@@ -47,6 +47,8 @@ public final class ScenarioDefinitions extends SimpleJsonResourceReloadListener 
         int version = requiredInt(json, "version", resourceId);
         if (version < 1) throw new IllegalArgumentException(resourceId + " has invalid version");
         String policy = requiredString(json, "policy", resourceId);
+        int cooldownSteps = requiredInt(json, "cooldown_steps", resourceId);
+        if (cooldownSteps < 0) throw new IllegalArgumentException(resourceId + " has negative cooldown_steps");
         JsonArray rawStages = requiredArray(json, "stages", resourceId);
         List<String> stages = rawStages.asList().stream().map(JsonElement::getAsString).toList();
         if (!stages.containsAll(List.of("OFFERED", "INVESTIGATE", "RECOVER", "RESOLVED"))) {
@@ -57,7 +59,7 @@ public final class ScenarioDefinitions extends SimpleJsonResourceReloadListener 
             try { capabilities.add(Capability.valueOf(capability.getAsString())); }
             catch (IllegalArgumentException failure) { throw new IllegalArgumentException(resourceId + " declares unknown capability " + capability, failure); }
         }
-        return new ScenarioDefinition(id, version, Set.copyOf(capabilities), List.copyOf(stages), policy);
+        return new ScenarioDefinition(id, version, Set.copyOf(capabilities), List.copyOf(stages), policy, cooldownSteps);
     }
 
     private static String requiredString(JsonObject json, String name, ResourceLocation resource) {

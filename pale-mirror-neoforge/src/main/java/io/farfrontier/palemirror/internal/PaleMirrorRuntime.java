@@ -12,9 +12,14 @@ import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.Narrator;
+import io.farfrontier.palemirror.domain.ScenarioDefinitionRef;
+import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
+import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
+import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
 import io.farfrontier.palemirror.internal.observation.PlayerEnteredFacilityBounds;
@@ -53,6 +58,7 @@ public final class PaleMirrorRuntime {
     public void tick() {
         if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) advanceSimulation(1);
         observePlayers();
+        reconcileScenarioCapabilities();
         reconcileMaterialization();
     }
 
@@ -63,6 +69,7 @@ public final class PaleMirrorRuntime {
         TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2), id, audienceFor(player));
         data.registerTestMine(mine);
         data.worldState().putFacility(new FacilityState(id, 80, 10, 10));
+        data.worldState().putSettlement(new SettlementState(new WorldObjectId("pale_mirror:test_settlement"), id, 80, 40));
         data.setDirty();
         return mine;
     }
@@ -71,7 +78,7 @@ public final class PaleMirrorRuntime {
         List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.AdvanceSimulation(steps));
         events.forEach(event -> {
             TestMineRecord mine = data.testMines().get(event.subject());
-            if (mine != null) commands.execute(data.worldState(), new DomainCommand.OfferScenario(event, mine.primaryAudience()));
+            if (mine != null) offerScenario(event, mine.primaryAudience());
         });
         if (!events.isEmpty()) data.setDirty();
         return events;
@@ -104,7 +111,8 @@ public final class PaleMirrorRuntime {
 
     public String status() {
         return "step=" + data.worldState().simulationStep() + ", facilities=" + data.worldState().facilities().size()
-                + ", scenarios=" + data.worldState().scenarios().size() + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count();
+                + ", settlements=" + data.worldState().settlements().size() + ", scenarios=" + data.worldState().scenarios().size()
+                + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count();
     }
 
     public void threatDestroyed(String objectId, String causationId) {
@@ -137,5 +145,35 @@ public final class PaleMirrorRuntime {
 
     private void reconcileMaterialization() {
         materializationScheduler.schedule(server, data).forEach(this::publish);
+    }
+
+    private void offerScenario(DomainEvent event, StoryAudienceId audience) {
+        ScenarioDefinition definition = ScenarioDefinitions.current().get(
+                net.minecraft.resources.ResourceLocation.parse("pale_mirror:investigation_recovery"));
+        if (definition == null) {
+            commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "definition unavailable"));
+            return;
+        }
+        if (!AdapterRegistry.supports(definition.capabilities())) {
+            commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "required capability unavailable"));
+            return;
+        }
+        ScenarioDefinitionRef pinned = new ScenarioDefinitionRef(definition.id().toString(), Integer.toString(definition.version()),
+                definition.stages(), definition.capabilities().stream().map(Enum::name).sorted().toList(), definition.cooldownSteps());
+        commands.execute(data.worldState(), new DomainCommand.OfferScenario(event, audience, pinned));
+    }
+
+    private void reconcileScenarioCapabilities() {
+        data.worldState().scenarios().forEach(scenario -> {
+            java.util.Set<io.farfrontier.palemirror.api.Capability> requirements = scenario.requiredCapabilities().stream()
+                    .map(io.farfrontier.palemirror.api.Capability::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet());
+            boolean available = AdapterRegistry.supports(requirements);
+            if (!available || scenario.status() == io.farfrontier.palemirror.domain.ScenarioStatus.BLOCKED) {
+                List<DomainEvent> events = commands.execute(data.worldState(),
+                        new DomainCommand.SetScenarioBlocked(scenario.id(), !available,
+                                available ? "capabilities restored" : "required capability unavailable"));
+                if (!events.isEmpty()) data.setDirty();
+            }
+        });
     }
 }

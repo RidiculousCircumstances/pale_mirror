@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.domain;
 
 import java.util.Objects;
+import java.util.List;
 
 public final class ScenarioInstance {
     private final String id;
@@ -9,17 +10,33 @@ public final class ScenarioInstance {
     private final StoryAudienceId audience;
     private final String definitionId;
     private final String definitionVersion;
+    private final List<String> pinnedStages;
+    private final List<String> requiredCapabilities;
     private ScenarioStatus status;
+    private ScenarioStatus resumeStatus;
+    private String blockedReason;
 
     public ScenarioInstance(String id, String sourceEventId, WorldObjectId target, StoryAudienceId audience,
                             String definitionId, String definitionVersion, ScenarioStatus status) {
+        this(id, sourceEventId, target, audience, definitionId, definitionVersion,
+                List.of("OFFERED", "INVESTIGATE", "RECOVER", "RESOLVED"), List.of(), status, null, "");
+    }
+
+    public ScenarioInstance(String id, String sourceEventId, WorldObjectId target, StoryAudienceId audience,
+                            String definitionId, String definitionVersion, List<String> pinnedStages,
+                            List<String> requiredCapabilities, ScenarioStatus status, ScenarioStatus resumeStatus,
+                            String blockedReason) {
         this.id = Objects.requireNonNull(id, "id");
         this.sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId");
         this.target = Objects.requireNonNull(target, "target");
         this.audience = Objects.requireNonNull(audience, "audience");
         this.definitionId = Objects.requireNonNull(definitionId, "definitionId");
         this.definitionVersion = Objects.requireNonNull(definitionVersion, "definitionVersion");
+        this.pinnedStages = List.copyOf(pinnedStages);
+        this.requiredCapabilities = List.copyOf(requiredCapabilities);
         this.status = Objects.requireNonNull(status, "status");
+        this.resumeStatus = resumeStatus;
+        this.blockedReason = blockedReason == null ? "" : blockedReason;
     }
 
     public String id() { return id; }
@@ -29,5 +46,23 @@ public final class ScenarioInstance {
     public String definitionId() { return definitionId; }
     public String definitionVersion() { return definitionVersion; }
     public ScenarioStatus status() { return status; }
+    public List<String> pinnedStages() { return pinnedStages; }
+    public List<String> requiredCapabilities() { return requiredCapabilities; }
+    public ScenarioStatus resumeStatus() { return resumeStatus; }
+    public String blockedReason() { return blockedReason; }
     public void setStatus(ScenarioStatus status) { this.status = Objects.requireNonNull(status, "status"); }
+    public boolean block(String reason) {
+        if (status == ScenarioStatus.BLOCKED || status.isTerminal()) return false;
+        resumeStatus = status;
+        status = ScenarioStatus.BLOCKED;
+        blockedReason = Objects.requireNonNull(reason, "reason");
+        return true;
+    }
+    public boolean resume() {
+        if (status != ScenarioStatus.BLOCKED || resumeStatus == null) return false;
+        status = resumeStatus;
+        resumeStatus = null;
+        blockedReason = "";
+        return true;
+    }
 }

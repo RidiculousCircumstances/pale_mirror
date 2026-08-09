@@ -7,14 +7,16 @@ import java.util.Objects;
 /** Applies explicit domain commands; it does not know about Minecraft or adapters. */
 public final class DomainCommandProcessor {
     private final SimulationEngine simulation;
+    private final SettlementSimulation settlements;
     private final ThreatLifecycle threats;
     private final Narrator narrator;
     private final ScenarioRuntime scenarios;
     private final DomainEventFactory events;
 
-    DomainCommandProcessor(SimulationEngine simulation, ThreatLifecycle threats, Narrator narrator,
+    DomainCommandProcessor(SimulationEngine simulation, SettlementSimulation settlements, ThreatLifecycle threats, Narrator narrator,
                            ScenarioRuntime scenarios, DomainEventFactory events) {
         this.simulation = Objects.requireNonNull(simulation, "simulation");
+        this.settlements = Objects.requireNonNull(settlements, "settlements");
         this.threats = Objects.requireNonNull(threats, "threats");
         this.narrator = Objects.requireNonNull(narrator, "narrator");
         this.scenarios = Objects.requireNonNull(scenarios, "scenarios");
@@ -25,13 +27,38 @@ public final class DomainCommandProcessor {
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(command, "command");
         return switch (command) {
-            case DomainCommand.AdvanceSimulation advance -> simulation.advance(state, advance.steps());
-            case DomainCommand.OfferScenario offer -> narrator.offerFor(state, offer.sourceEvent(), offer.audience());
+            case DomainCommand.AdvanceSimulation advance -> advanceSimulation(state, advance.steps());
+            case DomainCommand.OfferScenario offer -> narrator.offerFor(state, offer.sourceEvent(), offer.audience(), offer.definition());
             case DomainCommand.AcceptScenario accept -> scenarios.accept(state, accept.scenarioId());
             case DomainCommand.PlayerEnteredFacility entered -> scenarios.playerEntered(state, entered.audience(), entered.facilityId());
             case DomainCommand.ThreatControllerDestroyed destroyed -> reconcileDestroyedController(state, destroyed);
             case DomainCommand.MaterializationObserved observed -> reconcileMaterialization(state, observed);
+            case DomainCommand.NoScenario noScenario -> narrator.noScenario(state, noScenario.sourceEvent(), noScenario.audience(), noScenario.reason());
+            case DomainCommand.SetScenarioBlocked capability -> reconcileScenarioCapability(state, capability);
         };
+    }
+
+    private List<DomainEvent> advanceSimulation(WorldState state, int steps) {
+        List<DomainEvent> produced = new ArrayList<>(simulation.advance(state, steps));
+        produced.addAll(settlements.reconcile(state));
+        return List.copyOf(produced);
+    }
+
+    private List<DomainEvent> reconcileScenarioCapability(WorldState state, DomainCommand.SetScenarioBlocked command) {
+        ScenarioInstance scenario = state.scenario(command.scenarioId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown scenario " + command.scenarioId()));
+        if (scenario.status().isTerminal()) return List.of();
+        if (command.blocked() && scenario.block(command.reason())) {
+            DomainEvent event = events.create(state, DomainEventType.SCENARIO_BLOCKED, scenario.target(), scenario.sourceEventId());
+            state.addEvent(event);
+            return List.of(event);
+        }
+        if (!command.blocked() && scenario.resume()) {
+            DomainEvent event = events.create(state, DomainEventType.SCENARIO_RESUMED, scenario.target(), scenario.sourceEventId());
+            state.addEvent(event);
+            return List.of(event);
+        }
+        return List.of();
     }
 
     private List<DomainEvent> reconcileDestroyedController(WorldState state, DomainCommand.ThreatControllerDestroyed command) {

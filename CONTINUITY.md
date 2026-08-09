@@ -46,22 +46,30 @@
   force-loads chunks and works only near a player.
 - Generic World Registry entries now own physical identity, bounds, template,
   and representation lifecycle for the controlled mine.
-- Snapshot schema is v3. v1/v2/unknown snapshot formats stop server startup
+- Snapshot schema is v5. Legacy/unknown snapshot formats stop server startup
   before Minecraft can silently replace canonical SavedData; manual reset is
   required after an external backup.
+- Datapack scenarios now pin their authored stage/capability snapshot and
+  version into each active instance. Capability loss is explicit `BLOCKED` /
+  resume state, and `NO_SCENARIO` is causally recorded.
+- The first settlement/resource-flow expansion is active: an infected test mine
+  emits `SETTLEMENT_SUPPLY_DISRUPTED`, removes iron supply, and lowers defense;
+  recovery restores both.
+- Crimson Curse 1.4.3.1 checksum and L1 audit completed. Its public surface
+  only changes global scoreboards, so `CrimsonAdapter` remains explicitly
+  `BLOCKED`; the audit is documented in `docs/crimson-audit-1.4.3.1.md`.
 
 ### Now
 
-- Verify and commit the crash-safe core/World Registry expansion.
+- Verify and commit the authoring, settlement-supply, and Crimson-audit slice.
 
 ### Next
 
-- Add the dedicated-server restart/crash harness, datapack-pinned scenario
-  authoring, then perform the fail-closed Crimson public-surface audit.
+- Add the standalone dedicated-server restart/crash harness. It must exercise
+  a final packaged JAR, not just the in-process SavedData GameTest.
 
 ## Open questions
 
-- UNCONFIRMED: Crimson Curse 1.4.3.1 public L1 surface can safely materialize a local controller.
 - UNCONFIRMED: dedicated-server restart/crash harness has not yet completed its first full run.
 
 ## Working set
@@ -76,5 +84,7 @@
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/PaleMirrorRuntime.java`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/materialization/MaterializationScheduler.java`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/observation/ObservationReconciler.java`
+- `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/SettlementSimulation.java`
+- `docs/crimson-audit-1.4.3.1.md`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/gametest/CoreRecoveryGameTests.java`
 - `pale-mirror-neoforge/build.gradle`

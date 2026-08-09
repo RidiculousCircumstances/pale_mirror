@@ -17,6 +17,6 @@ public final class CrimsonAdapter implements IntegrationAdapter {
             return new AdapterHealth(AdapterHealth.Status.ABSENT, "mr_crimson_curse is not installed", Set.of());
         }
         return new AdapterHealth(AdapterHealth.Status.BLOCKED,
-                "Pinned Crimson L1 materialization audit has not passed; no native operation is exposed", Set.of());
+                "Crimson 1.4.3.1 exposes only global infection controls; no local controller identity/observation contract", Set.of());
     }
 }

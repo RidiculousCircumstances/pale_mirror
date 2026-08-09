@@ -3,12 +3,14 @@ package io.farfrontier.palemirror.gametest;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
+import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -38,11 +40,22 @@ public final class CoreRecoveryGameTests {
         TestMineRecord mine = runtime.createTestMine(player);
 
         runtime.advanceSimulation(1);
+        SettlementState settlement = PaleMirrorSavedData.get(level.getServer().overworld()).worldState().settlements().stream()
+                .findFirst().orElseThrow();
+        helper.assertValueEqual(settlement.supplyDisrupted(), true, "mine infection must disrupt settlement iron supply");
+        helper.assertValueEqual(settlement.currentDefense(), 30, "supply disruption must lower settlement defense");
         String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted by its audience");
 
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
-        tick(runtime, 3);
+        tick(runtime, 2);
+        CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
+        PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
+        helper.assertValueEqual(reloaded.testMines().get(mine.id()).job().nextOperationIndex(), 1,
+                "restart snapshot must retain completed operation progress");
+        helper.assertValueEqual(reloaded.testMines().get(mine.id()).job().operations().getFirst().state().name(), "COMPLETED",
+                "restart snapshot must retain operation postcondition state");
+        tick(runtime, 1);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.INFECTED, "facility status after materialization");
@@ -73,6 +86,8 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().observedRevision(), 3L,
                 "only a verified materialization job may advance the observed revision");
+        helper.assertValueEqual(settlement.supplyDisrupted(), false, "recovered mine must restore settlement supply");
+        helper.assertValueEqual(settlement.currentDefense(), 40, "recovered mine must restore settlement defense");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)),
                 "overlay cleanup must restore only PM-owned baseline cells");
         helper.succeed();
@@ -96,6 +111,8 @@ public final class CoreRecoveryGameTests {
         data.reconciliationLedger().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
+        data.worldState().settlements().clear();
+        data.worldState().narratorCooldowns().clear();
         data.worldState().history().clear();
         data.worldState().setSimulationStep(0);
         data.worldState().setEventSequence(0);

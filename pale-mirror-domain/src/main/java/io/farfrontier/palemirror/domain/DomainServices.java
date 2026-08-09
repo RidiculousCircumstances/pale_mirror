@@ -7,11 +7,13 @@ public final class DomainServices {
     private final ThreatLifecycle threats = new ThreatLifecycle(events);
     private final Narrator narrator = new Narrator(events);
     private final ScenarioRuntime scenarios = new ScenarioRuntime(events);
-    private final DomainCommandProcessor commands = new DomainCommandProcessor(simulation, threats, narrator, scenarios, events);
+    private final SettlementSimulation settlements = new SettlementSimulation(events);
+    private final DomainCommandProcessor commands = new DomainCommandProcessor(simulation, settlements, threats, narrator, scenarios, events);
 
     public SimulationEngine simulation() { return simulation; }
     public ThreatLifecycle threats() { return threats; }
     public Narrator narrator() { return narrator; }
     public ScenarioRuntime scenarios() { return scenarios; }
+    public SettlementSimulation settlements() { return settlements; }
     public DomainCommandProcessor commands() { return commands; }
 }

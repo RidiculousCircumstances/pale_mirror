@@ -7,4 +7,5 @@ import io.farfrontier.palemirror.api.Capability;
 import net.minecraft.resources.ResourceLocation;
 
 /** Compiled immutable datapack definition. Active scenarios pin its version at creation. */
-public record ScenarioDefinition(ResourceLocation id, int version, Set<Capability> capabilities, List<String> stages, String policy) { }
+public record ScenarioDefinition(ResourceLocation id, int version, Set<Capability> capabilities, List<String> stages,
+                                 String policy, long cooldownSteps) { }

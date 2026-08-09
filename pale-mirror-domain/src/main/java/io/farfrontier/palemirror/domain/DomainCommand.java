@@ -10,14 +10,16 @@ import java.util.Objects;
 public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.OfferScenario, DomainCommand.AcceptScenario,
         DomainCommand.PlayerEnteredFacility, DomainCommand.ThreatControllerDestroyed,
-        DomainCommand.MaterializationObserved {
+        DomainCommand.MaterializationObserved, DomainCommand.NoScenario,
+        DomainCommand.SetScenarioBlocked {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
-    record OfferScenario(DomainEvent sourceEvent, StoryAudienceId audience) implements DomainCommand {
+    record OfferScenario(DomainEvent sourceEvent, StoryAudienceId audience, ScenarioDefinitionRef definition) implements DomainCommand {
         public OfferScenario {
             Objects.requireNonNull(sourceEvent, "sourceEvent");
             Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(definition, "definition");
         }
     }
 
@@ -43,6 +45,21 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public MaterializationObserved {
             Objects.requireNonNull(facilityId, "facilityId");
             Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record NoScenario(DomainEvent sourceEvent, StoryAudienceId audience, String reason) implements DomainCommand {
+        public NoScenario {
+            Objects.requireNonNull(sourceEvent, "sourceEvent");
+            Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(reason, "reason");
+        }
+    }
+
+    record SetScenarioBlocked(String scenarioId, boolean blocked, String reason) implements DomainCommand {
+        public SetScenarioBlocked {
+            Objects.requireNonNull(scenarioId, "scenarioId");
+            Objects.requireNonNull(reason, "reason");
         }
     }
 }

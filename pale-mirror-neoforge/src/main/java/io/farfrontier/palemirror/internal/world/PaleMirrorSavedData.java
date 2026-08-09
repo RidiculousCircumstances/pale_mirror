@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
+import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldState;
@@ -38,7 +39,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    private static final int CURRENT_SCHEMA = 3;
+    private static final int CURRENT_SCHEMA = 5;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -177,10 +178,31 @@ public final class PaleMirrorSavedData extends SavedData {
             scenario.putString("audience", value.audience().value());
             scenario.putString("definition", value.definitionId());
             scenario.putString("definitionVersion", value.definitionVersion());
+            ListTag stages = new ListTag();
+            value.pinnedStages().forEach(stage -> stages.add(net.minecraft.nbt.StringTag.valueOf(stage)));
+            scenario.put("pinnedStages", stages);
+            ListTag capabilities = new ListTag();
+            value.requiredCapabilities().forEach(capability -> capabilities.add(net.minecraft.nbt.StringTag.valueOf(capability)));
+            scenario.put("requiredCapabilities", capabilities);
             scenario.putString("status", value.status().name());
+            if (value.resumeStatus() != null) scenario.putString("resumeStatus", value.resumeStatus().name());
+            scenario.putString("blockedReason", value.blockedReason());
             scenarios.add(scenario);
         });
         tag.put("scenarios", scenarios);
+        ListTag settlements = new ListTag();
+        state.settlements().forEach(value -> {
+            CompoundTag settlement = new CompoundTag();
+            settlement.putString("id", value.id().value());
+            settlement.putString("ironSource", value.ironSource().value());
+            settlement.putInt("expectedIron", value.expectedIronSupply());
+            settlement.putInt("baseDefense", value.baseDefense());
+            settlement.putInt("currentIron", value.currentIronSupply());
+            settlement.putInt("currentDefense", value.currentDefense());
+            settlement.putBoolean("supplyDisrupted", value.supplyDisrupted());
+            settlements.add(settlement);
+        });
+        tag.put("settlements", settlements);
         ListTag events = new ListTag();
         state.history().forEach(value -> {
             CompoundTag event = new CompoundTag();
@@ -193,6 +215,14 @@ public final class PaleMirrorSavedData extends SavedData {
             events.add(event);
         });
         tag.put("events", events);
+        ListTag cooldowns = new ListTag();
+        state.narratorCooldowns().forEach((audience, availableAt) -> {
+            CompoundTag cooldown = new CompoundTag();
+            cooldown.putString("audience", audience.value());
+            cooldown.putLong("availableAt", availableAt);
+            cooldowns.add(cooldown);
+        });
+        tag.put("narratorCooldowns", cooldowns);
         return tag;
     }
 
@@ -209,9 +239,21 @@ public final class PaleMirrorSavedData extends SavedData {
         }
         for (Tag element : tag.getList("scenarios", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
+            List<String> stages = stringList(value.getList("pinnedStages", Tag.TAG_STRING));
+            List<String> capabilities = stringList(value.getList("requiredCapabilities", Tag.TAG_STRING));
             state.putScenario(new ScenarioInstance(value.getString("id"), value.getString("source"),
                     new WorldObjectId(value.getString("target")), new StoryAudienceId(value.getString("audience")),
-                    value.getString("definition"), value.getString("definitionVersion"), ScenarioStatus.valueOf(value.getString("status"))));
+                    value.getString("definition"), value.getString("definitionVersion"), stages, capabilities,
+                    ScenarioStatus.valueOf(value.getString("status")),
+                    value.contains("resumeStatus", Tag.TAG_STRING) ? ScenarioStatus.valueOf(value.getString("resumeStatus")) : null,
+                    value.getString("blockedReason")));
+        }
+        for (Tag element : tag.getList("settlements", Tag.TAG_COMPOUND)) {
+            CompoundTag value = (CompoundTag) element;
+            state.putSettlement(new SettlementState(new WorldObjectId(value.getString("id")),
+                    new WorldObjectId(value.getString("ironSource")), value.getInt("expectedIron"),
+                    value.getInt("baseDefense"), value.getInt("currentIron"), value.getInt("currentDefense"),
+                    value.getBoolean("supplyDisrupted")));
         }
         for (Tag element : tag.getList("events", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
@@ -225,7 +267,17 @@ public final class PaleMirrorSavedData extends SavedData {
             }
         }
         state.setEventSequence(eventSequence);
+        for (Tag element : tag.getList("narratorCooldowns", Tag.TAG_COMPOUND)) {
+            CompoundTag cooldown = (CompoundTag) element;
+            state.setNarratorCooldown(new StoryAudienceId(cooldown.getString("audience")), cooldown.getLong("availableAt"));
+        }
         return state;
+    }
+
+    private static List<String> stringList(ListTag tags) {
+        List<String> values = new ArrayList<>();
+        for (Tag tag : tags) values.add(tag.getAsString());
+        return values;
     }
 
     private static CompoundTag writeMine(TestMineRecord mine) {
