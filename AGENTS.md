@@ -66,7 +66,7 @@ lifecycle. A test must cover a negative or recovery path for such changes.
 - `docs`: run `git diff --check` and `./gradlew guardrails`.
 - `small-code`: run focused tests and `./gradlew guardrails check`.
 - `critical-code`: run focused tests plus
-  `./gradlew guardrails check :pale-mirror-neoforge:build
+  `./gradlew guardrails check :pale-mirror-neoforge:runGameTestServer :pale-mirror-neoforge:build
   :pale-mirror-neoforge:verifyPackagedJar`; report any unavailable dedicated
   server/restart harness explicitly.
 

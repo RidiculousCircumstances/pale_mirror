@@ -18,6 +18,20 @@ Java 21 is mandatory. The Gradle toolchain resolver provisions it when needed:
 The distributable JAR is under `pale-mirror-neoforge/build/libs/`. `check`
 verifies that it embeds the pure domain module.
 
+## Runtime verification
+
+Run the core-slice GameTest in a real NeoForge server level:
+
+```bash
+./gradlew :pale-mirror-neoforge:runGameTestServer
+```
+
+It creates a mock server player, materializes the test mine and one
+TestThreat controller, destroys the controller through the normal death event,
+and verifies scenario resolution, recovery, and overlay cleanup. For a manual
+server smoke test, use `./gradlew :pale-mirror-neoforge:runServer`; its local
+port is configured in the ignored `pale-mirror-neoforge/run/server.properties`.
+
 ## Core-only manual check
 
 1. Start the dev server and grant yourself permission level 4.

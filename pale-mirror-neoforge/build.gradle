@@ -23,13 +23,15 @@ neoForge {
         }
         gameTestServer {
             type = 'gameTestServer'
-            systemProperty 'neoforge.enabledGameTestNamespaces', rootProject.providers.gradleProperty('mod_id').get()
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
         }
     }
 
     mods {
         pale_mirror {
             sourceSet sourceSets.main
+            sourceSet project(':pale-mirror-domain').sourceSets.main
         }
     }
 }

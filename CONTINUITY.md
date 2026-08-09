@@ -30,10 +30,18 @@
   Gradle guardrails added; `./gradlew guardrails` passed.
 - Replaced `DomainEngine` with cohesive simulation, threat-lifecycle, and
   event-factory services; focused deterministic and negative-path tests pass.
+- Runtime GameTest exposed a ModDev classpath defect: the domain source set was
+  embedded in the distributable JAR but absent from the dev mod runtime.
+- Fixed the ModDev source-set wiring. `runGameTestServer` now passes the full
+  core loop with a mock server player and real controller death observation.
+- Both the normal dev server and a clean NeoForge installation containing only
+  the packaged mod JAR reached successful server startup on Java 21.
+- Final critical-code profile passed: guardrails, unit tests, repeated
+  NeoForge GameTest, build, and embedded-domain JAR verification.
 
 ### Now
 
-- Commit the synchronized bounded-responsibility domain state.
+- Commit the runtime-test coverage and the ModDev wiring fix.
 
 ### Next
 
@@ -54,3 +62,5 @@
 - `docs/llm_guardrails.md`
 - `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/DomainServices.java`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/PaleMirrorRuntime.java`
+- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/gametest/CoreRecoveryGameTests.java`
+- `pale-mirror-neoforge/build.gradle`

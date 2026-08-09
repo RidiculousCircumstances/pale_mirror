@@ -28,7 +28,7 @@ report:
 | --- | --- | --- |
 | `docs` | Documentation, ledger, process text | `git diff --check`, `./gradlew guardrails` |
 | `small-code` | Isolated pure-domain helper or narrow command behavior | Focused tests, `./gradlew guardrails check` |
-| `critical-code` | SavedData, domain state, simulation, scenarios, materialization, observation, adapters, migrations, lifecycle | Focused tests plus `./gradlew guardrails check :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar` |
+| `critical-code` | SavedData, domain state, simulation, scenarios, materialization, observation, adapters, migrations, lifecycle | Focused tests plus `./gradlew guardrails check :pale-mirror-neoforge:runGameTestServer :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar` |
 
 If a dedicated-server or restart test is unavailable, do not call it passed:
 report the limitation and preserve the corresponding harness work as open.
