@@ -12,14 +12,25 @@ public final class FacilityState {
     private long desiredRevision;
     private long observedRevision;
     private FacilityStatus status;
+    private ThreatTier threatTier;
+    private long threatStartedAtStep;
 
     public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure) {
-        this(id, normalProduction, infectionThreshold, infectionPressure, normalProduction, 0, 0, 0, FacilityStatus.OPERATIONAL);
+        this(id, normalProduction, infectionThreshold, infectionPressure, normalProduction, 0, 0, 0,
+                FacilityStatus.OPERATIONAL, ThreatTier.DORMANT, 0);
     }
 
     public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure,
                          int currentProduction, int recoveryStepsRemaining, long desiredRevision,
                          long observedRevision, FacilityStatus status) {
+        this(id, normalProduction, infectionThreshold, infectionPressure, currentProduction, recoveryStepsRemaining,
+                desiredRevision, observedRevision, status,
+                status == FacilityStatus.INFECTED ? ThreatTier.FOOTHOLD : ThreatTier.DORMANT, 0);
+    }
+
+    public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure,
+                         int currentProduction, int recoveryStepsRemaining, long desiredRevision,
+                         long observedRevision, FacilityStatus status, ThreatTier threatTier, long threatStartedAtStep) {
         this.id = Objects.requireNonNull(id, "id");
         this.normalProduction = normalProduction;
         this.infectionThreshold = infectionThreshold;
@@ -29,6 +40,8 @@ public final class FacilityState {
         this.desiredRevision = desiredRevision;
         this.observedRevision = observedRevision;
         this.status = Objects.requireNonNull(status, "status");
+        this.threatTier = Objects.requireNonNull(threatTier, "threatTier");
+        this.threatStartedAtStep = threatStartedAtStep;
     }
 
     public WorldObjectId id() { return id; }
@@ -40,9 +53,35 @@ public final class FacilityState {
     public long desiredRevision() { return desiredRevision; }
     public long observedRevision() { return observedRevision; }
     public FacilityStatus status() { return status; }
+    public ThreatTier threatTier() { return threatTier; }
+    public long threatStartedAtStep() { return threatStartedAtStep; }
     public void setObservedRevision(long revision) { observedRevision = Math.max(observedRevision, revision); }
-    public void infect() { status = FacilityStatus.INFECTED; currentProduction = 0; desiredRevision++; }
-    public void beginRecovery(int steps) { status = FacilityStatus.RECOVERING; recoveryStepsRemaining = Math.max(1, steps); desiredRevision++; }
+    public void infect() { infect(0); }
+    public void infect(long simulationStep) {
+        status = FacilityStatus.INFECTED;
+        currentProduction = 0;
+        threatTier = ThreatTier.FOOTHOLD;
+        threatStartedAtStep = simulationStep;
+        desiredRevision++;
+    }
+    public boolean advanceThreatTier(long simulationStep) { return advanceThreatTier(simulationStep, ThreatTierPolicy.DEFAULT); }
+    public boolean advanceThreatTier(long simulationStep, ThreatTierPolicy policy) {
+        Objects.requireNonNull(policy, "policy");
+        if (status != FacilityStatus.INFECTED) return false;
+        long activeSteps = Math.max(0, simulationStep - threatStartedAtStep);
+        ThreatTier next = policy.next(threatTier, activeSteps);
+        if (next == threatTier) return false;
+        threatTier = next;
+        desiredRevision++;
+        return true;
+    }
+    public void beginRecovery(int steps) {
+        status = FacilityStatus.RECOVERING;
+        recoveryStepsRemaining = Math.max(1, steps);
+        threatTier = ThreatTier.DORMANT;
+        threatStartedAtStep = 0;
+        desiredRevision++;
+    }
     public boolean advanceRecovery() {
         if (status != FacilityStatus.RECOVERING) return false;
         recoveryStepsRemaining--;
@@ -50,6 +89,8 @@ public final class FacilityState {
         status = FacilityStatus.OPERATIONAL;
         currentProduction = normalProduction;
         infectionPressure = 0;
+        threatTier = ThreatTier.DORMANT;
+        threatStartedAtStep = 0;
         desiredRevision++;
         return true;
     }

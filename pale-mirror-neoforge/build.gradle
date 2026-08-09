@@ -99,7 +99,7 @@ tasks.register('verifyPackagedJar') {
 
 tasks.register('verifyCrimsonSandboxPackaging') {
     group = 'verification'
-    description = 'Fails if the final JAR omits the always-active Crimson sandbox datapack or its actor initializer.'
+    description = 'Fails if the final JAR omits the always-active Crimson sandbox datapack, tier policy, or base actor initializers.'
     dependsOn tasks.named('jar')
     inputs.file(distributableJar)
     doLast {
@@ -107,7 +107,14 @@ tasks.register('verifyCrimsonSandboxPackaging') {
                 'crimson_sandbox/pack.mcmeta',
                 'crimson_sandbox/data/crimson_curse/function/load.mcfunction',
                 'crimson_sandbox/data/crimson_curse/function/tick.mcfunction',
-                'data/pale_mirror/function/crimson/v1431/initialize_human.mcfunction'
+                'data/pale_mirror/pale_mirror/threat_tiers/default.json',
+                'data/pale_mirror/function/crimson/v1431/initialize_human.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_villager.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_husk.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_skeleton.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_drowned.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bogged.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_wither_skeleton.mcfunction'
         ]
         def jar = new java.util.jar.JarFile(distributableJar.get().asFile)
         try {

@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.domain.ThreatTier;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
@@ -50,7 +51,10 @@ public final class EncounterDefinitions extends SimpleJsonResourceReloadListener
             if (!slot.matches("[a-z0-9_/-]+") || !slots.add(slot)) {
                 throw new IllegalArgumentException(resourceId + " has invalid or duplicate actor slot " + slot);
             }
-            return new EncounterProfile.ActorSlot(slot, ResourceLocation.parse(requiredString(actor, "entity_type", resourceId)).toString());
+            String profile = ResourceLocation.parse(requiredString(actor, "actor_profile", resourceId)).toString();
+            ThreatTier minimumTier = actor.has("minimum_tier")
+                    ? ThreatTier.valueOf(requiredString(actor, "minimum_tier", resourceId)) : ThreatTier.FOOTHOLD;
+            return new EncounterProfile.ActorSlot(slot, profile, minimumTier);
         }).toList();
         return new EncounterProfile(id, version, actors);
     }

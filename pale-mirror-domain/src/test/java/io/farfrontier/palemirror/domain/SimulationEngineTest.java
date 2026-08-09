@@ -104,4 +104,32 @@ class SimulationEngineTest {
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.SETTLEMENT_SUPPLY_DISRUPTED));
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.SETTLEMENT_SUPPLY_RESTORED));
     }
+
+    @Test
+    void threatTiersAdvanceOnlyFromDeterministicSimulationTime() {
+        WorldState state = new WorldState();
+        WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
+        state.putFacility(new FacilityState(mine, 80, 10, 10));
+        DomainServices services = new DomainServices();
+
+        services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
+        FacilityState facility = state.facility(mine).orElseThrow();
+        assertEquals(ThreatTier.FOOTHOLD, facility.threatTier());
+        assertEquals(1, facility.threatStartedAtStep());
+        assertEquals(1, facility.desiredRevision());
+
+        services.commands().execute(state, new DomainCommand.AdvanceSimulation(11));
+        assertEquals(ThreatTier.FOOTHOLD, facility.threatTier());
+        assertEquals(1, facility.desiredRevision());
+        assertTrue(services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).stream()
+                .anyMatch(event -> event.type() == DomainEventType.THREAT_TIER_ESCALATED));
+        assertEquals(ThreatTier.INFESTED, facility.threatTier());
+        assertEquals(2, facility.desiredRevision());
+
+        services.commands().execute(state, new DomainCommand.AdvanceSimulation(24));
+        assertEquals(ThreatTier.SIEGE, facility.threatTier());
+        services.commands().execute(state, new DomainCommand.AdvanceSimulation(36));
+        assertEquals(ThreatTier.APEX, facility.threatTier());
+        assertEquals(4, facility.desiredRevision());
+    }
 }

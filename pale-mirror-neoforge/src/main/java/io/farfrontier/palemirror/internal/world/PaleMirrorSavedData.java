@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.domain.ScenarioInstance;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
+import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldState;
 import io.farfrontier.palemirror.internal.materialization.JobState;
@@ -35,22 +36,19 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
-
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    private static final int CURRENT_SCHEMA = 6;
+    private static final int CURRENT_SCHEMA = 7;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
     private final ReconciliationLedger reconciliationLedger;
     private final WorldObjectRegistry worldRegistry;
-
     public PaleMirrorSavedData() {
         this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry());
     }
-
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
                                 WorldObjectRegistry worldRegistry) {
@@ -60,12 +58,10 @@ public final class PaleMirrorSavedData extends SavedData {
         this.reconciliationLedger = reconciliationLedger;
         this.worldRegistry = worldRegistry;
     }
-
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
                 new SavedData.Factory<>(PaleMirrorSavedData::new, PaleMirrorSavedData::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), DATA_NAME);
     }
-
     /**
      * DimensionDataStorage logs and replaces a broken SavedData load by design.
      * Pale Mirror cannot permit that behaviour for an incompatible canonical
@@ -86,7 +82,6 @@ public final class PaleMirrorSavedData extends SavedData {
                     + "; server startup is stopped rather than replacing it", failure);
         }
     }
-
     public WorldState worldState() { return worldState; }
     public Map<WorldObjectId, TestMineRecord> testMines() { return testMines; }
     public Map<String, StoryAudienceId> audienceMappings() { return audienceMappings; }
@@ -96,7 +91,6 @@ public final class PaleMirrorSavedData extends SavedData {
         worldRegistry.register(mine.object());
         testMines.put(mine.id(), mine);
     }
-
     public static PaleMirrorSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
         tag = migrate(tag);
         int version = tag.contains("schemaVersion", Tag.TAG_INT) ? tag.getInt("schemaVersion") : 0;
@@ -122,14 +116,13 @@ public final class PaleMirrorSavedData extends SavedData {
         for (Tag element : tag.getList("reconciledObservations", Tag.TAG_STRING)) observations.add(element.getAsString());
         return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry);
     }
-
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " cannot be migrated to schema "
                 + CURRENT_SCHEMA + ". Back up the world and remove its data/pale_mirror.dat to deliberately reset legacy Pale Mirror state.");
     }
 
     private static boolean isMigratable(int version) {
-        return version == CURRENT_SCHEMA || version == 5;
+        return version == CURRENT_SCHEMA || version == 5 || version == 6;
     }
 
     /** Sequential migration of the prior released snapshot; never silently drops native references. */
@@ -137,7 +130,11 @@ public final class PaleMirrorSavedData extends SavedData {
         int version = source.contains("schemaVersion", Tag.TAG_INT) ? source.getInt("schemaVersion") : 0;
         if (version > CURRENT_SCHEMA || !isMigratable(version)) throw incompatibleSchema(version);
         CompoundTag migrated = source.copy();
-        if (version == 5) migrateV5ToV6(migrated);
+        if (version == 5) {
+            migrateV5ToV6(migrated);
+            version = 6;
+        }
+        if (version == 6) migrateV6ToV7(migrated);
         return migrated;
     }
 
@@ -173,6 +170,31 @@ public final class PaleMirrorSavedData extends SavedData {
             }
         }
         tag.putInt("schemaVersion", 6);
+    }
+
+    /** v6 had one implicit infected presentation; v7 pins PM tiers and actor profiles explicitly. */
+    private static void migrateV6ToV7(CompoundTag tag) {
+        CompoundTag snapshot = tag.getCompound("snapshot");
+        long step = snapshot.getLong("simulationStep");
+        for (Tag element : snapshot.getList("facilities", Tag.TAG_COMPOUND)) {
+            CompoundTag facility = (CompoundTag) element;
+            boolean infected = "INFECTED".equals(facility.getString("status"));
+            facility.putString("threatTier", infected ? ThreatTier.FOOTHOLD.name() : ThreatTier.DORMANT.name());
+            facility.putLong("threatStartedAtStep", infected ? step : 0L);
+        }
+        for (Tag element : tag.getList("testMines", Tag.TAG_COMPOUND)) {
+            CompoundTag mine = (CompoundTag) element;
+            if (!mine.contains("encounter", Tag.TAG_COMPOUND)) continue;
+            for (Tag actorElement : mine.getCompound("encounter").getList("actors", Tag.TAG_COMPOUND)) {
+                CompoundTag actor = (CompoundTag) actorElement;
+                String entityType = actor.getString("entityType");
+                actor.putString("profile", "minecraft:zombie".equals(entityType)
+                        ? "pale_mirror:crimsonified_human" : "");
+                actor.putLong("nextRuntimeTick", 0L);
+                actor.putInt("actionCounter", 0);
+            }
+        }
+        tag.putInt("schemaVersion", 7);
     }
 
     @Override
@@ -214,6 +236,8 @@ public final class PaleMirrorSavedData extends SavedData {
             facility.putLong("desiredRevision", value.desiredRevision());
             facility.putLong("observedRevision", value.observedRevision());
             facility.putString("status", value.status().name());
+            facility.putString("threatTier", value.threatTier().name());
+            facility.putLong("threatStartedAtStep", value.threatStartedAtStep());
             facilities.add(facility);
         });
         tag.put("facilities", facilities);
@@ -285,7 +309,9 @@ public final class PaleMirrorSavedData extends SavedData {
             state.putFacility(new FacilityState(new WorldObjectId(value.getString("id")), value.getInt("normalProduction"),
                     value.getInt("threshold"), value.getInt("pressure"), value.getInt("currentProduction"),
                     value.getInt("recoverySteps"), value.getLong("desiredRevision"), value.getLong("observedRevision"),
-                    FacilityStatus.valueOf(value.getString("status"))));
+                    FacilityStatus.valueOf(value.getString("status")),
+                    ThreatTier.valueOf(value.contains("threatTier", Tag.TAG_STRING) ? value.getString("threatTier") : "DORMANT"),
+                    value.getLong("threatStartedAtStep")));
         }
         for (Tag element : tag.getList("scenarios", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
@@ -419,9 +445,12 @@ public final class PaleMirrorSavedData extends SavedData {
         encounter.actors().forEach(actor -> {
             CompoundTag value = new CompoundTag();
             value.putString("slot", actor.slotId());
+            value.putString("profile", actor.actorProfileId());
             value.putString("entityType", actor.entityTypeId());
             if (actor.entityId() != null) value.putUUID("entity", actor.entityId());
             value.putString("status", actor.status().name());
+            value.putLong("nextRuntimeTick", actor.nextRuntimeTick());
+            value.putInt("actionCounter", actor.actionCounter());
             actors.add(value);
         });
         tag.put("actors", actors);
@@ -432,9 +461,10 @@ public final class PaleMirrorSavedData extends SavedData {
         List<EncounterActorRef> actors = new ArrayList<>();
         for (Tag element : tag.getList("actors", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
-            actors.add(new EncounterActorRef(value.getString("slot"), value.getString("entityType"),
+            actors.add(new EncounterActorRef(value.getString("slot"), value.getString("profile"), value.getString("entityType"),
                     value.hasUUID("entity") ? value.getUUID("entity") : null,
-                    EncounterActorRef.Status.valueOf(value.getString("status"))));
+                    EncounterActorRef.Status.valueOf(value.getString("status")), value.getLong("nextRuntimeTick"),
+                    value.getInt("actionCounter")));
         }
         return new EncounterRecord(tag.getString("profile"), tag.getString("profileVersion"), tag.getString("job"),
                 tag.getLong("desiredRevision"), actors,

@@ -57,3 +57,7 @@ critical_flows:
     path: PM encounter intent -> isolated Crimson actor protocol -> typed observation -> PM reconciliation
     owner: neoforge CrimsonSandboxAdapter and top-priority built-in datapack
     verification: critical-code
+  - id: pm-threat-tiers
+    path: deterministic simulation -> PM threat tier -> desired revision -> bounded encounter roster -> local actor runtime
+    owner: domain tiers plus neoforge CrimsonSandboxAdapter
+    verification: critical-code

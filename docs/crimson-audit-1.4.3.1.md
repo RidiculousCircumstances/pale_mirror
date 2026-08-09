@@ -40,12 +40,17 @@ Crimson 1.4.3.1
 → PM-only initializer gives it the Crimsonified Human local form
 ```
 
-The initializer reproduces the zombie branch's local name, tags, attributes,
-equipment, loot table, and persistence, but omits its global team, sounds,
-particles, and `Global Mass += 15` side effect. The integration currently does
-**not** invoke Crimson's actor passive/ability functions: several read or write
-global scores. Base zombie AI plus Crimson's actor form is the supported first
-profile.
+The initializers reproduce seven audited local forms (Human, Villager, Husk,
+Skeleton, Drowned, Bogged and Wither Skeleton). They omit global teams, sounds,
+particles, and `Global Mass += 15`. The integration currently does **not**
+invoke Crimson's actor passive/ability functions: several read or write global
+scores. Vanilla AI plus a bounded PM actor runtime is the supported first
+profile set; exact provenance and release restrictions are recorded in
+[`crimson-content-ledger-1.4.3.1.md`](crimson-content-ledger-1.4.3.1.md).
+
+PM-native tiers (`FOOTHOLD`, `INFESTED`, `SIEGE`, `APEX`) advance
+deterministically in the domain and select encounter roster entries. They do
+not read, write, or mirror Crimson's global Phase/Points/Mass values.
 
 All private identifiers are confined to
 `internal/integration/crimson`. PM stores the actor UUID, slot, object ID, and

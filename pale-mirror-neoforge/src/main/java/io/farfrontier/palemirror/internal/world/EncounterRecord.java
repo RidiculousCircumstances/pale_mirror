@@ -42,17 +42,31 @@ public final class EncounterRecord {
         for (int index = 0; index < actors.size(); index++) if (actors.get(index).slotId().equals(slotId)) return index;
         return -1;
     }
-    public void activate(String slotId, UUID entityId) { replace(slotId, entityId, EncounterActorRef.Status.ACTIVE); state = EncounterState.ACTIVE; diagnostic = ""; }
-    public void defeated(String slotId, UUID entityId) { replace(slotId, entityId, EncounterActorRef.Status.DEFEATED); }
-    public void removed(String slotId) { replace(slotId, null, EncounterActorRef.Status.REMOVED); }
+    public void activate(String slotId, UUID entityId, String entityTypeId) {
+        replace(slotId, entityId, entityTypeId, EncounterActorRef.Status.ACTIVE, 0, 0);
+        state = EncounterState.ACTIVE;
+        diagnostic = "";
+    }
+    public void activate(String slotId, UUID entityId) {
+        EncounterActorRef actor = actor(slotId).orElseThrow();
+        activate(slotId, entityId, actor.entityTypeId());
+    }
+    public void defeated(String slotId, UUID entityId) { replace(slotId, entityId, "", EncounterActorRef.Status.DEFEATED, 0, 0); }
+    public void removed(String slotId) { replace(slotId, null, "", EncounterActorRef.Status.REMOVED, 0, 0); }
+    public void scheduleRuntime(String slotId, long nextRuntimeTick) {
+        EncounterActorRef actor = actor(slotId).orElseThrow();
+        replace(slotId, actor.entityId(), actor.entityTypeId(), actor.status(), nextRuntimeTick, actor.actionCounter() + 1);
+    }
     public void degrade(String reason) { state = EncounterState.DEGRADED; diagnostic = Objects.requireNonNull(reason, "reason"); }
     public void clean() { state = EncounterState.CLEANED; diagnostic = ""; }
 
-    private void replace(String slotId, UUID entityId, EncounterActorRef.Status status) {
+    private void replace(String slotId, UUID entityId, String entityTypeId, EncounterActorRef.Status status,
+                         long nextRuntimeTick, int actionCounter) {
         for (int index = 0; index < actors.size(); index++) {
             EncounterActorRef actor = actors.get(index);
             if (actor.slotId().equals(slotId)) {
-                actors.set(index, new EncounterActorRef(slotId, actor.entityTypeId(), entityId, status));
+                actors.set(index, new EncounterActorRef(slotId, actor.actorProfileId(), entityTypeId, entityId, status,
+                        nextRuntimeTick, actionCounter));
                 return;
             }
         }

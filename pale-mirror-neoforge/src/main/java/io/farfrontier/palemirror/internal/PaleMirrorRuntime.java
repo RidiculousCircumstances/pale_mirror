@@ -21,6 +21,7 @@ import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
+import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
 import io.farfrontier.palemirror.internal.observation.PlayerEnteredFacilityBounds;
@@ -58,25 +59,35 @@ public final class PaleMirrorRuntime {
     public static void stop(MinecraftServer server) { INSTANCES.remove(server); }
 
     public void tick() {
+        domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) advanceSimulation(1);
         observePlayers();
         reconcileScenarioCapabilities();
         reconcileMaterialization();
+        AdapterRegistry.crimson().tickRuntime(server, data);
     }
 
     public TestMineRecord createTestMine(ServerPlayer player) {
         WorldObjectId id = new WorldObjectId("pale_mirror:test_mine");
-        if (data.testMines().containsKey(id)) throw new IllegalStateException("Test mine already exists");
-        ServerLevel level = player.serverLevel();
-        TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2), id, audienceFor(player));
-        data.registerTestMine(mine);
-        data.worldState().putFacility(new FacilityState(id, 80, 10, 10));
+        TestMineRecord mine = registerThreatSite(player, id);
         data.worldState().putSettlement(new SettlementState(new WorldObjectId("pale_mirror:test_settlement"), id, 80, 40));
         data.setDirty();
         return mine;
     }
 
+    /** Registers a PM-owned, bounded threat site in any loaded player dimension; it never uses worldgen. */
+    public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id) {
+        if (data.testMines().containsKey(id)) throw new IllegalStateException("PM threat site already exists: " + id.value());
+        ServerLevel level = player.serverLevel();
+        TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2), id, audienceFor(player));
+        data.registerTestMine(mine);
+        data.worldState().putFacility(new FacilityState(id, 80, 10, 10));
+        data.setDirty();
+        return mine;
+    }
+
     public List<DomainEvent> advanceSimulation(int steps) {
+        domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.AdvanceSimulation(steps));
         events.forEach(event -> {
             TestMineRecord mine = data.testMines().get(event.subject());

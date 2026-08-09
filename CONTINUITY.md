@@ -2,8 +2,8 @@
 
 ## Goal (success criteria)
 
-- Maintain a server-authoritative Pale Mirror core slice with explicit,
-  enforceable architectural and LLM-change guardrails.
+- Maintain a server-authoritative Pale Mirror core slice and expand the
+  version-pinned Crimson layer without making it a second source of truth.
 
 ## Constraints/Assumptions
 
@@ -11,6 +11,8 @@
 - `pale-mirror-domain` remains independent of Minecraft and NeoForge.
 - Core slice must work without Crimson Curse. The exact-version Crimson sandbox
   is optional; PM remains the owner of all world progression and global threat state.
+- Crimson content is an ARR-licensed internal prototype; public distribution of
+  derived content is blocked pending the author's written permission.
 
 ## Key decisions
 
@@ -23,6 +25,8 @@
 - Third-party internals may be used only behind an isolated, version-pinned
   sandbox adapter; their identifiers cannot leak to domain, scenario, or
   generic materialization layers.
+- PM-native tiers, not Crimson Phase/Points/Mass, select encounter content and
+  advance only from deterministic domain simulation.
 
 ## State
 
@@ -70,23 +74,24 @@
 - A final-JAR dedicated-server restart harness now creates a clean NeoForge
   runtime, force-crashes it, and verifies the same world starts again. The
   GameTest separately serializes a partially completed `RUNNING` job.
+- The first PM-managed content roster is active: seven audited Crimsonified
+  vanilla forms, tier-filtered encounter slots, persisted actor profiles and a
+  bounded local actor runtime. Their global Crimson tick remains disabled.
 
 ### Now
 
-- Complete critical-code verification and commit the isolated Crimson Sandbox
-  1.4.3.1 integration.
+- Verify and commit PM-native tiers and the seven-profile Crimson base roster.
 
 ### Next
 
-- Add a second audited Crimson actor archetype only after proving its complete
-  local side-effect graph. Global ThreatFront remains a separate milestone.
+- Audit Decayed variants before adding their first profile. Elite actors,
+  threat objects and all destructive effects remain separate milestones.
 
 ## Open questions
 
-- UNCONFIRMED: an external client/real-player flow has not yet been automated.
-- Crimson's optional Spore resources log errors in an otherwise successful
-  clean-server boot; validate the complete Packwiz dependency profile before a
-  player-facing release.
+- UNCONFIRMED: an external client/real-player flow and official Crimson resource
+  pack rendering have not yet been automated.
+- Obtain written permission before distributing derived Crimson content.
 
 ## Working set
 

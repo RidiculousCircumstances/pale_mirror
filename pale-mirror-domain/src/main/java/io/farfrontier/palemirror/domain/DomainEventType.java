@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.domain;
 public enum DomainEventType {
     MINE_INFECTED,
     FACILITY_DISABLED,
+    THREAT_TIER_ESCALATED,
     SCENARIO_OFFERED,
     SCENARIO_ACCEPTED,
     FACILITY_INVESTIGATED,

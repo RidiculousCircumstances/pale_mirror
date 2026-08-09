@@ -1,7 +1,13 @@
 {
   "id": "pale_mirror:crimson_mine_guards",
-  "version": 1,
+  "version": 2,
   "actors": [
-    { "slot": "guard_1", "entity_type": "minecraft:zombie" }
+    { "slot": "guard_human", "actor_profile": "pale_mirror:crimsonified_human", "minimum_tier": "FOOTHOLD" },
+    { "slot": "guard_husk", "actor_profile": "pale_mirror:crimsonified_husk", "minimum_tier": "FOOTHOLD" },
+    { "slot": "guard_villager", "actor_profile": "pale_mirror:crimsonified_villager", "minimum_tier": "INFESTED" },
+    { "slot": "guard_skeleton", "actor_profile": "pale_mirror:crimsonified_skeleton", "minimum_tier": "INFESTED" },
+    { "slot": "guard_drowned", "actor_profile": "pale_mirror:crimsonified_drowned", "minimum_tier": "INFESTED" },
+    { "slot": "guard_bogged", "actor_profile": "pale_mirror:crimsonified_bogged", "minimum_tier": "SIEGE" },
+    { "slot": "guard_wither", "actor_profile": "pale_mirror:crimsonified_wither_skeleton", "minimum_tier": "APEX" }
   ]
 }

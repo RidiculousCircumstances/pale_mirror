@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
+import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.CrimsonEncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -42,6 +43,7 @@ public final class PaleMirrorEvents {
     public static void onReloadListeners(AddReloadListenerEvent event) {
         event.addListener(EncounterDefinitions.INSTANCE);
         event.addListener(ScenarioDefinitions.INSTANCE);
+        event.addListener(ThreatTierDefinitions.INSTANCE);
     }
 
     @SubscribeEvent
@@ -91,8 +93,22 @@ public final class PaleMirrorEvents {
                     } catch (IllegalStateException failure) {
                         context.getSource().sendFailure(Component.translatable("pale_mirror.command.testmine.no_space"));
                         return 0;
+                }
+        })));
+        root.then(Commands.literal("threatsite").then(Commands.literal("register").requires(source -> source.hasPermission(4))
+                .then(Commands.argument("id", StringArgumentType.word()).executes(context -> {
+                    try {
+                        ServerPlayer player = context.getSource().getPlayerOrException();
+                        String id = net.minecraft.resources.ResourceLocation.parse(StringArgumentType.getString(context, "id")).toString();
+                        TestMineRecord site = PaleMirrorRuntime.forServer(context.getSource().getServer())
+                                .registerThreatSite(player, new io.farfrontier.palemirror.domain.WorldObjectId(id));
+                        context.getSource().sendSuccess(() -> Component.literal("Registered PM threat site " + site.id().value()), true);
+                        return 1;
+                    } catch (IllegalArgumentException | IllegalStateException failure) {
+                        context.getSource().sendFailure(Component.literal("Could not register PM threat site: " + failure.getMessage()));
+                        return 0;
                     }
-                })));
+                }))));
         root.then(Commands.literal("simulate").then(Commands.literal("step").requires(source -> source.hasPermission(4))
                 .then(Commands.argument("count", IntegerArgumentType.integer(1, 24)).executes(context -> {
                             int count = IntegerArgumentType.getInteger(context, "count");

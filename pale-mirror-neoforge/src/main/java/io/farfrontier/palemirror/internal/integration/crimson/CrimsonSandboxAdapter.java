@@ -7,14 +7,13 @@ import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.api.IntegrationAdapter;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
+import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.Mob;
 import net.neoforged.fml.ModList;
 
 /**
@@ -26,11 +25,13 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
     public static final String JOB_ID_KEY = "pale_mirror_job_id";
     public static final String ROLE_KEY = "pale_mirror_role";
     public static final String SLOT_KEY = "pale_mirror_encounter_slot";
+    public static final String PROFILE_KEY = "pale_mirror_crimson_profile";
     public static final String ACTOR_ROLE = "crimson_actor";
     private static final ResourceLocation CRIMSON_LOAD = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/load.mcfunction");
     private static final ResourceLocation CRIMSON_TICK = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/tick.mcfunction");
     private static final String SANDBOX_PACK_ID = "mod/pale_mirror:crimson_sandbox";
     private volatile AdapterHealth verifiedHealth;
+    private final CrimsonActorRuntime actorRuntime = new CrimsonActorRuntime();
 
     @Override
     public String id() { return "pale_mirror:crimson_sandbox"; }
@@ -83,20 +84,21 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
                                             EncounterProfile.ActorSlot slot) {
         verifySandbox(level.getServer());
         if (health().status() != AdapterHealth.Status.AVAILABLE) return ActorOperationResult.unavailable(health().detail());
-        if (!"minecraft:zombie".equals(slot.entityType())) {
-            return ActorOperationResult.unavailable("Crimson sandbox 1.4.3.1 supports only minecraft:zombie actor slots");
-        }
+        CrimsonActorProfile profile = CrimsonActorProfile.byId(slot.actorProfileId())
+                .orElse(null);
+        if (profile == null) return ActorOperationResult.unavailable(
+                "Crimson sandbox 1.4.3.1 does not support PM actor profile " + slot.actorProfileId());
         EncounterActorRef reference = mine.encounter().actor(slot.id()).orElse(null);
         if (reference != null && reference.entityId() != null) {
             Entity existing = level.getEntity(reference.entityId());
-            if (isOwnedActor(existing, mine, slot.id()) && isCrimsonifiedHuman(existing)) {
-                mine.encounter().activate(slot.id(), reference.entityId());
+            if (isOwnedActor(existing, mine, slot.id()) && profile.matches(existing)) {
+                mine.encounter().activate(slot.id(), reference.entityId(), profile.entityTypeId());
                 return ActorOperationResult.materialized();
             }
             if (existing != null) return ActorOperationResult.unavailable("Crimson actor identity conflict for slot " + slot.id());
         }
 
-        Zombie actor = EntityType.ZOMBIE.create(level);
+        Mob actor = profile.create(level);
         if (actor == null) return ActorOperationResult.unavailable("Could not create Crimson actor base entity");
         int slotIndex = mine.encounter().slotIndex(slot.id());
         actor.moveTo(mine.anchor().getX() + 1.5D + Math.max(slotIndex, 0), mine.anchor().getY() + 1.0D,
@@ -106,16 +108,17 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         actor.getPersistentData().putString(JOB_ID_KEY, jobId);
         actor.getPersistentData().putString(ROLE_KEY, ACTOR_ROLE);
         actor.getPersistentData().putString(SLOT_KEY, slot.id());
+        actor.getPersistentData().putString(PROFILE_KEY, profile.id());
         if (!level.addFreshEntity(actor)) return ActorOperationResult.unavailable("Could not add Crimson actor to the level");
-        if (!CrimsonProtocol1431.initializeHuman(level, actor)) {
+        if (!CrimsonProtocol1431.initializeActor(level, actor, profile)) {
             actor.discard();
             return ActorOperationResult.unavailable("Crimson sandbox initializer failed");
         }
-        if (!isOwnedActor(actor, mine, slot.id()) || !isCrimsonifiedHuman(actor)) {
+        if (!isOwnedActor(actor, mine, slot.id()) || !profile.matches(actor)) {
             actor.discard();
             return ActorOperationResult.unavailable("Crimson sandbox initializer postcondition failed");
         }
-        mine.encounter().activate(slot.id(), actor.getUUID());
+        mine.encounter().activate(slot.id(), actor.getUUID(), profile.entityTypeId());
         return ActorOperationResult.materialized();
     }
 
@@ -138,6 +141,12 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         return ActorOperationResult.materialized();
     }
 
+    /** Runs only PM-registered local actors, with a fixed work budget inside the runtime. */
+    public void tickRuntime(MinecraftServer server, PaleMirrorSavedData data) {
+        if (server.overworld().getGameTime() % 100L == 0L) verifySandbox(server);
+        if (health().status() == AdapterHealth.Status.AVAILABLE) actorRuntime.tick(server, data);
+    }
+
     public static boolean isOwnedActor(Entity entity, TestMineRecord mine, String slotId) {
         return entity != null && !entity.isRemoved() && ACTOR_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
                 && mine.id().value().equals(entity.getPersistentData().getString(OBJECT_ID_KEY))
@@ -150,9 +159,4 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
                 && !entity.getPersistentData().getString(SLOT_KEY).isBlank();
     }
 
-    private static boolean isCrimsonifiedHuman(Entity entity) {
-        return entity.getType() == EntityType.ZOMBIE && entity.getTags().contains(CrimsonProtocol1431.HUMAN_TAG)
-                && entity.getCustomName() != null
-                && Component.literal("Crimsonified Human").equals(entity.getCustomName());
-    }
 }

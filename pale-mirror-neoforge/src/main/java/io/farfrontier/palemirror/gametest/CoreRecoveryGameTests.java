@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.SettlementState;
+import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
@@ -64,7 +65,7 @@ public final class CoreRecoveryGameTests {
                 "restart snapshot must retain completed operation progress");
         helper.assertValueEqual(reloaded.testMines().get(mine.id()).job().operations().getFirst().state().name(), "COMPLETED",
                 "restart snapshot must retain operation postcondition state");
-        tick(runtime, 2);
+        tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.INFECTED, "facility status after materialization");
@@ -73,7 +74,7 @@ public final class CoreRecoveryGameTests {
         helper.assertTrue(mine.anchorId() != null, "PM-owned anchor must be materialized exactly once");
         boolean crimsonAvailable = AdapterRegistry.crimson().health().status()
                 == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE;
-        UUID crimsonActorId = crimsonAvailable ? mine.encounter().actor("guard_1").orElseThrow().entityId() : null;
+        UUID crimsonActorId = crimsonAvailable ? mine.encounter().actor("guard_human").orElseThrow().entityId() : null;
         if (crimsonAvailable) {
             LivingEntity crimsonActor = (LivingEntity) level.getEntity(crimsonActorId);
             helper.assertTrue(crimsonActor != null, "sandbox profile must materialize its persisted actor UUID");
@@ -84,14 +85,19 @@ public final class CoreRecoveryGameTests {
             CompoundTag actorSnapshot = PaleMirrorSavedData.get(level.getServer().overworld())
                     .save(new CompoundTag(), level.registryAccess());
             PaleMirrorSavedData actorReloaded = PaleMirrorSavedData.load(actorSnapshot, level.registryAccess());
-            helper.assertValueEqual(actorReloaded.testMines().get(mine.id()).encounter().actor("guard_1")
+            helper.assertValueEqual(actorReloaded.testMines().get(mine.id()).encounter().actor("guard_human")
                     .orElseThrow().entityId(), crimsonActorId, "restart snapshot must retain Crimson actor identity");
             crimsonActor.die(level.damageSources().generic());
-            helper.assertValueEqual(mine.encounter().actor("guard_1").orElseThrow().status().name(), "DEFEATED",
+            helper.assertValueEqual(mine.encounter().actor("guard_human").orElseThrow().status().name(), "DEFEATED",
                     "actor death must be observed without resolving the PM-owned controller");
             helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                     .facility(mine.id()).orElseThrow().status(), FacilityStatus.INFECTED,
                     "optional actor death must not change canonical threat state");
+            tick(runtime, 2);
+            helper.assertValueEqual(mine.encounter().actor("guard_human").orElseThrow().status().name(), "DEFEATED",
+                    "a defeated actor must not reactivate until PM changes the desired revision");
+            helper.assertValueEqual(mine.encounter().actor("guard_human").orElseThrow().entityId(), crimsonActorId,
+                    "a defeated actor must not receive a replacement UUID before a new PM revision");
         } else {
             helper.assertValueEqual(mine.encounter().state(), EncounterState.DEGRADED,
                     "missing Crimson capability must degrade only encounter presentation");
@@ -110,8 +116,8 @@ public final class CoreRecoveryGameTests {
                 "v5 controller reference must migrate to the PM anchor reference");
         helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
                 "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 6,
-                "migrated snapshot must be rewritten as schema v6");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 7,
+                "migrated snapshot must be rewritten as schema v7");
 
         LivingEntity anchorEntity = (LivingEntity) level.getEntity(mine.anchorId());
         helper.assertTrue(anchorEntity != null, "materialized anchor must be present by its registered UUID");
@@ -120,7 +126,7 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.RECOVERING, "facility status after observed controller death");
         runtime.advanceSimulation(1);
-        tick(runtime, 4);
+        tick(runtime, 5);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.OPERATIONAL, "facility status after recovery simulation");
@@ -138,6 +144,44 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(settlement.currentDefense(), 40, "recovered mine must restore settlement defense");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)),
                 "overlay cleanup must restore only PM-owned baseline cells");
+        helper.succeed();
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void crimsonBaseRosterMaterializesByPmTier(GameTestHelper helper) {
+        if (AdapterRegistry.crimson().health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
+            helper.succeed();
+            return;
+        }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
+        resetPaleMirrorState(level);
+        clearMineVolume(level, anchor);
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        player.setPos(anchor.getX() + 0.5, anchor.getY() - 2, anchor.getZ() + 0.5);
+        TestMineRecord mine = runtime.createTestMine(player);
+        runtime.advanceSimulation(1);
+        String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
+        helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted");
+        player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
+
+        tick(runtime, 5);
+        advanceTier(runtime, 12, 8);
+        advanceTier(runtime, 24, 10);
+        advanceTier(runtime, 36, 11);
+
+        var facility = PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(mine.id()).orElseThrow();
+        helper.assertValueEqual(facility.threatTier(), ThreatTier.APEX, "PM simulation must reach APEX without Crimson phases");
+        helper.assertValueEqual(mine.encounter().actors().size(), 7, "APEX roster must contain all seven base profiles");
+        for (var actorRef : mine.encounter().actors()) {
+            LivingEntity actor = (LivingEntity) level.getEntity(actorRef.entityId());
+            helper.assertTrue(actor != null && actorRef.status().name().equals("ACTIVE"),
+                    "each tier-selected profile must materialize exactly once: " + actorRef.slotId());
+            helper.assertTrue(actor.getPersistentData().getString(CrimsonSandboxAdapter.PROFILE_KEY)
+                    .equals(actorRef.actorProfileId()), "actor profile provenance must survive materialization");
+        }
         helper.succeed();
     }
 
@@ -227,6 +271,11 @@ public final class CoreRecoveryGameTests {
 
     private static void tick(PaleMirrorRuntime runtime, int count) {
         for (int index = 0; index < count; index++) runtime.tick();
+    }
+
+    private static void advanceTier(PaleMirrorRuntime runtime, int steps, int materializationTicks) {
+        runtime.advanceSimulation(steps);
+        tick(runtime, materializationTicks);
     }
 
     private static void runCommand(ServerLevel level, String command) {

@@ -101,7 +101,9 @@ public final class TestMineMaterializer {
 
     private String ensureAnchor(ServerLevel level, TestMineRecord mine, String jobId) {
         if (!AdapterRegistry.vanillaAnchor().ensureAnchor(level, mine, jobId)) return "Could not create PM anchor";
-        return AdapterRegistry.vanillaAnchor().hasAnchor(level, mine) ? null : "PM anchor postcondition failed";
+        if (!AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)) return "PM anchor postcondition failed";
+        mine.object().setLifecycle(WorldObjectLifecycle.ACTIVE);
+        return null;
     }
 
     private String removeAnchor(ServerLevel level, TestMineRecord mine) {
@@ -114,7 +116,8 @@ public final class TestMineMaterializer {
         EncounterProfile.ActorSlot slot = mine.encounter().actors().stream()
                 .filter(actor -> actor.slotId().equals(slotId))
                 .findFirst()
-                .map(actor -> new EncounterProfile.ActorSlot(actor.slotId(), actor.entityTypeId()))
+                .map(actor -> new EncounterProfile.ActorSlot(actor.slotId(), actor.actorProfileId(),
+                        io.farfrontier.palemirror.domain.ThreatTier.FOOTHOLD))
                 .orElse(null);
         return slot == null ? ActorOperationResult.unavailable("Encounter profile has no persisted slot " + slotId)
                 : AdapterRegistry.crimson().ensureActor(level, mine, jobId, slot);

@@ -97,12 +97,24 @@ public final class MaterializationScheduler {
             return;
         }
         if (profile == null) {
-            mine.setEncounter(new EncounterRecord("", "", jobId, facility.desiredRevision(), List.of(), EncounterState.DEGRADED,
-                    "Encounter profile is unavailable or changed after the scenario was offered"));
+            if (mine.encounter().actors().isEmpty()) {
+                mine.setEncounter(new EncounterRecord("", "", jobId, facility.desiredRevision(), List.of(), EncounterState.DEGRADED,
+                        "Encounter profile is unavailable or changed after the scenario was offered"));
+            } else {
+                mine.encounter().degrade("Encounter profile is unavailable or changed after the scenario was offered; "
+                        + "existing PM actor references are retained for cleanup");
+            }
             return;
         }
-        List<EncounterActorRef> actors = profile.actors().stream().map(actor -> new EncounterActorRef(actor.id(),
-                actor.entityType().toString(), null, EncounterActorRef.Status.MISSING)).toList();
+        List<EncounterActorRef> actors = profile.actorsFor(facility.threatTier()).stream().map(actor -> {
+            EncounterActorRef previous = mine.encounter().actor(actor.id()).orElse(null);
+            if (previous != null && previous.actorProfileId().equals(actor.actorProfileId())
+                    && previous.status() == EncounterActorRef.Status.ACTIVE) {
+                return new EncounterActorRef(actor.id(), actor.actorProfileId(), previous.entityTypeId(), previous.entityId(),
+                        previous.status(), previous.nextRuntimeTick(), previous.actionCounter());
+            }
+            return new EncounterActorRef(actor.id(), actor.actorProfileId(), "", null, EncounterActorRef.Status.MISSING);
+        }).toList();
         mine.setEncounter(new EncounterRecord(profile.id(), Integer.toString(profile.version()), jobId,
                 facility.desiredRevision(), actors, EncounterState.NONE, ""));
     }
