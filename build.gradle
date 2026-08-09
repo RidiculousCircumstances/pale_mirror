@@ -47,6 +47,98 @@ tasks.register('verifyJava21') {
     }
 }
 
+def architectureFile = layout.projectDirectory.file('architecture.yml').asFile
+def domainJavaSources = fileTree('pale-mirror-domain/src/main/java') { include '**/*.java' }
+def apiJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
+def guardedJavaSources = fileTree('.') {
+    include 'pale-mirror-domain/src/**/*.java', 'pale-mirror-neoforge/src/**/*.java'
+    exclude '**/build/**'
+}
+def trackedFiles = providers.exec {
+    commandLine 'git', 'ls-files'
+}.standardOutput.asText.map { text -> text.readLines() }
+def requiredArchitectureStatements = [
+        'Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations.',
+        'Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.',
+        'Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.',
+        'Observers publish typed facts; reconciliation alone converts them into domain commands and events.',
+        'Unknown or player-owned block changes are conflicts and must not be overwritten by default.'
+]
+
+tasks.register('verifyArchitecture') {
+    group = 'verification'
+    description = 'Checks Pale Mirror layer boundaries and required architecture invariants.'
+    inputs.file(architectureFile)
+    inputs.files(domainJavaSources, apiJavaSources)
+    doLast {
+        if (!architectureFile.exists()) {
+            throw new GradleException('architecture.yml is missing')
+        }
+        String architecture = architectureFile.getText('UTF-8')
+        requiredArchitectureStatements.each { statement ->
+            if (!architecture.contains(statement)) {
+                throw new GradleException("architecture.yml is missing required invariant: ${statement}")
+            }
+        }
+
+        def forbiddenDomainReferences = [
+                'net.minecraft.', 'net.neoforged.', 'io.farfrontier.palemirror.internal.',
+                'System.currentTimeMillis', 'Instant.now', 'LocalDateTime.now', 'Math.random', 'new Random('
+        ]
+        domainJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenDomainReferences.each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Domain boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+
+        apiJavaSources.files.each { source ->
+            if (source.getText('UTF-8').contains('io.farfrontier.palemirror.internal.')) {
+                throw new GradleException("API boundary violation: ${source} imports internal implementation")
+            }
+        }
+    }
+}
+
+tasks.register('verifyWorkspaceHygiene') {
+    group = 'verification'
+    description = 'Rejects tracked generated runtime state and real environment files.'
+    inputs.property('trackedFiles', trackedFiles)
+    doLast {
+        def tracked = trackedFiles.get()
+        def forbidden = tracked.findAll { path ->
+            path == '.env' || path.startsWith('.env.') || path.startsWith('.gradle/') ||
+                    path.startsWith('run/') || path.contains('/runs/') || path.startsWith('build/') ||
+                    path.contains('/build/') || path.startsWith('.idea/') ||
+                    (path.endsWith('.jar') && path != 'gradle/wrapper/gradle-wrapper.jar')
+        }
+        if (!forbidden.isEmpty()) {
+            throw new GradleException("Generated/local workspace state must not be tracked: ${forbidden.join(', ')}")
+        }
+    }
+}
+
+tasks.register('verifyLargeFiles') {
+    group = 'verification'
+    description = 'Applies the 500-line Java-file debt ratchet.'
+    inputs.files(guardedJavaSources)
+    doLast {
+        def oversized = guardedJavaSources.files.findAll { source -> source.readLines().size() > 500 }
+        if (!oversized.isEmpty()) {
+            throw new GradleException("Java files exceed the 500-line guardrail: ${oversized.join(', ')}")
+        }
+    }
+}
+
+tasks.register('guardrails') {
+    group = 'verification'
+    description = 'Runs fast architecture and LLM-drift guardrails.'
+    dependsOn tasks.named('verifyJava21'), tasks.named('verifyArchitecture'),
+            tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles')
+}
+
 tasks.named('check') {
-    dependsOn tasks.named('verifyJava21')
+    dependsOn tasks.named('guardrails')
 }
