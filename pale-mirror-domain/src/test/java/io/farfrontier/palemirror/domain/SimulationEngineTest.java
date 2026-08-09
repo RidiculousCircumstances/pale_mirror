@@ -14,17 +14,16 @@ class SimulationEngineTest {
         state.putFacility(new FacilityState(mine, 80, 10, 10));
         DomainServices services = new DomainServices();
 
-        DomainEvent infection = services.simulation().advance(state, 1).getFirst();
+        DomainEvent infection = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).getFirst();
         assertEquals(DomainEventType.MINE_INFECTED, infection.type());
         assertEquals(FacilityStatus.INFECTED, state.facility(mine).orElseThrow().status());
 
-        ScenarioInstance scenario = services.narrator()
-                .offerFor(state, infection, StoryAudienceId.globalTestAudience()).orElseThrow();
-        services.scenarios().accept(state, scenario.id());
-        services.scenarios().playerEntered(state, StoryAudienceId.globalTestAudience(), mine);
-        services.threats().controllerDestroyed(state, mine, "test:controller");
-        services.scenarios().reconcileRecovery(state, mine);
-        services.simulation().advance(state, 1);
+        services.commands().execute(state, new DomainCommand.OfferScenario(infection, StoryAudienceId.globalTestAudience()));
+        ScenarioInstance scenario = state.scenarios().stream().findFirst().orElseThrow();
+        services.commands().execute(state, new DomainCommand.AcceptScenario(scenario.id()));
+        services.commands().execute(state, new DomainCommand.PlayerEnteredFacility(StoryAudienceId.globalTestAudience(), mine));
+        services.commands().execute(state, new DomainCommand.ThreatControllerDestroyed(mine, "test:controller"));
+        services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
 
         assertEquals(FacilityStatus.OPERATIONAL, state.facility(mine).orElseThrow().status());
         assertEquals(80, state.facility(mine).orElseThrow().currentProduction());
@@ -36,7 +35,8 @@ class SimulationEngineTest {
     void negativeSimulationStepFailsVisiblyWithoutMutatingState() {
         WorldState state = new WorldState();
 
-        assertThrows(IllegalArgumentException.class, () -> new DomainServices().simulation().advance(state, -1));
+        assertThrows(IllegalArgumentException.class, () -> new DomainServices().commands()
+                .execute(state, new DomainCommand.AdvanceSimulation(-1)));
         assertEquals(0, state.simulationStep());
     }
 }

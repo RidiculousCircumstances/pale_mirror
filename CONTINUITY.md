@@ -38,15 +38,26 @@
   the packaged mod JAR reached successful server startup on Java 21.
 - Final critical-code profile passed: guardrails, unit tests, repeated
   NeoForge GameTest, build, and embedded-domain JAR verification.
+- Runtime-test coverage and its ModDev source-set fix committed as `365dbb6`.
+- Domain mutations now enter through explicit `DomainCommand` values; typed
+  Minecraft facts pass through a bounded persisted reconciliation ledger.
+- Materialization is a deterministic persisted plan with independently saved,
+  idempotent operations and verified postconditions. The scheduler never
+  force-loads chunks and works only near a player.
+- Generic World Registry entries now own physical identity, bounds, template,
+  and representation lifecycle for the controlled mine.
+- Snapshot schema is v3. v1/v2/unknown snapshot formats stop server startup
+  before Minecraft can silently replace canonical SavedData; manual reset is
+  required after an external backup.
 
 ### Now
 
-- Commit the runtime-test coverage and the ModDev wiring fix.
+- Verify and commit the crash-safe core/World Registry expansion.
 
 ### Next
 
-- Add persisted materialization-plan operations and the dedicated-server
-  restart/crash harness as the next core-slice expansion.
+- Add the dedicated-server restart/crash harness, datapack-pinned scenario
+  authoring, then perform the fail-closed Crimson public-surface audit.
 
 ## Open questions
 
@@ -61,6 +72,9 @@
 - `build.gradle`
 - `docs/llm_guardrails.md`
 - `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/DomainServices.java`
+- `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/DomainCommandProcessor.java`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/PaleMirrorRuntime.java`
+- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/materialization/MaterializationScheduler.java`
+- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/observation/ObservationReconciler.java`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/gametest/CoreRecoveryGameTests.java`
 - `pale-mirror-neoforge/build.gradle`

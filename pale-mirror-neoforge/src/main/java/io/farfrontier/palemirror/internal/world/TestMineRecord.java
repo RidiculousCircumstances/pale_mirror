@@ -11,20 +11,16 @@ import net.minecraft.core.BlockPos;
 
 public final class TestMineRecord {
     private final WorldObjectId id;
-    private final String dimensionId;
-    private final BlockPos anchor;
-    private final String templateVersion;
+    private final WorldObjectRegistryEntry object;
     private final StoryAudienceId primaryAudience;
     private final List<MutableCell> mutableCells;
     private UUID controllerId;
     private MaterializationJob job;
 
-    public TestMineRecord(WorldObjectId id, String dimensionId, BlockPos anchor, String templateVersion, StoryAudienceId primaryAudience,
+    public TestMineRecord(WorldObjectRegistryEntry object, StoryAudienceId primaryAudience,
                           List<MutableCell> mutableCells, UUID controllerId, MaterializationJob job) {
-        this.id = id;
-        this.dimensionId = dimensionId;
-        this.anchor = anchor.immutable();
-        this.templateVersion = templateVersion;
+        this.id = object.id();
+        this.object = object;
         this.primaryAudience = primaryAudience;
         this.mutableCells = new ArrayList<>(mutableCells);
         this.controllerId = controllerId;
@@ -32,18 +28,15 @@ public final class TestMineRecord {
     }
 
     public WorldObjectId id() { return id; }
-    public String dimensionId() { return dimensionId; }
-    public BlockPos anchor() { return anchor; }
-    public String templateVersion() { return templateVersion; }
+    public WorldObjectRegistryEntry object() { return object; }
+    public String dimensionId() { return object.dimensionId(); }
+    public BlockPos anchor() { return object.anchor(); }
+    public String templateVersion() { return object.templateVersion(); }
     public StoryAudienceId primaryAudience() { return primaryAudience; }
     public List<MutableCell> mutableCells() { return mutableCells; }
     public UUID controllerId() { return controllerId; }
     public MaterializationJob job() { return job; }
     public void setControllerId(UUID value) { controllerId = value; }
     public void setJob(MaterializationJob value) { job = value; }
-    public boolean contains(BlockPos pos) {
-        return Math.abs(pos.getX() - anchor.getX()) <= 4
-                && pos.getY() >= anchor.getY() && pos.getY() <= anchor.getY() + 4
-                && Math.abs(pos.getZ() - anchor.getZ()) <= 4;
-    }
+    public boolean contains(BlockPos pos) { return object.contains(pos); }
 }

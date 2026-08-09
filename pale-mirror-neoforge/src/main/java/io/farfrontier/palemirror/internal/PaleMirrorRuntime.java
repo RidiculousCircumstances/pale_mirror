@@ -7,16 +7,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import io.farfrontier.palemirror.domain.DomainEvent;
+import io.farfrontier.palemirror.domain.DomainCommand;
+import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.FacilityState;
-import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.Narrator;
-import io.farfrontier.palemirror.domain.ScenarioRuntime;
-import io.farfrontier.palemirror.domain.SimulationEngine;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
-import io.farfrontier.palemirror.domain.ThreatLifecycle;
 import io.farfrontier.palemirror.domain.WorldObjectId;
-import io.farfrontier.palemirror.internal.materialization.TestMineMaterializer;
+import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
+import io.farfrontier.palemirror.internal.observation.Observation;
+import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
+import io.farfrontier.palemirror.internal.observation.PlayerEnteredFacilityBounds;
+import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.TestMineTemplate;
@@ -32,11 +34,10 @@ public final class PaleMirrorRuntime {
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
     private final DomainServices domainServices = new DomainServices();
-    private final SimulationEngine simulation = domainServices.simulation();
-    private final ThreatLifecycle threats = domainServices.threats();
+    private final DomainCommandProcessor commands = domainServices.commands();
     private final Narrator narrator = domainServices.narrator();
-    private final ScenarioRuntime scenarios = domainServices.scenarios();
-    private final TestMineMaterializer materializer = new TestMineMaterializer();
+    private final ObservationReconciler reconciler = new ObservationReconciler(commands);
+    private final MaterializationScheduler materializationScheduler = new MaterializationScheduler();
 
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
@@ -60,17 +61,17 @@ public final class PaleMirrorRuntime {
         if (data.testMines().containsKey(id)) throw new IllegalStateException("Test mine already exists");
         ServerLevel level = player.serverLevel();
         TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2), id, audienceFor(player));
-        data.testMines().put(id, mine);
+        data.registerTestMine(mine);
         data.worldState().putFacility(new FacilityState(id, 80, 10, 10));
         data.setDirty();
         return mine;
     }
 
     public List<DomainEvent> advanceSimulation(int steps) {
-        List<DomainEvent> events = simulation.advance(data.worldState(), steps);
+        List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.AdvanceSimulation(steps));
         events.forEach(event -> {
             TestMineRecord mine = data.testMines().get(event.subject());
-            if (mine != null) narrator.offerFor(data.worldState(), event, mine.primaryAudience());
+            if (mine != null) commands.execute(data.worldState(), new DomainCommand.OfferScenario(event, mine.primaryAudience()));
         });
         if (!events.isEmpty()) data.setDirty();
         return events;
@@ -79,7 +80,7 @@ public final class PaleMirrorRuntime {
     public boolean accept(String scenarioId, StoryAudienceId audience) {
         try {
             if (!data.worldState().scenario(scenarioId).map(value -> value.audience().equals(audience)).orElse(false)) return false;
-            boolean changed = !scenarios.accept(data.worldState(), scenarioId).isEmpty();
+            boolean changed = !commands.execute(data.worldState(), new DomainCommand.AcceptScenario(scenarioId)).isEmpty();
             if (changed) data.setDirty();
             return changed;
         } catch (IllegalArgumentException ignored) {
@@ -108,38 +109,33 @@ public final class PaleMirrorRuntime {
 
     public void threatDestroyed(String objectId, String causationId) {
         WorldObjectId id = new WorldObjectId(objectId);
-        if (data.testMines().containsKey(id)) {
-            List<DomainEvent> events = threats.controllerDestroyed(data.worldState(), id, causationId);
-            if (!events.isEmpty()) {
-                scenarios.reconcileRecovery(data.worldState(), id);
-                data.testMines().get(id).setControllerId(null);
-                data.setDirty();
-            }
+        if (data.testMines().containsKey(id)) publish(new ThreatControllerDestroyed(
+                "controller-destroyed:" + causationId, id, causationId));
+    }
+
+    public List<DomainEvent> publish(Observation observation) {
+        List<DomainEvent> events = reconciler.reconcile(data, observation);
+        if (observation instanceof ThreatControllerDestroyed destroyed) {
+            TestMineRecord mine = data.testMines().get(destroyed.facilityId());
+            if (mine != null) mine.setControllerId(null);
         }
+        return events;
     }
 
     private void observePlayers() {
         for (TestMineRecord mine : data.testMines().values()) {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 if (player.serverLevel().dimension().location().toString().equals(mine.dimensionId()) && mine.contains(player.blockPosition())) {
-                    if (!scenarios.playerEntered(data.worldState(), audienceFor(player), mine.id()).isEmpty()) data.setDirty();
+                    FacilityState facility = data.worldState().facility(mine.id()).orElse(null);
+                    if (facility != null) publish(new PlayerEnteredFacilityBounds(
+                            "player-entered:" + player.getUUID() + ":" + mine.id().value() + ":" + facility.desiredRevision(),
+                            audienceFor(player), mine.id()));
                 }
             }
         }
     }
 
     private void reconcileMaterialization() {
-        for (TestMineRecord mine : data.testMines().values()) {
-            FacilityState facility = data.worldState().facility(mine.id()).orElse(null);
-            if (facility == null) continue;
-            if (facility.status() == FacilityStatus.INFECTED && data.worldState().scenarios().stream().noneMatch(scenario ->
-                    scenario.target().equals(mine.id()) && scenario.status() == io.farfrontier.palemirror.domain.ScenarioStatus.RECOVER)) continue;
-            for (ServerLevel level : server.getAllLevels()) {
-                if (level.dimension().location().toString().equals(mine.dimensionId())) {
-                    materializer.reconcile(level, facility, mine);
-                    data.setDirty();
-                }
-            }
-        }
+        materializationScheduler.schedule(server, data).forEach(this::publish);
     }
 }

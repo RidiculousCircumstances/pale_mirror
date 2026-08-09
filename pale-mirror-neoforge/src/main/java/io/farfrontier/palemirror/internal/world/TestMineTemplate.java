@@ -35,6 +35,9 @@ public final class TestMineTemplate {
             String block = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
             cells.add(new MutableCell(pos, block, block, false));
         }
-        return new TestMineRecord(id, level.dimension().location().toString(), anchor, VERSION, audience, cells, null, null);
+        WorldObjectRegistryEntry object = new WorldObjectRegistryEntry(id, level.dimension().location().toString(), anchor,
+                anchor.offset(-4, 0, -4), anchor.offset(4, 4, 4), "pale_mirror:test_mine", VERSION,
+                WorldObjectLifecycle.REPRESENTED);
+        return new TestMineRecord(object, audience, cells, null, null);
     }
 }

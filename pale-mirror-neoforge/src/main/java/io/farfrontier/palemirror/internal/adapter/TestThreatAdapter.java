@@ -45,6 +45,13 @@ public final class TestThreatAdapter implements IntegrationAdapter {
         return true;
     }
 
+    public boolean hasController(ServerLevel level, TestMineRecord mine) {
+        if (mine.controllerId() == null) return false;
+        Entity entity = level.getEntity(mine.controllerId());
+        return entity != null && !entity.isRemoved()
+                && mine.id().value().equals(entity.getPersistentData().getString(OBJECT_ID_KEY));
+    }
+
     public void removeController(ServerLevel level, TestMineRecord mine) {
         if (mine.controllerId() == null) return;
         Entity entity = level.getEntity(mine.controllerId());

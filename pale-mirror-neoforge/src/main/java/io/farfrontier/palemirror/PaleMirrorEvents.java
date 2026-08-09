@@ -7,12 +7,15 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.TestThreatAdapter;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
+import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
+import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -28,6 +31,7 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
+        PaleMirrorSavedData.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
         PaleMirrorRuntime.forServer(event.getServer());
     }
 
@@ -50,7 +54,10 @@ public final class PaleMirrorEvents {
     public static void onLivingDeath(LivingDeathEvent event) {
         String objectId = event.getEntity().getPersistentData().getString(TestThreatAdapter.OBJECT_ID_KEY);
         if (!objectId.isBlank() && event.getEntity().level().getServer() != null) {
-            PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).threatDestroyed(objectId, "entity:" + event.getEntity().getUUID());
+            String causationId = "entity:" + event.getEntity().getUUID();
+            PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new ThreatControllerDestroyed(
+                    "controller-destroyed:" + causationId,
+                    new io.farfrontier.palemirror.domain.WorldObjectId(objectId), causationId));
         }
     }
 

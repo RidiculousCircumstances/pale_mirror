@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
+import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -41,13 +42,15 @@ public final class CoreRecoveryGameTests {
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted by its audience");
 
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
-        runtime.tick();
+        tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.INFECTED, "facility status after materialization");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RECOVER, "scenario status after entering mine");
         helper.assertTrue(mine.controllerId() != null, "TestThreat controller must be materialized exactly once");
+        helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.ACTIVE,
+                "registry must record the active physical representation");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.NETHERRACK)),
                 "all PM-owned overlay cells must be materialized");
 
@@ -58,13 +61,18 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.RECOVERING, "facility status after observed controller death");
         runtime.advanceSimulation(1);
-        runtime.tick();
+        tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.OPERATIONAL, "facility status after recovery simulation");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RESOLVED, "scenario must resolve exactly once");
         helper.assertTrue(mine.controllerId() == null, "destroyed controller reference must be cleared");
+        helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.REPRESENTED,
+                "registry must retain the mine after its active threat is removed");
+        helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
+                .facility(mine.id()).orElseThrow().observedRevision(), 3L,
+                "only a verified materialization job may advance the observed revision");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)),
                 "overlay cleanup must restore only PM-owned baseline cells");
         helper.succeed();
@@ -83,12 +91,18 @@ public final class CoreRecoveryGameTests {
     private static void resetPaleMirrorState(ServerLevel level) {
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
         data.testMines().clear();
+        data.worldRegistry().clear();
         data.audienceMappings().clear();
+        data.reconciliationLedger().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().history().clear();
         data.worldState().setSimulationStep(0);
         data.worldState().setEventSequence(0);
         data.setDirty();
+    }
+
+    private static void tick(PaleMirrorRuntime runtime, int count) {
+        for (int index = 0; index < count; index++) runtime.tick();
     }
 }
