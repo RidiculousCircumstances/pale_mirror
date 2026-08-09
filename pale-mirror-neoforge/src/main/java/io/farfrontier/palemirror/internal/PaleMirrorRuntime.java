@@ -48,6 +48,7 @@ public final class PaleMirrorRuntime {
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
+        AdapterRegistry.crimson().verifySandbox(server);
     }
 
     public static PaleMirrorRuntime forServer(MinecraftServer server) {

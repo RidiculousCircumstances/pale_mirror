@@ -28,6 +28,11 @@ public final class ObservationReconciler {
             case MaterializationPostconditionObserved materialized -> commands.execute(data.worldState(),
                     new DomainCommand.MaterializationObserved(materialized.facilityId(), materialized.desiredRevision(),
                             materialized.causationId()));
+            case CrimsonEncounterActorDestroyed destroyed -> {
+                var mine = data.testMines().get(destroyed.facilityId());
+                if (mine != null) mine.encounter().defeated(destroyed.slotId(), destroyed.entityId());
+                yield List.of();
+            }
         };
         data.setDirty();
         return events;

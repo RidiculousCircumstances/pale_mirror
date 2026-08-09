@@ -27,11 +27,11 @@ Run the core-slice GameTest in a real NeoForge server level:
 ./gradlew :pale-mirror-neoforge:runGameTestServer
 ```
 
-It creates a mock server player, materializes the test mine and one PM anchor,
-persists a degraded optional Crimson encounter operation, destroys the anchor through the normal death event,
-and verifies scenario resolution, recovery, and overlay cleanup. For a manual
-server smoke test, use `./gradlew :pale-mirror-neoforge:runServer`; its local
-port is configured in the ignored `pale-mirror-neoforge/run/server.properties`.
+It creates a mock server player, materializes the test mine and its PM anchor,
+handles optional encounter failure, destroys the anchor through the normal
+death event, and verifies scenario resolution, recovery, and overlay cleanup.
+For a manual server smoke test, use `./gradlew :pale-mirror-neoforge:runServer`;
+its local port is configured in the ignored `pale-mirror-neoforge/run/server.properties`.
 
 ## Core-only manual check
 
@@ -45,15 +45,23 @@ port is configured in the ignored `pale-mirror-neoforge/run/server.properties`.
 Use `/pale_mirror object inspect pale_mirror:test_mine` to see the PM anchor,
 optional encounter state, and persisted materialization job.
 
-Crimson is an explicitly optional presentation adapter. Its pinned public
-surface currently has no safe local actor/controller contract, so it reports
-`DEGRADED` and the PM anchor path remains fully playable. Run the isolated
-packaged-JAR smoke profile with:
+Crimson is an explicitly optional, version-pinned sandbox integration. PM
+shadows Crimson's global bootstrap and tick, and remains the owner of spread,
+phases, raids, and recovery. With Crimson `1.4.3.1`, the encounter includes a PM-owned
+Crimsonified Human; killing it is observed but cannot resolve the PM anchor.
+
+Run the real Crimson actor and tick-isolation GameTest with:
+
+```bash
+./gradlew :pale-mirror-neoforge:runCrimsonGameTestServer
+```
+
+Run the isolated packaged-JAR boot profile with:
 
 ```bash
 ./gradlew :pale-mirror-neoforge:crimsonIntegrationHarness
 ```
 
-This is a binary startup smoke test, not a full Crimson gameplay test: the
-upstream datapack can log missing optional Spore resources in an otherwise
+The packaged-JAR task is a boot smoke test, not a full Crimson gameplay test:
+the upstream datapack can log missing optional Spore resources in an otherwise
 successful clean-server boot. Pale Mirror does not call those functions.

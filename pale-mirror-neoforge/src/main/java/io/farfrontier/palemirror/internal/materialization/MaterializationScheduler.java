@@ -37,12 +37,13 @@ public final class MaterializationScheduler {
             if (level == null || !level.hasChunkAt(mine.anchor()) || !playerIsNearby(server, level, mine)) continue;
 
             MaterializationJob job = mine.job();
-            if (job == null || !job.isFor(facility.desiredRevision())) {
-                ScenarioInstance scenario = selectedEncounterScenario(data, mine);
-                EncounterProfile profile = encounterProfile(scenario);
+            ScenarioInstance scenario = selectedEncounterScenario(data, mine);
+            EncounterProfile profile = encounterProfile(scenario);
+            MaterializationPlan plan = translator.translate(facility, profile, mine.encounter());
+            if (job == null || !job.isFor(facility.desiredRevision(), plan.policyId(), plan.policyVersion())) {
                 String jobId = "pm:job:" + mine.id().value() + ":" + facility.desiredRevision();
                 prepareEncounter(mine, facility, jobId, scenario, profile);
-                MaterializationPlan plan = translator.translate(facility, profile, mine.encounter());
+                plan = translator.translate(facility, profile, mine.encounter());
                 mine.setJob(new MaterializationJob(jobId,
                         facility.desiredRevision(), plan.policyId(), plan.policyVersion(), JobState.PLANNED,
                         plan.operations(), 0, 0, ""));

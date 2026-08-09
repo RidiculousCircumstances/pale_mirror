@@ -6,9 +6,11 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
+import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
+import io.farfrontier.palemirror.internal.observation.CrimsonEncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -60,6 +62,15 @@ public final class PaleMirrorEvents {
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new ThreatControllerDestroyed(
                     "controller-destroyed:" + causationId,
                     new io.farfrontier.palemirror.domain.WorldObjectId(objectId), causationId));
+        }
+        String actorObjectId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.OBJECT_ID_KEY);
+        String slotId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
+        if (!actorObjectId.isBlank() && !slotId.isBlank() && CrimsonSandboxAdapter.isActor(event.getEntity())
+                && event.getEntity().level().getServer() != null) {
+            String causationId = "entity:" + event.getEntity().getUUID();
+            PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new CrimsonEncounterActorDestroyed(
+                    "crimson-actor-destroyed:" + causationId, new io.farfrontier.palemirror.domain.WorldObjectId(actorObjectId),
+                    slotId, event.getEntity().getUUID()));
         }
     }
 

@@ -12,7 +12,7 @@ import io.farfrontier.palemirror.internal.world.EncounterRecord;
 /** Deterministically translates a mine's desired domain state into executor operations. */
 public final class TestMineMaterializationTranslator {
     public static final String POLICY_ID = "pale_mirror:pm_anchor";
-    public static final String POLICY_VERSION = "3";
+    public static final String POLICY_VERSION = "4";
 
     public MaterializationPlan translate(FacilityState facility) {
         return translate(facility, null, EncounterRecord.none());

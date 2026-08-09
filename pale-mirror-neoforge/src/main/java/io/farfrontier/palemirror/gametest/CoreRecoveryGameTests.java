@@ -5,6 +5,8 @@ import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
+import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -19,9 +21,13 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+import java.util.UUID;
 
 /** Exercises the core slice against a real NeoForge server level and a mock server player. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
@@ -65,10 +71,33 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RECOVER, "scenario status after entering mine");
         helper.assertTrue(mine.anchorId() != null, "PM-owned anchor must be materialized exactly once");
-        helper.assertValueEqual(mine.encounter().state(), EncounterState.DEGRADED,
-                "missing Crimson public actor capability must degrade only encounter presentation");
-        helper.assertValueEqual(mine.job().operations().get(2).state().name(), "DEGRADED",
-                "optional Crimson operation must be persisted as degraded rather than blocking recovery");
+        boolean crimsonAvailable = AdapterRegistry.crimson().health().status()
+                == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE;
+        UUID crimsonActorId = crimsonAvailable ? mine.encounter().actor("guard_1").orElseThrow().entityId() : null;
+        if (crimsonAvailable) {
+            LivingEntity crimsonActor = (LivingEntity) level.getEntity(crimsonActorId);
+            helper.assertTrue(crimsonActor != null, "sandbox profile must materialize its persisted actor UUID");
+            helper.assertTrue(crimsonActor.getTags().contains("Crimsonified_Human"),
+                    "sandbox actor must receive Crimson's local actor protocol");
+            helper.assertValueEqual(mine.job().operations().get(2).state().name(), "COMPLETED",
+                    "available Crimson actor operation must verify its postcondition");
+            CompoundTag actorSnapshot = PaleMirrorSavedData.get(level.getServer().overworld())
+                    .save(new CompoundTag(), level.registryAccess());
+            PaleMirrorSavedData actorReloaded = PaleMirrorSavedData.load(actorSnapshot, level.registryAccess());
+            helper.assertValueEqual(actorReloaded.testMines().get(mine.id()).encounter().actor("guard_1")
+                    .orElseThrow().entityId(), crimsonActorId, "restart snapshot must retain Crimson actor identity");
+            crimsonActor.die(level.damageSources().generic());
+            helper.assertValueEqual(mine.encounter().actor("guard_1").orElseThrow().status().name(), "DEFEATED",
+                    "actor death must be observed without resolving the PM-owned controller");
+            helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
+                    .facility(mine.id()).orElseThrow().status(), FacilityStatus.INFECTED,
+                    "optional actor death must not change canonical threat state");
+        } else {
+            helper.assertValueEqual(mine.encounter().state(), EncounterState.DEGRADED,
+                    "missing Crimson capability must degrade only encounter presentation");
+            helper.assertValueEqual(mine.job().operations().get(2).state().name(), "DEGRADED",
+                    "optional Crimson operation must be persisted as degraded rather than blocking recovery");
+        }
         helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.ACTIVE,
                 "registry must record the active physical representation");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.NETHERRACK)),
@@ -98,6 +127,8 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RESOLVED, "scenario must resolve exactly once");
         helper.assertTrue(mine.anchorId() == null, "destroyed anchor reference must be cleared");
+        if (crimsonActorId != null) helper.assertTrue(level.getEntity(crimsonActorId) == null,
+                "cleanup must remove only the PM-owned Crimson actor");
         helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.REPRESENTED,
                 "registry must retain the mine after its active threat is removed");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
@@ -108,6 +139,35 @@ public final class CoreRecoveryGameTests {
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)),
                 "overlay cleanup must restore only PM-owned baseline cells");
         helper.succeed();
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void crimsonSandboxShadowsGlobalTick(GameTestHelper helper) {
+        if (AdapterRegistry.crimson().health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
+            helper.succeed();
+            return;
+        }
+        ServerLevel level = helper.getLevel();
+        Zombie actor = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(actor != null, "test zombie must be constructible");
+        actor.moveTo(helper.absolutePos(new BlockPos(0, 2, 0)), 0.0F, 0.0F);
+        actor.addTag("PM_Crimson_Global_Tick_Test");
+        actor.addTag("Crimsonified_Human");
+        helper.assertTrue(level.addFreshEntity(actor), "test zombie must enter the level");
+        runCommand(level, "scoreboard objectives add Mass dummy");
+        runCommand(level, "scoreboard objectives add Second_Timer dummy");
+        runCommand(level, "scoreboard objectives add Aggro dummy");
+        runCommand(level, "scoreboard players set @e[tag=PM_Crimson_Global_Tick_Test,limit=1] Second_Timer 2");
+        runCommand(level, "scoreboard players set @e[tag=PM_Crimson_Global_Tick_Test,limit=1] Aggro 0");
+        runCommand(level, "scoreboard players set Second Mass 2");
+        helper.runAfterDelay(5, () -> {
+            runCommand(level, "execute as @e[tag=PM_Crimson_Global_Tick_Test,limit=1] if score @s Aggro matches 1.. run tag @s add PM_Crimson_Global_Tick_Leaked");
+            helper.assertTrue(!actor.getTags().contains("PM_Crimson_Global_Tick_Leaked"),
+                    "shadowed crimson_curse:tick must not execute Crimson global actor processing");
+            actor.discard();
+            helper.succeed();
+        });
     }
 
     private static void clearMineVolume(ServerLevel level, BlockPos anchor) {
@@ -167,5 +227,10 @@ public final class CoreRecoveryGameTests {
 
     private static void tick(PaleMirrorRuntime runtime, int count) {
         for (int index = 0; index < count; index++) runtime.tick();
+    }
+
+    private static void runCommand(ServerLevel level, String command) {
+        level.getServer().getCommands().performPrefixedCommand(
+                level.getServer().createCommandSourceStack().withSuppressedOutput().withPermission(4), command);
     }
 }

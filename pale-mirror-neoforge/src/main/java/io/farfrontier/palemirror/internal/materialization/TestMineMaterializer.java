@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.materialization;
 
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
+import io.farfrontier.palemirror.internal.integration.crimson.ActorOperationResult;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
@@ -37,13 +38,28 @@ public final class TestMineMaterializer {
         } else if (operation.state() != OperationState.COMPLETED) {
             operation.start();
             if (operation.type() == MaterializationOperationType.ENSURE_CRIMSON_ENCOUNTER_ACTOR) {
-                String diagnostic = ensureCrimsonActor(mine, operation.target());
-                operation.degrade(diagnostic);
+                ActorOperationResult result = ensureCrimsonActor(level, mine, job.jobId(), operation.target());
+                if (result.status() == ActorOperationResult.Status.MATERIALIZED) operation.complete();
+                else {
+                    operation.degrade(result.diagnostic());
+                    mine.encounter().degrade(result.diagnostic());
+                }
                 job.advanceOperation();
                 if (job.nextOperation() == null) completeJob(mine, job);
                 return job.state() == JobState.COMPLETED;
             }
-            String error = execute(level, mine, job, operation.type());
+            if (operation.type() == MaterializationOperationType.REMOVE_CRIMSON_ENCOUNTER_ACTOR) {
+                ActorOperationResult result = removeCrimsonActor(level, mine, operation.target());
+                if (result.status() == ActorOperationResult.Status.MATERIALIZED) operation.complete();
+                else {
+                    operation.degrade(result.diagnostic());
+                    mine.encounter().degrade(result.diagnostic());
+                }
+                job.advanceOperation();
+                if (job.nextOperation() == null) completeJob(mine, job);
+                return job.state() == JobState.COMPLETED;
+            }
+            String error = execute(level, mine, job, operation);
             if (error != null) {
                 operation.block(error);
                 job.block(error);
@@ -58,13 +74,13 @@ public final class TestMineMaterializer {
         return job.state() == JobState.COMPLETED;
     }
 
-    private String execute(ServerLevel level, TestMineRecord mine, MaterializationJob job, MaterializationOperationType type) {
-        return switch (type) {
+    private String execute(ServerLevel level, TestMineRecord mine, MaterializationJob job, MaterializationOperation operation) {
+        return switch (operation.type()) {
             case ENSURE_OVERLAY -> ensureOverlay(level, mine);
             case ENSURE_PM_ANCHOR -> ensureAnchor(level, mine, job.jobId());
             case REMOVE_PM_ANCHOR -> removeAnchor(level, mine);
             case ENSURE_CRIMSON_ENCOUNTER_ACTOR -> throw new IllegalStateException("Crimson actor operation must be handled as optional work");
-            case REMOVE_CRIMSON_ENCOUNTER_ACTOR -> removeCrimsonActor(mine);
+            case REMOVE_CRIMSON_ENCOUNTER_ACTOR -> throw new IllegalStateException("Crimson actor cleanup must be handled as optional work");
             case REMOVE_OVERLAY -> removeOverlay(level, mine);
         };
     }
@@ -94,21 +110,25 @@ public final class TestMineMaterializer {
                 ? null : "PM anchor removal postcondition failed";
     }
 
-    private String ensureCrimsonActor(TestMineRecord mine, String slotId) {
+    private ActorOperationResult ensureCrimsonActor(ServerLevel level, TestMineRecord mine, String jobId, String slotId) {
         EncounterProfile.ActorSlot slot = mine.encounter().actors().stream()
                 .filter(actor -> actor.slotId().equals(slotId))
                 .findFirst()
                 .map(actor -> new EncounterProfile.ActorSlot(actor.slotId(), actor.entityTypeId()))
                 .orElse(null);
-        String diagnostic = slot == null ? "Encounter profile has no persisted slot " + slotId
-                : AdapterRegistry.crimson().unavailableReason(slot);
-        mine.encounter().degrade(diagnostic);
-        return diagnostic;
+        return slot == null ? ActorOperationResult.unavailable("Encounter profile has no persisted slot " + slotId)
+                : AdapterRegistry.crimson().ensureActor(level, mine, jobId, slot);
     }
 
-    private String removeCrimsonActor(TestMineRecord mine) {
-        mine.encounter().clean();
-        return null;
+    private ActorOperationResult removeCrimsonActor(ServerLevel level, TestMineRecord mine, String slotId) {
+        ActorOperationResult result = AdapterRegistry.crimson().removeActor(level, mine, slotId);
+        if (result.status() != ActorOperationResult.Status.MATERIALIZED) {
+            return result;
+        }
+        if (mine.encounter().actors().stream().allMatch(actor -> actor.status() != io.farfrontier.palemirror.internal.world.EncounterActorRef.Status.ACTIVE)) {
+            mine.encounter().clean();
+        }
+        return result;
     }
 
     private static void completeJob(TestMineRecord mine, MaterializationJob job) {

@@ -42,7 +42,10 @@ public final class MaterializationJob {
     public void start() { state = JobState.RUNNING; attemptCount++; }
     public void complete() { state = JobState.COMPLETED; lastError = ""; }
     public void block(String error) { state = JobState.BLOCKED; lastError = error; }
-    public boolean isFor(long revision) { return desiredRevision == revision && state != JobState.CANCELLED; }
+    public boolean isFor(long revision, String expectedPolicyId, String expectedPolicyVersion) {
+        return desiredRevision == revision && state != JobState.CANCELLED
+                && policyId.equals(expectedPolicyId) && policyVersion.equals(expectedPolicyVersion);
+    }
     public MaterializationOperation nextOperation() {
         return nextOperationIndex < operations.size() ? operations.get(nextOperationIndex) : null;
     }

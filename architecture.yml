@@ -53,3 +53,7 @@ critical_flows:
     path: PM anchor -> optional encounter operation -> explicit degradation -> PM recovery
     owner: neoforge adapter and materialization bridge
     verification: critical-code
+  - id: crimson-sandbox
+    path: PM encounter intent -> isolated Crimson actor protocol -> typed observation -> PM reconciliation
+    owner: neoforge CrimsonSandboxAdapter and top-priority built-in datapack
+    verification: critical-code

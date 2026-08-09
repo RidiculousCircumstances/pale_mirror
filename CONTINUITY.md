@@ -9,8 +9,8 @@
 
 - Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
 - `pale-mirror-domain` remains independent of Minecraft and NeoForge.
-- Core slice must work without Crimson Curse; Crimson remains a soft,
-  presentation-only adapter with no global scoreboard writes.
+- Core slice must work without Crimson Curse. The exact-version Crimson sandbox
+  is optional; PM remains the owner of all world progression and global threat state.
 
 ## Key decisions
 
@@ -20,6 +20,9 @@
   `architecture.yml` is the compact boundary map.
 - Current work imports selected general practices from Stream Miner, adapted to
   this Java/NeoForge repository rather than copied verbatim.
+- Third-party internals may be used only behind an isolated, version-pinned
+  sandbox adapter; their identifiers cannot leak to domain, scenario, or
+  generic materialization layers.
 
 ## State
 
@@ -57,24 +60,26 @@
 - The first settlement/resource-flow expansion is active: an infected test mine
   emits `SETTLEMENT_SUPPLY_DISRUPTED`, removes iron supply, and lowers defense;
   recovery restores both.
-- Crimson Curse 1.4.3.1 checksum and L1 audit completed. Its public surface
-  only changes global scoreboards and contains no native entity classes, so the
-  adapter is explicitly `DEGRADED`; PM anchors remain canonical.
+- Crimson Curse 1.4.3.1 public and private protocol audits completed. The
+  `CrimsonSandboxAdapter` uses a top-priority built-in datapack to suppress its
+  global bootstrap and tick, then materializes a PM-owned Crimsonified Human
+  without Mass, phase, raid, or spread changes. PM anchors remain canonical.
+- Core and Crimson GameTests prove actor identity persistence, actor-death
+  observation without controller resolution, cleanup, and shadowing of the
+  original global Crimson tick.
 - A final-JAR dedicated-server restart harness now creates a clean NeoForge
   runtime, force-crashes it, and verifies the same world starts again. The
   GameTest separately serializes a partially completed `RUNNING` job.
 
 ### Now
 
-- Commit the verified PM-owned vanilla-anchor and optional Crimson encounter
-  foundation. The current public Crimson surface remains intentionally unable
-  to materialize native actors.
+- Complete critical-code verification and commit the isolated Crimson Sandbox
+  1.4.3.1 integration.
 
 ### Next
 
-- Design Global ThreatFront simulation as a separate milestone, including
-  escalation policy, bounded local activation, and a supported native-actor
-  integration decision.
+- Add a second audited Crimson actor archetype only after proving its complete
+  local side-effect graph. Global ThreatFront remains a separate milestone.
 
 ## Open questions
 
@@ -97,6 +102,7 @@
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/observation/ObservationReconciler.java`
 - `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/SettlementSimulation.java`
 - `docs/crimson-audit-1.4.3.1.md`
+- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/integration/crimson/`
 - `scripts/dedicated-restart-harness.sh`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/gametest/CoreRecoveryGameTests.java`
 - `pale-mirror-neoforge/build.gradle`

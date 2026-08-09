@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.internal.world;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 /** SavedData-owned native presentation record. A missing encounter never blocks the PM anchor. */
 public final class EncounterRecord {
@@ -33,7 +35,26 @@ public final class EncounterRecord {
     public List<EncounterActorRef> actors() { return List.copyOf(actors); }
     public EncounterState state() { return state; }
     public String diagnostic() { return diagnostic; }
-    public void activate() { state = EncounterState.ACTIVE; diagnostic = ""; }
+    public Optional<EncounterActorRef> actor(String slotId) {
+        return actors.stream().filter(actor -> actor.slotId().equals(slotId)).findFirst();
+    }
+    public int slotIndex(String slotId) {
+        for (int index = 0; index < actors.size(); index++) if (actors.get(index).slotId().equals(slotId)) return index;
+        return -1;
+    }
+    public void activate(String slotId, UUID entityId) { replace(slotId, entityId, EncounterActorRef.Status.ACTIVE); state = EncounterState.ACTIVE; diagnostic = ""; }
+    public void defeated(String slotId, UUID entityId) { replace(slotId, entityId, EncounterActorRef.Status.DEFEATED); }
+    public void removed(String slotId) { replace(slotId, null, EncounterActorRef.Status.REMOVED); }
     public void degrade(String reason) { state = EncounterState.DEGRADED; diagnostic = Objects.requireNonNull(reason, "reason"); }
     public void clean() { state = EncounterState.CLEANED; diagnostic = ""; }
+
+    private void replace(String slotId, UUID entityId, EncounterActorRef.Status status) {
+        for (int index = 0; index < actors.size(); index++) {
+            EncounterActorRef actor = actors.get(index);
+            if (actor.slotId().equals(slotId)) {
+                actors.set(index, new EncounterActorRef(slotId, actor.entityTypeId(), entityId, status));
+                return;
+            }
+        }
+    }
 }

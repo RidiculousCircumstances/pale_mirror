@@ -8,6 +8,10 @@ base {
     archivesName = rootProject.providers.gradleProperty('mod_id').get()
 }
 
+def crimsonIntegrationJar = layout.buildDirectory.file('integration/crimson_curse-1.4.3.1.jar')
+def crimsonIntegrationUrl = rootProject.providers.gradleProperty('crimson_integration_url').get()
+def crimsonIntegrationSha512 = rootProject.providers.gradleProperty('crimson_integration_sha512').get()
+
 dependencies {
     implementation project(':pale-mirror-domain')
     testImplementation platform('org.junit:junit-bom:5.11.4')
@@ -30,6 +34,12 @@ neoForge {
         }
         gameTestServer {
             type = 'gameTestServer'
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+        }
+        crimsonGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/crimson-game-test')
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
         }
@@ -87,6 +97,29 @@ tasks.register('verifyPackagedJar') {
     }
 }
 
+tasks.register('verifyCrimsonSandboxPackaging') {
+    group = 'verification'
+    description = 'Fails if the final JAR omits the always-active Crimson sandbox datapack or its actor initializer.'
+    dependsOn tasks.named('jar')
+    inputs.file(distributableJar)
+    doLast {
+        def requiredEntries = [
+                'crimson_sandbox/pack.mcmeta',
+                'crimson_sandbox/data/crimson_curse/function/load.mcfunction',
+                'crimson_sandbox/data/crimson_curse/function/tick.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_human.mcfunction'
+        ]
+        def jar = new java.util.jar.JarFile(distributableJar.get().asFile)
+        try {
+            requiredEntries.each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Crimson sandbox entry is missing from final JAR: ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
 tasks.register('dedicatedRestartHarness', Exec) {
     group = 'verification'
     description = 'Boots the final JAR in a clean NeoForge runtime, crashes it, and verifies restart.'
@@ -99,9 +132,6 @@ tasks.register('dedicatedRestartHarness', Exec) {
     commandLine 'bash', 'scripts/dedicated-restart-harness.sh', distributableJar.get().asFile.absolutePath
 }
 
-def crimsonIntegrationJar = layout.buildDirectory.file('integration/crimson_curse-1.4.3.1.jar')
-def crimsonIntegrationUrl = rootProject.providers.gradleProperty('crimson_integration_url').get()
-def crimsonIntegrationSha512 = rootProject.providers.gradleProperty('crimson_integration_sha512').get()
 tasks.register('downloadCrimsonIntegrationJar') {
     group = 'verification'
     description = 'Downloads the pinned Crimson runtime JAR and verifies SHA-512; normal builds never invoke it.'
@@ -120,10 +150,20 @@ tasks.register('downloadCrimsonIntegrationJar') {
     }
 }
 
+def prepareCrimsonGameTestMods = tasks.register('prepareCrimsonGameTestMods', Sync) {
+    dependsOn tasks.named('downloadCrimsonIntegrationJar')
+    from(crimsonIntegrationJar)
+    into(layout.buildDirectory.dir('runs/crimson-game-test/mods'))
+}
+
+tasks.named('runCrimsonGameTestServer') {
+    dependsOn prepareCrimsonGameTestMods
+}
+
 tasks.register('crimsonIntegrationHarness', Exec) {
     group = 'verification'
     description = 'Boots the final PM JAR beside the checksum-verified pinned Crimson JAR in a clean dedicated runtime.'
-    dependsOn tasks.named('jar'), tasks.named('downloadCrimsonIntegrationJar')
+    dependsOn tasks.named('verifyCrimsonSandboxPackaging'), tasks.named('downloadCrimsonIntegrationJar')
     workingDir rootProject.projectDir
     def harnessLauncher = javaToolchains.launcherFor {
         languageVersion = JavaLanguageVersion.of(21)

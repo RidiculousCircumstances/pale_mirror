@@ -7,10 +7,10 @@ The downloaded JAR matched the Packwiz SHA-512:
 7dff835f17bca4cf2a4efbf237393ccde1c12e4c334f3b3789d36499e3653c756a0be57af18ddae6e36e40cfcf93b33c21d3f47ce02c2d0a659da39fdb7d424c
 ```
 
-The audit was deliberately limited to public datapack functions, public
-commands, vanilla registries, and normal entity/block observations. No
-reflection, mixin, access transformer, or direct internal class dependency was
-considered.
+The first part of the audit covered the public datapack surface. The second,
+deliberately version-pinned part records the private actor protocol used by
+`CrimsonSandboxProfile 1.4.3.1`. It has no Java classes: its implementation is
+datapack functions, entity tags, teams, scores, and technical entities.
 
 | Required Pale Mirror capability | Public L1 result | Decision |
 | --- | --- | --- |
@@ -21,15 +21,41 @@ considered.
 | Avoid unintended global progression writes | Every exposed infection control function changes global scoreboards. | Blocked |
 | Public native encounter actor | The pinned JAR contains no `.class` files or custom entity registrations. Its public `crimson_curse:inf_mobs` tag contains only vanilla entity types. | No safe actor candidate |
 
-## Outcome
+## Public-surface outcome
 
-Pale Mirror now uses a PM-owned vanilla anchor as the canonical physical
-objective. `CrimsonEncounterAdapter` reports `DEGRADED` when the JAR is present: authored encounter slots are
-persisted and visible to diagnostics, but are deliberately not replaced by
-ordinary vanilla mobs pretending to be native Crimson content. This explicit
-degradation never blocks the PM recovery loop.
+Pale Mirror uses a PM-owned vanilla anchor as the canonical physical objective.
+No public function offers a local controller, caller-supplied identity, or
+safe local infection lifecycle. PM therefore never calls `cc_cmd:*` functions.
 
-Reopen the actor portion of this audit only if Crimson Curse publishes a stable
-local controller/actor API with caller-supplied identity/reference and an
-observable removal contract, or a documented public entity representation with
-equivalent lifecycle guarantees.
+## Isolated sandbox profile
+
+The enabled private compatibility layer is intentionally tiny and exact-version
+only:
+
+```text
+Crimson 1.4.3.1
+→ always-active top-priority built-in datapack shadows crimson_curse:load and :tick
+→ PM owns all spread, phases, raids, and scheduling
+→ PM creates a persisted vanilla zombie with PM provenance
+→ PM-only initializer gives it the Crimsonified Human local form
+```
+
+The initializer reproduces the zombie branch's local name, tags, attributes,
+equipment, loot table, and persistence, but omits its global team, sounds,
+particles, and `Global Mass += 15` side effect. The integration currently does
+**not** invoke Crimson's actor passive/ability functions: several read or write
+global scores. Base zombie AI plus Crimson's actor form is the supported first
+profile.
+
+All private identifiers are confined to
+`internal/integration/crimson`. PM stores the actor UUID, slot, object ID, and
+job ID; death becomes a typed observation and never resolves the PM controller.
+Absence, version mismatch, initializer failure, or identity conflict degrades
+only the optional encounter operation.
+
+`runCrimsonGameTestServer` proves both that a real Crimsonified Human is
+materialized and that the original global `crimson_curse:tick` does not process
+a test actor. Before every actor materialization the adapter also checks that
+the selected `load` and `tick` resources still come from the sandbox pack.
+Re-audit this profile for every Crimson update; if the test fails, the adapter
+must remain `BLOCKED` rather than approximate compatibility.
