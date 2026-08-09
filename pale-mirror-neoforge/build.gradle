@@ -1,0 +1,91 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.143'
+}
+
+base {
+    archivesName = rootProject.providers.gradleProperty('mod_id').get()
+}
+
+dependencies {
+    implementation project(':pale-mirror-domain')
+}
+
+neoForge {
+    version = rootProject.providers.gradleProperty('neo_version').get()
+
+    runs {
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', rootProject.providers.gradleProperty('mod_id').get()
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            systemProperty 'neoforge.enabledGameTestNamespaces', rootProject.providers.gradleProperty('mod_id').get()
+        }
+    }
+
+    mods {
+        pale_mirror {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def properties = [
+            minecraft_version_range: rootProject.providers.gradleProperty('minecraft_version_range').get(),
+            neo_version            : rootProject.providers.gradleProperty('neo_version').get(),
+            loader_version_range   : rootProject.providers.gradleProperty('loader_version_range').get(),
+            mod_id                 : rootProject.providers.gradleProperty('mod_id').get(),
+            mod_name               : rootProject.providers.gradleProperty('mod_name').get(),
+            mod_license            : rootProject.providers.gradleProperty('mod_license').get(),
+            mod_version            : rootProject.providers.gradleProperty('mod_version').get()
+    ]
+    inputs.properties(properties)
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+    expand(properties)
+}
+
+sourceSets.main.resources.srcDir(generateModMetadata)
+neoForge.ideSyncTask(generateModMetadata)
+
+tasks.named('jar', Jar).configure {
+    dependsOn project(':pale-mirror-domain').tasks.named('classes')
+    from project(':pale-mirror-domain').sourceSets.main.output
+}
+
+def distributableJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+
+tasks.register('verifyPackagedJar') {
+    group = 'verification'
+    description = 'Fails if the distributable mod jar does not embed the domain module.'
+    dependsOn tasks.named('jar')
+    inputs.file(distributableJar)
+    doLast {
+        def jarFile = distributableJar.get().asFile
+        def jar = new java.util.jar.JarFile(jarFile)
+        try {
+            if (jar.getEntry('io/farfrontier/palemirror/domain/WorldState.class') == null) {
+                throw new GradleException("${jarFile} does not embed pale-mirror-domain classes")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn rootProject.tasks.named('verifyJava21'), tasks.named('verifyPackagedJar')
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+}

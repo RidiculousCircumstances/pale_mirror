@@ -1,0 +1,7 @@
+{
+  "pale_mirror.command.testmine.created": "Created and registered Pale Mirror test mine %s.",
+  "pale_mirror.command.testmine.no_space": "The selected test mine volume must be empty.",
+  "pale_mirror.command.scenario.accepted": "Accepted scenario %s.",
+  "pale_mirror.command.scenario.missing": "No matching offered scenario was found.",
+  "pale_mirror.command.status": "Pale Mirror: %s"
+}

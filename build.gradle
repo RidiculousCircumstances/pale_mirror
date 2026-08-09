@@ -1,0 +1,52 @@
+plugins {
+    id 'base'
+    id 'java'
+}
+
+group = providers.gradleProperty('mod_group_id').get()
+version = providers.gradleProperty('mod_version').get()
+
+allprojects {
+    group = rootProject.group
+    version = rootProject.version
+}
+
+subprojects {
+    repositories {
+        mavenCentral()
+    }
+
+    plugins.withId('java') {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(21)
+            }
+        }
+
+        tasks.withType(JavaCompile).configureEach {
+            options.encoding = 'UTF-8'
+            options.release = 21
+        }
+    }
+}
+
+def java21Launcher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(21)
+}
+
+tasks.register('verifyJava21') {
+    group = 'verification'
+    description = 'Resolves and verifies the mandatory Java 21 toolchain before expensive tasks run.'
+    inputs.property('resolvedJavaVersion', java21Launcher.map { it.metadata.languageVersion.asInt() })
+    doLast {
+        def launcher = java21Launcher.get()
+        if (launcher.metadata.languageVersion.asInt() != 21) {
+            throw new GradleException("Pale Mirror requires Java 21; resolved ${launcher.metadata.languageVersion}.")
+        }
+        logger.lifecycle("Pale Mirror uses Java ${launcher.metadata.languageVersion} from ${launcher.metadata.installationPath}.")
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyJava21')
+}

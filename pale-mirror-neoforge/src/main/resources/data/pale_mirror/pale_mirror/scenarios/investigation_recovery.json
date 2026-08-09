@@ -1,0 +1,7 @@
+{
+  "id": "pale_mirror:investigation_recovery",
+  "version": 1,
+  "required_capabilities": ["TEST_THREAT_MATERIALIZATION", "TEST_THREAT_OBSERVATION"],
+  "stages": ["OFFERED", "INVESTIGATE", "RECOVER", "RESOLVED"],
+  "policy": "pale_mirror:test_threat"
+}
