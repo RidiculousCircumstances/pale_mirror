@@ -28,16 +28,17 @@
 - Stream Miner LLM and architecture guardrails inspected.
 - Adapted continuity ledger, architecture map, risk profiles, and blocking
   Gradle guardrails added; `./gradlew guardrails` passed.
+- Replaced `DomainEngine` with cohesive simulation, threat-lifecycle, and
+  event-factory services; focused deterministic and negative-path tests pass.
 
 ### Now
 
-- Commit the transferred guardrail baseline, then synchronize domain
-  coordination with its bounded-responsibility rules.
+- Commit the synchronized bounded-responsibility domain state.
 
 ### Next
 
-- Refactor the current domain coordination to match the new bounded-responsibility rules.
-- Run the critical-code verification profile and commit the synchronized state.
+- Add persisted materialization-plan operations and the dedicated-server
+  restart/crash harness as the next core-slice expansion.
 
 ## Open questions
 
@@ -51,3 +52,5 @@
 - `architecture.yml`
 - `build.gradle`
 - `docs/llm_guardrails.md`
+- `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/DomainServices.java`
+- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/PaleMirrorRuntime.java`

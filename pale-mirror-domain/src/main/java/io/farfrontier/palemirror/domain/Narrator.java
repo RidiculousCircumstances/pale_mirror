@@ -5,6 +5,12 @@ import java.util.Optional;
 
 /** First rule-based storyteller: it turns a global incident into at most one audience scenario. */
 public final class Narrator {
+    private final DomainEventFactory events;
+
+    Narrator(DomainEventFactory events) {
+        this.events = events;
+    }
+
     public Optional<ScenarioInstance> offerFor(WorldState state, DomainEvent event, StoryAudienceId audience) {
         if (event.type() != DomainEventType.MINE_INFECTED || state.hasScenarioForSource(event.eventId(), audience)) {
             return Optional.empty();
@@ -19,7 +25,7 @@ public final class Narrator {
                 "pm:scenario:" + event.eventId().substring("pm:event:".length()), event.eventId(), event.subject(), audience,
                 "pale_mirror:investigation_recovery", "1", ScenarioStatus.OFFERED);
         state.putScenario(scenario);
-        DomainEvent offered = new DomainEngine().event(state, DomainEventType.SCENARIO_OFFERED, event.subject(), event.eventId());
+        DomainEvent offered = events.create(state, DomainEventType.SCENARIO_OFFERED, event.subject(), event.eventId());
         state.addEvent(offered);
         return Optional.of(scenario);
     }

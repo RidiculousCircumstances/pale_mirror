@@ -6,13 +6,15 @@ import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
-import io.farfrontier.palemirror.domain.DomainEngine;
 import io.farfrontier.palemirror.domain.DomainEvent;
+import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.Narrator;
 import io.farfrontier.palemirror.domain.ScenarioRuntime;
+import io.farfrontier.palemirror.domain.SimulationEngine;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
+import io.farfrontier.palemirror.domain.ThreatLifecycle;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.materialization.TestMineMaterializer;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -29,9 +31,11 @@ public final class PaleMirrorRuntime {
 
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
-    private final DomainEngine engine = new DomainEngine();
-    private final Narrator narrator = new Narrator();
-    private final ScenarioRuntime scenarios = new ScenarioRuntime();
+    private final DomainServices domainServices = new DomainServices();
+    private final SimulationEngine simulation = domainServices.simulation();
+    private final ThreatLifecycle threats = domainServices.threats();
+    private final Narrator narrator = domainServices.narrator();
+    private final ScenarioRuntime scenarios = domainServices.scenarios();
     private final TestMineMaterializer materializer = new TestMineMaterializer();
 
     private PaleMirrorRuntime(MinecraftServer server) {
@@ -63,7 +67,7 @@ public final class PaleMirrorRuntime {
     }
 
     public List<DomainEvent> advanceSimulation(int steps) {
-        List<DomainEvent> events = engine.advanceSimulation(data.worldState(), steps);
+        List<DomainEvent> events = simulation.advance(data.worldState(), steps);
         events.forEach(event -> {
             TestMineRecord mine = data.testMines().get(event.subject());
             if (mine != null) narrator.offerFor(data.worldState(), event, mine.primaryAudience());
@@ -105,7 +109,7 @@ public final class PaleMirrorRuntime {
     public void threatDestroyed(String objectId, String causationId) {
         WorldObjectId id = new WorldObjectId(objectId);
         if (data.testMines().containsKey(id)) {
-            List<DomainEvent> events = engine.controllerDestroyed(data.worldState(), id, causationId);
+            List<DomainEvent> events = threats.controllerDestroyed(data.worldState(), id, causationId);
             if (!events.isEmpty()) {
                 scenarios.reconcileRecovery(data.worldState(), id);
                 data.testMines().get(id).setControllerId(null);
