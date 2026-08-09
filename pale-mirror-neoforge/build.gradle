@@ -87,6 +87,18 @@ tasks.register('verifyPackagedJar') {
     }
 }
 
+tasks.register('dedicatedRestartHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final JAR in a clean NeoForge runtime, crashes it, and verifies restart.'
+    dependsOn tasks.named('jar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/dedicated-restart-harness.sh', distributableJar.get().asFile.absolutePath
+}
+
 tasks.named('check') {
     dependsOn rootProject.tasks.named('verifyJava21'), tasks.named('verifyPackagedJar')
 }

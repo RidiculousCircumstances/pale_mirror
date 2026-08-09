@@ -58,19 +58,22 @@
 - Crimson Curse 1.4.3.1 checksum and L1 audit completed. Its public surface
   only changes global scoreboards, so `CrimsonAdapter` remains explicitly
   `BLOCKED`; the audit is documented in `docs/crimson-audit-1.4.3.1.md`.
+- A final-JAR dedicated-server restart harness now creates a clean NeoForge
+  runtime, force-crashes it, and verifies the same world starts again. The
+  GameTest separately serializes a partially completed `RUNNING` job.
 
 ### Now
 
-- Verify and commit the authoring, settlement-supply, and Crimson-audit slice.
+- Verify and commit the packaged-JAR dedicated restart harness.
 
 ### Next
 
-- Add the standalone dedicated-server restart/crash harness. It must exercise
-  a final packaged JAR, not just the in-process SavedData GameTest.
+- Add a controlled external client/real-player acceptance profile, then begin
+  the next domain object beyond the test settlement.
 
 ## Open questions
 
-- UNCONFIRMED: dedicated-server restart/crash harness has not yet completed its first full run.
+- UNCONFIRMED: an external client/real-player flow has not yet been automated.
 
 ## Working set
 
@@ -86,5 +89,6 @@
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/observation/ObservationReconciler.java`
 - `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/SettlementSimulation.java`
 - `docs/crimson-audit-1.4.3.1.md`
+- `scripts/dedicated-restart-harness.sh`
 - `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/gametest/CoreRecoveryGameTests.java`
 - `pale-mirror-neoforge/build.gradle`
