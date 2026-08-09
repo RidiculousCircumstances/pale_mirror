@@ -47,8 +47,10 @@ optional encounter state, and persisted materialization job.
 
 Crimson is an explicitly optional, version-pinned sandbox integration. PM
 shadows Crimson's global bootstrap and tick, and remains the owner of spread,
-phases, raids, and recovery. With Crimson `1.4.3.1`, the encounter includes a PM-owned
-Crimsonified Human; killing it is observed but cannot resolve the PM anchor.
+phases, raids, and recovery. With Crimson `1.4.3.1`, the Apex encounter has
+sixteen PM-owned local forms: seven Crimsonified, seven Decayed, Rusher and
+Raptor. Rusher's dash and Raptor's aura run in the bounded PM runtime; killing
+any encounter actor is observed but cannot resolve the PM anchor.
 
 Run the real Crimson actor and tick-isolation GameTest with:
 

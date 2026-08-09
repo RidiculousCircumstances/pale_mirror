@@ -84,14 +84,13 @@
 
 ### Now
 
-- Run the critical verification suite and commit special-actor behavior plus
-  the complete sixteen-profile encounter roster.
+- The sixteen-profile roster and special-actor runtime are committed as
+  `a6aa86a`; its critical verification suite passed.
 
 ### Next
 
-- Audit the first threat object (not a creature) with explicit provenance,
-  safe placement and cleanup. Bloodlinks and destructive effects remain
-  separate milestones.
+- Audit the first threat object with explicit provenance, safe placement and
+  cleanup. Bloodlinks and destructive effects remain separate milestones.
 
 ## Open questions
 
