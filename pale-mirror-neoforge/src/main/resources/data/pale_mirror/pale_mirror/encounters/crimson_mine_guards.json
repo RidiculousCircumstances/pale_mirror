@@ -1,6 +1,6 @@
 {
   "id": "pale_mirror:crimson_mine_guards",
-  "version": 3,
+  "version": 5,
   "actors": [
     { "slot": "guard_human", "actor_profile": "pale_mirror:crimsonified_human", "minimum_tier": "FOOTHOLD" },
     { "slot": "guard_husk", "actor_profile": "pale_mirror:crimsonified_husk", "minimum_tier": "FOOTHOLD" },
@@ -15,6 +15,8 @@
     { "slot": "decayed_skeleton", "actor_profile": "pale_mirror:decayed_skeleton", "minimum_tier": "APEX" },
     { "slot": "decayed_drowned", "actor_profile": "pale_mirror:decayed_drowned", "minimum_tier": "APEX" },
     { "slot": "decayed_bogged", "actor_profile": "pale_mirror:decayed_bogged", "minimum_tier": "APEX" },
-    { "slot": "decayed_wither", "actor_profile": "pale_mirror:decayed_wither_skeleton", "minimum_tier": "APEX" }
+    { "slot": "decayed_wither", "actor_profile": "pale_mirror:decayed_wither_skeleton", "minimum_tier": "APEX" },
+    { "slot": "rusher", "actor_profile": "pale_mirror:rusher", "minimum_tier": "APEX" },
+    { "slot": "raptor", "actor_profile": "pale_mirror:raptor", "minimum_tier": "APEX" }
   ]
 }

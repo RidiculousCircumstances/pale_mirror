@@ -8,8 +8,10 @@ import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Bounded local behaviour for registered PM actors. It deliberately never
@@ -32,16 +34,19 @@ final class CrimsonActorRuntime {
                 if (reference.status() != EncounterActorRef.Status.ACTIVE || reference.entityId() == null
                         || reference.nextRuntimeTick() > gameTick) continue;
                 Entity entity = level.getEntity(reference.entityId());
-                if (!(entity instanceof Mob actor) || !CrimsonSandboxAdapter.isOwnedActor(entity, mine, reference.slotId())) continue;
-                refreshTarget(level, mine, actor);
-                mine.encounter().scheduleRuntime(reference.slotId(), gameTick + TARGET_REFRESH_TICKS);
+                CrimsonActorProfile profile = CrimsonActorProfile.byId(reference.actorProfileId()).orElse(null);
+                if (!(entity instanceof Mob actor) || profile == null
+                        || !CrimsonSandboxAdapter.isOwnedActor(entity, mine, reference.slotId()) || !profile.matches(entity)) continue;
+                keepInsideThreatSite(mine, actor);
+                ServerPlayer target = refreshTarget(level, mine, actor);
+                mine.encounter().scheduleRuntime(reference.slotId(), gameTick + profile.behavior().execute(actor, target));
                 data.setDirty();
                 remaining--;
             }
         }
     }
 
-    private static void refreshTarget(ServerLevel level, TestMineRecord mine, Mob actor) {
+    private static ServerPlayer refreshTarget(ServerLevel level, TestMineRecord mine, Mob actor) {
         ServerPlayer target = level.players().stream()
                 .filter(player -> !player.isSpectator() && mine.contains(player.blockPosition()))
                 .filter(player -> actor.distanceToSqr(player) <= TARGET_RANGE_SQUARED)
@@ -49,6 +54,23 @@ final class CrimsonActorRuntime {
                 .orElse(null);
         if (target != null) actor.setTarget(target);
         else if (actor.getTarget() instanceof ServerPlayer) actor.setTarget(null);
+        return target;
+    }
+
+    /** A PM actor is never allowed to carry combat or terrain interaction out of its registered site. */
+    private static void keepInsideThreatSite(TestMineRecord mine, Mob actor) {
+        if (mine.contains(actor.blockPosition())) return;
+        int minX = mine.object().minBounds().getX();
+        int maxX = mine.object().maxBounds().getX();
+        int minY = mine.object().minBounds().getY();
+        int maxY = mine.object().maxBounds().getY();
+        int minZ = mine.object().minBounds().getZ();
+        int maxZ = mine.object().maxBounds().getZ();
+        actor.moveTo(Mth.clamp(actor.getX(), minX + 0.5D, maxX + 0.5D),
+                Mth.clamp(actor.getY(), minY + 1.0D, maxY + 1.0D),
+                Mth.clamp(actor.getZ(), minZ + 0.5D, maxZ + 0.5D), actor.getYRot(), actor.getXRot());
+        actor.setDeltaMovement(Vec3.ZERO);
+        actor.getNavigation().stop();
     }
 
     private static ServerLevel levelFor(MinecraftServer server, TestMineRecord mine) {

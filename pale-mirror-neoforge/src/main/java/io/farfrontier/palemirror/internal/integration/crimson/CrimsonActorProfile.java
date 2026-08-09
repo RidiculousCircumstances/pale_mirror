@@ -25,18 +25,27 @@ enum CrimsonActorProfile {
     DECAYED_DROWNED("pale_mirror:decayed_drowned", EntityType.DROWNED, "Decayed_Drowned", "initialize_decayed_drowned"),
     DECAYED_BOGGED("pale_mirror:decayed_bogged", EntityType.BOGGED, "Decayed_Bogged", "initialize_decayed_bogged"),
     DECAYED_WITHER_SKELETON("pale_mirror:decayed_wither_skeleton", EntityType.WITHER_SKELETON,
-            "Decayed_Wither_Skeleton", "initialize_decayed_wither_skeleton");
+            "Decayed_Wither_Skeleton", "initialize_decayed_wither_skeleton"),
+    RUSHER("pale_mirror:rusher", EntityType.RAVAGER, "Rusher", "initialize_rusher", CrimsonActorBehavior.RUSHER_DASH),
+    RAPTOR("pale_mirror:raptor", EntityType.ZOMBIE, "Raptor", "initialize_raptor", CrimsonActorBehavior.RAPTOR_AURA);
 
     private final String id;
     private final EntityType<? extends Mob> entityType;
     private final String markerTag;
     private final String initializer;
+    private final CrimsonActorBehavior behavior;
 
     CrimsonActorProfile(String id, EntityType<? extends Mob> entityType, String markerTag, String initializer) {
+        this(id, entityType, markerTag, initializer, CrimsonActorBehavior.VANILLA);
+    }
+
+    CrimsonActorProfile(String id, EntityType<? extends Mob> entityType, String markerTag, String initializer,
+                        CrimsonActorBehavior behavior) {
         this.id = id;
         this.entityType = entityType;
         this.markerTag = markerTag;
         this.initializer = initializer;
+        this.behavior = behavior;
     }
 
     static Optional<CrimsonActorProfile> byId(String id) {
@@ -47,6 +56,7 @@ enum CrimsonActorProfile {
     String entityTypeId() { return EntityType.getKey(entityType).toString(); }
     String markerTag() { return markerTag; }
     String initializer() { return initializer; }
+    CrimsonActorBehavior behavior() { return behavior; }
     Mob create(ServerLevel level) { return entityType.create(level); }
     boolean matches(Entity entity) {
         return entity != null && entity.getType() == entityType && entity.getTags().contains(markerTag);

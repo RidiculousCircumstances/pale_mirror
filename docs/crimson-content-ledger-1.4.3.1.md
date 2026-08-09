@@ -26,6 +26,8 @@ tables is blocked until the author grants written permission.
 | `decayed_drowned` | drowned | `decayed_drowned_spawn` non-trident branch | vanilla AI, local stats/loot | GameTest |
 | `decayed_bogged` | bogged | `decayed_mob` bogged branch | vanilla AI, local stats/loot | GameTest |
 | `decayed_wither_skeleton` | wither skeleton | `decayed_mob` wither-skeleton branch | vanilla AI, local stats/loot | GameTest |
+| `rusher` | ravager | `rusher_summon` | PM-owned 7–11 block dash; local stats/loot | GameTest |
+| `raptor` | zombie | `raptor_summon` | PM-owned local invisibility and target aura; no door breaking | GameTest |
 
 Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 
@@ -36,7 +38,7 @@ Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 
 ## Next audit queue
 
-Elite combat families, Bloodlinks/Nodes and boss objects remain unapproved.
-Each requires its own row with local dependency graph, destructive-operation
-policy, persistent identity, cleanup path, GameTest and restart test before
-becoming available to a PM encounter profile.
+Bloodlinks/Nodes and boss objects remain unapproved. Each requires its own row
+with local dependency graph, destructive-operation policy, persistent identity,
+cleanup path, GameTest and restart test before becoming available to a PM
+encounter profile.

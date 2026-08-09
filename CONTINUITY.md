@@ -74,20 +74,23 @@
 - A final-JAR dedicated-server restart harness now creates a clean NeoForge
   runtime, force-crashes it, and verifies the same world starts again. The
   GameTest separately serializes a partially completed `RUNNING` job.
-- Two PM-managed content families are active: seven Crimsonified and seven
-  Decayed vanilla forms, tier-filtered encounter slots, persisted actor
-  profiles and a bounded local actor runtime. Their global Crimson tick remains
-  disabled; spawn positions are bounded to the owning threat site.
+- Sixteen PM-managed forms are active: seven Crimsonified, seven Decayed,
+  Rusher and Raptor. Their tier-filtered slots and persisted references drive a
+  bounded local runtime; global Crimson tick remains disabled and actors are
+  leashed to their owning threat site.
+- Rusher's PM dash and Raptor's PM invisibility/target aura replace only safe
+  local behaviors; their global-score, Bloodlink, door-breaking and animation
+  paths remain disabled.
 
 ### Now
 
-- Run the critical verification suite and commit the fourteen-profile base and
-  Decayed roster.
+- Run the critical verification suite and commit special-actor behavior plus
+  the complete sixteen-profile encounter roster.
 
 ### Next
 
-- Audit the first special actor and add only a PM-owned local behavior if its
-  dependency graph is safe. Elite objects and destructive effects remain
+- Audit the first threat object (not a creature) with explicit provenance,
+  safe placement and cleanup. Bloodlinks and destructive effects remain
   separate milestones.
 
 ## Open questions

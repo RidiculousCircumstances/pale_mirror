@@ -23,8 +23,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -170,11 +172,11 @@ public final class CoreRecoveryGameTests {
         tick(runtime, 5);
         advanceTier(runtime, 12, 8);
         advanceTier(runtime, 24, 11);
-        advanceTier(runtime, 36, 17);
+        advanceTier(runtime, 36, 22);
 
         var facility = PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(mine.id()).orElseThrow();
         helper.assertValueEqual(facility.threatTier(), ThreatTier.APEX, "PM simulation must reach APEX without Crimson phases");
-        helper.assertValueEqual(mine.encounter().actors().size(), 14, "APEX roster must contain all audited base and Decayed profiles");
+        helper.assertValueEqual(mine.encounter().actors().size(), 16, "APEX roster must contain audited base, Decayed and special profiles");
         for (var actorRef : mine.encounter().actors()) {
             LivingEntity actor = (LivingEntity) level.getEntity(actorRef.entityId());
             helper.assertTrue(actor != null && actorRef.status().name().equals("ACTIVE"),
@@ -183,6 +185,27 @@ public final class CoreRecoveryGameTests {
                     .equals(actorRef.actorProfileId()), "actor profile provenance must survive materialization");
             helper.assertTrue(mine.contains(actor.blockPosition()), "actor must remain inside its PM threat-site bounds");
         }
+        Mob rusher = (Mob) level.getEntity(mine.encounter().actor("rusher").orElseThrow().entityId());
+        helper.assertValueEqual(rusher.getType(), EntityType.RAVAGER, "Rusher must use its audited Ravager local form");
+        player.setPos(anchor.getX() - 3.5D, rusher.getY(), anchor.getZ() - 3.5D);
+        rusher.setDeltaMovement(Vec3.ZERO);
+        mine.encounter().scheduleRuntime("rusher", 0L);
+        runtime.tick();
+        helper.assertTrue(rusher.getDeltaMovement().horizontalDistanceSqr() > 0.1D,
+                "PM-owned Rusher behavior must dash only toward a player inside its threat site");
+        rusher.moveTo(anchor.getX() + 20.5D, rusher.getY(), anchor.getZ() + 20.5D, 0.0F, 0.0F);
+        mine.encounter().scheduleRuntime("rusher", 0L);
+        runtime.tick();
+        helper.assertTrue(mine.contains(rusher.blockPosition()), "PM runtime must return an escaping actor to its owned bounds");
+        Mob raptor = (Mob) level.getEntity(mine.encounter().actor("raptor").orElseThrow().entityId());
+        helper.assertValueEqual(raptor.getType(), EntityType.ZOMBIE, "Raptor must use its audited Zombie local form");
+        player.setPos(raptor.getX(), raptor.getY(), raptor.getZ());
+        mine.encounter().scheduleRuntime("raptor", 0L);
+        runtime.tick();
+        helper.assertTrue(player.hasEffect(net.minecraft.world.effect.MobEffects.POISON),
+                "PM-owned Raptor behavior must affect only its selected in-site player target");
+        helper.assertTrue(raptor.hasEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY),
+                "PM-owned Raptor behavior must retain its local invisibility");
         helper.succeed();
     }
 

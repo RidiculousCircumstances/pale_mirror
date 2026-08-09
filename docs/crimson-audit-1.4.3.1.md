@@ -40,12 +40,17 @@ Crimson 1.4.3.1
 → PM-only initializer gives it the Crimsonified Human local form
 ```
 
-The initializers reproduce fourteen audited local forms: seven Crimsonified and
-their seven Decayed counterparts. They omit global teams, sounds, particles,
-and `Global Mass += 15` / `+= 45`. The integration currently does **not**
-invoke Crimson's actor passive/ability functions: several read or write global
-scores. Vanilla AI plus a bounded PM actor runtime is the supported first
-profile set; exact provenance and release restrictions are recorded in
+The initializers reproduce sixteen audited local forms: seven Crimsonified,
+their seven Decayed counterparts, Rusher and Raptor. They omit global teams,
+sounds, particles, and `Global Mass += 15` / `+= 45`. Rusher's upstream
+behaviour reads or writes `Second`, `Mass`, `Aggro`, `Leap`, `Global Points`,
+and Bloodlink state, so PM replaces only its 7–11 block charge with a bounded
+local runtime behavior. Raptor's upstream passive writes global scores, runs
+animation functions, applies Bloodlinks, and can break doors; PM keeps only
+local invisibility plus a close-range poison/weakness aura against the selected
+in-site player. Other upstream actor passive/ability functions are not invoked.
+Vanilla AI plus the bounded PM actor runtime is the supported profile set; exact
+provenance and release restrictions are recorded in
 [`crimson-content-ledger-1.4.3.1.md`](crimson-content-ledger-1.4.3.1.md).
 
 PM-native tiers (`FOOTHOLD`, `INFESTED`, `SIEGE`, `APEX`) advance
