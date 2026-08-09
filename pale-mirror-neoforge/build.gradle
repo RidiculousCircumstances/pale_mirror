@@ -123,7 +123,17 @@ tasks.register('verifyCrimsonSandboxPackaging') {
                 'data/pale_mirror/function/crimson/v1431/initialize_decayed_bogged.mcfunction',
                 'data/pale_mirror/function/crimson/v1431/initialize_decayed_wither_skeleton.mcfunction',
                 'data/pale_mirror/function/crimson/v1431/initialize_rusher.mcfunction',
-                'data/pale_mirror/function/crimson/v1431/initialize_raptor.mcfunction'
+                'data/pale_mirror/function/crimson/v1431/initialize_raptor.mcfunction',
+                'data/pale_mirror/pale_mirror/sieges/crimson_apex.json',
+                'data/pale_mirror/function/crimson/v1431/initialize_juggernaut.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_knight.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_mangler.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_pummeler.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_kraken.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_osiris.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bloodlink_i.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bloodlink_ii.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bloodlink_iii.mcfunction'
         ]
         def jar = new java.util.jar.JarFile(distributableJar.get().asFile)
         try {

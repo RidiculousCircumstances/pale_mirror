@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
+import io.farfrontier.palemirror.domain.SiegeStage;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
@@ -15,6 +16,9 @@ import io.farfrontier.palemirror.internal.world.EncounterState;
 import io.farfrontier.palemirror.internal.observation.MaterializationPostconditionObserved;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
+import io.farfrontier.palemirror.internal.world.SiegePartKind;
+import io.farfrontier.palemirror.internal.world.SiegePartRef;
+import io.farfrontier.palemirror.internal.world.SiegeRecord;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
@@ -39,11 +43,12 @@ public final class MaterializationScheduler {
             MaterializationJob job = mine.job();
             ScenarioInstance scenario = selectedEncounterScenario(data, mine);
             EncounterProfile profile = encounterProfile(scenario);
-            MaterializationPlan plan = translator.translate(facility, profile, mine.encounter());
+            MaterializationPlan plan = translator.translate(facility, profile, mine.encounter(), mine.siege());
             if (job == null || !job.isFor(facility.desiredRevision(), plan.policyId(), plan.policyVersion())) {
                 String jobId = "pm:job:" + mine.id().value() + ":" + facility.desiredRevision();
                 prepareEncounter(mine, facility, jobId, scenario, profile);
-                plan = translator.translate(facility, profile, mine.encounter());
+                prepareSiege(mine, facility);
+                plan = translator.translate(facility, profile, mine.encounter(), mine.siege());
                 mine.setJob(new MaterializationJob(jobId,
                         facility.desiredRevision(), plan.policyId(), plan.policyVersion(), JobState.PLANNED,
                         plan.operations(), 0, 0, ""));
@@ -117,5 +122,52 @@ public final class MaterializationScheduler {
         }).toList();
         mine.setEncounter(new EncounterRecord(profile.id(), Integer.toString(profile.version()), jobId,
                 facility.desiredRevision(), actors, EncounterState.NONE, ""));
+    }
+
+    /**
+     * Builds the physical gate list from canonical state only.  Earlier gates
+     * are deliberately retained as defeated references: this gives cleanup and
+     * provenance a durable record without ever re-materialising a cleared gate.
+     */
+    private static void prepareSiege(TestMineRecord mine, FacilityState facility) {
+        if (facility.status() != FacilityStatus.INFECTED) return;
+        SiegeStage stage = facility.siege().stage();
+        if (stage == SiegeStage.INACTIVE || stage == SiegeStage.PENDING || stage == SiegeStage.BYPASSED) return;
+        if (mine.mutableCells().size() != 4) {
+            mine.siege().degrade("Test mine template does not expose four PM-owned node cells");
+            return;
+        }
+        List<SiegePartRef> parts = new ArrayList<>();
+        for (int index = 0; index < 4; index++) {
+            String slot = List.of("node_resistance", "node_strength", "node_speed", "node_infested").get(index);
+            parts.add(existingOrNew(mine.siege(), slot, SiegePartKind.NODE, "pale_mirror:" + slot,
+                    mine.mutableCells().get(index).position()));
+        }
+        if (stage.ordinal() >= SiegeStage.BOSS.ordinal()) {
+            parts.add(existingOrNew(mine.siege(), "boss", SiegePartKind.BOSS, facility.siege().bossProfileId(),
+                    mine.anchor().offset(0, 1, -2)));
+        }
+        if (stage.ordinal() >= SiegeStage.BLOODLINK_I.ordinal()) {
+            parts.add(existingOrNew(mine.siege(), "bloodlink_i", SiegePartKind.BLOODLINK,
+                    "pale_mirror:bloodlink_i", mine.anchor().offset(0, 1, 2)));
+        }
+        if (stage.ordinal() >= SiegeStage.BLOODLINK_II.ordinal()) {
+            parts.add(existingOrNew(mine.siege(), "bloodlink_ii", SiegePartKind.BLOODLINK,
+                    "pale_mirror:bloodlink_ii", mine.anchor().offset(2, 1, 0)));
+        }
+        if (stage.ordinal() >= SiegeStage.BLOODLINK_III.ordinal()) {
+            parts.add(existingOrNew(mine.siege(), "bloodlink_iii", SiegePartKind.BLOODLINK,
+                    "pale_mirror:bloodlink_iii", mine.anchor().offset(-2, 1, 0)));
+        }
+        mine.setSiege(new SiegeRecord(facility.siege().definitionId(), facility.siege().definitionVersion(),
+                facility.desiredRevision(), parts, mine.siege().diagnostic()));
+    }
+
+    private static SiegePartRef existingOrNew(SiegeRecord record, String slot, SiegePartKind kind, String profile,
+                                               net.minecraft.core.BlockPos position) {
+        SiegePartRef existing = record.part(slot).orElse(null);
+        if (existing != null && existing.kind() == kind && existing.profileId().equals(profile)
+                && existing.position().equals(position)) return existing;
+        return new SiegePartRef(slot, kind, profile, position, null, SiegePartRef.Status.MISSING);
     }
 }

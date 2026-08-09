@@ -1,0 +1,2 @@
+# Stationary PM-owned first Bloodlink gate; it cannot run any global Crimson behavior.
+data merge entity @s[type=minecraft:wither_skeleton] {CustomName:'[{"text":"Bloodlink I"}]',Tags:["PM_Crimson_Siege","PM_Bloodlink_I"],Silent:true,PersistenceRequired:true,NoAI:true,Health:60f,attributes:[{id:"minecraft:generic.knockback_resistance",base:0.7f},{id:"minecraft:generic.max_health",base:60f},{id:"minecraft:generic.scale",base:1f}],CanPickUpLoot:false,DeathLootTable:"crimson_curse:entities/infected_flesh"}

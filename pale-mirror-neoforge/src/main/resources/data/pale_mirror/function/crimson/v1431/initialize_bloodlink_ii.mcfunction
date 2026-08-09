@@ -1,0 +1,2 @@
+# Stationary PM-owned second Bloodlink gate; all mechanics remain local to the test-mine bounds.
+data merge entity @s[type=minecraft:wither_skeleton] {CustomName:'[{"text":"Bloodlink II"}]',Tags:["PM_Crimson_Siege","PM_Bloodlink_II"],Silent:true,PersistenceRequired:true,NoAI:true,Health:120f,attributes:[{id:"minecraft:generic.knockback_resistance",base:0.8f},{id:"minecraft:generic.max_health",base:120f},{id:"minecraft:generic.scale",base:1.5f}],CanPickUpLoot:false,DeathLootTable:"crimson_curse:entities/infected_flesh"}

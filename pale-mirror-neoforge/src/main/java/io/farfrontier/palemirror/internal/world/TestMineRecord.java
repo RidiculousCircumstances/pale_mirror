@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.world;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
 
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -53,4 +54,7 @@ public final class TestMineRecord {
     public void setSiege(SiegeRecord value) { siege = value == null ? SiegeRecord.none() : value; }
     public void setJob(MaterializationJob value) { job = value; }
     public boolean contains(BlockPos pos) { return object.contains(pos); }
+    public Optional<MutableCell> mutableCell(BlockPos position) {
+        return mutableCells.stream().filter(cell -> cell.position().equals(position)).findFirst();
+    }
 }

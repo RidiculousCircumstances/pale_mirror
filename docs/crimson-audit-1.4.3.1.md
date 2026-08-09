@@ -57,15 +57,42 @@ PM-native tiers (`FOOTHOLD`, `INFESTED`, `SIEGE`, `APEX`) advance
 deterministically in the domain and select encounter roster entries. They do
 not read, write, or mirror Crimson's global Phase/Points/Mass values.
 
+## PM-owned siege profile
+
+At `APEX`, the optional sandbox materializes a separate, PM-owned clearance
+chain:
+
+```text
+four registered Node cells
+→ one hash-selected boss (Juggernaut, Knight, Mangler, Pummeler, Kraken, or Osiris)
+→ Bloodlink I → II → III
+→ PM anchor becomes vulnerable
+```
+
+Nodes are Sea Lanterns placed only into the controlled mine's four registered
+mutable cells; normal provenance preconditions still apply. Bosses and
+Bloodlinks are vanilla base entities carrying PM object, job, role, slot and
+profile data. Their UUIDs are saved in `SiegeRecord`; no world scan attempts to
+discover a similar entity. Death and node-break events are typed observations,
+deduplicated before a domain command advances the chain. The adapter blocks an
+active scenario if this capability disappears rather than silently unsealing
+the controller.
+
+The six boss forms retain only bounded local behavior. Mangler uses a PM dash;
+Pummeler and Kraken use direct non-griefing local pulses; Osiris uses a local
+health phase; Bloodlinks use a local weakness aura. Ravager, Ghast, Phantom and
+Bloodlink autonomous AI is disabled where needed. No form calls upstream
+Bloodlink, raid, terrain conversion, global-score or player functions.
+
 All private identifiers are confined to
 `internal/integration/crimson`. PM stores the actor UUID, slot, object ID, and
 job ID; death becomes a typed observation and never resolves the PM controller.
 Absence, version mismatch, initializer failure, or identity conflict degrades
 only the optional encounter operation.
 
-`runCrimsonGameTestServer` proves both that a real Crimsonified Human is
-materialized and that the original global `crimson_curse:tick` does not process
-a test actor. Before every actor materialization the adapter also checks that
-the selected `load` and `tick` resources still come from the sandbox pack.
-Re-audit this profile for every Crimson update; if the test fails, the adapter
-must remain `BLOCKED` rather than approximate compatibility.
+`runCrimsonGameTestServer` proves a real Crimsonified Human, global-tick
+shadowing, and the full Node → boss → Bloodlink → controller PM clearance
+chain. Before every actor materialization the adapter also checks that the
+selected `load` and `tick` resources still come from the sandbox pack. Re-audit
+this profile for every Crimson update; if the test fails, the adapter must
+remain `BLOCKED` rather than approximate compatibility.

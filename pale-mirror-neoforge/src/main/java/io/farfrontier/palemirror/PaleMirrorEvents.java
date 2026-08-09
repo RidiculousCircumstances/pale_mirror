@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdap
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
+import io.farfrontier.palemirror.internal.content.CrimsonSiegeDefinitions;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.CrimsonEncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -21,10 +22,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -44,6 +48,7 @@ public final class PaleMirrorEvents {
         event.addListener(EncounterDefinitions.INSTANCE);
         event.addListener(ScenarioDefinitions.INSTANCE);
         event.addListener(ThreatTierDefinitions.INSTANCE);
+        event.addListener(CrimsonSiegeDefinitions.INSTANCE);
     }
 
     @SubscribeEvent
@@ -60,10 +65,22 @@ public final class PaleMirrorEvents {
     public static void onLivingDeath(LivingDeathEvent event) {
         String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
         if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null) {
+            PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(event.getEntity().level().getServer());
+            if (!runtime.controllerVulnerable(objectId)) {
+                event.setCanceled(true);
+                return;
+            }
             String causationId = "entity:" + event.getEntity().getUUID();
-            PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new ThreatControllerDestroyed(
+            runtime.publish(new ThreatControllerDestroyed(
                     "controller-destroyed:" + causationId,
                     new io.farfrontier.palemirror.domain.WorldObjectId(objectId), causationId));
+        }
+        String siegeObjectId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.OBJECT_ID_KEY);
+        String siegeSlotId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
+        if (!siegeObjectId.isBlank() && !siegeSlotId.isBlank() && CrimsonSandboxAdapter.isSiegeEntity(event.getEntity())
+                && event.getEntity().level().getServer() != null) {
+            PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
+                    .siegeEntityDestroyed(siegeObjectId, siegeSlotId, event.getEntity().getUUID());
         }
         String actorObjectId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.OBJECT_ID_KEY);
         String slotId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
@@ -74,6 +91,22 @@ public final class PaleMirrorEvents {
                     "crimson-actor-destroyed:" + causationId, new io.farfrontier.palemirror.domain.WorldObjectId(actorObjectId),
                     slotId, event.getEntity().getUUID()));
         }
+    }
+
+    @SubscribeEvent
+    public static void onLivingAttack(LivingIncomingDamageEvent event) {
+        String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
+        if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null
+                && !PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).controllerVulnerable(objectId)) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (!(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)
+                || !event.getState().is(net.minecraft.world.level.block.Blocks.SEA_LANTERN)) return;
+        PaleMirrorRuntime.forServer(level.getServer()).siegeNodeDestroyed(level, event.getPos());
     }
 
     @SubscribeEvent

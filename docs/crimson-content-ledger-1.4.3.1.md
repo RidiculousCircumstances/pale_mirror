@@ -28,6 +28,15 @@ tables is blocked until the author grants written permission.
 | `decayed_wither_skeleton` | wither skeleton | `decayed_mob` wither-skeleton branch | vanilla AI, local stats/loot | GameTest |
 | `rusher` | ravager | `rusher_summon` | PM-owned 7–11 block dash; local stats/loot | GameTest |
 | `raptor` | zombie | `raptor_summon` | PM-owned local invisibility and target aura; no door breaking | GameTest |
+| `juggernaut` | zombie | `juggernaut` local form | vanilla melee, no door breaking; PM site leash | siege GameTest |
+| `knight` | zombie | `knight` local form | vanilla melee, no door breaking; PM site leash | siege GameTest |
+| `mangler` | ravager | `mangler` local form | no AI; PM bounded dash, never terrain griefing | siege GameTest |
+| `pummeler` | ghast | `pummeler` local form | no AI; PM local non-griefing pulse | siege GameTest |
+| `kraken` | phantom | `kraken` local form | no AI; PM local close-range grasp | siege GameTest |
+| `osiris` | zombie | `osiris` local form | PM local health phase; no upstream brain/raid | siege GameTest |
+| `bloodlink_i` | wither skeleton | Bloodlink I | no AI; registered PM gate and local aura | siege GameTest |
+| `bloodlink_ii` | wither skeleton | Bloodlink II | no AI; registered PM gate and local aura | siege GameTest |
+| `bloodlink_iii` | wither skeleton | Bloodlink III | no AI; registered PM gate and local aura | siege GameTest |
 
 Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 
@@ -36,9 +45,11 @@ Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 - infection spread, arbitrary block conversion, explosions and worldgen;
 - calls into `crimson_curse:tick`, actor passive functions or player functions.
 
-## Next audit queue
+## PM siege constraints
 
-Bloodlinks/Nodes and boss objects remain unapproved. Each requires its own row
-with local dependency graph, destructive-operation policy, persistent identity,
-cleanup path, GameTest and restart test before becoming available to a PM
-encounter profile.
+Nodes are not derived Crimson blocks: they are PM-owned Sea Lanterns constrained
+to the four template mutable cells and restored through the normal provenance
+cleanup path. Boss and Bloodlink UUIDs are saved only as PM `SiegePartRef`
+records. The supported sequence is fixed to Nodes → one deterministic boss →
+Bloodlink I/II/III; no upstream Bloodlink graph, raid, global score, world scan
+or terrain operation is imported.

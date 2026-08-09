@@ -61,3 +61,7 @@ critical_flows:
     path: deterministic simulation -> PM threat tier -> desired revision -> bounded encounter roster -> local actor runtime
     owner: domain tiers plus neoforge CrimsonSandboxAdapter
     verification: critical-code
+  - id: pm-crimson-siege
+    path: APEX -> four PM-owned Nodes -> deterministic Crimson form -> Bloodlink I/II/III -> unsealed PM anchor -> recovery
+    owner: domain siege state plus neoforge materialization and CrimsonSandboxAdapter
+    verification: critical-code

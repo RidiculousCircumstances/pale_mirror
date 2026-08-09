@@ -9,110 +9,62 @@
 
 - Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
 - `pale-mirror-domain` remains independent of Minecraft and NeoForge.
-- Core slice must work without Crimson Curse. The exact-version Crimson sandbox
-  is optional; PM remains the owner of all world progression and global threat state.
-- Crimson content is an ARR-licensed internal prototype; public distribution of
-  derived content is blocked pending the author's written permission.
+- Core slice must work without Crimson Curse; the exact-version sandbox is optional.
+- Crimson content is ARR-licensed; public distribution of derived content needs written permission.
 
 ## Key decisions
 
-- Canonical state resides in Pale Mirror SavedData/domain state, not chunks,
-  entities, adapters, or quest presentation.
-- Architecture guardrails are mechanical Gradle checks plus focused tests;
-  `architecture.yml` is the compact boundary map.
-- Current work imports selected general practices from Stream Miner, adapted to
-  this Java/NeoForge repository rather than copied verbatim.
-- Third-party internals may be used only behind an isolated, version-pinned
-  sandbox adapter; their identifiers cannot leak to domain, scenario, or
-  generic materialization layers.
-- PM-native tiers, not Crimson Phase/Points/Mass, select encounter content and
-  advance only from deterministic domain simulation.
+- PM SavedData/domain state owns world progression, scenarios, threat tiers,
+  siege stage and desired state; chunks/entities/adapters are representations.
+- `architecture.yml` is the boundary source of truth; Gradle guardrails enforce it.
+- Third-party internals are allowed only in an isolated, version-pinned
+  adapter; identifiers cannot leak to domain or generic materialization.
+- PM-native tiers—not Crimson Phase/Points/Mass—drive deterministic progression.
+- At APEX, an available sandbox runs `4 Nodes → deterministic boss →
+  Bloodlink I/II/III → PM anchor`; adapter loss blocks the scenario. Core-only
+  activation bypasses the optional chain instead of changing core behavior.
 
 ## State
 
 ### Done
 
-- Initial core vertical slice committed as `d89e411`.
-- Stream Miner LLM and architecture guardrails inspected.
-- Adapted continuity ledger, architecture map, risk profiles, and blocking
-  Gradle guardrails added; `./gradlew guardrails` passed.
-- Replaced `DomainEngine` with cohesive simulation, threat-lifecycle, and
-  event-factory services; focused deterministic and negative-path tests pass.
-- Runtime GameTest exposed a ModDev classpath defect: the domain source set was
-  embedded in the distributable JAR but absent from the dev mod runtime.
-- Fixed the ModDev source-set wiring. `runGameTestServer` now passes the full
-  core loop with a mock server player and real controller death observation.
-- Both the normal dev server and a clean NeoForge installation containing only
-  the packaged mod JAR reached successful server startup on Java 21.
-- Final critical-code profile passed: guardrails, unit tests, repeated
-  NeoForge GameTest, build, and embedded-domain JAR verification.
-- Runtime-test coverage and its ModDev source-set fix committed as `365dbb6`.
-- Domain mutations now enter through explicit `DomainCommand` values; typed
-  Minecraft facts pass through a bounded persisted reconciliation ledger.
-- Materialization is a deterministic persisted plan with independently saved,
-  idempotent operations and verified postconditions. The scheduler never
-  force-loads chunks and works only near a player.
-- Generic World Registry entries now own physical identity, bounds, template,
-  and representation lifecycle for the controlled mine.
-- Snapshot schema is v7. Released v5 and v6 formats migrate sequentially; other
-  legacy/unknown snapshot formats stop server startup
-  before Minecraft can silently replace canonical SavedData; manual reset is
-  required after an external backup.
-- Datapack scenarios now pin their authored stage/capability snapshot and
-  version into each active instance. Capability loss is explicit `BLOCKED` /
-  resume state, and `NO_SCENARIO` is causally recorded.
-- The first settlement/resource-flow expansion is active: an infected test mine
-  emits `SETTLEMENT_SUPPLY_DISRUPTED`, removes iron supply, and lowers defense;
-  recovery restores both.
-- Crimson Curse 1.4.3.1 public and private protocol audits completed. The
-  `CrimsonSandboxAdapter` uses a top-priority built-in datapack to suppress its
-  global bootstrap and tick, then materializes a PM-owned Crimsonified Human
-  without Mass, phase, raid, or spread changes. PM anchors remain canonical.
-- Core and Crimson GameTests prove actor identity persistence, actor-death
-  observation without controller resolution, cleanup, and shadowing of the
-  original global Crimson tick.
-- A final-JAR dedicated-server restart harness now creates a clean NeoForge
-  runtime, force-crashes it, and verifies the same world starts again. The
-  GameTest separately serializes a partially completed `RUNNING` job.
-- Sixteen PM-managed forms are active: seven Crimsonified, seven Decayed,
-  Rusher and Raptor. Their tier-filtered slots and persisted references drive a
-  bounded local runtime; global Crimson tick remains disabled and actors are
-  leashed to their owning threat site.
-- Rusher's PM dash and Raptor's PM invisibility/target aura replace only safe
-  local behaviors; their global-score, Bloodlink, door-breaking and animation
-  paths remain disabled.
+- Core vertical slice, restart harness, deterministic simulation, migrations,
+  authored scenarios, provenance-safe materialization and settlement flow are implemented.
+- The domain is command/event based; typed Minecraft observations reconcile
+  through a bounded persisted deduplication ledger.
+- Crimson 1.4.3.1 is sandboxed by a top-priority built-in datapack that shadows
+  its global load/tick. PM owns spread, raids, phases and actor lifecycle.
+- Sixteen PM-managed local forms are tier-selected and bounded to their site:
+  seven Crimsonified, seven Decayed, Rusher and Raptor.
+- Schema v8 persists canonical `SiegeState` and physical `SiegeRecord` refs.
+  Released v7 infected facilities migrate to an explicit bypass to avoid
+  surprise locks.
+- PM now owns four provenance-safe Node cells, deterministic boss selection
+  across Juggernaut/Knight/Mangler/Pummeler/Kraken/Osiris, and three persisted
+  Bloodlink gates. Only their typed destruction observations advance state.
+- PM controller damage is rejected before the chain is clear. All new entities
+  carry PM provenance; their local runtime is bounded, non-global and non-griefing.
+- Core and Crimson GameTests pass, including the full siege clearance chain.
 
 ### Now
 
-- The sixteen-profile roster and special-actor runtime are committed as
-  `a6aa86a`; its critical verification suite passed.
+- Siege implementation is complete locally; full critical-code verification and
+  final commit remain for the current change.
 
 ### Next
 
-- Audit the first threat object with explicit provenance, safe placement and
-  cleanup. Bloodlinks and destructive effects remain separate milestones.
+- Run clean packaged-JAR/restart profiles with the new siege data, then audit
+  manual multiplayer/client behavior and resource-pack presentation.
 
 ## Open questions
 
-- UNCONFIRMED: an external client/real-player flow and official Crimson resource
-  pack rendering have not yet been automated.
-- Obtain written permission before distributing derived Crimson content.
+- UNCONFIRMED: a real-client/multiplayer siege playthrough has not been automated.
+- Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set
 
-- `AGENTS.md`
-- `CONTINUITY.md`
-- `architecture.yml`
-- `build.gradle`
-- `docs/llm_guardrails.md`
-- `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/DomainServices.java`
-- `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/DomainCommandProcessor.java`
-- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/PaleMirrorRuntime.java`
-- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/materialization/MaterializationScheduler.java`
-- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/observation/ObservationReconciler.java`
-- `pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain/SettlementSimulation.java`
-- `docs/crimson-audit-1.4.3.1.md`
-- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/integration/crimson/`
-- `scripts/dedicated-restart-harness.sh`
-- `pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/gametest/CoreRecoveryGameTests.java`
-- `pale-mirror-neoforge/build.gradle`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/crimson-audit-1.4.3.1.md`
+- `pale-mirror-domain/.../SiegeState.java`, `FacilityState.java`, `DomainCommandProcessor.java`
+- `pale-mirror-neoforge/.../PaleMirrorRuntime.java`, `PaleMirrorEvents.java`
+- `internal/materialization/`, `internal/observation/`, `internal/integration/crimson/`
+- `gametest/CrimsonSiegeGameTests.java`, `pale-mirror-neoforge/build.gradle`

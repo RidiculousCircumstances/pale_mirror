@@ -1,0 +1,2 @@
+# Stationary PM-owned third Bloodlink gate; it is a registered entity, never a world scan target.
+data merge entity @s[type=minecraft:wither_skeleton] {CustomName:'[{"text":"Bloodlink III"}]',Tags:["PM_Crimson_Siege","PM_Bloodlink_III"],Silent:true,PersistenceRequired:true,NoAI:true,Health:180f,attributes:[{id:"minecraft:generic.knockback_resistance",base:0.9f},{id:"minecraft:generic.max_health",base:180f},{id:"minecraft:generic.scale",base:2f}],CanPickUpLoot:false,DeathLootTable:"crimson_curse:entities/infected_flesh"}

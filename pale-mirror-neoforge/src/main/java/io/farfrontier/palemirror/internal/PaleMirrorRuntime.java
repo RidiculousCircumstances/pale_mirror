@@ -22,11 +22,16 @@ import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
+import io.farfrontier.palemirror.internal.content.CrimsonSiegeDefinition;
+import io.farfrontier.palemirror.internal.content.CrimsonSiegeDefinitions;
+import io.farfrontier.palemirror.domain.SiegeStage;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
 import io.farfrontier.palemirror.internal.observation.PlayerEnteredFacilityBounds;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
+import io.farfrontier.palemirror.internal.observation.SiegeGateDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.SiegePartKind;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.TestMineTemplate;
 import net.minecraft.server.MinecraftServer;
@@ -61,6 +66,7 @@ public final class PaleMirrorRuntime {
     public void tick() {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) advanceSimulation(1);
+        reconcilePendingSieges();
         observePlayers();
         reconcileScenarioCapabilities();
         reconcileMaterialization();
@@ -146,9 +152,46 @@ public final class PaleMirrorRuntime {
                 "controller-destroyed:" + causationId, id, causationId));
     }
 
+    /** The event layer asks this before allowing damage to the PM controller. */
+    public boolean controllerVulnerable(String objectId) {
+        try {
+            return data.worldState().facility(new WorldObjectId(objectId))
+                    .map(FacilityState::controllerVulnerable).orElse(false);
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    /** Reports a PM-owned boss or Bloodlink death. Unknown or stale identities are ignored. */
+    public void siegeEntityDestroyed(String objectId, String slotId, UUID entityId) {
+        try {
+            WorldObjectId id = new WorldObjectId(objectId);
+            TestMineRecord mine = data.testMines().get(id);
+            if (mine == null || mine.siege().part(slotId).filter(part -> part.kind() != SiegePartKind.NODE
+                    && entityId.equals(part.entityId())).isEmpty()) return;
+            publish(new SiegeGateDestroyed("siege-gate:" + id.value() + ":" + slotId + ":" + entityId,
+                    id, slotId, "entity:" + entityId));
+        } catch (IllegalArgumentException ignored) {
+            // Entity data is not trusted provenance until it matches a registered PM reference.
+        }
+    }
+
+    /** Reports a node break only when the exact PM record owns that mutable cell. */
+    public void siegeNodeDestroyed(ServerLevel level, net.minecraft.core.BlockPos position) {
+        for (TestMineRecord mine : data.testMines().values()) {
+            if (!mine.dimensionId().equals(level.dimension().location().toString())) continue;
+            mine.siege().parts().stream().filter(part -> part.kind() == SiegePartKind.NODE)
+                    .filter(part -> part.status() == io.farfrontier.palemirror.internal.world.SiegePartRef.Status.ACTIVE)
+                    .filter(part -> part.position().equals(position)).findFirst().ifPresent(part -> publish(
+                            new SiegeGateDestroyed("siege-node:" + mine.id().value() + ":" + part.slotId() + ":"
+                                    + data.worldState().facility(mine.id()).map(FacilityState::desiredRevision).orElse(0L),
+                                    mine.id(), part.slotId(), "block:" + position.asLong())));
+        }
+    }
+
     public List<DomainEvent> publish(Observation observation) {
         List<DomainEvent> events = reconciler.reconcile(data, observation);
-        if (observation instanceof ThreatControllerDestroyed destroyed) {
+        if (observation instanceof ThreatControllerDestroyed destroyed && !events.isEmpty()) {
             TestMineRecord mine = data.testMines().get(destroyed.facilityId());
             if (mine != null) mine.setAnchorId(null);
         }
@@ -197,11 +240,34 @@ public final class PaleMirrorRuntime {
         data.worldState().scenarios().forEach(scenario -> {
             java.util.Set<io.farfrontier.palemirror.api.Capability> requirements = scenario.requiredCapabilities().stream()
                     .map(io.farfrontier.palemirror.api.Capability::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet());
-            boolean available = AdapterRegistry.supports(requirements);
+            boolean siegeNeedsCrimson = data.worldState().facility(scenario.target())
+                    .map(value -> value.siege().stage().protectsController()).orElse(false);
+            boolean available = AdapterRegistry.supports(requirements) && (!siegeNeedsCrimson
+                    || AdapterRegistry.crimson().health().status() == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE);
             if (!available || scenario.status() == io.farfrontier.palemirror.domain.ScenarioStatus.BLOCKED) {
                 List<DomainEvent> events = commands.execute(data.worldState(),
                         new DomainCommand.SetScenarioBlocked(scenario.id(), !available,
-                                available ? "capabilities restored" : "required capability unavailable"));
+                                available ? "capabilities restored" : siegeNeedsCrimson
+                                        ? "Crimson siege capability unavailable" : "required capability unavailable"));
+                if (!events.isEmpty()) data.setDirty();
+            }
+        });
+    }
+
+    private void reconcilePendingSieges() {
+        data.worldState().facilities().forEach(facility -> {
+            if (facility.siege().stage() != SiegeStage.PENDING) return;
+            CrimsonSiegeDefinition definition = CrimsonSiegeDefinitions.defaultDefinition();
+            if (AdapterRegistry.crimson().health().status() == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE
+                    && definition != null) {
+                String boss = CrimsonSiegeDefinitions.selectBoss(definition, server.overworld().getSeed(), facility.id(),
+                        facility.desiredRevision() + 1L);
+                List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.ActivateSiege(facility.id(),
+                        definition.id().toString(), Integer.toString(definition.version()), boss, "pm:siege-activate"));
+                if (!events.isEmpty()) data.setDirty();
+            } else {
+                List<DomainEvent> events = commands.execute(data.worldState(),
+                        new DomainCommand.BypassSiege(facility.id(), "pm:siege-bypass"));
                 if (!events.isEmpty()) data.setDirty();
             }
         });

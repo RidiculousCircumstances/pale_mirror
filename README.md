@@ -52,6 +52,15 @@ sixteen PM-owned local forms: seven Crimsonified, seven Decayed, Rusher and
 Raptor. Rusher's dash and Raptor's aura run in the bounded PM runtime; killing
 any encounter actor is observed but cannot resolve the PM anchor.
 
+At `APEX`, an available Crimson sandbox additionally enables the PM siege
+chain: four Sea Lantern Nodes in the mine's predeclared mutable cells, one
+deterministically selected boss form, and Bloodlink I–III. All four Nodes, the
+boss, and each Bloodlink must be cleared before the PM anchor accepts damage.
+PM persists every physical reference and never invokes Crimson's global
+infection, phase, raid, terrain, or tick functions. If the pinned adapter is
+unavailable while this chain is active, the scenario visibly blocks; core-only
+worlds bypass the optional chain rather than receiving a surprise lock.
+
 Run the real Crimson actor and tick-isolation GameTest with:
 
 ```bash

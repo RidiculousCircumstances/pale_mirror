@@ -11,6 +11,14 @@ final class CrimsonProtocol1431 {
     private CrimsonProtocol1431() { }
 
     static boolean initializeActor(ServerLevel level, Mob actor, CrimsonActorProfile profile) {
+        return initializeActor(level, actor, profile.initializer(), profile.markerTag());
+    }
+
+    static boolean initializeSiegeEntity(ServerLevel level, Mob actor, CrimsonSiegeProfile profile) {
+        return initializeActor(level, actor, profile.initializer(), profile.markerTag());
+    }
+
+    private static boolean initializeActor(ServerLevel level, Mob actor, String initializer, String markerTag) {
         String temporaryTag = "pm_crimson_init_" + actor.getUUID().toString().replace("-", "");
         actor.addTag(temporaryTag);
         try {
@@ -18,8 +26,8 @@ final class CrimsonProtocol1431 {
             server.getCommands().performPrefixedCommand(
                     server.createCommandSourceStack().withSuppressedOutput().withPermission(4),
                     "execute as @e[tag=" + temporaryTag + ",limit=1] at @s run function pale_mirror:crimson/v1431/"
-                            + profile.initializer());
-            return actor.getTags().contains(profile.markerTag());
+                            + initializer);
+            return actor.getTags().contains(markerTag);
         } catch (RuntimeException ignored) {
             return false;
         } finally {

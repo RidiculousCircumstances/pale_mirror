@@ -1,0 +1,2 @@
+# The upstream mount/cloud behavior is omitted; PM runs only bounded local effects.
+data merge entity @s[type=minecraft:phantom] {CustomName:'[{"text":"Kraken"}]',Tags:["PM_Crimson_Siege","Kraken","Primal"],Silent:true,PersistenceRequired:true,NoAI:true,Health:72f,attributes:[{id:"minecraft:generic.knockback_resistance",base:0.65f},{id:"minecraft:generic.max_health",base:72f},{id:"minecraft:generic.follow_range",base:32f},{id:"minecraft:generic.attack_damage",base:12f}],CanPickUpLoot:false,DeathLootTable:"crimson_curse:entities/infected_flesh"}

@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.SiegePartKind;
 
 /** The sole bridge which turns observed physical facts into domain commands. */
 public final class ObservationReconciler {
@@ -32,6 +33,20 @@ public final class ObservationReconciler {
                 var mine = data.testMines().get(destroyed.facilityId());
                 if (mine != null) mine.encounter().defeated(destroyed.slotId(), destroyed.entityId());
                 yield List.of();
+            }
+            case SiegeGateDestroyed destroyed -> {
+                List<DomainEvent> produced = commands.execute(data.worldState(),
+                        new DomainCommand.SiegeGateDestroyed(destroyed.facilityId(), destroyed.slotId(), destroyed.causationId()));
+                if (!produced.isEmpty()) {
+                    var mine = data.testMines().get(destroyed.facilityId());
+                    var part = mine == null ? null : mine.siege().part(destroyed.slotId()).orElse(null);
+                    if (part != null) {
+                        mine.siege().defeat(destroyed.slotId());
+                        if (part.kind() == SiegePartKind.NODE) mine.mutableCell(part.position())
+                                .ifPresent(cell -> cell.markApplied("minecraft:air"));
+                    }
+                }
+                yield produced;
             }
         };
         data.setDirty();

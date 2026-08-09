@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
+import io.farfrontier.palemirror.internal.world.SiegePartRef;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -27,11 +28,13 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
     public static final String SLOT_KEY = "pale_mirror_encounter_slot";
     public static final String PROFILE_KEY = "pale_mirror_crimson_profile";
     public static final String ACTOR_ROLE = "crimson_actor";
+    public static final String SIEGE_ROLE = "crimson_siege";
     private static final ResourceLocation CRIMSON_LOAD = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/load.mcfunction");
     private static final ResourceLocation CRIMSON_TICK = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/tick.mcfunction");
     private static final String SANDBOX_PACK_ID = "mod/pale_mirror:crimson_sandbox";
     private volatile AdapterHealth verifiedHealth;
     private final CrimsonActorRuntime actorRuntime = new CrimsonActorRuntime();
+    private final CrimsonSiegeRuntime siegeRuntime = new CrimsonSiegeRuntime();
 
     @Override
     public String id() { return "pale_mirror:crimson_sandbox"; }
@@ -73,7 +76,7 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         }
         return new AdapterHealth(AdapterHealth.Status.AVAILABLE,
                 "Crimson " + version + " sandboxed: PM owns spread, phases, and actor lifecycle",
-                Set.of(Capability.CRIMSON_ENCOUNTER_ACTORS));
+                Set.of(Capability.CRIMSON_ENCOUNTER_ACTORS, Capability.CRIMSON_SIEGE_OBJECTS));
     }
 
     private static String sourcePack(MinecraftServer server, ResourceLocation resource) {
@@ -144,10 +147,57 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         return ActorOperationResult.materialized();
     }
 
+    public ActorOperationResult ensureSiegeEntity(ServerLevel level, TestMineRecord mine, String jobId, SiegePartRef part) {
+        verifySandbox(level.getServer());
+        if (health().status() != AdapterHealth.Status.AVAILABLE) return ActorOperationResult.unavailable(health().detail());
+        CrimsonSiegeProfile profile = CrimsonSiegeProfile.byId(part.profileId()).orElse(null);
+        if (profile == null) return ActorOperationResult.unavailable("Unsupported Crimson siege profile " + part.profileId());
+        if (part.entityId() != null) {
+            Entity existing = level.getEntity(part.entityId());
+            if (isOwnedSiegeEntity(existing, mine, part.slotId()) && profile.matches(existing)) {
+                mine.siege().activate(part.slotId(), part.entityId());
+                return ActorOperationResult.materialized();
+            }
+            if (existing != null) return ActorOperationResult.unavailable("Crimson siege identity conflict for slot " + part.slotId());
+        }
+        Mob entity = profile.create(level);
+        if (entity == null) return ActorOperationResult.unavailable("Could not create Crimson siege entity");
+        entity.moveTo(part.position().getX() + 0.5D, part.position().getY(), part.position().getZ() + 0.5D, 0.0F, 0.0F);
+        entity.setPersistenceRequired();
+        entity.getPersistentData().putString(OBJECT_ID_KEY, mine.id().value());
+        entity.getPersistentData().putString(JOB_ID_KEY, jobId);
+        entity.getPersistentData().putString(ROLE_KEY, SIEGE_ROLE);
+        entity.getPersistentData().putString(SLOT_KEY, part.slotId());
+        entity.getPersistentData().putString(PROFILE_KEY, profile.id());
+        if (!level.addFreshEntity(entity)) return ActorOperationResult.unavailable("Could not add Crimson siege entity to level");
+        if (!CrimsonProtocol1431.initializeSiegeEntity(level, entity, profile)
+                || !isOwnedSiegeEntity(entity, mine, part.slotId()) || !profile.matches(entity)) {
+            entity.discard();
+            return ActorOperationResult.unavailable("Crimson siege initializer postcondition failed");
+        }
+        mine.siege().activate(part.slotId(), entity.getUUID());
+        return ActorOperationResult.materialized();
+    }
+
+    public ActorOperationResult removeSiegeEntity(ServerLevel level, TestMineRecord mine, String slotId) {
+        SiegePartRef part = mine.siege().part(slotId).orElse(null);
+        if (part == null || part.entityId() == null) return ActorOperationResult.materialized();
+        Entity entity = level.getEntity(part.entityId());
+        if (entity != null && !isOwnedSiegeEntity(entity, mine, slotId)) {
+            return ActorOperationResult.unavailable("Crimson siege identity conflict during cleanup for slot " + slotId);
+        }
+        if (entity != null) entity.discard();
+        mine.siege().remove(slotId);
+        return ActorOperationResult.materialized();
+    }
+
     /** Runs only PM-registered local actors, with a fixed work budget inside the runtime. */
     public void tickRuntime(MinecraftServer server, PaleMirrorSavedData data) {
         if (server.overworld().getGameTime() % 100L == 0L) verifySandbox(server);
-        if (health().status() == AdapterHealth.Status.AVAILABLE) actorRuntime.tick(server, data);
+        if (health().status() == AdapterHealth.Status.AVAILABLE) {
+            actorRuntime.tick(server, data);
+            siegeRuntime.tick(server, data);
+        }
     }
 
     public static boolean isOwnedActor(Entity entity, TestMineRecord mine, String slotId) {
@@ -160,6 +210,18 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         return entity != null && ACTOR_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
                 && !entity.getPersistentData().getString(OBJECT_ID_KEY).isBlank()
                 && !entity.getPersistentData().getString(SLOT_KEY).isBlank();
+    }
+
+    public static boolean isSiegeEntity(Entity entity) {
+        return entity != null && SIEGE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
+                && !entity.getPersistentData().getString(OBJECT_ID_KEY).isBlank()
+                && !entity.getPersistentData().getString(SLOT_KEY).isBlank();
+    }
+
+    public static boolean isOwnedSiegeEntity(Entity entity, TestMineRecord mine, String slotId) {
+        return entity != null && !entity.isRemoved() && SIEGE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
+                && mine.id().value().equals(entity.getPersistentData().getString(OBJECT_ID_KEY))
+                && slotId.equals(entity.getPersistentData().getString(SLOT_KEY));
     }
 
 }
