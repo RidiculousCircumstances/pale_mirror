@@ -11,7 +11,8 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.OfferScenario, DomainCommand.AcceptScenario,
         DomainCommand.PlayerEnteredFacility, DomainCommand.ThreatControllerDestroyed,
         DomainCommand.MaterializationObserved, DomainCommand.NoScenario,
-        DomainCommand.SetScenarioBlocked {
+        DomainCommand.SetScenarioBlocked, DomainCommand.ActivateSiege,
+        DomainCommand.BypassSiege, DomainCommand.SiegeGateDestroyed {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -60,6 +61,32 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public SetScenarioBlocked {
             Objects.requireNonNull(scenarioId, "scenarioId");
             Objects.requireNonNull(reason, "reason");
+        }
+    }
+
+    record ActivateSiege(WorldObjectId facilityId, String definitionId, String definitionVersion, String bossProfileId,
+                         String causationId) implements DomainCommand {
+        public ActivateSiege {
+            Objects.requireNonNull(facilityId, "facilityId");
+            Objects.requireNonNull(definitionId, "definitionId");
+            Objects.requireNonNull(definitionVersion, "definitionVersion");
+            Objects.requireNonNull(bossProfileId, "bossProfileId");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record BypassSiege(WorldObjectId facilityId, String causationId) implements DomainCommand {
+        public BypassSiege {
+            Objects.requireNonNull(facilityId, "facilityId");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record SiegeGateDestroyed(WorldObjectId facilityId, String slotId, String causationId) implements DomainCommand {
+        public SiegeGateDestroyed {
+            Objects.requireNonNull(facilityId, "facilityId");
+            Objects.requireNonNull(slotId, "slotId");
+            Objects.requireNonNull(causationId, "causationId");
         }
     }
 }

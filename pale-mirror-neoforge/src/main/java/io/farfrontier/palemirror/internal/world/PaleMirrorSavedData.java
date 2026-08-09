@@ -15,6 +15,8 @@ import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
+import io.farfrontier.palemirror.domain.SiegeStage;
+import io.farfrontier.palemirror.domain.SiegeState;
 import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.ThreatTier;
@@ -39,7 +41,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    private static final int CURRENT_SCHEMA = 7;
+    private static final int CURRENT_SCHEMA = 8;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -101,7 +103,7 @@ public final class PaleMirrorSavedData extends SavedData {
         CompoundTag snapshot = tag.getCompound("snapshot");
         WorldState state = readState(snapshot);
         state.setSchemaVersion(CURRENT_SCHEMA);
-        WorldObjectRegistry registry = readRegistry(tag.getList("worldObjects", Tag.TAG_COMPOUND));
+        WorldObjectRegistry registry = WorldPresentationCodec.readRegistry(tag.getList("worldObjects", Tag.TAG_COMPOUND));
         Map<WorldObjectId, TestMineRecord> mines = new LinkedHashMap<>();
         for (Tag element : tag.getList("testMines", Tag.TAG_COMPOUND)) {
             TestMineRecord mine = readMine((CompoundTag) element, registry);
@@ -122,7 +124,7 @@ public final class PaleMirrorSavedData extends SavedData {
     }
 
     private static boolean isMigratable(int version) {
-        return version == CURRENT_SCHEMA || version == 5 || version == 6;
+        return version == CURRENT_SCHEMA || version == 5 || version == 6 || version == 7;
     }
 
     /** Sequential migration of the prior released snapshot; never silently drops native references. */
@@ -134,7 +136,11 @@ public final class PaleMirrorSavedData extends SavedData {
             migrateV5ToV6(migrated);
             version = 6;
         }
-        if (version == 6) migrateV6ToV7(migrated);
+        if (version == 6) {
+            migrateV6ToV7(migrated);
+            version = 7;
+        }
+        if (version == 7) migrateV7ToV8(migrated);
         return migrated;
     }
 
@@ -197,12 +203,30 @@ public final class PaleMirrorSavedData extends SavedData {
         tag.putInt("schemaVersion", 7);
     }
 
+    /** Existing threats remain controller-vulnerable after upgrade; a new siege never silently locks a live world. */
+    private static void migrateV7ToV8(CompoundTag tag) {
+        CompoundTag snapshot = tag.getCompound("snapshot");
+        for (Tag element : snapshot.getList("facilities", Tag.TAG_COMPOUND)) {
+            CompoundTag facility = (CompoundTag) element;
+            if (facility.contains("siege", Tag.TAG_COMPOUND)) continue;
+            CompoundTag siege = new CompoundTag();
+            boolean infected = "INFECTED".equals(facility.getString("status"));
+            siege.putString("stage", infected ? SiegeStage.BYPASSED.name() : SiegeStage.INACTIVE.name());
+            siege.putString("definition", "");
+            siege.putString("definitionVersion", "");
+            siege.putString("boss", "");
+            siege.put("destroyedNodes", new ListTag());
+            facility.put("siege", siege);
+        }
+        tag.putInt("schemaVersion", 8);
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("schemaVersion", CURRENT_SCHEMA);
         tag.put("snapshot", writeState(worldState));
         ListTag objects = new ListTag();
-        worldRegistry.entries().forEach(entry -> objects.add(writeRegistryEntry(entry)));
+        worldRegistry.entries().forEach(entry -> objects.add(WorldPresentationCodec.writeRegistryEntry(entry)));
         tag.put("worldObjects", objects);
         ListTag mines = new ListTag();
         testMines.values().forEach(mine -> mines.add(writeMine(mine)));
@@ -238,6 +262,15 @@ public final class PaleMirrorSavedData extends SavedData {
             facility.putString("status", value.status().name());
             facility.putString("threatTier", value.threatTier().name());
             facility.putLong("threatStartedAtStep", value.threatStartedAtStep());
+            CompoundTag siege = new CompoundTag();
+            siege.putString("stage", value.siege().stage().name());
+            siege.putString("definition", value.siege().definitionId());
+            siege.putString("definitionVersion", value.siege().definitionVersion());
+            siege.putString("boss", value.siege().bossProfileId());
+            ListTag destroyedNodes = new ListTag();
+            value.siege().destroyedNodes().forEach(node -> destroyedNodes.add(net.minecraft.nbt.StringTag.valueOf(node)));
+            siege.put("destroyedNodes", destroyedNodes);
+            facility.put("siege", siege);
             facilities.add(facility);
         });
         tag.put("facilities", facilities);
@@ -306,12 +339,17 @@ public final class PaleMirrorSavedData extends SavedData {
         long eventSequence = 0;
         for (Tag element : tag.getList("facilities", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
+            CompoundTag siegeTag = value.getCompound("siege");
+            SiegeState siege = new SiegeState(
+                    SiegeStage.valueOf(siegeTag.contains("stage", Tag.TAG_STRING) ? siegeTag.getString("stage") : "INACTIVE"),
+                    siegeTag.getString("definition"), siegeTag.getString("definitionVersion"), siegeTag.getString("boss"),
+                    new java.util.LinkedHashSet<>(stringList(siegeTag.getList("destroyedNodes", Tag.TAG_STRING))));
             state.putFacility(new FacilityState(new WorldObjectId(value.getString("id")), value.getInt("normalProduction"),
                     value.getInt("threshold"), value.getInt("pressure"), value.getInt("currentProduction"),
                     value.getInt("recoverySteps"), value.getLong("desiredRevision"), value.getLong("observedRevision"),
                     FacilityStatus.valueOf(value.getString("status")),
                     ThreatTier.valueOf(value.contains("threatTier", Tag.TAG_STRING) ? value.getString("threatTier") : "DORMANT"),
-                    value.getLong("threatStartedAtStep")));
+                    value.getLong("threatStartedAtStep"), siege));
         }
         for (Tag element : tag.getList("scenarios", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
@@ -362,7 +400,8 @@ public final class PaleMirrorSavedData extends SavedData {
         tag.putString("id", mine.id().value());
         tag.putString("audience", mine.primaryAudience().value());
         if (mine.anchorId() != null) tag.putUUID("anchor", mine.anchorId());
-        tag.put("encounter", writeEncounter(mine.encounter()));
+        tag.put("encounter", WorldPresentationCodec.writeEncounter(mine.encounter()));
+        tag.put("siegePresentation", WorldPresentationCodec.writeSiege(mine.siege()));
         ListTag cells = new ListTag();
         mine.mutableCells().forEach(cell -> {
             CompoundTag value = new CompoundTag();
@@ -426,74 +465,13 @@ public final class PaleMirrorSavedData extends SavedData {
         }
         UUID anchor = tag.hasUUID("anchor") ? tag.getUUID("anchor") : null;
         EncounterRecord encounter = tag.contains("encounter", Tag.TAG_COMPOUND)
-                ? readEncounter(tag.getCompound("encounter")) : EncounterRecord.none();
+                ? WorldPresentationCodec.readEncounter(tag.getCompound("encounter")) : EncounterRecord.none();
+        SiegeRecord siege = tag.contains("siegePresentation", Tag.TAG_COMPOUND)
+                ? WorldPresentationCodec.readSiege(tag.getCompound("siegePresentation")) : SiegeRecord.none();
         StoryAudienceId audience = tag.contains("audience", Tag.TAG_STRING)
                 ? new StoryAudienceId(tag.getString("audience")) : StoryAudienceId.globalTestAudience();
         WorldObjectId id = new WorldObjectId(tag.getString("id"));
-        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, job);
+        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, siege, job);
     }
 
-    private static CompoundTag writeEncounter(EncounterRecord encounter) {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("profile", encounter.profileId());
-        tag.putString("profileVersion", encounter.profileVersion());
-        tag.putString("job", encounter.jobId());
-        tag.putLong("desiredRevision", encounter.desiredRevision());
-        tag.putString("state", encounter.state().name());
-        tag.putString("diagnostic", encounter.diagnostic());
-        ListTag actors = new ListTag();
-        encounter.actors().forEach(actor -> {
-            CompoundTag value = new CompoundTag();
-            value.putString("slot", actor.slotId());
-            value.putString("profile", actor.actorProfileId());
-            value.putString("entityType", actor.entityTypeId());
-            if (actor.entityId() != null) value.putUUID("entity", actor.entityId());
-            value.putString("status", actor.status().name());
-            value.putLong("nextRuntimeTick", actor.nextRuntimeTick());
-            value.putInt("actionCounter", actor.actionCounter());
-            actors.add(value);
-        });
-        tag.put("actors", actors);
-        return tag;
-    }
-
-    private static EncounterRecord readEncounter(CompoundTag tag) {
-        List<EncounterActorRef> actors = new ArrayList<>();
-        for (Tag element : tag.getList("actors", Tag.TAG_COMPOUND)) {
-            CompoundTag value = (CompoundTag) element;
-            actors.add(new EncounterActorRef(value.getString("slot"), value.getString("profile"), value.getString("entityType"),
-                    value.hasUUID("entity") ? value.getUUID("entity") : null,
-                    EncounterActorRef.Status.valueOf(value.getString("status")), value.getLong("nextRuntimeTick"),
-                    value.getInt("actionCounter")));
-        }
-        return new EncounterRecord(tag.getString("profile"), tag.getString("profileVersion"), tag.getString("job"),
-                tag.getLong("desiredRevision"), actors,
-                EncounterState.valueOf(tag.contains("state", Tag.TAG_STRING) ? tag.getString("state") : "NONE"),
-                tag.getString("diagnostic"));
-    }
-
-    private static CompoundTag writeRegistryEntry(WorldObjectRegistryEntry entry) {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("id", entry.id().value());
-        tag.putString("dimension", entry.dimensionId());
-        tag.putLong("anchor", entry.anchor().asLong());
-        tag.putLong("minBounds", entry.minBounds().asLong());
-        tag.putLong("maxBounds", entry.maxBounds().asLong());
-        tag.putString("template", entry.templateId());
-        tag.putString("templateVersion", entry.templateVersion());
-        tag.putString("lifecycle", entry.lifecycle().name());
-        return tag;
-    }
-
-    private static WorldObjectRegistry readRegistry(ListTag serialized) {
-        WorldObjectRegistry registry = new WorldObjectRegistry();
-        for (Tag element : serialized) {
-            CompoundTag tag = (CompoundTag) element;
-            registry.register(new WorldObjectRegistryEntry(new WorldObjectId(tag.getString("id")), tag.getString("dimension"),
-                    BlockPos.of(tag.getLong("anchor")), BlockPos.of(tag.getLong("minBounds")),
-                    BlockPos.of(tag.getLong("maxBounds")), tag.getString("template"), tag.getString("templateVersion"),
-                    WorldObjectLifecycle.valueOf(tag.getString("lifecycle"))));
-        }
-        return registry;
-    }
 }

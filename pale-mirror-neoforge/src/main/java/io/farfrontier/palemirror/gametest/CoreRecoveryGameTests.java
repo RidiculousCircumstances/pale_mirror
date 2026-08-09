@@ -118,8 +118,8 @@ public final class CoreRecoveryGameTests {
                 "v5 controller reference must migrate to the PM anchor reference");
         helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
                 "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 7,
-                "migrated snapshot must be rewritten as schema v7");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 8,
+                "migrated snapshot must be rewritten as schema v8");
 
         LivingEntity anchorEntity = (LivingEntity) level.getEntity(mine.anchorId());
         helper.assertTrue(anchorEntity != null, "materialized anchor must be present by its registered UUID");

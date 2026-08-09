@@ -132,4 +132,37 @@ class SimulationEngineTest {
         assertEquals(ThreatTier.APEX, facility.threatTier());
         assertEquals(4, facility.desiredRevision());
     }
+
+    @Test
+    void siegeGatesRejectPrematureControllerDeathAndAdvanceInOrder() {
+        WorldState state = new WorldState();
+        WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
+        FacilityState facility = new FacilityState(mine, 80, 10, 10);
+        state.putFacility(facility);
+        DomainServices services = new DomainServices();
+        facility.infect(0);
+        ThreatTierPolicy policy = new ThreatTierPolicy(1, 2, 3);
+        facility.advanceThreatTier(100, policy);
+        facility.advanceThreatTier(100, policy);
+        facility.advanceThreatTier(100, policy);
+        assertEquals(SiegeStage.PENDING, facility.siege().stage());
+
+        services.commands().execute(state, new DomainCommand.ActivateSiege(mine, "pale_mirror:crimson_apex",
+                "1", "pale_mirror:juggernaut", "test:activate"));
+        assertEquals(SiegeStage.NODES, facility.siege().stage());
+        assertTrue(services.commands().execute(state, new DomainCommand.ThreatControllerDestroyed(mine, "test:early")).isEmpty());
+
+        for (String node : SiegeState.NODE_SLOTS) {
+            services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, node, "test:" + node));
+        }
+        assertEquals(SiegeStage.BOSS, facility.siege().stage());
+        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "boss", "test:boss"));
+        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "bloodlink_i", "test:one"));
+        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "bloodlink_ii", "test:two"));
+        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "bloodlink_iii", "test:three"));
+        assertEquals(SiegeStage.CONTROLLER_VULNERABLE, facility.siege().stage());
+        assertEquals(FacilityStatus.INFECTED, state.facility(mine).orElseThrow().status(), "controller must still exist before observation");
+        services.commands().execute(state, new DomainCommand.ThreatControllerDestroyed(mine, "test:controller"));
+        assertEquals(FacilityStatus.RECOVERING, state.facility(mine).orElseThrow().status());
+    }
 }
