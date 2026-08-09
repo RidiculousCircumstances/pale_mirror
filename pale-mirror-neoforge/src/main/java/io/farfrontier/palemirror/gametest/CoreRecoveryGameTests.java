@@ -169,18 +169,19 @@ public final class CoreRecoveryGameTests {
 
         tick(runtime, 5);
         advanceTier(runtime, 12, 8);
-        advanceTier(runtime, 24, 10);
-        advanceTier(runtime, 36, 11);
+        advanceTier(runtime, 24, 11);
+        advanceTier(runtime, 36, 17);
 
         var facility = PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(mine.id()).orElseThrow();
         helper.assertValueEqual(facility.threatTier(), ThreatTier.APEX, "PM simulation must reach APEX without Crimson phases");
-        helper.assertValueEqual(mine.encounter().actors().size(), 7, "APEX roster must contain all seven base profiles");
+        helper.assertValueEqual(mine.encounter().actors().size(), 14, "APEX roster must contain all audited base and Decayed profiles");
         for (var actorRef : mine.encounter().actors()) {
             LivingEntity actor = (LivingEntity) level.getEntity(actorRef.entityId());
             helper.assertTrue(actor != null && actorRef.status().name().equals("ACTIVE"),
                     "each tier-selected profile must materialize exactly once: " + actorRef.slotId());
             helper.assertTrue(actor.getPersistentData().getString(CrimsonSandboxAdapter.PROFILE_KEY)
                     .equals(actorRef.actorProfileId()), "actor profile provenance must survive materialization");
+            helper.assertTrue(mine.contains(actor.blockPosition()), "actor must remain inside its PM threat-site bounds");
         }
         helper.succeed();
     }

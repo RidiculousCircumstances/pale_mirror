@@ -19,6 +19,13 @@ tables is blocked until the author grants written permission.
 | `crimsonified_drowned` | drowned | `crimsonified_drowned_spawn` non-trident branch | vanilla AI, local stats/loot | GameTest |
 | `crimsonified_bogged` | bogged | `crimsonified_mob` bogged branch | vanilla AI, local stats/loot | GameTest |
 | `crimsonified_wither_skeleton` | wither skeleton | `crimsonified_mob` wither-skeleton branch | vanilla AI, local stats/loot | GameTest |
+| `decayed_human` | zombie | `decayed_mob` zombie branch | vanilla AI, local stats/loot | GameTest |
+| `decayed_villager` | zombie villager | `decayed_mob` villager branch | vanilla AI, local stats/loot | GameTest |
+| `decayed_husk` | husk | `decayed_mob` husk branch | vanilla AI, local stats/loot | GameTest |
+| `decayed_skeleton` | skeleton | `decayed_mob` skeleton branch | vanilla AI, local stats/loot | GameTest |
+| `decayed_drowned` | drowned | `decayed_drowned_spawn` non-trident branch | vanilla AI, local stats/loot | GameTest |
+| `decayed_bogged` | bogged | `decayed_mob` bogged branch | vanilla AI, local stats/loot | GameTest |
+| `decayed_wither_skeleton` | wither skeleton | `decayed_mob` wither-skeleton branch | vanilla AI, local stats/loot | GameTest |
 
 Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 
@@ -29,7 +36,7 @@ Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 
 ## Next audit queue
 
-Decayed variants, elite combat families, Bloodlinks/Nodes and boss objects
-remain unapproved. Each requires its own row with local dependency graph,
-destructive-operation policy, persistent identity, cleanup path, GameTest and
-restart test before becoming available to a PM encounter profile.
+Elite combat families, Bloodlinks/Nodes and boss objects remain unapproved.
+Each requires its own row with local dependency graph, destructive-operation
+policy, persistent identity, cleanup path, GameTest and restart test before
+becoming available to a PM encounter profile.

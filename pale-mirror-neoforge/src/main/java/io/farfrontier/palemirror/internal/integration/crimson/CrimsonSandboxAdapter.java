@@ -101,8 +101,11 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         Mob actor = profile.create(level);
         if (actor == null) return ActorOperationResult.unavailable("Could not create Crimson actor base entity");
         int slotIndex = mine.encounter().slotIndex(slot.id());
-        actor.moveTo(mine.anchor().getX() + 1.5D + Math.max(slotIndex, 0), mine.anchor().getY() + 1.0D,
-                mine.anchor().getZ() + 0.5D, 0.0F, 0.0F);
+        int boundedIndex = Math.max(slotIndex, 0);
+        int xOffset = (boundedIndex % 4) - 1;
+        int zOffset = (boundedIndex / 4) - 1;
+        actor.moveTo(mine.anchor().getX() + 0.5D + xOffset, mine.anchor().getY() + 1.0D,
+                mine.anchor().getZ() + 0.5D + zOffset, 0.0F, 0.0F);
         actor.setPersistenceRequired();
         actor.getPersistentData().putString(OBJECT_ID_KEY, mine.id().value());
         actor.getPersistentData().putString(JOB_ID_KEY, jobId);

@@ -40,9 +40,9 @@ Crimson 1.4.3.1
 → PM-only initializer gives it the Crimsonified Human local form
 ```
 
-The initializers reproduce seven audited local forms (Human, Villager, Husk,
-Skeleton, Drowned, Bogged and Wither Skeleton). They omit global teams, sounds,
-particles, and `Global Mass += 15`. The integration currently does **not**
+The initializers reproduce fourteen audited local forms: seven Crimsonified and
+their seven Decayed counterparts. They omit global teams, sounds, particles,
+and `Global Mass += 15` / `+= 45`. The integration currently does **not**
 invoke Crimson's actor passive/ability functions: several read or write global
 scores. Vanilla AI plus a bounded PM actor runtime is the supported first
 profile set; exact provenance and release restrictions are recorded in

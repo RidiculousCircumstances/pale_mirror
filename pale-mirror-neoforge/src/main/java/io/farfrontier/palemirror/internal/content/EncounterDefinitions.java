@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Atomic registry of optional encounter profiles. Content failure retains the previous registry. */
 public final class EncounterDefinitions extends SimpleJsonResourceReloadListener {
     public static final EncounterDefinitions INSTANCE = new EncounterDefinitions();
-    private static final int MAX_ACTORS = 8;
+    private static final int MAX_ACTORS = 16;
     private static final AtomicReference<Map<ResourceLocation, EncounterProfile>> CURRENT = new AtomicReference<>(Map.of());
 
     private EncounterDefinitions() { super(new Gson(), "pale_mirror/encounters"); }

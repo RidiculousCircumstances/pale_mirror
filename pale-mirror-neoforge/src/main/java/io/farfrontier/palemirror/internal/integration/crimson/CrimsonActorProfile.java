@@ -17,7 +17,15 @@ enum CrimsonActorProfile {
     DROWNED("pale_mirror:crimsonified_drowned", EntityType.DROWNED, "Crimsonified_Drowned", "initialize_drowned"),
     BOGGED("pale_mirror:crimsonified_bogged", EntityType.BOGGED, "Crimsonified_Bogged", "initialize_bogged"),
     WITHER_SKELETON("pale_mirror:crimsonified_wither_skeleton", EntityType.WITHER_SKELETON,
-            "Crimsonified_Wither_Skeleton", "initialize_wither_skeleton");
+            "Crimsonified_Wither_Skeleton", "initialize_wither_skeleton"),
+    DECAYED_HUMAN("pale_mirror:decayed_human", EntityType.ZOMBIE, "Decayed_Human", "initialize_decayed_human"),
+    DECAYED_VILLAGER("pale_mirror:decayed_villager", EntityType.ZOMBIE_VILLAGER, "Decayed_Villager", "initialize_decayed_villager"),
+    DECAYED_HUSK("pale_mirror:decayed_husk", EntityType.HUSK, "Decayed_Husk", "initialize_decayed_husk"),
+    DECAYED_SKELETON("pale_mirror:decayed_skeleton", EntityType.SKELETON, "Decayed_Skeleton", "initialize_decayed_skeleton"),
+    DECAYED_DROWNED("pale_mirror:decayed_drowned", EntityType.DROWNED, "Decayed_Drowned", "initialize_decayed_drowned"),
+    DECAYED_BOGGED("pale_mirror:decayed_bogged", EntityType.BOGGED, "Decayed_Bogged", "initialize_decayed_bogged"),
+    DECAYED_WITHER_SKELETON("pale_mirror:decayed_wither_skeleton", EntityType.WITHER_SKELETON,
+            "Decayed_Wither_Skeleton", "initialize_decayed_wither_skeleton");
 
     private final String id;
     private final EntityType<? extends Mob> entityType;

@@ -54,7 +54,7 @@
   force-loads chunks and works only near a player.
 - Generic World Registry entries now own physical identity, bounds, template,
   and representation lifecycle for the controlled mine.
-- Snapshot schema is v6. The released v5 format migrates sequentially; other
+- Snapshot schema is v7. Released v5 and v6 formats migrate sequentially; other
   legacy/unknown snapshot formats stop server startup
   before Minecraft can silently replace canonical SavedData; manual reset is
   required after an external backup.
@@ -74,18 +74,21 @@
 - A final-JAR dedicated-server restart harness now creates a clean NeoForge
   runtime, force-crashes it, and verifies the same world starts again. The
   GameTest separately serializes a partially completed `RUNNING` job.
-- The first PM-managed content roster is active: seven audited Crimsonified
-  vanilla forms, tier-filtered encounter slots, persisted actor profiles and a
-  bounded local actor runtime. Their global Crimson tick remains disabled.
+- Two PM-managed content families are active: seven Crimsonified and seven
+  Decayed vanilla forms, tier-filtered encounter slots, persisted actor
+  profiles and a bounded local actor runtime. Their global Crimson tick remains
+  disabled; spawn positions are bounded to the owning threat site.
 
 ### Now
 
-- Verify and commit PM-native tiers and the seven-profile Crimson base roster.
+- Run the critical verification suite and commit the fourteen-profile base and
+  Decayed roster.
 
 ### Next
 
-- Audit Decayed variants before adding their first profile. Elite actors,
-  threat objects and all destructive effects remain separate milestones.
+- Audit the first special actor and add only a PM-owned local behavior if its
+  dependency graph is safe. Elite objects and destructive effects remain
+  separate milestones.
 
 ## Open questions
 

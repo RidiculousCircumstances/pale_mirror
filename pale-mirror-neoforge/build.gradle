@@ -114,7 +114,14 @@ tasks.register('verifyCrimsonSandboxPackaging') {
                 'data/pale_mirror/function/crimson/v1431/initialize_skeleton.mcfunction',
                 'data/pale_mirror/function/crimson/v1431/initialize_drowned.mcfunction',
                 'data/pale_mirror/function/crimson/v1431/initialize_bogged.mcfunction',
-                'data/pale_mirror/function/crimson/v1431/initialize_wither_skeleton.mcfunction'
+                'data/pale_mirror/function/crimson/v1431/initialize_wither_skeleton.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_human.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_villager.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_husk.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_skeleton.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_drowned.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_bogged.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_wither_skeleton.mcfunction'
         ]
         def jar = new java.util.jar.JarFile(distributableJar.get().asFile)
         try {
