@@ -5,10 +5,17 @@ import java.util.Objects;
 
 /** Immutable authoring snapshot pinned into a scenario at offer time. */
 public record ScenarioDefinitionRef(String id, String version, List<String> stages,
-                                    List<String> requiredCapabilities, long cooldownSteps) {
+                                    List<String> requiredCapabilities, long cooldownSteps,
+                                    String encounterProfileId, String encounterProfileVersion) {
+    public ScenarioDefinitionRef(String id, String version, List<String> stages,
+                                 List<String> requiredCapabilities, long cooldownSteps) {
+        this(id, version, stages, requiredCapabilities, cooldownSteps, "", "");
+    }
     public ScenarioDefinitionRef {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(version, "version");
+        encounterProfileId = encounterProfileId == null ? "" : encounterProfileId;
+        encounterProfileVersion = encounterProfileVersion == null ? "" : encounterProfileVersion;
         stages = List.copyOf(stages);
         requiredCapabilities = List.copyOf(requiredCapabilities);
         if (!stages.containsAll(List.of("OFFERED", "INVESTIGATE", "RECOVER", "RESOLVED"))) {

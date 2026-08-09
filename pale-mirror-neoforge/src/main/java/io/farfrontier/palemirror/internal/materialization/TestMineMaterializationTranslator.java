@@ -1,36 +1,46 @@
 package io.farfrontier.palemirror.internal.materialization;
 
 import java.util.List;
+import java.util.ArrayList;
 
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.WorldObjectId;
+import io.farfrontier.palemirror.internal.content.EncounterProfile;
+import io.farfrontier.palemirror.internal.world.EncounterRecord;
 
 /** Deterministically translates a mine's desired domain state into executor operations. */
 public final class TestMineMaterializationTranslator {
-    public static final String POLICY_ID = "pale_mirror:test_threat";
-    public static final String POLICY_VERSION = "2";
+    public static final String POLICY_ID = "pale_mirror:pm_anchor";
+    public static final String POLICY_VERSION = "3";
 
     public MaterializationPlan translate(FacilityState facility) {
+        return translate(facility, null, EncounterRecord.none());
+    }
+
+    public MaterializationPlan translate(FacilityState facility, EncounterProfile profile, EncounterRecord encounter) {
         WorldObjectId id = facility.id();
         long revision = facility.desiredRevision();
         if (facility.status() == FacilityStatus.INFECTED) {
-            return plan(revision, id, MaterializationOperationType.ENSURE_OVERLAY,
-                    MaterializationOperationType.ENSURE_TEST_THREAT_CONTROLLER);
+            List<MaterializationOperation> operations = new ArrayList<>();
+            operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_OVERLAY, ""));
+            operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_PM_ANCHOR, ""));
+            if (profile != null) profile.actors().forEach(actor -> operations.add(operation(id, revision, operations.size(),
+                    MaterializationOperationType.ENSURE_CRIMSON_ENCOUNTER_ACTOR, actor.id())));
+            return new MaterializationPlan(POLICY_ID, POLICY_VERSION, revision, operations);
         }
-        return plan(revision, id, MaterializationOperationType.REMOVE_TEST_THREAT_CONTROLLER,
-                MaterializationOperationType.REMOVE_OVERLAY);
-    }
-
-    private static MaterializationPlan plan(long revision, WorldObjectId id, MaterializationOperationType first,
-                                            MaterializationOperationType second) {
-        return new MaterializationPlan(POLICY_ID, POLICY_VERSION, revision, List.of(
-                operation(id, revision, 0, first), operation(id, revision, 1, second)));
+        List<MaterializationOperation> operations = new ArrayList<>();
+        encounter.actors().forEach(actor -> operations.add(operation(id, revision, operations.size(),
+                MaterializationOperationType.REMOVE_CRIMSON_ENCOUNTER_ACTOR, actor.slotId())));
+        operations.add(operation(id, revision, operations.size(), MaterializationOperationType.REMOVE_PM_ANCHOR, ""));
+        operations.add(operation(id, revision, operations.size(), MaterializationOperationType.REMOVE_OVERLAY, ""));
+        return new MaterializationPlan(POLICY_ID, POLICY_VERSION, revision, operations);
     }
 
     private static MaterializationOperation operation(WorldObjectId id, long revision, int index,
-                                                       MaterializationOperationType type) {
+                                                       MaterializationOperationType type, String target) {
         String key = id.value() + ":" + revision + ":" + type.name().toLowerCase();
-        return new MaterializationOperation("op-" + index, key, type, OperationState.PENDING, 0, "");
+        String targetSuffix = target.isBlank() ? "" : ":" + target;
+        return new MaterializationOperation("op-" + index, key + targetSuffix, type, target, OperationState.PENDING, 0, "");
     }
 }

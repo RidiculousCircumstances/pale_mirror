@@ -1,0 +1,7 @@
+{
+  "id": "pale_mirror:crimson_mine_guards",
+  "version": 1,
+  "actors": [
+    { "slot": "guard_1", "entity_type": "minecraft:zombie" }
+  ]
+}

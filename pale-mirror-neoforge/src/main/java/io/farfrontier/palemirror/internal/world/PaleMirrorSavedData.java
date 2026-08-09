@@ -39,7 +39,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    private static final int CURRENT_SCHEMA = 5;
+    private static final int CURRENT_SCHEMA = 6;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -78,7 +78,7 @@ public final class PaleMirrorSavedData extends SavedData {
             CompoundTag root = NbtIo.readCompressed(dataFile, NbtAccounter.unlimitedHeap());
             CompoundTag tag = root.contains("data", Tag.TAG_COMPOUND) ? root.getCompound("data") : root;
             int version = tag.contains("schemaVersion", Tag.TAG_INT) ? tag.getInt("schemaVersion") : 0;
-            if (version != CURRENT_SCHEMA) {
+            if (!isMigratable(version)) {
                 throw incompatibleSchema(version);
             }
         } catch (IOException failure) {
@@ -98,6 +98,7 @@ public final class PaleMirrorSavedData extends SavedData {
     }
 
     public static PaleMirrorSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
+        tag = migrate(tag);
         int version = tag.contains("schemaVersion", Tag.TAG_INT) ? tag.getInt("schemaVersion") : 0;
         if (version > CURRENT_SCHEMA) {
             throw new IllegalStateException("Pale Mirror data schema " + version + " is newer than this mod supports");
@@ -125,6 +126,53 @@ public final class PaleMirrorSavedData extends SavedData {
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " cannot be migrated to schema "
                 + CURRENT_SCHEMA + ". Back up the world and remove its data/pale_mirror.dat to deliberately reset legacy Pale Mirror state.");
+    }
+
+    private static boolean isMigratable(int version) {
+        return version == CURRENT_SCHEMA || version == 5;
+    }
+
+    /** Sequential migration of the prior released snapshot; never silently drops native references. */
+    private static CompoundTag migrate(CompoundTag source) {
+        int version = source.contains("schemaVersion", Tag.TAG_INT) ? source.getInt("schemaVersion") : 0;
+        if (version > CURRENT_SCHEMA || !isMigratable(version)) throw incompatibleSchema(version);
+        CompoundTag migrated = source.copy();
+        if (version == 5) migrateV5ToV6(migrated);
+        return migrated;
+    }
+
+    private static void migrateV5ToV6(CompoundTag tag) {
+        for (Tag element : tag.getList("testMines", Tag.TAG_COMPOUND)) {
+            CompoundTag mine = (CompoundTag) element;
+            if (mine.hasUUID("controller") && !mine.hasUUID("anchor")) mine.putUUID("anchor", mine.getUUID("controller"));
+            if (mine.contains("job", Tag.TAG_COMPOUND)) {
+                for (Tag operationElement : mine.getCompound("job").getList("operations", Tag.TAG_COMPOUND)) {
+                    CompoundTag operation = (CompoundTag) operationElement;
+                    operation.putString("type", switch (operation.getString("type")) {
+                        case "ENSURE_TEST_THREAT_CONTROLLER" -> "ENSURE_PM_ANCHOR";
+                        case "REMOVE_TEST_THREAT_CONTROLLER" -> "REMOVE_PM_ANCHOR";
+                        default -> operation.getString("type");
+                    });
+                    if (!operation.contains("target", Tag.TAG_STRING)) operation.putString("target", "");
+                }
+            }
+        }
+        CompoundTag snapshot = tag.getCompound("snapshot");
+        for (Tag element : snapshot.getList("scenarios", Tag.TAG_COMPOUND)) {
+            CompoundTag scenario = (CompoundTag) element;
+            if (!scenario.contains("encounterProfile", Tag.TAG_STRING)) {
+                boolean defaultMineScenario = "pale_mirror:investigation_recovery".equals(scenario.getString("definition"));
+                scenario.putString("encounterProfile", defaultMineScenario ? "pale_mirror:crimson_mine_guards" : "");
+                scenario.putString("encounterProfileVersion", defaultMineScenario ? "1" : "");
+            }
+            ListTag capabilities = scenario.getList("requiredCapabilities", Tag.TAG_STRING);
+            for (int index = 0; index < capabilities.size(); index++) {
+                String value = capabilities.getString(index);
+                if ("TEST_THREAT_MATERIALIZATION".equals(value)) capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("PM_ANCHOR_MATERIALIZATION"));
+                if ("TEST_THREAT_OBSERVATION".equals(value)) capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("PM_ANCHOR_OBSERVATION"));
+            }
+        }
+        tag.putInt("schemaVersion", 6);
     }
 
     @Override
@@ -178,6 +226,8 @@ public final class PaleMirrorSavedData extends SavedData {
             scenario.putString("audience", value.audience().value());
             scenario.putString("definition", value.definitionId());
             scenario.putString("definitionVersion", value.definitionVersion());
+            scenario.putString("encounterProfile", value.encounterProfileId());
+            scenario.putString("encounterProfileVersion", value.encounterProfileVersion());
             ListTag stages = new ListTag();
             value.pinnedStages().forEach(stage -> stages.add(net.minecraft.nbt.StringTag.valueOf(stage)));
             scenario.put("pinnedStages", stages);
@@ -244,6 +294,7 @@ public final class PaleMirrorSavedData extends SavedData {
             state.putScenario(new ScenarioInstance(value.getString("id"), value.getString("source"),
                     new WorldObjectId(value.getString("target")), new StoryAudienceId(value.getString("audience")),
                     value.getString("definition"), value.getString("definitionVersion"), stages, capabilities,
+                    value.getString("encounterProfile"), value.getString("encounterProfileVersion"),
                     ScenarioStatus.valueOf(value.getString("status")),
                     value.contains("resumeStatus", Tag.TAG_STRING) ? ScenarioStatus.valueOf(value.getString("resumeStatus")) : null,
                     value.getString("blockedReason")));
@@ -284,7 +335,8 @@ public final class PaleMirrorSavedData extends SavedData {
         CompoundTag tag = new CompoundTag();
         tag.putString("id", mine.id().value());
         tag.putString("audience", mine.primaryAudience().value());
-        if (mine.controllerId() != null) tag.putUUID("controller", mine.controllerId());
+        if (mine.anchorId() != null) tag.putUUID("anchor", mine.anchorId());
+        tag.put("encounter", writeEncounter(mine.encounter()));
         ListTag cells = new ListTag();
         mine.mutableCells().forEach(cell -> {
             CompoundTag value = new CompoundTag();
@@ -312,6 +364,7 @@ public final class PaleMirrorSavedData extends SavedData {
                 serialized.putString("id", operation.operationId());
                 serialized.putString("key", operation.idempotencyKey());
                 serialized.putString("type", operation.type().name());
+                serialized.putString("target", operation.target());
                 serialized.putString("state", operation.state().name());
                 serialized.putInt("attempts", operation.attemptCount());
                 serialized.putString("error", operation.lastError());
@@ -337,7 +390,7 @@ public final class PaleMirrorSavedData extends SavedData {
             for (Tag element : value.getList("operations", Tag.TAG_COMPOUND)) {
                 CompoundTag operation = (CompoundTag) element;
                 operations.add(new MaterializationOperation(operation.getString("id"), operation.getString("key"),
-                        MaterializationOperationType.valueOf(operation.getString("type")),
+                        MaterializationOperationType.valueOf(operation.getString("type")), operation.getString("target"),
                         OperationState.valueOf(operation.getString("state")), operation.getInt("attempts"),
                         operation.getString("error")));
             }
@@ -345,11 +398,48 @@ public final class PaleMirrorSavedData extends SavedData {
                     value.getString("policyVersion"), JobState.valueOf(value.getString("state")), operations,
                     value.getInt("nextOperationIndex"), value.getInt("attempts"), value.getString("error"));
         }
-        UUID controller = tag.hasUUID("controller") ? tag.getUUID("controller") : null;
+        UUID anchor = tag.hasUUID("anchor") ? tag.getUUID("anchor") : null;
+        EncounterRecord encounter = tag.contains("encounter", Tag.TAG_COMPOUND)
+                ? readEncounter(tag.getCompound("encounter")) : EncounterRecord.none();
         StoryAudienceId audience = tag.contains("audience", Tag.TAG_STRING)
                 ? new StoryAudienceId(tag.getString("audience")) : StoryAudienceId.globalTestAudience();
         WorldObjectId id = new WorldObjectId(tag.getString("id"));
-        return new TestMineRecord(registry.require(id), audience, cells, controller, job);
+        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, job);
+    }
+
+    private static CompoundTag writeEncounter(EncounterRecord encounter) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("profile", encounter.profileId());
+        tag.putString("profileVersion", encounter.profileVersion());
+        tag.putString("job", encounter.jobId());
+        tag.putLong("desiredRevision", encounter.desiredRevision());
+        tag.putString("state", encounter.state().name());
+        tag.putString("diagnostic", encounter.diagnostic());
+        ListTag actors = new ListTag();
+        encounter.actors().forEach(actor -> {
+            CompoundTag value = new CompoundTag();
+            value.putString("slot", actor.slotId());
+            value.putString("entityType", actor.entityTypeId());
+            if (actor.entityId() != null) value.putUUID("entity", actor.entityId());
+            value.putString("status", actor.status().name());
+            actors.add(value);
+        });
+        tag.put("actors", actors);
+        return tag;
+    }
+
+    private static EncounterRecord readEncounter(CompoundTag tag) {
+        List<EncounterActorRef> actors = new ArrayList<>();
+        for (Tag element : tag.getList("actors", Tag.TAG_COMPOUND)) {
+            CompoundTag value = (CompoundTag) element;
+            actors.add(new EncounterActorRef(value.getString("slot"), value.getString("entityType"),
+                    value.hasUUID("entity") ? value.getUUID("entity") : null,
+                    EncounterActorRef.Status.valueOf(value.getString("status"))));
+        }
+        return new EncounterRecord(tag.getString("profile"), tag.getString("profileVersion"), tag.getString("job"),
+                tag.getLong("desiredRevision"), actors,
+                EncounterState.valueOf(tag.contains("state", Tag.TAG_STRING) ? tag.getString("state") : "NONE"),
+                tag.getString("diagnostic"));
     }
 
     private static CompoundTag writeRegistryEntry(WorldObjectRegistryEntry entry) {

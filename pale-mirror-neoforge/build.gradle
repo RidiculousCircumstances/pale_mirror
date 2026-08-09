@@ -99,6 +99,40 @@ tasks.register('dedicatedRestartHarness', Exec) {
     commandLine 'bash', 'scripts/dedicated-restart-harness.sh', distributableJar.get().asFile.absolutePath
 }
 
+def crimsonIntegrationJar = layout.buildDirectory.file('integration/crimson_curse-1.4.3.1.jar')
+def crimsonIntegrationUrl = rootProject.providers.gradleProperty('crimson_integration_url').get()
+def crimsonIntegrationSha512 = rootProject.providers.gradleProperty('crimson_integration_sha512').get()
+tasks.register('downloadCrimsonIntegrationJar') {
+    group = 'verification'
+    description = 'Downloads the pinned Crimson runtime JAR and verifies SHA-512; normal builds never invoke it.'
+    outputs.file(crimsonIntegrationJar)
+    inputs.property('url', crimsonIntegrationUrl)
+    inputs.property('sha512', crimsonIntegrationSha512)
+    doLast {
+        def target = crimsonIntegrationJar.get().asFile
+        target.parentFile.mkdirs()
+        byte[] bytes = new URL(crimsonIntegrationUrl).bytes
+        String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+        if (!actual.equalsIgnoreCase(crimsonIntegrationSha512)) {
+            throw new GradleException("Pinned Crimson SHA-512 mismatch: expected ${crimsonIntegrationSha512}, got ${actual}")
+        }
+        target.bytes = bytes
+    }
+}
+
+tasks.register('crimsonIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside the checksum-verified pinned Crimson JAR in a clean dedicated runtime.'
+    dependsOn tasks.named('jar'), tasks.named('downloadCrimsonIntegrationJar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/crimson-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            crimsonIntegrationJar.get().asFile.absolutePath
+}
+
 tasks.named('check') {
     dependsOn rootProject.tasks.named('verifyJava21'), tasks.named('verifyPackagedJar')
 }

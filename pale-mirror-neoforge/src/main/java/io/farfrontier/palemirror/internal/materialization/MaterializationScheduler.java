@@ -6,6 +6,12 @@ import java.util.List;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
+import io.farfrontier.palemirror.domain.ScenarioInstance;
+import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
+import io.farfrontier.palemirror.internal.content.EncounterProfile;
+import io.farfrontier.palemirror.internal.world.EncounterActorRef;
+import io.farfrontier.palemirror.internal.world.EncounterRecord;
+import io.farfrontier.palemirror.internal.world.EncounterState;
 import io.farfrontier.palemirror.internal.observation.MaterializationPostconditionObserved;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -32,8 +38,12 @@ public final class MaterializationScheduler {
 
             MaterializationJob job = mine.job();
             if (job == null || !job.isFor(facility.desiredRevision())) {
-                MaterializationPlan plan = translator.translate(facility);
-                mine.setJob(new MaterializationJob("pm:job:" + mine.id().value() + ":" + facility.desiredRevision(),
+                ScenarioInstance scenario = selectedEncounterScenario(data, mine);
+                EncounterProfile profile = encounterProfile(scenario);
+                String jobId = "pm:job:" + mine.id().value() + ":" + facility.desiredRevision();
+                prepareEncounter(mine, facility, jobId, scenario, profile);
+                MaterializationPlan plan = translator.translate(facility, profile, mine.encounter());
+                mine.setJob(new MaterializationJob(jobId,
                         facility.desiredRevision(), plan.policyId(), plan.policyVersion(), JobState.PLANNED,
                         plan.operations(), 0, 0, ""));
                 data.setDirty();
@@ -64,5 +74,35 @@ public final class MaterializationScheduler {
         return server.getPlayerList().getPlayers().stream().anyMatch(player -> player.serverLevel() == level
                 && player.distanceToSqr(mine.anchor().getX() + 0.5D, mine.anchor().getY() + 0.5D,
                 mine.anchor().getZ() + 0.5D) <= ACTIVATION_RANGE_SQUARED);
+    }
+
+    private static ScenarioInstance selectedEncounterScenario(PaleMirrorSavedData data, TestMineRecord mine) {
+        return data.worldState().scenarios().stream().filter(value -> value.target().equals(mine.id())
+                && value.status() == ScenarioStatus.RECOVER).findFirst().orElse(null);
+    }
+
+    private static EncounterProfile encounterProfile(ScenarioInstance scenario) {
+        if (scenario == null || scenario.encounterProfileId().isBlank()
+                || "unavailable".equals(scenario.encounterProfileVersion())) return null;
+        EncounterProfile profile = EncounterDefinitions.current().get(net.minecraft.resources.ResourceLocation.parse(scenario.encounterProfileId()));
+        return profile != null && Integer.toString(profile.version()).equals(scenario.encounterProfileVersion()) ? profile : null;
+    }
+
+    private static void prepareEncounter(TestMineRecord mine, FacilityState facility, String jobId,
+                                         ScenarioInstance scenario, EncounterProfile profile) {
+        if (facility.status() != FacilityStatus.INFECTED) return;
+        if (scenario == null || scenario.encounterProfileId().isBlank()) {
+            mine.setEncounter(EncounterRecord.none());
+            return;
+        }
+        if (profile == null) {
+            mine.setEncounter(new EncounterRecord("", "", jobId, facility.desiredRevision(), List.of(), EncounterState.DEGRADED,
+                    "Encounter profile is unavailable or changed after the scenario was offered"));
+            return;
+        }
+        List<EncounterActorRef> actors = profile.actors().stream().map(actor -> new EncounterActorRef(actor.id(),
+                actor.entityType().toString(), null, EncounterActorRef.Status.MISSING)).toList();
+        mine.setEncounter(new EncounterRecord(profile.id(), Integer.toString(profile.version()), jobId,
+                facility.desiredRevision(), actors, EncounterState.NONE, ""));
     }
 }

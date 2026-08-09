@@ -14,16 +14,18 @@ public final class TestMineRecord {
     private final WorldObjectRegistryEntry object;
     private final StoryAudienceId primaryAudience;
     private final List<MutableCell> mutableCells;
-    private UUID controllerId;
+    private UUID anchorId;
+    private EncounterRecord encounter;
     private MaterializationJob job;
 
     public TestMineRecord(WorldObjectRegistryEntry object, StoryAudienceId primaryAudience,
-                          List<MutableCell> mutableCells, UUID controllerId, MaterializationJob job) {
+                          List<MutableCell> mutableCells, UUID anchorId, EncounterRecord encounter, MaterializationJob job) {
         this.id = object.id();
         this.object = object;
         this.primaryAudience = primaryAudience;
         this.mutableCells = new ArrayList<>(mutableCells);
-        this.controllerId = controllerId;
+        this.anchorId = anchorId;
+        this.encounter = encounter == null ? EncounterRecord.none() : encounter;
         this.job = job;
     }
 
@@ -34,9 +36,11 @@ public final class TestMineRecord {
     public String templateVersion() { return object.templateVersion(); }
     public StoryAudienceId primaryAudience() { return primaryAudience; }
     public List<MutableCell> mutableCells() { return mutableCells; }
-    public UUID controllerId() { return controllerId; }
+    public UUID anchorId() { return anchorId; }
+    public EncounterRecord encounter() { return encounter; }
     public MaterializationJob job() { return job; }
-    public void setControllerId(UUID value) { controllerId = value; }
+    public void setAnchorId(UUID value) { anchorId = value; }
+    public void setEncounter(EncounterRecord value) { encounter = value == null ? EncounterRecord.none() : value; }
     public void setJob(MaterializationJob value) { job = value; }
     public boolean contains(BlockPos pos) { return object.contains(pos); }
 }

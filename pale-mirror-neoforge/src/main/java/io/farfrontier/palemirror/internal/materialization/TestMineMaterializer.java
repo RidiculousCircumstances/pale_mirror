@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.materialization;
 
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
@@ -31,8 +32,17 @@ public final class TestMineMaterializer {
             job.block(operation.lastError());
             return false;
         }
-        if (operation.state() != OperationState.COMPLETED) {
+        if (operation.state() == OperationState.DEGRADED) {
+            job.advanceOperation();
+        } else if (operation.state() != OperationState.COMPLETED) {
             operation.start();
+            if (operation.type() == MaterializationOperationType.ENSURE_CRIMSON_ENCOUNTER_ACTOR) {
+                String diagnostic = ensureCrimsonActor(mine, operation.target());
+                operation.degrade(diagnostic);
+                job.advanceOperation();
+                if (job.nextOperation() == null) completeJob(mine, job);
+                return job.state() == JobState.COMPLETED;
+            }
             String error = execute(level, mine, job, operation.type());
             if (error != null) {
                 operation.block(error);
@@ -41,11 +51,9 @@ public final class TestMineMaterializer {
             }
             operation.complete();
         }
-        job.advanceOperation();
+        if (operation.state() == OperationState.COMPLETED) job.advanceOperation();
         if (job.nextOperation() == null) {
-            job.complete();
-            mine.object().setLifecycle(operation.type() == MaterializationOperationType.ENSURE_TEST_THREAT_CONTROLLER
-                    ? WorldObjectLifecycle.ACTIVE : WorldObjectLifecycle.REPRESENTED);
+            completeJob(mine, job);
         }
         return job.state() == JobState.COMPLETED;
     }
@@ -53,8 +61,10 @@ public final class TestMineMaterializer {
     private String execute(ServerLevel level, TestMineRecord mine, MaterializationJob job, MaterializationOperationType type) {
         return switch (type) {
             case ENSURE_OVERLAY -> ensureOverlay(level, mine);
-            case ENSURE_TEST_THREAT_CONTROLLER -> ensureController(level, mine, job.jobId());
-            case REMOVE_TEST_THREAT_CONTROLLER -> removeController(level, mine);
+            case ENSURE_PM_ANCHOR -> ensureAnchor(level, mine, job.jobId());
+            case REMOVE_PM_ANCHOR -> removeAnchor(level, mine);
+            case ENSURE_CRIMSON_ENCOUNTER_ACTOR -> throw new IllegalStateException("Crimson actor operation must be handled as optional work");
+            case REMOVE_CRIMSON_ENCOUNTER_ACTOR -> removeCrimsonActor(mine);
             case REMOVE_OVERLAY -> removeOverlay(level, mine);
         };
     }
@@ -73,15 +83,38 @@ public final class TestMineMaterializer {
         return overlaysMatch(level, mine) ? null : "Overlay postcondition failed";
     }
 
-    private String ensureController(ServerLevel level, TestMineRecord mine, String jobId) {
-        if (!AdapterRegistry.testThreat().ensureController(level, mine, jobId)) return "Could not create TestThreat controller";
-        return AdapterRegistry.testThreat().hasController(level, mine) ? null : "TestThreat controller postcondition failed";
+    private String ensureAnchor(ServerLevel level, TestMineRecord mine, String jobId) {
+        if (!AdapterRegistry.vanillaAnchor().ensureAnchor(level, mine, jobId)) return "Could not create PM anchor";
+        return AdapterRegistry.vanillaAnchor().hasAnchor(level, mine) ? null : "PM anchor postcondition failed";
     }
 
-    private String removeController(ServerLevel level, TestMineRecord mine) {
-        AdapterRegistry.testThreat().removeController(level, mine);
-        return mine.controllerId() == null && !AdapterRegistry.testThreat().hasController(level, mine)
-                ? null : "TestThreat controller removal postcondition failed";
+    private String removeAnchor(ServerLevel level, TestMineRecord mine) {
+        AdapterRegistry.vanillaAnchor().removeAnchor(level, mine);
+        return mine.anchorId() == null && !AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)
+                ? null : "PM anchor removal postcondition failed";
+    }
+
+    private String ensureCrimsonActor(TestMineRecord mine, String slotId) {
+        EncounterProfile.ActorSlot slot = mine.encounter().actors().stream()
+                .filter(actor -> actor.slotId().equals(slotId))
+                .findFirst()
+                .map(actor -> new EncounterProfile.ActorSlot(actor.slotId(), actor.entityTypeId()))
+                .orElse(null);
+        String diagnostic = slot == null ? "Encounter profile has no persisted slot " + slotId
+                : AdapterRegistry.crimson().unavailableReason(slot);
+        mine.encounter().degrade(diagnostic);
+        return diagnostic;
+    }
+
+    private String removeCrimsonActor(TestMineRecord mine) {
+        mine.encounter().clean();
+        return null;
+    }
+
+    private static void completeJob(TestMineRecord mine, MaterializationJob job) {
+        job.complete();
+        mine.object().setLifecycle(job.operations().stream().anyMatch(value -> value.type() == MaterializationOperationType.ENSURE_PM_ANCHOR)
+                ? WorldObjectLifecycle.ACTIVE : WorldObjectLifecycle.REPRESENTED);
     }
 
     private String removeOverlay(ServerLevel level, TestMineRecord mine) {

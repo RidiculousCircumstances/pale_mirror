@@ -2,7 +2,8 @@
   "id": "pale_mirror:investigation_recovery",
   "version": 1,
   "cooldown_steps": 2,
-  "required_capabilities": ["TEST_THREAT_MATERIALIZATION", "TEST_THREAT_OBSERVATION"],
+  "required_capabilities": ["PM_ANCHOR_MATERIALIZATION", "PM_ANCHOR_OBSERVATION"],
   "stages": ["OFFERED", "INVESTIGATE", "RECOVER", "RESOLVED"],
-  "policy": "pale_mirror:test_threat"
+  "policy": "pale_mirror:pm_anchor",
+  "encounter_profile": "pale_mirror:crimson_mine_guards"
 }

@@ -38,6 +38,6 @@ public final class TestMineTemplate {
         WorldObjectRegistryEntry object = new WorldObjectRegistryEntry(id, level.dimension().location().toString(), anchor,
                 anchor.offset(-4, 0, -4), anchor.offset(4, 4, 4), "pale_mirror:test_mine", VERSION,
                 WorldObjectLifecycle.REPRESENTED);
-        return new TestMineRecord(object, audience, cells, null, null);
+        return new TestMineRecord(object, audience, cells, null, EncounterRecord.none(), null);
     }
 }

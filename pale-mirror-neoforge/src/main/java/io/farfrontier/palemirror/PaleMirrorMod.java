@@ -11,6 +11,6 @@ public final class PaleMirrorMod {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public PaleMirrorMod(IEventBus ignored) {
-        LOGGER.info("Pale Mirror bootstrapped; core-only TestThreat profile is available.");
+        LOGGER.info("Pale Mirror bootstrapped; PM-owned vanilla anchors are available.");
     }
 }

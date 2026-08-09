@@ -9,7 +9,8 @@
 
 - Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
 - `pale-mirror-domain` remains independent of Minecraft and NeoForge.
-- Core slice must work without Crimson Curse; Crimson remains a soft adapter.
+- Core slice must work without Crimson Curse; Crimson remains a soft,
+  presentation-only adapter with no global scoreboard writes.
 
 ## Key decisions
 
@@ -46,7 +47,8 @@
   force-loads chunks and works only near a player.
 - Generic World Registry entries now own physical identity, bounds, template,
   and representation lifecycle for the controlled mine.
-- Snapshot schema is v5. Legacy/unknown snapshot formats stop server startup
+- Snapshot schema is v6. The released v5 format migrates sequentially; other
+  legacy/unknown snapshot formats stop server startup
   before Minecraft can silently replace canonical SavedData; manual reset is
   required after an external backup.
 - Datapack scenarios now pin their authored stage/capability snapshot and
@@ -56,24 +58,30 @@
   emits `SETTLEMENT_SUPPLY_DISRUPTED`, removes iron supply, and lowers defense;
   recovery restores both.
 - Crimson Curse 1.4.3.1 checksum and L1 audit completed. Its public surface
-  only changes global scoreboards, so `CrimsonAdapter` remains explicitly
-  `BLOCKED`; the audit is documented in `docs/crimson-audit-1.4.3.1.md`.
+  only changes global scoreboards and contains no native entity classes, so the
+  adapter is explicitly `DEGRADED`; PM anchors remain canonical.
 - A final-JAR dedicated-server restart harness now creates a clean NeoForge
   runtime, force-crashes it, and verifies the same world starts again. The
   GameTest separately serializes a partially completed `RUNNING` job.
 
 ### Now
 
-- Verify and commit the packaged-JAR dedicated restart harness.
+- Commit the verified PM-owned vanilla-anchor and optional Crimson encounter
+  foundation. The current public Crimson surface remains intentionally unable
+  to materialize native actors.
 
 ### Next
 
-- Add a controlled external client/real-player acceptance profile, then begin
-  the next domain object beyond the test settlement.
+- Design Global ThreatFront simulation as a separate milestone, including
+  escalation policy, bounded local activation, and a supported native-actor
+  integration decision.
 
 ## Open questions
 
 - UNCONFIRMED: an external client/real-player flow has not yet been automated.
+- Crimson's optional Spore resources log errors in an otherwise successful
+  clean-server boot; validate the complete Packwiz dependency profile before a
+  player-facing release.
 
 ## Working set
 

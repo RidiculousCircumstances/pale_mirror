@@ -5,8 +5,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
-import io.farfrontier.palemirror.internal.adapter.TestThreatAdapter;
+import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
+import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -37,6 +38,7 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onReloadListeners(AddReloadListenerEvent event) {
+        event.addListener(EncounterDefinitions.INSTANCE);
         event.addListener(ScenarioDefinitions.INSTANCE);
     }
 
@@ -52,8 +54,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
-        String objectId = event.getEntity().getPersistentData().getString(TestThreatAdapter.OBJECT_ID_KEY);
-        if (!objectId.isBlank() && event.getEntity().level().getServer() != null) {
+        String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
+        if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null) {
             String causationId = "entity:" + event.getEntity().getUUID();
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new ThreatControllerDestroyed(
                     "controller-destroyed:" + causationId,
@@ -108,6 +110,13 @@ public final class PaleMirrorEvents {
                     context.getSource().sendSuccess(() -> Component.literal(health), false);
                     return 1;
         })));
+        root.then(Commands.literal("object").then(Commands.literal("inspect")
+                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
+                    String id = StringArgumentType.getString(context, "id");
+                    context.getSource().sendSuccess(() -> Component.literal(
+                            PaleMirrorRuntime.forServer(context.getSource().getServer()).inspectObject(id)), false);
+                    return 1;
+                }))));
         event.getDispatcher().register(root);
     }
 

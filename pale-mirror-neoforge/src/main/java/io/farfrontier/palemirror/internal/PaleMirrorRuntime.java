@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationSchedul
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
+import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
 import io.farfrontier.palemirror.internal.observation.PlayerEnteredFacilityBounds;
@@ -115,6 +116,18 @@ public final class PaleMirrorRuntime {
                 + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count();
     }
 
+    public String inspectObject(String objectId) {
+        TestMineRecord mine = data.testMines().get(new WorldObjectId(objectId));
+        if (mine == null) return "Unknown PM world object " + objectId;
+        String job = mine.job() == null ? "none" : mine.job().jobId() + ":" + mine.job().state()
+                + ":op=" + mine.job().nextOperationIndex();
+        return "object=" + mine.id().value() + ", lifecycle=" + mine.object().lifecycle()
+                + ", anchor=" + (mine.anchorId() == null ? "none" : mine.anchorId())
+                + ", encounter=" + mine.encounter().state() + ":" + mine.encounter().profileId()
+                + (mine.encounter().diagnostic().isBlank() ? "" : " (" + mine.encounter().diagnostic() + ")")
+                + ", job=" + job;
+    }
+
     public void threatDestroyed(String objectId, String causationId) {
         WorldObjectId id = new WorldObjectId(objectId);
         if (data.testMines().containsKey(id)) publish(new ThreatControllerDestroyed(
@@ -125,7 +138,7 @@ public final class PaleMirrorRuntime {
         List<DomainEvent> events = reconciler.reconcile(data, observation);
         if (observation instanceof ThreatControllerDestroyed destroyed) {
             TestMineRecord mine = data.testMines().get(destroyed.facilityId());
-            if (mine != null) mine.setControllerId(null);
+            if (mine != null) mine.setAnchorId(null);
         }
         return events;
     }
@@ -158,8 +171,13 @@ public final class PaleMirrorRuntime {
             commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "required capability unavailable"));
             return;
         }
+        String profileId = definition.encounterProfileId();
+        String profileVersion = profileId.isBlank() ? "" : EncounterDefinitions.current()
+                .get(net.minecraft.resources.ResourceLocation.parse(profileId)) == null ? "unavailable"
+                : Integer.toString(EncounterDefinitions.current().get(net.minecraft.resources.ResourceLocation.parse(profileId)).version());
         ScenarioDefinitionRef pinned = new ScenarioDefinitionRef(definition.id().toString(), Integer.toString(definition.version()),
-                definition.stages(), definition.capabilities().stream().map(Enum::name).sorted().toList(), definition.cooldownSteps());
+                definition.stages(), definition.capabilities().stream().map(Enum::name).sorted().toList(), definition.cooldownSteps(),
+                profileId, profileVersion);
         commands.execute(data.worldState(), new DomainCommand.OfferScenario(event, audience, pinned));
     }
 

@@ -51,7 +51,7 @@ class SimulationEngineTest {
         DomainEvent infection = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).getFirst();
         ScenarioDefinitionRef pinned = new ScenarioDefinitionRef("pale_mirror:investigation_recovery", "17",
                 java.util.List.of("OFFERED", "INVESTIGATE", "RECOVER", "RESOLVED"),
-                java.util.List.of("TEST_THREAT_MATERIALIZATION"), 2);
+                java.util.List.of("PM_ANCHOR_MATERIALIZATION"), 2, "pale_mirror:crimson_guards", "1");
 
         services.commands().execute(state, new DomainCommand.OfferScenario(infection, StoryAudienceId.globalTestAudience(), pinned));
         ScenarioInstance scenario = state.scenarios().stream().findFirst().orElseThrow();
@@ -59,7 +59,9 @@ class SimulationEngineTest {
         services.commands().execute(state, new DomainCommand.SetScenarioBlocked(scenario.id(), false, "adapter restored"));
 
         assertEquals("17", scenario.definitionVersion());
-        assertEquals(java.util.List.of("TEST_THREAT_MATERIALIZATION"), scenario.requiredCapabilities());
+        assertEquals(java.util.List.of("PM_ANCHOR_MATERIALIZATION"), scenario.requiredCapabilities());
+        assertEquals("pale_mirror:crimson_guards", scenario.encounterProfileId());
+        assertEquals("1", scenario.encounterProfileVersion());
         assertEquals(ScenarioStatus.OFFERED, scenario.status());
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.SCENARIO_BLOCKED));
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.SCENARIO_RESUMED));

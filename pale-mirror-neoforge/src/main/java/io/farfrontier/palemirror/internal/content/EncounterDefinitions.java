@@ -1,0 +1,72 @@
+package io.farfrontier.palemirror.internal.content;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import io.farfrontier.palemirror.PaleMirrorMod;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
+
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+
+/** Atomic registry of optional encounter profiles. Content failure retains the previous registry. */
+public final class EncounterDefinitions extends SimpleJsonResourceReloadListener {
+    public static final EncounterDefinitions INSTANCE = new EncounterDefinitions();
+    private static final int MAX_ACTORS = 8;
+    private static final AtomicReference<Map<ResourceLocation, EncounterProfile>> CURRENT = new AtomicReference<>(Map.of());
+
+    private EncounterDefinitions() { super(new Gson(), "pale_mirror/encounters"); }
+
+    public static Map<ResourceLocation, EncounterProfile> current() { return CURRENT.get(); }
+
+    @Override
+    protected void apply(Map<ResourceLocation, JsonElement> resources, ResourceManager manager, ProfilerFiller profiler) {
+        Map<ResourceLocation, EncounterProfile> compiled = new LinkedHashMap<>();
+        resources.forEach((resourceId, element) -> {
+            EncounterProfile profile = compile(resourceId, element.getAsJsonObject());
+            if (compiled.put(ResourceLocation.parse(profile.id()), profile) != null) throw new IllegalArgumentException("Duplicate encounter profile " + profile.id());
+        });
+        CURRENT.set(Map.copyOf(compiled));
+        PaleMirrorMod.LOGGER.info("Loaded {} Pale Mirror encounter profile(s)", compiled.size());
+    }
+
+    private static EncounterProfile compile(ResourceLocation resourceId, JsonObject json) {
+        String id = ResourceLocation.parse(requiredString(json, "id", resourceId)).toString();
+        int version = requiredInt(json, "version", resourceId);
+        JsonArray rawActors = requiredArray(json, "actors", resourceId);
+        if (rawActors.size() > MAX_ACTORS) throw new IllegalArgumentException(resourceId + " exceeds " + MAX_ACTORS + " actor slots");
+        Set<String> slots = new LinkedHashSet<>();
+        List<EncounterProfile.ActorSlot> actors = rawActors.asList().stream().map(value -> {
+            JsonObject actor = value.getAsJsonObject();
+            String slot = requiredString(actor, "slot", resourceId);
+            if (!slot.matches("[a-z0-9_/-]+") || !slots.add(slot)) {
+                throw new IllegalArgumentException(resourceId + " has invalid or duplicate actor slot " + slot);
+            }
+            return new EncounterProfile.ActorSlot(slot, ResourceLocation.parse(requiredString(actor, "entity_type", resourceId)).toString());
+        }).toList();
+        return new EncounterProfile(id, version, actors);
+    }
+
+    private static String requiredString(JsonObject json, String name, ResourceLocation resource) {
+        if (!json.has(name) || !json.get(name).isJsonPrimitive()) throw new IllegalArgumentException(resource + " requires string " + name);
+        return json.get(name).getAsString();
+    }
+
+    private static int requiredInt(JsonObject json, String name, ResourceLocation resource) {
+        if (!json.has(name) || !json.get(name).isJsonPrimitive()) throw new IllegalArgumentException(resource + " requires integer " + name);
+        return json.get(name).getAsInt();
+    }
+
+    private static JsonArray requiredArray(JsonObject json, String name, ResourceLocation resource) {
+        if (!json.has(name) || !json.get(name).isJsonArray()) throw new IllegalArgumentException(resource + " requires array " + name);
+        return json.getAsJsonArray(name);
+    }
+}

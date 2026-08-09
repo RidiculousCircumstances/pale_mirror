@@ -49,3 +49,7 @@ critical_flows:
     path: persisted job -> restart -> postcondition check -> idempotent completion
     owner: neoforge
     verification: critical-code
+  - id: optional-encounter-degradation
+    path: PM anchor -> optional encounter operation -> explicit degradation -> PM recovery
+    owner: neoforge adapter and materialization bridge
+    verification: critical-code

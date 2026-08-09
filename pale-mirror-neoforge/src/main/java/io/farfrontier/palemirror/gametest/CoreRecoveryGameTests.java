@@ -9,8 +9,11 @@ import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
+import io.farfrontier.palemirror.internal.world.EncounterState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -55,32 +58,46 @@ public final class CoreRecoveryGameTests {
                 "restart snapshot must retain completed operation progress");
         helper.assertValueEqual(reloaded.testMines().get(mine.id()).job().operations().getFirst().state().name(), "COMPLETED",
                 "restart snapshot must retain operation postcondition state");
-        tick(runtime, 1);
+        tick(runtime, 2);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.INFECTED, "facility status after materialization");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RECOVER, "scenario status after entering mine");
-        helper.assertTrue(mine.controllerId() != null, "TestThreat controller must be materialized exactly once");
+        helper.assertTrue(mine.anchorId() != null, "PM-owned anchor must be materialized exactly once");
+        helper.assertValueEqual(mine.encounter().state(), EncounterState.DEGRADED,
+                "missing Crimson public actor capability must degrade only encounter presentation");
+        helper.assertValueEqual(mine.job().operations().get(2).state().name(), "DEGRADED",
+                "optional Crimson operation must be persisted as degraded rather than blocking recovery");
         helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.ACTIVE,
                 "registry must record the active physical representation");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.NETHERRACK)),
                 "all PM-owned overlay cells must be materialized");
 
-        LivingEntity controller = (LivingEntity) level.getEntity(mine.controllerId());
-        helper.assertTrue(controller != null, "materialized controller must be present by its registered UUID");
-        controller.die(level.damageSources().generic());
+        CompoundTag legacy = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess()).copy();
+        downgradeV6SnapshotToV5(legacy);
+        PaleMirrorSavedData migrated = PaleMirrorSavedData.load(legacy, level.registryAccess());
+        helper.assertValueEqual(migrated.testMines().get(mine.id()).anchorId(), mine.anchorId(),
+                "v5 controller reference must migrate to the PM anchor reference");
+        helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
+                "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 6,
+                "migrated snapshot must be rewritten as schema v6");
+
+        LivingEntity anchorEntity = (LivingEntity) level.getEntity(mine.anchorId());
+        helper.assertTrue(anchorEntity != null, "materialized anchor must be present by its registered UUID");
+        anchorEntity.die(level.damageSources().generic());
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.RECOVERING, "facility status after observed controller death");
         runtime.advanceSimulation(1);
-        tick(runtime, 3);
+        tick(runtime, 4);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().status(), FacilityStatus.OPERATIONAL, "facility status after recovery simulation");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RESOLVED, "scenario must resolve exactly once");
-        helper.assertTrue(mine.controllerId() == null, "destroyed controller reference must be cleared");
+        helper.assertTrue(mine.anchorId() == null, "destroyed anchor reference must be cleared");
         helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.REPRESENTED,
                 "registry must retain the mine after its active threat is removed");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
@@ -117,6 +134,35 @@ public final class CoreRecoveryGameTests {
         data.worldState().setSimulationStep(0);
         data.worldState().setEventSequence(0);
         data.setDirty();
+    }
+
+    private static void downgradeV6SnapshotToV5(CompoundTag tag) {
+        tag.putInt("schemaVersion", 5);
+        CompoundTag mine = tag.getList("testMines", Tag.TAG_COMPOUND).getCompound(0);
+        mine.putUUID("controller", mine.getUUID("anchor"));
+        mine.remove("anchor");
+        ListTag operations = mine.getCompound("job").getList("operations", Tag.TAG_COMPOUND);
+        for (Tag element : operations) {
+            CompoundTag operation = (CompoundTag) element;
+            operation.putString("type", switch (operation.getString("type")) {
+                case "ENSURE_PM_ANCHOR" -> "ENSURE_TEST_THREAT_CONTROLLER";
+                case "REMOVE_PM_ANCHOR" -> "REMOVE_TEST_THREAT_CONTROLLER";
+                default -> operation.getString("type");
+            });
+            operation.remove("target");
+        }
+        CompoundTag scenario = tag.getCompound("snapshot").getList("scenarios", Tag.TAG_COMPOUND).getCompound(0);
+        scenario.remove("encounterProfile");
+        scenario.remove("encounterProfileVersion");
+        ListTag capabilities = scenario.getList("requiredCapabilities", Tag.TAG_STRING);
+        for (int index = 0; index < capabilities.size(); index++) {
+            if ("PM_ANCHOR_MATERIALIZATION".equals(capabilities.getString(index))) {
+                capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("TEST_THREAT_MATERIALIZATION"));
+            }
+            if ("PM_ANCHOR_OBSERVATION".equals(capabilities.getString(index))) {
+                capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("TEST_THREAT_OBSERVATION"));
+            }
+        }
     }
 
     private static void tick(PaleMirrorRuntime runtime, int count) {

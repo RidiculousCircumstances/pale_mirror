@@ -19,12 +19,17 @@ considered.
 | Disable autonomous raid side effects | `cc_config:disable_raids` writes global `Raids_Enabled = 0`; Packwiz already applies this policy. | Available globally, insufficient for local controller |
 | Detect one cleanup event after restart/unload | No public controller query, callback, or documented stable controller identity exists. | Blocked |
 | Avoid unintended global progression writes | Every exposed infection control function changes global scoreboards. | Blocked |
+| Public native encounter actor | The pinned JAR contains no `.class` files or custom entity registrations. Its public `crimson_curse:inf_mobs` tag contains only vanilla entity types. | No safe actor candidate |
 
 ## Outcome
 
-`CrimsonAdapter` remains `BLOCKED` even when the JAR is installed. It exports
-no Crimson materialization or observation capability. Pale Mirror therefore
-continues to use the fully testable `TestThreatAdapter` core slice.
+Pale Mirror now uses a PM-owned vanilla anchor as the canonical physical
+objective. `CrimsonEncounterAdapter` reports `DEGRADED` when the JAR is present: authored encounter slots are
+persisted and visible to diagnostics, but are deliberately not replaced by
+ordinary vanilla mobs pretending to be native Crimson content. This explicit
+degradation never blocks the PM recovery loop.
 
-Reopen this audit only if Crimson Curse publishes a stable local controller API
-with a caller-supplied identity/reference and an observable removal contract.
+Reopen the actor portion of this audit only if Crimson Curse publishes a stable
+local controller/actor API with caller-supplied identity/reference and an
+observable removal contract, or a documented public entity representation with
+equivalent lifecycle guarantees.

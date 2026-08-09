@@ -8,4 +8,4 @@ import net.minecraft.resources.ResourceLocation;
 
 /** Compiled immutable datapack definition. Active scenarios pin its version at creation. */
 public record ScenarioDefinition(ResourceLocation id, int version, Set<Capability> capabilities, List<String> stages,
-                                 String policy, long cooldownSteps) { }
+                                 String policy, long cooldownSteps, String encounterProfileId) { }

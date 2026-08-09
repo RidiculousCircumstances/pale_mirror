@@ -23,8 +23,8 @@ public final class Narrator {
 
         ScenarioInstance scenario = new ScenarioInstance(
                 "pm:scenario:" + event.eventId().substring("pm:event:".length()), event.eventId(), event.subject(), audience,
-                definition.id(), definition.version(), definition.stages(), definition.requiredCapabilities(), ScenarioStatus.OFFERED,
-                null, "");
+                definition.id(), definition.version(), definition.stages(), definition.requiredCapabilities(),
+                definition.encounterProfileId(), definition.encounterProfileVersion(), ScenarioStatus.OFFERED, null, "");
         state.putScenario(scenario);
         state.setNarratorCooldown(audience, state.simulationStep() + definition.cooldownSteps());
         DomainEvent offered = events.create(state, DomainEventType.SCENARIO_OFFERED, event.subject(), event.eventId());
