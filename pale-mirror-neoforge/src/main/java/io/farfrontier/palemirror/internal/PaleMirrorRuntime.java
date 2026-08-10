@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
@@ -30,6 +31,7 @@ import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
 import io.farfrontier.palemirror.internal.observation.PlayerEnteredFacilityBounds;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
+import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.observation.SiegeGateDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.SiegePartKind;
@@ -38,6 +40,8 @@ import io.farfrontier.palemirror.internal.world.TestMineTemplate;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 
 /** Server-thread coordinator. It is intentionally the only bridge between domain and Minecraft layers. */
 public final class PaleMirrorRuntime {
@@ -214,6 +218,44 @@ public final class PaleMirrorRuntime {
             if (mine != null) mine.setAnchorId(null);
         }
         return events;
+    }
+
+    /**
+     * Resolves incoming damage only for an exact persisted PM actor reference.
+     * This remains outside domain state: encounter combat is optional physical
+     * presentation, while an adapter can never directly alter a facility.
+     */
+    public ActorDamageResult receiveSourceActorDamage(Entity entity, DamageSource source, float amount) {
+        var claimant = AdapterRegistry.threatActors().stream().filter(adapter -> adapter.matchesActor(entity)).findFirst().orElse(null);
+        if (claimant == null) return ActorDamageResult.passThrough();
+        if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM actor is not in a server level");
+        String objectId = entity.getPersistentData().getString(io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter.OBJECT_ID_KEY);
+        String slotId = entity.getPersistentData().getString("pale_mirror_encounter_slot");
+        if (objectId.isBlank() || slotId.isBlank()) return ActorDamageResult.blocked("PM actor lacks persisted provenance");
+        try {
+            WorldObjectId facilityId = new WorldObjectId(objectId);
+            TestMineRecord mine = data.testMines().get(facilityId);
+            FacilityState facility = data.worldState().facility(facilityId).orElse(null);
+            if (mine == null || facility == null || !mine.dimensionId().equals(level.dimension().location().toString())) {
+                return ActorDamageResult.blocked("PM actor is not attached to its registered threat site");
+            }
+            var reference = mine.encounter().actor(slotId).orElse(null);
+            if (!claimant.source().equals(facility.infectionSource()) || reference == null
+                    || !claimant.matchesOwnedActor(entity, mine, slotId)) {
+                return ActorDamageResult.blocked("PM actor provenance does not match its canonical source and slot");
+            }
+            ActorDamageResult result = claimant.receiveDamage(level, mine, entity, reference, source, amount);
+            if (!result.intercepts()) return result;
+            data.setDirty();
+            if (result.disposition() == ActorDamageResult.Disposition.DEFEATED) {
+                String causationId = "combat:" + entity.getUUID();
+                publish(new EncounterActorDestroyed("encounter-actor-destroyed:" + claimant.source().value() + ":" + causationId,
+                        facilityId, claimant.source(), slotId, entity.getUUID()));
+            }
+            return result;
+        } catch (IllegalArgumentException ignored) {
+            return ActorDamageResult.blocked("PM actor contains an invalid persisted world object id");
+        }
     }
 
     private void observePlayers() {

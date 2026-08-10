@@ -8,6 +8,7 @@ public enum Capability {
     CRIMSON_ENCOUNTER_ACTORS,
     /** Optional PM-owned Nodes, Bloodlinks and boss forms from the pinned Crimson sandbox. */
     CRIMSON_SIEGE_OBJECTS,
-    /** Optional dormant native forms from the version-pinned Spore sandbox. */
-    SPORE_ENCOUNTER_ACTORS
+    /** Optional constrained native forms from the version-pinned Spore sandbox. */
+    SPORE_ENCOUNTER_ACTORS,
+    SPORE_CONTROLLED_COMBAT
 }

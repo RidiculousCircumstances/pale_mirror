@@ -31,6 +31,7 @@ final class WorldPresentationCodec {
             value.putString("status", actor.status().name());
             value.putLong("nextRuntimeTick", actor.nextRuntimeTick());
             value.putInt("actionCounter", actor.actionCounter());
+            value.putInt("combatHitPoints", actor.combatHitPoints());
             actors.add(value);
         });
         tag.put("actors", actors);
@@ -44,7 +45,8 @@ final class WorldPresentationCodec {
             actors.add(new EncounterActorRef(value.getString("slot"), value.getString("profile"), value.getString("entityType"),
                     value.hasUUID("entity") ? value.getUUID("entity") : null,
                     EncounterActorRef.Status.valueOf(value.getString("status")), value.getLong("nextRuntimeTick"),
-                    value.getInt("actionCounter")));
+                    value.getInt("actionCounter"), value.contains("combatHitPoints", Tag.TAG_INT)
+                            ? value.getInt("combatHitPoints") : EncounterActorRef.UNINITIALIZED_COMBAT_HIT_POINTS));
         }
         return new EncounterRecord(tag.getString("profile"), tag.getString("profileVersion"), tag.getString("job"),
                 tag.getLong("desiredRevision"), actors,

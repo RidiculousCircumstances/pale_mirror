@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.internal.adapter.ThreatActorAdapter;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
+import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
 import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -17,9 +18,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
 
 /**
@@ -28,11 +34,13 @@ import net.neoforged.fml.ModList;
  *
  * Native infected AI is not an authority and is unsafe for a PM-controlled
  * site because Spore entities can evolve and write terrain themselves.  Every
- * PM-owned Spore entity is therefore placed in a persistent dormant and
- * damage-locked state (NoAI, no target, invulnerable) while PM retains source,
- * phase, spread and cleanup.  The PM anchor remains the only clearable
- * controller; cleanup discards these presentation forms without invoking
- * Spore's native death/remains path.
+ * PM-owned Spore entity is therefore kept in a persistent constrained state
+ * (NoAI, no target, no navigation) while PM retains source, phase, spread and
+ * cleanup.  A small PM combat executor may use the entity as a stationary
+ * model/sound provider, but never invokes native goals, damage, evolution,
+ * terrain work or infection. The PM anchor remains the only clearable
+ * controller; cleanup discards these forms without invoking Spore's native
+ * death/remains path.
  */
 public final class SporeSandboxAdapter implements ThreatActorAdapter {
     public static final String ROLE_KEY = VanillaAnchorAdapter.ROLE_KEY;
@@ -41,6 +49,7 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
     public static final String ACTOR_ROLE = "spore_actor";
     public static final String MOD_ID = "spore";
     public static final String VERSION = "2.2.0j";
+    private final SporeCombatRuntime combatRuntime = new SporeCombatRuntime();
 
     @Override
     public String id() { return "pale_mirror:spore_sandbox"; }
@@ -64,10 +73,14 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
                 return new AdapterHealth(AdapterHealth.Status.BLOCKED,
                         "Spore registry is missing required entity " + profile.entityTypeId(), Set.of());
             }
+            if (!BuiltInRegistries.SOUND_EVENT.containsKey(ResourceLocation.parse(profile.attackSoundId()))) {
+                return new AdapterHealth(AdapterHealth.Status.BLOCKED,
+                        "Spore registry is missing required combat sound " + profile.attackSoundId(), Set.of());
+            }
         }
         return new AdapterHealth(AdapterHealth.Status.AVAILABLE,
-                "Spore " + version + " sandboxed: PM owns spread, tiers, controller and native actor dormancy",
-                Set.of(Capability.SPORE_ENCOUNTER_ACTORS));
+                "Spore " + version + " sandboxed: PM owns spread, tiers, controller and constrained combat",
+                Set.of(Capability.SPORE_ENCOUNTER_ACTORS, Capability.SPORE_CONTROLLED_COMBAT));
     }
 
     @Override
@@ -78,11 +91,15 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         if (profile == null) return ActorOperationResult.unavailable(
                 "Spore sandbox " + VERSION + " does not support PM actor profile " + slot.actorProfileId());
         EncounterActorRef reference = site.encounter().actor(slot.id()).orElse(null);
+        if (reference != null && reference.status() == EncounterActorRef.Status.DEFEATED) {
+            return ActorOperationResult.materialized();
+        }
         if (reference != null && reference.entityId() != null) {
             Entity existing = level.getEntity(reference.entityId());
             if (matchesOwnedActor(existing, site, slot.id()) && profile.entityTypeId().equals(entityTypeId(existing))) {
-                holdDormant(existing);
+                holdConstrained(existing);
                 site.encounter().activate(slot.id(), reference.entityId(), profile.entityTypeId());
+                site.encounter().initializeCombatHitPoints(slot.id(), profile.combatHitPoints());
                 return ActorOperationResult.materialized();
             }
             if (existing != null) return ActorOperationResult.unavailable("Spore actor identity conflict for slot " + slot.id());
@@ -101,13 +118,14 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         actor.getPersistentData().putString(ROLE_KEY, ACTOR_ROLE);
         actor.getPersistentData().putString(SLOT_KEY, slot.id());
         actor.getPersistentData().putString(PROFILE_KEY, profile.id());
-        holdDormant(actor);
+        holdConstrained(actor);
         if (!level.addFreshEntity(actor)) return ActorOperationResult.unavailable("Could not add Spore actor to the level");
         if (!matchesOwnedActor(actor, site, slot.id()) || !profile.entityTypeId().equals(entityTypeId(actor))) {
             actor.discard();
             return ActorOperationResult.unavailable("Spore actor postcondition failed");
         }
         site.encounter().activate(slot.id(), actor.getUUID(), profile.entityTypeId());
+        site.encounter().initializeCombatHitPoints(slot.id(), profile.combatHitPoints());
         return ActorOperationResult.materialized();
     }
 
@@ -144,18 +162,45 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
                 && slotId.equals(entity.getPersistentData().getString(SLOT_KEY));
     }
 
+    /**
+     * PM consumes player damage into its persisted encounter health.  All
+     * other sources are rejected so a native Spore {@code hurt}/{@code die}
+     * path can never gain authority over this site.
+     */
+    @Override
+    public ActorDamageResult receiveDamage(ServerLevel level, TestMineRecord site, Entity entity,
+                                           EncounterActorRef reference, DamageSource source, float amount) {
+        if (!matchesOwnedActor(entity, site, reference.slotId()) || reference.status() != EncounterActorRef.Status.ACTIVE) {
+            return ActorDamageResult.blocked("Spore actor identity is stale or not active");
+        }
+        if (!(source.getEntity() instanceof ServerPlayer player) || player.isSpectator()
+                || player.serverLevel() != level || !site.contains(player.blockPosition()) || !site.contains(entity.blockPosition())) {
+            return ActorDamageResult.blocked("Only a player inside the PM threat site may damage its constrained Spore actor");
+        }
+        SporeActorProfile profile = SporeActorProfile.byId(reference.actorProfileId()).orElse(null);
+        if (profile == null) return ActorDamageResult.blocked("Unsupported Spore combat profile " + reference.actorProfileId());
+        site.encounter().initializeCombatHitPoints(reference.slotId(), profile.combatHitPoints());
+        int remaining = site.encounter().consumeCombatHitPoints(reference.slotId(), Math.max(1, Mth.ceil(amount)));
+        level.broadcastEntityEvent(entity, (byte) 2);
+        level.playSound(null, entity.blockPosition(), profile.attackSound(), SoundSource.HOSTILE, 0.65F, 0.8F);
+        if (remaining > 0) return ActorDamageResult.consumed();
+        entity.discard();
+        return ActorDamageResult.defeated();
+    }
+
     @Override
     public void tickRuntime(MinecraftServer server, PaleMirrorSavedData data) {
-        if (server.overworld().getGameTime() % 20L != 0L || health().status() != AdapterHealth.Status.AVAILABLE) return;
+        if (health().status() != AdapterHealth.Status.AVAILABLE) return;
         for (TestMineRecord site : data.testMines().values()) {
             ServerLevel level = levelFor(server, site);
             if (level == null) continue;
             for (EncounterActorRef reference : site.encounter().actors()) {
                 if (reference.entityId() == null) continue;
                 Entity entity = level.getEntity(reference.entityId());
-                if (matchesOwnedActor(entity, site, reference.slotId())) holdDormant(entity);
+                if (matchesOwnedActor(entity, site, reference.slotId())) holdConstrained(entity);
             }
         }
+        combatRuntime.tick(server, data, this);
     }
 
     private static String entityTypeId(Entity entity) {
@@ -169,11 +214,13 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         return null;
     }
 
-    private static void holdDormant(Entity entity) {
+    void holdConstrained(Entity entity) {
         if (!(entity instanceof Mob mob)) return;
         mob.setNoAi(true);
-        mob.setInvulnerable(true);
+        mob.setInvulnerable(false);
         mob.setTarget(null);
         mob.setLastHurtByMob(null);
+        mob.getNavigation().stop();
+        mob.setDeltaMovement(Vec3.ZERO);
     }
 }

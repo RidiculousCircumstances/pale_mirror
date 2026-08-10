@@ -123,8 +123,8 @@ public final class CoreRecoveryGameTests {
                 "v5 controller reference must migrate to the PM anchor reference");
         helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
                 "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 10,
-                "migrated snapshot must be rewritten as schema v10");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 11,
+                "migrated snapshot must be rewritten as schema v11");
         helper.assertValueEqual(migrated.worldState().facility(mine.id()).orElseThrow().infectionSource(), InfectionSourceId.CRIMSON,
                 "legacy snapshot must receive the explicit source recorded by its original PM path");
         CompoundTag v8Presentation = persisted.copy();

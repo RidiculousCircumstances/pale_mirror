@@ -133,3 +133,15 @@ Run the isolated packaged-JAR boot profile with:
 The packaged-JAR task is a boot smoke test, not a full Crimson gameplay test:
 the upstream datapack can log missing optional Spore resources in an otherwise
 successful clean-server boot. Pale Mirror does not call those functions.
+
+## Spore controlled combat
+
+With the checksum-pinned Spore `2.2.0j` installed, the two PM Spore forms are
+stationary local defenders. PM holds their native AI, target acquisition,
+navigation and movement off; it owns their hit points and attack cooldown in
+SavedData. A defender can attack only a non-spectator player within its
+registered mine bounds and fixed profile range. Player hits are consumed by
+PM before Spore's native damage/death code runs. A lethal hit safely discards
+the form and records a presentation-only defeat; it cannot leave Spore remains,
+spread infection or resolve the PM anchor. Native movement, evolution, terrain,
+organisms, raids and hivemind behaviors remain disabled.

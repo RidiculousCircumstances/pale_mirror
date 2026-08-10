@@ -2,11 +2,14 @@ package io.farfrontier.palemirror.internal.adapter;
 
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
+import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
 import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
+import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 
 /**
@@ -21,6 +24,14 @@ public interface ThreatActorAdapter extends io.farfrontier.palemirror.api.Integr
     boolean matchesActor(Entity entity);
     boolean matchesOwnedActor(Entity entity, TestMineRecord site, String slotId);
 
+    /**
+     * Classifies damage to one persisted PM actor.  Native integrations must
+     * return BLOCKED unless they have an audited safe combat policy.
+     */
+    default ActorDamageResult receiveDamage(ServerLevel level, TestMineRecord site, Entity entity,
+                                            EncounterActorRef reference, DamageSource source, float amount) {
+        return ActorDamageResult.passThrough();
+    }
     default void tickRuntime(MinecraftServer server, PaleMirrorSavedData data) { }
     default void presentDamage(net.minecraft.world.entity.LivingEntity entity) { }
     default void presentDeath(net.minecraft.world.entity.LivingEntity entity) { }

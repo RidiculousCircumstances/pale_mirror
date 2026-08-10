@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
+import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
@@ -107,7 +108,10 @@ public final class PaleMirrorEvents {
             event.setCanceled(true);
             return;
         }
-        if (AdapterRegistry.spore().matchesActor(event.getEntity())) event.setCanceled(true);
+        if (event.getEntity().level().getServer() == null) return;
+        ActorDamageResult result = PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
+                .receiveSourceActorDamage(event.getEntity(), event.getSource(), event.getAmount());
+        if (result.intercepts()) event.setCanceled(true);
     }
 
     @SubscribeEvent

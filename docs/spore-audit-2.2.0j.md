@@ -15,8 +15,8 @@
 
 | PM profile | Pinned registry id | PM tier | State |
 | --- | --- | --- | --- |
-| `pale_mirror:spore_infected_human` | `spore:inf_human` | FOOTHOLD | supported |
-| `pale_mirror:spore_braiomil` | `spore:braiomil` | INFESTED | supported |
+| `pale_mirror:spore_infected_human` | `spore:inf_human` | FOOTHOLD | constrained stationary combat |
+| `pale_mirror:spore_braiomil` | `spore:braiomil` | INFESTED | constrained stationary combat |
 
 The adapter verifies the installed mod id, exact version, and both registry
 entries before materialization.  A missing or incompatible installation is an
@@ -31,14 +31,21 @@ remains/growth blocks during `die`.  Braiomil also has native combat/evolution
 logic.  These mechanisms are not PM-authoritative and cannot run in the first
 slice.
 
-Accordingly, PM-owned Spore actors are presentation forms only:
+Accordingly, PM-owned Spore actors remain constrained forms:
 
 - persistent, provenance-tagged native entities;
-- `NoAI`, no target, and invulnerable;
-- reasserted by a bounded adapter tick over registered PM references only;
-- never used as the controller or clearance condition;
-- discarded by PM cleanup rather than killed, so native death/remains code is
-  not invoked.
+- `NoAI`, no target, stopped navigation and zeroed movement, reasserted only
+  over registered PM references;
+- a bounded PM executor selects only a nearby player inside the same registered
+  site and applies a static, profile-owned vanilla damage event on a persisted
+  cooldown; actors never move, navigate, summon, infect, evolve or break
+  terrain;
+- incoming player damage is converted to PM-owned persisted combat HP before
+  Spore's `hurt` path runs; all non-player/out-of-site damage is rejected;
+- a lethal PM combat hit discards the actor and emits one typed presentation
+  observation, instead of calling native `die` and its remains path;
+- never used as the controller or clearance condition. The PM anchor remains
+  the unique recovery condition.
 
 The PM vanilla anchor remains the unique controller.  It alone converts an
 observed destruction into `RECOVERING`; Spore actor observations cannot alter
@@ -51,13 +58,15 @@ The Spore GameTest profile boots the checksum-pinned JAR and proves:
 1. an explicit `pale_mirror:spore` facility selects the Spore scenario;
 2. PM applies a provenance-safe vanilla fungal palette, never Spore terrain
    conversion;
-3. both native registry forms materialize exactly once at PM tiers and retain
-   dormant restrictions;
+3. both native registry forms materialize exactly once at PM tiers, retain
+   their constrained restrictions, and use PM-owned health/cooldown state;
 4. source identity survives a SavedData round trip;
 5. a forged observation from the wrong source is rejected; and
-6. controller clearance removes native forms through PM cleanup.
+6. only a player in the site may damage a constrained form; external damage is
+   rejected, a lethal approved hit leaves no Spore remains, and a defeated form
+   never respawns on a later desired revision; and
+7. controller clearance removes remaining native forms through PM cleanup.
 
-It does not yet provide combat-capable Spore actors, native Spore terrain,
-organisms, raids, hiveminds, or a full content catalogue.  Those require an
-isolated follow-up design that controls each native side effect before it is
-enabled.
+It provides only static PM-controlled attacks, not native Spore combat AI,
+movement, terrain, organisms, raids, hiveminds, or a full content catalogue.
+Each additional capability still requires its own isolated side-effect audit.

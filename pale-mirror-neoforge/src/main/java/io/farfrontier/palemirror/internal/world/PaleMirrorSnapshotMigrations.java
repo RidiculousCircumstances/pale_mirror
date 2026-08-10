@@ -13,7 +13,7 @@ final class PaleMirrorSnapshotMigrations {
 
     static boolean isMigratable(int version) {
         return version == PaleMirrorSavedData.CURRENT_SCHEMA || version == 5 || version == 6
-                || version == 7 || version == 8 || version == 9;
+                || version == 7 || version == 8 || version == 9 || version == 10;
     }
 
     static CompoundTag migrate(CompoundTag source) {
@@ -24,7 +24,8 @@ final class PaleMirrorSnapshotMigrations {
         if (version == 6) { migrateV6ToV7(migrated); version = 7; }
         if (version == 7) { migrateV7ToV8(migrated); version = 8; }
         if (version == 8) { migrateV8ToV9(migrated); version = 9; }
-        if (version == 9) migrateV9ToV10(migrated);
+        if (version == 9) { migrateV9ToV10(migrated); version = 10; }
+        if (version == 10) migrateV10ToV11(migrated);
         return migrated;
     }
 
@@ -130,5 +131,20 @@ final class PaleMirrorSnapshotMigrations {
             }
         }
         tag.putInt("schemaVersion", 10);
+    }
+
+    /** v11 makes PM-owned combat health explicit for safe adapter combat. */
+    private static void migrateV10ToV11(CompoundTag tag) {
+        for (Tag mineElement : tag.getList("testMines", Tag.TAG_COMPOUND)) {
+            CompoundTag mine = (CompoundTag) mineElement;
+            if (!mine.contains("encounter", Tag.TAG_COMPOUND)) continue;
+            for (Tag actorElement : mine.getCompound("encounter").getList("actors", Tag.TAG_COMPOUND)) {
+                CompoundTag actor = (CompoundTag) actorElement;
+                if (!actor.contains("combatHitPoints", Tag.TAG_INT)) {
+                    actor.putInt("combatHitPoints", EncounterActorRef.UNINITIALIZED_COMBAT_HIT_POINTS);
+                }
+            }
+        }
+        tag.putInt("schemaVersion", 11);
     }
 }

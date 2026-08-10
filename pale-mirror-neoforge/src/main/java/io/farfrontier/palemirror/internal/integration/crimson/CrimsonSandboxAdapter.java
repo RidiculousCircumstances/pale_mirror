@@ -107,6 +107,9 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         if (profile == null) return ActorOperationResult.unavailable(
                 "Crimson sandbox 1.4.3.1 does not support PM actor profile " + slot.actorProfileId());
         EncounterActorRef reference = mine.encounter().actor(slot.id()).orElse(null);
+        if (reference != null && reference.status() == EncounterActorRef.Status.DEFEATED) {
+            return ActorOperationResult.materialized();
+        }
         if (reference != null && reference.entityId() != null) {
             Entity existing = level.getEntity(reference.entityId());
             if (isOwnedActor(existing, mine, slot.id()) && profile.matches(existing)) {

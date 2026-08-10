@@ -34,9 +34,9 @@
 - The staged infection biome is core-only and uses fixed vanilla blocks in
   predeclared `test-mine-v2` cells; it never calls Crimson terrain conversion
   or claims unrecorded cells from legacy mines.
-- Spore 2.2.0j is isolated through its entity registry only.  Its first two
-  native forms are persistent, dormant and invulnerable presentation; PM alone
-  owns clearance and discards forms during cleanup to avoid native death/remains.
+- Spore 2.2.0j is isolated through its entity registry only. Its first two
+  native forms are stationary, constrained PM combat forms; PM owns their
+  persisted HP/cooldown and replaces lethal native death with safe discard.
 
 ## State
 
@@ -71,22 +71,24 @@
 - New `test-mine-v2` sites render a bounded staged biome: 66 biome cells move
   through FOOTHOLD/INFESTED/SIEGE/APEX palettes while four separate Node cells
   retain siege ownership. Conflicts block instead of overwriting external edits.
-- Schema v10 persists the facility infection source and migrates v9 snapshots
-  to explicit Crimson source data.  Encounter operations and observations are
+- Schema v11 persists PM-owned encounter combat HP and migrates v10 snapshots
+  with explicit uninitialized physical combat state. Schema v10 persists the
+  facility infection source and migrates v9 snapshots to explicit Crimson data.
+  Encounter operations and observations are
   source-neutral; an observation with a mismatched source is ignored.
 - A checksum-pinned Spore 2.2.0j GameTest profile proves a separate
-  `pale_mirror:spore` scenario, fungal palette, two dormant native forms,
-  source persistence and PM-controlled cleanup.
+  `pale_mirror:spore` scenario, fungal palette, two constrained native forms,
+  source persistence, PM stationary combat, safe defeat and PM-controlled cleanup.
 
 ### Now
 
-- Source-aware threat sites and the safe Spore thin vertical slice are
-  implemented; core and Spore GameTest profiles have passed.
+- Source-aware threat sites, the safe Spore slice and PM-controlled stationary
+  combat are implemented; core and Spore GameTest profiles have passed.
 
 ### Next
 
-- Define an isolated, side-effect-controlled capability plan before enabling
-  combat, terrain or organism behaviours from additional Spore content.
+- Define isolated, side-effect-controlled plans before enabling Spore movement,
+  terrain or organism behaviours; do not enable native AI as a shortcut.
 - Perform a graphical client/multiplayer pass against the private pack to
   validate Crimson and Spore visuals, mixing and particles.
 

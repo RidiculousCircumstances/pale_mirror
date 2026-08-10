@@ -60,7 +60,7 @@ public final class SporeSandboxGameTests {
         helper.assertValueEqual(BuiltInRegistries.ENTITY_TYPE.getKey(human.getType()).toString(), "spore:inf_human",
                 "Spore adapter must use only its pinned registered entity contract");
         helper.assertTrue(human instanceof net.minecraft.world.entity.Mob mob && mob.isNoAi(),
-                "PM must keep a native Spore form dormant so it cannot own spread or terrain conversion");
+                "PM must keep a native Spore form constrained so it cannot own spread or terrain conversion");
         helper.assertValueEqual(human.getPersistentData().getString(SporeSandboxAdapter.PROFILE_KEY),
                 "pale_mirror:spore_infected_human", "native actor must retain PM source provenance");
         runtime.publish(new EncounterActorDestroyed("forged-wrong-source", site.id(), InfectionSourceId.CRIMSON,
@@ -74,11 +74,52 @@ public final class SporeSandboxGameTests {
         CompoundTag snapshot = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
         helper.assertValueEqual(PaleMirrorSavedData.load(snapshot, level.registryAccess()).worldState().facility(site.id()).orElseThrow()
                 .infectionSource(), InfectionSourceId.SPORE, "restart snapshot must retain the canonical source identity");
+        CompoundTag v10Snapshot = snapshot.copy();
+        v10Snapshot.putInt("schemaVersion", 10);
+        v10Snapshot.getList("testMines", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).getCompound("encounter")
+                .getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).forEach(value -> ((CompoundTag) value).remove("combatHitPoints"));
+        helper.assertValueEqual(PaleMirrorSavedData.load(v10Snapshot, level.registryAccess()).testMines().get(site.id())
+                .encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints(),
+                io.farfrontier.palemirror.internal.world.EncounterActorRef.UNINITIALIZED_COMBAT_HIT_POINTS,
+                "v10 migration must leave physical combat health explicitly uninitialized for the adapter to restore");
 
+        int initialCombatHealth = site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints();
+        helper.assertValueEqual(initialCombatHealth, 18, "PM must persist the audited Spore combat health instead of native health");
+        player.setPos(human.getX(), human.getY(), human.getZ() + 1.0D);
+        helper.assertTrue(!human.hurt(level.damageSources().playerAttack(player), 3.0F),
+                "PM must consume a player hit before Spore native damage hooks run");
+        helper.assertValueEqual(site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints(),
+                initialCombatHealth - 3, "PM-owned encounter health must record a non-lethal player hit");
+        CompoundTag combatSnapshot = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
+        helper.assertValueEqual(PaleMirrorSavedData.load(combatSnapshot, level.registryAccess()).testMines().get(site.id())
+                .encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints(), initialCombatHealth - 3,
+                "restart snapshot must retain PM-owned Spore combat health");
+        int actionsBefore = site.encounter().actor("dormant_infected_human").orElseThrow().actionCounter();
+        site.encounter().scheduleRuntime("dormant_infected_human", 0L);
+        runtime.tick();
+        var afterCombatAction = site.encounter().actor("dormant_infected_human").orElseThrow();
+        helper.assertValueEqual(afterCombatAction.actionCounter(), actionsBefore + 2,
+                "PM constrained-combat runtime must schedule one bounded attack while a player is inside the site");
+        helper.assertTrue(afterCombatAction.nextRuntimeTick() > 0,
+                "PM must persist the next combat cooldown rather than relying on native Spore AI");
+
+        int afterPlayerHit = site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints();
         helper.assertTrue(!human.hurt(level.damageSources().generic(), 10_000.0F),
-                "dormant Spore form must reject damage so native death/remains code cannot edit the world");
+                "non-player damage must be rejected so native death/remains code cannot edit the world");
+        helper.assertValueEqual(site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints(), afterPlayerHit,
+                "blocked external damage must not change PM-owned combat health");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(site.id()).orElseThrow()
                 .status(), FacilityStatus.INFECTED, "native form damage must not resolve the PM-owned controller");
+
+        helper.assertTrue(!human.hurt(level.damageSources().playerAttack(player), 10_000.0F),
+                "a lethal player hit must become a PM discard rather than a native Spore death");
+        helper.assertTrue(level.getEntity(human.getUUID()) == null, "safe PM defeat must discard the native actor immediately");
+        helper.assertValueEqual(site.encounter().actor("dormant_infected_human").orElseThrow().status().name(), "DEFEATED",
+                "safe actor defeat must reconcile exactly once as a presentation-only fact");
+        for (int x = -4; x <= 4; x++) for (int y = 0; y <= 4; y++) for (int z = -4; z <= 4; z++) {
+            helper.assertTrue(!BuiltInRegistries.BLOCK.getKey(level.getBlockState(site.anchor().offset(x, y, z)).getBlock())
+                    .getNamespace().equals("spore"), "safe PM defeat must never leave native Spore remains or growth");
+        }
 
         runtime.advanceSimulation(12);
         tick(runtime, 6);
@@ -86,9 +127,11 @@ public final class SporeSandboxGameTests {
                 .threatTier(), ThreatTier.INFESTED, "PM simulation, not Spore evolution, must select the next roster tier");
         LivingEntity braiomil = (LivingEntity) level.getEntity(site.encounter().actor("dormant_braiomil").orElseThrow().entityId());
         helper.assertTrue(braiomil instanceof net.minecraft.world.entity.Mob mob && mob.isNoAi(),
-                "second native form must also remain dormant under PM control");
+                "second native form must also remain constrained under PM control");
         helper.assertValueEqual(BuiltInRegistries.ENTITY_TYPE.getKey(braiomil.getType()).toString(), "spore:braiomil",
                 "PM tier selection must materialize the second pinned Spore form exactly once");
+        helper.assertValueEqual(site.encounter().actor("dormant_infected_human").orElseThrow().status().name(), "DEFEATED",
+                "a safely defeated Spore actor must not respawn when PM later changes its desired revision");
         LivingEntity controller = (LivingEntity) level.getEntity(site.anchorId());
         helper.assertTrue(controller != null, "PM-owned controller must remain independently materialized beside native forms");
         controller.die(level.damageSources().generic());

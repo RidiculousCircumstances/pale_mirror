@@ -115,9 +115,10 @@ public final class MaterializationScheduler {
         List<EncounterActorRef> actors = profile.actorsFor(facility.threatTier()).stream().map(actor -> {
             EncounterActorRef previous = mine.encounter().actor(actor.id()).orElse(null);
             if (previous != null && previous.actorProfileId().equals(actor.actorProfileId())
-                    && previous.status() == EncounterActorRef.Status.ACTIVE) {
+                    && (previous.status() == EncounterActorRef.Status.ACTIVE
+                    || previous.status() == EncounterActorRef.Status.DEFEATED)) {
                 return new EncounterActorRef(actor.id(), actor.actorProfileId(), previous.entityTypeId(), previous.entityId(),
-                        previous.status(), previous.nextRuntimeTick(), previous.actionCounter());
+                        previous.status(), previous.nextRuntimeTick(), previous.actionCounter(), previous.combatHitPoints());
             }
             return new EncounterActorRef(actor.id(), actor.actorProfileId(), "", null, EncounterActorRef.Status.MISSING);
         }).toList();

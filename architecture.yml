@@ -79,7 +79,7 @@ critical_flows:
     path: canonical InfectionSourceId -> source-neutral encounter operation -> isolated source adapter -> typed source-checked observation
     owner: domain FacilityState plus neoforge materialization and reconciliation bridge
     verification: critical-code
-  - id: pm-spore-dormant-slice
-    path: PM Spore tier -> registered native Spore form -> dormant/invulnerable containment -> PM anchor clearance -> discard cleanup
-    owner: neoforge SporeSandboxAdapter and PM materialization bridge
+  - id: pm-spore-controlled-combat
+    path: PM Spore tier -> constrained native form -> PM-owned combat HP/cooldown and stationary attack -> typed defeat observation -> PM anchor clearance -> discard cleanup
+    owner: neoforge SporeSandboxAdapter, SporeCombatRuntime and PM materialization bridge
     verification: critical-code
