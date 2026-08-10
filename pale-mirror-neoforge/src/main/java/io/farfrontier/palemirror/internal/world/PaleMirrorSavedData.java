@@ -36,6 +36,9 @@ import io.farfrontier.palemirror.internal.effect.EffectLeaseLedger;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineLedger;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineRecord;
 import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
+import io.farfrontier.palemirror.internal.economy.EconomyPresentationCodec;
+import io.farfrontier.palemirror.internal.economy.ResourceTransferLedger;
+import io.farfrontier.palemirror.internal.economy.SettlementDepotRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -49,7 +52,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 20;
+    static final int CURRENT_SCHEMA = 21;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -61,15 +64,20 @@ public final class PaleMirrorSavedData extends SavedData {
     private final ThreatCombatLedger threatCombat;
     private final Map<String, CampaignRegionRecord> campaignRegions;
     private final Map<WorldObjectId, SettlementObservationRecord> settlementObservations;
+    private final ResourceTransferLedger resourceTransfers;
+    private final Map<WorldObjectId, SettlementDepotRecord> settlementDepots;
     public PaleMirrorSavedData() {
         this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
-                new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger(), new LinkedHashMap<>(), new LinkedHashMap<>());
+                new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(),
+                new ResourceTransferLedger(), new LinkedHashMap<>());
     }
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
                                 WorldObjectRegistry worldRegistry, EffectLeaseLedger effectLeases, QuarantineLedger quarantine,
                                 ThreatCombatLedger threatCombat, Map<String, CampaignRegionRecord> campaignRegions,
-                                Map<WorldObjectId, SettlementObservationRecord> settlementObservations) {
+                                Map<WorldObjectId, SettlementObservationRecord> settlementObservations,
+                                ResourceTransferLedger resourceTransfers,
+                                Map<WorldObjectId, SettlementDepotRecord> settlementDepots) {
         this.worldState = worldState;
         this.testMines = testMines;
         this.audienceMappings = audienceMappings;
@@ -80,6 +88,8 @@ public final class PaleMirrorSavedData extends SavedData {
         this.threatCombat = threatCombat;
         this.campaignRegions = campaignRegions;
         this.settlementObservations = settlementObservations;
+        this.resourceTransfers = resourceTransfers;
+        this.settlementDepots = settlementDepots;
     }
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
@@ -120,6 +130,8 @@ public final class PaleMirrorSavedData extends SavedData {
     public Map<String, CampaignRegionRecord> campaignRegions() { return campaignRegions; }
     /** Physical evidence from read-only village observers; never a second canonical settlement model. */
     public Map<WorldObjectId, SettlementObservationRecord> settlementObservations() { return settlementObservations; }
+    public ResourceTransferLedger resourceTransfers() { return resourceTransfers; }
+    public Map<WorldObjectId, SettlementDepotRecord> settlementDepots() { return settlementDepots; }
     public boolean observeSettlement(io.farfrontier.palemirror.internal.adapter.SettlementObservation observation) {
         SettlementObservationRecord record = settlementObservations.get(observation.settlementId());
         if (record == null) {
@@ -168,11 +180,12 @@ public final class PaleMirrorSavedData extends SavedData {
         }
         return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
                 new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag),
-                CampaignRegionPresentationCodec.read(tag), SettlementObservationCodec.read(tag));
+                CampaignRegionPresentationCodec.read(tag), SettlementObservationCodec.read(tag),
+                EconomyPresentationCodec.readLedger(tag), EconomyPresentationCodec.readDepots(tag));
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " is not compatible with schema "
-                + CURRENT_SCHEMA + ". The schema-v20 Settlement Actor boundary requires a new world; back up the old world before resetting its Pale Mirror data.");
+                + CURRENT_SCHEMA + ". The schema-v21 transactional economy boundary requires a new world; back up the old world before resetting its Pale Mirror data.");
     }
 
     private static boolean isMigratable(int version) {
@@ -209,6 +222,7 @@ public final class PaleMirrorSavedData extends SavedData {
         ThreatCombatPresentationCodec.write(tag, threatCombat);
         CampaignRegionPresentationCodec.write(tag, campaignRegions);
         SettlementObservationCodec.write(tag, settlementObservations);
+        EconomyPresentationCodec.write(tag, resourceTransfers, settlementDepots);
         return tag;
     }
 

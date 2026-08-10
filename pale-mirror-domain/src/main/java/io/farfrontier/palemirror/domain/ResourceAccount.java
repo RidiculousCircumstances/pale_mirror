@@ -4,7 +4,7 @@ import java.util.OptionalLong;
 
 /** One bounded macro-resource account; physical item inventories never mirror this value. */
 public final class ResourceAccount {
-    private final int capacity;
+    private int capacity;
     private final int production;
     private final int baseConsumption;
     private final int rationedConsumption;
@@ -52,6 +52,27 @@ public final class ResourceAccount {
     public ResourceAvailability availability() { return availability; }
     public OptionalLong reserveSteps() {
         return netFlow < 0 ? OptionalLong.of((stock + (long) -netFlow - 1L) / -netFlow) : OptionalLong.empty();
+    }
+
+    /** Credits an external, explicitly receipted delivery and returns the accepted amount. */
+    public int credit(int amount) {
+        if (amount < 0) throw new IllegalArgumentException("Credit must not be negative");
+        if (amount > capacity - stock) return 0;
+        stock += amount;
+        return amount;
+    }
+
+    /** Debits canonical stock only when the complete amount is available. */
+    public boolean debit(int amount, int minimumRemaining) {
+        if (amount < 0 || minimumRemaining < 0) throw new IllegalArgumentException("Debit values must not be negative");
+        if (stock - amount < minimumRemaining) return false;
+        stock -= amount;
+        return true;
+    }
+
+    public void expandCapacity(int newCapacity) {
+        if (newCapacity < capacity) throw new IllegalArgumentException("Resource capacity cannot shrink");
+        capacity = newCapacity;
     }
 
     void advance(int incoming, boolean rationing) {

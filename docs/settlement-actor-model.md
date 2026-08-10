@@ -481,3 +481,19 @@ The completed breaking slice replaces:
 Schema v19 is intentionally rejected with a new-world diagnostic. Physical
 ruins, population groups, positive development, Millénaire reconciliation and
 social identity remain follow-up slices rather than compatibility shims.
+
+## Physical economy boundary (0.2d)
+
+Schema v21 introduces the first item-to-macro-resource bridge. A versioned
+PM-owned Supply Depot is placed in a deterministic loaded safe footprint and
+records baseline and last-applied state for every mutable cell. Its barrel is
+an interaction endpoint only: its inventory is never canonical stock.
+
+Deposits and withdrawals use a bounded persisted `ResourceTransferLedger`.
+Each operation pins the mapping version, player, audience-owned site, amount
+and domain resource, then advances through physical reservation and a domain
+command before completion. Reserved stacks carry the transfer identity and
+cannot be used while reconciliation is active. Withdrawal is limited to 16
+IRON per player per simulation step and must leave two consumption steps in
+reserve. Unknown or changed depot cells block materialization rather than
+overwriting the village or player construction.

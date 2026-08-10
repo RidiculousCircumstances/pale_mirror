@@ -38,6 +38,7 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
+import net.neoforged.neoforge.event.entity.item.ItemTossEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.common.util.TriState;
@@ -165,7 +166,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedRightClickItem(PlayerInteractEvent.RightClickItem event) {
-        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "right click")) {
+        if (denyReservedTransfer(event.getEntity(), event.getItemStack())
+                || denyExcludedItem(event.getEntity(), event.getItemStack(), "right click")) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
         }
@@ -173,21 +175,30 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
-        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "use on block")) {
+        if (denyReservedTransfer(event.getEntity(), event.getItemStack())
+                || denyExcludedItem(event.getEntity(), event.getItemStack(), "use on block")) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
             return;
         }
-        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
-                && PaleMirrorRuntime.forServer(player.getServer()).presentSettlementJournal(player, event.getPos())) {
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.SUCCESS);
+        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()) {
+            PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
+            var transfer = runtime.interactWithSupplyDepot(player, event.getPos());
+            if (transfer.handled()) {
+                player.sendSystemMessage(Component.literal(transfer.message()));
+                event.setCanceled(true);
+                event.setCancellationResult(transfer.success() ? InteractionResult.SUCCESS : InteractionResult.FAIL);
+            } else if (runtime.presentSettlementJournal(player, event.getPos())) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+            }
         }
     }
 
     @SubscribeEvent
     public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
-        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "use on entity")) {
+        if (denyReservedTransfer(event.getEntity(), event.getItemStack())
+                || denyExcludedItem(event.getEntity(), event.getItemStack(), "use on entity")) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
         }
@@ -195,7 +206,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
-        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "specific entity use")) {
+        if (denyReservedTransfer(event.getEntity(), event.getItemStack())
+                || denyExcludedItem(event.getEntity(), event.getItemStack(), "specific entity use")) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
         }
@@ -203,7 +215,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedItemUse(LivingEntityUseItemEvent.Start event) {
-        if (event.getEntity() instanceof ServerPlayer player && denyExcludedItem(player, event.getItem(), "held use")) {
+        if (event.getEntity() instanceof ServerPlayer player && (denyReservedTransfer(player, event.getItem())
+                || denyExcludedItem(player, event.getItem(), "held use"))) {
             event.setCanceled(true);
         }
     }
@@ -218,7 +231,8 @@ public final class PaleMirrorEvents {
     /** Recipe events are post-craft; zeroing the live output prevents excluded stacks entering the inventory. */
     @SubscribeEvent
     public static void onExcludedCraft(PlayerEvent.ItemCraftedEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && denyExcludedItem(player, event.getCrafting(), "craft output")) {
+        if (event.getEntity() instanceof ServerPlayer player && (denyReservedTransfer(player, event.getCrafting())
+                || denyExcludedItem(player, event.getCrafting(), "craft output"))) {
             event.getCrafting().setCount(0);
             player.containerMenu.broadcastChanges();
         }
@@ -226,9 +240,17 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedSmelt(PlayerEvent.ItemSmeltedEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && denyExcludedItem(player, event.getSmelting(), "smelt output")) {
+        if (event.getEntity() instanceof ServerPlayer player && (denyReservedTransfer(player, event.getSmelting())
+                || denyExcludedItem(player, event.getSmelting(), "smelt output"))) {
             event.getSmelting().setCount(0);
             player.containerMenu.broadcastChanges();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onReservedItemToss(ItemTossEvent event) {
+        if (event.getPlayer() instanceof ServerPlayer player && denyReservedTransfer(player, event.getEntity().getItem())) {
+            event.setCanceled(true);
         }
     }
 
@@ -323,6 +345,13 @@ public final class PaleMirrorEvents {
             }
             return true;
         }).orElse(false);
+    }
+
+    private static boolean denyReservedTransfer(Player player, ItemStack stack) {
+        if (!(player instanceof ServerPlayer serverPlayer) || stack.isEmpty()
+                || !PaleMirrorRuntime.forServer(serverPlayer.getServer()).isReservedTransferItem(stack)) return false;
+        serverPlayer.sendSystemMessage(Component.literal("This item is reserved by a Pale Mirror resource transfer."));
+        return true;
     }
 
     private static int registerThreatSite(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context,

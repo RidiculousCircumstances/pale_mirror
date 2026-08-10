@@ -16,7 +16,8 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.BypassGate, DomainCommand.GatePartDestroyed,
         DomainCommand.ValidateRouteContract, DomainCommand.ObserveSettlementPlace,
         DomainCommand.RegisterLivingRegion, DomainCommand.DiscoverLivingRegion,
-        DomainCommand.TriggerFacilityInfection {
+        DomainCommand.TriggerFacilityInfection, DomainCommand.DepositResource,
+        DomainCommand.WithdrawResource {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -148,6 +149,28 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public TriggerFacilityInfection {
             Objects.requireNonNull(facilityId, "facilityId");
             Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record DepositResource(WorldObjectId communityId, ResourceKind resource, int amount,
+                           String transferId) implements DomainCommand {
+        public DepositResource {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(resource, "resource");
+            Objects.requireNonNull(transferId, "transferId");
+            if (amount <= 0 || transferId.isBlank()) throw new IllegalArgumentException("Invalid resource deposit");
+        }
+    }
+
+    record WithdrawResource(WorldObjectId communityId, ResourceKind resource, int amount,
+                            int minimumRemaining, String transferId) implements DomainCommand {
+        public WithdrawResource {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(resource, "resource");
+            Objects.requireNonNull(transferId, "transferId");
+            if (amount <= 0 || minimumRemaining < 0 || transferId.isBlank()) {
+                throw new IllegalArgumentException("Invalid resource withdrawal");
+            }
         }
     }
 }

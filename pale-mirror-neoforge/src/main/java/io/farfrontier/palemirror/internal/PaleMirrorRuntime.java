@@ -33,6 +33,8 @@ import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
 import io.farfrontier.palemirror.internal.world.RegionalLogisticsRuntime;
 import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
+import io.farfrontier.palemirror.internal.economy.ResourceTransferRuntime;
+import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.domain.SourceGateStatus;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
@@ -49,6 +51,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 
 /** Server-thread coordinator. It is intentionally the only bridge between domain and Minecraft layers. */
 public final class PaleMirrorRuntime {
@@ -85,6 +88,8 @@ public final class PaleMirrorRuntime {
         if (server.overworld().getGameTime() % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0
                 && SettlementObservationRuntime.observeNearPlayers(server, data, commands)) data.setDirty();
         CampaignRegionBootstrapper.tick(server, data, commands);
+        if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
+        if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
         if (server.overworld().getGameTime() % LOGISTICS_OBSERVATION_INTERVAL_TICKS == 0) {
             handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands, LOGISTICS_PROOF_WINDOW_STEPS));
         }
@@ -158,7 +163,9 @@ public final class PaleMirrorRuntime {
                 + ", regions=" + data.worldState().livingRegions().size() + ", scenarios=" + data.worldState().scenarios().size()
                 + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count()
                 + ", effectLeases=" + data.effectLeases().leases().size() + ", combatActors=" + data.threatCombat().actors().size()
-                + ", projectiles=" + data.threatCombat().projectiles().size() + ", quarantine=" + data.quarantine().records().size();
+                + ", projectiles=" + data.threatCombat().projectiles().size() + ", quarantine=" + data.quarantine().records().size()
+                + ", resourceTransfers=" + data.resourceTransfers().transfers().size()
+                + ", depots=" + data.settlementDepots().size();
     }
 
     /** Admin-facing causal state, deliberately derived from canonical state rather than the physical presentation. */
@@ -180,6 +187,16 @@ public final class PaleMirrorRuntime {
     public boolean presentSettlementJournal(ServerPlayer player, net.minecraft.core.BlockPos position) {
         return RegionalJournal.present(data, player, position, this::audienceFor);
     }
+
+    public ResourceTransferRuntime.InteractionResult interactWithSupplyDepot(ServerPlayer player,
+                                                                              net.minecraft.core.BlockPos position) {
+        ResourceTransferRuntime.InteractionResult result = ResourceTransferRuntime.prepare(data, commands, player,
+                position, audienceFor(player));
+        if (result.handled() && result.success()) data.setDirty();
+        return result;
+    }
+
+    public boolean isReservedTransferItem(ItemStack stack) { return ResourceTransferRuntime.isReserved(stack); }
 
     /** Records a legacy source stack without granting it PM authority or deleting player data. */
     public void quarantineLegacyItem(ServerPlayer player, String sourceId, String fingerprint, String reason) {

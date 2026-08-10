@@ -49,6 +49,8 @@ public final class DomainCommandProcessor {
             case DomainCommand.RegisterLivingRegion registered -> registerLivingRegion(state, registered);
             case DomainCommand.DiscoverLivingRegion discovered -> discoverLivingRegion(state, discovered);
             case DomainCommand.TriggerFacilityInfection triggered -> triggerFacilityInfection(state, triggered);
+            case DomainCommand.DepositResource deposited -> depositResource(state, deposited);
+            case DomainCommand.WithdrawResource withdrawn -> withdrawResource(state, withdrawn);
         };
     }
 
@@ -237,6 +239,23 @@ public final class DomainCommandProcessor {
         produced.add(recordEvent(state, DomainEventType.MINE_INFECTED, facility.id(), command.causationId()));
         produced.add(recordEvent(state, DomainEventType.FACILITY_DISABLED, facility.id(), command.causationId()));
         return List.copyOf(produced);
+    }
+
+    private List<DomainEvent> depositResource(WorldState state, DomainCommand.DepositResource command) {
+        ResourceAccount account = state.economy(command.communityId()).orElseThrow(() ->
+                new IllegalArgumentException("Unknown settlement economy " + command.communityId()))
+                .require(command.resource());
+        int accepted = account.credit(command.amount());
+        if (accepted != command.amount()) throw new IllegalStateException("Resource deposit exceeds canonical capacity");
+        return record(state, DomainEventType.RESOURCE_DEPOSITED, command.communityId(), command.transferId());
+    }
+
+    private List<DomainEvent> withdrawResource(WorldState state, DomainCommand.WithdrawResource command) {
+        ResourceAccount account = state.economy(command.communityId()).orElseThrow(() ->
+                new IllegalArgumentException("Unknown settlement economy " + command.communityId()))
+                .require(command.resource());
+        if (!account.debit(command.amount(), command.minimumRemaining())) return List.of();
+        return record(state, DomainEventType.RESOURCE_WITHDRAWN, command.communityId(), command.transferId());
     }
 
     private List<DomainEvent> record(WorldState state, DomainEventType type, WorldObjectId subject, String causationId) {

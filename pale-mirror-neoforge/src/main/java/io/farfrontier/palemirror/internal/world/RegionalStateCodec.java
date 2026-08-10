@@ -37,7 +37,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
-/** Exact schema-v20 persistence for the First Living Settlement actor model. */
+/** Exact persistence for the First Living Settlement actor model. */
 final class RegionalStateCodec {
     private RegionalStateCodec() { }
 

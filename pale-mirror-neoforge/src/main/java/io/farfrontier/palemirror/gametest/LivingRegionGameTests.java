@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.internal.adapter.SettlementObservation;
 import io.farfrontier.palemirror.internal.adapter.VanillaVillageSettlementAdapter;
 import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
@@ -37,6 +38,9 @@ public final class LivingRegionGameTests {
         data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt + 200));
         data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt + 400));
         CampaignRegionBootstrapper.tick(level.getServer(), data, new DomainServices().commands());
+        SettlementDepotRuntime.tick(level.getServer(), data);
+        SettlementDepotRuntime.tick(level.getServer(), data);
+        SettlementDepotRuntime.tick(level.getServer(), data);
 
         var region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElseThrow();
         var settlement = data.worldState().community(region.communityId()).orElseThrow();
@@ -49,6 +53,11 @@ public final class LivingRegionGameTests {
                 "PLANNED", "the fallback supply route must require a later physical observation");
         helper.assertTrue(data.campaignRegions().containsKey(CampaignRegionBootstrapper.IRONHILL_ID),
                 "physical coordinates are persisted separately from the canonical region aggregate");
+        var depot = data.settlementDepots().get(CampaignRegionBootstrapper.IRONHILL);
+        helper.assertTrue(depot != null && depot.state() == io.farfrontier.palemirror.internal.economy.SettlementDepotState.ACTIVE,
+                "a PM-owned supply depot must materialize without replacing observed village blocks");
+        helper.assertValueEqual(level.getBlockState(depot.interactionPosition()).getBlock(), Blocks.BARREL,
+                "the depot interaction endpoint must have a verified physical postcondition");
         var presentation = data.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID);
         presentation.observeRouteEndpoint(true, 7, 18, "vehicle-a");
         presentation.observeRouteEndpoint(false, 8, 18, "vehicle-b");
@@ -87,6 +96,8 @@ public final class LivingRegionGameTests {
         helper.assertValueEqual(reloaded.settlementObservations().get(region.placeId()).lastDamageAttribution(),
                 io.farfrontier.palemirror.domain.DamageAttribution.PLAYER,
                 "restart snapshot must retain causal attribution for confirmed physical evidence");
+        helper.assertValueEqual(reloaded.settlementDepots().get(region.communityId()).anchor(), depot.anchor(),
+                "restart snapshot must pin the selected depot footprint");
         helper.succeed();
     }
 
@@ -151,6 +162,8 @@ public final class LivingRegionGameTests {
         data.effectLeases().clear();
         data.quarantine().clear();
         data.threatCombat().clear();
+        data.resourceTransfers().clear();
+        data.settlementDepots().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();

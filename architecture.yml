@@ -59,6 +59,10 @@ invariants:
     statement: Strategic flow uses persisted RouteContract validation; WorldSites may keep multiple typed affiliations and ambiguous beneficiaries fail closed; Create observations prove capability without delivering stock directly, and capacity ages from CURRENT to STALE to EXPIRED without force-loading chunks.
   - id: presentation-read-only
     statement: FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression.
+  - id: transactional-resource-boundary
+    statement: Physical items cross the settlement economy boundary only through a persisted bounded transfer ledger; ordinary container contents never mirror canonical stock, and reserved stacks fail closed until reconciliation completes.
+  - id: pm-owned-settlement-sites
+    statement: Pale Mirror materializes settlement infrastructure only inside a persisted deterministic PM-owned footprint with per-cell provenance and postconditions; observed village blocks remain read-only.
 
 critical_flows:
   - id: core-recovery
@@ -124,4 +128,8 @@ critical_flows:
   - id: create-same-vehicle-proof
     path: named loaded station -> opaque native vehicle observation -> second endpoint observation -> bounded same-vehicle proof -> canonical route capacity
     owner: NeoForge Create adapter and regional logistics reconciliation
+    verification: critical-code
+  - id: settlement-resource-transfer
+    path: depot interaction -> persisted PREPARED receipt -> reserved physical stack or canonical debit -> domain command/event -> physical completion -> bounded compaction
+    owner: domain economy plus NeoForge resource transfer ledger and depot executor
     verification: critical-code
