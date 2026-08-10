@@ -50,6 +50,7 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
     public static final String MOD_ID = "spore";
     public static final String VERSION = "2.2.0j";
     private final SporeCombatRuntime combatRuntime = new SporeCombatRuntime();
+    private final SporeMovementRuntime movementRuntime = new SporeMovementRuntime();
 
     @Override
     public String id() { return "pale_mirror:spore_sandbox"; }
@@ -80,7 +81,8 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         }
         return new AdapterHealth(AdapterHealth.Status.AVAILABLE,
                 "Spore " + version + " sandboxed: PM owns spread, tiers, controller and constrained combat",
-                Set.of(Capability.SPORE_ENCOUNTER_ACTORS, Capability.SPORE_CONTROLLED_COMBAT));
+                Set.of(Capability.SPORE_ENCOUNTER_ACTORS, Capability.SPORE_CONTROLLED_COMBAT,
+                        Capability.SPORE_CONTROLLED_MOVEMENT, Capability.SPORE_GLOBAL_ISOLATION));
     }
 
     @Override
@@ -200,6 +202,7 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
                 if (matchesOwnedActor(entity, site, reference.slotId())) holdConstrained(entity);
             }
         }
+        movementRuntime.tick(server, data, this);
         combatRuntime.tick(server, data, this);
     }
 

@@ -25,5 +25,8 @@ public final class PaleMirrorMod {
         event.addPackFinders(ResourceLocation.fromNamespaceAndPath(MOD_ID, "crimson_sandbox"),
                 PackType.SERVER_DATA, Component.literal("Pale Mirror Crimson Sandbox"), PackSource.BUILT_IN,
                 true, Pack.Position.TOP);
+        event.addPackFinders(ResourceLocation.fromNamespaceAndPath(MOD_ID, "spore_sandbox"),
+                PackType.SERVER_DATA, Component.literal("Pale Mirror Spore Sandbox"), PackSource.BUILT_IN,
+                true, Pack.Position.TOP);
     }
 }

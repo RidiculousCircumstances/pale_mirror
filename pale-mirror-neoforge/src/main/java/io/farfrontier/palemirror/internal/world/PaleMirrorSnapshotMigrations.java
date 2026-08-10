@@ -13,7 +13,7 @@ final class PaleMirrorSnapshotMigrations {
 
     static boolean isMigratable(int version) {
         return version == PaleMirrorSavedData.CURRENT_SCHEMA || version == 5 || version == 6
-                || version == 7 || version == 8 || version == 9 || version == 10;
+                || version == 7 || version == 8 || version == 9 || version == 10 || version == 11 || version == 12;
     }
 
     static CompoundTag migrate(CompoundTag source) {
@@ -25,7 +25,9 @@ final class PaleMirrorSnapshotMigrations {
         if (version == 7) { migrateV7ToV8(migrated); version = 8; }
         if (version == 8) { migrateV8ToV9(migrated); version = 9; }
         if (version == 9) { migrateV9ToV10(migrated); version = 10; }
-        if (version == 10) migrateV10ToV11(migrated);
+        if (version == 10) { migrateV10ToV11(migrated); version = 11; }
+        if (version == 11) { migrateV11ToV12(migrated); version = 12; }
+        if (version == 12) migrateV12ToV13(migrated);
         return migrated;
     }
 
@@ -146,5 +148,30 @@ final class PaleMirrorSnapshotMigrations {
             }
         }
         tag.putInt("schemaVersion", 11);
+    }
+
+    /** v12 separates PM movement state from action/combat cooldowns. */
+    private static void migrateV11ToV12(CompoundTag tag) {
+        for (Tag mineElement : tag.getList("testMines", Tag.TAG_COMPOUND)) {
+            CompoundTag mine = (CompoundTag) mineElement;
+            if (!mine.contains("encounter", Tag.TAG_COMPOUND)) continue;
+            for (Tag actorElement : mine.getCompound("encounter").getList("actors", Tag.TAG_COMPOUND)) {
+                CompoundTag actor = (CompoundTag) actorElement;
+                if (!actor.contains("nextMovementTick", Tag.TAG_LONG)) actor.putLong("nextMovementTick", 0L);
+                if (!actor.contains("routeCursor", Tag.TAG_INT)) actor.putInt("routeCursor", 0);
+            }
+        }
+        tag.putInt("schemaVersion", 12);
+    }
+
+    /** v13 pins an authored composition so a reload cannot reshuffle an active encounter. */
+    private static void migrateV12ToV13(CompoundTag tag) {
+        for (Tag mineElement : tag.getList("testMines", Tag.TAG_COMPOUND)) {
+            CompoundTag mine = (CompoundTag) mineElement;
+            if (mine.contains("encounter", Tag.TAG_COMPOUND) && !mine.getCompound("encounter").contains("composition", Tag.TAG_STRING)) {
+                mine.getCompound("encounter").putString("composition", "");
+            }
+        }
+        tag.putInt("schemaVersion", 13);
     }
 }

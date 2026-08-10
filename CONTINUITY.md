@@ -34,9 +34,12 @@
 - The staged infection biome is core-only and uses fixed vanilla blocks in
   predeclared `test-mine-v2` cells; it never calls Crimson terrain conversion
   or claims unrecorded cells from legacy mines.
-- Spore 2.2.0j is isolated through its entity registry only. Its first two
-  native forms are stationary, constrained PM combat forms; PM owns their
-  persisted HP/cooldown and replaces lethal native death with safe discard.
+- Spore 2.2.0j is a version-pinned black box. Its top built-in no-spawn pack,
+  isolated global-handler mixins and entity-join provenance firewall disable
+  native global mechanics; PM owns all permitted local actor state.
+- Spore exact-tier encounter compositions and actor refs are pinned in
+  SavedData. PM owns their HP, cooldown and bounded movement, and replaces
+  lethal native death with safe discard.
 
 ## State
 
@@ -76,26 +79,35 @@
   facility infection source and migrates v9 snapshots to explicit Crimson data.
   Encounter operations and observations are
   source-neutral; an observation with a mismatched source is ignored.
+- Schema v13 pins authored encounter composition ids; v12 independently
+  persists PM movement scheduling. Earlier snapshots migrate sequentially.
 - A checksum-pinned Spore 2.2.0j GameTest profile proves a separate
-  `pale_mirror:spore` scenario, fungal palette, two constrained native forms,
-  source persistence, PM stationary combat, safe defeat and PM-controlled cleanup.
+  `pale_mirror:spore` scenario, fungal palette, global firewall, four audited
+  native forms across FOOTHOLD/INFESTED/SIEGE/APEX, deterministic composition,
+  PM movement/combat, safe defeat and PM-controlled cleanup.
+- `sporeIntegrationHarness` has booted the final packaged JAR with the pinned
+  Spore JAR through two clean dedicated-server starts; client verification is
+  prepared as `runSporeClient` but needs a graphical session.
 
 ### Now
 
-- Source-aware threat sites, the safe Spore slice and PM-controlled stationary
-  combat are implemented; core and Spore GameTest profiles have passed.
+- Source-aware threat sites, PM-controlled Spore compositions, global
+  isolation, constrained movement and local combat are implemented; focused
+  unit/core/Spore GameTest profiles have passed.
 
 ### Next
 
-- Define isolated, side-effect-controlled plans before enabling Spore movement,
-  terrain or organism behaviours; do not enable native AI as a shortcut.
-- Perform a graphical client/multiplayer pass against the private pack to
-  validate Crimson and Spore visuals, mixing and particles.
+- Perform a graphical client/multiplayer pass with `runSporeClient` against
+  the private pack to validate Spore models, animation and sound cues.
+- Before any native Spore projectile/effect transfer, add persisted PM effect
+  provenance and a side-effect audit; do not allow native AI as a shortcut.
+- Audit the remaining Spore catalogue one class at a time; terrain, organisms,
+  raids and hiveminds stay disabled until PM equivalents exist.
 
 ## Open questions
 
-- UNCONFIRMED: a real-client/multiplayer siege playthrough has not been automated;
-  the current evidence covers pinned resources and server-side visual data.
+- UNCONFIRMED: a real-client/multiplayer Spore or Crimson playthrough has not
+  been automated; current evidence covers pinned resources and server runtime.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set

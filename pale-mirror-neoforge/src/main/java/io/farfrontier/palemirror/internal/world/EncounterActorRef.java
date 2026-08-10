@@ -5,7 +5,8 @@ import java.util.UUID;
 
 /** Stable native reference plus bounded PM-owned execution state for one authored encounter slot. */
 public record EncounterActorRef(String slotId, String actorProfileId, String entityTypeId, UUID entityId, Status status,
-                                long nextRuntimeTick, int actionCounter, int combatHitPoints) {
+                                long nextRuntimeTick, int actionCounter, int combatHitPoints,
+                                long nextMovementTick, int routeCursor) {
     public static final int UNINITIALIZED_COMBAT_HIT_POINTS = -1;
     public enum Status { ACTIVE, DEFEATED, MISSING, REMOVED }
 
@@ -17,12 +18,18 @@ public record EncounterActorRef(String slotId, String actorProfileId, String ent
     }
 
     public EncounterActorRef(String slotId, String actorProfileId, String entityTypeId, UUID entityId, Status status) {
-        this(slotId, actorProfileId, entityTypeId, entityId, status, 0, 0, UNINITIALIZED_COMBAT_HIT_POINTS);
+        this(slotId, actorProfileId, entityTypeId, entityId, status, 0, 0, UNINITIALIZED_COMBAT_HIT_POINTS, 0, 0);
     }
 
     public EncounterActorRef(String slotId, String actorProfileId, String entityTypeId, UUID entityId, Status status,
                              long nextRuntimeTick, int actionCounter) {
         this(slotId, actorProfileId, entityTypeId, entityId, status, nextRuntimeTick, actionCounter,
-                UNINITIALIZED_COMBAT_HIT_POINTS);
+                UNINITIALIZED_COMBAT_HIT_POINTS, 0, 0);
+    }
+
+    public EncounterActorRef(String slotId, String actorProfileId, String entityTypeId, UUID entityId, Status status,
+                             long nextRuntimeTick, int actionCounter, int combatHitPoints) {
+        this(slotId, actorProfileId, entityTypeId, entityId, status, nextRuntimeTick, actionCounter,
+                combatHitPoints, 0, 0);
     }
 }

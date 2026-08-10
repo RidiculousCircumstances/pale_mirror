@@ -52,6 +52,10 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
         }
+        sporeClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/spore-client')
+        }
     }
 
     mods {
@@ -261,6 +265,82 @@ def prepareSporeGameTestMods = tasks.register('prepareSporeGameTestMods', Sync) 
 
 tasks.named('runSporeGameTestServer') {
     dependsOn prepareSporeGameTestMods
+}
+
+def prepareSporeClientMods = tasks.register('prepareSporeClientMods', Sync) {
+    dependsOn tasks.named('downloadSporeIntegrationJar')
+    from(sporeIntegrationJar)
+    into(layout.buildDirectory.dir('runs/spore-client/mods'))
+}
+
+tasks.named('runSporeClient') {
+    dependsOn prepareSporeClientMods
+}
+
+tasks.register('verifySporeSandboxPackaging') {
+    group = 'verification'
+    description = 'Fails if the final JAR omits the Spore isolation mixins, no-spawn datapack, or PM tier composition.'
+    dependsOn tasks.named('jar')
+    inputs.file(distributableJar)
+    doLast {
+        def requiredEntries = [
+                'pale_mirror.spore.mixins.json',
+                'spore_sandbox/pack.mcmeta',
+                'spore_sandbox/data/spore/neoforge/biome_modifier/ground_fungal_foliage_modifier.json',
+                'spore_sandbox/data/spore/neoforge/biome_modifier/inf_spawns.json',
+                'spore_sandbox/data/spore/neoforge/structure_modifier/spore_structure_spawns.json',
+                'data/pale_mirror/pale_mirror/encounters/spore_mine_guard.json',
+                'io/farfrontier/palemirror/internal/integration/spore/SporeRuntimeFirewall.class',
+                'io/farfrontier/palemirror/internal/integration/spore/SporeMovementRuntime.class'
+        ]
+        def jar = new java.util.jar.JarFile(distributableJar.get().asFile)
+        try {
+            requiredEntries.each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Spore sandbox entry is missing from final JAR: ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.register('verifySporeVisualContract') {
+    group = 'verification'
+    description = 'Verifies that the pinned Spore client JAR still supplies the resources used by PM-owned actor forms.'
+    dependsOn tasks.named('downloadSporeIntegrationJar')
+    inputs.file(sporeIntegrationJar)
+    doLast {
+        def requiredEntries = [
+                'assets/spore/textures/entity/infected.png',
+                'assets/spore/textures/entity/inf_husk.png',
+                'assets/spore/textures/entity/baio.png',
+                'assets/spore/textures/entity/spitter.png',
+                'assets/spore/sounds/slash.ogg',
+                'assets/spore/sounds/braiomil_attack.ogg',
+                'assets/spore/sounds/spitter_spit1.ogg'
+        ]
+        def jar = new java.util.jar.JarFile(sporeIntegrationJar.get().asFile)
+        try {
+            requiredEntries.each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Pinned Spore visual resource is missing: ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.register('sporeIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside the checksum-verified pinned Spore JAR twice in a clean dedicated runtime.'
+    dependsOn tasks.named('verifySporeSandboxPackaging'), tasks.named('verifySporeVisualContract')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/spore-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            sporeIntegrationJar.get().asFile.absolutePath
 }
 
 tasks.register('crimsonIntegrationHarness', Exec) {

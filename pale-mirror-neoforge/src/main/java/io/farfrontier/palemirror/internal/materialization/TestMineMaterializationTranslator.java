@@ -33,8 +33,18 @@ public final class TestMineMaterializationTranslator {
             operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_OVERLAY,
                     facility.threatTier().name()));
             operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_PM_ANCHOR, ""));
-            if (profile != null) profile.actors().forEach(actor -> operations.add(operation(id, revision, operations.size(),
-                    MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR, actor.id())));
+            // Once the scheduler has prepared the encounter, its SavedData
+            // record is the pinned materialization intent.  In particular a
+            // datapack composition must not be read again while a job is
+            // executing, otherwise reload could reshuffle physical actors.
+            // The profile fallback exists only for the legacy direct-plan
+            // call site before an encounter record has been prepared.
+            List<String> actorSlots = profile == null ? List.of()
+                    : !encounter.actors().isEmpty()
+                    ? encounter.actors().stream().map(actor -> actor.slotId()).toList()
+                    : profile.actors().stream().map(actor -> actor.id()).toList();
+            actorSlots.forEach(slotId -> operations.add(operation(id, revision, operations.size(),
+                    MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR, slotId)));
             siege.parts().stream().filter(part -> part.status() != io.farfrontier.palemirror.internal.world.SiegePartRef.Status.DEFEATED)
                     .filter(part -> part.status() != io.farfrontier.palemirror.internal.world.SiegePartRef.Status.REMOVED)
                     .forEach(part -> operations.add(operation(id, revision, operations.size(),

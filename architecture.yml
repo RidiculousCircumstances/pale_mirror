@@ -80,6 +80,10 @@ critical_flows:
     owner: domain FacilityState plus neoforge materialization and reconciliation bridge
     verification: critical-code
   - id: pm-spore-controlled-combat
-    path: PM Spore tier -> constrained native form -> PM-owned combat HP/cooldown and stationary attack -> typed defeat observation -> PM anchor clearance -> discard cleanup
-    owner: neoforge SporeSandboxAdapter, SporeCombatRuntime and PM materialization bridge
+    path: PM tier/composition -> persisted encounter intent -> constrained native form -> PM-owned combat HP/cooldown/movement -> typed defeat observation -> PM anchor clearance -> discard cleanup
+    owner: neoforge SporeSandboxAdapter, SporeCombatRuntime, SporeMovementRuntime and PM materialization bridge
+    verification: critical-code
+  - id: pm-spore-global-isolation
+    path: exact Spore pin -> top built-in no-spawn datapack plus isolated global-handler mixins -> entity-join provenance firewall -> PM-local actor materialization only
+    owner: neoforge SporeRuntimeFirewall and the spore_sandbox built-in pack
     verification: critical-code

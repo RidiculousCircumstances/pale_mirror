@@ -10,6 +10,10 @@ description='''
 Canonical world simulation, scenarios, materialization and reconciliation for Far Frontier.
 '''
 
+[[mixins]]
+config="pale_mirror.spore.mixins.json"
+requiredMods=["spore"]
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"

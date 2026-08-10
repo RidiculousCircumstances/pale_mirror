@@ -58,6 +58,26 @@ class TestMineMaterializationTranslatorTest {
     }
 
     @Test
+    void encounterCompositionIsDeterministicAndNeverFallsBackToAnEarlierTier() {
+        EncounterProfile.ActorSlot foothold = new EncounterProfile.ActorSlot("human", "pale_mirror:spore_infected_human",
+                ThreatTier.FOOTHOLD);
+        EncounterProfile.ActorSlot siege = new EncounterProfile.ActorSlot("spitter", "pale_mirror:spore_spitter",
+                ThreatTier.FOOTHOLD);
+        EncounterProfile profile = new EncounterProfile("pale_mirror:spore", 2, java.util.List.of(), java.util.List.of(
+                new EncounterProfile.Composition("foothold_a", ThreatTier.FOOTHOLD, 1, java.util.List.of(foothold)),
+                new EncounterProfile.Composition("foothold_b", ThreatTier.FOOTHOLD, 3, java.util.List.of(foothold)),
+                new EncounterProfile.Composition("siege", ThreatTier.SIEGE, 1, java.util.List.of(siege))));
+
+        EncounterProfile.Composition first = profile.selectComposition(ThreatTier.FOOTHOLD, 42L,
+                "pale_mirror:test_mine", 7L);
+        EncounterProfile.Composition repeat = profile.selectComposition(ThreatTier.FOOTHOLD, 42L,
+                "pale_mirror:test_mine", 7L);
+        assertEquals(first.id(), repeat.id());
+        assertEquals("siege", profile.selectComposition(ThreatTier.SIEGE, 42L, "pale_mirror:test_mine", 7L).id());
+        assertEquals(null, profile.selectComposition(ThreatTier.APEX, 42L, "pale_mirror:test_mine", 7L));
+    }
+
+    @Test
     void unavailableNewProfileNeverForgetsExistingActorsNeededForCleanup() {
         FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), 80, 10, 10);
         facility.infect(1);

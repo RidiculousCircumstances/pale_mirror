@@ -47,7 +47,7 @@ public final class MaterializationScheduler {
             MaterializationPlan plan = translator.translate(facility, profile, mine.encounter(), mine.siege());
             if (job == null || !job.isFor(facility.desiredRevision(), plan.policyId(), plan.policyVersion())) {
                 String jobId = "pm:job:" + mine.id().value() + ":" + facility.desiredRevision();
-                prepareEncounter(mine, facility, jobId, scenario, profile);
+                prepareEncounter(mine, facility, jobId, scenario, profile, server.overworld().getSeed());
                 prepareSiege(mine, facility);
                 plan = translator.translate(facility, profile, mine.encounter(), mine.siege());
                 mine.setJob(new MaterializationJob(jobId,
@@ -96,7 +96,7 @@ public final class MaterializationScheduler {
     }
 
     private static void prepareEncounter(TestMineRecord mine, FacilityState facility, String jobId,
-                                         ScenarioInstance scenario, EncounterProfile profile) {
+                                         ScenarioInstance scenario, EncounterProfile profile, long worldSeed) {
         if (facility.status() != FacilityStatus.INFECTED) return;
         if (scenario == null || scenario.encounterProfileId().isBlank()) {
             mine.setEncounter(EncounterRecord.none());
@@ -112,18 +112,23 @@ public final class MaterializationScheduler {
             }
             return;
         }
-        List<EncounterActorRef> actors = profile.actorsFor(facility.threatTier()).stream().map(actor -> {
+        EncounterProfile.Composition composition = profile.selectComposition(facility.threatTier(), worldSeed,
+                facility.id().value(), facility.desiredRevision());
+        String compositionId = composition == null ? "" : composition.id();
+        List<EncounterProfile.ActorSlot> requestedActors = composition == null ? profile.actorsFor(facility.threatTier()) : composition.actors();
+        List<EncounterActorRef> actors = requestedActors.stream().map(actor -> {
             EncounterActorRef previous = mine.encounter().actor(actor.id()).orElse(null);
             if (previous != null && previous.actorProfileId().equals(actor.actorProfileId())
                     && (previous.status() == EncounterActorRef.Status.ACTIVE
                     || previous.status() == EncounterActorRef.Status.DEFEATED)) {
                 return new EncounterActorRef(actor.id(), actor.actorProfileId(), previous.entityTypeId(), previous.entityId(),
-                        previous.status(), previous.nextRuntimeTick(), previous.actionCounter(), previous.combatHitPoints());
+                        previous.status(), previous.nextRuntimeTick(), previous.actionCounter(), previous.combatHitPoints(),
+                        previous.nextMovementTick(), previous.routeCursor());
             }
             return new EncounterActorRef(actor.id(), actor.actorProfileId(), "", null, EncounterActorRef.Status.MISSING);
         }).toList();
         mine.setEncounter(new EncounterRecord(profile.id(), Integer.toString(profile.version()), jobId,
-                facility.desiredRevision(), actors, EncounterState.NONE, ""));
+                facility.desiredRevision(), compositionId, actors, EncounterState.NONE, ""));
     }
 
     /**

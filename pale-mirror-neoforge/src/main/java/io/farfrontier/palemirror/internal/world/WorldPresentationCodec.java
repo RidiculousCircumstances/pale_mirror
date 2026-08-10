@@ -19,6 +19,7 @@ final class WorldPresentationCodec {
         tag.putString("profileVersion", encounter.profileVersion());
         tag.putString("job", encounter.jobId());
         tag.putLong("desiredRevision", encounter.desiredRevision());
+        tag.putString("composition", encounter.compositionId());
         tag.putString("state", encounter.state().name());
         tag.putString("diagnostic", encounter.diagnostic());
         ListTag actors = new ListTag();
@@ -32,6 +33,8 @@ final class WorldPresentationCodec {
             value.putLong("nextRuntimeTick", actor.nextRuntimeTick());
             value.putInt("actionCounter", actor.actionCounter());
             value.putInt("combatHitPoints", actor.combatHitPoints());
+            value.putLong("nextMovementTick", actor.nextMovementTick());
+            value.putInt("routeCursor", actor.routeCursor());
             actors.add(value);
         });
         tag.put("actors", actors);
@@ -46,10 +49,11 @@ final class WorldPresentationCodec {
                     value.hasUUID("entity") ? value.getUUID("entity") : null,
                     EncounterActorRef.Status.valueOf(value.getString("status")), value.getLong("nextRuntimeTick"),
                     value.getInt("actionCounter"), value.contains("combatHitPoints", Tag.TAG_INT)
-                            ? value.getInt("combatHitPoints") : EncounterActorRef.UNINITIALIZED_COMBAT_HIT_POINTS));
+                            ? value.getInt("combatHitPoints") : EncounterActorRef.UNINITIALIZED_COMBAT_HIT_POINTS,
+                    value.getLong("nextMovementTick"), value.getInt("routeCursor")));
         }
         return new EncounterRecord(tag.getString("profile"), tag.getString("profileVersion"), tag.getString("job"),
-                tag.getLong("desiredRevision"), actors,
+                tag.getLong("desiredRevision"), tag.getString("composition"), actors,
                 EncounterState.valueOf(tag.contains("state", Tag.TAG_STRING) ? tag.getString("state") : "NONE"),
                 tag.getString("diagnostic"));
     }

@@ -42,10 +42,33 @@ public final class EncounterDefinitions extends SimpleJsonResourceReloadListener
     private static EncounterProfile compile(ResourceLocation resourceId, JsonObject json) {
         String id = ResourceLocation.parse(requiredString(json, "id", resourceId)).toString();
         int version = requiredInt(json, "version", resourceId);
-        JsonArray rawActors = requiredArray(json, "actors", resourceId);
+        List<EncounterProfile.ActorSlot> actors = json.has("actors") ? compileActors(requiredArray(json, "actors", resourceId), resourceId)
+                : List.of();
+        List<EncounterProfile.Composition> compositions = json.has("compositions")
+                ? compileCompositions(requiredArray(json, "compositions", resourceId), resourceId) : List.of();
+        return new EncounterProfile(id, version, actors, compositions);
+    }
+
+    private static List<EncounterProfile.Composition> compileCompositions(JsonArray rawCompositions, ResourceLocation resourceId) {
+        if (rawCompositions.isEmpty()) throw new IllegalArgumentException(resourceId + " must not define an empty compositions array");
+        Set<String> ids = new LinkedHashSet<>();
+        return rawCompositions.asList().stream().map(value -> {
+            JsonObject composition = value.getAsJsonObject();
+            String id = requiredString(composition, "id", resourceId);
+            if (!id.matches("[a-z0-9_/-]+") || !ids.add(id)) {
+                throw new IllegalArgumentException(resourceId + " has invalid or duplicate composition id " + id);
+            }
+            ThreatTier tier = ThreatTier.valueOf(requiredString(composition, "tier", resourceId));
+            int weight = composition.has("weight") ? requiredInt(composition, "weight", resourceId) : 1;
+            return new EncounterProfile.Composition(id, tier, weight,
+                    compileActors(requiredArray(composition, "actors", resourceId), resourceId));
+        }).toList();
+    }
+
+    private static List<EncounterProfile.ActorSlot> compileActors(JsonArray rawActors, ResourceLocation resourceId) {
         if (rawActors.size() > MAX_ACTORS) throw new IllegalArgumentException(resourceId + " exceeds " + MAX_ACTORS + " actor slots");
         Set<String> slots = new LinkedHashSet<>();
-        List<EncounterProfile.ActorSlot> actors = rawActors.asList().stream().map(value -> {
+        return rawActors.asList().stream().map(value -> {
             JsonObject actor = value.getAsJsonObject();
             String slot = requiredString(actor, "slot", resourceId);
             if (!slot.matches("[a-z0-9_/-]+") || !slots.add(slot)) {
@@ -56,7 +79,6 @@ public final class EncounterDefinitions extends SimpleJsonResourceReloadListener
                     ? ThreatTier.valueOf(requiredString(actor, "minimum_tier", resourceId)) : ThreatTier.FOOTHOLD;
             return new EncounterProfile.ActorSlot(slot, profile, minimumTier);
         }).toList();
-        return new EncounterProfile(id, version, actors);
     }
 
     private static String requiredString(JsonObject json, String name, ResourceLocation resource) {

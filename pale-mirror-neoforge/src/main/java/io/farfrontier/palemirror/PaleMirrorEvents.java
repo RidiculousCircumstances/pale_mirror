@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
+import io.farfrontier.palemirror.internal.integration.spore.SporeRuntimeFirewall;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
@@ -30,6 +31,7 @@ import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
@@ -61,6 +63,18 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         PaleMirrorRuntime.forServer(event.getServer()).tick();
+    }
+
+    /**
+     * In full PM isolation mode, Spore entities are allowed into a server level
+     * only after the adapter has attached an exact PM owner and slot.  This is
+     * deliberately an event-boundary guard, not a world scan.
+     */
+    @SubscribeEvent
+    public static void onEntityJoin(EntityJoinLevelEvent event) {
+        if (!event.getLevel().isClientSide() && SporeRuntimeFirewall.rejectUnmanagedEntity(event.getEntity())) {
+            event.setCanceled(true);
+        }
     }
 
     @SubscribeEvent

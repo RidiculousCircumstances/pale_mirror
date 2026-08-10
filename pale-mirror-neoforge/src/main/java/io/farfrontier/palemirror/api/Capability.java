@@ -10,5 +10,10 @@ public enum Capability {
     CRIMSON_SIEGE_OBJECTS,
     /** Optional constrained native forms from the version-pinned Spore sandbox. */
     SPORE_ENCOUNTER_ACTORS,
-    SPORE_CONTROLLED_COMBAT
+    /** PM-owned combat health and attacks for constrained Spore forms. */
+    SPORE_CONTROLLED_COMBAT,
+    /** PM-owned patrol and pursuit while Spore native AI stays disabled. */
+    SPORE_CONTROLLED_MOVEMENT,
+    /** Version-pinned suppression of Spore global spawning and infection handlers. */
+    SPORE_GLOBAL_ISOLATION
 }

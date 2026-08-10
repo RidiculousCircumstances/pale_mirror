@@ -1,0 +1,10 @@
+{
+  "required": false,
+  "package": "io.farfrontier.palemirror.internal.integration.spore.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "SporeGlobalRuntimeMixin",
+    "SporeInfectionRuntimeMixin",
+    "SporeInfectedSafetyMixin"
+  ]
+}
