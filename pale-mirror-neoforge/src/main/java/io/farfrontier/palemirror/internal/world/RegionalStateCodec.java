@@ -43,6 +43,9 @@ import io.farfrontier.palemirror.domain.SettlementDevelopmentPolicy;
 import io.farfrontier.palemirror.domain.DevelopmentIntent;
 import io.farfrontier.palemirror.domain.DevelopmentIntentType;
 import io.farfrontier.palemirror.domain.DevelopmentIntentState;
+import io.farfrontier.palemirror.domain.FieldAuthority;
+import io.farfrontier.palemirror.domain.SettlementAuthorityField;
+import io.farfrontier.palemirror.domain.SettlementAuthorityProfile;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -68,6 +71,8 @@ final class RegionalStateCodec {
         tag.put("settlementDevelopments", list(state.settlementDevelopments().stream().map(RegionalStateCodec::writeDevelopment).toList()));
         tag.put("developmentPolicies", list(state.developmentPolicies().stream().map(RegionalStateCodec::writeDevelopmentPolicy).toList()));
         tag.put("developmentIntents", list(state.developmentIntents().stream().map(RegionalStateCodec::writeDevelopmentIntent).toList()));
+        tag.put("settlementAuthorityProfiles", list(state.settlementAuthorityProfiles().stream()
+                .map(RegionalStateCodec::writeAuthorityProfile).toList()));
     }
 
     static void read(CompoundTag tag, WorldState state) {
@@ -87,6 +92,9 @@ final class RegionalStateCodec {
         for (Tag value : tag.getList("settlementDevelopments", Tag.TAG_COMPOUND)) state.putSettlementDevelopment(readDevelopment((CompoundTag) value));
         for (Tag value : tag.getList("developmentPolicies", Tag.TAG_COMPOUND)) state.putDevelopmentPolicy(readDevelopmentPolicy((CompoundTag) value));
         for (Tag value : tag.getList("developmentIntents", Tag.TAG_COMPOUND)) state.putDevelopmentIntent(readDevelopmentIntent((CompoundTag) value));
+        for (Tag value : tag.getList("settlementAuthorityProfiles", Tag.TAG_COMPOUND)) {
+            state.putSettlementAuthorityProfile(readAuthorityProfile((CompoundTag) value));
+        }
     }
 
     private static CompoundTag writeCommunity(SettlementCommunity value) {
@@ -399,6 +407,36 @@ final class RegionalStateCodec {
                 tag.contains("resource", Tag.TAG_STRING) ? ResourceKind.valueOf(tag.getString("resource")) : null,
                 tag.getInt("reserved"), tag.getString("policyVersion"),
                 DevelopmentIntentState.valueOf(tag.getString("state")), tag.getString("diagnostic"));
+    }
+
+    private static CompoundTag writeAuthorityProfile(SettlementAuthorityProfile value) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("community", value.communityId().value());
+        tag.putString("profileId", value.profileId());
+        tag.putBoolean("relocationAllowed", value.relocationAllowed());
+        tag.putBoolean("pmRuinAllowed", value.pmRuinAllowed());
+        tag.putBoolean("pmPopulationGrowthAllowed", value.pmPopulationGrowthAllowed());
+        ListTag fields = new ListTag();
+        for (SettlementAuthorityField field : SettlementAuthorityField.values()) {
+            CompoundTag item = new CompoundTag();
+            item.putString("field", field.name());
+            item.putString("authority", value.authority(field).name());
+            fields.add(item);
+        }
+        tag.put("fields", fields);
+        return tag;
+    }
+
+    private static SettlementAuthorityProfile readAuthorityProfile(CompoundTag tag) {
+        Map<SettlementAuthorityField, FieldAuthority> fields = new EnumMap<>(SettlementAuthorityField.class);
+        for (Tag value : tag.getList("fields", Tag.TAG_COMPOUND)) {
+            CompoundTag item = (CompoundTag) value;
+            fields.put(SettlementAuthorityField.valueOf(item.getString("field")),
+                    FieldAuthority.valueOf(item.getString("authority")));
+        }
+        return new SettlementAuthorityProfile(id(tag, "community"), tag.getString("profileId"), fields,
+                tag.getBoolean("relocationAllowed"), tag.getBoolean("pmRuinAllowed"),
+                tag.getBoolean("pmPopulationGrowthAllowed"));
     }
 
     private static ListTag list(java.util.List<CompoundTag> values) {

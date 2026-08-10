@@ -540,3 +540,28 @@ is cleared, supply is available, the original place has current strong evidence
 and is not ruined. Returning changes occupancy but does not repair unknown
 village blocks; the representative camp is removed only through its PM-owned
 provenance mask.
+
+## Native settlement authority (0.2g)
+
+Schema v24 makes field ownership executable rather than documentary. Each
+campaign community pins a source-neutral `SettlementAuthorityProfile` for
+macro population, physical NPCs, strategic resource flow, local construction,
+and physical integrity. The default PM-managed profile preserves the vanilla
+slice. The native-reconciled profile gives the external system ownership of
+NPCs and construction, lets PM own only its strategic routes/economy and
+external PM sites, and accepts population changes only through stable typed
+observations and the domain command pipeline.
+
+The Millénaire 9.0.0-beta.2 adapter is exact-version and checksum pinned. Its
+private class names and reflection are confined to one integration package.
+It reads village UUID, bounds, resident records, cohort evidence and defender
+strength; it never calls native tick, construction, inventory, population,
+raid or progression mutators. The opaque native UUID is persisted with the
+observation record so restart cannot remap the place by proximity.
+
+Native villages are excluded from the authored Ironhill campaign by default.
+Server owners must explicitly enable `allowMillenaireCampaign`. Even after
+opt-in, PM cannot evacuate, ruin, grow, return, or build inside the native
+society. Objective shortage, external PM depot/storehouse, route contracts,
+defence consequences and prosperity may still form the macro story. This is a
+read-only reconciliation slice, not the future culture/reputation social layer.

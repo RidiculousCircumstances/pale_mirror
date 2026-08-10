@@ -15,6 +15,8 @@ import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdap
 import io.farfrontier.palemirror.internal.integration.spore.SporeSandboxAdapter;
 import io.farfrontier.palemirror.internal.integration.create.CreateLogisticsAdapter;
 import io.farfrontier.palemirror.internal.integration.ftb.FtbQuestsPresentationAdapter;
+import io.farfrontier.palemirror.internal.integration.millenaire.MillenaireIntegrationConfig;
+import io.farfrontier.palemirror.internal.integration.millenaire.MillenaireSettlementAdapter;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -26,15 +28,17 @@ public final class AdapterRegistry {
     private static final CreateLogisticsAdapter CREATE_LOGISTICS = new CreateLogisticsAdapter();
     private static final VanillaVillageSettlementAdapter VANILLA_VILLAGES = new VanillaVillageSettlementAdapter();
     private static final FtbQuestsPresentationAdapter FTB_QUESTS = new FtbQuestsPresentationAdapter();
+    private static final MillenaireSettlementAdapter MILLENAIRE_SETTLEMENTS = new MillenaireSettlementAdapter();
     private static final List<SourceThreatAdapter> SOURCE_ADAPTERS = List.of(CRIMSON, SPORE);
     private static final List<LogisticsAdapter> LOGISTICS_ADAPTERS = List.of(CREATE_LOGISTICS);
-    private static final List<SettlementAdapter> SETTLEMENT_ADAPTERS = List.of(VANILLA_VILLAGES);
+    private static final List<SettlementAdapter> SETTLEMENT_ADAPTERS = List.of(VANILLA_VILLAGES, MILLENAIRE_SETTLEMENTS);
     private static final Map<String, IntegrationAdapter> ADAPTERS = Map.of(
             VANILLA_ANCHOR.id(), VANILLA_ANCHOR,
             CRIMSON.id(), CRIMSON,
             SPORE.id(), SPORE,
             CREATE_LOGISTICS.id(), CREATE_LOGISTICS,
             VANILLA_VILLAGES.id(), VANILLA_VILLAGES,
+            MILLENAIRE_SETTLEMENTS.id(), MILLENAIRE_SETTLEMENTS,
             FTB_QUESTS.id(), FTB_QUESTS);
 
     private AdapterRegistry() { }
@@ -43,6 +47,13 @@ public final class AdapterRegistry {
     public static List<SourceThreatAdapter> sourceAdapters() { return SOURCE_ADAPTERS; }
     public static List<LogisticsAdapter> logisticsAdapters() { return LOGISTICS_ADAPTERS; }
     public static List<SettlementAdapter> settlementAdapters() { return SETTLEMENT_ADAPTERS; }
+    public static boolean campaignEligible(io.farfrontier.palemirror.internal.world.SettlementObservationRecord record) {
+        return !MILLENAIRE_SETTLEMENTS.owns(record) || MILLENAIRE_SETTLEMENTS.campaignEnabled();
+    }
+    public static void registerConfigs(net.neoforged.fml.ModContainer container) {
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                MillenaireIntegrationConfig.SPEC, "pale-mirror-millenaire.toml");
+    }
     /** Optional generic player-facing action; no FTB type or progress crosses this boundary. */
     public static Optional<String> scenarioJournalCommand() { return FTB_QUESTS.journalOpenCommand(); }
     public static Optional<LogisticsRouteObservation> observeLogisticsRoute(ServerLevel level,

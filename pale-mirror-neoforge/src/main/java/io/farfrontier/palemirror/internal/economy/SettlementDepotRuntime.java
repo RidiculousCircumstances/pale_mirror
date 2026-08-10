@@ -63,6 +63,8 @@ public final class SettlementDepotRuntime {
             boolean ruined = data.worldState().communityPlaceBinding(depot.communityId())
                     .flatMap(binding -> data.worldState().place(binding.placeId()))
                     .map(place -> place.structuralIntegrity() == StructuralIntegrity.RUINED).orElse(false);
+            ruined &= data.worldState().settlementAuthorityProfile(depot.communityId())
+                    .map(io.farfrontier.palemirror.domain.SettlementAuthorityProfile::pmRuinAllowed).orElse(true);
             if (depot.state() == SettlementDepotState.ACTIVE && ruined) {
                 String failure = materializeRuin(level, depot);
                 depot.block(failure == null ? "Settlement place is ruined" : failure);

@@ -12,8 +12,9 @@ public final class PaleMirrorMod {
     public static final String MOD_ID = "pale_mirror";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public PaleMirrorMod(IEventBus modBus) {
+    public PaleMirrorMod(IEventBus modBus, net.neoforged.fml.ModContainer container) {
         modBus.addListener(PaleMirrorMod::registerBuiltInPacks);
+        AdapterRegistry.registerConfigs(container);
         LOGGER.info("Pale Mirror bootstrapped; PM-owned vanilla anchors are available.");
     }
 

@@ -29,11 +29,16 @@ def ftbTeamsIntegrationUrl = rootProject.providers.gradleProperty('ftb_teams_int
 def ftbTeamsIntegrationSha512 = rootProject.providers.gradleProperty('ftb_teams_integration_sha512').get()
 def architecturyIntegrationUrl = rootProject.providers.gradleProperty('architectury_integration_url').get()
 def architecturyIntegrationSha512 = rootProject.providers.gradleProperty('architectury_integration_sha512').get()
+def millenaireIntegrationJar = layout.buildDirectory.file('integration/millenaire-9.0.0-beta.2.jar')
+def millenaireIntegrationUrl = rootProject.providers.gradleProperty('millenaire_integration_url').get()
+def millenaireIntegrationSha512 = rootProject.providers.gradleProperty('millenaire_integration_sha512').get()
 def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get().asFile
 def crimsonGameTestDirectory = layout.buildDirectory.dir('runs/crimson-game-test').get().asFile
 def sporeGameTestDirectory = layout.buildDirectory.dir('runs/spore-game-test').get().asFile
 def createGameTestDirectory = layout.buildDirectory.dir('runs/create-game-test').get().asFile
 def ftbGameTestDirectory = layout.buildDirectory.dir('runs/ftb-game-test').get().asFile
+def millenaireGameTestDirectory = layout.buildDirectory.dir('runs/millenaire-game-test').get().asFile
+def millenaireGameTestWorldDirectory = new File(millenaireGameTestDirectory, 'world')
 def crimsonGameTestWorldDirectory = new File(crimsonGameTestDirectory, 'world')
 def sporeGameTestWorldDirectory = new File(sporeGameTestDirectory, 'world')
 def createGameTestWorldDirectory = new File(createGameTestDirectory, 'world')
@@ -94,6 +99,13 @@ neoForge {
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
             systemProperty 'pale_mirror.ftb_presentation_only', 'true'
         }
+        millenaireGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/millenaire-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.millenaire_adapter_only', 'true'
+        }
         coreClient {
             client()
             gameDirectory = layout.buildDirectory.dir('runs/core-client')
@@ -113,6 +125,10 @@ neoForge {
         ftbClient {
             client()
             gameDirectory = layout.buildDirectory.dir('runs/ftb-client')
+        }
+        millenaireClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/millenaire-client')
         }
     }
 
@@ -166,6 +182,7 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/internal/combat/PmProjectileRuntime.class',
                     'io/farfrontier/palemirror/internal/adapter/SourceItemFirewall.class',
                     'io/farfrontier/palemirror/internal/integration/ftb/FtbQuestsPresentationAdapter.class',
+                    'io/farfrontier/palemirror/internal/integration/millenaire/MillenaireSettlementAdapter.class',
                     'ftb_quests_presentation/chapters/pale_mirror_first_living_region.snbt',
                     'pale_mirror.item_firewall.mixins.json'
             ].each { entry ->
@@ -410,6 +427,18 @@ def downloadFtbTeamsIntegrationJar = downloadVerifiedIntegrationJar('downloadFtb
         ftbTeamsIntegrationUrl, ftbTeamsIntegrationSha512, 'FTB Teams')
 def downloadArchitecturyIntegrationJar = downloadVerifiedIntegrationJar('downloadArchitecturyIntegrationJar', architecturyIntegrationJar,
         architecturyIntegrationUrl, architecturyIntegrationSha512, 'Architectury API')
+def downloadMillenaireIntegrationJar = downloadVerifiedIntegrationJar('downloadMillenaireIntegrationJar', millenaireIntegrationJar,
+        millenaireIntegrationUrl, millenaireIntegrationSha512, 'Millenaire 9.0.0-beta.2')
+def prepareMillenaireGameTestMods = tasks.register('prepareMillenaireGameTestMods', Sync) {
+    dependsOn downloadMillenaireIntegrationJar
+    from(millenaireIntegrationJar)
+    into(layout.buildDirectory.dir('runs/millenaire-game-test/mods'))
+}
+
+tasks.named('runMillenaireGameTestServer') {
+    dependsOn prepareMillenaireGameTestMods
+    doFirst { millenaireGameTestWorldDirectory.deleteDir() }
+}
 def prepareFtbGameTestMods = tasks.register('prepareFtbGameTestMods', Sync) {
     dependsOn downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar, downloadFtbTeamsIntegrationJar,
             downloadArchitecturyIntegrationJar
@@ -454,16 +483,23 @@ def prepareFtbClientMods = tasks.register('prepareFtbClientMods', Sync) {
     from(ftbQuestsIntegrationJar, ftbLibraryIntegrationJar, ftbTeamsIntegrationJar, architecturyIntegrationJar)
     into(layout.buildDirectory.dir('runs/ftb-client/mods'))
 }
+def prepareMillenaireClientMods = tasks.register('prepareMillenaireClientMods', Sync) {
+    dependsOn downloadMillenaireIntegrationJar
+    from(millenaireIntegrationJar)
+    into(layout.buildDirectory.dir('runs/millenaire-client/mods'))
+}
 
 tasks.named('runCoreClient') { dependsOn prepareCoreClientMods }
 tasks.named('runCrimsonClient') { dependsOn prepareCrimsonClientMods }
 tasks.named('runCreateClient') { dependsOn prepareCreateClientMods }
 tasks.named('runFtbClient') { dependsOn prepareFtbClientMods }
+tasks.named('runMillenaireClient') { dependsOn prepareMillenaireClientMods }
 
 tasks.register('clientSmoke', Exec) {
     group = 'verification'
     description = 'Runs graphical client render/bootstrap smoke profiles; requires Xvfb or PALE_MIRROR_XVFB.'
-    dependsOn tasks.named('classes'), prepareCrimsonClientMods, prepareSporeClientMods, prepareCreateClientMods, prepareFtbClientMods
+    dependsOn tasks.named('classes'), prepareCrimsonClientMods, prepareSporeClientMods, prepareCreateClientMods,
+            prepareFtbClientMods, prepareMillenaireClientMods
     workingDir rootProject.projectDir
     environment 'PALE_MIRROR_XVFB', System.getenv('PALE_MIRROR_XVFB') ?: ''
     commandLine 'bash', 'scripts/client-smoke-harness.sh', rootProject.projectDir.absolutePath
@@ -482,13 +518,25 @@ tasks.register('ftbIntegrationHarness', Exec) {
             ftbTeamsIntegrationJar.get().asFile.absolutePath, architecturyIntegrationJar.get().asFile.absolutePath
 }
 
+tasks.register('millenaireIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside checksum-verified Millenaire twice and verifies read-only adapter startup.'
+    dependsOn tasks.named('jar'), downloadMillenaireIntegrationJar
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/millenaire-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            millenaireIntegrationJar.get().asFile.absolutePath
+}
+
 tasks.register('fullSmoke') {
     group = 'verification'
     description = 'Runs all server, optional-integration, packaged-JAR restart, and graphical client smoke gates.'
     dependsOn tasks.named('runGameTestServer'), tasks.named('runCrimsonGameTestServer'), tasks.named('runSporeGameTestServer'),
-            tasks.named('runCreateGameTestServer'), tasks.named('runFtbGameTestServer'), tasks.named('dedicatedRestartHarness'),
+            tasks.named('runCreateGameTestServer'), tasks.named('runFtbGameTestServer'),
+            tasks.named('runMillenaireGameTestServer'), tasks.named('dedicatedRestartHarness'),
             tasks.named('crimsonIntegrationHarness'), tasks.named('sporeIntegrationHarness'), tasks.named('createIntegrationHarness'),
-            tasks.named('ftbIntegrationHarness'), tasks.named('clientSmoke')
+            tasks.named('ftbIntegrationHarness'), tasks.named('millenaireIntegrationHarness'), tasks.named('clientSmoke')
 }
 
 tasks.register('verifySporeSandboxPackaging') {
@@ -581,7 +629,8 @@ tasks.named('crimsonIntegrationHarness') { mustRunAfter tasks.named('dedicatedRe
 tasks.named('sporeIntegrationHarness') { mustRunAfter tasks.named('crimsonIntegrationHarness') }
 tasks.named('createIntegrationHarness') { mustRunAfter tasks.named('sporeIntegrationHarness') }
 tasks.named('ftbIntegrationHarness') { mustRunAfter tasks.named('createIntegrationHarness') }
-tasks.named('clientSmoke') { mustRunAfter tasks.named('ftbIntegrationHarness') }
+tasks.named('millenaireIntegrationHarness') { mustRunAfter tasks.named('ftbIntegrationHarness') }
+tasks.named('clientSmoke') { mustRunAfter tasks.named('millenaireIntegrationHarness') }
 
 tasks.named('check') {
     dependsOn rootProject.tasks.named('verifyJava21'), tasks.named('verifyPackagedJar')

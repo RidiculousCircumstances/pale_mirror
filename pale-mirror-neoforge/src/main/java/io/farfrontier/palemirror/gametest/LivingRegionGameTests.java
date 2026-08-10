@@ -105,6 +105,8 @@ public final class LivingRegionGameTests {
                 "restart snapshot must retain population groups as the only macro-population source");
         helper.assertValueEqual(reloaded.worldState().settlementDevelopment(region.communityId()).orElseThrow().prosperity(), 25,
                 "restart snapshot must retain positive development state");
+        helper.assertValueEqual(reloaded.worldState().settlementAuthorityProfile(region.communityId()).orElseThrow().profileId(),
+                "pale_mirror:pm_managed", "restart snapshot must retain the immutable settlement authority contract");
         helper.succeed();
     }
 

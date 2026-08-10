@@ -19,7 +19,8 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.TriggerFacilityInfection, DomainCommand.DepositResource,
         DomainCommand.WithdrawResource, DomainCommand.BeginSettlementEvacuation,
         DomainCommand.StartDevelopmentIntent, DomainCommand.CompleteDevelopmentIntent,
-        DomainCommand.CancelDevelopmentIntent {
+        DomainCommand.CancelDevelopmentIntent, DomainCommand.RegisterSettlementAuthorityProfile,
+        DomainCommand.ReconcileSettlementPopulation {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -204,6 +205,23 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public CancelDevelopmentIntent {
             Objects.requireNonNull(intentId, "intentId");
             Objects.requireNonNull(reason, "reason");
+        }
+    }
+
+    record RegisterSettlementAuthorityProfile(SettlementAuthorityProfile profile) implements DomainCommand {
+        public RegisterSettlementAuthorityProfile { Objects.requireNonNull(profile, "profile"); }
+    }
+
+    record ReconcileSettlementPopulation(WorldObjectId communityId, String populationGroupId,
+                                         java.util.Map<SettlementCohort, Integer> cohorts,
+                                         String observationId, String causationId) implements DomainCommand {
+        public ReconcileSettlementPopulation {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(populationGroupId, "populationGroupId");
+            cohorts = java.util.Map.copyOf(cohorts);
+            Objects.requireNonNull(observationId, "observationId");
+            Objects.requireNonNull(causationId, "causationId");
+            if (populationGroupId.isBlank() || observationId.isBlank()) throw new IllegalArgumentException("Population reconciliation identity is blank");
         }
     }
 }

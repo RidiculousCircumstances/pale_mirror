@@ -33,6 +33,8 @@ public final class SettlementObservationRecord {
     private final BlockPos minBounds;
     private final BlockPos maxBounds;
     private final String provenance;
+    private final String authorityProfileId;
+    private final String nativeReference;
     private final Map<String, SettlementRepresentativeRecord> representatives;
     private int observedPopulation;
     private int observedGuards;
@@ -52,7 +54,8 @@ public final class SettlementObservationRecord {
     public SettlementObservationRecord(SettlementObservation observation) {
         this(observation.settlementId(), observation.dimensionId(), observation.anchor(), observation.minBounds(),
                 observation.maxBounds(), observation.population(), observation.guards(), observation.observedAtGameTime(),
-                observation.provenance(), 0, observation.fullBoundsLoaded(), false, EvidenceReliability.TENTATIVE,
+                observation.provenance(), observation.authorityProfileId(), observation.nativeReference(), 0,
+                observation.fullBoundsLoaded(), false, EvidenceReliability.TENTATIVE,
                 observation.observationId(), SettlementEvidenceType.LOADED_SNAPSHOT, DamageAttribution.UNKNOWN,
                 0, 0, new LinkedHashMap<>());
         incorporateRepresentatives(observation, 0);
@@ -60,7 +63,8 @@ public final class SettlementObservationRecord {
 
     public SettlementObservationRecord(WorldObjectId id, String dimensionId, BlockPos anchor, BlockPos minBounds,
                                        BlockPos maxBounds, int observedPopulation, int observedGuards,
-                                       long lastObservedGameTime, String provenance, long loadedDurationTicks,
+                                       long lastObservedGameTime, String provenance, String authorityProfileId,
+                                       String nativeReference, long loadedDurationTicks,
                                        boolean lastFullBoundsLoaded, boolean initialMembershipEstablished,
                                        EvidenceReliability reliability, String lastEvidenceId,
                                        SettlementEvidenceType lastEvidenceType, DamageAttribution lastDamageAttribution,
@@ -72,6 +76,9 @@ public final class SettlementObservationRecord {
         this.minBounds = Objects.requireNonNull(minBounds, "minBounds").immutable();
         this.maxBounds = Objects.requireNonNull(maxBounds, "maxBounds").immutable();
         this.provenance = Objects.requireNonNull(provenance, "provenance");
+        if (authorityProfileId == null || authorityProfileId.isBlank()) throw new IllegalArgumentException("authorityProfileId must not be blank");
+        this.authorityProfileId = authorityProfileId;
+        this.nativeReference = Objects.requireNonNull(nativeReference, "nativeReference");
         if (observedPopulation < 0 || observedGuards < 0 || lastObservedGameTime < 0 || loadedDurationTicks < 0
                 || observedResidentDeaths < 0 || observedGuardDeaths < 0) {
             throw new IllegalArgumentException("Settlement physical observation values must not be negative");
@@ -100,6 +107,8 @@ public final class SettlementObservationRecord {
     public BlockPos minBounds() { return minBounds; }
     public BlockPos maxBounds() { return maxBounds; }
     public String provenance() { return provenance; }
+    public String authorityProfileId() { return authorityProfileId; }
+    public String nativeReference() { return nativeReference; }
     public int observedPopulation() { return observedPopulation; }
     public int observedGuards() { return observedGuards; }
     public long lastObservedGameTime() { return lastObservedGameTime; }
@@ -119,6 +128,12 @@ public final class SettlementObservationRecord {
         return (int) representatives.values().stream().filter(value -> value.cohort() == SettlementCohort.GUARDS
                 && value.registered()).count();
     }
+    public Map<SettlementCohort, Integer> registeredCohorts() {
+        Map<SettlementCohort, Integer> result = new java.util.EnumMap<>(SettlementCohort.class);
+        representatives.values().stream().filter(SettlementRepresentativeRecord::registered)
+                .forEach(value -> result.merge(value.cohort(), 1, Integer::sum));
+        return Map.copyOf(result);
+    }
     public ObservationFreshness freshness(long gameTime) {
         long age = Math.max(0, gameTime - lastObservedGameTime);
         if (age <= CURRENT_MAX_AGE_TICKS) return ObservationFreshness.CURRENT;
@@ -133,7 +148,9 @@ public final class SettlementObservationRecord {
 
     public boolean observe(SettlementObservation observation) {
         if (!id.equals(observation.settlementId()) || !dimensionId.equals(observation.dimensionId())
-                || !anchor.equals(observation.anchor()) || !provenance.equals(observation.provenance())) {
+                || !anchor.equals(observation.anchor()) || !provenance.equals(observation.provenance())
+                || !authorityProfileId.equals(observation.authorityProfileId())
+                || !nativeReference.equals(observation.nativeReference())) {
             throw new IllegalArgumentException("Settlement observation identity changed for " + id.value());
         }
         long delta = observation.observedAtGameTime() >= lastObservedGameTime

@@ -54,7 +54,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 23;
+    static final int CURRENT_SCHEMA = 24;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -192,7 +192,7 @@ public final class PaleMirrorSavedData extends SavedData {
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " is not compatible with schema "
-                + CURRENT_SCHEMA + ". The schema-v23 settlement development boundary requires a new world; back up the old world before resetting its Pale Mirror data.");
+                + CURRENT_SCHEMA + ". The schema-v24 settlement authority boundary requires a new world; back up the old world before resetting its Pale Mirror data.");
     }
 
     private static boolean isMigratable(int version) {

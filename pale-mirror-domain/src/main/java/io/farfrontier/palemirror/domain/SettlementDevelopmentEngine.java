@@ -46,7 +46,9 @@ public final class SettlementDevelopmentEngine {
                 storehouse = created;
             }
         }
-        if (storehouse != null && storehouse.state() == DevelopmentIntentState.ACTIVE && qualifies) {
+        boolean pmPopulationGrowth = state.settlementAuthorityProfile(communityId)
+                .map(SettlementAuthorityProfile::pmPopulationGrowthAllowed).orElse(true);
+        if (storehouse != null && storehouse.state() == DevelopmentIntentState.ACTIVE && qualifies && pmPopulationGrowth) {
             development.advanceGrowth();
             if (development.stableGrowthSteps() >= policy.growthSteps()
                     && state.population(communityId) < development.housingCapacity()) {
@@ -62,6 +64,8 @@ public final class SettlementDevelopmentEngine {
 
     private void reconcileReturnHome(WorldState state, SettlementDevelopment development, SettlementPlace place,
                                      ResourceAccount iron, List<DomainEvent> produced) {
+        if (state.settlementAuthorityProfile(development.communityId())
+                .map(profile -> !profile.relocationAllowed()).orElse(false)) return;
         PopulationGroup displaced = state.populationGroups(development.communityId()).stream()
                 .filter(group -> group.disposition() == PopulationDisposition.DISPLACED
                         || group.disposition() == PopulationDisposition.RESETTLED).findFirst().orElse(null);

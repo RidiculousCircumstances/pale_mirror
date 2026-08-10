@@ -91,6 +91,18 @@ public final class PopulationGroup {
         cohorts.merge(Objects.requireNonNull(cohort, "cohort"), amount, Math::addExact);
         revision++;
     }
+    public boolean reconcileCohorts(Map<SettlementCohort, Integer> observed) {
+        EnumMap<SettlementCohort, Integer> next = new EnumMap<>(SettlementCohort.class);
+        observed.forEach((cohort, amount) -> {
+            if (amount < 0) throw new IllegalArgumentException("Population cohort cannot be negative");
+            if (amount > 0) next.put(Objects.requireNonNull(cohort, "cohort"), amount);
+        });
+        if (cohorts.equals(next)) return false;
+        cohorts.clear();
+        cohorts.putAll(next);
+        revision++;
+        return true;
+    }
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
         return value;

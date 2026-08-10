@@ -61,6 +61,8 @@ public final class DomainCommandProcessor {
             case DomainCommand.StartDevelopmentIntent intent -> startDevelopmentIntent(state, intent.intentId());
             case DomainCommand.CompleteDevelopmentIntent intent -> completeDevelopmentIntent(state, intent.intentId());
             case DomainCommand.CancelDevelopmentIntent intent -> cancelDevelopmentIntent(state, intent.intentId(), intent.reason());
+            case DomainCommand.RegisterSettlementAuthorityProfile authority -> registerAuthorityProfile(state, authority.profile());
+            case DomainCommand.ReconcileSettlementPopulation population -> reconcileSettlementPopulation(state, population);
         };
     }
 
@@ -290,6 +292,42 @@ public final class DomainCommandProcessor {
         List<DomainEvent> produced = settlementEmergencies.beginEvacuation(state, command.communityId(), command.causationId());
         produced.forEach(state::addEvent);
         return produced;
+    }
+
+    private List<DomainEvent> registerAuthorityProfile(WorldState state, SettlementAuthorityProfile profile) {
+        if (state.community(profile.communityId()).isEmpty()) {
+            throw new IllegalArgumentException("Unknown settlement community " + profile.communityId());
+        }
+        SettlementAuthorityProfile current = state.settlementAuthorityProfile(profile.communityId()).orElse(null);
+        if (current != null) {
+            if (!current.profileId().equals(profile.profileId()) || !current.fields().equals(profile.fields())
+                    || current.relocationAllowed() != profile.relocationAllowed()
+                    || current.pmRuinAllowed() != profile.pmRuinAllowed()
+                    || current.pmPopulationGrowthAllowed() != profile.pmPopulationGrowthAllowed()) {
+                throw new IllegalStateException("Settlement authority profile is immutable once registered");
+            }
+            return List.of();
+        }
+        state.putSettlementAuthorityProfile(profile);
+        return record(state, DomainEventType.SETTLEMENT_AUTHORITY_PROFILE_REGISTERED,
+                profile.communityId(), profile.profileId());
+    }
+
+    private List<DomainEvent> reconcileSettlementPopulation(WorldState state,
+            DomainCommand.ReconcileSettlementPopulation command) {
+        SettlementAuthorityProfile profile = state.settlementAuthorityProfile(command.communityId())
+                .orElseThrow(() -> new IllegalStateException("Settlement population has no authority profile"));
+        if (profile.authority(SettlementAuthorityField.MACRO_POPULATION) != FieldAuthority.RECONCILED) return List.of();
+        PopulationGroup group = state.populationGroup(command.populationGroupId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown population group " + command.populationGroupId()));
+        if (!group.communityId().equals(command.communityId()) || group.disposition() != PopulationDisposition.RESIDENT) {
+            return List.of();
+        }
+        if (!group.reconcileCohorts(command.cohorts())) return List.of();
+        state.communityPlaceBinding(command.communityId()).flatMap(binding -> state.place(binding.placeId()))
+                .ifPresent(place -> place.setOccupancy(group.size() == 0 ? OccupancyState.EMPTY : OccupancyState.INHABITED));
+        return record(state, DomainEventType.SETTLEMENT_POPULATION_RECONCILED,
+                command.communityId(), command.observationId() + ":" + command.causationId());
     }
 
     private List<DomainEvent> startDevelopmentIntent(WorldState state, String intentId) {

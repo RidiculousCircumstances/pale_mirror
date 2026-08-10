@@ -5,6 +5,7 @@ final class GameTestProfiles {
     private GameTestProfiles() { }
     static boolean createAdapterOnly() {
         return Boolean.getBoolean("pale_mirror.create_adapter_only")
-                || Boolean.getBoolean("pale_mirror.ftb_presentation_only");
+                || Boolean.getBoolean("pale_mirror.ftb_presentation_only")
+                || Boolean.getBoolean("pale_mirror.millenaire_adapter_only");
     }
 }

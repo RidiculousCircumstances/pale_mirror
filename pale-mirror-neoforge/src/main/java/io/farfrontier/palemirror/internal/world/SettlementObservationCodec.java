@@ -14,7 +14,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import io.farfrontier.palemirror.domain.StructuralIntegrity;
 
-/** Schema-v20 codec for bounded typed settlement evidence and representative membership. */
+/** Schema-v24 codec for bounded typed settlement evidence, native reference and representative membership. */
 final class SettlementObservationCodec {
     private SettlementObservationCodec() { }
 
@@ -28,6 +28,8 @@ final class SettlementObservationCodec {
             value.putLong("min", record.minBounds().asLong());
             value.putLong("max", record.maxBounds().asLong());
             value.putString("provenance", record.provenance());
+            value.putString("authorityProfileId", record.authorityProfileId());
+            value.putString("nativeReference", record.nativeReference());
             value.putInt("population", record.observedPopulation());
             value.putInt("guards", record.observedGuards());
             value.putLong("lastObserved", record.lastObservedGameTime());
@@ -83,7 +85,8 @@ final class SettlementObservationCodec {
             SettlementObservationRecord record = new SettlementObservationRecord(id, value.getString("dimension"),
                     BlockPos.of(value.getLong("anchor")), BlockPos.of(value.getLong("min")),
                     BlockPos.of(value.getLong("max")), value.getInt("population"), value.getInt("guards"),
-                    value.getLong("lastObserved"), value.getString("provenance"), value.getLong("loadedDuration"),
+                    value.getLong("lastObserved"), value.getString("provenance"), value.getString("authorityProfileId"),
+                    value.getString("nativeReference"), value.getLong("loadedDuration"),
                     value.getBoolean("fullBoundsLoaded"), value.getBoolean("initialMembershipEstablished"),
                     EvidenceReliability.valueOf(value.getString("reliability")), value.getString("lastEvidenceId"),
                     SettlementEvidenceType.valueOf(value.getString("lastEvidenceType")),

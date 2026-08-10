@@ -69,6 +69,8 @@ invariants:
     statement: A known critical settlement receives a persisted grace window before automatic evacuation; the objective policy continues without Narrator, and irreversible physical consequences touch only PM-owned cells.
   - id: settlement-positive-development
     statement: Stable surplus creates a persisted domain DevelopmentIntent and reserves canonical resources; capacity, housing, prosperity and growth advance only after provenance-safe PM-owned physical work is verified.
+  - id: settlement-field-authority
+    statement: Every campaign settlement pins a source-neutral field authority profile; native-reconciled settlements may contribute population and integrity facts while PM remains unable to move, ruin, grow or construct the native society.
 
 critical_flows:
   - id: core-recovery
@@ -78,6 +80,10 @@ critical_flows:
   - id: restart-recovery
     path: persisted job -> restart -> postcondition check -> idempotent completion
     owner: neoforge
+    verification: critical-code
+  - id: native-settlement-reconciliation
+    path: pinned read-only adapter -> stable typed evidence -> field-authority check -> command -> canonical population reconciliation
+    owner: isolated optional adapter plus generic observation bridge and domain authority profile
     verification: critical-code
   - id: optional-encounter-degradation
     path: PM anchor -> optional encounter operation -> explicit degradation -> PM recovery

@@ -13,6 +13,7 @@ public final class SettlementEmergencyRuntime {
     public List<DomainEvent> reconcile(WorldState state) {
         List<DomainEvent> produced = new ArrayList<>();
         state.communities().stream().sorted(Comparator.comparing(SettlementCommunity::id)).forEach(community -> {
+            if (state.settlementAuthorityProfile(community.id()).map(profile -> !profile.relocationAllowed()).orElse(false)) return;
             SettlementPolicy policy = state.settlementPolicy(community.id()).orElseThrow();
             SettlementSecurity security = state.security(community.id()).orElseThrow();
             SettlementEmergencyWindow window = state.emergencyWindow(community.id()).orElse(null);
@@ -43,6 +44,9 @@ public final class SettlementEmergencyRuntime {
     }
 
     public List<DomainEvent> beginEvacuation(WorldState state, WorldObjectId communityId, String causationId) {
+        if (state.settlementAuthorityProfile(communityId).map(profile -> !profile.relocationAllowed()).orElse(false)) {
+            return List.of();
+        }
         SettlementEmergencyWindow window = state.emergencyWindow(communityId).orElse(null);
         SettlementPolicy policy = state.settlementPolicy(communityId).orElseThrow();
         if (window == null || !window.beginEvacuation()) return List.of();
@@ -65,7 +69,8 @@ public final class SettlementEmergencyRuntime {
         }
         state.communityPlaceBinding(communityId).flatMap(binding -> state.place(binding.placeId())).ifPresent(place -> {
             place.setOccupancy(OccupancyState.EMPTY);
-            if (activeThreat(state, communityId)) {
+            if (activeThreat(state, communityId)
+                    && state.settlementAuthorityProfile(communityId).map(SettlementAuthorityProfile::pmRuinAllowed).orElse(true)) {
                 place.setStructuralIntegrity(StructuralIntegrity.RUINED);
                 produced.add(event(state, DomainEventType.SETTLEMENT_PLACE_RUINED, place.id(), "policy:unopposed-threat"));
             }

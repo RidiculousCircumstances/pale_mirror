@@ -636,6 +636,14 @@ real PM-owned storehouse upgrade, prosperity, housing and bounded population
 growth. Recovery can return a displaced community to a sufficiently observed,
 non-ruined home without reconstructing native or player-owned buildings.
 
+Schema v24 closes the remaining 0.2 field-ownership debt. A native settlement
+can now host the same external mine/route/economy story only by explicit server
+opt-in and under a pinned ownership matrix. Pale Mirror reconciles stable
+native population facts but cannot move, destroy, grow, or construct the
+native society. Millénaire remains an optional read-only compatibility profile;
+its culture, relations, quests, local production, and development stay native
+and outside the 0.2 product scope.
+
 The technical foundation is now good enough that horizontal expansion is the
 main risk: more sources, forms, and adapters could grow without demonstrating
 that the result is an interesting game.

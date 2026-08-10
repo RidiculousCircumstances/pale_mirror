@@ -27,12 +27,14 @@ import io.farfrontier.palemirror.domain.PopulationGroup;
 import io.farfrontier.palemirror.domain.SettlementCohort;
 import io.farfrontier.palemirror.domain.SettlementDevelopment;
 import io.farfrontier.palemirror.domain.SettlementDevelopmentPolicy;
+import io.farfrontier.palemirror.domain.SettlementAuthorityProfile;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinition;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinitions;
+import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -94,6 +96,7 @@ public final class CampaignRegionBootstrapper {
         SettlementObservationRecord observed = data.settlementObservations().values().stream()
                 .filter(value -> value.dimensionId().equals(server.overworld().dimension().location().toString()))
                 .filter(SettlementObservationRecord::strongEnoughForRecognition)
+                .filter(AdapterRegistry::campaignEligible)
                 .sorted(java.util.Comparator.comparing(value -> value.id().value())).findFirst().orElse(null);
         if (observed == null) return;
         CampaignRegionDefinition definition = CampaignRegionDefinitions.require(IRONHILL_DEFINITION);
@@ -141,6 +144,10 @@ public final class CampaignRegionBootstrapper {
         commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
                 community, place, new CommunityPlaceBinding(IRONHILL, placeId), economy, security, policy, sites, affiliations,
                 capabilities, routes, List.of(residents)));
+        SettlementAuthorityProfile authority = "pale_mirror:native_reconciled".equals(observed.authorityProfileId())
+                ? SettlementAuthorityProfile.nativeReconciled(IRONHILL)
+                : SettlementAuthorityProfile.pmManaged(IRONHILL);
+        commands.execute(data.worldState(), new DomainCommand.RegisterSettlementAuthorityProfile(authority));
         data.worldState().putSettlementDevelopment(new SettlementDevelopment(IRONHILL, 25, 0,
                 population, Math.max(0, population - observed.observedPopulation() / 5), 0));
         data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(IRONHILL));

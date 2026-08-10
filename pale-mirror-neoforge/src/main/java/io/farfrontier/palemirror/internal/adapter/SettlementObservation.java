@@ -10,7 +10,16 @@ import net.minecraft.core.BlockPos;
 public record SettlementObservation(WorldObjectId settlementId, String dimensionId, BlockPos anchor,
                                     BlockPos minBounds, BlockPos maxBounds, int population,
                                     int guards, long observedAtGameTime, boolean fullBoundsLoaded,
-                                    List<SettlementRepresentativeObservation> representatives, String provenance) {
+                                    List<SettlementRepresentativeObservation> representatives, String provenance,
+                                    String authorityProfileId, String nativeReference) {
+    public SettlementObservation(WorldObjectId settlementId, String dimensionId, BlockPos anchor,
+                                 BlockPos minBounds, BlockPos maxBounds, int population,
+                                 int guards, long observedAtGameTime, boolean fullBoundsLoaded,
+                                 List<SettlementRepresentativeObservation> representatives, String provenance) {
+        this(settlementId, dimensionId, anchor, minBounds, maxBounds, population, guards,
+                observedAtGameTime, fullBoundsLoaded, representatives, provenance,
+                "pale_mirror:pm_managed", "");
+    }
     public SettlementObservation {
         Objects.requireNonNull(settlementId, "settlementId");
         Objects.requireNonNull(dimensionId, "dimensionId");
@@ -22,6 +31,8 @@ public record SettlementObservation(WorldObjectId settlementId, String dimension
         }
         representatives = List.copyOf(representatives);
         provenance = Objects.requireNonNull(provenance, "provenance");
+        if (authorityProfileId == null || authorityProfileId.isBlank()) throw new IllegalArgumentException("authorityProfileId must not be blank");
+        nativeReference = Objects.requireNonNull(nativeReference, "nativeReference");
     }
 
     public String observationId() {

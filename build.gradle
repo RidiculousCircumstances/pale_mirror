@@ -112,7 +112,7 @@ tasks.register('verifySourceIsolation') {
     description = 'Rejects source-specific integrations leaking into domain or generic NeoForge layers.'
     inputs.files(domainJavaSources, genericNeoForgeJavaSources)
     doLast {
-        def forbiddenDomainTokens = ['Crimson', 'Spore', 'crimson', 'spore']
+        def forbiddenDomainTokens = ['Crimson', 'Spore', 'Millenaire', 'Millénaire', 'crimson', 'spore', 'millenaire']
         domainJavaSources.files.each { source ->
             String text = source.getText('UTF-8')
             forbiddenDomainTokens.each { token ->
@@ -125,6 +125,7 @@ tasks.register('verifySourceIsolation') {
         def forbiddenGenericReferences = [
                 'internal.integration.crimson.', 'internal.integration.spore.',
                 'CrimsonSandboxAdapter', 'SporeSandboxAdapter', 'CreateLogisticsAdapter', 'internal.integration.create.',
+                'MillenaireSettlementAdapter', 'internal.integration.millenaire.',
                 'CrimsonGate', 'CrimsonSiege', 'SporeSandbox',
                 'InfectionSourceId.CRIMSON', 'InfectionSourceId.SPORE',
                 'ENSURE_CRIMSON_', 'REMOVE_CRIMSON_', 'ENSURE_SPORE_', 'REMOVE_SPORE_'

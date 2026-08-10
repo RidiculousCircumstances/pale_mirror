@@ -6,6 +6,9 @@ import io.farfrontier.palemirror.domain.DamageAttribution;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.SettlementCohort;
+import io.farfrontier.palemirror.domain.FieldAuthority;
+import io.farfrontier.palemirror.domain.SettlementAuthorityField;
+import io.farfrontier.palemirror.domain.PopulationDisposition;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import net.minecraft.server.MinecraftServer;
@@ -77,9 +80,21 @@ public final class SettlementObservationRuntime {
         var freshness = record.freshness(gameTime);
         String projectionId = record.lastEvidenceId() + ":" + freshness + ":" + record.reliability()
                 + ":guards=" + record.registeredGuards();
-        return !commands.execute(data.worldState(), new DomainCommand.ObserveSettlementPlace(record.id(),
+        boolean changed = !commands.execute(data.worldState(), new DomainCommand.ObserveSettlementPlace(record.id(),
                 freshness, record.reliability(), record.registeredGuards(), record.inferredIntegrity(), projectionId,
                 "adapter:settlement:" + record.lastEvidenceType() + ":" + record.lastDamageAttribution())).isEmpty();
+        var binding = data.worldState().bindingForPlace(record.id()).orElse(null);
+        if (binding == null || !record.strongEnoughForRecognition()) return changed;
+        var authority = data.worldState().settlementAuthorityProfile(binding.communityId()).orElse(null);
+        if (authority == null || authority.authority(SettlementAuthorityField.MACRO_POPULATION) != FieldAuthority.RECONCILED) {
+            return changed;
+        }
+        var group = data.worldState().populationGroups(binding.communityId()).stream()
+                .filter(value -> value.disposition() == PopulationDisposition.RESIDENT).findFirst().orElse(null);
+        if (group == null) return changed;
+        return !commands.execute(data.worldState(), new DomainCommand.ReconcileSettlementPopulation(
+                binding.communityId(), group.id(), record.registeredCohorts(), projectionId,
+                "adapter:settlement:population")).isEmpty() || changed;
     }
 
     private static DamageAttribution attribution(DamageSource source) {

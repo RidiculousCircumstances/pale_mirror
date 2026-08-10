@@ -18,6 +18,8 @@ public enum Capability {
     LOGISTICS_ROUTE_OBSERVATION,
     /** Read-only discovery of an already generated vanilla-compatible settlement. */
     SETTLEMENT_OBSERVATION,
+    /** Native settlement state can be reconciled without PM writing its actors or construction. */
+    SETTLEMENT_NATIVE_RECONCILIATION,
     /** Optional player-facing mirror of PM scenario state in FTB Quests. */
     FTB_QUEST_PRESENTATION
 }

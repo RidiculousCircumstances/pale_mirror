@@ -64,6 +64,22 @@ class SettlementDevelopmentEngineTest {
         assertEquals(OccupancyState.INHABITED, state.place(PLACE).orElseThrow().occupancy());
     }
 
+    @Test
+    void nativeAuthorityAllowsExternalStorehouseButNeverPmPopulationGrowth() {
+        WorldState state = developmentState();
+        state.putSettlementAuthorityProfile(SettlementAuthorityProfile.nativeReconciled(COMMUNITY));
+        DomainServices services = new DomainServices();
+        for (int step = 0; step < 6; step++) services.settlementDevelopment().reconcile(state);
+        DevelopmentIntent intent = state.developmentIntents().stream().findFirst().orElseThrow();
+        services.commands().execute(state, new DomainCommand.StartDevelopmentIntent(intent.id()));
+        services.commands().execute(state, new DomainCommand.CompleteDevelopmentIntent(intent.id()));
+        services.commands().execute(state, new DomainCommand.DepositResource(COMMUNITY, ResourceKind.IRON, 94, "test:native-restock"));
+
+        for (int step = 0; step < 16; step++) services.settlementDevelopment().reconcile(state);
+        assertEquals(80, state.population(COMMUNITY));
+        assertEquals(0, state.settlementDevelopment(COMMUNITY).orElseThrow().stableGrowthSteps());
+    }
+
     private static final WorldObjectId COMMUNITY = new WorldObjectId("pale_mirror:community");
     private static final WorldObjectId PLACE = new WorldObjectId("pale_mirror:place");
     private static final WorldObjectId STORAGE = new WorldObjectId("pale_mirror:depot");

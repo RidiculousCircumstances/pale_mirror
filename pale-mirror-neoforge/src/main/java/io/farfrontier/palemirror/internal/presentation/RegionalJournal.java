@@ -45,6 +45,8 @@ public final class RegionalJournal {
                     .map(value -> "prosperity:" + value.prosperity() + ",pressure:" + value.developmentPressure()
                             + ",housing:" + data.worldState().population(community.id()) + "/" + value.housingCapacity()
                             + ",growth:" + value.stableGrowthSteps()).orElse("unavailable");
+            String authority = data.worldState().settlementAuthorityProfile(community.id())
+                    .map(profile -> profile.profileId() + profile.fields()).orElse("unregistered");
             return "community=" + community.id().value() + ", place=" + place.id().value() + "["
                     + place.recognition() + "/" + place.observationFreshness() + "/" + place.lastReliability() + "]"
                     + ", population=" + data.worldState().population(community.id()) + ", iron=" + iron.stock() + "/" + iron.capacity()
@@ -57,6 +59,7 @@ public final class RegionalJournal {
                     + ", emergency=" + data.worldState().emergencyWindow(community.id())
                     .map(window -> window.state() + "@" + window.deadlineStep()).orElse("none")
                     + ", development=" + development
+                    + ", authority=" + authority
                     + ", contracts=" + routes;
         } catch (IllegalArgumentException ignored) {
             return "Invalid settlement id " + requestedId;
@@ -98,6 +101,10 @@ public final class RegionalJournal {
                 "Development — prosperity " + value.prosperity() + ", pressure " + value.developmentPressure()
                         + ", housing " + data.worldState().population(community.id()) + "/" + value.housingCapacity()
                         + ", growth " + value.stableGrowthSteps() + ".")));
+        data.worldState().settlementAuthorityProfile(community.id()).ifPresent(profile -> {
+            if (!profile.relocationAllowed()) player.sendSystemMessage(Component.literal(
+                    "This society remains native-owned: Pale Mirror can reconcile its condition and external supply, but cannot evacuate, ruin, grow, or construct it."));
+        });
         AdapterRegistry.scenarioJournalCommand().ifPresent(command -> player.sendSystemMessage(
                 action("[Open regional journal]", command).append(Component.literal(" — presentation only; PM owns state."))));
         data.worldState().emergencyWindow(community.id()).filter(window ->

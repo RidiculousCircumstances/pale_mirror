@@ -33,6 +33,7 @@
 - Schema v21 is the breaking physical-economy boundary. IRON crosses through a PM-owned depot and a bounded persisted transfer ledger; ordinary barrel contents remain non-canonical.
 - Schema v22 separates population into cohort-bearing `PopulationGroup` records and adds objective grace/evacuation/displacement state. Community identity survives place loss.
 - Schema v23 adds positive settlement development: pinned surplus policy, resource reservations, physical storehouse intent, prosperity/housing and bounded growth/return-home.
+- Schema v24 pins a generic settlement field-authority profile. Millénaire 9.0.0-beta.2 is an optional exact-version read-only reconciliation profile; native villages are excluded from the campaign unless `allowMillenaireCampaign=true`.
 
 ## State
 
@@ -55,20 +56,21 @@
 - 0.2d adds all-or-nothing stock mutations, emergency-reserve withdrawal, a bounded retained transfer ledger, reserved-item reconciliation and deterministic provenance-safe supply-depot materialization. Focused domain/NeoForge tests, guardrails, build and packaged-JAR verification pass.
 - 0.2e adds an eight-step intervention window, audience-authorized or automatic evacuation, displaced/refugee-camp presentation, PM-owned ruin overlays, structural sampling and damage attribution. Unit/NeoForge tests, packaging and all 14 core GameTests pass.
 - 0.2f adds development pressure, exactly releasable IRON reservations, restart-safe storehouse execution, doubled capacity, prosperity/housing growth, population growth and safe return-home/camp cleanup. Unit/NeoForge tests, packaging and all 14 core GameTests pass.
+- 0.2g adds generic per-field authority, stable native population reconciliation, persisted opaque native references, an isolated reflection-only Millénaire observer and default-off campaign opt-in. Domain/NeoForge tests, 15 core and Millénaire GameTests, packaged two-start restart, six-profile graphical client smoke, build and packaging pass.
 
 ### Now
 
-- 0.2f implementation is complete at schema v23.
+- 0.2d–0.2g implementation is complete at schema v24.
 
 ### Next
 
-- Implement schema-v24 Millénaire ownership reconciliation and final expanded smoke profiles.
-- Retain the authenticated FTB/client and real scheduled-train walkthroughs as release evidence.
+- Perform the authenticated multiplayer playthrough and the player-built scheduled Create train walkthrough as manual release evidence.
+- Review 0.2 release acceptance and decide whether culture/reputation begins in 0.3 rather than expanding schema v24.
 
 ## Open questions
 
 - UNCONFIRMED: authenticated multiplayer playthrough and the player-built native Create scheduled-train traversal; automation deliberately does not fake a Create train.
-- KNOWN MODEL DEBT: Millénaire field ownership remains the final 0.2 slice; structure inference is deliberately bounded and missing NPCs never imply deaths.
+- KNOWN MODEL DEBT: Millénaire culture, relations, quests, local economy and native development remain intentionally native-owned; structure inference is bounded and missing NPCs never imply deaths.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set
