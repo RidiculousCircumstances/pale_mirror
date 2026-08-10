@@ -1,6 +1,12 @@
-# Pale Mirror 0.2: First Living Settlement
+# Pale Mirror 0.2: First Living Region — Ironhill
 
 ## Purpose and status
+
+> **Canonical current review:**
+> [`product-review-0.2-and-vision-0.3.md`](product-review-0.2-and-vision-0.3.md)
+> supersedes this document where current product status, the remaining 0.2
+> release gate, or 0.3 priorities differ. This document retains the detailed
+> design and implementation history of slices 0.2a–0.2g.
 
 Pale Mirror has proven its primary technical hypothesis: an abstract canonical
 state can be safely materialized through different mods, and the result of a
@@ -16,25 +22,28 @@ when a player can tell a causal story such as:
 
 The next product objective is to make that kind of story possible.
 
-**Current product position:** Pale Mirror 0.1 is a proven engine for one
-managed aggregate and one causal story type:
+**Current product position:** Pale Mirror is an internal product alpha and an
+almost-ready technological release candidate for 0.2. The engine is proven for
+one managed living region and one cross-system causal chain:
 
 ```text
-Mine + Threat + Scenario + Physical representation
+Mine + Threat + Route + Settlement + Scenario + Physical representation
 ```
 
-It is authoritative for controlled threat objects. It is not yet a broad,
-authoritative world simulation: the causal relationships below are still to be
-proven in one coherent region.
+It is authoritative for the controlled world objects, settlement economy,
+policy, scenarios, and materialization in that region. The negative chain from
+infection through shortage and evacuation is implemented, but the product
+release is not complete until a player can discover, understand, and resolve
+the story without operator commands or developer explanation.
 
 ```text
 Mine -> Route -> Settlement -> Defence -> Migration -> Infrastructure
 ```
 
-This document began as product direction. The status section below records the
-implemented 0.2a/0.2b baseline and the corrective 0.2c actor synchronization;
-the Definition of 0.2 remains the release gate. The canonical settlement design
-is defined in [`settlement-actor-model.md`](settlement-actor-model.md).
+This document began as product direction and now records the implementation
+history through schema v24 and slices 0.2a–0.2g. The player-facing Definition
+of 0.2 remains the release gate. The canonical settlement design is defined in
+[`settlement-actor-model.md`](settlement-actor-model.md).
 
 ## Implemented vertical-slice baseline
 
@@ -530,7 +539,7 @@ They broaden the surface area without proving the core product value.
 
 ## Definition of Pale Mirror 0.2
 
-**Pale Mirror 0.2: First Living Settlement** is complete when, without
+**Pale Mirror 0.2: First Living Region — Ironhill** is complete when, without
 operator commands:
 
 1. a player discovers one registered mine, community, and occupied place;
@@ -546,7 +555,12 @@ operator commands:
    validating an alternate supply route;
 7. the world preserves one durable result: restored supply or persistently
    weakened defence;
-8. the same state and causal history survive restart without divergence.
+8. the same state and causal history survive restart without divergence;
+9. a real `MineSite`, legacy freight representation, and receiving depot make
+   the physical relationship legible;
+10. a real scheduled Create train proves the positive alternate-route path;
+11. a dynamic journal explains causes, stock, flow, time, choices, and outcome;
+12. the complete Ironhill exercise can be recreated and repeated cleanly.
 
 The release gate proves a settlement actor, not the entire future settlement
 model. Evacuation is absent from schema v20; canonical evacuation,

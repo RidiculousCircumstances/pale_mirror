@@ -2,7 +2,7 @@
 
 ## Goal (success criteria)
 
-- Maintain PM as canonical world/scenario owner and evolve the proven threat loop into one living region: Mine -> Route -> Settlement -> Defence -> player choice -> durable consequence.
+- Close Pale Mirror 0.2 as First Living Region: Ironhill: a player discovers, understands and resolves Mine -> Route -> Settlement -> choice -> durable consequence without operator help; then evolve it into repeatable Living Frontier regions in 0.3.
 
 ## Constraints/Assumptions
 
@@ -37,6 +37,9 @@
 - Server-side runtime debug controls are operator-only. Read commands expose typed evidence and canonical facts; manual binding uses the normal living-region registration path; destructive reset is a two-phase maintenance action that must fail closed once any PM physical work, transfer, lease, actor or projectile exists.
 - Debug visualization is ephemeral presentation: per-operator bounded particles expose observed/managed bounds and planned mine columns; advanced client tooltips expose item registry ownership and PM policy without mutating ItemStacks.
 - Debug navigation exposes dimension/coordinates and clickable operator teleports only for persisted physical anchors; canonical planned mines remain inspectable but cannot be teleported to until materialized.
+- Product status is an internal alpha and near technological 0.2 RC, not a completed gameplay release. Technology is stronger than physical legibility, player comprehension and repeatability.
+- The remaining 0.2 release gate is mandatory: real MineSite, readable legacy freight route/depot, positive live scheduled-Create-train proof, dynamic causal journal and repeatable Ironhill exercise.
+- 0.3 is `Living Frontier`: repeatable multi-region causal stories with combat, infrastructure, evacuation/refusal, visible consequences, Narrator candidate scoring and delayed aftermath. It does not broaden infection providers or commodity scope first.
 
 ## State
 
@@ -65,22 +68,23 @@
 
 ### Now
 
-- Runtime debug toolkit is implemented and verified; deploy it only when the user requests a live-server update.
+- Canonical product review is synchronized: the schema-v24 engine proves the negative living-region chain, while the player-facing 0.2 release gate remains open.
 
 ### Next
 
-- Use the operator toolkit for the authenticated multiplayer playthrough and player-built scheduled Create train walkthrough.
-- Review 0.2 release acceptance and decide whether culture/reputation begins in 0.3 rather than expanding schema v24.
+- Close 0.2 in order: real MineSite; legacy freight/loading/receiving representation; dynamic PM Journal; real scheduled Create-train E2E; clean repeatable exercise.
+- After the 0.2 gate, replace singleton bootstrap with `RegionArchetype`/placement plans, implement three supply-crisis outcomes, visible recovery/evacuation, multi-region Narrator scoring and delayed aftermath.
 
 ## Open questions
 
 - UNCONFIRMED: authenticated multiplayer playthrough and the player-built native Create scheduled-train traversal; automation deliberately does not fake a Create train.
 - KNOWN MODEL DEBT: Millénaire culture, relations, quests, local economy and native development remain intentionally native-owned; structure inference is bounded and missing NPCs never imply deaths.
+- UNCONFIRMED: the exact native PM Journal UI surface; FTB Quests remains an optional read-only projection, not the primary 0.3 presentation owner.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/runtime-debug-toolkit.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-review-0.2-and-vision-0.3.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/runtime-debug-toolkit.md`
 - `PaleMirrorSavedData`, `SourceGateState`, `internal/adapter/`, `internal/effect/`, `internal/quarantine/`
 - `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
 - `internal/debug/`, `CampaignRegionBootstrapper`, `SettlementObservationRecord`
