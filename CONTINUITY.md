@@ -21,12 +21,12 @@
 - Spore global spawning/infection/evolution paths are suppressed by a top pack, exact mixins and an entity-join firewall.
 - PM effect leases are written and marked dirty before any non-replayable physical action. A `RUNNING` lease becomes `UNKNOWN_AFTER_RESTART` and is never replayed implicitly.
 - Excluded source stacks are denied at interaction, craft/smelt, pickup, `inventoryTick` and melee boundaries. Legacy stacks remain physically present but only as SavedData quarantine diagnostics.
-- Schema v19 intentionally has no legacy migration: snapshots from v5–v18 fail closed and require a new world because a living-region state cannot safely infer historical source-specific and regional facts.
+- Schema v20 is the breaking Settlement Actor boundary: all v5–v19 snapshots fail closed and require a new world because community/place identity, policy, contracts and membership cannot be inferred safely.
 - Crimson is the primary canonical threat source for the next product slice; Spore is optional/test-only unless a future scenario explicitly selects it.
 - Create 6.0.10 is an optional, version-pinned, reflection-contained read-only logistics adapter. It certifies a route only after observing the same opaque native vehicle at two named loaded stations; it never drives Create or force-loads chunks.
 - Vanilla/Integrated Villages discovery is read-only: a bounded loaded-chunk observer needs two villagers plus a stable bell/bed landmark and never creates or overwrites settlement blocks.
 - FTB Quests is an optional static journal projection. PM never reads or writes FTB progression; it seeds one non-reward chapter only if its exact PM-owned config file is absent.
-- Canonical settlement direction is an actor model, not one state object: `SettlementCommunity`, `SettlementPlace`, `PopulationGroup`, economy, security, independent `WorldSite`, freshness-bounded `RouteContract`, and deterministic `SettlementPolicy` have separate ownership.
+- Canonical settlement direction is an actor model, not one state object: `SettlementCommunity`, `SettlementPlace`, economy, security, independent `WorldSite`, freshness-bounded `RouteContract`, and deterministic `SettlementPolicy` have separate ownership; `PopulationGroup` is the next separate aggregate, not part of schema v20.
 - There is no universal settlement lifecycle or unexplained numeric confidence. Recognition, observation freshness, integrity, operation, occupancy, crisis and population disposition are orthogonal; observations use explicit evidence/reliability classes and causal attribution.
 - A crisis is an objective simulation fact. Settlement policy acts without a scenario; Narrator only selects presentation/pacing and may return `NO_SCENARIO`.
 - Ordinary containers never mirror canonical stock. Physical delivery/withdrawal requires persisted receipts/leases; adapters declare field ownership as PM/native/derived/observed/reconciled.
@@ -36,7 +36,8 @@
 ### Done
 
 - Core vertical slice, deterministic simulation, migration pipeline, provenance-safe materialization, restart harness and settlement flow are implemented.
-- First Living Region baseline: deterministic Settlement/Route/ResourceFlow/MigrantGroup/LivingRegion domain aggregates; an Ironhill plan bound to one observed settlement; shortage/defence consequences; `settlement_supply_crisis`; combat, Create-route and evacuation resolutions; player journal and explain/timeline/logistics commands.
+- First Living Region baseline remains proven, and 0.2c replaces its v19 prototype with schema-v20 Community/Place/Economy/Security/Policy, independent WorldSites, freshness-bounded RouteContracts, typed evidence/membership, objective crisis facts and combat/logistics outcomes. Prototype evacuation is removed.
+- Policy and contract thresholds are datapack-authored and pinned into SavedData. IRON rationing reduces demand by 25%; missing supply permanently lowers defence; Create capacity ages full through 8 steps, half through 24, then expires.
 - Physical region work is a persistent mine-only campaign job. It resolves a terrain anchor, records RUNNING, and recovers idempotently; it does not replace an observed village. Core GameTests (14) and checksum-pinned Create and FTB runtime profiles pass.
 - Crimson sandbox: sixteen normal forms; APEX Nodes → deterministic boss → Bloodlink I/II/III → PM anchor; CEM/EMF/ETF visual contract, local sound/particles and PM visual children.
 - Staged test-mine biome uses 66 registered vanilla cells plus four separate Node cells; unknown changes conflict rather than overwrite.
@@ -47,21 +48,21 @@
 - The packaged-JAR verifier requires the effect ledger and item firewall classes/config. Focused unit tests plus core, Spore and Crimson GameTest servers passed after this change.
 - The domain and generic NeoForge bridge now carry only `InfectionSourceId`, `SourceGateState`, source-neutral materialization operations and adapter contracts. Crimson/Spore identities, gate layouts, overlays and item classification live behind their adapters; `verifySourceIsolation` prevents regressions.
 - The vanilla village observer, FTB static journal, same-vehicle Create proof, full packaged integration restart harnesses (core/Crimson/Spore/Create/FTB), and Xvfb client-smoke profiles (core/Crimson/Spore/Create/FTB) are implemented. The native train traversal remains a real-world acceptance walkthrough rather than a fake GameTest vehicle.
+- The aggregate `fullSmoke` gate passes: five 14-test GameTest profiles, five clean packaged-JAR restart profiles, and five graphical render/audio profiles. Heavy harnesses run serially, retain failed runtimes for diagnosis, and remove successful runtimes to keep CI resource use bounded.
 
 ### Now
 
-- Treat v19 Settlement/Route/MigrantGroup state as a tested prototype and plan the corrective `First Living Settlement` slice against `docs/settlement-actor-model.md`.
+- 0.2c actor synchronization and its full runtime verification are complete; select the next bounded product slice after review.
 
 ### Next
 
-- Implement the minimal actor slice: one IRON account, autonomous ration/request/crisis policy, one WorldSite, one freshness-bounded RouteContract, typed evidence/membership, two responses, and a causal journal.
-- Then separate evacuation/population groups, physical ruins, positive development, Millénaire ownership reconciliation, and social identity into bounded vertical slices.
+- Implement evacuation/population groups, physical ruin reconciliation, positive development, Millénaire ownership reconciliation, and social identity as separate bounded slices.
 - Retain the authenticated FTB/client and real scheduled-train walkthroughs as release evidence.
 
 ## Open questions
 
 - UNCONFIRMED: authenticated multiplayer playthrough and the player-built native Create scheduled-train traversal; automation deliberately does not fake a Create train.
-- KNOWN MODEL DEBT: v19 mixes society/place/economy/security, has no settlement decision engine or site/route-contract freshness, and stores deaths only as diagnostics; a destroyed village can remain canonically live. The corrective slice must use typed evidence and orthogonal states, not another overloaded status enum.
+- KNOWN MODEL DEBT: typed evidence deliberately cannot yet infer a physically destroyed/empty place or materialize safe ruins; canonical PopulationGroup, inventory receipts, positive development and Millénaire ownership remain future slices.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set

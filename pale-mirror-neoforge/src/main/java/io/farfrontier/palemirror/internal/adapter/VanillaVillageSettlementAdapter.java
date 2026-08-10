@@ -7,10 +7,12 @@ import java.util.Set;
 import io.farfrontier.palemirror.api.AdapterHealth;
 import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.domain.WorldObjectId;
+import io.farfrontier.palemirror.domain.SettlementCohort;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
@@ -54,8 +56,18 @@ public final class VanillaVillageSettlementAdapter implements SettlementAdapter 
                 landmark.getZ() - ENTITY_RADIUS);
         BlockPos max = new BlockPos(landmark.getX() + ENTITY_RADIUS, landmark.getY() + VERTICAL_RADIUS,
                 landmark.getZ() + ENTITY_RADIUS);
+        List<SettlementRepresentativeObservation> representatives = new java.util.ArrayList<>();
+        villagers.stream().filter(villager -> residentBox(landmark).contains(villager.position()))
+                .sorted(Comparator.comparing(villager -> villager.getUUID().toString()))
+                .forEach(villager -> representatives.add(new SettlementRepresentativeObservation(
+                        villager.getUUID().toString(), cohort(villager))));
+        level.getEntitiesOfClass(IronGolem.class, residentBox(landmark)).stream()
+                .sorted(Comparator.comparing(golem -> golem.getUUID().toString()))
+                .forEach(golem -> representatives.add(new SettlementRepresentativeObservation(
+                        golem.getUUID().toString(), SettlementCohort.GUARDS)));
         return List.of(new SettlementObservation(id, level.dimension().location().toString(), landmark, min, max,
-                residents, guards, level.getGameTime(), "minecraft:loaded_village_signals_v1"));
+                residents, guards, level.getGameTime(), fullyLoaded(level, min, max), representatives,
+                "minecraft:loaded_village_signals_v2"));
     }
 
     private static AABB searchBox(BlockPos center) {
@@ -77,5 +89,28 @@ public final class VanillaVillageSettlementAdapter implements SettlementAdapter 
                         .thenComparingInt(position -> level.getBlockState(position).is(Blocks.BELL) ? 0 : 1)
                         .thenComparingLong(BlockPos::asLong))
                 .findFirst().orElse(null);
+    }
+
+    private static SettlementCohort cohort(Villager villager) {
+        if (villager.isBaby()) return SettlementCohort.CHILDREN;
+        var profession = villager.getVillagerData().getProfession();
+        if (profession == VillagerProfession.LIBRARIAN || profession == VillagerProfession.CLERIC) {
+            return SettlementCohort.SPECIALISTS;
+        }
+        return profession == VillagerProfession.NONE || profession == VillagerProfession.NITWIT
+                ? SettlementCohort.CIVILIANS : SettlementCohort.WORKERS;
+    }
+
+    private static boolean fullyLoaded(ServerLevel level, BlockPos min, BlockPos max) {
+        int minChunkX = Math.floorDiv(min.getX(), 16);
+        int maxChunkX = Math.floorDiv(max.getX(), 16);
+        int minChunkZ = Math.floorDiv(min.getZ(), 16);
+        int maxChunkZ = Math.floorDiv(max.getZ(), 16);
+        for (int x = minChunkX; x <= maxChunkX; x++) {
+            for (int z = minChunkZ; z <= maxChunkZ; z++) {
+                if (!level.hasChunkAt(new BlockPos(x << 4, min.getY(), z << 4))) return false;
+            }
+        }
+        return true;
     }
 }

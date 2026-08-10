@@ -62,7 +62,7 @@ public final class SporeSandboxGameTests {
         reset(level);
         clearMineVolume(level, siteAnchor);
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
-        player.setPos(playerStart.getX() + 0.5D, playerStart.getY(), playerStart.getZ() + 0.5D);
+        player.setPos(siteAnchor.getX() + 0.5D, siteAnchor.getY() - 2.0D, siteAnchor.getZ() + 0.5D);
         TestMineRecord site = runtime.registerThreatSite(player, new WorldObjectId("pale_mirror:spore_test_mine"), new InfectionSourceId("pale_mirror:spore"));
         helper.assertValueEqual(site.anchor(), siteAnchor, "Spore source placement must be deterministic and non-overlapping");
 
@@ -271,10 +271,7 @@ public final class SporeSandboxGameTests {
         data.threatCombat().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
-        data.worldState().settlements().clear();
-        data.worldState().routes().clear();
-        data.worldState().migrantGroups().clear();
-        data.worldState().livingRegions().clear();
+        data.worldState().clearRegionalState();
         data.campaignRegions().clear();
         data.settlementObservations().clear();
         data.worldState().narratorCooldowns().clear();

@@ -3,8 +3,11 @@ package io.farfrontier.palemirror.domain;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Resolves a settlement crisis from canonical facts, never from UI or adapter actions. */
+/** Resolves presentation from canonical supply facts; it never creates the crisis itself. */
 public final class SettlementCrisisRuntime {
+    public static final String PRIMARY_OUTCOME = "PRIMARY_SUPPLY_RESTORED";
+    public static final String ALTERNATE_OUTCOME = "ALTERNATE_SUPPLY_VALIDATED";
+
     private final DomainEventFactory events;
 
     SettlementCrisisRuntime(DomainEventFactory events) { this.events = events; }
@@ -20,22 +23,27 @@ public final class SettlementCrisisRuntime {
     public List<DomainEvent> reconcile(WorldState state) {
         List<DomainEvent> produced = new ArrayList<>();
         for (ScenarioInstance scenario : state.scenarios()) {
-            if (scenario.archetype() != ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
-                    || (scenario.status() != ScenarioStatus.ASSESS && scenario.status() != ScenarioStatus.RESPOND)) continue;
+            if (scenario.archetype() != ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS || scenario.status().isTerminal()
+                    || scenario.status() == ScenarioStatus.BLOCKED) continue;
             LivingRegionState region = state.livingRegions().stream()
-                    .filter(value -> value.settlementId().equals(scenario.target())).findFirst().orElse(null);
+                    .filter(value -> value.communityId().equals(scenario.target())).findFirst().orElse(null);
             if (region == null) continue;
-            boolean mineRecovered = state.facility(region.primaryFacilityId())
+            ResourceAccount iron = state.economy(region.communityId()).map(value -> value.require(ResourceKind.IRON)).orElse(null);
+            if (iron == null) continue;
+            boolean primaryRecovered = state.facility(region.primaryFacilityId())
                     .map(value -> value.status() == FacilityStatus.OPERATIONAL).orElse(false);
-            boolean alternateRoute = state.route(region.alternateRouteId())
-                    .map(value -> value.transferableCapacity() >= state.settlement(region.settlementId())
-                            .map(settlement -> settlement.consumption(ResourceKind.IRON)).orElse(Integer.MAX_VALUE)).orElse(false);
-            boolean evacuated = state.migrantGroups().stream().anyMatch(value -> value.originSettlement().equals(region.settlementId()));
-            if (!mineRecovered && !alternateRoute && !evacuated) continue;
-            scenario.setStatus(ScenarioStatus.RESOLVED);
-            region.resolve();
-            DomainEvent resolved = events.create(state, DomainEventType.SCENARIO_RESOLVED, scenario.target(), scenario.sourceEventId());
+            boolean alternateValidated = state.routeContract(region.alternateRouteId())
+                    .map(value -> value.transferableCapacity(state.simulationStep()) >= iron.effectiveConsumption())
+                    .orElse(false);
+            String outcome = primaryRecovered ? PRIMARY_OUTCOME : alternateValidated ? ALTERNATE_OUTCOME : "";
+            if (outcome.isEmpty() || !scenario.resolve(outcome)) continue;
+            DomainEvent outcomeEvent = events.create(state, primaryRecovered ? DomainEventType.PRIMARY_SUPPLY_RESTORED
+                    : DomainEventType.ALTERNATE_SUPPLY_VALIDATED, scenario.target(), scenario.sourceEventId());
+            DomainEvent resolved = events.create(state, DomainEventType.SCENARIO_RESOLVED,
+                    scenario.target(), scenario.sourceEventId());
+            state.addEvent(outcomeEvent);
             state.addEvent(resolved);
+            produced.add(outcomeEvent);
             produced.add(resolved);
         }
         return List.copyOf(produced);

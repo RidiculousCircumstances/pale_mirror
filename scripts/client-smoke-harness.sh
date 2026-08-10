@@ -23,20 +23,32 @@ fail() {
 
 smoke() {
   local profile=$1
-  local log_file="$runtime_dir/$profile.log"
-  setsid bash -c 'cd "$1" && DISPLAY="$2" LIBGL_ALWAYS_SOFTWARE=1 exec ./gradlew ":pale-mirror-neoforge:run${3}" --no-daemon' \
-      harness "$repo_dir" "$display" "$profile" >"$log_file" 2>&1 &
-  local client_pid=$!
-  local ready=false
-  for attempt in $(seq 1 90); do
-    if rg -q 'Pale Mirror bootstrapped' "$log_file" && rg -q 'Sound engine started' "$log_file"; then ready=true; break; fi
-    if rg -q 'Mod loading has failed|Exception in thread|Failed to initialize the mod loading system' "$log_file"; then break; fi
-    if ! kill -0 "$client_pid" 2>/dev/null; then break; fi
-    sleep 1
+  for launch_attempt in 1 2; do
+    local log_file="$runtime_dir/$profile-$launch_attempt.log"
+    setsid bash -c 'cd "$1" && DISPLAY="$2" LIBGL_ALWAYS_SOFTWARE=1 exec ./gradlew ":pale-mirror-neoforge:run${3}" --no-daemon' \
+        harness "$repo_dir" "$display" "$profile" >"$log_file" 2>&1 &
+    local client_pid=$!
+    local ready=false
+    for attempt in $(seq 1 90); do
+      if rg -q 'Pale Mirror bootstrapped' "$log_file" && rg -q 'Sound engine started' "$log_file"; then ready=true; break; fi
+      if rg -q 'Mod loading has failed|Exception in thread|Failed to initialize the mod loading system' "$log_file"; then break; fi
+      if ! kill -0 "$client_pid" 2>/dev/null; then break; fi
+      sleep 1
+    done
+    kill -TERM -- "-$client_pid" 2>/dev/null || true
+    wait "$client_pid" 2>/dev/null || true
+    if "$ready"; then return 0; fi
+    if [[ "$launch_attempt" -eq 1 ]] && rg -q 'Crash during font initialization' "$log_file" \
+        && rg -q 'FileSystemNotFoundException' "$log_file"; then
+      # NeoForge's pre-mod early display can race its own union filesystem
+      # teardown in headless llvmpipe. One fresh JVM retry is sufficient and
+      # is deliberately limited to this signature; mod failures never retry.
+      continue
+    fi
+    printf 'Profile %s did not reach client render bootstrap.\n' "$profile" >&2
+    tail -80 "$log_file" >&2
+    fail
   done
-  kill -TERM -- "-$client_pid" 2>/dev/null || true
-  wait "$client_pid" 2>/dev/null || true
-  "$ready" || { printf 'Profile %s did not reach client render bootstrap.\n' "$profile" >&2; tail -80 "$log_file" >&2; fail; }
 }
 
 smoke CoreClient
@@ -44,4 +56,5 @@ smoke CrimsonClient
 smoke SporeClient
 smoke CreateClient
 smoke FtbClient
-printf 'Client render smoke passed for core, Crimson, Spore, Create, and FTB profiles; retained runtime: %s\n' "$runtime_dir"
+printf 'Client render smoke passed for core, Crimson, Spore, Create, and FTB profiles.\n'
+rm -rf -- "$runtime_dir"

@@ -9,7 +9,7 @@ import net.minecraft.core.BlockPos;
 public final class CampaignRegionRecord {
     private final String id;
     private final String dimensionId;
-    private final WorldObjectId settlementId;
+    private final WorldObjectId placeId;
     private final BlockPos settlementAnchor;
     private final BlockPos primaryMineColumn;
     private final BlockPos alternateMineColumn;
@@ -25,7 +25,7 @@ public final class CampaignRegionRecord {
     private String originVehicleId;
     private String destinationVehicleId;
 
-    public CampaignRegionRecord(String id, String dimensionId, WorldObjectId settlementId, BlockPos settlementAnchor,
+    public CampaignRegionRecord(String id, String dimensionId, WorldObjectId placeId, BlockPos settlementAnchor,
                                 BlockPos primaryMineColumn, BlockPos alternateMineColumn,
                                 BlockPos primaryMineAnchor, BlockPos alternateMineAnchor,
                                 CampaignRegionPresentationStatus status, String diagnostic, int nextOperationIndex,
@@ -34,7 +34,7 @@ public final class CampaignRegionRecord {
                                 String originVehicleId, String destinationVehicleId) {
         this.id = Objects.requireNonNull(id, "id");
         this.dimensionId = Objects.requireNonNull(dimensionId, "dimensionId");
-        this.settlementId = Objects.requireNonNull(settlementId, "settlementId");
+        this.placeId = Objects.requireNonNull(placeId, "placeId");
         this.settlementAnchor = Objects.requireNonNull(settlementAnchor, "settlementAnchor").immutable();
         this.primaryMineColumn = Objects.requireNonNull(primaryMineColumn, "primaryMineColumn").immutable();
         this.alternateMineColumn = Objects.requireNonNull(alternateMineColumn, "alternateMineColumn").immutable();
@@ -59,7 +59,7 @@ public final class CampaignRegionRecord {
     public String id() { return id; }
     public String jobId() { return "pm:campaign:" + id; }
     public String dimensionId() { return dimensionId; }
-    public WorldObjectId settlementId() { return settlementId; }
+    public WorldObjectId placeId() { return placeId; }
     public BlockPos settlementAnchor() { return settlementAnchor; }
     public BlockPos primaryMineColumn() { return primaryMineColumn; }
     public BlockPos alternateMineColumn() { return alternateMineColumn; }

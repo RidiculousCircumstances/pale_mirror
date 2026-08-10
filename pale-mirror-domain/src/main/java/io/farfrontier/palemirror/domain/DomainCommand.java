@@ -14,7 +14,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.MaterializationObserved, DomainCommand.NoScenario,
         DomainCommand.SetScenarioBlocked, DomainCommand.ActivateGate,
         DomainCommand.BypassGate, DomainCommand.GatePartDestroyed,
-        DomainCommand.ObserveRouteCapacity, DomainCommand.EvacuateSettlement,
+        DomainCommand.ValidateRouteContract, DomainCommand.ObserveSettlementPlace,
         DomainCommand.RegisterLivingRegion, DomainCommand.DiscoverLivingRegion,
         DomainCommand.TriggerFacilityInfection {
 
@@ -91,31 +91,48 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         }
     }
 
-    record ObserveRouteCapacity(WorldObjectId routeId, int capacity, String causationId) implements DomainCommand {
-        public ObserveRouteCapacity {
-            Objects.requireNonNull(routeId, "routeId");
+    record ValidateRouteContract(WorldObjectId contractId, int capacity, long observedStep,
+                                 String observationId, String causationId) implements DomainCommand {
+        public ValidateRouteContract {
+            Objects.requireNonNull(contractId, "contractId");
+            Objects.requireNonNull(observationId, "observationId");
             Objects.requireNonNull(causationId, "causationId");
-            if (capacity < 0) throw new IllegalArgumentException("Route capacity must not be negative");
+            if (capacity < 0 || observedStep < 0) throw new IllegalArgumentException("Invalid route validation");
         }
     }
 
-    record EvacuateSettlement(WorldObjectId settlementId, WorldObjectId migrantGroupId, int population,
-                              String causationId) implements DomainCommand {
-        public EvacuateSettlement {
-            Objects.requireNonNull(settlementId, "settlementId");
-            Objects.requireNonNull(migrantGroupId, "migrantGroupId");
+    record ObserveSettlementPlace(WorldObjectId placeId, ObservationFreshness freshness,
+                                  EvidenceReliability reliability, int registeredGuards,
+                                  String observationId, String causationId) implements DomainCommand {
+        public ObserveSettlementPlace {
+            Objects.requireNonNull(placeId, "placeId");
+            Objects.requireNonNull(freshness, "freshness");
+            Objects.requireNonNull(reliability, "reliability");
+            Objects.requireNonNull(observationId, "observationId");
             Objects.requireNonNull(causationId, "causationId");
-            if (population <= 0) throw new IllegalArgumentException("Evacuated population must be positive");
+            if (registeredGuards < 0) throw new IllegalArgumentException("Registered guards must not be negative");
         }
     }
 
     record RegisterLivingRegion(LivingRegionState region, List<FacilityState> facilities,
-                                SettlementState settlement, List<RouteState> routes) implements DomainCommand {
+                                SettlementCommunity community, SettlementPlace place,
+                                CommunityPlaceBinding binding, SettlementEconomy economy,
+                                SettlementSecurity security, SettlementPolicy policy, List<WorldSite> sites,
+                                List<SiteAffiliation> affiliations, List<SiteCapability> capabilities,
+                                List<RouteContract> routeContracts) implements DomainCommand {
         public RegisterLivingRegion {
             Objects.requireNonNull(region, "region");
             facilities = List.copyOf(facilities);
-            Objects.requireNonNull(settlement, "settlement");
-            routes = List.copyOf(routes);
+            Objects.requireNonNull(community, "community");
+            Objects.requireNonNull(place, "place");
+            Objects.requireNonNull(binding, "binding");
+            Objects.requireNonNull(economy, "economy");
+            Objects.requireNonNull(security, "security");
+            Objects.requireNonNull(policy, "policy");
+            sites = List.copyOf(sites);
+            affiliations = List.copyOf(affiliations);
+            capabilities = List.copyOf(capabilities);
+            routeContracts = List.copyOf(routeContracts);
         }
     }
 

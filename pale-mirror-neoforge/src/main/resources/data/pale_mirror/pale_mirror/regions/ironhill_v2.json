@@ -1,0 +1,19 @@
+{
+  "id": "pale_mirror:ironhill_v2",
+  "version": 2,
+  "infection_source": "pale_mirror:crimson",
+  "population": 80,
+  "iron_production": 18,
+  "iron_demand": 12,
+  "initial_iron_stock": 48,
+  "iron_stock_capacity": 72,
+  "rationed_iron_demand": 9,
+  "defence": 55,
+  "crisis_delay_steps": 2,
+  "ration_reserve_steps": 10,
+  "request_reserve_steps": 5,
+  "defence_loss_per_unavailable_step": 8,
+  "stable_recovery_steps": 2,
+  "route_current_window_steps": 8,
+  "route_expiry_window_steps": 24
+}

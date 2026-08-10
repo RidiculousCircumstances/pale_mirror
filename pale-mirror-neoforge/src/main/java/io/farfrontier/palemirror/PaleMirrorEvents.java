@@ -17,7 +17,6 @@ import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
-import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -95,7 +94,8 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
         if (event.getEntity().level().getServer() != null) {
-            SettlementObservationRuntime.recordDeath(event.getEntity().level().getServer(), event.getEntity());
+            PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
+                    .recordSettlementDeath(event.getEntity(), event.getSource());
         }
         String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
         if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null) {
@@ -274,14 +274,6 @@ public final class PaleMirrorEvents {
                             if (accepted) context.getSource().sendSuccess(() -> Component.translatable("pale_mirror.command.scenario.accepted", id), true);
                             else context.getSource().sendFailure(Component.translatable("pale_mirror.command.scenario.missing"));
                             return accepted ? 1 : 0;
-        })));
-        scenario.then(Commands.literal("evacuate").then(Commands.argument("id", StringArgumentType.word()).executes(context -> {
-                            String id = StringArgumentType.getString(context, "id");
-                            PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
-                            boolean evacuated = runtime.evacuate(id, audienceFor(context.getSource(), runtime));
-                            if (evacuated) context.getSource().sendSuccess(() -> Component.literal("Ironhill evacuation has begun."), true);
-                            else context.getSource().sendFailure(Component.literal("No matching active settlement crisis was found."));
-                            return evacuated ? 1 : 0;
         })));
         root.then(scenario);
         root.then(Commands.literal("adapter").requires(source -> source.hasPermission(2)).then(Commands.literal("status").executes(context -> {

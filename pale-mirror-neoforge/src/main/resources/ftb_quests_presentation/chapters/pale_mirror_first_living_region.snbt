@@ -25,7 +25,7 @@
       y: 0.0d
     }
     {
-      description: ["Resolve a supply crisis by clearing the mine, proving a real train route, or evacuating residents.", "These are explanations only: FTB Quests never decides PM scenario state."]
+      description: ["Resolve a supply crisis by clearing the mine or proving a real train route.", "These are explanations only: FTB Quests never decides PM scenario state."]
       id: "50A1E00000000004"
       icon: "minecraft:minecart"
       title: "Choose a response"

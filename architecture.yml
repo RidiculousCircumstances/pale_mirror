@@ -52,7 +52,11 @@ invariants:
   - id: logistics-observation
     statement: A player-built logistics route becomes canonical capacity only through a typed, bounded adapter observation; PM never drives third-party transport or force-loads route chunks.
   - id: settlement-observation
-    statement: Vanilla-compatible settlements are registered only from stable, loaded world facts; their blocks, residents and development remain outside PM write authority.
+    statement: Vanilla-compatible places are recognized only after a complete 400-tick loaded evidence window; reliability, freshness, representative membership and causal losses remain typed and separate, and missing entities never imply death or ruin.
+  - id: settlement-actor
+    statement: A settlement community, its physical place, economy, security and policy are separate canonical records; deterministic settlement policy creates crisis facts and continues acting when Narrator returns NO_SCENARIO.
+  - id: route-contract
+    statement: Strategic flow uses persisted RouteContract validation; WorldSites may keep multiple typed affiliations and ambiguous beneficiaries fail closed; Create observations prove capability without delivering stock directly, and capacity ages from CURRENT to STALE to EXPIRED without force-loading chunks.
   - id: presentation-read-only
     statement: FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression.
 
@@ -114,8 +118,8 @@ critical_flows:
     owner: neoforge ExcludedSourceItemFirewall, ItemStack mixin and event observers
     verification: critical-code
   - id: living-region-supply
-    path: observed settlement -> Mine -> Route -> Settlement stock -> Defence -> crisis scenario -> combat/logistics/evacuation outcome
-    owner: domain regional model plus NeoForge settlement observer, presentation and logistics bridge
+    path: typed place evidence -> Community/Place binding -> Mine -> RouteContract -> ResourceAccount -> SettlementPolicy -> objective crisis -> combat/logistics outcome
+    owner: domain settlement actor model plus NeoForge evidence, presentation and logistics bridges
     verification: critical-code
   - id: create-same-vehicle-proof
     path: named loaded station -> opaque native vehicle observation -> second endpoint observation -> bounded same-vehicle proof -> canonical route capacity

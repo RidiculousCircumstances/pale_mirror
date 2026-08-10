@@ -8,19 +8,20 @@ import java.util.Objects;
 public final class DomainCommandProcessor {
     private final SimulationEngine simulation;
     private final ResourceFlowSimulation resources;
-    private final SettlementLifecycle settlements;
+    private final SettlementDecisionEngine settlementDecisions;
     private final ThreatLifecycle threats;
     private final Narrator narrator;
     private final ScenarioRuntime scenarios;
     private final SettlementCrisisRuntime settlementCrises;
     private final DomainEventFactory events;
 
-    DomainCommandProcessor(SimulationEngine simulation, ResourceFlowSimulation resources, SettlementLifecycle settlements,
+    DomainCommandProcessor(SimulationEngine simulation, ResourceFlowSimulation resources,
+                           SettlementDecisionEngine settlementDecisions,
                            ThreatLifecycle threats, Narrator narrator,
                            ScenarioRuntime scenarios, SettlementCrisisRuntime settlementCrises, DomainEventFactory events) {
         this.simulation = Objects.requireNonNull(simulation, "simulation");
         this.resources = Objects.requireNonNull(resources, "resources");
-        this.settlements = Objects.requireNonNull(settlements, "settlements");
+        this.settlementDecisions = Objects.requireNonNull(settlementDecisions, "settlementDecisions");
         this.threats = Objects.requireNonNull(threats, "threats");
         this.narrator = Objects.requireNonNull(narrator, "narrator");
         this.scenarios = Objects.requireNonNull(scenarios, "scenarios");
@@ -43,8 +44,8 @@ public final class DomainCommandProcessor {
             case DomainCommand.ActivateGate activated -> activateGate(state, activated);
             case DomainCommand.BypassGate bypassed -> bypassGate(state, bypassed);
             case DomainCommand.GatePartDestroyed destroyed -> gatePartDestroyed(state, destroyed);
-            case DomainCommand.ObserveRouteCapacity observed -> observeRouteCapacity(state, observed);
-            case DomainCommand.EvacuateSettlement evacuated -> evacuateSettlement(state, evacuated);
+            case DomainCommand.ValidateRouteContract observed -> validateRouteContract(state, observed);
+            case DomainCommand.ObserveSettlementPlace observed -> observeSettlementPlace(state, observed);
             case DomainCommand.RegisterLivingRegion registered -> registerLivingRegion(state, registered);
             case DomainCommand.DiscoverLivingRegion discovered -> discoverLivingRegion(state, discovered);
             case DomainCommand.TriggerFacilityInfection triggered -> triggerFacilityInfection(state, triggered);
@@ -52,9 +53,14 @@ public final class DomainCommandProcessor {
     }
 
     private List<DomainEvent> advanceSimulation(WorldState state, int steps) {
-        List<DomainEvent> produced = new ArrayList<>(simulation.advance(state, steps));
-        produced.addAll(resources.reconcile(state));
-        produced.addAll(settlementCrises.reconcile(state));
+        if (steps < 0) throw new IllegalArgumentException("Simulation steps must not be negative");
+        List<DomainEvent> produced = new ArrayList<>();
+        for (int index = 0; index < steps; index++) {
+            produced.addAll(simulation.advance(state, 1));
+            produced.addAll(resources.reconcile(state));
+            produced.addAll(settlementDecisions.reconcile(state));
+            produced.addAll(settlementCrises.reconcile(state));
+        }
         return List.copyOf(produced);
     }
 
@@ -128,53 +134,88 @@ public final class DomainCommandProcessor {
         return List.copyOf(produced);
     }
 
-    private List<DomainEvent> observeRouteCapacity(WorldState state, DomainCommand.ObserveRouteCapacity command) {
-        RouteState route = state.route(command.routeId())
-                .orElseThrow(() -> new IllegalArgumentException("Unknown route " + command.routeId()));
-        RouteStatus before = route.status();
-        if (!route.observeCapacity(command.capacity())) return List.of();
-        List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.ROUTE_CAPACITY_OBSERVED,
-                command.routeId(), command.causationId()));
-        if (route.status() == RouteStatus.OPERATIONAL && before != RouteStatus.OPERATIONAL) {
-            produced.addAll(record(state, DomainEventType.ROUTE_OPERATIONAL, command.routeId(), command.causationId()));
-        } else if (route.status() == RouteStatus.DISRUPTED && before != RouteStatus.DISRUPTED) {
-            produced.addAll(record(state, DomainEventType.ROUTE_DISRUPTED, command.routeId(), command.causationId()));
+    private List<DomainEvent> validateRouteContract(WorldState state, DomainCommand.ValidateRouteContract command) {
+        RouteContract contract = state.routeContract(command.contractId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown route contract " + command.contractId()));
+        if (command.observedStep() > state.simulationStep()) {
+            throw new IllegalArgumentException("Route observation cannot come from a future simulation step");
         }
-        return List.copyOf(produced);
+        if (!contract.validate(command.capacity(), command.observedStep(), command.observationId())) return List.of();
+        return record(state, DomainEventType.ROUTE_CONTRACT_VALIDATED, command.contractId(), command.causationId());
     }
 
-    private List<DomainEvent> evacuateSettlement(WorldState state, DomainCommand.EvacuateSettlement command) {
-        List<DomainEvent> produced = new ArrayList<>(settlements.evacuate(state, command.settlementId(),
-                command.migrantGroupId(), command.population(), command.causationId()));
-        if (!produced.isEmpty()) produced.addAll(settlementCrises.reconcile(state));
+    private List<DomainEvent> observeSettlementPlace(WorldState state, DomainCommand.ObserveSettlementPlace command) {
+        SettlementPlace place = state.place(command.placeId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown settlement place " + command.placeId()));
+        if (!place.observe(command.observationId(), command.freshness(), command.reliability())) return List.of();
+        List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.SETTLEMENT_OBSERVATION_RECONCILED,
+                command.placeId(), command.causationId()));
+        state.bindingForPlace(command.placeId()).flatMap(binding -> state.security(binding.communityId())).ifPresent(security -> {
+            if (security.observeGuards(command.registeredGuards())) {
+                produced.add(recordEvent(state, DomainEventType.SETTLEMENT_GUARD_CAPABILITY_CHANGED,
+                        security.communityId(), command.causationId()));
+            }
+        });
         return List.copyOf(produced);
     }
 
     private List<DomainEvent> registerLivingRegion(WorldState state, DomainCommand.RegisterLivingRegion command) {
         if (state.livingRegion(command.region().id()).isPresent()) return List.of();
-        if (!command.settlement().id().equals(command.region().settlementId())) {
-            throw new IllegalArgumentException("Living region settlement identity does not match its definition");
+        if (!command.community().id().equals(command.region().communityId())
+                || !command.place().id().equals(command.region().placeId())
+                || !command.binding().communityId().equals(command.community().id())
+                || !command.binding().placeId().equals(command.place().id())
+                || !command.economy().communityId().equals(command.community().id())
+                || !command.security().communityId().equals(command.community().id())
+                || !command.policy().communityId().equals(command.community().id())) {
+            throw new IllegalArgumentException("Living region actor identities do not match its definition");
         }
         if (command.facilities().stream().noneMatch(facility -> facility.id().equals(command.region().primaryFacilityId()))
                 || command.facilities().stream().noneMatch(facility -> facility.id().equals(command.region().alternateFacilityId()))) {
             throw new IllegalArgumentException("Living region facilities do not match its definition");
         }
-        if (command.routes().stream().noneMatch(route -> route.id().equals(command.region().primaryRouteId()))
-                || command.routes().stream().noneMatch(route -> route.id().equals(command.region().alternateRouteId()))) {
-            throw new IllegalArgumentException("Living region routes do not match its definition");
+        if (command.routeContracts().stream().noneMatch(route -> route.id().equals(command.region().primaryRouteId()))
+                || command.routeContracts().stream().noneMatch(route -> route.id().equals(command.region().alternateRouteId()))) {
+            throw new IllegalArgumentException("Living region contracts do not match its definition");
+        }
+        java.util.Set<WorldObjectId> siteIds = command.sites().stream().map(WorldSite::id)
+                .collect(java.util.stream.Collectors.toSet());
+        if (siteIds.size() != command.sites().size()
+                || command.affiliations().stream().anyMatch(value -> !siteIds.contains(value.siteId()))
+                || command.capabilities().stream().anyMatch(value -> !siteIds.contains(value.siteId()))
+                || command.routeContracts().stream().anyMatch(value -> !siteIds.contains(value.originEndpoint())
+                || !siteIds.contains(value.destinationEndpoint()))) {
+            throw new IllegalArgumentException("Living region site graph contains duplicate or unknown endpoints");
+        }
+        if (command.affiliations().stream().anyMatch(value -> value.role() == SiteAffiliationRole.SUPPLIER
+                && command.facilities().stream().noneMatch(facility -> facility.id().equals(value.objectId())))
+                || command.affiliations().stream().anyMatch(value -> value.role() == SiteAffiliationRole.RECIPIENT
+                && !value.objectId().equals(command.community().id()))) {
+            throw new IllegalArgumentException("Living region site affiliations do not match canonical owners");
         }
         command.facilities().forEach(facility -> {
             if (state.facility(facility.id()).isPresent()) throw new IllegalStateException("Duplicate facility " + facility.id());
         });
-        command.routes().forEach(route -> {
-            if (state.route(route.id()).isPresent()) throw new IllegalStateException("Duplicate route " + route.id());
+        command.routeContracts().forEach(route -> {
+            if (state.routeContract(route.id()).isPresent()) throw new IllegalStateException("Duplicate route contract " + route.id());
         });
-        if (state.settlement(command.settlement().id()).isPresent()) {
-            throw new IllegalStateException("Duplicate settlement " + command.settlement().id());
+        command.sites().forEach(site -> {
+            if (state.site(site.id()).isPresent()) throw new IllegalStateException("Duplicate world site " + site.id());
+        });
+        if (state.community(command.community().id()).isPresent() || state.place(command.place().id()).isPresent()) {
+            throw new IllegalStateException("Duplicate settlement actor identity");
         }
         command.facilities().forEach(state::putFacility);
-        state.putSettlement(command.settlement());
-        command.routes().forEach(state::putRoute);
+        state.putCommunity(command.community());
+        state.putPlace(command.place());
+        state.putCommunityPlaceBinding(command.binding());
+        state.putEconomy(command.economy());
+        state.putSecurity(command.security());
+        state.putSettlementPolicy(command.policy());
+        command.sites().forEach(state::putSite);
+        command.affiliations().forEach(state::putSiteAffiliation);
+        command.capabilities().forEach(state::putSiteCapability);
+        command.routeContracts().forEach(state::putRouteContract);
         state.putLivingRegion(command.region());
         return List.of();
     }
@@ -182,8 +223,9 @@ public final class DomainCommandProcessor {
     private List<DomainEvent> discoverLivingRegion(WorldState state, DomainCommand.DiscoverLivingRegion command) {
         LivingRegionState region = state.livingRegion(command.regionId())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown living region " + command.regionId()));
-        if (!region.discover(command.audience(), state.simulationStep())) return List.of();
-        return record(state, DomainEventType.REGION_DISCOVERED, region.settlementId(), command.causationId());
+        if (!region.recognize(command.audience(), state.simulationStep())) return List.of();
+        state.place(region.placeId()).orElseThrow().recognize();
+        return record(state, DomainEventType.REGION_DISCOVERED, region.communityId(), command.causationId());
     }
 
     private List<DomainEvent> triggerFacilityInfection(WorldState state, DomainCommand.TriggerFacilityInfection command) {
@@ -194,9 +236,6 @@ public final class DomainCommandProcessor {
         List<DomainEvent> produced = new ArrayList<>();
         produced.add(recordEvent(state, DomainEventType.MINE_INFECTED, facility.id(), command.causationId()));
         produced.add(recordEvent(state, DomainEventType.FACILITY_DISABLED, facility.id(), command.causationId()));
-        state.livingRegions().stream().filter(region -> region.primaryFacilityId().equals(facility.id()) && region.activateCrisis())
-                .forEach(region -> produced.add(recordEvent(state, DomainEventType.REGION_CRISIS_ACTIVATED,
-                        region.settlementId(), command.causationId())));
         return List.copyOf(produced);
     }
 

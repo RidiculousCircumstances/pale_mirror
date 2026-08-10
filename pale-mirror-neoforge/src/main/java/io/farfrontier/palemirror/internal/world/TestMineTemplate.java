@@ -21,15 +21,24 @@ public final class TestMineTemplate {
     private TestMineTemplate() { }
 
     public static TestMineRecord place(ServerLevel level, BlockPos anchor, WorldObjectId id, StoryAudienceId audience) {
-        if (!isClear(level, anchor)) throw new IllegalStateException("Test mine volume is not empty");
+        BlockPos conflict = firstConflict(level, anchor);
+        if (conflict != null) {
+            throw new IllegalStateException("Test mine volume is not empty at " + conflict + ": "
+                    + BuiltInRegistries.BLOCK.getKey(level.getBlockState(conflict).getBlock()));
+        }
         return placeChecked(level, anchor, id, audience);
     }
 
     public static boolean isClear(ServerLevel level, BlockPos anchor) {
+        return firstConflict(level, anchor) == null;
+    }
+
+    private static BlockPos firstConflict(ServerLevel level, BlockPos anchor) {
         for (int x = -4; x <= 4; x++) for (int y = 0; y <= 4; y++) for (int z = -4; z <= 4; z++) {
-            if (!level.isEmptyBlock(anchor.offset(x, y, z))) return false;
+            BlockPos position = anchor.offset(x, y, z);
+            if (!level.isEmptyBlock(position)) return position;
         }
-        return true;
+        return null;
     }
 
     public static boolean isMaterialized(ServerLevel level, BlockPos anchor) {

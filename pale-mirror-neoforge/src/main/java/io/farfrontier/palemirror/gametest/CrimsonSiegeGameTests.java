@@ -259,7 +259,7 @@ public final class CrimsonSiegeGameTests {
         data.threatCombat().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
-        data.worldState().settlements().clear();
+        data.worldState().clearRegionalState();
         data.worldState().narratorCooldowns().clear();
         data.worldState().history().clear();
         data.worldState().setSimulationStep(0);

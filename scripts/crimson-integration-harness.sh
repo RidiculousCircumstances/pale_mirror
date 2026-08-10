@@ -59,4 +59,5 @@ if ! start_server "$log_one"; then fail; fi
 stop_server
 if ! start_server "$log_two"; then fail; fi
 stop_server
-printf 'Crimson integration packaged-JAR restart harness passed; retained runtime: %s\n' "$runtime_dir"
+printf 'Crimson integration packaged-JAR restart harness passed.\n'
+rm -rf -- "$runtime_dir"

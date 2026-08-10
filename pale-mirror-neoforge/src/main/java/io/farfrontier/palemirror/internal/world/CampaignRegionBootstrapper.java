@@ -1,19 +1,32 @@
 package io.farfrontier.palemirror.internal.world;
 
 import java.util.List;
-import java.util.Map;
-
+import io.farfrontier.palemirror.domain.CommunityPlaceBinding;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.LivingRegionState;
+import io.farfrontier.palemirror.domain.OperationalState;
+import io.farfrontier.palemirror.domain.RecognitionState;
+import io.farfrontier.palemirror.domain.ResourceAccount;
 import io.farfrontier.palemirror.domain.ResourceKind;
-import io.farfrontier.palemirror.domain.ResourceStock;
-import io.farfrontier.palemirror.domain.RouteState;
-import io.farfrontier.palemirror.domain.RouteStatus;
-import io.farfrontier.palemirror.domain.SettlementState;
+import io.farfrontier.palemirror.domain.RouteContract;
+import io.farfrontier.palemirror.domain.RouteContractStatus;
+import io.farfrontier.palemirror.domain.RouteProvider;
+import io.farfrontier.palemirror.domain.SettlementCommunity;
+import io.farfrontier.palemirror.domain.SettlementEconomy;
+import io.farfrontier.palemirror.domain.SettlementPlace;
+import io.farfrontier.palemirror.domain.SettlementPolicy;
+import io.farfrontier.palemirror.domain.SettlementSecurity;
+import io.farfrontier.palemirror.domain.GuardCapability;
+import io.farfrontier.palemirror.domain.SiteAffiliation;
+import io.farfrontier.palemirror.domain.SiteAffiliationRole;
+import io.farfrontier.palemirror.domain.SiteCapability;
+import io.farfrontier.palemirror.domain.SiteCapabilityType;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
+import io.farfrontier.palemirror.domain.WorldSite;
+import io.farfrontier.palemirror.domain.WorldSiteType;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinition;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinitions;
 import net.minecraft.core.BlockPos;
@@ -25,13 +38,15 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Binds the first authored region to a read-only observed settlement; it never builds a village. */
 public final class CampaignRegionBootstrapper {
-    public static final String IRONHILL_ID = "pale_mirror:ironhill_v1";
-    /** Legacy label only; a real region uses {@link LivingRegionState#settlementId()}. */
-    public static final WorldObjectId IRONHILL = new WorldObjectId("pale_mirror:ironhill");
+    public static final String IRONHILL_ID = "pale_mirror:ironhill_v2";
+    public static final WorldObjectId IRONHILL = new WorldObjectId("pale_mirror:ironhill_community");
     public static final WorldObjectId MINE17 = new WorldObjectId("pale_mirror:mine17");
     public static final WorldObjectId RED_VALLEY = new WorldObjectId("pale_mirror:red_valley_ironworks");
     public static final WorldObjectId MINE17_ROUTE = new WorldObjectId("pale_mirror:mine17_to_ironhill");
     public static final WorldObjectId RED_VALLEY_ROUTE = new WorldObjectId("pale_mirror:red_valley_to_ironhill");
+    public static final WorldObjectId MINE17_DISPATCH_SITE = new WorldObjectId("pale_mirror:mine17_dispatch");
+    public static final WorldObjectId RED_VALLEY_DISPATCH_SITE = new WorldObjectId("pale_mirror:red_valley_dispatch");
+    public static final WorldObjectId IRONHILL_RECEIVING_SITE = new WorldObjectId("pale_mirror:ironhill_receiving");
     public static final String RED_VALLEY_DISPATCH = "PM Red Valley Dispatch";
     public static final String IRONHILL_RECEIVING = "PM Ironhill Receiving";
     private static final ResourceLocation IRONHILL_DEFINITION = ResourceLocation.parse(IRONHILL_ID);
@@ -74,27 +89,53 @@ public final class CampaignRegionBootstrapper {
         if (data.worldState().livingRegion(IRONHILL_ID).isPresent()) return;
         SettlementObservationRecord observed = data.settlementObservations().values().stream()
                 .filter(value -> value.dimensionId().equals(server.overworld().dimension().location().toString()))
+                .filter(SettlementObservationRecord::strongEnoughForRecognition)
                 .sorted(java.util.Comparator.comparing(value -> value.id().value())).findFirst().orElse(null);
         if (observed == null) return;
         CampaignRegionDefinition definition = CampaignRegionDefinitions.require(IRONHILL_DEFINITION);
-        WorldObjectId settlementId = observed.id();
+        WorldObjectId placeId = observed.id();
         int population = Math.max(1, observed.observedPopulation());
         int ironDemand = Math.max(1, scale(definition.ironDemand(), population, definition.population()));
         int initialStock = Math.max(ironDemand * 4, scale(definition.initialIronStock(), population, definition.population()));
         int capacity = Math.max(initialStock, scale(definition.ironStockCapacity(), population, definition.population()));
-        LivingRegionState region = new LivingRegionState(IRONHILL_ID, settlementId, MINE17, RED_VALLEY, MINE17_ROUTE,
-                RED_VALLEY_ROUTE, definition.crisisDelaySteps(), null, io.farfrontier.palemirror.domain.LivingRegionStatus.PLANNED, -1);
+        LivingRegionState region = new LivingRegionState(IRONHILL_ID, IRONHILL, placeId, MINE17, RED_VALLEY,
+                MINE17_ROUTE, RED_VALLEY_ROUTE, definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1);
         FacilityState primary = new FacilityState(MINE17, definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
         FacilityState alternate = new FacilityState(RED_VALLEY, definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
-        SettlementState settlement = new SettlementState(settlementId, population, definition.defence(),
-                Map.of(ResourceKind.IRON, new ResourceStock(capacity, initialStock)), Map.of(ResourceKind.IRON, ironDemand));
-        List<RouteState> routes = List.of(
-                new RouteState(MINE17_ROUTE, MINE17, settlementId, ResourceKind.IRON, definition.ironProduction(),
-                        definition.ironProduction(), RouteStatus.OPERATIONAL),
-                new RouteState(RED_VALLEY_ROUTE, RED_VALLEY, settlementId, ResourceKind.IRON, definition.ironProduction(), RouteStatus.PLANNED));
-        commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate), settlement, routes));
+        SettlementCommunity community = new SettlementCommunity(IRONHILL, population);
+        SettlementPlace place = new SettlementPlace(placeId);
+        int rationedDemand = Math.min(ironDemand, Math.max(0,
+                scale(definition.rationedIronDemand(), population, definition.population())));
+        SettlementEconomy economy = new SettlementEconomy(IRONHILL, java.util.Map.of(ResourceKind.IRON,
+                new ResourceAccount(capacity, initialStock, 0, ironDemand, rationedDemand)));
+        SettlementSecurity security = new SettlementSecurity(IRONHILL, definition.defence(), definition.defence(),
+                observed.registeredGuards(), observed.registeredGuards() > 0 ? GuardCapability.PRESENT : GuardCapability.ABSENT);
+        SettlementPolicy policy = new SettlementPolicy(IRONHILL, definition.rationReserveSteps(),
+                definition.requestReserveSteps(), definition.defenceLossPerUnavailableStep(), definition.stableStepsToRecover());
+        List<WorldSite> sites = List.of(
+                new WorldSite(MINE17_DISPATCH_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
+                new WorldSite(RED_VALLEY_DISPATCH_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
+                new WorldSite(IRONHILL_RECEIVING_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL));
+        List<SiteAffiliation> affiliations = List.of(
+                new SiteAffiliation(MINE17_DISPATCH_SITE, MINE17, SiteAffiliationRole.SUPPLIER),
+                new SiteAffiliation(RED_VALLEY_DISPATCH_SITE, RED_VALLEY, SiteAffiliationRole.SUPPLIER),
+                new SiteAffiliation(IRONHILL_RECEIVING_SITE, IRONHILL, SiteAffiliationRole.RECIPIENT));
+        List<SiteCapability> capabilities = List.of(
+                new SiteCapability(MINE17_DISPATCH_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
+                new SiteCapability(RED_VALLEY_DISPATCH_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
+                new SiteCapability(IRONHILL_RECEIVING_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()));
+        List<RouteContract> routes = List.of(
+                new RouteContract(MINE17_ROUTE, MINE17_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.PALE_MIRROR,
+                        ResourceKind.IRON, definition.ironProduction(), definition.routeCurrentWindowSteps(),
+                        definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED),
+                new RouteContract(RED_VALLEY_ROUTE, RED_VALLEY_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.CREATE,
+                        ResourceKind.IRON, definition.ironProduction(), definition.routeCurrentWindowSteps(),
+                        definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED));
+        commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
+                community, place, new CommunityPlaceBinding(IRONHILL, placeId), economy, security, policy, sites, affiliations,
+                capabilities, routes));
         data.campaignRegions().put(IRONHILL_ID, new CampaignRegionRecord(IRONHILL_ID,
-                observed.dimensionId(), settlementId, observed.anchor(), mineColumn(server, observed.anchor(), PRIMARY_MINE_DISTANCE),
+                observed.dimensionId(), placeId, observed.anchor(), mineColumn(server, observed.anchor(), PRIMARY_MINE_DISTANCE),
                 mineColumn(server, observed.anchor(), -ALTERNATE_MINE_DISTANCE), null, null,
                 CampaignRegionPresentationStatus.PLANNED, "", 0, -1, -1, 0, 0, "", ""));
         data.setDirty();

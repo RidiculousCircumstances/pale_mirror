@@ -68,14 +68,22 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 19,
-                "observed-settlement snapshot must record schema v19 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 20,
+                "settlement-actor snapshot must record schema v20 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
+        CompoundTag incompatible = persisted.copy();
+        incompatible.putInt("schemaVersion", 19);
+        try {
+            PaleMirrorSavedData.load(incompatible, level.registryAccess());
+            throw new AssertionError("schema v19 must fail closed at the actor-model boundary");
+        } catch (IllegalStateException expected) {
+            helper.assertTrue(expected.getMessage().contains("new world"), "schema rejection must explain recovery");
+        }
         TestMineRecord reloadedMine = reloaded.testMines().get(mine.id());
         helper.assertTrue(reloadedMine != null && reloadedMine.job() != null,
-                "v19 snapshot must retain the persisted materialization job");
+                "v20 snapshot must retain the persisted materialization job");
         helper.assertValueEqual(reloadedMine.job().nextOperationIndex(), 1,
-                "v19 snapshot must retain completed operation progress");
+                "v20 snapshot must retain completed operation progress");
         tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
@@ -364,10 +372,7 @@ public final class CoreRecoveryGameTests {
         data.threatCombat().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
-        data.worldState().settlements().clear();
-        data.worldState().routes().clear();
-        data.worldState().migrantGroups().clear();
-        data.worldState().livingRegions().clear();
+        data.worldState().clearRegionalState();
         data.campaignRegions().clear();
         data.settlementObservations().clear();
         data.worldState().narratorCooldowns().clear();

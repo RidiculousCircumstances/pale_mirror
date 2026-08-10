@@ -2,71 +2,61 @@ package io.farfrontier.palemirror.domain;
 
 import java.util.Objects;
 
-/** One authored causal region; physical coordinates belong to the NeoForge presentation record. */
+/** Authored relationships for one causal region; crisis is owned by its community, not this record. */
 public final class LivingRegionState {
     private final String id;
-    private final WorldObjectId settlementId;
+    private final WorldObjectId communityId;
+    private final WorldObjectId placeId;
     private final WorldObjectId primaryFacilityId;
     private final WorldObjectId alternateFacilityId;
     private final WorldObjectId primaryRouteId;
     private final WorldObjectId alternateRouteId;
-    private final long crisisDelaySteps;
+    private final long incidentDelaySteps;
     private StoryAudienceId primaryAudience;
-    private LivingRegionStatus status;
+    private RecognitionState recognition;
     private long discoveredAtStep;
 
-    public LivingRegionState(String id, WorldObjectId settlementId, WorldObjectId primaryFacilityId,
-                             WorldObjectId alternateFacilityId, WorldObjectId primaryRouteId,
-                             WorldObjectId alternateRouteId) {
-        this(id, settlementId, primaryFacilityId, alternateFacilityId, primaryRouteId, alternateRouteId,
-                2, null, LivingRegionStatus.PLANNED, -1);
-    }
-
-    public LivingRegionState(String id, WorldObjectId settlementId, WorldObjectId primaryFacilityId,
-                             WorldObjectId alternateFacilityId, WorldObjectId primaryRouteId,
-                             WorldObjectId alternateRouteId, long crisisDelaySteps, StoryAudienceId primaryAudience,
-                             LivingRegionStatus status, long discoveredAtStep) {
+    public LivingRegionState(String id, WorldObjectId communityId, WorldObjectId placeId,
+                             WorldObjectId primaryFacilityId, WorldObjectId alternateFacilityId,
+                             WorldObjectId primaryRouteId, WorldObjectId alternateRouteId,
+                             long incidentDelaySteps, StoryAudienceId primaryAudience,
+                             RecognitionState recognition, long discoveredAtStep) {
         this.id = Objects.requireNonNull(id, "id");
-        this.settlementId = Objects.requireNonNull(settlementId, "settlementId");
+        this.communityId = Objects.requireNonNull(communityId, "communityId");
+        this.placeId = Objects.requireNonNull(placeId, "placeId");
         this.primaryFacilityId = Objects.requireNonNull(primaryFacilityId, "primaryFacilityId");
         this.alternateFacilityId = Objects.requireNonNull(alternateFacilityId, "alternateFacilityId");
         this.primaryRouteId = Objects.requireNonNull(primaryRouteId, "primaryRouteId");
         this.alternateRouteId = Objects.requireNonNull(alternateRouteId, "alternateRouteId");
-        if (crisisDelaySteps < 0) throw new IllegalArgumentException("Crisis delay must not be negative");
-        this.crisisDelaySteps = crisisDelaySteps;
+        if (incidentDelaySteps < 0 || discoveredAtStep < -1) throw new IllegalArgumentException("Invalid region timing");
+        this.incidentDelaySteps = incidentDelaySteps;
         this.primaryAudience = primaryAudience;
-        this.status = Objects.requireNonNull(status, "status");
+        this.recognition = Objects.requireNonNull(recognition, "recognition");
         this.discoveredAtStep = discoveredAtStep;
     }
 
     public String id() { return id; }
-    public WorldObjectId settlementId() { return settlementId; }
+    public WorldObjectId communityId() { return communityId; }
+    public WorldObjectId placeId() { return placeId; }
     public WorldObjectId primaryFacilityId() { return primaryFacilityId; }
     public WorldObjectId alternateFacilityId() { return alternateFacilityId; }
     public WorldObjectId primaryRouteId() { return primaryRouteId; }
     public WorldObjectId alternateRouteId() { return alternateRouteId; }
-    public long crisisDelaySteps() { return crisisDelaySteps; }
+    public long incidentDelaySteps() { return incidentDelaySteps; }
     public StoryAudienceId primaryAudience() { return primaryAudience; }
-    public LivingRegionStatus status() { return status; }
+    public RecognitionState recognition() { return recognition; }
     public long discoveredAtStep() { return discoveredAtStep; }
-    public boolean discover(StoryAudienceId audience, long simulationStep) {
-        if (status != LivingRegionStatus.PLANNED) return false;
+
+    public boolean recognize(StoryAudienceId audience, long simulationStep) {
+        if (recognition != RecognitionState.DISCOVERED) return false;
         primaryAudience = Objects.requireNonNull(audience, "audience");
-        status = LivingRegionStatus.DISCOVERED;
+        recognition = RecognitionState.RECOGNIZED;
         discoveredAtStep = simulationStep;
         return true;
     }
-    public boolean crisisDue(long simulationStep) {
-        return status == LivingRegionStatus.DISCOVERED && discoveredAtStep >= 0 && simulationStep >= discoveredAtStep + crisisDelaySteps;
-    }
-    public boolean activateCrisis() {
-        if (status != LivingRegionStatus.DISCOVERED) return false;
-        status = LivingRegionStatus.CRISIS_ACTIVE;
-        return true;
-    }
-    public boolean resolve() {
-        if (status != LivingRegionStatus.CRISIS_ACTIVE) return false;
-        status = LivingRegionStatus.RESOLVED;
-        return true;
+
+    public boolean incidentDue(long simulationStep) {
+        return recognition == RecognitionState.RECOGNIZED && discoveredAtStep >= 0
+                && simulationStep >= discoveredAtStep + incidentDelaySteps;
     }
 }

@@ -93,7 +93,7 @@ public final class MaterializationScheduler {
                                 && value.status() == ScenarioStatus.RESPOND
                                 && data.worldState().livingRegions().stream().anyMatch(region ->
                                 region.primaryFacilityId().equals(mine.id())
-                                        && region.settlementId().equals(value.target())))
+                                        && region.communityId().equals(value.target())))
                         .findFirst().orElse(null));
     }
 

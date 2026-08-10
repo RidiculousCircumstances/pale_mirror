@@ -574,6 +574,15 @@ tasks.register('crimsonIntegrationHarness', Exec) {
             crimsonIntegrationJar.get().asFile.absolutePath
 }
 
+// These process-level gates each install and boot a clean dedicated runtime.
+// Serial execution keeps fullSmoke within predictable disk and memory bounds;
+// failed harnesses still retain their own isolated runtime for diagnosis.
+tasks.named('crimsonIntegrationHarness') { mustRunAfter tasks.named('dedicatedRestartHarness') }
+tasks.named('sporeIntegrationHarness') { mustRunAfter tasks.named('crimsonIntegrationHarness') }
+tasks.named('createIntegrationHarness') { mustRunAfter tasks.named('sporeIntegrationHarness') }
+tasks.named('ftbIntegrationHarness') { mustRunAfter tasks.named('createIntegrationHarness') }
+tasks.named('clientSmoke') { mustRunAfter tasks.named('ftbIntegrationHarness') }
+
 tasks.named('check') {
     dependsOn rootProject.tasks.named('verifyJava21'), tasks.named('verifyPackagedJar')
 }

@@ -11,9 +11,16 @@ import java.util.Optional;
 public final class WorldState {
     private final Map<WorldObjectId, FacilityState> facilities = new LinkedHashMap<>();
     private final Map<String, ScenarioInstance> scenarios = new LinkedHashMap<>();
-    private final Map<WorldObjectId, SettlementState> settlements = new LinkedHashMap<>();
-    private final Map<WorldObjectId, RouteState> routes = new LinkedHashMap<>();
-    private final Map<WorldObjectId, MigrantGroupState> migrantGroups = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementCommunity> communities = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementPlace> places = new LinkedHashMap<>();
+    private final Map<WorldObjectId, CommunityPlaceBinding> communityPlaceBindings = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementEconomy> economies = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementSecurity> securities = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementPolicy> settlementPolicies = new LinkedHashMap<>();
+    private final Map<WorldObjectId, WorldSite> sites = new LinkedHashMap<>();
+    private final Map<String, SiteAffiliation> siteAffiliations = new LinkedHashMap<>();
+    private final Map<String, SiteCapability> siteCapabilities = new LinkedHashMap<>();
+    private final Map<WorldObjectId, RouteContract> routeContracts = new LinkedHashMap<>();
     private final Map<String, LivingRegionState> livingRegions = new LinkedHashMap<>();
     private final List<DomainEvent> history = new ArrayList<>();
     private final Map<StoryAudienceId, Long> narratorCooldowns = new LinkedHashMap<>();
@@ -29,25 +36,77 @@ public final class WorldState {
     public void setEventSequence(long value) { eventSequence = value; }
     public Collection<FacilityState> facilities() { return facilities.values(); }
     public Collection<ScenarioInstance> scenarios() { return scenarios.values(); }
-    public Collection<SettlementState> settlements() { return settlements.values(); }
-    public Collection<RouteState> routes() { return routes.values(); }
-    public Collection<MigrantGroupState> migrantGroups() { return migrantGroups.values(); }
+    public Collection<SettlementCommunity> communities() { return communities.values(); }
+    public Collection<SettlementPlace> places() { return places.values(); }
+    public Collection<CommunityPlaceBinding> communityPlaceBindings() { return communityPlaceBindings.values(); }
+    public Collection<SettlementEconomy> economies() { return economies.values(); }
+    public Collection<SettlementSecurity> securities() { return securities.values(); }
+    public Collection<SettlementPolicy> settlementPolicies() { return settlementPolicies.values(); }
+    public Collection<WorldSite> sites() { return sites.values(); }
+    public Collection<SiteAffiliation> siteAffiliations() { return siteAffiliations.values(); }
+    public Collection<SiteCapability> siteCapabilities() { return siteCapabilities.values(); }
+    public Collection<RouteContract> routeContracts() { return routeContracts.values(); }
     public Collection<LivingRegionState> livingRegions() { return livingRegions.values(); }
     public List<DomainEvent> history() { return history; }
     public Map<StoryAudienceId, Long> narratorCooldowns() { return narratorCooldowns; }
     public Optional<FacilityState> facility(WorldObjectId id) { return Optional.ofNullable(facilities.get(id)); }
     public Optional<ScenarioInstance> scenario(String id) { return Optional.ofNullable(scenarios.get(id)); }
-    public Optional<SettlementState> settlement(WorldObjectId id) { return Optional.ofNullable(settlements.get(id)); }
-    public Optional<RouteState> route(WorldObjectId id) { return Optional.ofNullable(routes.get(id)); }
-    public Optional<MigrantGroupState> migrantGroup(WorldObjectId id) { return Optional.ofNullable(migrantGroups.get(id)); }
+    public Optional<SettlementCommunity> community(WorldObjectId id) { return Optional.ofNullable(communities.get(id)); }
+    public Optional<SettlementPlace> place(WorldObjectId id) { return Optional.ofNullable(places.get(id)); }
+    public Optional<CommunityPlaceBinding> communityPlaceBinding(WorldObjectId communityId) { return Optional.ofNullable(communityPlaceBindings.get(communityId)); }
+    public Optional<CommunityPlaceBinding> bindingForPlace(WorldObjectId placeId) {
+        return communityPlaceBindings.values().stream().filter(binding -> binding.placeId().equals(placeId)).findFirst();
+    }
+    public Optional<SettlementEconomy> economy(WorldObjectId communityId) { return Optional.ofNullable(economies.get(communityId)); }
+    public Optional<SettlementSecurity> security(WorldObjectId communityId) { return Optional.ofNullable(securities.get(communityId)); }
+    public Optional<SettlementPolicy> settlementPolicy(WorldObjectId communityId) { return Optional.ofNullable(settlementPolicies.get(communityId)); }
+    public Optional<WorldSite> site(WorldObjectId id) { return Optional.ofNullable(sites.get(id)); }
+    public Optional<SiteAffiliation> siteAffiliation(WorldObjectId siteId, SiteAffiliationRole role) {
+        List<SiteAffiliation> matches = siteAffiliations(siteId, role);
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+    }
+    public List<SiteAffiliation> siteAffiliations(WorldObjectId siteId, SiteAffiliationRole role) {
+        return siteAffiliations.values().stream()
+                .filter(value -> value.siteId().equals(siteId) && value.role() == role)
+                .sorted(java.util.Comparator.comparing(SiteAffiliation::objectId))
+                .toList();
+    }
+    public Optional<SiteCapability> siteCapability(WorldObjectId siteId, SiteCapabilityType type, ResourceKind resource) {
+        return Optional.ofNullable(siteCapabilities.get(capabilityKey(siteId, type, resource)));
+    }
+    public Optional<RouteContract> routeContract(WorldObjectId id) { return Optional.ofNullable(routeContracts.get(id)); }
     public Optional<LivingRegionState> livingRegion(String id) { return Optional.ofNullable(livingRegions.get(id)); }
     public void putFacility(FacilityState facility) { facilities.put(facility.id(), facility); }
     public void putScenario(ScenarioInstance scenario) { scenarios.put(scenario.id(), scenario); }
-    public void putSettlement(SettlementState settlement) { settlements.put(settlement.id(), settlement); }
-    public void putRoute(RouteState route) { routes.put(route.id(), route); }
-    public void putMigrantGroup(MigrantGroupState migrantGroup) { migrantGroups.put(migrantGroup.id(), migrantGroup); }
+    public void putCommunity(SettlementCommunity community) { communities.put(community.id(), community); }
+    public void putPlace(SettlementPlace place) { places.put(place.id(), place); }
+    public void putCommunityPlaceBinding(CommunityPlaceBinding binding) { communityPlaceBindings.put(binding.communityId(), binding); }
+    public void putEconomy(SettlementEconomy economy) { economies.put(economy.communityId(), economy); }
+    public void putSecurity(SettlementSecurity security) { securities.put(security.communityId(), security); }
+    public void putSettlementPolicy(SettlementPolicy policy) { settlementPolicies.put(policy.communityId(), policy); }
+    public void putSite(WorldSite site) { sites.put(site.id(), site); }
+    public void putSiteAffiliation(SiteAffiliation affiliation) {
+        siteAffiliations.put(affiliationKey(affiliation.siteId(), affiliation.objectId(), affiliation.role()), affiliation);
+    }
+    public void putSiteCapability(SiteCapability capability) {
+        siteCapabilities.put(capabilityKey(capability.siteId(), capability.type(), capability.resource()), capability);
+    }
+    public void putRouteContract(RouteContract contract) { routeContracts.put(contract.id(), contract); }
     public void putLivingRegion(LivingRegionState region) {
         if (livingRegions.putIfAbsent(region.id(), region) != null) throw new IllegalStateException("Duplicate living region " + region.id());
+    }
+    public void clearRegionalState() {
+        communities.clear();
+        places.clear();
+        communityPlaceBindings.clear();
+        economies.clear();
+        securities.clear();
+        settlementPolicies.clear();
+        sites.clear();
+        siteAffiliations.clear();
+        siteCapabilities.clear();
+        routeContracts.clear();
+        livingRegions.clear();
     }
     public void addEvent(DomainEvent event) { history.add(event); }
     public boolean hasScenarioForSource(String sourceEventId, StoryAudienceId audience) {
@@ -63,5 +122,13 @@ public final class WorldState {
     }
     public void setNarratorCooldown(StoryAudienceId audience, long availableAtStep) {
         narratorCooldowns.put(audience, availableAtStep);
+    }
+
+    private static String capabilityKey(WorldObjectId siteId, SiteCapabilityType type, ResourceKind resource) {
+        return siteId.value() + "|" + type + "|" + (resource == null ? "" : resource.name());
+    }
+
+    private static String affiliationKey(WorldObjectId siteId, WorldObjectId objectId, SiteAffiliationRole role) {
+        return siteId.value() + "|" + objectId.value() + "|" + role.name();
     }
 }

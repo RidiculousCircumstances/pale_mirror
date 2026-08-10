@@ -18,6 +18,7 @@ public final class ScenarioInstance {
     private ScenarioStatus status;
     private ScenarioStatus resumeStatus;
     private String blockedReason;
+    private String resolutionOutcome;
 
     public ScenarioInstance(String id, String sourceEventId, WorldObjectId target, StoryAudienceId audience,
                             String definitionId, String definitionVersion, ScenarioStatus status) {
@@ -37,6 +38,15 @@ public final class ScenarioInstance {
                             String definitionId, String definitionVersion, List<String> pinnedStages,
                             List<String> requiredCapabilities, String encounterProfileId, String encounterProfileVersion,
                             ScenarioArchetype archetype, ScenarioStatus status, ScenarioStatus resumeStatus, String blockedReason) {
+        this(id, sourceEventId, target, audience, definitionId, definitionVersion, pinnedStages, requiredCapabilities,
+                encounterProfileId, encounterProfileVersion, archetype, status, resumeStatus, blockedReason, "");
+    }
+
+    public ScenarioInstance(String id, String sourceEventId, WorldObjectId target, StoryAudienceId audience,
+                            String definitionId, String definitionVersion, List<String> pinnedStages,
+                            List<String> requiredCapabilities, String encounterProfileId, String encounterProfileVersion,
+                            ScenarioArchetype archetype, ScenarioStatus status, ScenarioStatus resumeStatus,
+                            String blockedReason, String resolutionOutcome) {
         this.id = Objects.requireNonNull(id, "id");
         this.sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId");
         this.target = Objects.requireNonNull(target, "target");
@@ -51,6 +61,7 @@ public final class ScenarioInstance {
         this.status = Objects.requireNonNull(status, "status");
         this.resumeStatus = resumeStatus;
         this.blockedReason = blockedReason == null ? "" : blockedReason;
+        this.resolutionOutcome = resolutionOutcome == null ? "" : resolutionOutcome;
     }
 
     public String id() { return id; }
@@ -67,7 +78,14 @@ public final class ScenarioInstance {
     public ScenarioArchetype archetype() { return archetype; }
     public ScenarioStatus resumeStatus() { return resumeStatus; }
     public String blockedReason() { return blockedReason; }
+    public String resolutionOutcome() { return resolutionOutcome; }
     public void setStatus(ScenarioStatus status) { this.status = Objects.requireNonNull(status, "status"); }
+    public boolean resolve(String outcome) {
+        if (status.isTerminal()) return false;
+        status = ScenarioStatus.RESOLVED;
+        resolutionOutcome = Objects.requireNonNull(outcome, "outcome");
+        return true;
+    }
     public boolean block(String reason) {
         if (status == ScenarioStatus.BLOCKED || status.isTerminal()) return false;
         resumeStatus = status;

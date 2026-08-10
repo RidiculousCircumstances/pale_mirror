@@ -62,4 +62,5 @@ stop_server
 if ! start_server "$log_two"; then fail; fi
 stop_server
 
-printf 'Spore integration packaged-JAR restart harness passed; retained runtime: %s\n' "$runtime_dir"
+printf 'Spore integration packaged-JAR restart harness passed.\n'
+rm -rf -- "$runtime_dir"

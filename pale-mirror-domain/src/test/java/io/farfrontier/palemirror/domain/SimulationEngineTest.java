@@ -85,105 +85,126 @@ class SimulationEngineTest {
     @Test
     void infectedMineDisruptsSettlementSupplyAndRecoveryRestoresIt() {
         WorldState state = new WorldState();
-        WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
-        WorldObjectId settlement = new WorldObjectId("pale_mirror:test_settlement");
-        WorldObjectId route = new WorldObjectId("pale_mirror:test_route");
-        state.putFacility(new FacilityState(mine, TEST_SOURCE, 80, 10, 10));
-        state.putSettlement(ironhill(settlement, 80, 40, 0));
-        state.putRoute(new RouteState(route, mine, settlement, ResourceKind.IRON, 80, 80, RouteStatus.OPERATIONAL));
         DomainServices services = new DomainServices();
+        LivingRegionState region = registerLivingRegion(state, services, 0);
+        WorldObjectId mine = region.primaryFacilityId();
 
+        services.commands().execute(state, new DomainCommand.TriggerFacilityInfection(mine, "test:infection"));
         services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
-        SettlementState disrupted = state.settlements().stream().findFirst().orElseThrow();
-        assertTrue(disrupted.supplyDisrupted());
-        assertEquals(0, disrupted.stock(ResourceKind.IRON));
-        assertEquals(32, disrupted.currentDefense());
+        ResourceAccount disrupted = state.economy(region.communityId()).orElseThrow().require(ResourceKind.IRON);
+        assertEquals(ResourceAvailability.UNAVAILABLE, disrupted.availability());
+        assertEquals(0, disrupted.stock());
+        assertEquals(47, state.security(region.communityId()).orElseThrow().defenceReadiness());
         services.commands().execute(state, new DomainCommand.ThreatControllerDestroyed(mine, "test:controller"));
         services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
 
-        assertTrue(!disrupted.supplyDisrupted());
-        assertEquals(68, disrupted.stock(ResourceKind.IRON));
-        assertEquals(40, disrupted.currentDefense());
+        assertEquals(ResourceAvailability.AVAILABLE, disrupted.availability());
+        assertEquals(9, disrupted.stock());
+        assertEquals(47, state.security(region.communityId()).orElseThrow().defenceReadiness(),
+                "defence loss is a durable consequence");
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.SETTLEMENT_SUPPLY_DISRUPTED));
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.SETTLEMENT_SUPPLY_RESTORED));
     }
 
     @Test
-    void observedRouteCapacityIsTheOnlyWayAPlannedRouteTransfersSupply() {
+    void validationIsTheOnlyWayAPlannedCreateContractTransfersSupplyAndItAges() {
         WorldState state = new WorldState();
-        WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
-        WorldObjectId settlement = new WorldObjectId("pale_mirror:test_settlement");
-        WorldObjectId route = new WorldObjectId("pale_mirror:test_route");
-        state.putFacility(new FacilityState(mine, TEST_SOURCE, 18, 99, 0));
-        state.putSettlement(ironhill(settlement, 80, 55, 24));
-        state.putRoute(new RouteState(route, mine, settlement, ResourceKind.IRON, 18, RouteStatus.PLANNED));
         DomainServices services = new DomainServices();
+        LivingRegionState region = registerLivingRegion(state, services, 24);
+        state.facility(region.primaryFacilityId()).orElseThrow().infect(0);
 
         services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
-        assertEquals(12, state.settlement(settlement).orElseThrow().stock(ResourceKind.IRON));
-        assertEquals(RouteStatus.PLANNED, state.route(route).orElseThrow().status());
+        assertEquals(12, state.economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock());
+        assertEquals(RouteContractStatus.PLANNED, state.routeContract(region.alternateRouteId()).orElseThrow().status());
 
-        services.commands().execute(state, new DomainCommand.ObserveRouteCapacity(route, 18, "test:create-train"));
+        services.commands().execute(state, new DomainCommand.ValidateRouteContract(region.alternateRouteId(), 18,
+                state.simulationStep(), "train:one:1", "test:create-train"));
         services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
-        assertEquals(18, state.settlement(settlement).orElseThrow().stock(ResourceKind.IRON));
-        assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.ROUTE_OPERATIONAL));
+        assertEquals(21, state.economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock());
+        RouteContract contract = state.routeContract(region.alternateRouteId()).orElseThrow();
+        assertEquals(18, contract.transferableCapacity(state.simulationStep()));
+        state.setSimulationStep(10);
+        assertEquals(9, contract.transferableCapacity(state.simulationStep()));
+        state.setSimulationStep(26);
+        assertEquals(0, contract.transferableCapacity(state.simulationStep()));
     }
 
     @Test
-    void evacuationCreatesOnePersistentMigrantGroupAndDeclinesSettlement() {
+    void sharedWorldSiteKeepsAllAffiliationsAndRejectsAmbiguousFlow() {
         WorldState state = new WorldState();
-        WorldObjectId settlement = new WorldObjectId("pale_mirror:ironhill");
-        WorldObjectId migrants = new WorldObjectId("pale_mirror:ironhill_refugees");
-        state.putSettlement(ironhill(settlement, 80, 55, 48));
         DomainServices services = new DomainServices();
+        LivingRegionState region = registerLivingRegion(state, services, 24);
+        RouteContract primary = state.routeContract(region.primaryRouteId()).orElseThrow();
+        WorldObjectId secondCommunity = new WorldObjectId("pale_mirror:second_community");
 
-        assertEquals(2, services.commands().execute(state,
-                new DomainCommand.EvacuateSettlement(settlement, migrants, 56, "test:evacuate")).size());
-        assertEquals(24, state.settlement(settlement).orElseThrow().population());
-        assertEquals(SettlementStatus.DECLINING, state.settlement(settlement).orElseThrow().status());
-        assertEquals(56, state.migrantGroup(migrants).orElseThrow().population());
-        assertTrue(services.commands().execute(state,
-                new DomainCommand.EvacuateSettlement(settlement, migrants, 10, "test:duplicate")).isEmpty());
+        state.putSiteAffiliation(new SiteAffiliation(primary.destinationEndpoint(), secondCommunity,
+                SiteAffiliationRole.RECIPIENT));
+        assertEquals(2, state.siteAffiliations(primary.destinationEndpoint(), SiteAffiliationRole.RECIPIENT).size());
+
+        services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
+
+        assertEquals(12, state.economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock(),
+                "a shared endpoint needs an explicit future beneficiary contract instead of duplicating supply");
     }
 
     @Test
     void settlementCrisisCanResolveThroughAnObservedAlternateRoute() {
         WorldState state = new WorldState();
-        WorldObjectId primaryMine = new WorldObjectId("pale_mirror:mine17");
-        WorldObjectId alternateMine = new WorldObjectId("pale_mirror:red_valley");
-        WorldObjectId settlement = new WorldObjectId("pale_mirror:ironhill");
-        WorldObjectId primaryRoute = new WorldObjectId("pale_mirror:mine17_route");
-        WorldObjectId alternateRoute = new WorldObjectId("pale_mirror:red_valley_route");
-        LivingRegionState region = new LivingRegionState("pale_mirror:ironhill_v1", settlement, primaryMine,
-                alternateMine, primaryRoute, alternateRoute, 0, StoryAudienceId.globalTestAudience(),
-                LivingRegionStatus.DISCOVERED, 0);
         DomainServices services = new DomainServices();
-        services.commands().execute(state, new DomainCommand.RegisterLivingRegion(region,
-                java.util.List.of(new FacilityState(primaryMine, TEST_SOURCE, 18, 99, 0),
-                        new FacilityState(alternateMine, TEST_SOURCE, 18, 99, 0)),
-                ironhill(settlement, 80, 55, 0),
-                java.util.List.of(new RouteState(primaryRoute, primaryMine, settlement, ResourceKind.IRON, 18, 18,
-                                RouteStatus.OPERATIONAL),
-                        new RouteState(alternateRoute, alternateMine, settlement, ResourceKind.IRON, 18,
-                                RouteStatus.PLANNED))));
+        LivingRegionState region = registerLivingRegion(state, services, 0);
 
-        services.commands().execute(state, new DomainCommand.TriggerFacilityInfection(primaryMine, "test:crisis"));
-        DomainEvent shortage = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).stream()
-                .filter(event -> event.type() == DomainEventType.SETTLEMENT_SUPPLY_DISRUPTED).findFirst().orElseThrow();
+        services.commands().execute(state, new DomainCommand.TriggerFacilityInfection(region.primaryFacilityId(), "test:crisis"));
+        DomainEvent crisis = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).stream()
+                .filter(event -> event.type() == DomainEventType.SETTLEMENT_CRISIS_DETECTED).findFirst().orElseThrow();
         ScenarioDefinitionRef definition = new ScenarioDefinitionRef("pale_mirror:ironhill_supply_crisis", "1",
                 java.util.List.of("OFFERED", "ASSESS", "RESPOND", "RESOLVED"), java.util.List.of(), 0,
                 "", "", ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS);
-        services.commands().execute(state, new DomainCommand.OfferScenario(shortage, StoryAudienceId.globalTestAudience(), definition));
+        services.commands().execute(state, new DomainCommand.OfferScenario(crisis, StoryAudienceId.globalTestAudience(), definition));
         ScenarioInstance scenario = state.scenarios().stream().findFirst().orElseThrow();
         services.commands().execute(state, new DomainCommand.AcceptScenario(scenario.id()));
 
-        services.commands().execute(state, new DomainCommand.ObserveRouteCapacity(alternateRoute, 18, "test:train"));
+        services.commands().execute(state, new DomainCommand.ValidateRouteContract(region.alternateRouteId(), 18,
+                state.simulationStep(), "train:alternate:1", "test:train"));
         services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
 
         assertEquals(ScenarioStatus.RESOLVED, scenario.status());
-        assertEquals(LivingRegionStatus.RESOLVED, region.status());
-        assertEquals(SettlementStatus.STABLE, state.settlement(settlement).orElseThrow().status());
-        assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.ROUTE_OPERATIONAL));
+        assertEquals(SettlementCrisisRuntime.ALTERNATE_OUTCOME, scenario.resolutionOutcome());
+        assertEquals(RecognitionState.RECOGNIZED, region.recognition());
+        assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.ALTERNATE_SUPPLY_VALIDATED));
+    }
+
+    @Test
+    void noScenarioDoesNotPauseSettlementPolicy() {
+        WorldState state = new WorldState();
+        DomainServices services = new DomainServices();
+        LivingRegionState region = registerLivingRegion(state, services, 0);
+        services.commands().execute(state, new DomainCommand.TriggerFacilityInfection(region.primaryFacilityId(), "test:crisis"));
+        DomainEvent crisis = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).stream()
+                .filter(event -> event.type() == DomainEventType.SETTLEMENT_CRISIS_DETECTED).findFirst().orElseThrow();
+        services.commands().execute(state, new DomainCommand.NoScenario(crisis, StoryAudienceId.globalTestAudience(), "pacing"));
+        int defence = state.security(region.communityId()).orElseThrow().defenceReadiness();
+
+        services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
+
+        assertTrue(state.security(region.communityId()).orElseThrow().defenceReadiness() < defence);
+        assertEquals(CrisisState.CRITICAL, state.community(region.communityId()).orElseThrow().crisisState());
+    }
+
+    @Test
+    void typedPlaceEvidenceUpdatesGuardCapabilityWithoutChangingMacroPopulation() {
+        WorldState state = new WorldState();
+        DomainServices services = new DomainServices();
+        LivingRegionState region = registerLivingRegion(state, services, 24);
+        int population = state.community(region.communityId()).orElseThrow().population();
+
+        assertEquals(2, services.commands().execute(state, new DomainCommand.ObserveSettlementPlace(region.placeId(),
+                ObservationFreshness.CURRENT, EvidenceReliability.CONFIRMED, 0,
+                "death:guard-0", "player:guard-death")).size());
+        assertTrue(services.commands().execute(state, new DomainCommand.ObserveSettlementPlace(region.placeId(),
+                ObservationFreshness.CURRENT, EvidenceReliability.CONFIRMED, 0,
+                "death:guard-0", "player:guard-death")).isEmpty());
+        assertEquals(GuardCapability.ABSENT, state.security(region.communityId()).orElseThrow().guardCapability());
+        assertEquals(population, state.community(region.communityId()).orElseThrow().population());
     }
 
     @Test
@@ -246,9 +267,40 @@ class SimulationEngineTest {
         assertEquals(FacilityStatus.RECOVERING, state.facility(mine).orElseThrow().status());
     }
 
-    private static SettlementState ironhill(WorldObjectId id, int population, int defense, int ironStock) {
-        return new SettlementState(id, population, defense,
-                java.util.Map.of(ResourceKind.IRON, new ResourceStock(96, ironStock)),
-                java.util.Map.of(ResourceKind.IRON, 12));
+    private static LivingRegionState registerLivingRegion(WorldState state, DomainServices services, int ironStock) {
+        WorldObjectId communityId = new WorldObjectId("pale_mirror:ironhill_community");
+        WorldObjectId placeId = new WorldObjectId("pale_mirror:ironhill_place");
+        WorldObjectId primaryMine = new WorldObjectId("pale_mirror:mine17");
+        WorldObjectId alternateMine = new WorldObjectId("pale_mirror:red_valley");
+        WorldObjectId primarySite = new WorldObjectId("pale_mirror:mine17_dispatch");
+        WorldObjectId alternateSite = new WorldObjectId("pale_mirror:red_valley_dispatch");
+        WorldObjectId receivingSite = new WorldObjectId("pale_mirror:ironhill_receiving");
+        WorldObjectId primaryRoute = new WorldObjectId("pale_mirror:mine17_route");
+        WorldObjectId alternateRoute = new WorldObjectId("pale_mirror:red_valley_route");
+        LivingRegionState region = new LivingRegionState("pale_mirror:ironhill_v2", communityId, placeId, primaryMine,
+                alternateMine, primaryRoute, alternateRoute, 0, StoryAudienceId.globalTestAudience(),
+                RecognitionState.RECOGNIZED, 0);
+        services.commands().execute(state, new DomainCommand.RegisterLivingRegion(region,
+                java.util.List.of(new FacilityState(primaryMine, TEST_SOURCE, 18, 99, 0),
+                        new FacilityState(alternateMine, TEST_SOURCE, 18, 99, 0)),
+                new SettlementCommunity(communityId, 80), new SettlementPlace(placeId),
+                new CommunityPlaceBinding(communityId, placeId),
+                new SettlementEconomy(communityId, java.util.Map.of(ResourceKind.IRON,
+                        new ResourceAccount(96, ironStock, 0, 12, 9))),
+                new SettlementSecurity(communityId, 55), new SettlementPolicy(communityId, 10, 5, 8, 2),
+                java.util.List.of(new WorldSite(primarySite, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
+                        new WorldSite(alternateSite, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
+                        new WorldSite(receivingSite, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL)),
+                java.util.List.of(new SiteAffiliation(primarySite, primaryMine, SiteAffiliationRole.SUPPLIER),
+                        new SiteAffiliation(alternateSite, alternateMine, SiteAffiliationRole.SUPPLIER),
+                        new SiteAffiliation(receivingSite, communityId, SiteAffiliationRole.RECIPIENT)),
+                java.util.List.of(new SiteCapability(primarySite, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, 18),
+                        new SiteCapability(alternateSite, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, 18),
+                        new SiteCapability(receivingSite, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, 18)),
+                java.util.List.of(new RouteContract(primaryRoute, primarySite, receivingSite, RouteProvider.PALE_MIRROR,
+                                ResourceKind.IRON, 18, 8, 24, RouteContractStatus.PLANNED),
+                        new RouteContract(alternateRoute, alternateSite, receivingSite, RouteProvider.CREATE,
+                                ResourceKind.IRON, 18, 8, 24, RouteContractStatus.PLANNED))));
+        return region;
     }
 }

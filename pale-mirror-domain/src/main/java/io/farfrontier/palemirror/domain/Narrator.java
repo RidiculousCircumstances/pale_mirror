@@ -47,6 +47,6 @@ public final class Narrator {
     }
 
     private static boolean supports(DomainEventType type) {
-        return type == DomainEventType.MINE_INFECTED || type == DomainEventType.SETTLEMENT_SUPPLY_DISRUPTED;
+        return type == DomainEventType.MINE_INFECTED || type == DomainEventType.SETTLEMENT_CRISIS_DETECTED;
     }
 }

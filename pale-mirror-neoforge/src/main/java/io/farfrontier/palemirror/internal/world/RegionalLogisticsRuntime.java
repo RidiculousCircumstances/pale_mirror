@@ -6,8 +6,6 @@ import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.LivingRegionState;
-import io.farfrontier.palemirror.domain.ScenarioArchetype;
-import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.LogisticsRouteContract;
 import net.minecraft.server.MinecraftServer;
@@ -21,7 +19,7 @@ public final class RegionalLogisticsRuntime {
         LivingRegionState region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElse(null);
         CampaignRegionRecord presentation = data.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID);
         if (region == null || presentation == null || presentation.primaryMineAnchor() == null
-                || presentation.alternateMineAnchor() == null || !hasAcceptedCrisis(data, region)) return List.of();
+                || presentation.alternateMineAnchor() == null) return List.of();
         LogisticsRouteContract contract = new LogisticsRouteContract(region.alternateRouteId(), presentation.alternateMineAnchor(),
                 presentation.settlementAnchor(), CampaignRegionBootstrapper.RED_VALLEY_DISPATCH,
                 CampaignRegionBootstrapper.IRONHILL_RECEIVING);
@@ -32,10 +30,13 @@ public final class RegionalLogisticsRuntime {
             changed |= observeEndpoints(data, presentation, observation.destinationTrainPresent(), observation.destinationCapacity(),
                     observation.destinationVehicleId(), false);
             int capacity = presentation.certifiedRouteCapacity(data.worldState().simulationStep(), proofWindowSteps);
-            List<DomainEvent> events = data.worldState().route(region.alternateRouteId())
-                    .filter(route -> route.observedCapacity() != capacity)
-                    .map(ignored -> commands.execute(data.worldState(), new DomainCommand.ObserveRouteCapacity(
-                            region.alternateRouteId(), capacity, "adapter:logistics:" + region.id())))
+            String observationId = capacity <= 0 ? "" : "create:" + presentation.originVehicleId() + ":"
+                    + presentation.originTrainSeenAtStep() + ":" + presentation.destinationTrainSeenAtStep();
+            List<DomainEvent> events = capacity <= 0 ? List.of() : data.worldState().routeContract(region.alternateRouteId())
+                    .filter(route -> !route.lastObservationId().equals(observationId))
+                    .map(ignored -> commands.execute(data.worldState(), new DomainCommand.ValidateRouteContract(
+                            region.alternateRouteId(), capacity, data.worldState().simulationStep(), observationId,
+                            "adapter:logistics:" + region.id())))
                     .orElseGet(List::of);
             if (changed || !events.isEmpty()) data.setDirty();
             return events;
@@ -48,19 +49,18 @@ public final class RegionalLogisticsRuntime {
         if (record == null) return "No observed settlement is bound to the First Living Region.";
         if (record.alternateMineAnchor() == null) return "Red Valley mine is not materialized; approach "
                 + record.alternateMineColumn().toShortString() + " first.";
+        LivingRegionState region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElse(null);
+        var contract = region == null ? null : data.worldState().routeContract(region.alternateRouteId()).orElse(null);
+        String contractStatus = contract == null ? "missing" : contract.status() + "/"
+                + contract.health(data.worldState().simulationStep()) + "/" + contract.freshness(data.worldState().simulationStep())
+                + " capacity=" + contract.transferableCapacity(data.worldState().simulationStep())
+                + " validatedAt=" + contract.lastSuccessfulValidationStep();
         return "Create schedule: '" + CampaignRegionBootstrapper.RED_VALLEY_DISPATCH + "' at "
                 + record.alternateMineAnchor().toShortString() + " -> '" + CampaignRegionBootstrapper.IRONHILL_RECEIVING
                 + "' at " + record.settlementAnchor().toShortString() + "; vehicle origin=" + record.originVehicleId()
                 + " step=" + record.originTrainSeenAtStep() + ", destination=" + record.destinationVehicleId() + " step="
                 + record.destinationTrainSeenAtStep() + ", certified capacity="
-                + record.certifiedRouteCapacity(data.worldState().simulationStep(), 8);
-    }
-
-    private static boolean hasAcceptedCrisis(PaleMirrorSavedData data, LivingRegionState region) {
-        return region.status() == io.farfrontier.palemirror.domain.LivingRegionStatus.CRISIS_ACTIVE
-                && data.worldState().scenarios().stream().anyMatch(scenario ->
-                scenario.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
-                        && scenario.target().equals(region.settlementId()) && scenario.status() == ScenarioStatus.RESPOND);
+                + record.certifiedRouteCapacity(data.worldState().simulationStep(), 8) + ", contract=" + contractStatus;
     }
 
     private static boolean observeEndpoints(PaleMirrorSavedData data, CampaignRegionRecord presentation, boolean present,

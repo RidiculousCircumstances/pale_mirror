@@ -32,11 +32,9 @@ Mine -> Route -> Settlement -> Defence -> Migration -> Infrastructure
 ```
 
 This document began as product direction. The status section below records the
-implemented 0.2a/0.2b vertical-slice work; the Definition of 0.2 remains the
-release gate. The canonical settlement design is defined in
-[`settlement-actor-model.md`](settlement-actor-model.md). Where the current v19
-types differ from that model, they are tested prototype state rather than a
-promise of final aggregate boundaries.
+implemented 0.2a/0.2b baseline and the corrective 0.2c actor synchronization;
+the Definition of 0.2 remains the release gate. The canonical settlement design
+is defined in [`settlement-actor-model.md`](settlement-actor-model.md).
 
 ## Implemented vertical-slice baseline
 
@@ -48,24 +46,23 @@ Ironhill (observed population; datapack baseline 80, iron demand 12, defence 55)
   <- Red Valley replacement route (initially PLANNED)
 ```
 
-- The pure domain currently owns prototype `SettlementState`, bounded
-  `ResourceStock`, `RouteState`, `ResourceFlow`, `MigrantGroupState`, and
-  `LivingRegionState` aggregates. Resource flow is sorted and deterministic.
-  The canonical target separates community, place, population groups,
-  economy, security, world sites, and route contracts.
+- Schema v20 replaces the prototype aggregate with separate
+  `SettlementCommunity`, `SettlementPlace`, economy, security, pinned policy,
+  independent `WorldSite`, and freshness-bounded `RouteContract` records.
+  Resource flow and settlement decisions are sorted and deterministic.
 - A discovered Ironhill schedules one global Mine17 infection after its pinned
   intervention delay. Its stock then depletes, defence falls, and one
   audience-scoped `settlement_supply_crisis` offer is created from the actual
   shortage event.
-- The accepted crisis has three implemented canonical resolutions: controller
-  clearance and mine recovery; an observed alternate route; or an explicit
-  evacuation that creates a persistent abstract migrant group. A caravan is
-  deliberately not faked.
+- The accepted crisis has two release-critical resolutions: controller
+  clearance and mine recovery, or a validated alternate Create route.
+  Prototype evacuation was removed rather than freezing the wrong aggregate.
 - A bounded vanilla/Integrated Villages observer registers a settlement only
   from loaded facts: at least two villagers and one stable bell/bed landmark.
   It writes no village blocks, entities, jobs, or development state. A normal
-  player can use that bell/bed as a journal and accept the offer or evacuate
-  without operator permission. `/pale_mirror explain settlement <id>`,
+  player can use that bell/bed as a journal and accept the offer without
+  operator permission, then pursue combat or alternate logistics.
+  `/pale_mirror explain settlement <id>`,
   `/pale_mirror timeline <id>`, and `/pale_mirror logistics status` expose
   causal and physical evidence to operators.
 - The campaign job now owns only the two controlled mine templates. It saves a
@@ -78,17 +75,18 @@ Ironhill (observed population; datapack baseline 80, iron demand 12, defence 55)
   already loaded. The same opaque native train UUID must arrive at both
   endpoints within a bounded simulation window to certify LOW/MEDIUM/HIGH
   capacity; two arbitrary trains, missing evidence, or unloaded endpoints
-  never invent capacity or force-load chunks. This proof must become validation
-  evidence for a freshness-bounded `RouteContract`; a momentary train pass is
-  not the final definition of an indefinitely operational route.
+  never invent capacity or force-load chunks. The proof validates a persisted
+  contract at full capacity for 8 steps, half capacity through step 24, then
+  expires to zero unless another control run refreshes it.
 - FTB Quests 2101.1.30 is an optional read-only presentation adapter. It
   installs one PM-owned static, no-reward chapter through FTB's public config
   and reload command, refuses to overwrite an unknown chapter collision, and
   opens it with FTB's public `open_book` command. PM never reads or writes FTB
   team progress.
 
-The core GameTest suite validates the canonical regional plan, observed village
-provenance, same-vehicle route-proof persistence, and v19 restart snapshot.
+The core GameTest suite validates the canonical regional plan, typed village
+evidence and membership, same-vehicle route proof, and schema-v20 restart while
+explicitly rejecting schema v19.
 Separate checksum-pinned Create and FTB profiles boot their real mod stacks;
 the FTB profile loads the PM chapter. Packaged dedicated restart/crash harnesses
 cover core, Crimson, Spore, Create, and FTB. Graphical render bootstrap smoke
@@ -417,14 +415,17 @@ player to understand a settlement crisis. The player needs to see what changed,
 why it changed, what evidence PM used, what choices remain, how long they have,
 and what refusal will cost.
 
-Prioritize FTB Quests as a read-only presentation layer. It must never own
-canonical state, but it can present:
+FTB Quests is a read-only presentation layer. It never owns canonical state;
+the current 0.2c projection presents:
 
 ```text
 Source: Mine17 stopped supplying iron
 Consequence: Ironhill is losing defensive readiness
-Responses: clear the mine; create alternative supply; prepare evacuation
+Responses: clear the mine; create alternative supply
 ```
+
+Evacuation is a future projection only after canonical population groups and
+host-place bindings exist; it is not offered by schema v20.
 
 Add operator-facing explainability as a first-class tool:
 
@@ -548,7 +549,7 @@ operator commands:
 8. the same state and causal history survive restart without divergence.
 
 The release gate proves a settlement actor, not the entire future settlement
-model. Prototype evacuation remains experimental; canonical evacuation,
+model. Evacuation is absent from schema v20; canonical evacuation,
 population groups, physical ruins, positive expansion, Millénaire ownership,
 and culture/reputation are follow-up vertical slices.
 
@@ -566,26 +567,21 @@ FTB Quests: read-only presentation
 CreateAdapter: one functional logistics contract
 ```
 
-### Known model debts before release
+### Remaining model debts before release
 
-The current v19 model is still state-centric:
+The 0.2c schema-v20 synchronization closes the state-centric aggregate,
+autonomous-policy, typed-evidence, and RouteContract debts. Remaining bounded
+debts are explicit:
 
-- `SettlementState` mixes community, place, economy, security, and occupancy;
-- `SettlementStatus` mixes economic pressure with lifecycle meaning;
-- visible villagers lack explicit membership/cohort representation;
-- resident and iron-golem deaths are diagnostic counters rather than typed,
-  reliability-classified reconciliation evidence;
-- route observations directly change momentary capacity instead of validating
-  a freshness-bounded contract;
-- the settlement does not yet have an autonomous decision engine;
-- ordinary physical inventories have no delivery/withdrawal receipt boundary;
-- a physically destroyed village can remain a canonical live settlement.
+- ordinary physical inventories still need delivery/withdrawal receipts;
+- typed evidence deliberately does not yet infer `DAMAGED`, `EMPTY`, or
+  `RUINED`, so destroyed-place reconciliation is a later slice;
+- positive development, canonical population groups, Millénaire field
+  ownership, culture and reputation remain deferred.
 
-The corrective implementation must not introduce a universal confidence
-number or one replacement lifecycle enum. Observation freshness, structural
-integrity, operational state, occupancy, crisis, and population disposition
-remain separate. Missing chunks, an absent landmark, or an isolated death are
-never sufficient to infer ruin.
+Observation freshness, structural integrity, operational state, occupancy,
+crisis, and population disposition remain separate. Missing chunks, an absent
+landmark, or an isolated death are never sufficient to infer ruin.
 
 ## Practical order of work
 
@@ -596,7 +592,12 @@ never sufficient to infer ruin.
 3. Run graphical client smoke tests for Crimson and Spore.
 4. Verify animations, sounds, particles, AcidBall behavior, and cleanup.
 
-### 0.2b: build the first living-region slice
+### 0.2b: build the first living-region prototype
+
+The prototype proved the physical campaign, read-only village discovery,
+Create same-vehicle evidence and FTB presentation.
+
+### 0.2c: synchronize the settlement actor model
 
 1. Replace the prototype's overloaded settlement state with the minimal
    community/place/economy/security ownership needed by this slice.
@@ -615,9 +616,10 @@ never sufficient to infer ruin.
 8. Preserve restart safety and prove that a Narrator `NO_SCENARIO` does not
    pause settlement behavior.
 
-Then implement evacuation/population groups, physical ruin representation,
-positive development, Millénaire ownership reconciliation, and social identity
-as separate slices before broad natural discovery/worldgen.
+These items are implemented in schema v20 and covered by domain, GameTest and
+restart gates. Next implement evacuation/population groups, physical ruin
+representation, positive development, Millénaire ownership reconciliation,
+and social identity as separate slices before broad natural discovery/worldgen.
 
 ## Product conclusion
 

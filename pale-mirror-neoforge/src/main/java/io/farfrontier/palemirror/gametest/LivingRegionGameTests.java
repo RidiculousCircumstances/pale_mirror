@@ -32,17 +32,20 @@ public final class LivingRegionGameTests {
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
         reset(data);
         BlockPos villageAnchor = helper.absolutePos(new net.minecraft.core.BlockPos(0, 2, 0));
-        data.observeSettlement(observation(level, villageAnchor, 4, 1));
+        long observedAt = level.getGameTime();
+        data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt));
+        data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt + 200));
+        data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt + 400));
         CampaignRegionBootstrapper.tick(level.getServer(), data, new DomainServices().commands());
 
         var region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElseThrow();
-        var settlement = data.worldState().settlement(region.settlementId()).orElseThrow();
+        var settlement = data.worldState().community(region.communityId()).orElseThrow();
         helper.assertValueEqual(region.primaryFacilityId(), CampaignRegionBootstrapper.MINE17,
                 "Ironhill must have one canonical primary mine");
         helper.assertValueEqual(settlement.population(), 4, "canonical population starts from the observed settlement signal");
-        helper.assertValueEqual(settlement.stock(ResourceKind.IRON), 4,
+        helper.assertValueEqual(data.worldState().economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock(), 4,
                 "the strategic stock is scaled from the observed settlement rather than a fake template population");
-        helper.assertValueEqual(data.worldState().route(CampaignRegionBootstrapper.RED_VALLEY_ROUTE).orElseThrow().status().name(),
+        helper.assertValueEqual(data.worldState().routeContract(CampaignRegionBootstrapper.RED_VALLEY_ROUTE).orElseThrow().status().name(),
                 "PLANNED", "the fallback supply route must require a later physical observation");
         helper.assertTrue(data.campaignRegions().containsKey(CampaignRegionBootstrapper.IRONHILL_ID),
                 "physical coordinates are persisted separately from the canonical region aggregate");
@@ -54,6 +57,23 @@ public final class LivingRegionGameTests {
         presentation.observeRouteEndpoint(false, 9, 18, "vehicle-a");
         helper.assertValueEqual(presentation.certifiedRouteCapacity(9, 8), 18,
                 "the same observed vehicle at both endpoints certifies real traversal capacity");
+        var evidence = data.settlementObservations().get(region.placeId());
+        helper.assertValueEqual(evidence.reliability(), io.farfrontier.palemirror.domain.EvidenceReliability.STRONG,
+                "a complete 400-tick window must create STRONG positive evidence");
+        helper.assertValueEqual(evidence.registeredGuards(), 1, "initial guards must become registered representatives");
+        helper.assertValueEqual(evidence.freshness(observedAt + 900),
+                io.farfrontier.palemirror.domain.ObservationFreshness.STALE,
+                "freshness must age independently from reliability");
+        helper.assertValueEqual(evidence.freshness(observedAt + 2900),
+                io.farfrontier.palemirror.domain.ObservationFreshness.EXPIRED,
+                "old positive evidence must eventually expire without implying loss");
+        evidence.recordDeath("guard-0", io.farfrontier.palemirror.domain.SettlementCohort.GUARDS,
+                io.farfrontier.palemirror.domain.DamageAttribution.PLAYER, observedAt + 401);
+        helper.assertValueEqual(evidence.registeredGuards(), 0,
+                "confirmed death must remove only the registered guard capability representative");
+        helper.assertValueEqual(evidence.lastEvidenceType(),
+                io.farfrontier.palemirror.domain.SettlementEvidenceType.REGISTERED_GUARD_DEATH,
+                "registered guard death must be a typed confirmed fact");
 
         CompoundTag snapshot = data.save(new CompoundTag(), level.registryAccess());
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(snapshot, level.registryAccess());
@@ -64,6 +84,9 @@ public final class LivingRegionGameTests {
                 "restart snapshot must retain regional presentation work");
         helper.assertValueEqual(reloaded.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID).destinationVehicleId(),
                 "vehicle-a", "restart snapshot must retain the opaque Create vehicle proof");
+        helper.assertValueEqual(reloaded.settlementObservations().get(region.placeId()).lastDamageAttribution(),
+                io.farfrontier.palemirror.domain.DamageAttribution.PLAYER,
+                "restart snapshot must retain causal attribution for confirmed physical evidence");
         helper.succeed();
     }
 
@@ -96,10 +119,19 @@ public final class LivingRegionGameTests {
         });
     }
 
-    private static SettlementObservation observation(ServerLevel level, BlockPos anchor, int population, int guards) {
+    private static SettlementObservation observation(ServerLevel level, BlockPos anchor, int population, int guards,
+                                                     long observedAt) {
+        java.util.List<io.farfrontier.palemirror.internal.adapter.SettlementRepresentativeObservation> representatives
+                = new java.util.ArrayList<>();
+        for (int index = 0; index < population; index++) representatives.add(
+                new io.farfrontier.palemirror.internal.adapter.SettlementRepresentativeObservation(
+                        "resident-" + index, io.farfrontier.palemirror.domain.SettlementCohort.CIVILIANS));
+        for (int index = 0; index < guards; index++) representatives.add(
+                new io.farfrontier.palemirror.internal.adapter.SettlementRepresentativeObservation(
+                        "guard-" + index, io.farfrontier.palemirror.domain.SettlementCohort.GUARDS));
         return new SettlementObservation(new WorldObjectId("pale_mirror:test_observed_village"),
                 level.dimension().location().toString(), anchor, anchor.offset(-20, -4, -20), anchor.offset(20, 8, 20),
-                population, guards, level.getGameTime(), "minecraft:loaded_village_signals_v1");
+                population, guards, observedAt, true, representatives, "minecraft:loaded_village_signals_v2");
     }
 
     private static void spawnVillager(ServerLevel level, BlockPos position) {
@@ -121,10 +153,7 @@ public final class LivingRegionGameTests {
         data.threatCombat().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
-        data.worldState().settlements().clear();
-        data.worldState().routes().clear();
-        data.worldState().migrantGroups().clear();
-        data.worldState().livingRegions().clear();
+        data.worldState().clearRegionalState();
         data.worldState().narratorCooldowns().clear();
         data.worldState().history().clear();
         data.worldState().setSimulationStep(0);

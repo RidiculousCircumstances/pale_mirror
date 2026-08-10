@@ -68,4 +68,5 @@ if ! start_server "$log_two"; then fail; fi
 rg -q 'pale_mirror_presentation_version: 1' "$chapter" || fail
 stop_server
 
-printf 'FTB presentation packaged-JAR restart harness passed; retained runtime: %s\n' "$runtime_dir"
+printf 'FTB presentation packaged-JAR restart harness passed.\n'
+rm -rf -- "$runtime_dir"

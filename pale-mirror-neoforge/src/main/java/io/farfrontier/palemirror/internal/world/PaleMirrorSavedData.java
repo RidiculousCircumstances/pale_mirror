@@ -49,7 +49,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 19;
+    static final int CURRENT_SCHEMA = 20;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -172,7 +172,7 @@ public final class PaleMirrorSavedData extends SavedData {
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " is not compatible with schema "
-                + CURRENT_SCHEMA + ". This source-neutral architecture requires a new world; back up the old world before resetting its Pale Mirror data.");
+                + CURRENT_SCHEMA + ". The schema-v20 Settlement Actor boundary requires a new world; back up the old world before resetting its Pale Mirror data.");
     }
 
     private static boolean isMigratable(int version) {
@@ -255,6 +255,7 @@ public final class PaleMirrorSavedData extends SavedData {
             scenario.putString("status", value.status().name());
             if (value.resumeStatus() != null) scenario.putString("resumeStatus", value.resumeStatus().name());
             scenario.putString("blockedReason", value.blockedReason());
+            scenario.putString("resolutionOutcome", value.resolutionOutcome());
             scenarios.add(scenario);
         });
         tag.put("scenarios", scenarios);
@@ -365,7 +366,7 @@ public final class PaleMirrorSavedData extends SavedData {
                             ? value.getString("archetype") : ScenarioArchetype.INVESTIGATION_RECOVERY.name()),
                     ScenarioStatus.valueOf(value.getString("status")),
                     value.contains("resumeStatus", Tag.TAG_STRING) ? ScenarioStatus.valueOf(value.getString("resumeStatus")) : null,
-                    value.getString("blockedReason")));
+                    value.getString("blockedReason"), value.getString("resolutionOutcome")));
         }
         RegionalStateCodec.read(tag, state);
         for (Tag element : tag.getList("events", Tag.TAG_COMPOUND)) {

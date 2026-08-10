@@ -6,4 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 /** Immutable authored parameters for one PM-managed living region. */
 public record CampaignRegionDefinition(ResourceLocation id, int version, InfectionSourceId infectionSource,
                                        int population, int ironProduction, int ironDemand, int initialIronStock,
-                                       int ironStockCapacity, int defence, long crisisDelaySteps) { }
+                                       int ironStockCapacity, int rationedIronDemand, int defence, long crisisDelaySteps,
+                                       long rationReserveSteps, long requestReserveSteps,
+                                       int defenceLossPerUnavailableStep, int stableStepsToRecover,
+                                       long routeCurrentWindowSteps, long routeExpiryWindowSteps) { }

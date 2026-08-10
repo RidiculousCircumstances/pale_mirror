@@ -18,7 +18,7 @@ final class CampaignRegionPresentationCodec {
             CompoundTag value = new CompoundTag();
             value.putString("id", region.id());
             value.putString("dimension", region.dimensionId());
-            value.putString("settlement", region.settlementId().value());
+            value.putString("place", region.placeId().value());
             value.putLong("settlementAnchor", region.settlementAnchor().asLong());
             value.putLong("primaryMineColumn", region.primaryMineColumn().asLong());
             value.putLong("alternateMineColumn", region.alternateMineColumn().asLong());
@@ -43,7 +43,7 @@ final class CampaignRegionPresentationCodec {
         for (Tag element : tag.getList("campaignRegions", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
             CampaignRegionRecord region = new CampaignRegionRecord(value.getString("id"), value.getString("dimension"),
-                    new io.farfrontier.palemirror.domain.WorldObjectId(value.getString("settlement")),
+                    new io.farfrontier.palemirror.domain.WorldObjectId(value.getString("place")),
                     BlockPos.of(value.getLong("settlementAnchor")), BlockPos.of(value.getLong("primaryMineColumn")),
                     BlockPos.of(value.getLong("alternateMineColumn")),
                     value.contains("primaryMineAnchor", Tag.TAG_LONG) ? BlockPos.of(value.getLong("primaryMineAnchor")) : null,

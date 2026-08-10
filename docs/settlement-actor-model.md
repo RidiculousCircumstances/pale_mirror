@@ -4,9 +4,9 @@
 
 This document is the canonical product model for settlements. It corrects the
 earlier state-centric description in `product-vision-0.2-first-living-region.md`.
-The current v19 implementation is a useful vertical-slice prototype, but its
-single `SettlementState`, `SettlementStatus`, `RouteState`, and
-`MigrantGroupState` are not the final aggregate boundaries described here.
+Schema v20 implements the first bounded actor slice described here. It replaces
+the v19 `SettlementState`, `SettlementStatus`, `RouteState`, and
+`MigrantGroupState` prototype rather than migrating ambiguous identity.
 
 The product promise is that settlements live, make bounded decisions, grow,
 decline, migrate, and create causal history without waiting for a player or the
@@ -460,17 +460,17 @@ the full future model:
 
 Evacuation and `PopulationGroup`, physical ruins, positive expansion,
 Millénaire field reconciliation, and culture/reputation follow as separate
-vertical slices. Existing prototype evacuation state remains experimental and
-must not freeze the final aggregate boundary.
+vertical slices. Prototype evacuation was removed from schema v20 so it cannot
+freeze the final aggregate boundary.
 
-## Migration from the v19 prototype
+## Schema-v20 synchronization
 
-The current code must not be relabelled as this model. A future critical-code
-change will explicitly migrate or replace:
+The completed breaking slice replaces:
 
 - `SettlementState` with community/place/economy/security ownership;
 - `SettlementStatus` with orthogonal state families and derived UI status;
-- `MigrantGroupState` with explicit population groups and host bindings;
+- `MigrantGroupState` with no canonical evacuation state until population
+  groups and host bindings receive their own vertical slice;
 - `RouteState` with route contracts and validation freshness;
 - raw death counters with typed evidence and a reconciliation window;
 - direct observed route capacity with contract validation followed by
@@ -478,6 +478,6 @@ change will explicitly migrate or replace:
 - the scenario-triggered crisis path with a settlement policy and objective
   crisis event.
 
-Until that slice is implemented, the v19 model remains a tested prototype and
-the divergence is a documented architectural debt rather than an implied
-completed migration.
+Schema v19 is intentionally rejected with a new-world diagnostic. Physical
+ruins, population groups, positive development, Millénaire reconciliation and
+social identity remain follow-up slices rather than compatibility shims.
