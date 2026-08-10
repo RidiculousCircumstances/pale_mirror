@@ -34,6 +34,8 @@
 - Schema v22 separates population into cohort-bearing `PopulationGroup` records and adds objective grace/evacuation/displacement state. Community identity survives place loss.
 - Schema v23 adds positive settlement development: pinned surplus policy, resource reservations, physical storehouse intent, prosperity/housing and bounded growth/return-home.
 - Schema v24 pins a generic settlement field-authority profile. Millénaire 9.0.0-beta.2 is an optional exact-version read-only reconciliation profile; native villages are excluded from the campaign unless `allowMillenaireCampaign=true`.
+- Server-side runtime debug controls are operator-only. Read commands expose typed evidence and canonical facts; manual binding uses the normal living-region registration path; destructive reset is a two-phase maintenance action that must fail closed once any PM physical work, transfer, lease, actor or projectile exists.
+- Debug visualization is ephemeral presentation: per-operator bounded particles expose observed/managed bounds and planned mine columns; advanced client tooltips expose item registry ownership and PM policy without mutating ItemStacks.
 
 ## State
 
@@ -57,14 +59,15 @@
 - 0.2e adds an eight-step intervention window, audience-authorized or automatic evacuation, displaced/refugee-camp presentation, PM-owned ruin overlays, structural sampling and damage attribution. Unit/NeoForge tests, packaging and all 14 core GameTests pass.
 - 0.2f adds development pressure, exactly releasable IRON reservations, restart-safe storehouse execution, doubled capacity, prosperity/housing growth, population growth and safe return-home/camp cleanup. Unit/NeoForge tests, packaging and all 14 core GameTests pass.
 - 0.2g adds generic per-field authority, stable native population reconciliation, persisted opaque native references, an isolated reflection-only Millénaire observer and default-off campaign opt-in. Domain/NeoForge tests, 15 core and Millénaire GameTests, packaged two-start restart, six-profile graphical client smoke, build and packaging pass.
+- Runtime debug toolkit adds AUTO/MANUAL observation control, explicit nearest/ID binding through the canonical registration pipeline, candidate/region/verification reports, canonical infection trigger, resource-location command arguments, per-operator zone markers, advanced item diagnostics and a tokenized fail-closed reset for wholly unmaterialized state. Seventeen GameTests include manual binding plus reset rejection/recovery; all six graphical client profiles pass with the client tooltip hook.
 
 ### Now
 
-- 0.2d–0.2g implementation is complete at schema v24.
+- Runtime debug toolkit is implemented and verified; deploy it only when the user requests a live-server update.
 
 ### Next
 
-- Perform the authenticated multiplayer playthrough and the player-built scheduled Create train walkthrough as manual release evidence.
+- Use the operator toolkit for the authenticated multiplayer playthrough and player-built scheduled Create train walkthrough.
 - Review 0.2 release acceptance and decide whether culture/reputation begins in 0.3 rather than expanding schema v24.
 
 ## Open questions
@@ -75,7 +78,8 @@
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/runtime-debug-toolkit.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
 - `PaleMirrorSavedData`, `SourceGateState`, `internal/adapter/`, `internal/effect/`, `internal/quarantine/`
 - `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
+- `internal/debug/`, `CampaignRegionBootstrapper`, `SettlementObservationRecord`
 - `internal/integration/crimson/CrimsonActorRuntime`, `CrimsonSiegeRuntime`, `internal/integration/spore/SporeCombatRuntime`, `SporeProjectileRuntime`

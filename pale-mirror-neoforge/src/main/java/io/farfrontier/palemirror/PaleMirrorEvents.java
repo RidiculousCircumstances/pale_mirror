@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinitions;
+import io.farfrontier.palemirror.internal.debug.DebugCommandRegistrar;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -20,6 +21,7 @@ import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
@@ -285,7 +287,7 @@ public final class PaleMirrorEvents {
                 .then(Commands.argument("source", StringArgumentType.word()).executes(context ->
                         createTestMine(context, StringArgumentType.getString(context, "source"))))));
         root.then(Commands.literal("threatsite").then(Commands.literal("register").requires(source -> source.hasPermission(4))
-                .then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("id", ResourceLocationArgument.id())
                         .then(Commands.argument("source", StringArgumentType.word()).executes(context ->
                                 registerThreatSite(context, StringArgumentType.getString(context, "source")))))));
         root.then(Commands.literal("simulate").then(Commands.literal("step").requires(source -> source.hasPermission(4))
@@ -317,22 +319,22 @@ public final class PaleMirrorEvents {
                     return 1;
         })));
         root.then(Commands.literal("object").requires(source -> source.hasPermission(2)).then(Commands.literal("inspect")
-                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
-                    String id = StringArgumentType.getString(context, "id");
+                .then(Commands.argument("id", ResourceLocationArgument.id()).executes(context -> {
+                    String id = ResourceLocationArgument.getId(context, "id").toString();
                     context.getSource().sendSuccess(() -> Component.literal(
                             PaleMirrorRuntime.forServer(context.getSource().getServer()).inspectObject(id)), false);
                     return 1;
                 }))));
         root.then(Commands.literal("explain").requires(source -> source.hasPermission(2)).then(Commands.literal("settlement")
-                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
-                    String id = StringArgumentType.getString(context, "id");
+                .then(Commands.argument("id", ResourceLocationArgument.id()).executes(context -> {
+                    String id = ResourceLocationArgument.getId(context, "id").toString();
                     context.getSource().sendSuccess(() -> Component.literal(
                             PaleMirrorRuntime.forServer(context.getSource().getServer()).explainSettlement(id)), false);
                     return 1;
                 }))));
         root.then(Commands.literal("timeline").requires(source -> source.hasPermission(2))
-                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
-                    String id = StringArgumentType.getString(context, "id");
+                .then(Commands.argument("id", ResourceLocationArgument.id()).executes(context -> {
+                    String id = ResourceLocationArgument.getId(context, "id").toString();
                     context.getSource().sendSuccess(() -> Component.literal(
                             PaleMirrorRuntime.forServer(context.getSource().getServer()).timeline(id)), false);
                     return 1;
@@ -344,9 +346,9 @@ public final class PaleMirrorEvents {
                     return 1;
                 })));
         root.then(Commands.literal("settlement").then(Commands.literal("evacuate")
-                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
+                .then(Commands.argument("id", ResourceLocationArgument.id()).executes(context -> {
                     PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
-                    String id = StringArgumentType.getString(context, "id");
+                    String id = ResourceLocationArgument.getId(context, "id").toString();
                     boolean started = runtime.beginSettlementEvacuation(id, audienceFor(context.getSource(), runtime),
                             context.getSource().getEntity() == null ? "command:server"
                                     : "player:" + context.getSource().getEntity().getUUID());
@@ -354,6 +356,7 @@ public final class PaleMirrorEvents {
                     else context.getSource().sendFailure(Component.literal("Evacuation is unavailable or belongs to another audience."));
                     return started ? 1 : 0;
                 }))));
+        DebugCommandRegistrar.attach(root);
         event.getDispatcher().register(root);
     }
 
@@ -384,7 +387,7 @@ public final class PaleMirrorEvents {
             io.farfrontier.palemirror.domain.InfectionSourceId source = AdapterRegistry.sourceForAlias(sourceName)
                     .orElseThrow(() -> new IllegalArgumentException("unknown PM source " + sourceName)).source();
             ServerPlayer player = context.getSource().getPlayerOrException();
-            String id = net.minecraft.resources.ResourceLocation.parse(StringArgumentType.getString(context, "id")).toString();
+            String id = ResourceLocationArgument.getId(context, "id").toString();
             TestMineRecord site = PaleMirrorRuntime.forServer(context.getSource().getServer())
                     .registerThreatSite(player, new io.farfrontier.palemirror.domain.WorldObjectId(id), source);
             context.getSource().sendSuccess(() -> Component.literal("Registered PM " + sourceName + " threat site " + site.id().value()), true);

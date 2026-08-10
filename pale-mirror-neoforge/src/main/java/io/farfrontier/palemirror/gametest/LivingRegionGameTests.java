@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.gametest;
 
+import java.util.UUID;
+
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.ResourceKind;
@@ -9,6 +11,7 @@ import io.farfrontier.palemirror.internal.adapter.VanillaVillageSettlementAdapte
 import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
+import io.farfrontier.palemirror.internal.debug.RuntimeDebugService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
@@ -137,6 +140,76 @@ public final class LivingRegionGameTests {
                     "registry provenance must explicitly describe an observed, not PM-materialized settlement");
             helper.succeed();
         });
+    }
+
+    @GameTest(batch = "pm-runtime-debug", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void manualDiscoveryAndExplicitBindUseCanonicalPipeline(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 2, 0));
+        long observedAt = level.getGameTime();
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt));
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt + 200));
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt + 400));
+        DomainServices services = new DomainServices();
+
+        CampaignRegionBootstrapper.tick(level.getServer(), data, services.commands(), false);
+        helper.assertTrue(data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).isEmpty(),
+                "MANUAL discovery must keep collecting evidence without binding it");
+        CampaignRegionBootstrapper.bindCandidate(level.getServer(), data, services.commands(),
+                new WorldObjectId("pale_mirror:test_observed_village"));
+        helper.assertValueEqual(data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElseThrow().placeId(),
+                new WorldObjectId("pale_mirror:test_observed_village"),
+                "explicit selection must use the production registration pipeline");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-runtime-debug", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void resetIsTwoPhaseAndFailsClosedOncePhysicalWorkStarts(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 2, 0));
+        long observedAt = level.getGameTime();
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt));
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt + 200));
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt + 400));
+        DomainServices services = new DomainServices();
+        CampaignRegionBootstrapper.bindCandidate(level.getServer(), data, services.commands(),
+                new WorldObjectId("pale_mirror:test_observed_village"));
+        RuntimeDebugService debug = new RuntimeDebugService();
+        UUID operator = UUID.randomUUID();
+        var preview = debug.previewReset(operator, observedAt + 400, data);
+        helper.assertTrue(preview.success(), "a wholly abstract plan must produce a reset authorization");
+        helper.assertTrue(!debug.confirmReset(operator, "wrong-token", observedAt + 400, data).success(),
+                "confirmation must be tied to the exact operator token");
+        helper.assertTrue(data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).isPresent(),
+                "a rejected confirmation must preserve canonical state");
+
+        var presentation = data.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID);
+        presentation.resolvePendingMineAnchor(anchor.offset(64, 8, 0));
+        presentation.startOperation();
+        helper.assertTrue(!debug.previewReset(operator, observedAt + 401, data).success(),
+                "a RUNNING physical job must fail closed even before a block postcondition is known");
+
+        reset(data);
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt));
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt + 200));
+        data.observeSettlement(observation(level, anchor, 4, 1, observedAt + 400));
+        CampaignRegionBootstrapper.bindCandidate(level.getServer(), data, services.commands(),
+                new WorldObjectId("pale_mirror:test_observed_village"));
+        var recoveryPreview = debug.previewReset(operator, observedAt + 402, data);
+        String token = recoveryPreview.message().substring(recoveryPreview.message().lastIndexOf(' ') + 1);
+        helper.assertTrue(debug.confirmReset(operator, token, observedAt + 402, data).success(),
+                "a fresh preview must recover the maintenance workflow after unsafe work is removed externally");
+        helper.assertTrue(data.worldState().livingRegions().isEmpty() && data.settlementObservations().isEmpty(),
+                "successful reset must clear abstract canonical state and observations together");
+        helper.assertValueEqual(debug.discoveryMode(), RuntimeDebugService.DiscoveryMode.MANUAL,
+                "successful reset must prevent immediate automatic re-registration in the same runtime");
+        helper.succeed();
     }
 
     private static SettlementObservation observation(ServerLevel level, BlockPos anchor, int population, int guards,

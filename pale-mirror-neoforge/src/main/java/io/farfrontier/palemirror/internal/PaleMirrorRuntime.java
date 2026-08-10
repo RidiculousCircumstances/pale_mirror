@@ -6,7 +6,6 @@ import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
-import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
@@ -28,6 +27,7 @@ import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
+import io.farfrontier.palemirror.internal.debug.RuntimeDebugController;
 import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
 import io.farfrontier.palemirror.internal.world.RegionalLogisticsRuntime;
@@ -70,10 +70,12 @@ public final class PaleMirrorRuntime {
     private final Narrator narrator = domainServices.narrator();
     private final ObservationReconciler reconciler = new ObservationReconciler(commands);
     private final MaterializationScheduler materializationScheduler = new MaterializationScheduler();
+    private final RuntimeDebugController debug;
 
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
+        this.debug = new RuntimeDebugController(server, data, commands, this::handleDomainEvents);
         if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         PmProjectileRuntime.discardUnknownAfterRestart(server, data);
@@ -89,7 +91,7 @@ public final class PaleMirrorRuntime {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         if (server.overworld().getGameTime() % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0
                 && SettlementObservationRuntime.observeNearPlayers(server, data, commands)) data.setDirty();
-        CampaignRegionBootstrapper.tick(server, data, commands);
+        CampaignRegionBootstrapper.tick(server, data, commands, debug.automaticBindingEnabled());
         if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
         if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
         if (RefugeeCampRuntime.tick(server, data)) data.setDirty();
@@ -110,6 +112,7 @@ public final class PaleMirrorRuntime {
         if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
         if (data.threatCombat().expireAndCompact(gameTick)) data.setDirty();
         AdapterRegistry.tickRuntime(server, data);
+        debug.renderZoneMarkers();
     }
 
     /**
@@ -193,6 +196,8 @@ public final class PaleMirrorRuntime {
     }
 
     public String logisticsStatus() { return RegionalLogisticsRuntime.describe(data); }
+
+    public RuntimeDebugController debug() { return debug; }
 
     public void recordSettlementDeath(Entity entity, DamageSource source) {
         if (SettlementObservationRuntime.observeDeath(data, commands, entity, source)) data.setDirty();

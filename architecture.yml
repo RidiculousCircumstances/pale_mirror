@@ -71,6 +71,8 @@ invariants:
     statement: Stable surplus creates a persisted domain DevelopmentIntent and reserves canonical resources; capacity, housing, prosperity and growth advance only after provenance-safe PM-owned physical work is verified.
   - id: settlement-field-authority
     statement: Every campaign settlement pins a source-neutral field authority profile; native-reconciled settlements may contribute population and integrity facts while PM remains unable to move, ruin, grow or construct the native society.
+  - id: operator-debug-safety
+    statement: Operator debug reads projections or invokes normal validated state transitions; maintenance reset is two-phase, bounded to wholly unmaterialized PM state, rechecks every precondition at commit time, and fails closed without touching Minecraft blocks, entities, chunks or foreign state.
 
 critical_flows:
   - id: core-recovery
@@ -152,4 +154,8 @@ critical_flows:
   - id: settlement-development
     path: stable surplus -> development pressure -> reserved IRON -> persisted intent -> PM-owned storehouse postcondition -> capacity/prosperity/housing -> bounded population growth
     owner: domain development policy plus NeoForge storehouse executor
+    verification: critical-code
+  - id: operator-runtime-debug
+    path: typed projections -> operator diagnostics/particle markers -> explicit canonical command or two-phase safe maintenance
+    owner: NeoForge RuntimeDebugService; domain and physical adapters remain authoritative for changes
     verification: critical-code

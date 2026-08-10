@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.OperationalState;
+import io.farfrontier.palemirror.domain.ObservationFreshness;
 import io.farfrontier.palemirror.domain.RecognitionState;
 import io.farfrontier.palemirror.domain.ResourceAccount;
 import io.farfrontier.palemirror.domain.ResourceKind;
@@ -63,7 +64,12 @@ public final class CampaignRegionBootstrapper {
     private CampaignRegionBootstrapper() { }
 
     public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
-        ensureCanonicalPlan(server, data, commands);
+        tick(server, data, commands, true);
+    }
+
+    public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands,
+                            boolean automaticBinding) {
+        if (automaticBinding) ensureCanonicalPlan(server, data, commands);
         CampaignRegionRecord record = data.campaignRegions().get(IRONHILL_ID);
         if (record == null || record.status() == CampaignRegionPresentationStatus.MATERIALIZED
                 || record.status() == CampaignRegionPresentationStatus.BLOCKED || !playerIsNearPendingMine(server, record)) return;
@@ -93,12 +99,43 @@ public final class CampaignRegionBootstrapper {
 
     private static void ensureCanonicalPlan(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
         if (data.worldState().livingRegion(IRONHILL_ID).isPresent()) return;
+        long gameTime = server.overworld().getGameTime();
         SettlementObservationRecord observed = data.settlementObservations().values().stream()
                 .filter(value -> value.dimensionId().equals(server.overworld().dimension().location().toString()))
                 .filter(SettlementObservationRecord::strongEnoughForRecognition)
+                .filter(value -> value.freshness(gameTime) == ObservationFreshness.CURRENT)
                 .filter(AdapterRegistry::campaignEligible)
                 .sorted(java.util.Comparator.comparing(value -> value.id().value())).findFirst().orElse(null);
         if (observed == null) return;
+        registerCanonicalPlan(server, data, commands, observed);
+    }
+
+    /** Explicit operator selection still uses the exact production registration pipeline. */
+    public static void bindCandidate(MinecraftServer server, PaleMirrorSavedData data,
+                                     DomainCommandProcessor commands, WorldObjectId candidateId) {
+        if (data.worldState().livingRegion(IRONHILL_ID).isPresent()) {
+            throw new IllegalStateException("A living region is already bound; inspect it or use the safe reset workflow");
+        }
+        SettlementObservationRecord observed = data.settlementObservations().get(candidateId);
+        if (observed == null) throw new IllegalArgumentException("Unknown observed settlement " + candidateId.value());
+        if (!observed.dimensionId().equals(server.overworld().dimension().location().toString())) {
+            throw new IllegalArgumentException("The first living region currently requires an Overworld settlement");
+        }
+        if (!observed.strongEnoughForRecognition()) {
+            throw new IllegalStateException("Settlement evidence is not STRONG yet (loaded "
+                    + observed.loadedDurationTicks() + "/" + SettlementObservationRecord.MEMBERSHIP_WINDOW_TICKS + " ticks)");
+        }
+        if (observed.freshness(server.overworld().getGameTime()) != ObservationFreshness.CURRENT) {
+            throw new IllegalStateException("Settlement evidence is not CURRENT; revisit the village before binding");
+        }
+        if (!AdapterRegistry.campaignEligible(observed)) {
+            throw new IllegalStateException("Settlement adapter is not eligible for the living-region campaign");
+        }
+        registerCanonicalPlan(server, data, commands, observed);
+    }
+
+    private static void registerCanonicalPlan(MinecraftServer server, PaleMirrorSavedData data,
+                                              DomainCommandProcessor commands, SettlementObservationRecord observed) {
         CampaignRegionDefinition definition = CampaignRegionDefinitions.require(IRONHILL_DEFINITION);
         WorldObjectId placeId = observed.id();
         int population = Math.max(1, observed.observedPopulation());
