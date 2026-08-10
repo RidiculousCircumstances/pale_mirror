@@ -26,6 +26,10 @@
 - Create 6.0.10 is an optional, version-pinned, reflection-contained read-only logistics adapter. It certifies a route only after observing the same opaque native vehicle at two named loaded stations; it never drives Create or force-loads chunks.
 - Vanilla/Integrated Villages discovery is read-only: a bounded loaded-chunk observer needs two villagers plus a stable bell/bed landmark and never creates or overwrites settlement blocks.
 - FTB Quests is an optional static journal projection. PM never reads or writes FTB progression; it seeds one non-reward chapter only if its exact PM-owned config file is absent.
+- Canonical settlement direction is an actor model, not one state object: `SettlementCommunity`, `SettlementPlace`, `PopulationGroup`, economy, security, independent `WorldSite`, freshness-bounded `RouteContract`, and deterministic `SettlementPolicy` have separate ownership.
+- There is no universal settlement lifecycle or unexplained numeric confidence. Recognition, observation freshness, integrity, operation, occupancy, crisis and population disposition are orthogonal; observations use explicit evidence/reliability classes and causal attribution.
+- A crisis is an objective simulation fact. Settlement policy acts without a scenario; Narrator only selects presentation/pacing and may return `NO_SCENARIO`.
+- Ordinary containers never mirror canonical stock. Physical delivery/withdrawal requires persisted receipts/leases; adapters declare field ownership as PM/native/derived/observed/reconciled.
 
 ## State
 
@@ -46,21 +50,23 @@
 
 ### Now
 
-- Run `fullSmoke` with `PALE_MIRROR_XVFB` when no system Xvfb is installed, then perform the documented interactive Create scheduled-train and three-choice gameplay walkthroughs.
+- Treat v19 Settlement/Route/MigrantGroup state as a tested prototype and plan the corrective `First Living Settlement` slice against `docs/settlement-actor-model.md`.
 
 ### Next
 
-- Add an actual authenticated client-to-dedicated-server walkthrough that exercises FTB `open_book`, then record screenshots/video of Crimson and Spore visual effects.
-- Add a true interactive scheduled-train acceptance run before Narrator v2 and natural discovery/worldgen.
+- Implement the minimal actor slice: one IRON account, autonomous ration/request/crisis policy, one WorldSite, one freshness-bounded RouteContract, typed evidence/membership, two responses, and a causal journal.
+- Then separate evacuation/population groups, physical ruins, positive development, Millénaire ownership reconciliation, and social identity into bounded vertical slices.
+- Retain the authenticated FTB/client and real scheduled-train walkthroughs as release evidence.
 
 ## Open questions
 
 - UNCONFIRMED: authenticated multiplayer playthrough and the player-built native Create scheduled-train traversal; automation deliberately does not fake a Create train.
+- KNOWN MODEL DEBT: v19 mixes society/place/economy/security, has no settlement decision engine or site/route-contract freshness, and stores deaths only as diagnostics; a destroyed village can remain canonically live. The corrective slice must use typed evidence and orthogonal states, not another overloaded status enum.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-vision-0.2-first-living-region.md`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
 - `PaleMirrorSavedData`, `SourceGateState`, `internal/adapter/`, `internal/effect/`, `internal/quarantine/`
 - `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
 - `internal/integration/crimson/CrimsonActorRuntime`, `CrimsonSiegeRuntime`, `internal/integration/spore/SporeCombatRuntime`, `SporeProjectileRuntime`

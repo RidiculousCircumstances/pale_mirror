@@ -1,4 +1,4 @@
-# Pale Mirror 0.2: First Living Region
+# Pale Mirror 0.2: First Living Settlement
 
 ## Purpose and status
 
@@ -33,22 +33,26 @@ Mine -> Route -> Settlement -> Defence -> Migration -> Infrastructure
 
 This document began as product direction. The status section below records the
 implemented 0.2a/0.2b vertical-slice work; the Definition of 0.2 remains the
-release gate, not a claim that every later presentation or settlement adapter
-is complete.
+release gate. The canonical settlement design is defined in
+[`settlement-actor-model.md`](settlement-actor-model.md). Where the current v19
+types differ from that model, they are tested prototype state rather than a
+promise of final aggregate boundaries.
 
 ## Implemented vertical-slice baseline
 
 The current branch implements one new-world-only region bound to an observed settlement:
 
 ```text
-Ironhill (population 80, iron demand 12, defence 55)
+Ironhill (observed population; datapack baseline 80, iron demand 12, defence 55)
   <- Mine17 primary IRON route (capacity 18)
   <- Red Valley replacement route (initially PLANNED)
 ```
 
-- The pure domain owns `Settlement`, bounded `ResourceStock`, `Route`,
-  `ResourceFlow`, `MigrantGroup`, and `LivingRegion` aggregates. Resource flow
-  is sorted and deterministic.
+- The pure domain currently owns prototype `SettlementState`, bounded
+  `ResourceStock`, `RouteState`, `ResourceFlow`, `MigrantGroupState`, and
+  `LivingRegionState` aggregates. Resource flow is sorted and deterministic.
+  The canonical target separates community, place, population groups,
+  economy, security, world sites, and route contracts.
 - A discovered Ironhill schedules one global Mine17 infection after its pinned
   intervention delay. Its stock then depletes, defence falls, and one
   audience-scoped `settlement_supply_crisis` offer is created from the actual
@@ -69,12 +73,14 @@ Ironhill (population 80, iron demand 12, defence 55)
   its ensure operation reconstructs or finishes the same mine without
   overwriting a partial or player-altered volume. It never materializes a
   replacement settlement.
-- The first Create contract is read-only and version-pinned to 6.0.10. It
+- The first Create observation bridge is read-only and version-pinned to 6.0.10. It
   recognises two named, nearby `Track Station`s only when their chunks are
   already loaded. The same opaque native train UUID must arrive at both
   endpoints within a bounded simulation window to certify LOW/MEDIUM/HIGH
   capacity; two arbitrary trains, missing evidence, or unloaded endpoints
-  never invent capacity or force-load chunks.
+  never invent capacity or force-load chunks. This proof must become validation
+  evidence for a freshness-bounded `RouteContract`; a momentary train pass is
+  not the final definition of an indefinitely operational route.
 - FTB Quests 2101.1.30 is an optional read-only presentation adapter. It
   installs one PM-owned static, no-reward chapter through FTB's public config
   and reload command, refuses to overwrite an unknown chapter collision, and
@@ -139,7 +145,7 @@ The current foundation includes:
 - protection of unknown/player changes;
 - persisted leases for dangerous physical effects;
 - explicit adapter capability health;
-- intentional rejection of unsafe schema v5-v15 migration;
+- intentional rejection of unsafe schema v5-v18 migration;
 - GameTests and packaged-JAR verification;
 - a firewall that prevents source items from silently entering the economy.
 
@@ -153,35 +159,57 @@ is addressed to one audience, but another player may physically intervene; the
 world outcome remains one shared outcome. This model is appropriate for both
 single-player and cooperative servers.
 
-## The next vertical slice: Mine--Settlement--Route
+## Canonical direction: a settlement is an actor
 
 Do not first add a third infection mod or a large global war. First prove that
-several domain systems causally affect one another inside one living region.
+several domain systems and an autonomous settlement policy causally affect one
+another inside one living region.
 
-Add the second and third object families:
+The earlier shorthand `Settlement = society + place` is insufficient for
+migration, ruins, and resettlement. The canonical model separates:
 
 ```text
-Mine
-Settlement
-Route / ResourceFlow
+SettlementCommunity  -> identity, population groups, memory, relations, policy
+SettlementPlace      -> territory, occupancy, representation, integrity
+PopulationGroup      -> residents, evacuees, refugees, migrants in transit
+SettlementEconomy    -> stock, flow, reserve, production, consumption
+SettlementSecurity   -> manpower, fortification, supplies, readiness
+WorldSite            -> reusable physical site and typed capabilities
+RouteContract        -> validated transport capability, health, freshness
+SettlementPolicy     -> deterministic local decisions
 ```
 
-This slice determines whether Pale Mirror is a general systems core rather
-than an excellent threat orchestrator.
+There is no universal settlement lifecycle. Recognition, observation
+freshness, structural integrity, operational state, occupancy, crisis, and
+population disposition are orthogonal. A UI phrase such as "Ironhill is
+recovering" is a derived view. The complete ownership and state model is in
+[`settlement-actor-model.md`](settlement-actor-model.md).
 
 ### Reference scenario: Ironhill
 
-Ironhill starts with an abstract, observable state:
+Ironhill starts as a community occupying a place and depending on a validated
+resource route:
 
 ```text
-Settlement: Ironhill
-population = 80
-iron demand = 12/day
-defence = 0.55
+IronhillCommunity
+    population = 80
+    policy = frontier_mutual_aid
+
+IronhillPlace
+    occupancy = INHABITED
+    structuralIntegrity = INTACT
+
+IRON account
+    stock = 120
+    netFlow = +6/step
+    reserveSteps = sufficient
+
+SettlementSecurity
+    defenceReadiness = 55
 
 Mine: Mine17
 iron production = 18/day
-route = Mine17 -> Ironhill
+routeContract = Mine17 -> Ironhill
 ```
 
 When Mine17 becomes infected:
@@ -190,14 +218,17 @@ When Mine17 becomes infected:
 Mine17: OPERATIONAL -> INFECTED
 production: 18 -> 0
 
-after several simulation steps:
-Ironhill iron stock decreases
-tool availability decreases
+after several simulation steps and settlement decisions:
+Ironhill consumes reserves
+Ironhill enables rationing
+reserveSteps crosses policy thresholds
 defence readiness decreases
+SettlementCrisisDetected is emitted as an objective world fact
 ```
 
-The Narrator should identify the causal chain and present several valid
-responses, rather than one linear objective.
+The settlement policy reacts before a scenario exists. The Narrator may expose
+the resulting crisis to an audience, choose an archetype, delay it, or return
+`NO_SCENARIO`; it never creates the crisis by offering a scenario.
 
 #### A. Clear and recover the mine
 
@@ -214,7 +245,7 @@ iron source, establish a replacement route, deliver temporary stock, and later
 build Create infrastructure. The old mine may remain lost while the settlement
 survives.
 
-#### C. Evacuate or abandon
+#### C. Evacuate or abandon (later corrective slice)
 
 The player does not save production but helps part of the population leave.
 
@@ -227,48 +258,58 @@ status = DECLINING or ABANDONED
 new world object: RefugeeCamp or MigrantGroup
 ```
 
-Failure must generate a subsequent story, not merely a terminal `FAILED`
-screen. This one branching scenario will provide more product evidence than
-several additional linear archetypes.
-
-## Minimal next domain model
-
-Start with a deliberately small economy:
+The canonical form separates the people from their original location:
 
 ```text
-Settlement
-Route
-ResourceFlow
-Stock
-Production
-Consumption
-Shortage
-Surplus
-Defence
+IronhillCommunity -> DISPLACED
+IronhillPlace -> RUINED or EMPTY
+PopulationGroup(Ironhill refugees) -> hosted by RefugeeCamp12
 ```
 
-Use only a few resource categories at first:
+The existing prototype evacuation proves persistence but does not freeze this
+aggregate boundary. Evacuation and population groups follow after the first
+economic actor loop. Failure must eventually generate a subsequent story, not
+merely a terminal `FAILED` screen.
 
-```text
-FOOD
-IRON
-TIMBER
-TOOLS
-MEDICINE
-MILITARY_SUPPLIES
-```
+## Minimal economic actor model
 
-The first cross-domain proof needs only:
+Start with one macro-resource and distinguish flow deficit from actual
+shortage:
 
 ```text
 Mine produces IRON
-Settlement consumes IRON
-Route transfers IRON
-Shortage lowers DEFENCE
+RouteContract validates transport capability
+PM simulates the macro-flow while the contract is healthy and fresh
+SettlementEconomy records stock, netFlow, and reserveSteps
+SettlementPolicy consumes reserve, rations, requests supply, then emits crisis
+SettlementSecurity reacts to actual availability and policy decisions
 ```
 
-Do not simulate carrots, ingots, or individual tools one by one. Those details
-add accounting without necessarily creating stories.
+`netFlow < 0` means reserves are being consumed. It does not mean there is an
+immediate shortage. Availability becomes strained or unavailable only when
+stock and reserve thresholds justify it.
+
+Ordinary containers do not mirror canonical stock. A storehouse may provide
+capacity, but item delivery requires an atomic physical-item removal followed
+by a persisted `DeliveryReceipt`; withdrawal reserves canonical stock before
+materializing items. This avoids duplication between abstract and physical
+resources.
+
+Later slices may add `FOOD`, `TIMBER`, `TOOLS`, `MEDICINE`, and
+`MILITARY_SUPPLIES`. Do not simulate carrots, ingots, or individual tools one
+by one before the one-resource actor loop is proven.
+
+Positive development is also first-class. Sustained surplus can increase
+reserves, prosperity, migration attraction, labour capacity, capabilities, and
+eventually an expansion intent. `STABLE` is not the ceiling of settlement
+development, even though physical district construction is deferred.
+
+Economy and defence do not exhaust community identity. The canonical model
+reserves `SettlementProfile`, culture/faction, priorities, relations, trust,
+local policy, and relevant memory. Two communities facing the same deficit may
+ration, request aid, close their borders, raise prices, migrate, or become
+aggressive. This social differentiation follows after the one-resource policy
+loop, but it belongs to the community aggregate rather than the Narrator.
 
 ## Integration order
 
@@ -280,42 +321,65 @@ Do not begin by taking over Millénaire construction. The first
 - discover a settlement;
 - assign a stable `WorldObjectId`;
 - define bounds and anchor;
-- estimate population;
-- observe deaths and defenders;
-- map physical settlement facts to canonical `Settlement` state.
+- publish membership-aware population estimates;
+- distinguish registered role representatives from ambient NPCs;
+- publish typed deaths, defender loss, landmark damage, and observation
+  freshness;
+- classify reliability as `CONFIRMED`, `STRONG`, or `TENTATIVE`, with
+  `CURRENT`, `STALE`, or `EXPIRED` freshness tracked separately;
+- never map a missing entity or one landmark directly to canonical ruin.
 
 Begin with vanilla villages or Villager Overhaul, then add a Millénaire adapter.
 
-Only after the mapping is trustworthy should PM materialize limited observable
-state, for example:
+Every adapter declares a field-ownership matrix using `PM_OWNED`,
+`NATIVE_OWNED`, `DERIVED`, `OBSERVED_ONLY`, and `RECONCILED`. Vanilla macro
+population may be PM-owned while physical villagers are observed. Millénaire
+NPCs and local construction remain native-owned; its macro-population and
+physical integrity require an audited reconciliation policy. PM must not place
+a second local economy over a native simulation that already owns one.
+
+Only after the mapping and authority matrix are trustworthy may an adapter
+represent limited state. The concrete effect depends on field ownership:
 
 ```text
-food shortage -> fewer traders, weaker assortment, visibly empty storehouse
-low defence -> fewer guards, damaged fortification, alert state
-prosperity -> market activity, additional NPCs, improved storehouse
+PM-owned representation -> sparse overlays or PM-owned representative actors
+native-owned representation -> supported native request, never silent takeover
+observed-only representation -> journal/ambient view; no physical mutation
 ```
 
-Native settlement development should be a later, audited opt-in. If Millénaire
-offers safe development controls, PM may request them; otherwise use PM-owned
-prefab expansion policies. Do not start by rewriting settlement AI or building
-logic.
+PM does not delete traders or guards to make an abstract number visible. A
+confirmed native death may change a reconciled capability; a PM-owned actor
+may be removed by PM; a native-owned population changes only through its
+adapter's supported ownership policy.
+
+Native settlement development should be a later, audited opt-in. Off-screen PM
+outcomes may be represented on the next safe chunk load only inside registered
+world/mod-generated bounds, with versioned policies, provenance masks, and
+conflict-safe sparse overlays. This can close a registered site, add limited
+ruin evidence, or represent refugees; it cannot overwrite player-owned blocks.
+Do not start by rewriting settlement AI or building logic.
 
 ### CreateAdapter: the next high-value adapter
 
 Create should arrive before more threat providers. It makes the systems model
 into a distinctive game rather than an event generator.
 
-PM must not try to infer every player factory. Instead, introduce an explicit
-physical-to-domain contract:
+PM must not try to infer every player factory. Physical infrastructure is an
+independent `WorldSite` with affiliations and one or more typed capabilities:
 
 ```text
-FacilityAnchor
-LogisticsNode
-RouteEndpoint
+WorldSite
+SiteAffiliation
+SiteCapability(STORAGE / LOGISTICS / SHELTER / DEFENCE)
+RouteContract
 ```
 
-The player links a real Create installation to a PM object. The adapter then
-checks only bounded, meaningful capabilities:
+One station may serve several settlements, and one site may provide storage
+and logistics simultaneously. A bell is only a physical anchor capability;
+the community's `WorldObjectId` owns identity.
+
+The player links a real Create installation to endpoints. The adapter checks
+only bounded, meaningful capabilities:
 
 - mechanical energy is present;
 - a registered container is connected;
@@ -323,16 +387,22 @@ checks only bounded, meaningful capabilities:
 - the registered installation is operational;
 - capacity is LOW, MEDIUM, or HIGH.
 
-It publishes generic observations such as:
+It publishes generic validation evidence such as:
 
 ```text
-TransportRouteOperational
+RouteControlRunSucceeded
 ProductionFacilityOperational
 SupplyCapacityObserved
 ```
 
+One successful control run validates that the route can carry supported cargo.
+PM then simulates macro-delivery abstractly while the `RouteContract` remains
+healthy and fresh. Station damage, a removed train, an invalid line, or stale
+validation degrades/closes the contract. Constant physical travel through
+unloaded chunks is not required.
+
 Pale Mirror does not need to know which gears were used. Aeronautics can later
-be another transport capability:
+be another provider of the same transport contract:
 
 ```text
 AIR_SUPPLY
@@ -366,13 +436,20 @@ Add operator-facing explainability as a first-class tool:
 
 For example, Narrator diagnostics should show severity, settlement relevance,
 audience reachability, available capabilities, archetype novelty, and cooldown
-status. Without this, narrative balancing will become opaque.
+status. Settlement diagnostics must separately show objective crisis facts,
+policy decisions, route validation freshness, observation reliability, and
+causal attribution. A player dismantling a bound storehouse is not an unknown
+"mysterious disaster": evidence should distinguish threat, raid, player,
+environmental, and unknown damage where the observer can prove it. Without
+this, narrative balancing and world causality become opaque.
 
 ## Narrator v2 direction
 
-The current single archetype was the correct first step. The next Narrator
-should score candidates for tension and opportunity, rather than react directly
-to isolated events:
+The current single archetype was the correct first step. Settlement simulation
+and `SettlementDecisionEngine` produce objective facts and autonomous
+decisions first. The next Narrator scores candidates for tension and
+opportunity derived from those facts, rather than reacting directly to isolated
+events or moving a settlement into crisis:
 
 ```text
 TradeDisruptionCandidate
@@ -395,6 +472,11 @@ Candidate selection should consider:
 The Narrator must regulate pacing and variety, not simply choose the largest
 numeric problem. After two combat stories, it should be able to favor trade,
 recovery, construction, or expedition.
+
+Settlements continue acting when no scenario is selected. They can ration,
+seek trade, prepare defence, begin evacuation, invest in recovery, or exploit a
+surplus according to deterministic policy. Narrator owns neither these
+decisions nor their outcomes.
 
 ## Progression model and fairness policy
 
@@ -447,18 +529,28 @@ They broaden the surface area without proving the core product value.
 
 ## Definition of Pale Mirror 0.2
 
-**Pale Mirror 0.2: First Living Region** is complete when, without operator
-commands, a player can:
+**Pale Mirror 0.2: First Living Settlement** is complete when, without
+operator commands:
 
-1. discover a registered mine and its connected settlement;
-2. see that the mine materially supplies the settlement;
-3. encounter its infection;
-4. understand the causal chain through a journal/presentation layer;
-5. receive at least three meaningful responses;
-6. solve the crisis through combat, logistics, or deliberate abandonment;
-7. observe a durable settlement change;
-8. restart the server without state divergence;
-9. receive a follow-up story after either success or failure.
+1. a player discovers one registered mine, community, and occupied place;
+2. one validated `RouteContract` supplies `IRON` to one canonical resource
+   account;
+3. mine infection produces a negative flow, reserve depletion, rationing, and
+   an objective crisis fact through deterministic settlement policy;
+4. that settlement continues making decisions even if Narrator returns
+   `NO_SCENARIO`;
+5. the player can understand stock, net flow, reserve, route freshness, policy
+   decisions, and consequences through a read-only journal;
+6. the player can resolve the first crisis either by clearing the mine or by
+   validating an alternate supply route;
+7. the world preserves one durable result: restored supply or persistently
+   weakened defence;
+8. the same state and causal history survive restart without divergence.
+
+The release gate proves a settlement actor, not the entire future settlement
+model. Prototype evacuation remains experimental; canonical evacuation,
+population groups, physical ruins, positive expansion, Millénaire ownership,
+and culture/reputation are follow-up vertical slices.
 
 Minimal stack:
 
@@ -468,11 +560,32 @@ Spore: optional/test provider
 
 Mine + Settlement + Route + ResourceFlow
 
-Investigation/Recovery + Supply disruption + Abandonment/Evacuation outcome
+Investigation/Recovery + autonomous Supply disruption + alternate logistics
 
 FTB Quests: read-only presentation
 CreateAdapter: one functional logistics contract
 ```
+
+### Known model debts before release
+
+The current v19 model is still state-centric:
+
+- `SettlementState` mixes community, place, economy, security, and occupancy;
+- `SettlementStatus` mixes economic pressure with lifecycle meaning;
+- visible villagers lack explicit membership/cohort representation;
+- resident and iron-golem deaths are diagnostic counters rather than typed,
+  reliability-classified reconciliation evidence;
+- route observations directly change momentary capacity instead of validating
+  a freshness-bounded contract;
+- the settlement does not yet have an autonomous decision engine;
+- ordinary physical inventories have no delivery/withdrawal receipt boundary;
+- a physically destroyed village can remain a canonical live settlement.
+
+The corrective implementation must not introduce a universal confidence
+number or one replacement lifecycle enum. Observation freshness, structural
+integrity, operational state, occupancy, crisis, and population disposition
+remain separate. Missing chunks, an absent landmark, or an isolated death are
+never sufficient to infer ruin.
 
 ## Practical order of work
 
@@ -485,14 +598,26 @@ CreateAdapter: one functional logistics contract
 
 ### 0.2b: build the first living-region slice
 
-1. Add `Settlement`, `Route`, and `ResourceFlow` domain aggregates.
-2. Implement a controlled, read-only settlement adapter.
-3. Connect Mine17-style production to settlement supply and defence.
-4. Implement shortage and defence consequences.
-5. Implement the one branching crisis scenario.
-6. Add FTB Quests read-only presentation and explain commands.
-7. Add the first Create logistics capability.
-8. Only then implement Narrator v2 and natural discovery/worldgen.
+1. Replace the prototype's overloaded settlement state with the minimal
+   community/place/economy/security ownership needed by this slice.
+2. Add one `IRON` resource account with stock, net flow, reserve steps, and
+   availability.
+3. Add one independent `WorldSite` logistics endpoint and one freshness-bounded
+   `RouteContract`.
+4. Add a deterministic settlement policy: consume reserve, ration, request
+   supply, then emit an objective crisis fact.
+5. Upgrade the read-only observer with membership, evidence type, loaded
+   duration, freshness, reliability class, and causation.
+6. Keep only two release-critical responses: clear Mine17 or validate the
+   alternate route.
+7. Upgrade the read-only journal to explain facts, policy decisions, contract
+   health, and consequences.
+8. Preserve restart safety and prove that a Narrator `NO_SCENARIO` does not
+   pause settlement behavior.
+
+Then implement evacuation/population groups, physical ruin representation,
+positive development, Millénaire ownership reconciliation, and social identity
+as separate slices before broad natural discovery/worldgen.
 
 ## Product conclusion
 
