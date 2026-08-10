@@ -305,7 +305,7 @@ public final class PaleMirrorEvents {
                             context.getSource().sendSuccess(() -> ScenarioCommandPresentation.offered(offered), false);
                             return offered.size();
         }));
-        scenario.then(Commands.literal("accept").then(Commands.argument("id", StringArgumentType.word()).executes(context -> {
+        scenario.then(Commands.literal("accept").then(Commands.argument("id", StringArgumentType.greedyString()).executes(context -> {
                             String id = StringArgumentType.getString(context, "id");
                             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
                             boolean accepted = runtime.accept(id, audienceFor(context.getSource(), runtime));

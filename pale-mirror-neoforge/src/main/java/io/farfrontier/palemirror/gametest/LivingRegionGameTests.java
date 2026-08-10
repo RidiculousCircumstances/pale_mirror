@@ -190,6 +190,7 @@ public final class LivingRegionGameTests {
     @SuppressWarnings("removal")
     public static void offeredScenarioRendersExactClickableAcceptCommand(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
         var scenario = new ScenarioInstance("pm:scenario:48", "pm:event:48",
                 new WorldObjectId("pale_mirror:mine"), new StoryAudienceId("pm:audience:test"),
                 "pale_mirror:investigation_recovery", "1", ScenarioStatus.OFFERED);
@@ -202,6 +203,10 @@ public final class LivingRegionGameTests {
                 "offered scenarios must expose an exact clickable accept command using the complete opaque ID");
         helper.assertValueEqual(ScenarioCommandPresentation.offered(java.util.List.of()).getString(),
                 "No offered scenarios.", "an empty offer list must remain explicit");
+        var parsed = level.getServer().getCommands().getDispatcher().parse(
+                "pale_mirror scenario accept pm:scenario:48", level.getServer().createCommandSourceStack());
+        helper.assertTrue(!parsed.getReader().canRead() && parsed.getExceptions().isEmpty(),
+                "the command tree must consume the complete colon-bearing opaque scenario ID");
         helper.succeed();
     }
 
