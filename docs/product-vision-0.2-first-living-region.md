@@ -631,6 +631,11 @@ displacement, representative camps and PM-owned ruin overlays. These are
 settlement-policy consequences, not Narrator state. Arbitrary village blocks
 and ordinary container inventories remain outside PM ownership.
 
+Schema v23 adds the complementary positive loop: sustained surplus produces a
+real PM-owned storehouse upgrade, prosperity, housing and bounded population
+growth. Recovery can return a displaced community to a sufficiently observed,
+non-ruined home without reconstructing native or player-owned buildings.
+
 The technical foundation is now good enough that horizontal expansion is the
 main risk: more sources, forms, and adapters could grow without demonstrating
 that the result is an interesting game.

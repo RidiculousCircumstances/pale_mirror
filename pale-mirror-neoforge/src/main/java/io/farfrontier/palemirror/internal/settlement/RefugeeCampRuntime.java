@@ -83,6 +83,24 @@ public final class RefugeeCampRuntime {
         return entity.getPersistentData().getBoolean(REPRESENTATIVE_KEY);
     }
 
+    public static boolean cleanupReturnedGroups(MinecraftServer server, PaleMirrorSavedData data) {
+        boolean changed = false;
+        for (RefugeeCampRecord camp : data.refugeeCamps().values()) {
+            var group = data.worldState().populationGroup(camp.populationGroupId()).orElse(null);
+            if (group == null || group.disposition() != PopulationDisposition.RESIDENT
+                    || camp.state() != SettlementDepotState.ACTIVE) continue;
+            ServerLevel level = level(server, camp.dimensionId());
+            if (level == null || !level.hasChunkAt(camp.anchor())) continue;
+            String failure = cleanup(level, camp);
+            if (failure == null) {
+                camp.block("Population returned home");
+                data.worldState().site(camp.siteId()).ifPresent(site -> site.setOperationalState(OperationalState.OFFLINE));
+            } else camp.block(failure);
+            changed = true;
+        }
+        return changed;
+    }
+
     private static String ensure(ServerLevel level, RefugeeCampRecord camp) {
         for (MutableCell cell : camp.cells()) {
             String current = blockId(level, cell.position());
@@ -97,6 +115,25 @@ public final class RefugeeCampRuntime {
             cell.markApplied(desiredId);
         }
         ensureRepresentatives(level, camp);
+        return null;
+    }
+
+    private static String cleanup(ServerLevel level, RefugeeCampRecord camp) {
+        for (MutableCell cell : camp.cells()) {
+            String current = blockId(level, cell.position());
+            if (cell.conflicted() || !current.equals(cell.lastAppliedBlock()) && !current.equals(cell.baselineBlock())) {
+                cell.conflict();
+                return "Refugee camp cleanup conflicts at " + cell.position();
+            }
+            Block baseline = BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(cell.baselineBlock()));
+            level.setBlock(cell.position(), baseline.defaultBlockState(), 3);
+            if (!blockId(level, cell.position()).equals(cell.baselineBlock())) return "Refugee camp cleanup postcondition failed";
+            cell.markApplied(cell.baselineBlock());
+        }
+        camp.representativeIds().forEach(id -> {
+            var entity = level.getEntity(id);
+            if (entity != null && isRepresentative(entity)) entity.discard();
+        });
         return null;
     }
 

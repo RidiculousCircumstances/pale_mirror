@@ -10,6 +10,7 @@ public final class DomainCommandProcessor {
     private final ResourceFlowSimulation resources;
     private final SettlementDecisionEngine settlementDecisions;
     private final SettlementEmergencyRuntime settlementEmergencies;
+    private final SettlementDevelopmentEngine settlementDevelopment;
     private final ThreatLifecycle threats;
     private final Narrator narrator;
     private final ScenarioRuntime scenarios;
@@ -19,12 +20,14 @@ public final class DomainCommandProcessor {
     DomainCommandProcessor(SimulationEngine simulation, ResourceFlowSimulation resources,
                            SettlementDecisionEngine settlementDecisions,
                            SettlementEmergencyRuntime settlementEmergencies,
+                           SettlementDevelopmentEngine settlementDevelopment,
                            ThreatLifecycle threats, Narrator narrator,
                            ScenarioRuntime scenarios, SettlementCrisisRuntime settlementCrises, DomainEventFactory events) {
         this.simulation = Objects.requireNonNull(simulation, "simulation");
         this.resources = Objects.requireNonNull(resources, "resources");
         this.settlementDecisions = Objects.requireNonNull(settlementDecisions, "settlementDecisions");
         this.settlementEmergencies = Objects.requireNonNull(settlementEmergencies, "settlementEmergencies");
+        this.settlementDevelopment = Objects.requireNonNull(settlementDevelopment, "settlementDevelopment");
         this.threats = Objects.requireNonNull(threats, "threats");
         this.narrator = Objects.requireNonNull(narrator, "narrator");
         this.scenarios = Objects.requireNonNull(scenarios, "scenarios");
@@ -55,6 +58,9 @@ public final class DomainCommandProcessor {
             case DomainCommand.DepositResource deposited -> depositResource(state, deposited);
             case DomainCommand.WithdrawResource withdrawn -> withdrawResource(state, withdrawn);
             case DomainCommand.BeginSettlementEvacuation evacuation -> beginSettlementEvacuation(state, evacuation);
+            case DomainCommand.StartDevelopmentIntent intent -> startDevelopmentIntent(state, intent.intentId());
+            case DomainCommand.CompleteDevelopmentIntent intent -> completeDevelopmentIntent(state, intent.intentId());
+            case DomainCommand.CancelDevelopmentIntent intent -> cancelDevelopmentIntent(state, intent.intentId(), intent.reason());
         };
     }
 
@@ -67,6 +73,7 @@ public final class DomainCommandProcessor {
             produced.addAll(settlementDecisions.reconcile(state));
             produced.addAll(settlementCrises.reconcile(state));
             produced.addAll(settlementEmergencies.reconcile(state));
+            produced.addAll(settlementDevelopment.reconcile(state));
         }
         return List.copyOf(produced);
     }
@@ -283,6 +290,37 @@ public final class DomainCommandProcessor {
         List<DomainEvent> produced = settlementEmergencies.beginEvacuation(state, command.communityId(), command.causationId());
         produced.forEach(state::addEvent);
         return produced;
+    }
+
+    private List<DomainEvent> startDevelopmentIntent(WorldState state, String intentId) {
+        DevelopmentIntent intent = state.developmentIntent(intentId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown development intent " + intentId));
+        if (!intent.start()) return List.of();
+        return record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_STARTED, intent.communityId(), intent.id());
+    }
+
+    private List<DomainEvent> completeDevelopmentIntent(WorldState state, String intentId) {
+        DevelopmentIntent intent = state.developmentIntent(intentId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown development intent " + intentId));
+        if (intent.type() != DevelopmentIntentType.UPGRADE_STOREHOUSE || !intent.complete()) return List.of();
+        ResourceAccount account = state.economy(intent.communityId()).orElseThrow().require(intent.requiredResource());
+        account.consumeReservation(intent.reservedAmount());
+        account.expandCapacity(Math.multiplyExact(account.capacity(), 2));
+        SiteCapability current = state.siteCapability(intent.targetSiteId(), SiteCapabilityType.STORAGE, intent.requiredResource())
+                .orElseThrow(() -> new IllegalStateException("Storehouse intent lost its target capability"));
+        state.putSiteCapability(new SiteCapability(current.siteId(), current.type(), current.resource(),
+                Math.multiplyExact(current.capacity(), 2)));
+        state.settlementDevelopment(intent.communityId()).orElseThrow().storehouseCompleted();
+        return record(state, DomainEventType.SETTLEMENT_STOREHOUSE_UPGRADED, intent.communityId(), intent.id());
+    }
+
+    private List<DomainEvent> cancelDevelopmentIntent(WorldState state, String intentId, String reason) {
+        DevelopmentIntent intent = state.developmentIntent(intentId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown development intent " + intentId));
+        if (!intent.cancel(reason)) return List.of();
+        if (intent.reservedAmount() > 0) state.economy(intent.communityId()).orElseThrow()
+                .require(intent.requiredResource()).releaseReservation(intent.reservedAmount());
+        return record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_CANCELLED, intent.communityId(), intent.id());
     }
 
     private List<DomainEvent> record(WorldState state, DomainEventType type, WorldObjectId subject, String causationId) {

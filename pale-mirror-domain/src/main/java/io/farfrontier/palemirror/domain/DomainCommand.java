@@ -17,7 +17,9 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.ValidateRouteContract, DomainCommand.ObserveSettlementPlace,
         DomainCommand.RegisterLivingRegion, DomainCommand.DiscoverLivingRegion,
         DomainCommand.TriggerFacilityInfection, DomainCommand.DepositResource,
-        DomainCommand.WithdrawResource, DomainCommand.BeginSettlementEvacuation {
+        DomainCommand.WithdrawResource, DomainCommand.BeginSettlementEvacuation,
+        DomainCommand.StartDevelopmentIntent, DomainCommand.CompleteDevelopmentIntent,
+        DomainCommand.CancelDevelopmentIntent {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -189,6 +191,19 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             Objects.requireNonNull(communityId, "communityId");
             Objects.requireNonNull(audience, "audience");
             Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record StartDevelopmentIntent(String intentId) implements DomainCommand {
+        public StartDevelopmentIntent { Objects.requireNonNull(intentId, "intentId"); }
+    }
+    record CompleteDevelopmentIntent(String intentId) implements DomainCommand {
+        public CompleteDevelopmentIntent { Objects.requireNonNull(intentId, "intentId"); }
+    }
+    record CancelDevelopmentIntent(String intentId, String reason) implements DomainCommand {
+        public CancelDevelopmentIntent {
+            Objects.requireNonNull(intentId, "intentId");
+            Objects.requireNonNull(reason, "reason");
         }
     }
 }

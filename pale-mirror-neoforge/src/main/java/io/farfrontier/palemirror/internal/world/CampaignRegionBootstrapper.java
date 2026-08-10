@@ -25,6 +25,8 @@ import io.farfrontier.palemirror.domain.SiteCapability;
 import io.farfrontier.palemirror.domain.SiteCapabilityType;
 import io.farfrontier.palemirror.domain.PopulationGroup;
 import io.farfrontier.palemirror.domain.SettlementCohort;
+import io.farfrontier.palemirror.domain.SettlementDevelopment;
+import io.farfrontier.palemirror.domain.SettlementDevelopmentPolicy;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
@@ -139,6 +141,9 @@ public final class CampaignRegionBootstrapper {
         commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
                 community, place, new CommunityPlaceBinding(IRONHILL, placeId), economy, security, policy, sites, affiliations,
                 capabilities, routes, List.of(residents)));
+        data.worldState().putSettlementDevelopment(new SettlementDevelopment(IRONHILL, 25, 0,
+                population, Math.max(0, population - observed.observedPopulation() / 5), 0));
+        data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(IRONHILL));
         data.campaignRegions().put(IRONHILL_ID, new CampaignRegionRecord(IRONHILL_ID,
                 observed.dimensionId(), placeId, observed.anchor(), mineColumn(server, observed.anchor(), PRIMARY_MINE_DISTANCE),
                 mineColumn(server, observed.anchor(), -ALTERNATE_MINE_DISTANCE), null, null,

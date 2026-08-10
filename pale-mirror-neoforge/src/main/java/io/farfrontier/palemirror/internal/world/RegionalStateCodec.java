@@ -38,6 +38,11 @@ import io.farfrontier.palemirror.domain.PopulationDisposition;
 import io.farfrontier.palemirror.domain.SettlementCohort;
 import io.farfrontier.palemirror.domain.SettlementEmergencyWindow;
 import io.farfrontier.palemirror.domain.EmergencyWindowState;
+import io.farfrontier.palemirror.domain.SettlementDevelopment;
+import io.farfrontier.palemirror.domain.SettlementDevelopmentPolicy;
+import io.farfrontier.palemirror.domain.DevelopmentIntent;
+import io.farfrontier.palemirror.domain.DevelopmentIntentType;
+import io.farfrontier.palemirror.domain.DevelopmentIntentState;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -60,6 +65,9 @@ final class RegionalStateCodec {
         tag.put("livingRegions", list(state.livingRegions().stream().map(RegionalStateCodec::writeRegion).toList()));
         tag.put("populationGroups", list(state.populationGroups().stream().map(RegionalStateCodec::writePopulationGroup).toList()));
         tag.put("emergencyWindows", list(state.emergencyWindows().stream().map(RegionalStateCodec::writeEmergencyWindow).toList()));
+        tag.put("settlementDevelopments", list(state.settlementDevelopments().stream().map(RegionalStateCodec::writeDevelopment).toList()));
+        tag.put("developmentPolicies", list(state.developmentPolicies().stream().map(RegionalStateCodec::writeDevelopmentPolicy).toList()));
+        tag.put("developmentIntents", list(state.developmentIntents().stream().map(RegionalStateCodec::writeDevelopmentIntent).toList()));
     }
 
     static void read(CompoundTag tag, WorldState state) {
@@ -76,6 +84,9 @@ final class RegionalStateCodec {
         for (Tag value : tag.getList("livingRegions", Tag.TAG_COMPOUND)) state.putLivingRegion(readRegion((CompoundTag) value));
         for (Tag value : tag.getList("populationGroups", Tag.TAG_COMPOUND)) state.putPopulationGroup(readPopulationGroup((CompoundTag) value));
         for (Tag value : tag.getList("emergencyWindows", Tag.TAG_COMPOUND)) state.putEmergencyWindow(readEmergencyWindow((CompoundTag) value));
+        for (Tag value : tag.getList("settlementDevelopments", Tag.TAG_COMPOUND)) state.putSettlementDevelopment(readDevelopment((CompoundTag) value));
+        for (Tag value : tag.getList("developmentPolicies", Tag.TAG_COMPOUND)) state.putDevelopmentPolicy(readDevelopmentPolicy((CompoundTag) value));
+        for (Tag value : tag.getList("developmentIntents", Tag.TAG_COMPOUND)) state.putDevelopmentIntent(readDevelopmentIntent((CompoundTag) value));
     }
 
     private static CompoundTag writeCommunity(SettlementCommunity value) {
@@ -141,6 +152,7 @@ final class RegionalStateCodec {
             item.putInt("actualConsumption", account.actualConsumption());
             item.putInt("netFlow", account.netFlow());
             item.putString("availability", account.availability().name());
+            item.putInt("reserved", account.reserved());
             accounts.add(item);
         });
         tag.put("accounts", accounts);
@@ -155,7 +167,7 @@ final class RegionalStateCodec {
                     item.getInt("stock"), item.getInt("production"), item.getInt("baseConsumption"),
                     item.getInt("rationedConsumption"), item.getInt("incomingFlow"), item.getInt("effectiveConsumption"),
                     item.getInt("actualConsumption"), item.getInt("netFlow"),
-                    ResourceAvailability.valueOf(item.getString("availability"))));
+                    ResourceAvailability.valueOf(item.getString("availability")), item.getInt("reserved")));
         }
         return new SettlementEconomy(id(tag, "community"), accounts);
     }
@@ -330,6 +342,63 @@ final class RegionalStateCodec {
     private static SettlementEmergencyWindow readEmergencyWindow(CompoundTag tag) {
         return new SettlementEmergencyWindow(id(tag, "community"), tag.getLong("openedAtStep"),
                 tag.getLong("deadlineStep"), EmergencyWindowState.valueOf(tag.getString("state")));
+    }
+
+    private static CompoundTag writeDevelopment(SettlementDevelopment value) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("community", value.communityId().value());
+        tag.putInt("prosperity", value.prosperity());
+        tag.putInt("pressure", value.developmentPressure());
+        tag.putInt("housing", value.housingCapacity());
+        tag.putInt("labour", value.labourCapacity());
+        tag.putInt("stableGrowth", value.stableGrowthSteps());
+        return tag;
+    }
+
+    private static SettlementDevelopment readDevelopment(CompoundTag tag) {
+        return new SettlementDevelopment(id(tag, "community"), tag.getInt("prosperity"), tag.getInt("pressure"),
+                tag.getInt("housing"), tag.getInt("labour"), tag.getInt("stableGrowth"));
+    }
+
+    private static CompoundTag writeDevelopmentPolicy(SettlementDevelopmentPolicy value) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("community", value.communityId().value());
+        tag.putString("version", value.version());
+        tag.putInt("stockPercent", value.stockPercent());
+        tag.putInt("minimumDefence", value.minimumDefence());
+        tag.putInt("pressureSteps", value.pressureSteps());
+        tag.putInt("investmentIron", value.investmentIron());
+        tag.putInt("growthSteps", value.growthSteps());
+        return tag;
+    }
+
+    private static SettlementDevelopmentPolicy readDevelopmentPolicy(CompoundTag tag) {
+        return new SettlementDevelopmentPolicy(id(tag, "community"), tag.getString("version"),
+                tag.getInt("stockPercent"), tag.getInt("minimumDefence"), tag.getInt("pressureSteps"),
+                tag.getInt("investmentIron"), tag.getInt("growthSteps"));
+    }
+
+    private static CompoundTag writeDevelopmentIntent(DevelopmentIntent value) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("id", value.id());
+        tag.putString("community", value.communityId().value());
+        tag.putString("type", value.type().name());
+        if (value.targetSiteId() != null) tag.putString("targetSite", value.targetSiteId().value());
+        if (value.requiredResource() != null) tag.putString("resource", value.requiredResource().name());
+        tag.putInt("reserved", value.reservedAmount());
+        tag.putString("policyVersion", value.policyVersion());
+        tag.putString("state", value.state().name());
+        tag.putString("diagnostic", value.diagnostic());
+        return tag;
+    }
+
+    private static DevelopmentIntent readDevelopmentIntent(CompoundTag tag) {
+        return new DevelopmentIntent(tag.getString("id"), id(tag, "community"),
+                DevelopmentIntentType.valueOf(tag.getString("type")),
+                tag.contains("targetSite", Tag.TAG_STRING) ? id(tag, "targetSite") : null,
+                tag.contains("resource", Tag.TAG_STRING) ? ResourceKind.valueOf(tag.getString("resource")) : null,
+                tag.getInt("reserved"), tag.getString("policyVersion"),
+                DevelopmentIntentState.valueOf(tag.getString("state")), tag.getString("diagnostic"));
     }
 
     private static ListTag list(java.util.List<CompoundTag> values) {

@@ -36,6 +36,7 @@ import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
 import io.farfrontier.palemirror.internal.economy.ResourceTransferRuntime;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
+import io.farfrontier.palemirror.internal.settlement.SettlementDevelopmentRuntime;
 import io.farfrontier.palemirror.domain.SourceGateStatus;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
@@ -92,6 +93,7 @@ public final class PaleMirrorRuntime {
         if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
         if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
         if (RefugeeCampRuntime.tick(server, data)) data.setDirty();
+        if (SettlementDevelopmentRuntime.tick(server, data, commands)) data.setDirty();
         if (server.overworld().getGameTime() % LOGISTICS_OBSERVATION_INTERVAL_TICKS == 0) {
             handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands, LOGISTICS_PROOF_WINDOW_STEPS));
         }

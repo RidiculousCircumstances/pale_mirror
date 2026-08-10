@@ -11,6 +11,7 @@ public final class DomainServices {
     private final ResourceFlowSimulation resources = new ResourceFlowSimulation(events);
     private final SettlementDecisionEngine settlementDecisions = new SettlementDecisionEngine(events);
     private final SettlementEmergencyRuntime settlementEmergencies = new SettlementEmergencyRuntime(events);
+    private final SettlementDevelopmentEngine settlementDevelopment = new SettlementDevelopmentEngine(events);
     private final DomainCommandProcessor commands;
 
     public DomainServices() { this(ThreatTierPolicy.DEFAULT); }
@@ -18,6 +19,7 @@ public final class DomainServices {
     public DomainServices(ThreatTierPolicy tierPolicy) {
         simulation = new SimulationEngine(events, tierPolicy);
         commands = new DomainCommandProcessor(simulation, resources, settlementDecisions, settlementEmergencies,
+                settlementDevelopment,
                 threats, narrator, scenarios, settlementCrises, events);
     }
 
@@ -29,6 +31,7 @@ public final class DomainServices {
     public ResourceFlowSimulation resources() { return resources; }
     public SettlementDecisionEngine settlementDecisions() { return settlementDecisions; }
     public SettlementEmergencyRuntime settlementEmergencies() { return settlementEmergencies; }
+    public SettlementDevelopmentEngine settlementDevelopment() { return settlementDevelopment; }
     public DomainCommandProcessor commands() { return commands; }
     public void setThreatTierPolicy(ThreatTierPolicy policy) { simulation.setTierPolicy(policy); }
 }

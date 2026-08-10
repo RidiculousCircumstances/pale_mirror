@@ -519,3 +519,24 @@ cells after 1200 continuously observed ticks. Loss of at least 25 percent can
 confirm `DAMAGED`; 75 percent can confirm `RUINED` only for an already empty
 place. Player block damage is causally attributed. Missing villagers remain
 weak negative evidence and never decrement a population group.
+
+## Recovery and development (0.2f)
+
+Schema v23 gives settlements a positive trajectory. While an inhabited,
+currently observed and defended community holds at least 75 percent IRON,
+has positive flow and no crisis, development pressure rises. Six qualifying
+steps create a version-pinned storehouse intent and reserve 24 IRON without
+making the stock available to consumption or withdrawal.
+
+The NeoForge executor first persists `MATERIALIZING`, then upgrades only the
+existing PM-owned depot footprint. Its postcondition completes the intent,
+consumes the reservation, doubles canonical IRON capacity, adds eight housing
+slots and ten prosperity. A physical conflict cancels the intent and releases
+the complete reservation exactly once. After eight additional qualifying
+steps the PM-owned resident group grows by one adult, bounded by housing.
+
+A displaced group receives a separate return-home intent only after its threat
+is cleared, supply is available, the original place has current strong evidence
+and is not ruined. Returning changes occupancy but does not repair unknown
+village blocks; the representative camp is removed only through its PM-owned
+provenance mask.

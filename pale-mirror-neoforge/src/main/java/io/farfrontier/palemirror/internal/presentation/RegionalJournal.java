@@ -41,6 +41,10 @@ public final class RegionalJournal {
                             + "/" + route.freshness(data.worldState().simulationStep()) + ":"
                             + route.transferableCapacity(data.worldState().simulationStep()))
                     .sorted().reduce((left, right) -> left + ", " + right).orElse("none");
+            String development = data.worldState().settlementDevelopment(community.id())
+                    .map(value -> "prosperity:" + value.prosperity() + ",pressure:" + value.developmentPressure()
+                            + ",housing:" + data.worldState().population(community.id()) + "/" + value.housingCapacity()
+                            + ",growth:" + value.stableGrowthSteps()).orElse("unavailable");
             return "community=" + community.id().value() + ", place=" + place.id().value() + "["
                     + place.recognition() + "/" + place.observationFreshness() + "/" + place.lastReliability() + "]"
                     + ", population=" + data.worldState().population(community.id()) + ", iron=" + iron.stock() + "/" + iron.capacity()
@@ -52,6 +56,7 @@ public final class RegionalJournal {
                     .map(group -> group.id() + ":" + group.disposition() + "=" + group.size()).toList()
                     + ", emergency=" + data.worldState().emergencyWindow(community.id())
                     .map(window -> window.state() + "@" + window.deadlineStep()).orElse("none")
+                    + ", development=" + development
                     + ", contracts=" + routes;
         } catch (IllegalArgumentException ignored) {
             return "Invalid settlement id " + requestedId;
@@ -89,6 +94,10 @@ public final class RegionalJournal {
                 + security.defenceReadiness() + "/" + security.baseDefence() + ", iron " + iron.stock() + "/"
                 + iron.capacity() + ", flow " + iron.netFlow() + ", reserve " + reserve + ", "
                 + iron.availability() + ", policy " + community.crisisState()));
+        data.worldState().settlementDevelopment(community.id()).ifPresent(value -> player.sendSystemMessage(Component.literal(
+                "Development — prosperity " + value.prosperity() + ", pressure " + value.developmentPressure()
+                        + ", housing " + data.worldState().population(community.id()) + "/" + value.housingCapacity()
+                        + ", growth " + value.stableGrowthSteps() + ".")));
         AdapterRegistry.scenarioJournalCommand().ifPresent(command -> player.sendSystemMessage(
                 action("[Open regional journal]", command).append(Component.literal(" — presentation only; PM owns state."))));
         data.worldState().emergencyWindow(community.id()).filter(window ->

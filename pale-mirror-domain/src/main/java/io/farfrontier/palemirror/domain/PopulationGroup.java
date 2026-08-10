@@ -86,6 +86,11 @@ public final class PopulationGroup {
         revision++;
         return true;
     }
+    public void grow(SettlementCohort cohort, int amount) {
+        if (amount <= 0) throw new IllegalArgumentException("Population growth must be positive");
+        cohorts.merge(Objects.requireNonNull(cohort, "cohort"), amount, Math::addExact);
+        revision++;
+    }
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
         return value;

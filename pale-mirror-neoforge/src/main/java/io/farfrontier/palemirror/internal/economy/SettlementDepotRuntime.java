@@ -155,6 +155,24 @@ public final class SettlementDepotRuntime {
         return null;
     }
 
+    public static String upgradeStorehouse(ServerLevel level, SettlementDepotRecord depot) {
+        if (depot.state() != SettlementDepotState.ACTIVE) return "Supply depot is not operational";
+        for (MutableCell cell : depot.cells()) {
+            Block desired = cell.position().equals(depot.interactionPosition()) ? Blocks.BARREL
+                    : cell.position().equals(depot.anchor().offset(2, 1, 2)) ? Blocks.LANTERN : Blocks.STONE_BRICKS;
+            String desiredId = BuiltInRegistries.BLOCK.getKey(desired).toString();
+            String current = blockId(level, cell.position());
+            if (cell.conflicted() || !current.equals(cell.lastAppliedBlock()) && !current.equals(desiredId)) {
+                cell.conflict();
+                return "Storehouse upgrade conflicts with an unknown depot change at " + cell.position();
+            }
+            if (!current.equals(desiredId)) level.setBlock(cell.position(), desired.defaultBlockState(), 3);
+            if (!blockId(level, cell.position()).equals(desiredId)) return "Storehouse upgrade postcondition failed";
+            cell.markApplied(desiredId);
+        }
+        return null;
+    }
+
     private static Block desiredBlock(SettlementDepotRecord depot, BlockPos pos) {
         if (pos.equals(depot.interactionPosition())) return Blocks.BARREL;
         if (pos.equals(depot.anchor().offset(2, 1, 2))) return Blocks.LANTERN;

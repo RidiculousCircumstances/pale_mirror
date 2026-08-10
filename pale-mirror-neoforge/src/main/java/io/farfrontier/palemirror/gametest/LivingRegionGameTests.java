@@ -48,6 +48,8 @@ public final class LivingRegionGameTests {
                 "Ironhill must have one canonical primary mine");
         helper.assertValueEqual(data.worldState().population(settlement.id()), 4,
                 "canonical population starts from the observed settlement signal");
+        helper.assertValueEqual(data.worldState().settlementDevelopment(settlement.id()).orElseThrow().housingCapacity(), 4,
+                "initial housing starts at observed population and grows only through verified development");
         helper.assertValueEqual(data.worldState().economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock(), 4,
                 "the strategic stock is scaled from the observed settlement rather than a fake template population");
         helper.assertValueEqual(data.worldState().routeContract(CampaignRegionBootstrapper.RED_VALLEY_ROUTE).orElseThrow().status().name(),
@@ -101,6 +103,8 @@ public final class LivingRegionGameTests {
                 "restart snapshot must pin the selected depot footprint");
         helper.assertValueEqual(reloaded.worldState().population(region.communityId()), 4,
                 "restart snapshot must retain population groups as the only macro-population source");
+        helper.assertValueEqual(reloaded.worldState().settlementDevelopment(region.communityId()).orElseThrow().prosperity(), 25,
+                "restart snapshot must retain positive development state");
         helper.succeed();
     }
 

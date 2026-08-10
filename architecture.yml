@@ -67,6 +67,8 @@ invariants:
     statement: SettlementCommunity owns social identity while PopulationGroup owns cohort counts and disposition; evacuation changes occupancy and location without deleting community identity or inferring deaths from missing entities.
   - id: settlement-catastrophe-fairness
     statement: A known critical settlement receives a persisted grace window before automatic evacuation; the objective policy continues without Narrator, and irreversible physical consequences touch only PM-owned cells.
+  - id: settlement-positive-development
+    statement: Stable surplus creates a persisted domain DevelopmentIntent and reserves canonical resources; capacity, housing, prosperity and growth advance only after provenance-safe PM-owned physical work is verified.
 
 critical_flows:
   - id: core-recovery
@@ -140,4 +142,8 @@ critical_flows:
   - id: settlement-displacement
     path: objective critical state -> persisted grace window -> manual or automatic evacuation -> PopulationGroup disposition -> empty place -> PM-owned ruin/camp representation
     owner: domain emergency policy plus NeoForge provenance-safe settlement presentation
+    verification: critical-code
+  - id: settlement-development
+    path: stable surplus -> development pressure -> reserved IRON -> persisted intent -> PM-owned storehouse postcondition -> capacity/prosperity/housing -> bounded population growth
+    owner: domain development policy plus NeoForge storehouse executor
     verification: critical-code

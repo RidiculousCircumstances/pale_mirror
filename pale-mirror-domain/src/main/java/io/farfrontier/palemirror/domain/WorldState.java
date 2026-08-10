@@ -19,6 +19,9 @@ public final class WorldState {
     private final Map<WorldObjectId, SettlementPolicy> settlementPolicies = new LinkedHashMap<>();
     private final Map<String, PopulationGroup> populationGroups = new LinkedHashMap<>();
     private final Map<WorldObjectId, SettlementEmergencyWindow> emergencyWindows = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementDevelopment> settlementDevelopments = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementDevelopmentPolicy> developmentPolicies = new LinkedHashMap<>();
+    private final Map<String, DevelopmentIntent> developmentIntents = new LinkedHashMap<>();
     private final Map<WorldObjectId, WorldSite> sites = new LinkedHashMap<>();
     private final Map<String, SiteAffiliation> siteAffiliations = new LinkedHashMap<>();
     private final Map<String, SiteCapability> siteCapabilities = new LinkedHashMap<>();
@@ -46,6 +49,9 @@ public final class WorldState {
     public Collection<SettlementPolicy> settlementPolicies() { return settlementPolicies.values(); }
     public Collection<PopulationGroup> populationGroups() { return populationGroups.values(); }
     public Collection<SettlementEmergencyWindow> emergencyWindows() { return emergencyWindows.values(); }
+    public Collection<SettlementDevelopment> settlementDevelopments() { return settlementDevelopments.values(); }
+    public Collection<SettlementDevelopmentPolicy> developmentPolicies() { return developmentPolicies.values(); }
+    public Collection<DevelopmentIntent> developmentIntents() { return developmentIntents.values(); }
     public Collection<WorldSite> sites() { return sites.values(); }
     public Collection<SiteAffiliation> siteAffiliations() { return siteAffiliations.values(); }
     public Collection<SiteCapability> siteCapabilities() { return siteCapabilities.values(); }
@@ -71,6 +77,9 @@ public final class WorldState {
     }
     public int population(WorldObjectId communityId) { return populationGroups(communityId).stream().mapToInt(PopulationGroup::size).sum(); }
     public Optional<SettlementEmergencyWindow> emergencyWindow(WorldObjectId communityId) { return Optional.ofNullable(emergencyWindows.get(communityId)); }
+    public Optional<SettlementDevelopment> settlementDevelopment(WorldObjectId communityId) { return Optional.ofNullable(settlementDevelopments.get(communityId)); }
+    public Optional<SettlementDevelopmentPolicy> developmentPolicy(WorldObjectId communityId) { return Optional.ofNullable(developmentPolicies.get(communityId)); }
+    public Optional<DevelopmentIntent> developmentIntent(String id) { return Optional.ofNullable(developmentIntents.get(id)); }
     public Optional<WorldSite> site(WorldObjectId id) { return Optional.ofNullable(sites.get(id)); }
     public Optional<SiteAffiliation> siteAffiliation(WorldObjectId siteId, SiteAffiliationRole role) {
         List<SiteAffiliation> matches = siteAffiliations(siteId, role);
@@ -99,6 +108,11 @@ public final class WorldState {
         if (populationGroups.putIfAbsent(group.id(), group) != null) throw new IllegalStateException("Duplicate population group " + group.id());
     }
     public void putEmergencyWindow(SettlementEmergencyWindow window) { emergencyWindows.put(window.communityId(), window); }
+    public void putSettlementDevelopment(SettlementDevelopment value) { settlementDevelopments.put(value.communityId(), value); }
+    public void putDevelopmentPolicy(SettlementDevelopmentPolicy value) { developmentPolicies.put(value.communityId(), value); }
+    public void putDevelopmentIntent(DevelopmentIntent value) {
+        if (developmentIntents.putIfAbsent(value.id(), value) != null) throw new IllegalStateException("Duplicate development intent " + value.id());
+    }
     public void putSite(WorldSite site) { sites.put(site.id(), site); }
     public void putSiteAffiliation(SiteAffiliation affiliation) {
         siteAffiliations.put(affiliationKey(affiliation.siteId(), affiliation.objectId(), affiliation.role()), affiliation);
@@ -119,6 +133,9 @@ public final class WorldState {
         settlementPolicies.clear();
         populationGroups.clear();
         emergencyWindows.clear();
+        settlementDevelopments.clear();
+        developmentPolicies.clear();
+        developmentIntents.clear();
         sites.clear();
         siteAffiliations.clear();
         siteCapabilities.clear();
