@@ -27,6 +27,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -79,6 +80,7 @@ public final class PaleMirrorEvents {
         String siegeSlotId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
         if (!siegeObjectId.isBlank() && !siegeSlotId.isBlank() && CrimsonSandboxAdapter.isSiegeEntity(event.getEntity())
                 && event.getEntity().level().getServer() != null) {
+            AdapterRegistry.crimson().presentDeath(event.getEntity());
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
                     .siegeEntityDestroyed(siegeObjectId, siegeSlotId, event.getEntity().getUUID());
         }
@@ -86,6 +88,7 @@ public final class PaleMirrorEvents {
         String slotId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
         if (!actorObjectId.isBlank() && !slotId.isBlank() && CrimsonSandboxAdapter.isActor(event.getEntity())
                 && event.getEntity().level().getServer() != null) {
+            AdapterRegistry.crimson().presentDeath(event.getEntity());
             String causationId = "entity:" + event.getEntity().getUUID();
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new CrimsonEncounterActorDestroyed(
                     "crimson-actor-destroyed:" + causationId, new io.farfrontier.palemirror.domain.WorldObjectId(actorObjectId),
@@ -100,6 +103,13 @@ public final class PaleMirrorEvents {
                 && !PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).controllerVulnerable(objectId)) {
             event.setCanceled(true);
         }
+    }
+
+    @SubscribeEvent
+    public static void onLivingDamage(LivingDamageEvent.Post event) {
+        if (event.getNewDamage() <= 0.0F) return;
+        AdapterRegistry.crimson().presentDamage(event.getEntity());
+        AdapterRegistry.crimson().presentAttack(event.getSource().getEntity());
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)

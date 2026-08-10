@@ -54,6 +54,13 @@ audited CEM-selecting names, model-carrier equipment, scale and Pummeler's
 resource contract is checked in Gradle and the Pummeler carrier is checked in
 a real NeoForge GameTest.
 
+PM additionally supplies Raptor's limb/body frames, Bloodlink's five approved
+stage frames, and an invulnerable no-AI Osiris Brain visual passenger. Rusher
+and Mangler receive a short-lived PM marker passenger only while dashing so
+their CEM `is_ridden` pose is active. These presentation children carry PM
+visual provenance and are always discarded when their registered parent is
+removed or dies. They cannot receive Crimson tags, teams, scoreboards or AI.
+
 ## PM siege constraints
 
 Nodes are not derived Crimson blocks: they are PM-owned Sea Lanterns constrained

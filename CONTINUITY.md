@@ -26,6 +26,8 @@
 - This private integration reuses the pinned Crimson client resources already
   installed by the pack; PM owns the exact CEM-selecting entity data, not
   copied Crimson assets.
+- Presentation stays inside the isolated adapter: effects are derived from
+  registered PM entities and never write domain state or call Crimson runtime.
 
 ## State
 
@@ -52,16 +54,20 @@
   equipment/scale; Pummeler has a PM-owned Crimson model-display passenger.
 - The pinned-resource verifier covers all used CEM names and Pummeler's model
   carrier; a GameTest verifies the Pummeler passenger contract.
+- `CrimsonPresentationRuntime` now transfers local sounds, particles,
+  Raptor/Bloodlink model frames, CEM dash poses, Osiris health-phase cues and
+  an Osiris Brain visual child for the complete supported PM roster. All
+  presentation children are PM-owned and cleaned with their parent.
 
 ### Now
 
-- Run full critical-code verification and commit the local visual-contract
-  change.
+- Run full critical-code verification and commit the PM-owned presentation
+  runtime change.
 
 ### Next
 
 - Perform a graphical client/multiplayer pass against the private pack to
-  validate rendered frames and animations, then tune effects deliberately.
+  validate rendered frames, mixing and particles, then tune effects deliberately.
 
 ## Open questions
 

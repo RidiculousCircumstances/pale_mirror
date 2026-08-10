@@ -47,7 +47,10 @@ enum CrimsonSiegeProfile {
     boolean matches(Entity entity) {
         if (entity == null || entity.getType() != entityType || !entity.getTags().contains(markerTag)
                 || !visualName.equals(entity.getName().getString())) return false;
-        return this != PUMMELER || entity.getPassengers().stream().anyMatch(passenger -> passenger.getType() == EntityType.ITEM_DISPLAY
+        if (this == PUMMELER) return entity.getPassengers().stream().anyMatch(passenger -> passenger.getType() == EntityType.ITEM_DISPLAY
                 && passenger.getTags().contains("PM_Pummeler_Visual"));
+        if (this == OSIRIS) return entity.getPassengers().stream().anyMatch(passenger -> passenger.getType() == EntityType.MAGMA_CUBE
+                && passenger.getTags().contains("PM_Osiris_Brain"));
+        return true;
     }
 }

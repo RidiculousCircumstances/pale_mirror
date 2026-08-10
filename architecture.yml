@@ -66,6 +66,6 @@ critical_flows:
     owner: domain siege state plus neoforge materialization and CrimsonSandboxAdapter
     verification: critical-code
   - id: pm-crimson-visual-contract
-    path: PM actor profile -> exact entity visual name and model carrier -> pinned Crimson client resources -> client rendering
-    owner: neoforge CrimsonSandboxAdapter and pinned Crimson client pack
+    path: PM actor lifecycle/combat -> bounded CrimsonPresentationRuntime -> exact model frames, sounds and particles -> pinned Crimson client resources -> client rendering
+    owner: neoforge CrimsonSandboxAdapter, CrimsonPresentationRuntime and pinned Crimson client pack
     verification: critical-code

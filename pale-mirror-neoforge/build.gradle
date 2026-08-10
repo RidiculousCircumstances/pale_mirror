@@ -162,7 +162,13 @@ tasks.register('verifyCrimsonVisualContract') {
                 'assets/minecraft/optifine/cem/wither_skeleton.properties' : ['name.1="Crimsonified Wither Skeleton"', 'name.2="Decayed Wither Skeleton"', 'name.3="Stage I Bloodlink"', 'name.4="Stage II Bloodlink"', 'name.5="Stage III Bloodlink"'],
                 'assets/minecraft/optifine/cem/ravager.properties'         : ['name.2="Rusher"', 'name.3="Mangler"'],
                 'assets/minecraft/optifine/cem/phantom.properties'         : ['name.4="Kraken"'],
-                'assets/minecraft/models/item/book.json'                   : ['custom_model_data":5450230', 'crimson_curse/pummeler']
+                'assets/minecraft/optifine/cem/magma_cube.properties'      : ['name.1="Osiris Brain"'],
+                'assets/minecraft/models/item/book.json'                   : ['custom_model_data":5450100', 'custom_model_data":5450106',
+                                                                             'custom_model_data":5450013', 'custom_model_data":5450015',
+                                                                             'custom_model_data":5450170', 'custom_model_data":5450192',
+                                                                             'custom_model_data":5450230', 'crimson_curse/stage1_bloodlink_open0',
+                                                                             'crimson_curse/stage3_bloodlink_open0', 'crimson_curse/raptor_limbs_front',
+                                                                             'crimson_curse/raptor_body', 'crimson_curse/pummeler']
         ]
         def jar = new java.util.jar.JarFile(crimsonIntegrationJar.get().asFile)
         try {

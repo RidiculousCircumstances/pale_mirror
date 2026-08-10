@@ -14,11 +14,11 @@ import net.minecraft.world.phys.Vec3;
 enum CrimsonActorBehavior {
     VANILLA {
         @Override
-        long execute(Mob actor, ServerPlayer target) { return TARGET_REFRESH_TICKS; }
+        long execute(Mob actor, ServerPlayer target, CrimsonPresentationRuntime presentation) { return TARGET_REFRESH_TICKS; }
     },
     RUSHER_DASH {
         @Override
-        long execute(Mob actor, ServerPlayer target) {
+        long execute(Mob actor, ServerPlayer target, CrimsonPresentationRuntime presentation) {
             if (target == null) return TARGET_REFRESH_TICKS;
             Vec3 offset = target.position().subtract(actor.position());
             double horizontalDistance = Math.sqrt(offset.x * offset.x + offset.z * offset.z);
@@ -32,16 +32,18 @@ enum CrimsonActorBehavior {
             actor.hurtMarked = true;
             actor.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, RUSHER_EFFECT_TICKS, 1, true, false));
             actor.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, RUSHER_EFFECT_TICKS, 0, true, false));
+            presentation.rusherDash(actor);
             return RUSHER_DASH_COOLDOWN_TICKS;
         }
     },
     RAPTOR_AURA {
         @Override
-        long execute(Mob actor, ServerPlayer target) {
+        long execute(Mob actor, ServerPlayer target, CrimsonPresentationRuntime presentation) {
             actor.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, RAPTOR_INVISIBILITY_TICKS, 0, true, false));
             if (target != null && actor.distanceToSqr(target) <= RAPTOR_AURA_RANGE_SQUARED) {
                 target.addEffect(new MobEffectInstance(MobEffects.POISON, RAPTOR_AURA_EFFECT_TICKS, 1, false, false));
                 target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, RAPTOR_AURA_EFFECT_TICKS, 0, false, false));
+                presentation.raptorAura(actor);
             }
             return TARGET_REFRESH_TICKS;
         }
@@ -58,5 +60,5 @@ enum CrimsonActorBehavior {
     private static final int RAPTOR_AURA_EFFECT_TICKS = 60;
     private static final double RAPTOR_AURA_RANGE_SQUARED = 1.8D * 1.8D;
 
-    abstract long execute(Mob actor, ServerPlayer target);
+    abstract long execute(Mob actor, ServerPlayer target, CrimsonPresentationRuntime presentation);
 }

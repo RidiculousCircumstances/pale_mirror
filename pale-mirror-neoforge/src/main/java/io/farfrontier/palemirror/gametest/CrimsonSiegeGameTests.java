@@ -7,8 +7,12 @@ import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.integration.crimson.ActorOperationResult;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
+import io.farfrontier.palemirror.internal.world.EncounterActorRef;
+import io.farfrontier.palemirror.internal.world.EncounterRecord;
+import io.farfrontier.palemirror.internal.world.EncounterState;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.SiegePartKind;
 import io.farfrontier.palemirror.internal.world.SiegePartRef;
@@ -16,13 +20,18 @@ import io.farfrontier.palemirror.internal.world.SiegeRecord;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.TestMineTemplate;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.component.CustomModelData;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -132,6 +141,72 @@ public final class CrimsonSiegeGameTests {
                 .getInt("minecraft:custom_model_data"), 5450230,
                 "Pummeler display must select Crimson model 5450230");
         AdapterRegistry.crimson().removeSiegeEntity(level, mine, "visual_pummeler");
+        helper.assertTrue(display.isRemoved(), "Pummeler cleanup must remove its PM-owned visual passenger");
+        helper.succeed();
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
+    public static void pmPresentationDrivesCrimsonModelFramesAndPhases(GameTestHelper helper) {
+        if (AdapterRegistry.crimson().health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
+            helper.succeed();
+            return;
+        }
+        ServerLevel level = helper.getLevel();
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
+        reset(level);
+        clearMineVolume(level, anchor);
+        TestMineRecord mine = TestMineTemplate.place(level, anchor, new WorldObjectId("pale_mirror:presentation_test"),
+                StoryAudienceId.globalTestAudience());
+        mine.setEncounter(new EncounterRecord("presentation", "1", "pm:presentation-test", 1L,
+                java.util.List.of(new EncounterActorRef("raptor", "pale_mirror:raptor", "minecraft:zombie", null,
+                        EncounterActorRef.Status.MISSING, 0L, 0)), EncounterState.ACTIVE, ""));
+        SiegePartRef bloodlink = new SiegePartRef("bloodlink_i", SiegePartKind.BLOODLINK, "pale_mirror:bloodlink_i",
+                anchor.above(), null, SiegePartRef.Status.MISSING);
+        SiegePartRef osiris = new SiegePartRef("osiris", SiegePartKind.BOSS, "pale_mirror:osiris",
+                anchor.above(2), null, SiegePartRef.Status.MISSING);
+        mine.setSiege(new SiegeRecord("pale_mirror:crimson_apex", "1", 1L, java.util.List.of(bloodlink, osiris), ""));
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        data.registerTestMine(mine);
+
+        EncounterProfile.ActorSlot raptorSlot = new EncounterProfile.ActorSlot("raptor", "pale_mirror:raptor", ThreatTier.SIEGE);
+        helper.assertValueEqual(AdapterRegistry.crimson().ensureActor(level, mine, "pm:presentation-test", raptorSlot).status(),
+                ActorOperationResult.Status.MATERIALIZED, "Raptor must materialize with its model carriers");
+        helper.assertValueEqual(AdapterRegistry.crimson().ensureSiegeEntity(level, mine, "pm:presentation-test", bloodlink).status(),
+                ActorOperationResult.Status.MATERIALIZED, "Bloodlink must materialize with its model carrier");
+        helper.assertValueEqual(AdapterRegistry.crimson().ensureSiegeEntity(level, mine, "pm:presentation-test", osiris).status(),
+                ActorOperationResult.Status.MATERIALIZED, "Osiris must materialize for its local phase cue");
+
+        Mob raptor = (Mob) level.getEntity(mine.encounter().actor("raptor").orElseThrow().entityId());
+        Mob link = (Mob) level.getEntity(mine.siege().part("bloodlink_i").orElseThrow().entityId());
+        Mob boss = (Mob) level.getEntity(mine.siege().part("osiris").orElseThrow().entityId());
+        helper.assertValueEqual(modelData(raptor, EquipmentSlot.HEAD), 5450192,
+                "Raptor must retain Crimson's body model carrier");
+        helper.assertValueEqual(modelData(link, EquipmentSlot.HEAD), 5450100,
+                "Bloodlink I must start with Crimson's Stage I model carrier");
+        var brain = boss.getPassengers().stream().filter(value -> value.getType() == net.minecraft.world.entity.EntityType.MAGMA_CUBE
+                        && value.getTags().contains("PM_Osiris_Brain") && value.getName().getString().equals("Osiris Brain"))
+                .findFirst().orElse(null);
+        helper.assertTrue(brain != null,
+                "Osiris must retain its PM-owned Crimson Brain visual passenger");
+
+        raptor.setDeltaMovement(new Vec3(0.2D, 0.0D, 0.0D));
+        boss.setHealth(boss.getMaxHealth() * 0.4F);
+        AdapterRegistry.crimson().tickRuntime(level.getServer(), data);
+        helper.assertTrue(modelData(raptor, EquipmentSlot.MAINHAND) >= 5450170
+                        && modelData(raptor, EquipmentSlot.MAINHAND) <= 5450180,
+                "PM presentation must drive Raptor's audited animated hand-model frame range");
+        int bloodlinkFrame = modelData(link, EquipmentSlot.HEAD);
+        helper.assertTrue(bloodlinkFrame == 5450100 || bloodlinkFrame == 5450101 || bloodlinkFrame == 5450102
+                        || bloodlinkFrame == 5450019 || bloodlinkFrame == 5450013,
+                "PM presentation must drive an approved Bloodlink Stage I model frame");
+        helper.assertValueEqual(boss.getPersistentData().getInt("pale_mirror_crimson_visual_phase"), 1,
+                "PM presentation must emit Osiris's first local phase exactly once");
+
+        AdapterRegistry.crimson().removeActor(level, mine, "raptor");
+        AdapterRegistry.crimson().removeSiegeEntity(level, mine, "bloodlink_i");
+        AdapterRegistry.crimson().removeSiegeEntity(level, mine, "osiris");
+        helper.assertTrue(brain.isRemoved(), "Osiris cleanup must remove its PM-owned Brain visual passenger");
         helper.succeed();
     }
 
@@ -144,6 +219,11 @@ public final class CrimsonSiegeGameTests {
         entity.die(level.damageSources().generic());
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(mine.id())
                 .orElseThrow().siege().stage(), expected, "gate must advance exactly one PM clearance stage: " + slot);
+    }
+
+    private static int modelData(Mob entity, EquipmentSlot slot) {
+        CustomModelData modelData = entity.getItemBySlot(slot).get(DataComponents.CUSTOM_MODEL_DATA);
+        return modelData == null ? -1 : modelData.value();
     }
 
     private static void advanceTier(PaleMirrorRuntime runtime, int steps, int ticks) {

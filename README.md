@@ -76,8 +76,20 @@ The runtime fails the operation rather than accepting a visually malformed
 actor: PM verifies the exact name for every roster/siege profile and verifies
 the Pummeler passenger. `verifyCrimsonVisualContract` compares all required
 CEM names and the Pummeler model entry with the checksum-pinned Crimson JAR.
-It is a resource-contract check; an actual rendered-frame check still requires
-a graphical client playthrough.
+It also verifies the Raptor and Bloodlink model-frame resources plus Osiris
+Brain's CEM resource.
+
+`CrimsonPresentationRuntime` owns the live presentation of the supported PM
+roster. It emits the audited local spawn, ambient, hurt, death and attack cues;
+drives Raptor and Bloodlink book-model frames; provides short-lived invisible
+PM markers for Rusher/Mangler CEM dash poses; and gives Osiris a safe,
+PM-owned Brain visual passenger. All effects are bounded to registered PM
+entities, have a per-tick work budget, and are deleted with their parent. It
+uses only vanilla sound/particle APIs and never calls upstream Crimson
+functions, scoreboards, raids, terrain conversion or infection logic.
+
+This verifies server-side visual data and effect dispatch; an actual
+rendered-frame check still requires a graphical client playthrough.
 
 Run the real Crimson actor and tick-isolation GameTest with:
 

@@ -75,6 +75,29 @@ registered PM parent. `verifyCrimsonVisualContract` checks every used CEM name
 and this display-model entry against the pinned JAR. It validates resources and
 server-side entity data, not pixels rendered by a live graphical client.
 
+## PM-owned presentation runtime
+
+`CrimsonPresentationRuntime` is the complete presentation transfer for the
+PM-supported roster, not a reactivation of Crimson's runtime. It uses only
+registered PM actor/siege UUIDs and a fixed 32-entity work budget. It provides:
+
+* spawn, ambient, hurt and death sound/particle cues for all sixteen normal
+  forms and the six siege forms, using the vanilla sound events audited from
+  Crimson;
+* attack telegraphs for the Rusher, Raptor, Mangler, Pummeler, Kraken and
+  Bloodlinks, plus Osiris's two health phases;
+* Raptor limb/body book-model frames and Bloodlink stage frames from the pinned
+  client model map;
+* short-lived PM-owned marker passengers for the Rusher/Mangler CEM dash pose;
+* PM-owned Pummeler and Osiris Brain visual passengers, both deleted with the
+  registered parent.
+
+Presentation state is either derived from game time and the actor UUID, or is a
+single bounded `pale_mirror_crimson_visual_phase` field on Osiris solely to
+avoid replaying its phase cue after restart. It is never read by the domain.
+No presentation action changes a PM facility, scenario, siege stage, block, or
+non-PM entity; only the existing typed observations do that.
+
 ## PM-owned siege profile
 
 At `APEX`, the optional sandbox materializes a separate, PM-owned clearance

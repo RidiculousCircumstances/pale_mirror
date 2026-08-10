@@ -193,6 +193,8 @@ public final class CoreRecoveryGameTests {
         runtime.tick();
         helper.assertTrue(rusher.getDeltaMovement().horizontalDistanceSqr() > 0.1D,
                 "PM-owned Rusher behavior must dash only toward a player inside its threat site");
+        helper.assertTrue(rusher.getPassengers().stream().anyMatch(value -> value.getTags().contains("PM_Crimson_Dash_Pose")),
+                "PM-owned Rusher dash must create the bounded CEM dash-pose marker");
         rusher.moveTo(anchor.getX() + 20.5D, rusher.getY(), anchor.getZ() + 20.5D, 0.0F, 0.0F);
         mine.encounter().scheduleRuntime("rusher", 0L);
         runtime.tick();

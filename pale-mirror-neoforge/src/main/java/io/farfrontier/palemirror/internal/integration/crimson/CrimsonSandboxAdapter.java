@@ -33,8 +33,9 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
     private static final ResourceLocation CRIMSON_TICK = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/tick.mcfunction");
     private static final String SANDBOX_PACK_ID = "mod/pale_mirror:crimson_sandbox";
     private volatile AdapterHealth verifiedHealth;
-    private final CrimsonActorRuntime actorRuntime = new CrimsonActorRuntime();
-    private final CrimsonSiegeRuntime siegeRuntime = new CrimsonSiegeRuntime();
+    private final CrimsonPresentationRuntime presentation = new CrimsonPresentationRuntime();
+    private final CrimsonActorRuntime actorRuntime = new CrimsonActorRuntime(presentation);
+    private final CrimsonSiegeRuntime siegeRuntime = new CrimsonSiegeRuntime(presentation);
 
     @Override
     public String id() { return "pale_mirror:crimson_sandbox"; }
@@ -117,13 +118,16 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         actor.getPersistentData().putString(PROFILE_KEY, profile.id());
         if (!level.addFreshEntity(actor)) return ActorOperationResult.unavailable("Could not add Crimson actor to the level");
         if (!CrimsonProtocol1431.initializeActor(level, actor, profile)) {
+            presentation.discardVisualChildren(actor);
             actor.discard();
             return ActorOperationResult.unavailable("Crimson sandbox initializer failed");
         }
         if (!isOwnedActor(actor, mine, slot.id()) || !profile.matches(actor)) {
+            presentation.discardVisualChildren(actor);
             actor.discard();
             return ActorOperationResult.unavailable("Crimson sandbox initializer postcondition failed");
         }
+        presentation.spawned(level, actor, profile.id());
         mine.encounter().activate(slot.id(), actor.getUUID(), profile.entityTypeId());
         return ActorOperationResult.materialized();
     }
@@ -142,6 +146,7 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         if (!isOwnedActor(entity, mine, slotId)) {
             return ActorOperationResult.unavailable("Crimson actor identity conflict during cleanup for slot " + slotId);
         }
+        presentation.discardVisualChildren(entity);
         entity.discard();
         mine.encounter().removed(slotId);
         return ActorOperationResult.materialized();
@@ -172,9 +177,11 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         if (!level.addFreshEntity(entity)) return ActorOperationResult.unavailable("Could not add Crimson siege entity to level");
         if (!CrimsonProtocol1431.initializeSiegeEntity(level, entity, profile)
                 || !isOwnedSiegeEntity(entity, mine, part.slotId()) || !profile.matches(entity)) {
+            presentation.discardVisualChildren(entity);
             entity.discard();
             return ActorOperationResult.unavailable("Crimson siege initializer postcondition failed");
         }
+        presentation.spawned(level, entity, profile.id());
         mine.siege().activate(part.slotId(), entity.getUUID());
         return ActorOperationResult.materialized();
     }
@@ -186,7 +193,10 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         if (entity != null && !isOwnedSiegeEntity(entity, mine, slotId)) {
             return ActorOperationResult.unavailable("Crimson siege identity conflict during cleanup for slot " + slotId);
         }
-        if (entity != null) entity.discard();
+        if (entity != null) {
+            presentation.discardVisualChildren(entity);
+            entity.discard();
+        }
         mine.siege().remove(slotId);
         return ActorOperationResult.materialized();
     }
@@ -197,7 +207,39 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
         if (health().status() == AdapterHealth.Status.AVAILABLE) {
             actorRuntime.tick(server, data);
             siegeRuntime.tick(server, data);
+            presentation.tick(server, data);
         }
+    }
+
+    /** Emits only local PM presentation for a successfully applied damage event. */
+    public void presentDamage(net.minecraft.world.entity.LivingEntity entity) {
+        presentationProfile(entity).ifPresent(profile -> presentation.hurt(entity, profile));
+    }
+
+    /** Emits only local PM presentation for an observed PM actor or siege death. */
+    public void presentDeath(net.minecraft.world.entity.LivingEntity entity) {
+        presentationProfile(entity).ifPresent(profile -> {
+            presentation.died(entity, profile);
+            presentation.discardVisualChildren(entity);
+        });
+    }
+
+    /** Replays the approved attack cue when a PM actor is the source of actual damage. */
+    public void presentAttack(Entity entity) {
+        if (!(entity instanceof Mob actor)) return;
+        presentationProfile(actor).ifPresent(profile -> presentation.attacked(actor, profile));
+    }
+
+    private static java.util.Optional<String> presentationProfile(Entity entity) {
+        if (entity == null || entity.isRemoved()) return java.util.Optional.empty();
+        String profileId = entity.getPersistentData().getString(PROFILE_KEY);
+        if (ACTOR_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))) {
+            return CrimsonActorProfile.byId(profileId).filter(profile -> profile.matches(entity)).map(CrimsonActorProfile::id);
+        }
+        if (SIEGE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))) {
+            return CrimsonSiegeProfile.byId(profileId).filter(profile -> profile.matches(entity)).map(CrimsonSiegeProfile::id);
+        }
+        return java.util.Optional.empty();
     }
 
     public static boolean isOwnedActor(Entity entity, TestMineRecord mine, String slotId) {

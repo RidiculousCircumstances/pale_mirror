@@ -21,6 +21,11 @@ final class CrimsonActorRuntime {
     private static final int WORK_BUDGET_PER_TICK = 32;
     private static final long TARGET_REFRESH_TICKS = 20;
     private static final double TARGET_RANGE_SQUARED = 32.0D * 32.0D;
+    private final CrimsonPresentationRuntime presentation;
+
+    CrimsonActorRuntime(CrimsonPresentationRuntime presentation) {
+        this.presentation = presentation;
+    }
 
     void tick(MinecraftServer server, PaleMirrorSavedData data) {
         int remaining = WORK_BUDGET_PER_TICK;
@@ -39,7 +44,7 @@ final class CrimsonActorRuntime {
                         || !CrimsonSandboxAdapter.isOwnedActor(entity, mine, reference.slotId()) || !profile.matches(entity)) continue;
                 keepInsideThreatSite(mine, actor);
                 ServerPlayer target = refreshTarget(level, mine, actor);
-                mine.encounter().scheduleRuntime(reference.slotId(), gameTick + profile.behavior().execute(actor, target));
+                mine.encounter().scheduleRuntime(reference.slotId(), gameTick + profile.behavior().execute(actor, target, presentation));
                 data.setDirty();
                 remaining--;
             }
