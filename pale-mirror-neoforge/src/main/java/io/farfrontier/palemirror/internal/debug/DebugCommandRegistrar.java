@@ -30,7 +30,7 @@ public final class DebugCommandRegistrar {
 
         LiteralArgumentBuilder<CommandSourceStack> settlements = Commands.literal("settlements");
         settlements.then(Commands.literal("list").executes(context -> withPlayer(context,
-                player -> success(context, runtime(context).debug().settlementCandidates(player)))));
+                player -> components(context, runtime(context).debug().settlementLocations(player)))));
         settlements.then(Commands.literal("nearest").executes(context -> withPlayer(context,
                 player -> success(context, runtime(context).debug().nearestSettlement(player)))));
         settlements.then(Commands.literal("bind-nearest").executes(context -> withPlayer(context,
@@ -39,6 +39,17 @@ public final class DebugCommandRegistrar {
                 .executes(context -> action(context, runtime(context).debug().bind(new WorldObjectId(
                         ResourceLocationArgument.getId(context, "id").toString()))))));
         debug.then(settlements);
+
+        debug.then(Commands.literal("mines").then(Commands.literal("list").executes(context -> withPlayer(context,
+                player -> components(context, runtime(context).debug().mineLocations(player))))));
+        debug.then(Commands.literal("objects").then(Commands.literal("list").executes(context -> withPlayer(context,
+                player -> components(context, runtime(context).debug().objectLocations(player))))));
+
+        LiteralArgumentBuilder<CommandSourceStack> teleport = Commands.literal("tp");
+        teleport.then(teleportTarget("settlement", (controller, player, id) -> controller.teleportSettlement(player, id)));
+        teleport.then(teleportTarget("mine", (controller, player, id) -> controller.teleportMine(player, id)));
+        teleport.then(teleportTarget("object", (controller, player, id) -> controller.teleportObject(player, id)));
+        debug.then(teleport);
 
         debug.then(Commands.literal("region").then(Commands.literal("status").executes(context ->
                 success(context, runtime(context).debug().regionStatus()))));
@@ -68,6 +79,12 @@ public final class DebugCommandRegistrar {
                 : runtime(context).debug().zoneMarkers(player, enabled)));
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> teleportTarget(String kind, TeleportOperation operation) {
+        return Commands.literal(kind).then(Commands.argument("id", ResourceLocationArgument.id()).executes(context ->
+                withPlayer(context, player -> action(context, operation.apply(runtime(context).debug(), player,
+                        new WorldObjectId(ResourceLocationArgument.getId(context, "id").toString()))))));
+    }
+
     private static int withPlayer(CommandContext<CommandSourceStack> context,
                                   java.util.function.ToIntFunction<ServerPlayer> operation) {
         try {
@@ -87,6 +104,11 @@ public final class DebugCommandRegistrar {
         return 1;
     }
 
+    private static int components(CommandContext<CommandSourceStack> context, java.util.List<Component> messages) {
+        messages.forEach(message -> context.getSource().sendSuccess(() -> message, false));
+        return messages.size();
+    }
+
     private static int action(CommandContext<CommandSourceStack> context, RuntimeDebugService.ActionResult result) {
         if (result.success()) context.getSource().sendSuccess(() -> Component.literal(result.message()), true);
         else context.getSource().sendFailure(Component.literal(result.message()));
@@ -97,5 +119,10 @@ public final class DebugCommandRegistrar {
         return source.getEntity() == null
                 ? UUID.nameUUIDFromBytes(("command-source:" + source.getTextName()).getBytes(StandardCharsets.UTF_8))
                 : source.getEntity().getUUID();
+    }
+
+    @FunctionalInterface
+    private interface TeleportOperation {
+        RuntimeDebugService.ActionResult apply(RuntimeDebugController controller, ServerPlayer player, WorldObjectId id);
     }
 }

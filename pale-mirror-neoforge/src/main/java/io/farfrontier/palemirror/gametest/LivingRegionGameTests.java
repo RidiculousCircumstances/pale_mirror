@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugService;
+import io.farfrontier.palemirror.internal.debug.RuntimeDebugNavigator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
@@ -143,6 +144,7 @@ public final class LivingRegionGameTests {
     }
 
     @GameTest(batch = "pm-runtime-debug", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @SuppressWarnings("removal")
     public static void manualDiscoveryAndExplicitBindUseCanonicalPipeline(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
@@ -163,6 +165,20 @@ public final class LivingRegionGameTests {
         helper.assertValueEqual(data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElseThrow().placeId(),
                 new WorldObjectId("pale_mirror:test_observed_village"),
                 "explicit selection must use the production registration pipeline");
+        var player = helper.makeMockServerPlayerInLevel();
+        var navigator = new RuntimeDebugNavigator(level.getServer(), data);
+        var settlementLine = navigator.settlements(player).get(1);
+        helper.assertTrue(settlementLine.getString().contains(anchor.getX() + "," + anchor.getY())
+                        && settlementLine.getSiblings().getLast().getStyle().getClickEvent().getValue()
+                        .equals("/pale_mirror debug tp settlement pale_mirror:test_observed_village"),
+                "settlement listing must expose coordinates and an exact clickable teleport command");
+        helper.assertTrue(navigator.teleportSettlement(player,
+                new WorldObjectId("pale_mirror:test_observed_village")).success(),
+                "a persisted observed settlement anchor must be teleportable by an explicit operator action");
+        helper.assertTrue(!navigator.teleportMine(player, CampaignRegionBootstrapper.MINE17).success(),
+                "a merely planned mine must reject teleport rather than pretending it has a physical anchor");
+        helper.assertTrue(navigator.mines(player).stream().anyMatch(line -> line.getString().contains("PLANNED")),
+                "the mine listing must still expose planned coordinates when teleport is unavailable");
         helper.succeed();
     }
 

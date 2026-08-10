@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
 
 /** Narrow facade which keeps debug command plumbing out of the core server coordinator. */
 public final class RuntimeDebugController {
@@ -20,6 +21,7 @@ public final class RuntimeDebugController {
     private final DomainCommandProcessor commands;
     private final Consumer<List<DomainEvent>> eventHandler;
     private final RuntimeDebugService service = new RuntimeDebugService();
+    private final RuntimeDebugNavigator navigator;
 
     public RuntimeDebugController(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands,
                                   Consumer<List<DomainEvent>> eventHandler) {
@@ -27,6 +29,7 @@ public final class RuntimeDebugController {
         this.data = data;
         this.commands = commands;
         this.eventHandler = eventHandler;
+        this.navigator = new RuntimeDebugNavigator(server, data);
     }
 
     public boolean automaticBindingEnabled() { return service.automaticBindingEnabled(); }
@@ -35,6 +38,18 @@ public final class RuntimeDebugController {
     public String discoveryMode(RuntimeDebugService.DiscoveryMode mode) { return service.setDiscoveryMode(mode); }
     public String settlementCandidates(ServerPlayer player) { return service.settlementCandidates(server, data, player); }
     public String nearestSettlement(ServerPlayer player) { return service.nearestCandidate(server, data, player); }
+    public List<Component> settlementLocations(ServerPlayer player) { return navigator.settlements(player); }
+    public List<Component> mineLocations(ServerPlayer player) { return navigator.mines(player); }
+    public List<Component> objectLocations(ServerPlayer player) { return navigator.objects(player); }
+    public RuntimeDebugService.ActionResult teleportSettlement(ServerPlayer player, WorldObjectId id) {
+        return navigator.teleportSettlement(player, id);
+    }
+    public RuntimeDebugService.ActionResult teleportMine(ServerPlayer player, WorldObjectId id) {
+        return navigator.teleportMine(player, id);
+    }
+    public RuntimeDebugService.ActionResult teleportObject(ServerPlayer player, WorldObjectId id) {
+        return navigator.teleportObject(player, id);
+    }
     public RuntimeDebugService.ActionResult bindNearest(ServerPlayer player) {
         return service.bindNearest(server, data, commands, player);
     }

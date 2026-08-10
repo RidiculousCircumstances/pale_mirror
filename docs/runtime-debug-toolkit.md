@@ -62,6 +62,25 @@ per-player particles/tooltips rather than blocks, entities, or item mutations.
 Rendering is sent only to operators who enabled markers, is distance-bounded to 256 blocks, and creates no persistent
 world object.
 
+## Coordinates and navigation
+
+The location lists print dimension, anchor coordinates, distance in the current dimension and operational state. Every
+persisted physical anchor has a clickable `[TP]` action:
+
+```text
+/pale_mirror debug settlements list
+/pale_mirror debug mines list
+/pale_mirror debug objects list
+
+/pale_mirror debug tp settlement <namespace:id>
+/pale_mirror debug tp mine <namespace:id>
+/pale_mirror debug tp object <namespace:id>
+```
+
+Teleportation is an explicit operator action and uses the target dimension and a safe surface position above the anchor.
+A canonical but not yet materialized mine reports its planned dimension/X/Z and rejects teleportation: it has no physical
+anchor yet, and the navigator never pretends that planned work has already happened.
+
 ## Safe reset after an accidental binding
 
 Reset is intentionally narrow. It is available only while the campaign is wholly abstract and no materialization job,
@@ -84,6 +103,9 @@ blockers; after physical work starts, use the relevant reconciliation/cleanup wo
 /pale_mirror debug discovery status|auto|manual
 /pale_mirror debug settlements list|nearest|bind-nearest
 /pale_mirror debug settlements bind <namespace:id>
+/pale_mirror debug mines list
+/pale_mirror debug objects list
+/pale_mirror debug tp settlement|mine|object <namespace:id>
 /pale_mirror debug region status
 /pale_mirror debug verify
 /pale_mirror debug trigger infection
