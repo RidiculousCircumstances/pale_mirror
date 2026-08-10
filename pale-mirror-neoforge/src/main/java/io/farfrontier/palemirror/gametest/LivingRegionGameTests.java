@@ -5,6 +5,9 @@ import java.util.UUID;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.ResourceKind;
+import io.farfrontier.palemirror.domain.ScenarioInstance;
+import io.farfrontier.palemirror.domain.ScenarioStatus;
+import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.adapter.SettlementObservation;
 import io.farfrontier.palemirror.internal.adapter.VanillaVillageSettlementAdapter;
@@ -13,6 +16,7 @@ import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugService;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugNavigator;
+import io.farfrontier.palemirror.internal.presentation.ScenarioCommandPresentation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
@@ -179,6 +183,25 @@ public final class LivingRegionGameTests {
                 "a merely planned mine must reject teleport rather than pretending it has a physical anchor");
         helper.assertTrue(navigator.mines(player).stream().anyMatch(line -> line.getString().contains("PLANNED")),
                 "the mine listing must still expose planned coordinates when teleport is unavailable");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-runtime-debug", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @SuppressWarnings("removal")
+    public static void offeredScenarioRendersExactClickableAcceptCommand(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        var scenario = new ScenarioInstance("pm:scenario:48", "pm:event:48",
+                new WorldObjectId("pale_mirror:mine"), new StoryAudienceId("pm:audience:test"),
+                "pale_mirror:investigation_recovery", "1", ScenarioStatus.OFFERED);
+        var component = ScenarioCommandPresentation.offered(java.util.List.of(scenario));
+        var click = component.getSiblings().getLast().getStyle().getClickEvent();
+        helper.assertTrue(component.getString().contains("pm:scenario:48 [OFFERED] [ACCEPT]")
+                        && click != null
+                        && click.getAction() == net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND
+                        && click.getValue().equals("/pale_mirror scenario accept pm:scenario:48"),
+                "offered scenarios must expose an exact clickable accept command using the complete opaque ID");
+        helper.assertValueEqual(ScenarioCommandPresentation.offered(java.util.List.of()).getString(),
+                "No offered scenarios.", "an empty offer list must remain explicit");
         helper.succeed();
     }
 

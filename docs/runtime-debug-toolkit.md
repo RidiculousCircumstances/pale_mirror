@@ -114,5 +114,9 @@ blockers; after physical work starts, use the relevant reconciliation/cleanup wo
 /pale_mirror debug reset confirm <token>
 ```
 
+`/pale_mirror scenario list` renders every offered scenario with a green clickable `[ACCEPT]` action. The action
+submits the complete opaque scenario ID (for example `pm:scenario:48`), so operators do not need to reconstruct it
+from its numeric suffix.
+
 World-object arguments now use Minecraft resource-location parsing, so identifiers such as
 `pale_mirror:ironhill_community` do not need quotes.

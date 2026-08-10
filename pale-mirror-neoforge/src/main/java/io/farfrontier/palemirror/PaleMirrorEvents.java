@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.internal.content.CampaignRegionDefinitions;
 import io.farfrontier.palemirror.internal.debug.DebugCommandRegistrar;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
+import io.farfrontier.palemirror.internal.presentation.ScenarioCommandPresentation;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -301,7 +302,7 @@ public final class PaleMirrorEvents {
         scenario.then(Commands.literal("list").executes(context -> {
                             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
                             var offered = runtime.offered(audienceFor(context.getSource(), runtime));
-                            context.getSource().sendSuccess(() -> Component.literal(offered.isEmpty() ? "No offered scenarios." : offered.stream().map(value -> value.id() + " [" + value.status() + "]").reduce((a, b) -> a + ", " + b).orElseThrow()), false);
+                            context.getSource().sendSuccess(() -> ScenarioCommandPresentation.offered(offered), false);
                             return offered.size();
         }));
         scenario.then(Commands.literal("accept").then(Commands.argument("id", StringArgumentType.word()).executes(context -> {
