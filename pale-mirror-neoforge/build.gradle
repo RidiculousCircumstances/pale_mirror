@@ -11,6 +11,9 @@ base {
 def crimsonIntegrationJar = layout.buildDirectory.file('integration/crimson_curse-1.4.3.1.jar')
 def crimsonIntegrationUrl = rootProject.providers.gradleProperty('crimson_integration_url').get()
 def crimsonIntegrationSha512 = rootProject.providers.gradleProperty('crimson_integration_sha512').get()
+def sporeIntegrationJar = layout.buildDirectory.file('integration/spore_1.21.1_2.2.0j_neo.jar')
+def sporeIntegrationUrl = rootProject.providers.gradleProperty('spore_integration_url').get()
+def sporeIntegrationSha512 = rootProject.providers.gradleProperty('spore_integration_sha512').get()
 
 dependencies {
     implementation project(':pale-mirror-domain')
@@ -40,6 +43,12 @@ neoForge {
         crimsonGameTestServer {
             type = 'gameTestServer'
             gameDirectory = layout.buildDirectory.dir('runs/crimson-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+        }
+        sporeGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/spore-game-test')
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
         }
@@ -224,6 +233,34 @@ def prepareCrimsonGameTestMods = tasks.register('prepareCrimsonGameTestMods', Sy
 
 tasks.named('runCrimsonGameTestServer') {
     dependsOn prepareCrimsonGameTestMods
+}
+
+tasks.register('downloadSporeIntegrationJar') {
+    group = 'verification'
+    description = 'Downloads the pinned Spore runtime JAR and verifies SHA-512; normal builds never invoke it.'
+    outputs.file(sporeIntegrationJar)
+    inputs.property('url', sporeIntegrationUrl)
+    inputs.property('sha512', sporeIntegrationSha512)
+    doLast {
+        def target = sporeIntegrationJar.get().asFile
+        target.parentFile.mkdirs()
+        byte[] bytes = new URL(sporeIntegrationUrl).bytes
+        String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+        if (!actual.equalsIgnoreCase(sporeIntegrationSha512)) {
+            throw new GradleException("Pinned Spore SHA-512 mismatch: expected ${sporeIntegrationSha512}, got ${actual}")
+        }
+        target.bytes = bytes
+    }
+}
+
+def prepareSporeGameTestMods = tasks.register('prepareSporeGameTestMods', Sync) {
+    dependsOn tasks.named('downloadSporeIntegrationJar')
+    from(sporeIntegrationJar)
+    into(layout.buildDirectory.dir('runs/spore-game-test/mods'))
+}
+
+tasks.named('runSporeGameTestServer') {
+    dependsOn prepareSporeGameTestMods
 }
 
 tasks.register('crimsonIntegrationHarness', Exec) {

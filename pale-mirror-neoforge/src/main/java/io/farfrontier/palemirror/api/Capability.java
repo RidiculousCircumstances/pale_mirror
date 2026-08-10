@@ -7,5 +7,7 @@ public enum Capability {
     /** Optional presentation capability. It is never required for core recovery. */
     CRIMSON_ENCOUNTER_ACTORS,
     /** Optional PM-owned Nodes, Bloodlinks and boss forms from the pinned Crimson sandbox. */
-    CRIMSON_SIEGE_OBJECTS
+    CRIMSON_SIEGE_OBJECTS,
+    /** Optional dormant native forms from the version-pinned Spore sandbox. */
+    SPORE_ENCOUNTER_ACTORS
 }

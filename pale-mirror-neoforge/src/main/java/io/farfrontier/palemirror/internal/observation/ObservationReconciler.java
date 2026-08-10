@@ -29,9 +29,11 @@ public final class ObservationReconciler {
             case MaterializationPostconditionObserved materialized -> commands.execute(data.worldState(),
                     new DomainCommand.MaterializationObserved(materialized.facilityId(), materialized.desiredRevision(),
                             materialized.causationId()));
-            case CrimsonEncounterActorDestroyed destroyed -> {
+            case EncounterActorDestroyed destroyed -> {
                 var mine = data.testMines().get(destroyed.facilityId());
-                if (mine != null) mine.encounter().defeated(destroyed.slotId(), destroyed.entityId());
+                boolean sourceMatches = data.worldState().facility(destroyed.facilityId())
+                        .map(facility -> facility.infectionSource().equals(destroyed.source())).orElse(false);
+                if (mine != null && sourceMatches) mine.encounter().defeated(destroyed.slotId(), destroyed.entityId());
                 yield List.of();
             }
             case SiegeGateDestroyed destroyed -> {

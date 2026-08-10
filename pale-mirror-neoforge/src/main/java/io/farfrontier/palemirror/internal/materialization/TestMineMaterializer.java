@@ -2,13 +2,14 @@ package io.farfrontier.palemirror.internal.materialization;
 
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
-import io.farfrontier.palemirror.internal.integration.crimson.ActorOperationResult;
+import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.SiegePartRef;
 import io.farfrontier.palemirror.internal.world.SiegeRecord;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
 import io.farfrontier.palemirror.domain.ThreatTier;
+import io.farfrontier.palemirror.domain.FacilityState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -21,7 +22,7 @@ import net.minecraft.world.level.block.Blocks;
  * its physical postcondition before it is advanced in its job.
  */
 public final class TestMineMaterializer {
-    public boolean executeNext(ServerLevel level, TestMineRecord mine, MaterializationJob job) {
+    public boolean executeNext(ServerLevel level, TestMineRecord mine, FacilityState facility, MaterializationJob job) {
         if (!level.hasChunkAt(mine.anchor())) return false;
         if (job.state() == JobState.COMPLETED || job.state() == JobState.BLOCKED) return job.state() == JobState.COMPLETED;
         if (job.state() == JobState.PLANNED) job.start();
@@ -38,8 +39,8 @@ public final class TestMineMaterializer {
             job.advanceOperation();
         } else if (operation.state() != OperationState.COMPLETED) {
             operation.start();
-            if (operation.type() == MaterializationOperationType.ENSURE_CRIMSON_ENCOUNTER_ACTOR) {
-                ActorOperationResult result = ensureCrimsonActor(level, mine, job.jobId(), operation.target());
+            if (operation.type() == MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR) {
+                ActorOperationResult result = ensureSourceActor(level, mine, facility, job.jobId(), operation.target());
                 if (result.status() == ActorOperationResult.Status.MATERIALIZED) operation.complete();
                 else {
                     operation.degrade(result.diagnostic());
@@ -49,8 +50,8 @@ public final class TestMineMaterializer {
                 if (job.nextOperation() == null) completeJob(mine, job);
                 return job.state() == JobState.COMPLETED;
             }
-            if (operation.type() == MaterializationOperationType.REMOVE_CRIMSON_ENCOUNTER_ACTOR) {
-                ActorOperationResult result = removeCrimsonActor(level, mine, operation.target());
+            if (operation.type() == MaterializationOperationType.REMOVE_SOURCE_ENCOUNTER_ACTOR) {
+                ActorOperationResult result = removeSourceActor(level, mine, facility, operation.target());
                 if (result.status() == ActorOperationResult.Status.MATERIALIZED) operation.complete();
                 else {
                     operation.degrade(result.diagnostic());
@@ -82,7 +83,7 @@ public final class TestMineMaterializer {
                 if (job.nextOperation() == null) completeJob(mine, job);
                 return job.state() == JobState.COMPLETED;
             }
-            String error = execute(level, mine, job, operation);
+            String error = execute(level, mine, facility, job, operation);
             if (error != null) {
                 operation.block(error);
                 job.block(error);
@@ -97,13 +98,14 @@ public final class TestMineMaterializer {
         return job.state() == JobState.COMPLETED;
     }
 
-    private String execute(ServerLevel level, TestMineRecord mine, MaterializationJob job, MaterializationOperation operation) {
+    private String execute(ServerLevel level, TestMineRecord mine, FacilityState facility, MaterializationJob job,
+                           MaterializationOperation operation) {
         return switch (operation.type()) {
-            case ENSURE_OVERLAY -> ensureOverlay(level, mine, operation.target());
+            case ENSURE_OVERLAY -> ensureOverlay(level, mine, facility, operation.target());
             case ENSURE_PM_ANCHOR -> ensureAnchor(level, mine, job.jobId());
             case REMOVE_PM_ANCHOR -> removeAnchor(level, mine);
-            case ENSURE_CRIMSON_ENCOUNTER_ACTOR -> throw new IllegalStateException("Crimson actor operation must be handled as optional work");
-            case REMOVE_CRIMSON_ENCOUNTER_ACTOR -> throw new IllegalStateException("Crimson actor cleanup must be handled as optional work");
+            case ENSURE_SOURCE_ENCOUNTER_ACTOR -> throw new IllegalStateException("Source actor operation must be handled as optional work");
+            case REMOVE_SOURCE_ENCOUNTER_ACTOR -> throw new IllegalStateException("Source actor cleanup must be handled as optional work");
             case ENSURE_SIEGE_NODE -> ensureSiegeNode(level, mine, operation.target());
             case REMOVE_SIEGE_NODE -> removeSiegeNode(level, mine, operation.target());
             case ENSURE_CRIMSON_SIEGE_ENTITY -> throw new IllegalStateException("Crimson siege operation must be handled as optional work");
@@ -112,7 +114,7 @@ public final class TestMineMaterializer {
         };
     }
 
-    private String ensureOverlay(ServerLevel level, TestMineRecord mine, String tierName) {
+    private String ensureOverlay(ServerLevel level, TestMineRecord mine, FacilityState facility, String tierName) {
         ThreatTier tier;
         try {
             tier = ThreatTier.valueOf(tierName);
@@ -124,7 +126,7 @@ public final class TestMineMaterializer {
             return "Test mine biome exceeds the bounded registered-cell budget";
         }
         for (MutableCell cell : mine.biomeCells()) {
-            String desired = TestMineInfectionBiomePalette.desiredBlock(cell, tier);
+            String desired = TestMineInfectionBiomePalette.desiredBlock(cell, facility.infectionSource(), tier);
             boolean previouslyOwned = !cell.lastAppliedBlock().equals(cell.baselineBlock());
             boolean mustApply = !desired.equals(cell.baselineBlock());
             if (!previouslyOwned && !mustApply) continue;
@@ -138,7 +140,7 @@ public final class TestMineMaterializer {
             if (error != null) return error;
             cell.markApplied(desired);
         }
-        return overlaysMatch(level, mine, tier) ? null : "Infection biome postcondition failed";
+        return overlaysMatch(level, mine, facility, tier) ? null : "Infection biome postcondition failed";
     }
 
     private String ensureAnchor(ServerLevel level, TestMineRecord mine, String jobId) {
@@ -154,7 +156,8 @@ public final class TestMineMaterializer {
                 ? null : "PM anchor removal postcondition failed";
     }
 
-    private ActorOperationResult ensureCrimsonActor(ServerLevel level, TestMineRecord mine, String jobId, String slotId) {
+    private ActorOperationResult ensureSourceActor(ServerLevel level, TestMineRecord mine, FacilityState facility,
+                                                   String jobId, String slotId) {
         EncounterProfile.ActorSlot slot = mine.encounter().actors().stream()
                 .filter(actor -> actor.slotId().equals(slotId))
                 .findFirst()
@@ -162,11 +165,11 @@ public final class TestMineMaterializer {
                         io.farfrontier.palemirror.domain.ThreatTier.FOOTHOLD))
                 .orElse(null);
         return slot == null ? ActorOperationResult.unavailable("Encounter profile has no persisted slot " + slotId)
-                : AdapterRegistry.crimson().ensureActor(level, mine, jobId, slot);
+                : AdapterRegistry.sourceActor(facility.infectionSource()).ensureActor(level, mine, jobId, slot);
     }
 
-    private ActorOperationResult removeCrimsonActor(ServerLevel level, TestMineRecord mine, String slotId) {
-        ActorOperationResult result = AdapterRegistry.crimson().removeActor(level, mine, slotId);
+    private ActorOperationResult removeSourceActor(ServerLevel level, TestMineRecord mine, FacilityState facility, String slotId) {
+        ActorOperationResult result = AdapterRegistry.sourceActor(facility.infectionSource()).removeActor(level, mine, slotId);
         if (result.status() != ActorOperationResult.Status.MATERIALIZED) {
             return result;
         }
@@ -247,9 +250,9 @@ public final class TestMineMaterializer {
         return baselinesMatch(level, mine) ? null : "Overlay removal postcondition failed";
     }
 
-    private static boolean overlaysMatch(ServerLevel level, TestMineRecord mine, ThreatTier tier) {
+    private static boolean overlaysMatch(ServerLevel level, TestMineRecord mine, FacilityState facility, ThreatTier tier) {
         return mine.biomeCells().stream().allMatch(cell -> {
-            String desired = TestMineInfectionBiomePalette.desiredBlock(cell, tier);
+            String desired = TestMineInfectionBiomePalette.desiredBlock(cell, facility.infectionSource(), tier);
             boolean previouslyOwned = !cell.lastAppliedBlock().equals(cell.baselineBlock());
             boolean mustApply = !desired.equals(cell.baselineBlock());
             return !previouslyOwned && !mustApply || blockId(level, cell.position()).equals(desired);

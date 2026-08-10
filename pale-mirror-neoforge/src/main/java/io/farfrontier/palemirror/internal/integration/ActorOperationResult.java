@@ -1,6 +1,6 @@
-package io.farfrontier.palemirror.internal.integration.crimson;
+package io.farfrontier.palemirror.internal.integration;
 
-/** Typed result of a sandbox-owned actor operation; failures stay optional. */
+/** Typed outcome of optional source-owned actor work; canonical PM state never depends on it. */
 public record ActorOperationResult(Status status, String diagnostic) {
     public enum Status { MATERIALIZED, UNAVAILABLE }
 

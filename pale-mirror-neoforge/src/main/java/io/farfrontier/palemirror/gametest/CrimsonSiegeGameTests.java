@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
-import io.farfrontier.palemirror.internal.integration.crimson.ActorOperationResult;
+import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.EncounterRecord;

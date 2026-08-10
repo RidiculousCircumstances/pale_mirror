@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainEventType;
 import io.farfrontier.palemirror.domain.FacilityState;
+import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
@@ -41,7 +42,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    private static final int CURRENT_SCHEMA = 9;
+    static final int CURRENT_SCHEMA = 10;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -124,121 +125,11 @@ public final class PaleMirrorSavedData extends SavedData {
     }
 
     private static boolean isMigratable(int version) {
-        return version == CURRENT_SCHEMA || version == 5 || version == 6 || version == 7 || version == 8;
+        return PaleMirrorSnapshotMigrations.isMigratable(version);
     }
 
-    /** Sequential migration of the prior released snapshot; never silently drops native references. */
     private static CompoundTag migrate(CompoundTag source) {
-        int version = source.contains("schemaVersion", Tag.TAG_INT) ? source.getInt("schemaVersion") : 0;
-        if (version > CURRENT_SCHEMA || !isMigratable(version)) throw incompatibleSchema(version);
-        CompoundTag migrated = source.copy();
-        if (version == 5) {
-            migrateV5ToV6(migrated);
-            version = 6;
-        }
-        if (version == 6) {
-            migrateV6ToV7(migrated);
-            version = 7;
-        }
-        if (version == 7) {
-            migrateV7ToV8(migrated);
-            version = 8;
-        }
-        if (version == 8) migrateV8ToV9(migrated);
-        return migrated;
-    }
-
-    private static void migrateV5ToV6(CompoundTag tag) {
-        for (Tag element : tag.getList("testMines", Tag.TAG_COMPOUND)) {
-            CompoundTag mine = (CompoundTag) element;
-            if (mine.hasUUID("controller") && !mine.hasUUID("anchor")) mine.putUUID("anchor", mine.getUUID("controller"));
-            if (mine.contains("job", Tag.TAG_COMPOUND)) {
-                for (Tag operationElement : mine.getCompound("job").getList("operations", Tag.TAG_COMPOUND)) {
-                    CompoundTag operation = (CompoundTag) operationElement;
-                    operation.putString("type", switch (operation.getString("type")) {
-                        case "ENSURE_TEST_THREAT_CONTROLLER" -> "ENSURE_PM_ANCHOR";
-                        case "REMOVE_TEST_THREAT_CONTROLLER" -> "REMOVE_PM_ANCHOR";
-                        default -> operation.getString("type");
-                    });
-                    if (!operation.contains("target", Tag.TAG_STRING)) operation.putString("target", "");
-                }
-            }
-        }
-        CompoundTag snapshot = tag.getCompound("snapshot");
-        for (Tag element : snapshot.getList("scenarios", Tag.TAG_COMPOUND)) {
-            CompoundTag scenario = (CompoundTag) element;
-            if (!scenario.contains("encounterProfile", Tag.TAG_STRING)) {
-                boolean defaultMineScenario = "pale_mirror:investigation_recovery".equals(scenario.getString("definition"));
-                scenario.putString("encounterProfile", defaultMineScenario ? "pale_mirror:crimson_mine_guards" : "");
-                scenario.putString("encounterProfileVersion", defaultMineScenario ? "1" : "");
-            }
-            ListTag capabilities = scenario.getList("requiredCapabilities", Tag.TAG_STRING);
-            for (int index = 0; index < capabilities.size(); index++) {
-                String value = capabilities.getString(index);
-                if ("TEST_THREAT_MATERIALIZATION".equals(value)) capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("PM_ANCHOR_MATERIALIZATION"));
-                if ("TEST_THREAT_OBSERVATION".equals(value)) capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("PM_ANCHOR_OBSERVATION"));
-            }
-        }
-        tag.putInt("schemaVersion", 6);
-    }
-
-    /** v6 had one implicit infected presentation; v7 pins PM tiers and actor profiles explicitly. */
-    private static void migrateV6ToV7(CompoundTag tag) {
-        CompoundTag snapshot = tag.getCompound("snapshot");
-        long step = snapshot.getLong("simulationStep");
-        for (Tag element : snapshot.getList("facilities", Tag.TAG_COMPOUND)) {
-            CompoundTag facility = (CompoundTag) element;
-            boolean infected = "INFECTED".equals(facility.getString("status"));
-            facility.putString("threatTier", infected ? ThreatTier.FOOTHOLD.name() : ThreatTier.DORMANT.name());
-            facility.putLong("threatStartedAtStep", infected ? step : 0L);
-        }
-        for (Tag element : tag.getList("testMines", Tag.TAG_COMPOUND)) {
-            CompoundTag mine = (CompoundTag) element;
-            if (!mine.contains("encounter", Tag.TAG_COMPOUND)) continue;
-            for (Tag actorElement : mine.getCompound("encounter").getList("actors", Tag.TAG_COMPOUND)) {
-                CompoundTag actor = (CompoundTag) actorElement;
-                String entityType = actor.getString("entityType");
-                actor.putString("profile", "minecraft:zombie".equals(entityType)
-                        ? "pale_mirror:crimsonified_human" : "");
-                actor.putLong("nextRuntimeTick", 0L);
-                actor.putInt("actionCounter", 0);
-            }
-        }
-        tag.putInt("schemaVersion", 7);
-    }
-
-    /** Existing threats remain controller-vulnerable after upgrade; a new siege never silently locks a live world. */
-    private static void migrateV7ToV8(CompoundTag tag) {
-        CompoundTag snapshot = tag.getCompound("snapshot");
-        for (Tag element : snapshot.getList("facilities", Tag.TAG_COMPOUND)) {
-            CompoundTag facility = (CompoundTag) element;
-            if (facility.contains("siege", Tag.TAG_COMPOUND)) continue;
-            CompoundTag siege = new CompoundTag();
-            boolean infected = "INFECTED".equals(facility.getString("status"));
-            siege.putString("stage", infected ? SiegeStage.BYPASSED.name() : SiegeStage.INACTIVE.name());
-            siege.putString("definition", "");
-            siege.putString("definitionVersion", "");
-            siege.putString("boss", "");
-            siege.put("destroyedNodes", new ListTag());
-            facility.put("siege", siege);
-        }
-        tag.putInt("schemaVersion", 8);
-    }
-
-    /**
-     * v9 adds stage provenance to cells.  Pre-v9 snapshots retain their four
-     * verified cells as Node slots instead of taking ownership of additional
-     * world blocks whose history PM never recorded.
-     */
-    private static void migrateV8ToV9(CompoundTag tag) {
-        for (Tag mineElement : tag.getList("testMines", Tag.TAG_COMPOUND)) {
-            CompoundTag mine = (CompoundTag) mineElement;
-            for (Tag cellElement : mine.getList("cells", Tag.TAG_COMPOUND)) {
-                CompoundTag cell = (CompoundTag) cellElement;
-                if (!cell.contains("infectionStage", Tag.TAG_STRING)) cell.putString("infectionStage", InfectionBiomeStage.NODE.name());
-            }
-        }
-        tag.putInt("schemaVersion", 9);
+        return PaleMirrorSnapshotMigrations.migrate(source);
     }
 
     @Override
@@ -272,6 +163,7 @@ public final class PaleMirrorSavedData extends SavedData {
         state.facilities().forEach(value -> {
             CompoundTag facility = new CompoundTag();
             facility.putString("id", value.id().value());
+            facility.putString("infectionSource", value.infectionSource().value());
             facility.putInt("normalProduction", value.normalProduction());
             facility.putInt("threshold", value.infectionThreshold());
             facility.putInt("pressure", value.infectionPressure());
@@ -364,7 +256,9 @@ public final class PaleMirrorSavedData extends SavedData {
                     SiegeStage.valueOf(siegeTag.contains("stage", Tag.TAG_STRING) ? siegeTag.getString("stage") : "INACTIVE"),
                     siegeTag.getString("definition"), siegeTag.getString("definitionVersion"), siegeTag.getString("boss"),
                     new java.util.LinkedHashSet<>(stringList(siegeTag.getList("destroyedNodes", Tag.TAG_STRING))));
-            state.putFacility(new FacilityState(new WorldObjectId(value.getString("id")), value.getInt("normalProduction"),
+            state.putFacility(new FacilityState(new WorldObjectId(value.getString("id")),
+                    new InfectionSourceId(value.contains("infectionSource", Tag.TAG_STRING)
+                            ? value.getString("infectionSource") : InfectionSourceId.CRIMSON.value()), value.getInt("normalProduction"),
                     value.getInt("threshold"), value.getInt("pressure"), value.getInt("currentProduction"),
                     value.getInt("recoverySteps"), value.getLong("desiredRevision"), value.getLong("observedRevision"),
                     FacilityStatus.valueOf(value.getString("status")),

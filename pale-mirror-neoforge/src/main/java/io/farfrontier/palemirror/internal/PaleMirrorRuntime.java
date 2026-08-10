@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.FacilityState;
+import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.Narrator;
 import io.farfrontier.palemirror.domain.ScenarioDefinitionRef;
 import io.farfrontier.palemirror.domain.SettlementState;
@@ -71,23 +72,39 @@ public final class PaleMirrorRuntime {
         reconcileScenarioCapabilities();
         reconcileMaterialization();
         AdapterRegistry.crimson().tickRuntime(server, data);
+        AdapterRegistry.spore().tickRuntime(server, data);
     }
 
     public TestMineRecord createTestMine(ServerPlayer player) {
         WorldObjectId id = new WorldObjectId("pale_mirror:test_mine");
-        TestMineRecord mine = registerThreatSite(player, id);
+        TestMineRecord mine = registerThreatSite(player, id, InfectionSourceId.CRIMSON);
         data.worldState().putSettlement(new SettlementState(new WorldObjectId("pale_mirror:test_settlement"), id, 80, 40));
         data.setDirty();
         return mine;
     }
 
+    public TestMineRecord createSporeTestMine(ServerPlayer player) {
+        WorldObjectId id = new WorldObjectId("pale_mirror:spore_test_mine");
+        return registerThreatSite(player, id, InfectionSourceId.SPORE);
+    }
+
     /** Registers a PM-owned, bounded threat site in any loaded player dimension; it never uses worldgen. */
     public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id) {
+        return registerThreatSite(player, id, InfectionSourceId.CRIMSON);
+    }
+
+    /**
+     * A facility is bound to exactly one canonical infection source at
+     * creation.  Source composition is deliberately rejected by construction
+     * until a future policy defines conflict and cleanup semantics.
+     */
+    public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id, InfectionSourceId source) {
         if (data.testMines().containsKey(id)) throw new IllegalStateException("PM threat site already exists: " + id.value());
         ServerLevel level = player.serverLevel();
-        TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2), id, audienceFor(player));
+        int sourceOffset = source.equals(InfectionSourceId.SPORE) ? 16 : 0;
+        TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2).offset(sourceOffset, 0, 0), id, audienceFor(player));
         data.registerTestMine(mine);
-        data.worldState().putFacility(new FacilityState(id, 80, 10, 10));
+        data.worldState().putFacility(new FacilityState(id, source, 80, 10, 10));
         data.setDirty();
         return mine;
     }
@@ -139,7 +156,8 @@ public final class PaleMirrorRuntime {
         if (mine == null) return "Unknown PM world object " + objectId;
         String job = mine.job() == null ? "none" : mine.job().jobId() + ":" + mine.job().state()
                 + ":op=" + mine.job().nextOperationIndex();
-        return "object=" + mine.id().value() + ", lifecycle=" + mine.object().lifecycle()
+        String source = data.worldState().facility(mine.id()).map(value -> value.infectionSource().value()).orElse("missing");
+        return "object=" + mine.id().value() + ", source=" + source + ", lifecycle=" + mine.object().lifecycle()
                 + ", anchor=" + (mine.anchorId() == null ? "none" : mine.anchorId())
                 + ", encounter=" + mine.encounter().state() + ":" + mine.encounter().profileId()
                 + (mine.encounter().diagnostic().isBlank() ? "" : " (" + mine.encounter().diagnostic() + ")")
@@ -216,8 +234,12 @@ public final class PaleMirrorRuntime {
     }
 
     private void offerScenario(DomainEvent event, StoryAudienceId audience) {
+        InfectionSourceId source = data.worldState().facility(event.subject()).map(FacilityState::infectionSource)
+                .orElse(InfectionSourceId.CRIMSON);
+        String definitionId = source.equals(InfectionSourceId.SPORE)
+                ? "pale_mirror:spore_investigation_recovery" : "pale_mirror:investigation_recovery";
         ScenarioDefinition definition = ScenarioDefinitions.current().get(
-                net.minecraft.resources.ResourceLocation.parse("pale_mirror:investigation_recovery"));
+                net.minecraft.resources.ResourceLocation.parse(definitionId));
         if (definition == null) {
             commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "definition unavailable"));
             return;
@@ -241,7 +263,8 @@ public final class PaleMirrorRuntime {
             java.util.Set<io.farfrontier.palemirror.api.Capability> requirements = scenario.requiredCapabilities().stream()
                     .map(io.farfrontier.palemirror.api.Capability::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet());
             boolean siegeNeedsCrimson = data.worldState().facility(scenario.target())
-                    .map(value -> value.siege().stage().protectsController()).orElse(false);
+                    .map(value -> value.infectionSource().equals(InfectionSourceId.CRIMSON)
+                            && value.siege().stage().protectsController()).orElse(false);
             boolean available = AdapterRegistry.supports(requirements) && (!siegeNeedsCrimson
                     || AdapterRegistry.crimson().health().status() == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE);
             if (!available || scenario.status() == io.farfrontier.palemirror.domain.ScenarioStatus.BLOCKED) {
@@ -257,6 +280,12 @@ public final class PaleMirrorRuntime {
     private void reconcilePendingSieges() {
         data.worldState().facilities().forEach(facility -> {
             if (facility.siege().stage() != SiegeStage.PENDING) return;
+            if (!facility.infectionSource().equals(InfectionSourceId.CRIMSON)) {
+                List<DomainEvent> events = commands.execute(data.worldState(),
+                        new DomainCommand.BypassSiege(facility.id(), "pm:source-no-siege:" + facility.infectionSource().value()));
+                if (!events.isEmpty()) data.setDirty();
+                return;
+            }
             CrimsonSiegeDefinition definition = CrimsonSiegeDefinitions.defaultDefinition();
             if (AdapterRegistry.crimson().health().status() == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE
                     && definition != null) {

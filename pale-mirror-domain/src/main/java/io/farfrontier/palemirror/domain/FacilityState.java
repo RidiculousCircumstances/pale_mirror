@@ -4,6 +4,7 @@ import java.util.Objects;
 
 public final class FacilityState {
     private final WorldObjectId id;
+    private final InfectionSourceId infectionSource;
     private final int normalProduction;
     private final int infectionThreshold;
     private int infectionPressure;
@@ -17,14 +18,19 @@ public final class FacilityState {
     private final SiegeState siege;
 
     public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure) {
-        this(id, normalProduction, infectionThreshold, infectionPressure, normalProduction, 0, 0, 0,
+        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure);
+    }
+
+    public FacilityState(WorldObjectId id, InfectionSourceId infectionSource, int normalProduction,
+                         int infectionThreshold, int infectionPressure) {
+        this(id, infectionSource, normalProduction, infectionThreshold, infectionPressure, normalProduction, 0, 0, 0,
                 FacilityStatus.OPERATIONAL, ThreatTier.DORMANT, 0, new SiegeState());
     }
 
     public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure,
                          int currentProduction, int recoveryStepsRemaining, long desiredRevision,
                          long observedRevision, FacilityStatus status) {
-        this(id, normalProduction, infectionThreshold, infectionPressure, currentProduction, recoveryStepsRemaining,
+        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure, currentProduction, recoveryStepsRemaining,
                 desiredRevision, observedRevision, status,
                 status == FacilityStatus.INFECTED ? ThreatTier.FOOTHOLD : ThreatTier.DORMANT, 0, new SiegeState());
     }
@@ -32,7 +38,7 @@ public final class FacilityState {
     public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure,
                          int currentProduction, int recoveryStepsRemaining, long desiredRevision,
                          long observedRevision, FacilityStatus status, ThreatTier threatTier, long threatStartedAtStep) {
-        this(id, normalProduction, infectionThreshold, infectionPressure, currentProduction, recoveryStepsRemaining,
+        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure, currentProduction, recoveryStepsRemaining,
                 desiredRevision, observedRevision, status, threatTier, threatStartedAtStep, new SiegeState());
     }
 
@@ -40,7 +46,16 @@ public final class FacilityState {
                          int currentProduction, int recoveryStepsRemaining, long desiredRevision,
                          long observedRevision, FacilityStatus status, ThreatTier threatTier, long threatStartedAtStep,
                          SiegeState siege) {
+        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure, currentProduction,
+                recoveryStepsRemaining, desiredRevision, observedRevision, status, threatTier, threatStartedAtStep, siege);
+    }
+
+    public FacilityState(WorldObjectId id, InfectionSourceId infectionSource, int normalProduction, int infectionThreshold,
+                         int infectionPressure, int currentProduction, int recoveryStepsRemaining, long desiredRevision,
+                         long observedRevision, FacilityStatus status, ThreatTier threatTier, long threatStartedAtStep,
+                         SiegeState siege) {
         this.id = Objects.requireNonNull(id, "id");
+        this.infectionSource = Objects.requireNonNull(infectionSource, "infectionSource");
         this.normalProduction = normalProduction;
         this.infectionThreshold = infectionThreshold;
         this.infectionPressure = infectionPressure;
@@ -55,6 +70,7 @@ public final class FacilityState {
     }
 
     public WorldObjectId id() { return id; }
+    public InfectionSourceId infectionSource() { return infectionSource; }
     public int normalProduction() { return normalProduction; }
     public int infectionThreshold() { return infectionThreshold; }
     public int infectionPressure() { return infectionPressure; }

@@ -2,14 +2,15 @@
 
 ## Goal (success criteria)
 
-- Maintain a server-authoritative Pale Mirror core slice and expand the
-  version-pinned Crimson layer without making it a second source of truth.
+- Maintain a server-authoritative Pale Mirror core slice and expand isolated,
+  version-pinned infection sources without making them a second source of truth.
 
 ## Constraints/Assumptions
 
 - Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
 - `pale-mirror-domain` remains independent of Minecraft and NeoForge.
 - Core slice must work without Crimson Curse; the exact-version sandbox is optional.
+- Core slice must work without Fungal Infection:Spore; its sandbox is optional.
 - Crimson content is ARR-licensed; public distribution of derived content needs written permission.
 
 ## Key decisions
@@ -20,6 +21,8 @@
 - Third-party internals are allowed only in an isolated, version-pinned
   adapter; identifiers cannot leak to domain or generic materialization.
 - PM-native tiers—not Crimson Phase/Points/Mass—drive deterministic progression.
+- A facility has one immutable canonical `InfectionSourceId`; mixed-source
+  overlays are rejected until a dedicated composition policy exists.
 - At APEX, an available sandbox runs `4 Nodes → deterministic boss →
   Bloodlink I/II/III → PM anchor`; adapter loss blocks the scenario. Core-only
   activation bypasses the optional chain instead of changing core behavior.
@@ -31,6 +34,9 @@
 - The staged infection biome is core-only and uses fixed vanilla blocks in
   predeclared `test-mine-v2` cells; it never calls Crimson terrain conversion
   or claims unrecorded cells from legacy mines.
+- Spore 2.2.0j is isolated through its entity registry only.  Its first two
+  native forms are persistent, dormant and invulnerable presentation; PM alone
+  owns clearance and discards forms during cleanup to avoid native death/remains.
 
 ## State
 
@@ -65,16 +71,24 @@
 - New `test-mine-v2` sites render a bounded staged biome: 66 biome cells move
   through FOOTHOLD/INFESTED/SIEGE/APEX palettes while four separate Node cells
   retain siege ownership. Conflicts block instead of overwriting external edits.
+- Schema v10 persists the facility infection source and migrates v9 snapshots
+  to explicit Crimson source data.  Encounter operations and observations are
+  source-neutral; an observation with a mismatched source is ignored.
+- A checksum-pinned Spore 2.2.0j GameTest profile proves a separate
+  `pale_mirror:spore` scenario, fungal palette, two dormant native forms,
+  source persistence and PM-controlled cleanup.
 
 ### Now
 
-- The staged infection biome is implemented and its full critical-code suite,
-  packaged-JAR checks and Crimson dedicated-server smoke have passed.
+- Source-aware threat sites and the safe Spore thin vertical slice are
+  implemented; core and Spore GameTest profiles have passed.
 
 ### Next
 
+- Define an isolated, side-effect-controlled capability plan before enabling
+  combat, terrain or organism behaviours from additional Spore content.
 - Perform a graphical client/multiplayer pass against the private pack to
-  validate rendered frames, mixing and particles, then tune effects deliberately.
+  validate Crimson and Spore visuals, mixing and particles.
 
 ## Open questions
 
@@ -84,8 +98,9 @@
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/crimson-audit-1.4.3.1.md`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
 - `pale-mirror-domain/.../SiegeState.java`, `FacilityState.java`, `DomainCommandProcessor.java`
 - `pale-mirror-neoforge/.../PaleMirrorRuntime.java`, `PaleMirrorEvents.java`
 - `internal/materialization/`, `internal/observation/`, `internal/integration/crimson/`
 - `gametest/CrimsonSiegeGameTests.java`, `pale-mirror-neoforge/build.gradle`
+- `gametest/SporeSandboxGameTests.java`, `internal/integration/spore/`

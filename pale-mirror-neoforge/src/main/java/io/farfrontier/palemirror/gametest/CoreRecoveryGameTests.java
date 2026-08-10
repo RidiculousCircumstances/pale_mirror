@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.gametest;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.FacilityStatus;
+import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.ThreatTier;
@@ -122,8 +123,10 @@ public final class CoreRecoveryGameTests {
                 "v5 controller reference must migrate to the PM anchor reference");
         helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
                 "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 9,
-                "migrated snapshot must be rewritten as schema v9");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 10,
+                "migrated snapshot must be rewritten as schema v10");
+        helper.assertValueEqual(migrated.worldState().facility(mine.id()).orElseThrow().infectionSource(), InfectionSourceId.CRIMSON,
+                "legacy snapshot must receive the explicit source recorded by its original PM path");
         CompoundTag v8Presentation = persisted.copy();
         v8Presentation.putInt("schemaVersion", 8);
         for (Tag cellElement : v8Presentation.getList("testMines", Tag.TAG_COMPOUND).getCompound(0)
@@ -350,6 +353,9 @@ public final class CoreRecoveryGameTests {
 
     private static void downgradeV6SnapshotToV5(CompoundTag tag) {
         tag.putInt("schemaVersion", 5);
+        for (Tag facilityElement : tag.getCompound("snapshot").getList("facilities", Tag.TAG_COMPOUND)) {
+            ((CompoundTag) facilityElement).remove("infectionSource");
+        }
         CompoundTag mine = tag.getList("testMines", Tag.TAG_COMPOUND).getCompound(0);
         mine.putUUID("controller", mine.getUUID("anchor"));
         mine.remove("anchor");

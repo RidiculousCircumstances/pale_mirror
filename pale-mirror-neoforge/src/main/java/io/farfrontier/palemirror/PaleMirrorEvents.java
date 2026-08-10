@@ -12,7 +12,7 @@ import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.content.CrimsonSiegeDefinitions;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
-import io.farfrontier.palemirror.internal.observation.CrimsonEncounterActorDestroyed;
+import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -84,15 +84,18 @@ public final class PaleMirrorEvents {
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
                     .siegeEntityDestroyed(siegeObjectId, siegeSlotId, event.getEntity().getUUID());
         }
-        String actorObjectId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.OBJECT_ID_KEY);
-        String slotId = event.getEntity().getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
-        if (!actorObjectId.isBlank() && !slotId.isBlank() && CrimsonSandboxAdapter.isActor(event.getEntity())
-                && event.getEntity().level().getServer() != null) {
-            AdapterRegistry.crimson().presentDeath(event.getEntity());
-            String causationId = "entity:" + event.getEntity().getUUID();
-            PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new CrimsonEncounterActorDestroyed(
-                    "crimson-actor-destroyed:" + causationId, new io.farfrontier.palemirror.domain.WorldObjectId(actorObjectId),
-                    slotId, event.getEntity().getUUID()));
+        String actorObjectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
+        String slotId = event.getEntity().getPersistentData().getString("pale_mirror_encounter_slot");
+        if (!actorObjectId.isBlank() && !slotId.isBlank() && event.getEntity().level().getServer() != null) {
+            AdapterRegistry.threatActors().stream().filter(adapter -> adapter.matchesActor(event.getEntity())).findFirst()
+                    .ifPresent(adapter -> {
+                        adapter.presentDeath(event.getEntity());
+                        String causationId = "entity:" + event.getEntity().getUUID();
+                        PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).publish(new EncounterActorDestroyed(
+                                "encounter-actor-destroyed:" + adapter.source().value() + ":" + causationId,
+                                new io.farfrontier.palemirror.domain.WorldObjectId(actorObjectId), adapter.source(), slotId,
+                                event.getEntity().getUUID()));
+                    });
         }
     }
 
@@ -102,14 +105,18 @@ public final class PaleMirrorEvents {
         if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null
                 && !PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).controllerVulnerable(objectId)) {
             event.setCanceled(true);
+            return;
         }
+        if (AdapterRegistry.spore().matchesActor(event.getEntity())) event.setCanceled(true);
     }
 
     @SubscribeEvent
     public static void onLivingDamage(LivingDamageEvent.Post event) {
         if (event.getNewDamage() <= 0.0F) return;
-        AdapterRegistry.crimson().presentDamage(event.getEntity());
-        AdapterRegistry.crimson().presentAttack(event.getSource().getEntity());
+        AdapterRegistry.threatActors().forEach(adapter -> {
+            adapter.presentDamage(event.getEntity());
+            adapter.presentAttack(event.getSource().getEntity());
+        });
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -138,20 +145,21 @@ public final class PaleMirrorEvents {
                         return 0;
                 }
         })));
-        root.then(Commands.literal("threatsite").then(Commands.literal("register").requires(source -> source.hasPermission(4))
-                .then(Commands.argument("id", StringArgumentType.word()).executes(context -> {
+        root.then(Commands.literal("testmine").then(Commands.literal("create_spore").requires(source -> source.hasPermission(4)).executes(context -> {
                     try {
                         ServerPlayer player = context.getSource().getPlayerOrException();
-                        String id = net.minecraft.resources.ResourceLocation.parse(StringArgumentType.getString(context, "id")).toString();
-                        TestMineRecord site = PaleMirrorRuntime.forServer(context.getSource().getServer())
-                                .registerThreatSite(player, new io.farfrontier.palemirror.domain.WorldObjectId(id));
-                        context.getSource().sendSuccess(() -> Component.literal("Registered PM threat site " + site.id().value()), true);
+                        TestMineRecord mine = PaleMirrorRuntime.forServer(context.getSource().getServer()).createSporeTestMine(player);
+                        context.getSource().sendSuccess(() -> Component.literal("Created PM Spore test site " + mine.id().value()), true);
                         return 1;
-                    } catch (IllegalArgumentException | IllegalStateException failure) {
-                        context.getSource().sendFailure(Component.literal("Could not register PM threat site: " + failure.getMessage()));
+                    } catch (IllegalStateException failure) {
+                        context.getSource().sendFailure(Component.literal("Could not create PM Spore test site: " + failure.getMessage()));
                         return 0;
                     }
-                }))));
+        })));
+        root.then(Commands.literal("threatsite").then(Commands.literal("register").requires(source -> source.hasPermission(4))
+                .then(Commands.argument("id", StringArgumentType.word()).executes(context -> registerThreatSite(context, "crimson"))
+                        .then(Commands.argument("source", StringArgumentType.word()).executes(context ->
+                                registerThreatSite(context, StringArgumentType.getString(context, "source")))))));
         root.then(Commands.literal("simulate").then(Commands.literal("step").requires(source -> source.hasPermission(4))
                 .then(Commands.argument("count", IntegerArgumentType.integer(1, 24)).executes(context -> {
                             int count = IntegerArgumentType.getInteger(context, "count");
@@ -192,5 +200,25 @@ public final class PaleMirrorEvents {
 
     private static StoryAudienceId audienceFor(CommandSourceStack source, PaleMirrorRuntime runtime) {
         return source.getEntity() instanceof ServerPlayer player ? runtime.audienceFor(player) : runtime.defaultAudience();
+    }
+
+    private static int registerThreatSite(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context,
+                                          String sourceName) {
+        try {
+            io.farfrontier.palemirror.domain.InfectionSourceId source = switch (sourceName) {
+                case "crimson" -> io.farfrontier.palemirror.domain.InfectionSourceId.CRIMSON;
+                case "spore" -> io.farfrontier.palemirror.domain.InfectionSourceId.SPORE;
+                default -> throw new IllegalArgumentException("source must be crimson or spore");
+            };
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            String id = net.minecraft.resources.ResourceLocation.parse(StringArgumentType.getString(context, "id")).toString();
+            TestMineRecord site = PaleMirrorRuntime.forServer(context.getSource().getServer())
+                    .registerThreatSite(player, new io.farfrontier.palemirror.domain.WorldObjectId(id), source);
+            context.getSource().sendSuccess(() -> Component.literal("Registered PM " + sourceName + " threat site " + site.id().value()), true);
+            return 1;
+        } catch (IllegalArgumentException | IllegalStateException | com.mojang.brigadier.exceptions.CommandSyntaxException failure) {
+            context.getSource().sendFailure(Component.literal("Could not register PM threat site: " + failure.getMessage()));
+            return 0;
+        }
     }
 }

@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.internal.world.SiegeRecord;
 /** Deterministically translates a mine's desired domain state into executor operations. */
 public final class TestMineMaterializationTranslator {
     public static final String POLICY_ID = "pale_mirror:pm_anchor";
-    public static final String POLICY_VERSION = "6";
+    public static final String POLICY_VERSION = "7";
 
     public MaterializationPlan translate(FacilityState facility) {
         return translate(facility, null, EncounterRecord.none(), SiegeRecord.none());
@@ -34,7 +34,7 @@ public final class TestMineMaterializationTranslator {
                     facility.threatTier().name()));
             operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_PM_ANCHOR, ""));
             if (profile != null) profile.actors().forEach(actor -> operations.add(operation(id, revision, operations.size(),
-                    MaterializationOperationType.ENSURE_CRIMSON_ENCOUNTER_ACTOR, actor.id())));
+                    MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR, actor.id())));
             siege.parts().stream().filter(part -> part.status() != io.farfrontier.palemirror.internal.world.SiegePartRef.Status.DEFEATED)
                     .filter(part -> part.status() != io.farfrontier.palemirror.internal.world.SiegePartRef.Status.REMOVED)
                     .forEach(part -> operations.add(operation(id, revision, operations.size(),
@@ -45,7 +45,7 @@ public final class TestMineMaterializationTranslator {
         }
         List<MaterializationOperation> operations = new ArrayList<>();
         encounter.actors().forEach(actor -> operations.add(operation(id, revision, operations.size(),
-                MaterializationOperationType.REMOVE_CRIMSON_ENCOUNTER_ACTOR, actor.slotId())));
+                MaterializationOperationType.REMOVE_SOURCE_ENCOUNTER_ACTOR, actor.slotId())));
         siege.parts().forEach(part -> operations.add(operation(id, revision, operations.size(),
                 part.kind() == SiegePartKind.NODE ? MaterializationOperationType.REMOVE_SIEGE_NODE
                         : MaterializationOperationType.REMOVE_CRIMSON_SIEGE_ENTITY,

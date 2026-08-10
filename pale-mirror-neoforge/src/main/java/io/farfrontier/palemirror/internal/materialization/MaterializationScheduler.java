@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.farfrontier.palemirror.domain.FacilityState;
+import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
@@ -56,7 +57,7 @@ public final class MaterializationScheduler {
                 continue;
             }
             boolean wasCompleted = job.state() == JobState.COMPLETED;
-            boolean completed = executor.executeNext(level, mine, job);
+            boolean completed = executor.executeNext(level, mine, facility, job);
             data.setDirty();
             if (!wasCompleted && completed) observations.add(new MaterializationPostconditionObserved(
                     "materialization:" + job.jobId(), mine.id(), job.desiredRevision(), job.jobId()));
@@ -130,6 +131,7 @@ public final class MaterializationScheduler {
      * provenance a durable record without ever re-materialising a cleared gate.
      */
     private static void prepareSiege(TestMineRecord mine, FacilityState facility) {
+        if (!facility.infectionSource().equals(InfectionSourceId.CRIMSON)) return;
         if (facility.status() != FacilityStatus.INFECTED) return;
         SiegeStage stage = facility.siege().stage();
         if (stage == SiegeStage.INACTIVE || stage == SiegeStage.PENDING || stage == SiegeStage.BYPASSED) return;

@@ -5,7 +5,10 @@ import java.util.Set;
 import io.farfrontier.palemirror.api.AdapterHealth;
 import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.api.IntegrationAdapter;
+import io.farfrontier.palemirror.domain.InfectionSourceId;
+import io.farfrontier.palemirror.internal.adapter.ThreatActorAdapter;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
+import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -21,7 +24,7 @@ import net.neoforged.fml.ModList;
  * Isolated implementation of the pinned Crimson datapack protocol. PM owns
  * encounter identity and lifecycle; Crimson only supplies the local actor form.
  */
-public final class CrimsonSandboxAdapter implements IntegrationAdapter {
+public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
     public static final String OBJECT_ID_KEY = "pale_mirror_object_id";
     public static final String JOB_ID_KEY = "pale_mirror_job_id";
     public static final String ROLE_KEY = "pale_mirror_role";
@@ -39,6 +42,17 @@ public final class CrimsonSandboxAdapter implements IntegrationAdapter {
 
     @Override
     public String id() { return "pale_mirror:crimson_sandbox"; }
+
+    @Override
+    public InfectionSourceId source() { return InfectionSourceId.CRIMSON; }
+
+    @Override
+    public boolean matchesActor(Entity entity) { return isActor(entity); }
+
+    @Override
+    public boolean matchesOwnedActor(Entity entity, TestMineRecord site, String slotId) {
+        return isOwnedActor(entity, site, slotId);
+    }
 
     @Override
     public AdapterHealth health() {

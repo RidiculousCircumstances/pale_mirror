@@ -39,6 +39,8 @@ invariants:
     statement: Unknown or player-owned block changes are conflicts and must not be overwritten by default.
   - id: adapter-fallback
     statement: Missing optional integrations degrade to explicit adapter health states and must not block the core slice.
+  - id: source-identity
+    statement: Each facility has one immutable canonical InfectionSourceId; adapters and physical overlays must match it, and mixed-source composition requires an explicit future policy.
 
 critical_flows:
   - id: core-recovery
@@ -72,4 +74,12 @@ critical_flows:
   - id: pm-crimson-visual-contract
     path: PM actor lifecycle/combat -> bounded CrimsonPresentationRuntime -> exact model frames, sounds and particles -> pinned Crimson client resources -> client rendering
     owner: neoforge CrimsonSandboxAdapter, CrimsonPresentationRuntime and pinned Crimson client pack
+    verification: critical-code
+  - id: pm-source-aware-site
+    path: canonical InfectionSourceId -> source-neutral encounter operation -> isolated source adapter -> typed source-checked observation
+    owner: domain FacilityState plus neoforge materialization and reconciliation bridge
+    verification: critical-code
+  - id: pm-spore-dormant-slice
+    path: PM Spore tier -> registered native Spore form -> dormant/invulnerable containment -> PM anchor clearance -> discard cleanup
+    owner: neoforge SporeSandboxAdapter and PM materialization bridge
     verification: critical-code

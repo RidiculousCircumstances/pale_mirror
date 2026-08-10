@@ -1,0 +1,8 @@
+{
+  "id": "pale_mirror:spore_mine_guard",
+  "version": 1,
+  "actors": [
+    { "slot": "dormant_infected_human", "actor_profile": "pale_mirror:spore_infected_human", "minimum_tier": "FOOTHOLD" },
+    { "slot": "dormant_braiomil", "actor_profile": "pale_mirror:spore_braiomil", "minimum_tier": "INFESTED" }
+  ]
+}
