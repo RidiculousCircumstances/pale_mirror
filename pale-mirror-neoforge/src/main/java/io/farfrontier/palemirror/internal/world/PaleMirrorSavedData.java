@@ -12,12 +12,14 @@ import java.nio.file.Path;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainEventType;
 import io.farfrontier.palemirror.domain.FacilityState;
+import io.farfrontier.palemirror.domain.GatePhaseRef;
+import io.farfrontier.palemirror.domain.GatePlanRef;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
-import io.farfrontier.palemirror.domain.SiegeStage;
-import io.farfrontier.palemirror.domain.SiegeState;
+import io.farfrontier.palemirror.domain.SourceGateStatus;
+import io.farfrontier.palemirror.domain.SourceGateState;
 import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.ThreatTier;
@@ -31,8 +33,6 @@ import io.farfrontier.palemirror.internal.materialization.OperationState;
 import io.farfrontier.palemirror.internal.observation.ReconciliationLedger;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
 import io.farfrontier.palemirror.internal.effect.EffectLeaseLedger;
-import io.farfrontier.palemirror.internal.effect.EffectLeaseState;
-import io.farfrontier.palemirror.internal.quarantine.QuarantineKind;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineLedger;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineRecord;
 import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
@@ -49,7 +49,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 15;
+    static final int CURRENT_SCHEMA = 16;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -116,7 +116,6 @@ public final class PaleMirrorSavedData extends SavedData {
         testMines.put(mine.id(), mine);
     }
     public static PaleMirrorSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
-        tag = migrate(tag);
         int version = tag.contains("schemaVersion", Tag.TAG_INT) ? tag.getInt("schemaVersion") : 0;
         if (version > CURRENT_SCHEMA) {
             throw new IllegalStateException("Pale Mirror data schema " + version + " is newer than this mod supports");
@@ -140,28 +139,24 @@ public final class PaleMirrorSavedData extends SavedData {
         for (Tag element : tag.getList("reconciledObservations", Tag.TAG_STRING)) observations.add(element.getAsString());
         Map<String, EffectLease> leases = new LinkedHashMap<>();
         for (Tag element : tag.getList("effectLeases", Tag.TAG_COMPOUND)) {
-            EffectLease lease = readEffectLease((CompoundTag) element);
+            io.farfrontier.palemirror.internal.effect.EffectLease lease = PaleMirrorAuxiliaryPresentationCodec.readEffectLease((CompoundTag) element);
             leases.put(lease.id(), lease);
         }
         Map<String, QuarantineRecord> quarantine = new LinkedHashMap<>();
         for (Tag element : tag.getList("quarantine", Tag.TAG_COMPOUND)) {
-            QuarantineRecord record = readQuarantine((CompoundTag) element);
+            io.farfrontier.palemirror.internal.quarantine.QuarantineRecord record = PaleMirrorAuxiliaryPresentationCodec.readQuarantine((CompoundTag) element);
             quarantine.put(record.id(), record);
         }
         return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
                 new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag));
     }
     private static IllegalStateException incompatibleSchema(int version) {
-        return new IllegalStateException("Pale Mirror data schema " + version + " cannot be migrated to schema "
-                + CURRENT_SCHEMA + ". Back up the world and remove its data/pale_mirror.dat to deliberately reset legacy Pale Mirror state.");
+        return new IllegalStateException("Pale Mirror data schema " + version + " is not compatible with schema "
+                + CURRENT_SCHEMA + ". This source-neutral architecture requires a new world; back up the old world before resetting its Pale Mirror data.");
     }
 
     private static boolean isMigratable(int version) {
-        return PaleMirrorSnapshotMigrations.isMigratable(version);
-    }
-
-    private static CompoundTag migrate(CompoundTag source) {
-        return PaleMirrorSnapshotMigrations.migrate(source);
+        return version == CURRENT_SCHEMA;
     }
 
     @Override
@@ -186,58 +181,13 @@ public final class PaleMirrorSavedData extends SavedData {
         reconciliationLedger.appliedIds().forEach(value -> observations.add(net.minecraft.nbt.StringTag.valueOf(value)));
         tag.put("reconciledObservations", observations);
         ListTag effectLeases = new ListTag();
-        this.effectLeases.leases().forEach(lease -> effectLeases.add(writeEffectLease(lease)));
+        this.effectLeases.leases().forEach(lease -> effectLeases.add(PaleMirrorAuxiliaryPresentationCodec.writeEffectLease(lease)));
         tag.put("effectLeases", effectLeases);
         ListTag quarantine = new ListTag();
-        this.quarantine.records().forEach(record -> quarantine.add(writeQuarantine(record)));
+        this.quarantine.records().forEach(record -> quarantine.add(PaleMirrorAuxiliaryPresentationCodec.writeQuarantine(record)));
         tag.put("quarantine", quarantine);
         ThreatCombatPresentationCodec.write(tag, threatCombat);
         return tag;
-    }
-
-    private static CompoundTag writeEffectLease(EffectLease lease) {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("id", lease.id());
-        tag.putString("key", lease.idempotencyKey());
-        tag.putString("source", lease.sourceId());
-        tag.putString("facility", lease.facilityId());
-        tag.putString("slot", lease.actorSlotId());
-        tag.putString("kind", lease.kind());
-        tag.putLong("created", lease.createdAtGameTick());
-        tag.putLong("expires", lease.expiresAtGameTick());
-        tag.putString("state", lease.state().name());
-        tag.putLong("finished", lease.finishedAtGameTick());
-        if (lease.nativeReference() != null) tag.putUUID("native", lease.nativeReference());
-        tag.putString("diagnostic", lease.diagnostic());
-        return tag;
-    }
-
-    private static EffectLease readEffectLease(CompoundTag tag) {
-        return new EffectLease(tag.getString("id"), tag.getString("key"), tag.getString("source"),
-                tag.getString("facility"), tag.getString("slot"), tag.getString("kind"), tag.getLong("created"),
-                tag.getLong("expires"), EffectLeaseState.valueOf(tag.getString("state")), tag.getLong("finished"),
-                tag.hasUUID("native") ? tag.getUUID("native") : null, tag.getString("diagnostic"));
-    }
-
-    private static CompoundTag writeQuarantine(QuarantineRecord record) {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("id", record.id());
-        tag.putString("source", record.sourceId());
-        tag.putString("kind", record.kind().name());
-        tag.putString("fingerprint", record.fingerprint());
-        if (record.ownerId() != null) tag.putUUID("owner", record.ownerId());
-        tag.putLong("firstSeen", record.firstSeenGameTick());
-        tag.putLong("lastSeen", record.lastSeenGameTick());
-        tag.putInt("observations", record.observations());
-        tag.putString("diagnostic", record.diagnostic());
-        return tag;
-    }
-
-    private static QuarantineRecord readQuarantine(CompoundTag tag) {
-        return new QuarantineRecord(tag.getString("id"), tag.getString("source"),
-                QuarantineKind.valueOf(tag.getString("kind")), tag.getString("fingerprint"),
-                tag.hasUUID("owner") ? tag.getUUID("owner") : null, tag.getLong("firstSeen"), tag.getLong("lastSeen"),
-                tag.getInt("observations"), tag.getString("diagnostic"));
     }
 
     private static CompoundTag writeState(WorldState state) {
@@ -258,15 +208,7 @@ public final class PaleMirrorSavedData extends SavedData {
             facility.putString("status", value.status().name());
             facility.putString("threatTier", value.threatTier().name());
             facility.putLong("threatStartedAtStep", value.threatStartedAtStep());
-            CompoundTag siege = new CompoundTag();
-            siege.putString("stage", value.siege().stage().name());
-            siege.putString("definition", value.siege().definitionId());
-            siege.putString("definitionVersion", value.siege().definitionVersion());
-            siege.putString("boss", value.siege().bossProfileId());
-            ListTag destroyedNodes = new ListTag();
-            value.siege().destroyedNodes().forEach(node -> destroyedNodes.add(net.minecraft.nbt.StringTag.valueOf(node)));
-            siege.put("destroyedNodes", destroyedNodes);
-            facility.put("siege", siege);
+            facility.put("gate", writeGateState(value.gate()));
             facilities.add(facility);
         });
         tag.put("facilities", facilities);
@@ -329,25 +271,76 @@ public final class PaleMirrorSavedData extends SavedData {
         return tag;
     }
 
+    private static CompoundTag writeGateState(SourceGateState gate) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("status", gate.status().name());
+        tag.putInt("phase", gate.currentPhaseIndex());
+        ListTag destroyed = new ListTag();
+        gate.destroyedPartIds().forEach(value -> destroyed.add(net.minecraft.nbt.StringTag.valueOf(value)));
+        tag.put("destroyedParts", destroyed);
+        gate.plan().ifPresent(plan -> {
+            CompoundTag serialized = new CompoundTag();
+            serialized.putString("id", plan.id());
+            serialized.putString("version", plan.version());
+            ListTag phases = new ListTag();
+            plan.phases().forEach(phase -> {
+                CompoundTag value = new CompoundTag();
+                value.putString("id", phase.id());
+                ListTag parts = new ListTag();
+                phase.requiredPartIds().forEach(part -> parts.add(net.minecraft.nbt.StringTag.valueOf(part)));
+                value.put("parts", parts);
+                phases.add(value);
+            });
+            serialized.put("phases", phases);
+            ListTag parameters = new ListTag();
+            plan.opaqueParameters().forEach((key, value) -> {
+                CompoundTag parameter = new CompoundTag();
+                parameter.putString("key", key);
+                parameter.putString("value", value);
+                parameters.add(parameter);
+            });
+            serialized.put("parameters", parameters);
+            tag.put("plan", serialized);
+        });
+        return tag;
+    }
+
+    private static SourceGateState readGateState(CompoundTag tag) {
+        SourceGateStatus status = SourceGateStatus.valueOf(tag.contains("status", Tag.TAG_STRING)
+                ? tag.getString("status") : SourceGateStatus.INACTIVE.name());
+        GatePlanRef plan = null;
+        if (tag.contains("plan", Tag.TAG_COMPOUND)) {
+            CompoundTag serialized = tag.getCompound("plan");
+            List<GatePhaseRef> phases = new ArrayList<>();
+            for (Tag element : serialized.getList("phases", Tag.TAG_COMPOUND)) {
+                CompoundTag phase = (CompoundTag) element;
+                phases.add(new GatePhaseRef(phase.getString("id"), stringList(phase.getList("parts", Tag.TAG_STRING))));
+            }
+            Map<String, String> parameters = new LinkedHashMap<>();
+            for (Tag element : serialized.getList("parameters", Tag.TAG_COMPOUND)) {
+                CompoundTag parameter = (CompoundTag) element;
+                parameters.put(parameter.getString("key"), parameter.getString("value"));
+            }
+            plan = new GatePlanRef(serialized.getString("id"), serialized.getString("version"), phases, parameters);
+        }
+        return new SourceGateState(status, plan, tag.getInt("phase"),
+                new java.util.LinkedHashSet<>(stringList(tag.getList("destroyedParts", Tag.TAG_STRING))));
+    }
+
     private static WorldState readState(CompoundTag tag) {
         WorldState state = new WorldState();
         state.setSimulationStep(tag.getLong("simulationStep"));
         long eventSequence = 0;
         for (Tag element : tag.getList("facilities", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
-            CompoundTag siegeTag = value.getCompound("siege");
-            SiegeState siege = new SiegeState(
-                    SiegeStage.valueOf(siegeTag.contains("stage", Tag.TAG_STRING) ? siegeTag.getString("stage") : "INACTIVE"),
-                    siegeTag.getString("definition"), siegeTag.getString("definitionVersion"), siegeTag.getString("boss"),
-                    new java.util.LinkedHashSet<>(stringList(siegeTag.getList("destroyedNodes", Tag.TAG_STRING))));
+            SourceGateState gate = readGateState(value.getCompound("gate"));
             state.putFacility(new FacilityState(new WorldObjectId(value.getString("id")),
-                    new InfectionSourceId(value.contains("infectionSource", Tag.TAG_STRING)
-                            ? value.getString("infectionSource") : InfectionSourceId.CRIMSON.value()), value.getInt("normalProduction"),
+                    new InfectionSourceId(value.getString("infectionSource")), value.getInt("normalProduction"),
                     value.getInt("threshold"), value.getInt("pressure"), value.getInt("currentProduction"),
                     value.getInt("recoverySteps"), value.getLong("desiredRevision"), value.getLong("observedRevision"),
                     FacilityStatus.valueOf(value.getString("status")),
                     ThreatTier.valueOf(value.contains("threatTier", Tag.TAG_STRING) ? value.getString("threatTier") : "DORMANT"),
-                    value.getLong("threatStartedAtStep"), siege));
+                    value.getLong("threatStartedAtStep"), gate));
         }
         for (Tag element : tag.getList("scenarios", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
@@ -399,7 +392,7 @@ public final class PaleMirrorSavedData extends SavedData {
         tag.putString("audience", mine.primaryAudience().value());
         if (mine.anchorId() != null) tag.putUUID("anchor", mine.anchorId());
         tag.put("encounter", WorldPresentationCodec.writeEncounter(mine.encounter()));
-        tag.put("siegePresentation", WorldPresentationCodec.writeSiege(mine.siege()));
+        tag.put("gatePresentation", WorldPresentationCodec.writeGate(mine.gate()));
         ListTag cells = new ListTag();
         mine.mutableCells().forEach(cell -> {
             CompoundTag value = new CompoundTag();
@@ -467,12 +460,12 @@ public final class PaleMirrorSavedData extends SavedData {
         UUID anchor = tag.hasUUID("anchor") ? tag.getUUID("anchor") : null;
         EncounterRecord encounter = tag.contains("encounter", Tag.TAG_COMPOUND)
                 ? WorldPresentationCodec.readEncounter(tag.getCompound("encounter")) : EncounterRecord.none();
-        SiegeRecord siege = tag.contains("siegePresentation", Tag.TAG_COMPOUND)
-                ? WorldPresentationCodec.readSiege(tag.getCompound("siegePresentation")) : SiegeRecord.none();
+        GatePresentationRecord gate = tag.contains("gatePresentation", Tag.TAG_COMPOUND)
+                ? WorldPresentationCodec.readGate(tag.getCompound("gatePresentation")) : GatePresentationRecord.none();
         StoryAudienceId audience = tag.contains("audience", Tag.TAG_STRING)
                 ? new StoryAudienceId(tag.getString("audience")) : StoryAudienceId.globalTestAudience();
         WorldObjectId id = new WorldObjectId(tag.getString("id"));
-        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, siege, job);
+        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, gate, job);
     }
 
 }

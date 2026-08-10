@@ -9,13 +9,13 @@ class InfectionSourceIdTest {
     @Test
     void sourceIsCanonicalFacilityDataAndDoesNotChangeDuringLifecycle() {
         FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:spore_site"),
-                InfectionSourceId.SPORE, 80, 10, 10);
+                new InfectionSourceId("pale_mirror:test_source"), 80, 10, 10);
 
         facility.infect(12);
         facility.beginRecovery(1);
         facility.advanceRecovery();
 
-        assertEquals(InfectionSourceId.SPORE, facility.infectionSource());
+        assertEquals(new InfectionSourceId("pale_mirror:test_source"), facility.infectionSource());
     }
 
     @Test

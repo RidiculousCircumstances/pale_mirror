@@ -1,9 +1,8 @@
-package io.farfrontier.palemirror.internal.integration;
+package io.farfrontier.palemirror.internal.adapter;
 
 /**
- * Result of an adapter-owned incoming-damage decision.  The event bridge owns
- * cancellation and observation publication; an adapter may only classify the
- * already-registered physical actor.
+ * Result of an adapter-owned incoming-damage decision. The event bridge owns
+ * cancellation and observation publication; adapters only classify registered actors.
  */
 public record ActorDamageResult(Disposition disposition, String diagnostic) {
     public enum Disposition { PASS_THROUGH, BLOCKED, CONSUMED, DEFEATED }

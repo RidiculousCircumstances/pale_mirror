@@ -9,9 +9,6 @@ import java.util.Objects;
  * explicit future source-composition policy instead of accidental merging.
  */
 public record InfectionSourceId(String value) {
-    public static final InfectionSourceId CRIMSON = new InfectionSourceId("pale_mirror:crimson");
-    public static final InfectionSourceId SPORE = new InfectionSourceId("pale_mirror:spore");
-
     public InfectionSourceId {
         Objects.requireNonNull(value, "value");
         if (!value.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) {

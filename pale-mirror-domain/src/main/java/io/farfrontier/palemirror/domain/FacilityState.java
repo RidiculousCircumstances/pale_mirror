@@ -15,45 +15,18 @@ public final class FacilityState {
     private FacilityStatus status;
     private ThreatTier threatTier;
     private long threatStartedAtStep;
-    private final SiegeState siege;
-
-    public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure) {
-        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure);
-    }
+    private final SourceGateState gate;
 
     public FacilityState(WorldObjectId id, InfectionSourceId infectionSource, int normalProduction,
                          int infectionThreshold, int infectionPressure) {
         this(id, infectionSource, normalProduction, infectionThreshold, infectionPressure, normalProduction, 0, 0, 0,
-                FacilityStatus.OPERATIONAL, ThreatTier.DORMANT, 0, new SiegeState());
-    }
-
-    public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure,
-                         int currentProduction, int recoveryStepsRemaining, long desiredRevision,
-                         long observedRevision, FacilityStatus status) {
-        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure, currentProduction, recoveryStepsRemaining,
-                desiredRevision, observedRevision, status,
-                status == FacilityStatus.INFECTED ? ThreatTier.FOOTHOLD : ThreatTier.DORMANT, 0, new SiegeState());
-    }
-
-    public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure,
-                         int currentProduction, int recoveryStepsRemaining, long desiredRevision,
-                         long observedRevision, FacilityStatus status, ThreatTier threatTier, long threatStartedAtStep) {
-        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure, currentProduction, recoveryStepsRemaining,
-                desiredRevision, observedRevision, status, threatTier, threatStartedAtStep, new SiegeState());
-    }
-
-    public FacilityState(WorldObjectId id, int normalProduction, int infectionThreshold, int infectionPressure,
-                         int currentProduction, int recoveryStepsRemaining, long desiredRevision,
-                         long observedRevision, FacilityStatus status, ThreatTier threatTier, long threatStartedAtStep,
-                         SiegeState siege) {
-        this(id, InfectionSourceId.CRIMSON, normalProduction, infectionThreshold, infectionPressure, currentProduction,
-                recoveryStepsRemaining, desiredRevision, observedRevision, status, threatTier, threatStartedAtStep, siege);
+                FacilityStatus.OPERATIONAL, ThreatTier.DORMANT, 0, new SourceGateState());
     }
 
     public FacilityState(WorldObjectId id, InfectionSourceId infectionSource, int normalProduction, int infectionThreshold,
                          int infectionPressure, int currentProduction, int recoveryStepsRemaining, long desiredRevision,
                          long observedRevision, FacilityStatus status, ThreatTier threatTier, long threatStartedAtStep,
-                         SiegeState siege) {
+                         SourceGateState gate) {
         this.id = Objects.requireNonNull(id, "id");
         this.infectionSource = Objects.requireNonNull(infectionSource, "infectionSource");
         this.normalProduction = normalProduction;
@@ -66,7 +39,7 @@ public final class FacilityState {
         this.status = Objects.requireNonNull(status, "status");
         this.threatTier = Objects.requireNonNull(threatTier, "threatTier");
         this.threatStartedAtStep = threatStartedAtStep;
-        this.siege = Objects.requireNonNull(siege, "siege");
+        this.gate = Objects.requireNonNull(gate, "gate");
     }
 
     public WorldObjectId id() { return id; }
@@ -81,7 +54,7 @@ public final class FacilityState {
     public FacilityStatus status() { return status; }
     public ThreatTier threatTier() { return threatTier; }
     public long threatStartedAtStep() { return threatStartedAtStep; }
-    public SiegeState siege() { return siege; }
+    public SourceGateState gate() { return gate; }
     public void setObservedRevision(long revision) { observedRevision = Math.max(observedRevision, revision); }
     public void infect() { infect(0); }
     public void infect(long simulationStep) {
@@ -89,7 +62,7 @@ public final class FacilityState {
         currentProduction = 0;
         threatTier = ThreatTier.FOOTHOLD;
         threatStartedAtStep = simulationStep;
-        siege.reset();
+        gate.reset();
         desiredRevision++;
     }
     public boolean advanceThreatTier(long simulationStep) { return advanceThreatTier(simulationStep, ThreatTierPolicy.DEFAULT); }
@@ -100,7 +73,7 @@ public final class FacilityState {
         ThreatTier next = policy.next(threatTier, activeSteps);
         if (next == threatTier) return false;
         threatTier = next;
-        if (next == ThreatTier.APEX) siege.pending();
+        if (next == ThreatTier.APEX) gate.pending();
         desiredRevision++;
         return true;
     }
@@ -109,7 +82,7 @@ public final class FacilityState {
         recoveryStepsRemaining = Math.max(1, steps);
         threatTier = ThreatTier.DORMANT;
         threatStartedAtStep = 0;
-        siege.reset();
+        gate.reset();
         desiredRevision++;
     }
     public boolean advanceRecovery() {
@@ -121,28 +94,28 @@ public final class FacilityState {
         infectionPressure = 0;
         threatTier = ThreatTier.DORMANT;
         threatStartedAtStep = 0;
-        siege.reset();
+        gate.reset();
         desiredRevision++;
         return true;
     }
 
-    public boolean activateSiege(String definitionId, String definitionVersion, String bossProfileId) {
-        if (!siege.activate(definitionId, definitionVersion, bossProfileId)) return false;
+    public boolean activateGate(GatePlanRef plan) {
+        if (!gate.activate(plan)) return false;
         desiredRevision++;
         return true;
     }
 
-    public boolean bypassSiege() {
-        if (!siege.bypass()) return false;
+    public boolean bypassGate() {
+        if (!gate.bypass()) return false;
         desiredRevision++;
         return true;
     }
 
-    public boolean siegeGateDestroyed(String slotId) {
-        if (!siege.gateDestroyed(slotId)) return false;
+    public boolean gatePartDestroyed(String slotId) {
+        if (!gate.partDestroyed(slotId)) return false;
         desiredRevision++;
         return true;
     }
 
-    public boolean controllerVulnerable() { return siege.controllerVulnerable(); }
+    public boolean controllerVulnerable() { return gate.controllerVulnerable(); }
 }

@@ -11,8 +11,8 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.OfferScenario, DomainCommand.AcceptScenario,
         DomainCommand.PlayerEnteredFacility, DomainCommand.ThreatControllerDestroyed,
         DomainCommand.MaterializationObserved, DomainCommand.NoScenario,
-        DomainCommand.SetScenarioBlocked, DomainCommand.ActivateSiege,
-        DomainCommand.BypassSiege, DomainCommand.SiegeGateDestroyed {
+        DomainCommand.SetScenarioBlocked, DomainCommand.ActivateGate,
+        DomainCommand.BypassGate, DomainCommand.GatePartDestroyed {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -64,26 +64,23 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         }
     }
 
-    record ActivateSiege(WorldObjectId facilityId, String definitionId, String definitionVersion, String bossProfileId,
-                         String causationId) implements DomainCommand {
-        public ActivateSiege {
+    record ActivateGate(WorldObjectId facilityId, GatePlanRef plan, String causationId) implements DomainCommand {
+        public ActivateGate {
             Objects.requireNonNull(facilityId, "facilityId");
-            Objects.requireNonNull(definitionId, "definitionId");
-            Objects.requireNonNull(definitionVersion, "definitionVersion");
-            Objects.requireNonNull(bossProfileId, "bossProfileId");
+            Objects.requireNonNull(plan, "plan");
             Objects.requireNonNull(causationId, "causationId");
         }
     }
 
-    record BypassSiege(WorldObjectId facilityId, String causationId) implements DomainCommand {
-        public BypassSiege {
+    record BypassGate(WorldObjectId facilityId, String causationId) implements DomainCommand {
+        public BypassGate {
             Objects.requireNonNull(facilityId, "facilityId");
             Objects.requireNonNull(causationId, "causationId");
         }
     }
 
-    record SiegeGateDestroyed(WorldObjectId facilityId, String slotId, String causationId) implements DomainCommand {
-        public SiegeGateDestroyed {
+    record GatePartDestroyed(WorldObjectId facilityId, String slotId, String causationId) implements DomainCommand {
+        public GatePartDestroyed {
             Objects.requireNonNull(facilityId, "facilityId");
             Objects.requireNonNull(slotId, "slotId");
             Objects.requireNonNull(causationId, "causationId");

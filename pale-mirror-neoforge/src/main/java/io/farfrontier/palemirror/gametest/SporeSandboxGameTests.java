@@ -3,12 +3,13 @@ package io.farfrontier.palemirror.gametest;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
+import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.spore.SporeSandboxAdapter;
 import io.farfrontier.palemirror.internal.integration.spore.SporeRuntimeFirewall;
-import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
+import io.farfrontier.palemirror.internal.adapter.SourceItemFirewall;
 import io.farfrontier.palemirror.internal.combat.PmProjectileRef;
 import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
@@ -41,9 +42,9 @@ public final class SporeSandboxGameTests {
     private SporeSandboxGameTests() { }
 
     @SuppressWarnings("removal")
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
+    @GameTest(batch = "pm-spore-sandbox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
     public static void pmOwnsSporeSiteAndKeepsNativeFormsDormant(GameTestHelper helper) {
-        if (AdapterRegistry.spore().health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
+        if (AdapterRegistry.sourceAdapter(new InfectionSourceId("pale_mirror:spore")).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
         }
@@ -53,7 +54,7 @@ public final class SporeSandboxGameTests {
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
         ItemStack crimsonEncodedLegacyItem = new ItemStack(Items.NETHERITE_SWORD);
         crimsonEncodedLegacyItem.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(5_450_080));
-        helper.assertValueEqual(ExcludedSourceItemFirewall.classify(crimsonEncodedLegacyItem).orElseThrow().sourceId(), "crimson",
+        helper.assertValueEqual(SourceItemFirewall.classify(crimsonEncodedLegacyItem).orElseThrow().sourceId(), "pale_mirror:crimson",
                 "excluded Crimson custom-model stacks must be identified before source use hooks can run");
         BlockPos playerStart = helper.absolutePos(new BlockPos(0, 3, 0));
         BlockPos siteAnchor = playerStart.above(2).offset(16, 0, 0);
@@ -61,13 +62,13 @@ public final class SporeSandboxGameTests {
         clearMineVolume(level, siteAnchor);
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         player.setPos(playerStart.getX() + 0.5D, playerStart.getY(), playerStart.getZ() + 0.5D);
-        TestMineRecord site = runtime.createSporeTestMine(player);
+        TestMineRecord site = runtime.registerThreatSite(player, new WorldObjectId("pale_mirror:spore_test_mine"), new InfectionSourceId("pale_mirror:spore"));
         helper.assertValueEqual(site.anchor(), siteAnchor, "Spore source placement must be deterministic and non-overlapping");
 
         runtime.advanceSimulation(1);
         String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(site.id()).orElseThrow()
-                .infectionSource(), InfectionSourceId.SPORE, "source must be canonical facility state");
+                .infectionSource(), new InfectionSourceId("pale_mirror:spore"), "source must be canonical facility state");
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "Spore scenario must use the normal PM acceptance flow");
         player.setPos(siteAnchor.getX() + 0.5D, siteAnchor.getY() + 2.0D, siteAnchor.getZ() + 0.5D);
         // The persisted job now has overlay, anchor and two foothold actor
@@ -95,7 +96,7 @@ public final class SporeSandboxGameTests {
                 "PM patrol must move a constrained form only to a safe cell inside its registered site");
         helper.assertTrue(human instanceof net.minecraft.world.entity.Mob patrolMob && patrolMob.isNoAi(),
                 "PM movement must not enable native Spore AI");
-        runtime.publish(new EncounterActorDestroyed("forged-wrong-source", site.id(), InfectionSourceId.CRIMSON,
+        runtime.publish(new EncounterActorDestroyed("forged-wrong-source", site.id(), new InfectionSourceId("pale_mirror:crimson"),
                 "dormant_infected_human", human.getUUID()));
         helper.assertValueEqual(site.encounter().actor("dormant_infected_human").orElseThrow().status().name(), "ACTIVE",
                 "reconciliation must reject an actor observation whose source disagrees with canonical facility state");
@@ -105,7 +106,7 @@ public final class SporeSandboxGameTests {
                 "Spore foothold must use PM's bounded fungal palette rather than native terrain spread");
         CompoundTag snapshot = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
         helper.assertValueEqual(PaleMirrorSavedData.load(snapshot, level.registryAccess()).worldState().facility(site.id()).orElseThrow()
-                .infectionSource(), InfectionSourceId.SPORE, "restart snapshot must retain the canonical source identity");
+                .infectionSource(), new InfectionSourceId("pale_mirror:spore"), "restart snapshot must retain the canonical source identity");
         CompoundTag v10Snapshot = snapshot.copy();
         v10Snapshot.putInt("schemaVersion", 10);
         v10Snapshot.getList("testMines", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).getCompound("encounter")

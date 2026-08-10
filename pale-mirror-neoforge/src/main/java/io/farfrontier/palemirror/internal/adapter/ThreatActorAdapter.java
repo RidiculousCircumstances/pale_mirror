@@ -2,8 +2,6 @@ package io.farfrontier.palemirror.internal.adapter;
 
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
-import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
-import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;

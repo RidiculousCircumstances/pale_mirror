@@ -17,16 +17,16 @@ public final class TestMineRecord {
     private final List<MutableCell> mutableCells;
     private UUID anchorId;
     private EncounterRecord encounter;
-    private SiegeRecord siege;
+    private GatePresentationRecord gate;
     private MaterializationJob job;
 
     public TestMineRecord(WorldObjectRegistryEntry object, StoryAudienceId primaryAudience,
                           List<MutableCell> mutableCells, UUID anchorId, EncounterRecord encounter, MaterializationJob job) {
-        this(object, primaryAudience, mutableCells, anchorId, encounter, SiegeRecord.none(), job);
+        this(object, primaryAudience, mutableCells, anchorId, encounter, GatePresentationRecord.none(), job);
     }
 
     public TestMineRecord(WorldObjectRegistryEntry object, StoryAudienceId primaryAudience,
-                          List<MutableCell> mutableCells, UUID anchorId, EncounterRecord encounter, SiegeRecord siege,
+                          List<MutableCell> mutableCells, UUID anchorId, EncounterRecord encounter, GatePresentationRecord gate,
                           MaterializationJob job) {
         this.id = object.id();
         this.object = object;
@@ -34,7 +34,7 @@ public final class TestMineRecord {
         this.mutableCells = new ArrayList<>(mutableCells);
         this.anchorId = anchorId;
         this.encounter = encounter == null ? EncounterRecord.none() : encounter;
-        this.siege = siege == null ? SiegeRecord.none() : siege;
+        this.gate = gate == null ? GatePresentationRecord.none() : gate;
         this.job = job;
     }
 
@@ -53,11 +53,11 @@ public final class TestMineRecord {
     }
     public UUID anchorId() { return anchorId; }
     public EncounterRecord encounter() { return encounter; }
-    public SiegeRecord siege() { return siege; }
+    public GatePresentationRecord gate() { return gate; }
     public MaterializationJob job() { return job; }
     public void setAnchorId(UUID value) { anchorId = value; }
     public void setEncounter(EncounterRecord value) { encounter = value == null ? EncounterRecord.none() : value; }
-    public void setSiege(SiegeRecord value) { siege = value == null ? SiegeRecord.none() : value; }
+    public void setGate(GatePresentationRecord value) { gate = value == null ? GatePresentationRecord.none() : value; }
     public void setJob(MaterializationJob value) { job = value; }
     public boolean contains(BlockPos pos) { return object.contains(pos); }
     public Optional<MutableCell> mutableCell(BlockPos position) {

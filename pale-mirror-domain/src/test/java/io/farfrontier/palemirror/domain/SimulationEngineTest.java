@@ -7,11 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 class SimulationEngineTest {
+    private static final InfectionSourceId TEST_SOURCE = new InfectionSourceId("pale_mirror:test_source");
     @Test
     void infectionRecoveryAndNarrativeAreDeterministic() {
         WorldState state = new WorldState();
         WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
-        state.putFacility(new FacilityState(mine, 80, 10, 10));
+        state.putFacility(new FacilityState(mine, TEST_SOURCE, 80, 10, 10));
         DomainServices services = new DomainServices();
 
         DomainEvent infection = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).getFirst();
@@ -46,7 +47,7 @@ class SimulationEngineTest {
     void pinnedScenarioDefinitionSurvivesLaterContentChangesAndCapabilitiesCanResume() {
         WorldState state = new WorldState();
         WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
-        state.putFacility(new FacilityState(mine, 80, 10, 10));
+        state.putFacility(new FacilityState(mine, TEST_SOURCE, 80, 10, 10));
         DomainServices services = new DomainServices();
         DomainEvent infection = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).getFirst();
         ScenarioDefinitionRef pinned = new ScenarioDefinitionRef("pale_mirror:investigation_recovery", "17",
@@ -71,7 +72,7 @@ class SimulationEngineTest {
     void noScenarioIsCausallyRecordedOnce() {
         WorldState state = new WorldState();
         WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
-        state.putFacility(new FacilityState(mine, 80, 10, 10));
+        state.putFacility(new FacilityState(mine, TEST_SOURCE, 80, 10, 10));
         DomainServices services = new DomainServices();
         DomainEvent infection = services.commands().execute(state, new DomainCommand.AdvanceSimulation(1)).getFirst();
 
@@ -86,7 +87,7 @@ class SimulationEngineTest {
         WorldState state = new WorldState();
         WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
         WorldObjectId settlement = new WorldObjectId("pale_mirror:test_settlement");
-        state.putFacility(new FacilityState(mine, 80, 10, 10));
+        state.putFacility(new FacilityState(mine, TEST_SOURCE, 80, 10, 10));
         state.putSettlement(new SettlementState(settlement, mine, 80, 40));
         DomainServices services = new DomainServices();
 
@@ -109,7 +110,7 @@ class SimulationEngineTest {
     void threatTiersAdvanceOnlyFromDeterministicSimulationTime() {
         WorldState state = new WorldState();
         WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
-        state.putFacility(new FacilityState(mine, 80, 10, 10));
+        state.putFacility(new FacilityState(mine, TEST_SOURCE, 80, 10, 10));
         DomainServices services = new DomainServices();
 
         services.commands().execute(state, new DomainCommand.AdvanceSimulation(1));
@@ -137,7 +138,7 @@ class SimulationEngineTest {
     void siegeGatesRejectPrematureControllerDeathAndAdvanceInOrder() {
         WorldState state = new WorldState();
         WorldObjectId mine = new WorldObjectId("pale_mirror:test_mine");
-        FacilityState facility = new FacilityState(mine, 80, 10, 10);
+        FacilityState facility = new FacilityState(mine, TEST_SOURCE, 80, 10, 10);
         state.putFacility(facility);
         DomainServices services = new DomainServices();
         facility.infect(0);
@@ -145,22 +146,21 @@ class SimulationEngineTest {
         facility.advanceThreatTier(100, policy);
         facility.advanceThreatTier(100, policy);
         facility.advanceThreatTier(100, policy);
-        assertEquals(SiegeStage.PENDING, facility.siege().stage());
+        assertEquals(SourceGateStatus.PENDING, facility.gate().status());
 
-        services.commands().execute(state, new DomainCommand.ActivateSiege(mine, "pale_mirror:crimson_apex",
-                "1", "pale_mirror:juggernaut", "test:activate"));
-        assertEquals(SiegeStage.NODES, facility.siege().stage());
+        GatePlanRef plan = new GatePlanRef("pale_mirror:test_gate", "1", java.util.List.of(
+                new GatePhaseRef("first", java.util.List.of("one", "two")),
+                new GatePhaseRef("second", java.util.List.of("three"))));
+        services.commands().execute(state, new DomainCommand.ActivateGate(mine, plan, "test:activate"));
+        assertEquals(SourceGateStatus.ACTIVE, facility.gate().status());
         assertTrue(services.commands().execute(state, new DomainCommand.ThreatControllerDestroyed(mine, "test:early")).isEmpty());
 
-        for (String node : SiegeState.NODE_SLOTS) {
-            services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, node, "test:" + node));
+        for (String part : java.util.List.of("one", "two")) {
+            services.commands().execute(state, new DomainCommand.GatePartDestroyed(mine, part, "test:" + part));
         }
-        assertEquals(SiegeStage.BOSS, facility.siege().stage());
-        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "boss", "test:boss"));
-        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "bloodlink_i", "test:one"));
-        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "bloodlink_ii", "test:two"));
-        services.commands().execute(state, new DomainCommand.SiegeGateDestroyed(mine, "bloodlink_iii", "test:three"));
-        assertEquals(SiegeStage.CONTROLLER_VULNERABLE, facility.siege().stage());
+        assertEquals("second", facility.gate().currentPhase().orElseThrow().id());
+        services.commands().execute(state, new DomainCommand.GatePartDestroyed(mine, "three", "test:three"));
+        assertEquals(SourceGateStatus.UNSEALED, facility.gate().status());
         assertEquals(FacilityStatus.INFECTED, state.facility(mine).orElseThrow().status(), "controller must still exist before observation");
         services.commands().execute(state, new DomainCommand.ThreatControllerDestroyed(mine, "test:controller"));
         assertEquals(FacilityStatus.RECOVERING, state.facility(mine).orElseThrow().status());

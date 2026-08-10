@@ -14,29 +14,25 @@ import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.Narrator;
 import io.farfrontier.palemirror.domain.ScenarioDefinitionRef;
-import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
-import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
+import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
 import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
-import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
-import io.farfrontier.palemirror.internal.content.CrimsonSiegeDefinition;
-import io.farfrontier.palemirror.internal.content.CrimsonSiegeDefinitions;
-import io.farfrontier.palemirror.domain.SiegeStage;
+import io.farfrontier.palemirror.domain.SourceGateStatus;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
 import io.farfrontier.palemirror.internal.observation.PlayerEnteredFacilityBounds;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
-import io.farfrontier.palemirror.internal.observation.SiegeGateDestroyed;
+import io.farfrontier.palemirror.internal.observation.GatePartDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
-import io.farfrontier.palemirror.internal.world.SiegePartKind;
+import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.TestMineTemplate;
 import net.minecraft.server.MinecraftServer;
@@ -64,7 +60,7 @@ public final class PaleMirrorRuntime {
         if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         PmProjectileRuntime.discardUnknownAfterRestart(server, data);
-        AdapterRegistry.crimson().verifySandbox(server);
+        AdapterRegistry.onServerStarted(server);
     }
 
     public static PaleMirrorRuntime forServer(MinecraftServer server) {
@@ -76,7 +72,7 @@ public final class PaleMirrorRuntime {
     public void tick() {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) advanceSimulation(1);
-        reconcilePendingSieges();
+        reconcilePendingGates();
         observePlayers();
         reconcileScenarioCapabilities();
         reconcileMaterialization();
@@ -84,26 +80,7 @@ public final class PaleMirrorRuntime {
         if (data.effectLeases().expireDue(gameTick)) data.setDirty();
         if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
         if (data.threatCombat().expireAndCompact(gameTick)) data.setDirty();
-        AdapterRegistry.crimson().tickRuntime(server, data);
-        AdapterRegistry.spore().tickRuntime(server, data);
-    }
-
-    public TestMineRecord createTestMine(ServerPlayer player) {
-        WorldObjectId id = new WorldObjectId("pale_mirror:test_mine");
-        TestMineRecord mine = registerThreatSite(player, id, InfectionSourceId.CRIMSON);
-        data.worldState().putSettlement(new SettlementState(new WorldObjectId("pale_mirror:test_settlement"), id, 80, 40));
-        data.setDirty();
-        return mine;
-    }
-
-    public TestMineRecord createSporeTestMine(ServerPlayer player) {
-        WorldObjectId id = new WorldObjectId("pale_mirror:spore_test_mine");
-        return registerThreatSite(player, id, InfectionSourceId.SPORE);
-    }
-
-    /** Registers a PM-owned, bounded threat site in any loaded player dimension; it never uses worldgen. */
-    public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id) {
-        return registerThreatSite(player, id, InfectionSourceId.CRIMSON);
+        AdapterRegistry.tickRuntime(server, data);
     }
 
     /**
@@ -114,8 +91,7 @@ public final class PaleMirrorRuntime {
     public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id, InfectionSourceId source) {
         if (data.testMines().containsKey(id)) throw new IllegalStateException("PM threat site already exists: " + id.value());
         ServerLevel level = player.serverLevel();
-        int sourceOffset = source.equals(InfectionSourceId.SPORE) ? 16 : 0;
-        TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2).offset(sourceOffset, 0, 0), id, audienceFor(player));
+        TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2), id, audienceFor(player));
         data.registerTestMine(mine);
         data.worldState().putFacility(new FacilityState(id, source, 80, 10, 10));
         data.setDirty();
@@ -202,30 +178,31 @@ public final class PaleMirrorRuntime {
         }
     }
 
-    /** Reports a PM-owned boss or Bloodlink death. Unknown or stale identities are ignored. */
-    public void siegeEntityDestroyed(String objectId, String slotId, UUID entityId) {
+    /** Reports an exact source-owned gate carrier death; stale identities are ignored. */
+    public void gateEntityDestroyed(String objectId, String slotId, UUID entityId) {
         try {
             WorldObjectId id = new WorldObjectId(objectId);
             TestMineRecord mine = data.testMines().get(id);
-            if (mine == null || mine.siege().part(slotId).filter(part -> part.kind() != SiegePartKind.NODE
-                    && entityId.equals(part.entityId())).isEmpty()) return;
-            publish(new SiegeGateDestroyed("siege-gate:" + id.value() + ":" + slotId + ":" + entityId,
+            FacilityState facility = data.worldState().facility(id).orElse(null);
+            if (mine == null || facility == null || mine.gate().part(slotId)
+                    .filter(part -> entityId.equals(part.entityId())).isEmpty()) return;
+            publish(new GatePartDestroyed("gate-part:" + id.value() + ":" + slotId + ":" + entityId,
                     id, slotId, "entity:" + entityId));
         } catch (IllegalArgumentException ignored) {
             // Entity data is not trusted provenance until it matches a registered PM reference.
         }
     }
 
-    /** Reports a node break only when the exact PM record owns that mutable cell. */
-    public void siegeNodeDestroyed(ServerLevel level, net.minecraft.core.BlockPos position) {
+    /** Routes a block observation to the facility's source adapter without naming the physical representation. */
+    public void gateBlockDestroyed(ServerLevel level, net.minecraft.core.BlockPos position) {
         for (TestMineRecord mine : data.testMines().values()) {
             if (!mine.dimensionId().equals(level.dimension().location().toString())) continue;
-            mine.siege().parts().stream().filter(part -> part.kind() == SiegePartKind.NODE)
-                    .filter(part -> part.status() == io.farfrontier.palemirror.internal.world.SiegePartRef.Status.ACTIVE)
-                    .filter(part -> part.position().equals(position)).findFirst().ifPresent(part -> publish(
-                            new SiegeGateDestroyed("siege-node:" + mine.id().value() + ":" + part.slotId() + ":"
+            FacilityState facility = data.worldState().facility(mine.id()).orElse(null);
+            if (facility == null) continue;
+            AdapterRegistry.sourceAdapter(facility.infectionSource()).gatePartAt(level, mine, position).ifPresent(slot -> publish(
+                            new GatePartDestroyed("gate-block:" + mine.id().value() + ":" + slot + ":"
                                     + data.worldState().facility(mine.id()).map(FacilityState::desiredRevision).orElse(0L),
-                                    mine.id(), part.slotId(), "block:" + position.asLong())));
+                                    mine.id(), slot, "block:" + position.asLong())));
         }
     }
 
@@ -244,8 +221,9 @@ public final class PaleMirrorRuntime {
      * presentation, while an adapter can never directly alter a facility.
      */
     public ActorDamageResult receiveSourceActorDamage(Entity entity, DamageSource source, float amount) {
-        if (CrimsonSandboxAdapter.isSiegeEntity(entity)) return receiveCrimsonSiegeDamage(entity, source, amount);
-        var claimant = AdapterRegistry.threatActors().stream().filter(adapter -> adapter.matchesActor(entity)).findFirst().orElse(null);
+        var gateClaimant = AdapterRegistry.sourceAdapters().stream().filter(adapter -> adapter.matchesGatePart(entity)).findFirst().orElse(null);
+        if (gateClaimant != null) return receiveSourceGateDamage(gateClaimant, entity, source, amount);
+        var claimant = AdapterRegistry.sourceAdapters().stream().filter(adapter -> adapter.matchesActor(entity)).findFirst().orElse(null);
         if (claimant == null) return ActorDamageResult.passThrough();
         if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM actor is not in a server level");
         String objectId = entity.getPersistentData().getString(io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter.OBJECT_ID_KEY);
@@ -277,24 +255,29 @@ public final class PaleMirrorRuntime {
         }
     }
 
-    private ActorDamageResult receiveCrimsonSiegeDamage(Entity entity, DamageSource source, float amount) {
-        if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM siege actor is not in a server level");
-        String objectId = entity.getPersistentData().getString(CrimsonSandboxAdapter.OBJECT_ID_KEY);
-        String slotId = entity.getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
+    private ActorDamageResult receiveSourceGateDamage(io.farfrontier.palemirror.internal.adapter.SourceThreatAdapter claimant,
+                                                      Entity entity, DamageSource source, float amount) {
+        if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM gate actor is not in a server level");
+        String objectId = entity.getPersistentData().getString(io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter.OBJECT_ID_KEY);
+        String slotId = entity.getPersistentData().getString("pale_mirror_encounter_slot");
         try {
             WorldObjectId facilityId = new WorldObjectId(objectId);
             TestMineRecord mine = data.testMines().get(facilityId);
             if (mine == null || !mine.dimensionId().equals(level.dimension().location().toString())) {
-                return ActorDamageResult.blocked("PM siege actor is not attached to its registered site");
+                return ActorDamageResult.blocked("PM gate actor is not attached to its registered site");
             }
-            var part = mine.siege().part(slotId).orElse(null);
-            if (part == null || !entity.getUUID().equals(part.entityId())) return ActorDamageResult.blocked("PM siege actor identity is stale");
-            ActorDamageResult result = AdapterRegistry.crimson().receiveSiegeDamage(level, mine, entity, part, source, amount);
+            FacilityState facility = data.worldState().facility(facilityId).orElse(null);
+            SourceGatePartRef part = mine.gate().part(slotId).orElse(null);
+            if (facility == null || !claimant.source().equals(facility.infectionSource()) || part == null
+                    || !entity.getUUID().equals(part.entityId()) || !claimant.matchesOwnedGatePart(entity, mine, slotId)) {
+                return ActorDamageResult.blocked("PM gate actor identity is stale");
+            }
+            ActorDamageResult result = claimant.receiveGateDamage(level, mine, entity, part, source, amount);
             if (result.intercepts()) data.setDirty();
-            if (result.disposition() == ActorDamageResult.Disposition.DEFEATED) siegeEntityDestroyed(objectId, slotId, entity.getUUID());
+            if (result.disposition() == ActorDamageResult.Disposition.DEFEATED) gateEntityDestroyed(objectId, slotId, entity.getUUID());
             return result;
         } catch (IllegalArgumentException ignored) {
-            return ActorDamageResult.blocked("PM siege actor contains invalid provenance");
+            return ActorDamageResult.blocked("PM gate actor contains invalid provenance");
         }
     }
 
@@ -317,16 +300,14 @@ public final class PaleMirrorRuntime {
 
     private void offerScenario(DomainEvent event, StoryAudienceId audience) {
         InfectionSourceId source = data.worldState().facility(event.subject()).map(FacilityState::infectionSource)
-                .orElse(InfectionSourceId.CRIMSON);
-        String definitionId = source.equals(InfectionSourceId.SPORE)
-                ? "pale_mirror:spore_investigation_recovery" : "pale_mirror:investigation_recovery";
-        ScenarioDefinition definition = ScenarioDefinitions.current().get(
-                net.minecraft.resources.ResourceLocation.parse(definitionId));
+                .orElse(null);
+        if (source == null) return;
+        ScenarioDefinition definition = ScenarioDefinitions.forSource(source).stream().findFirst().orElse(null);
         if (definition == null) {
             commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "definition unavailable"));
             return;
         }
-        if (!AdapterRegistry.supports(definition.capabilities())) {
+        if (!AdapterRegistry.supports(source, definition.capabilities())) {
             commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "required capability unavailable"));
             return;
         }
@@ -344,43 +325,29 @@ public final class PaleMirrorRuntime {
         data.worldState().scenarios().forEach(scenario -> {
             java.util.Set<io.farfrontier.palemirror.api.Capability> requirements = scenario.requiredCapabilities().stream()
                     .map(io.farfrontier.palemirror.api.Capability::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet());
-            boolean siegeNeedsCrimson = data.worldState().facility(scenario.target())
-                    .map(value -> value.infectionSource().equals(InfectionSourceId.CRIMSON)
-                            && value.siege().stage().protectsController()).orElse(false);
-            boolean available = AdapterRegistry.supports(requirements) && (!siegeNeedsCrimson
-                    || AdapterRegistry.crimson().health().status() == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE);
+            FacilityState facility = data.worldState().facility(scenario.target()).orElse(null);
+            boolean gateNeedsSource = facility != null && facility.gate().status().protectsController();
+            boolean available = facility != null && AdapterRegistry.supports(facility.infectionSource(), requirements)
+                    && (!gateNeedsSource || AdapterRegistry.sourceAdapter(facility.infectionSource()).health().status()
+                    == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE);
             if (!available || scenario.status() == io.farfrontier.palemirror.domain.ScenarioStatus.BLOCKED) {
                 List<DomainEvent> events = commands.execute(data.worldState(),
                         new DomainCommand.SetScenarioBlocked(scenario.id(), !available,
-                                available ? "capabilities restored" : siegeNeedsCrimson
-                                        ? "Crimson siege capability unavailable" : "required capability unavailable"));
+                                available ? "capabilities restored" : gateNeedsSource
+                                        ? "source gate capability unavailable" : "required capability unavailable"));
                 if (!events.isEmpty()) data.setDirty();
             }
         });
     }
 
-    private void reconcilePendingSieges() {
+    private void reconcilePendingGates() {
         data.worldState().facilities().forEach(facility -> {
-            if (facility.siege().stage() != SiegeStage.PENDING) return;
-            if (!facility.infectionSource().equals(InfectionSourceId.CRIMSON)) {
-                List<DomainEvent> events = commands.execute(data.worldState(),
-                        new DomainCommand.BypassSiege(facility.id(), "pm:source-no-siege:" + facility.infectionSource().value()));
-                if (!events.isEmpty()) data.setDirty();
-                return;
-            }
-            CrimsonSiegeDefinition definition = CrimsonSiegeDefinitions.defaultDefinition();
-            if (AdapterRegistry.crimson().health().status() == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE
-                    && definition != null) {
-                String boss = CrimsonSiegeDefinitions.selectBoss(definition, server.overworld().getSeed(), facility.id(),
-                        facility.desiredRevision() + 1L);
-                List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.ActivateSiege(facility.id(),
-                        definition.id().toString(), Integer.toString(definition.version()), boss, "pm:siege-activate"));
-                if (!events.isEmpty()) data.setDirty();
-            } else {
-                List<DomainEvent> events = commands.execute(data.worldState(),
-                        new DomainCommand.BypassSiege(facility.id(), "pm:siege-bypass"));
-                if (!events.isEmpty()) data.setDirty();
-            }
+            if (facility.gate().status() != SourceGateStatus.PENDING) return;
+            var plan = AdapterRegistry.sourceAdapter(facility.infectionSource()).gatePlan(facility, server.overworld().getSeed());
+            List<DomainEvent> events = plan.map(value -> commands.execute(data.worldState(),
+                    new DomainCommand.ActivateGate(facility.id(), value, "pm:source-gate-activate"))).orElseGet(() ->
+                    commands.execute(data.worldState(), new DomainCommand.BypassGate(facility.id(), "pm:source-no-gate:" + facility.infectionSource().value())));
+            if (!events.isEmpty()) data.setDirty();
         });
     }
 }

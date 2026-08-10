@@ -14,6 +14,7 @@ def crimsonIntegrationSha512 = rootProject.providers.gradleProperty('crimson_int
 def sporeIntegrationJar = layout.buildDirectory.file('integration/spore_1.21.1_2.2.0j_neo.jar')
 def sporeIntegrationUrl = rootProject.providers.gradleProperty('spore_integration_url').get()
 def sporeIntegrationSha512 = rootProject.providers.gradleProperty('spore_integration_sha512').get()
+def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get().asFile
 
 dependencies {
     implementation project(':pale-mirror-domain')
@@ -37,6 +38,7 @@ neoForge {
         }
         gameTestServer {
             type = 'gameTestServer'
+            gameDirectory = coreGameTestDirectory
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
         }
@@ -94,7 +96,7 @@ def distributableJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
 
 tasks.register('verifyPackagedJar') {
     group = 'verification'
-    description = 'Fails if the distributable mod jar omits the domain module or PM effect/combat/item safety boundaries.'
+    description = 'Fails if the distributable mod jar omits the domain module or PM effect/combat/source-item safety boundaries.'
     dependsOn tasks.named('jar')
     inputs.file(distributableJar)
     doLast {
@@ -106,7 +108,7 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/internal/effect/EffectLeaseLedger.class',
                     'io/farfrontier/palemirror/internal/combat/ThreatCombatLedger.class',
                     'io/farfrontier/palemirror/internal/combat/PmProjectileRuntime.class',
-                    'io/farfrontier/palemirror/internal/integration/item/ExcludedSourceItemFirewall.class',
+                    'io/farfrontier/palemirror/internal/adapter/SourceItemFirewall.class',
                     'pale_mirror.item_firewall.mixins.json'
             ].each { entry ->
                 if (jar.getEntry(entry) == null) throw new GradleException("${jarFile} is missing required PM safety entry ${entry}")
@@ -114,6 +116,12 @@ tasks.register('verifyPackagedJar') {
         } finally {
             jar.close()
         }
+    }
+}
+
+tasks.named('runGameTestServer') {
+    doFirst {
+        coreGameTestDirectory.deleteDir()
     }
 }
 

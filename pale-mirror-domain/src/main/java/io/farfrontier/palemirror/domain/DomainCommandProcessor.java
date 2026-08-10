@@ -35,9 +35,9 @@ public final class DomainCommandProcessor {
             case DomainCommand.MaterializationObserved observed -> reconcileMaterialization(state, observed);
             case DomainCommand.NoScenario noScenario -> narrator.noScenario(state, noScenario.sourceEvent(), noScenario.audience(), noScenario.reason());
             case DomainCommand.SetScenarioBlocked capability -> reconcileScenarioCapability(state, capability);
-            case DomainCommand.ActivateSiege activated -> activateSiege(state, activated);
-            case DomainCommand.BypassSiege bypassed -> bypassSiege(state, bypassed);
-            case DomainCommand.SiegeGateDestroyed destroyed -> siegeGateDestroyed(state, destroyed);
+            case DomainCommand.ActivateGate activated -> activateGate(state, activated);
+            case DomainCommand.BypassGate bypassed -> bypassGate(state, bypassed);
+            case DomainCommand.GatePartDestroyed destroyed -> gatePartDestroyed(state, destroyed);
         };
     }
 
@@ -85,27 +85,27 @@ public final class DomainCommandProcessor {
         return List.of(event);
     }
 
-    private List<DomainEvent> activateSiege(WorldState state, DomainCommand.ActivateSiege command) {
+    private List<DomainEvent> activateGate(WorldState state, DomainCommand.ActivateGate command) {
         FacilityState facility = state.facility(command.facilityId())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown facility " + command.facilityId()));
-        if (!facility.activateSiege(command.definitionId(), command.definitionVersion(), command.bossProfileId())) return List.of();
-        return record(state, DomainEventType.SIEGE_ACTIVATED, command.facilityId(), command.causationId());
+        if (!facility.activateGate(command.plan())) return List.of();
+        return record(state, DomainEventType.GATE_ACTIVATED, command.facilityId(), command.causationId());
     }
 
-    private List<DomainEvent> bypassSiege(WorldState state, DomainCommand.BypassSiege command) {
+    private List<DomainEvent> bypassGate(WorldState state, DomainCommand.BypassGate command) {
         FacilityState facility = state.facility(command.facilityId())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown facility " + command.facilityId()));
-        if (!facility.bypassSiege()) return List.of();
-        return record(state, DomainEventType.SIEGE_BYPASSED, command.facilityId(), command.causationId());
+        if (!facility.bypassGate()) return List.of();
+        return record(state, DomainEventType.GATE_BYPASSED, command.facilityId(), command.causationId());
     }
 
-    private List<DomainEvent> siegeGateDestroyed(WorldState state, DomainCommand.SiegeGateDestroyed command) {
+    private List<DomainEvent> gatePartDestroyed(WorldState state, DomainCommand.GatePartDestroyed command) {
         FacilityState facility = state.facility(command.facilityId())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown facility " + command.facilityId()));
-        if (!facility.siegeGateDestroyed(command.slotId())) return List.of();
-        List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.SIEGE_GATE_DESTROYED,
+        if (!facility.gatePartDestroyed(command.slotId())) return List.of();
+        List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.GATE_PART_DESTROYED,
                 command.facilityId(), command.causationId()));
-        if (facility.siege().stage() == SiegeStage.CONTROLLER_VULNERABLE) {
+        if (facility.gate().status() == SourceGateStatus.UNSEALED) {
             produced.addAll(record(state, DomainEventType.CONTROLLER_UNSEALED, command.facilityId(), command.causationId()));
         }
         return List.copyOf(produced);

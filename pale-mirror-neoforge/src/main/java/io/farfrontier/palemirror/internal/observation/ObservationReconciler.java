@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
-import io.farfrontier.palemirror.internal.world.SiegePartKind;
+import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 
 /** The sole bridge which turns observed physical facts into domain commands. */
 public final class ObservationReconciler {
@@ -36,16 +36,17 @@ public final class ObservationReconciler {
                 if (mine != null && sourceMatches) mine.encounter().defeated(destroyed.slotId(), destroyed.entityId());
                 yield List.of();
             }
-            case SiegeGateDestroyed destroyed -> {
+            case GatePartDestroyed destroyed -> {
                 List<DomainEvent> produced = commands.execute(data.worldState(),
-                        new DomainCommand.SiegeGateDestroyed(destroyed.facilityId(), destroyed.slotId(), destroyed.causationId()));
+                        new DomainCommand.GatePartDestroyed(destroyed.facilityId(), destroyed.slotId(), destroyed.causationId()));
                 if (!produced.isEmpty()) {
                     var mine = data.testMines().get(destroyed.facilityId());
-                    var part = mine == null ? null : mine.siege().part(destroyed.slotId()).orElse(null);
+                    var facility = data.worldState().facility(destroyed.facilityId()).orElse(null);
+                    var part = mine == null ? null : mine.gate().part(destroyed.slotId()).orElse(null);
                     if (part != null) {
-                        mine.siege().defeat(destroyed.slotId());
-                        if (part.kind() == SiegePartKind.NODE) mine.mutableCell(part.position())
-                                .ifPresent(cell -> cell.markApplied("minecraft:air"));
+                        mine.gate().defeat(destroyed.slotId());
+                        if (facility != null) AdapterRegistry.sourceAdapter(facility.infectionSource())
+                                .onGatePartObservedDestroyed(mine, destroyed.slotId());
                     }
                 }
                 yield produced;

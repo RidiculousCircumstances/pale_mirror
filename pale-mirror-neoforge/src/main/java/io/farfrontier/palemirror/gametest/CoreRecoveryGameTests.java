@@ -3,13 +3,13 @@ package io.farfrontier.palemirror.gametest;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
+import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
-import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
-import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
+import io.farfrontier.palemirror.internal.adapter.SourceItemFirewall;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.InfectionBiomeStage;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -18,8 +18,6 @@ import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
 import io.farfrontier.palemirror.internal.world.EncounterState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -46,7 +44,7 @@ public final class CoreRecoveryGameTests {
     private CoreRecoveryGameTests() { }
 
     @SuppressWarnings("removal")
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    @GameTest(batch = "pm-core-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void testMineRecoversAfterObservedControllerDeath(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
@@ -56,26 +54,27 @@ public final class CoreRecoveryGameTests {
 
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         player.setPos(anchor.getX() + 0.5, anchor.getY() - 2, anchor.getZ() + 0.5);
-        TestMineRecord mine = runtime.createTestMine(player);
+        TestMineRecord mine = runtime.registerThreatSite(player, new WorldObjectId("pale_mirror:test_mine"), new InfectionSourceId("pale_mirror:crimson"));
 
         runtime.advanceSimulation(1);
-        SettlementState settlement = PaleMirrorSavedData.get(level.getServer().overworld()).worldState().settlements().stream()
-                .findFirst().orElseThrow();
-        helper.assertValueEqual(settlement.supplyDisrupted(), true, "mine infection must disrupt settlement iron supply");
-        helper.assertValueEqual(settlement.currentDefense(), 30, "supply disruption must lower settlement defense");
-        String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
+        var offers = runtime.offered(runtime.audienceFor(player));
+        if (offers.isEmpty()) {
+            throw new AssertionError("expected core scenario offer after MineInfected; " + runtime.status());
+        }
+        String scenarioId = offers.getFirst().id();
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted by its audience");
 
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 16,
+                "source-neutral snapshot must record schema v16 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
-        helper.assertValueEqual(reloaded.testMines().get(mine.id()).job().nextOperationIndex(), 1,
-                "restart snapshot must retain completed operation progress");
-        helper.assertValueEqual(reloaded.testMines().get(mine.id()).job().operations().getFirst().state().name(), "COMPLETED",
-                "restart snapshot must retain operation postcondition state");
-        helper.assertValueEqual(reloaded.testMines().get(mine.id()).biomeCells().size(), 66,
-                "restart snapshot must retain staged-biome cell provenance");
+        TestMineRecord reloadedMine = reloaded.testMines().get(mine.id());
+        helper.assertTrue(reloadedMine != null && reloadedMine.job() != null,
+                "v16 snapshot must retain the persisted materialization job");
+        helper.assertValueEqual(reloadedMine.job().nextOperationIndex(), 1,
+                "v16 snapshot must retain completed operation progress");
         tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
@@ -83,7 +82,7 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RECOVER, "scenario status after entering mine");
         helper.assertTrue(mine.anchorId() != null, "PM-owned anchor must be materialized exactly once");
-        boolean crimsonAvailable = AdapterRegistry.crimson().health().status()
+        boolean crimsonAvailable = AdapterRegistry.sourceAdapter(new InfectionSourceId("pale_mirror:crimson")).health().status()
                 == io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE;
         UUID crimsonActorId = crimsonAvailable ? mine.encounter().actor("guard_human").orElseThrow().entityId() : null;
         if (crimsonAvailable) {
@@ -122,32 +121,14 @@ public final class CoreRecoveryGameTests {
         assertBiomeStage(helper, level, mine, ThreatTier.FOOTHOLD);
 
         CompoundTag legacy = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess()).copy();
-        downgradeV6SnapshotToV5(legacy);
-        PaleMirrorSavedData migrated = PaleMirrorSavedData.load(legacy, level.registryAccess());
-        helper.assertValueEqual(migrated.testMines().get(mine.id()).anchorId(), mine.anchorId(),
-                "v5 controller reference must migrate to the PM anchor reference");
-        helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
-                "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 15,
-                "migrated snapshot must be rewritten as schema v15");
-        helper.assertTrue(migrated.effectLeases().leases().isEmpty(),
-                "v13 migration must create an explicitly empty effect ledger rather than infer physical effects");
-        helper.assertTrue(migrated.threatCombat().actors().isEmpty() && migrated.threatCombat().projectiles().isEmpty(),
-                "v14 migration must create empty PM combat state rather than adopting native actor data");
-        helper.assertValueEqual(migrated.testMines().get(mine.id()).encounter().compositionId(), "",
-                "legacy encounters must migrate to an explicitly unpinned composition rather than inventing one");
-        helper.assertValueEqual(migrated.worldState().facility(mine.id()).orElseThrow().infectionSource(), InfectionSourceId.CRIMSON,
-                "legacy snapshot must receive the explicit source recorded by its original PM path");
-        CompoundTag v8Presentation = persisted.copy();
-        v8Presentation.putInt("schemaVersion", 8);
-        for (Tag cellElement : v8Presentation.getList("testMines", Tag.TAG_COMPOUND).getCompound(0)
-                .getList("cells", Tag.TAG_COMPOUND)) {
-            ((CompoundTag) cellElement).remove("infectionStage");
+        legacy.putInt("schemaVersion", 15);
+        try {
+            PaleMirrorSavedData.load(legacy, level.registryAccess());
+            throw new AssertionError("source-specific schema v15 must not be accepted as source-neutral schema v16");
+        } catch (IllegalStateException expected) {
+            helper.assertTrue(expected.getMessage().contains("requires a new world"),
+                    "legacy snapshot rejection must explain the intentional new-world boundary");
         }
-        PaleMirrorSavedData v9Presentation = PaleMirrorSavedData.load(v8Presentation, level.registryAccess());
-        helper.assertTrue(v9Presentation.testMines().get(mine.id()).mutableCells().stream()
-                        .allMatch(cell -> cell.infectionStage() == InfectionBiomeStage.NODE),
-                "v8 cells without stage provenance must remain legacy Node cells rather than claiming new terrain");
 
         LivingEntity anchorEntity = (LivingEntity) level.getEntity(mine.anchorId());
         helper.assertTrue(anchorEntity != null, "materialized anchor must be present by its registered UUID");
@@ -170,22 +151,20 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .facility(mine.id()).orElseThrow().observedRevision(), 3L,
                 "only a verified materialization job may advance the observed revision");
-        helper.assertValueEqual(settlement.supplyDisrupted(), false, "recovered mine must restore settlement supply");
-        helper.assertValueEqual(settlement.currentDefense(), 40, "recovered mine must restore settlement defense");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)),
                 "overlay cleanup must restore only PM-owned baseline cells");
         helper.succeed();
     }
 
     @SuppressWarnings("removal")
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-core-items", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void excludedSourceItemIsQuarantinedAndCannotApplyMelee(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         resetPaleMirrorState(level);
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         ItemStack legacyCrimsonStack = new ItemStack(Items.NETHERITE_SWORD);
         legacyCrimsonStack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(5_450_080));
-        helper.assertTrue(ExcludedSourceItemFirewall.blocks(legacyCrimsonStack),
+        helper.assertTrue(SourceItemFirewall.blocks(legacyCrimsonStack),
                 "private Crimson item model range must be classified as excluded content");
         Zombie target = new Zombie(EntityType.ZOMBIE, level);
         target.setPos(player.getX() + 1.0D, player.getY(), player.getZ());
@@ -200,7 +179,7 @@ public final class CoreRecoveryGameTests {
     }
 
     @SuppressWarnings("removal")
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    @GameTest(batch = "pm-core-biome", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void infectionBiomeProgressesByPmTierAndFailsClosedOnConflict(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
@@ -210,7 +189,7 @@ public final class CoreRecoveryGameTests {
 
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         player.setPos(anchor.getX() + 0.5D, anchor.getY() - 2.0D, anchor.getZ() + 0.5D);
-        TestMineRecord mine = runtime.createTestMine(player);
+        TestMineRecord mine = runtime.registerThreatSite(player, new WorldObjectId("pale_mirror:test_mine"), new InfectionSourceId("pale_mirror:crimson"));
         runtime.advanceSimulation(1);
         String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted");
@@ -234,7 +213,7 @@ public final class CoreRecoveryGameTests {
     }
 
     @SuppressWarnings("removal")
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    @GameTest(batch = "pm-core-biome-conflict", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void infectionBiomeDoesNotOverwriteFuturePlayerChanges(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
@@ -244,7 +223,7 @@ public final class CoreRecoveryGameTests {
 
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         player.setPos(anchor.getX() + 0.5D, anchor.getY() - 2.0D, anchor.getZ() + 0.5D);
-        TestMineRecord mine = runtime.createTestMine(player);
+        TestMineRecord mine = runtime.registerThreatSite(player, new WorldObjectId("pale_mirror:test_mine"), new InfectionSourceId("pale_mirror:crimson"));
         MutableCell futureCell = mine.biomeCells().stream()
                 .filter(cell -> cell.infectionStage() == InfectionBiomeStage.INFESTED).findFirst().orElseThrow();
 
@@ -268,9 +247,9 @@ public final class CoreRecoveryGameTests {
     }
 
     @SuppressWarnings("removal")
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    @GameTest(batch = "pm-crimson-roster", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void crimsonBaseRosterMaterializesByPmTier(GameTestHelper helper) {
-        if (AdapterRegistry.crimson().health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
+        if (AdapterRegistry.sourceAdapter(new InfectionSourceId("pale_mirror:crimson")).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
         }
@@ -281,7 +260,7 @@ public final class CoreRecoveryGameTests {
         clearMineVolume(level, anchor);
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         player.setPos(anchor.getX() + 0.5, anchor.getY() - 2, anchor.getZ() + 0.5);
-        TestMineRecord mine = runtime.createTestMine(player);
+        TestMineRecord mine = runtime.registerThreatSite(player, new WorldObjectId("pale_mirror:test_mine"), new InfectionSourceId("pale_mirror:crimson"));
         runtime.advanceSimulation(1);
         String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted");
@@ -330,9 +309,9 @@ public final class CoreRecoveryGameTests {
     }
 
     @SuppressWarnings("removal")
-    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-crimson-shadow", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void crimsonSandboxShadowsGlobalTick(GameTestHelper helper) {
-        if (AdapterRegistry.crimson().health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
+        if (AdapterRegistry.sourceAdapter(new InfectionSourceId("pale_mirror:crimson")).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
         }
@@ -385,44 +364,6 @@ public final class CoreRecoveryGameTests {
         data.worldState().setSimulationStep(0);
         data.worldState().setEventSequence(0);
         data.setDirty();
-    }
-
-    private static void downgradeV6SnapshotToV5(CompoundTag tag) {
-        tag.putInt("schemaVersion", 5);
-        // The fixture models an actual v5 snapshot, which predates all
-        // optional physical-effect and combat ledgers.
-        tag.remove("effectLeases");
-        tag.remove("quarantine");
-        tag.remove("threatCombatActors");
-        tag.remove("pmProjectiles");
-        for (Tag facilityElement : tag.getCompound("snapshot").getList("facilities", Tag.TAG_COMPOUND)) {
-            ((CompoundTag) facilityElement).remove("infectionSource");
-        }
-        CompoundTag mine = tag.getList("testMines", Tag.TAG_COMPOUND).getCompound(0);
-        mine.putUUID("controller", mine.getUUID("anchor"));
-        mine.remove("anchor");
-        ListTag operations = mine.getCompound("job").getList("operations", Tag.TAG_COMPOUND);
-        for (Tag element : operations) {
-            CompoundTag operation = (CompoundTag) element;
-            operation.putString("type", switch (operation.getString("type")) {
-                case "ENSURE_PM_ANCHOR" -> "ENSURE_TEST_THREAT_CONTROLLER";
-                case "REMOVE_PM_ANCHOR" -> "REMOVE_TEST_THREAT_CONTROLLER";
-                default -> operation.getString("type");
-            });
-            operation.remove("target");
-        }
-        CompoundTag scenario = tag.getCompound("snapshot").getList("scenarios", Tag.TAG_COMPOUND).getCompound(0);
-        scenario.remove("encounterProfile");
-        scenario.remove("encounterProfileVersion");
-        ListTag capabilities = scenario.getList("requiredCapabilities", Tag.TAG_STRING);
-        for (int index = 0; index < capabilities.size(); index++) {
-            if ("PM_ANCHOR_MATERIALIZATION".equals(capabilities.getString(index))) {
-                capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("TEST_THREAT_MATERIALIZATION"));
-            }
-            if ("PM_ANCHOR_OBSERVATION".equals(capabilities.getString(index))) {
-                capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("TEST_THREAT_OBSERVATION"));
-            }
-        }
     }
 
     private static void assertBiomeStage(GameTestHelper helper, ServerLevel level, TestMineRecord mine, ThreatTier tier) {

@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.domain;
 
-/** PM-owned escalation level for a local threat site; it never mirrors Crimson global phases. */
+/** PM-owned escalation level for a local threat site; it never mirrors a source mod's global phases. */
 public enum ThreatTier {
     DORMANT,
     FOOTHOLD,

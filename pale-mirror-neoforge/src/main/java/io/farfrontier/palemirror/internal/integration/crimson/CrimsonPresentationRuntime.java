@@ -4,8 +4,7 @@ import java.util.Comparator;
 
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
-import io.farfrontier.palemirror.internal.world.SiegePartKind;
-import io.farfrontier.palemirror.internal.world.SiegePartRef;
+import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleOptions;
@@ -65,13 +64,13 @@ final class CrimsonPresentationRuntime {
                 tickProfile(level, actor, profile.id(), gameTick);
                 remaining--;
             }
-            for (SiegePartRef part : mine.siege().parts()) {
+            for (SourceGatePartRef part : mine.gate().parts()) {
                 if (remaining == 0) return;
-                if (part.kind() == SiegePartKind.NODE || part.status() != SiegePartRef.Status.ACTIVE || part.entityId() == null) continue;
+                if (part.status() != SourceGatePartRef.Status.ACTIVE || part.entityId() == null) continue;
                 Entity entity = level.getEntity(part.entityId());
                 CrimsonSiegeProfile profile = CrimsonSiegeProfile.byId(part.profileId()).orElse(null);
                 if (!(entity instanceof Mob actor) || profile == null
-                        || !CrimsonSandboxAdapter.isOwnedSiegeEntity(actor, mine, part.slotId()) || !profile.matches(actor)) continue;
+                        || !CrimsonSandboxAdapter.isOwnedGatePart(actor, mine, part.slotId()) || !profile.matches(actor)) continue;
                 tickProfile(level, actor, profile.id(), gameTick);
                 remaining--;
             }

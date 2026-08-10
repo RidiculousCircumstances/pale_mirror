@@ -58,17 +58,16 @@ final class WorldPresentationCodec {
                 tag.getString("diagnostic"));
     }
 
-    static CompoundTag writeSiege(SiegeRecord siege) {
+    static CompoundTag writeGate(GatePresentationRecord gate) {
         CompoundTag tag = new CompoundTag();
-        tag.putString("definition", siege.definitionId());
-        tag.putString("definitionVersion", siege.definitionVersion());
-        tag.putLong("desiredRevision", siege.desiredRevision());
-        tag.putString("diagnostic", siege.diagnostic());
+        tag.putString("plan", gate.planId());
+        tag.putString("planVersion", gate.planVersion());
+        tag.putLong("desiredRevision", gate.desiredRevision());
+        tag.putString("diagnostic", gate.diagnostic());
         ListTag parts = new ListTag();
-        siege.parts().forEach(part -> {
+        gate.parts().forEach(part -> {
             CompoundTag value = new CompoundTag();
             value.putString("slot", part.slotId());
-            value.putString("kind", part.kind().name());
             value.putString("profile", part.profileId());
             value.putLong("position", part.position().asLong());
             if (part.entityId() != null) value.putUUID("entity", part.entityId());
@@ -79,16 +78,15 @@ final class WorldPresentationCodec {
         return tag;
     }
 
-    static SiegeRecord readSiege(CompoundTag tag) {
-        List<SiegePartRef> parts = new ArrayList<>();
+    static GatePresentationRecord readGate(CompoundTag tag) {
+        List<SourceGatePartRef> parts = new ArrayList<>();
         for (Tag element : tag.getList("parts", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
-            parts.add(new SiegePartRef(value.getString("slot"), SiegePartKind.valueOf(value.getString("kind")),
-                    value.getString("profile"), BlockPos.of(value.getLong("position")),
+            parts.add(new SourceGatePartRef(value.getString("slot"), value.getString("profile"), BlockPos.of(value.getLong("position")),
                     value.hasUUID("entity") ? value.getUUID("entity") : null,
-                    SiegePartRef.Status.valueOf(value.getString("status"))));
+                    SourceGatePartRef.Status.valueOf(value.getString("status"))));
         }
-        return new SiegeRecord(tag.getString("definition"), tag.getString("definitionVersion"),
+        return new GatePresentationRecord(tag.getString("plan"), tag.getString("planVersion"),
                 tag.getLong("desiredRevision"), parts, tag.getString("diagnostic"));
     }
 

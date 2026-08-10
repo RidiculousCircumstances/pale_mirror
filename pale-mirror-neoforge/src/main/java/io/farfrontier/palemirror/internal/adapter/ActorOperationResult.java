@@ -1,6 +1,6 @@
-package io.farfrontier.palemirror.internal.integration;
+package io.farfrontier.palemirror.internal.adapter;
 
-/** Typed outcome of optional source-owned actor work; canonical PM state never depends on it. */
+/** Typed outcome of source-adapter work; canonical PM state never depends on it. */
 public record ActorOperationResult(Status status, String diagnostic) {
     public enum Status { MATERIALIZED, UNAVAILABLE }
 

@@ -6,7 +6,7 @@ import java.util.Objects;
 
 import io.farfrontier.palemirror.domain.ThreatTier;
 
-/** Immutable, datapack-authored presentation request. It cannot contain commands or global Crimson state. */
+/** Immutable, datapack-authored presentation request. It cannot contain commands or source-global state. */
 public record EncounterProfile(String id, int version, List<ActorSlot> actors, List<Composition> compositions) {
     public record ActorSlot(String id, String actorProfileId, ThreatTier minimumTier) {
         public ActorSlot {

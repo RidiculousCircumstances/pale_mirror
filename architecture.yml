@@ -41,6 +41,8 @@ invariants:
     statement: Missing optional integrations degrade to explicit adapter health states and must not block the core slice.
   - id: source-identity
     statement: Each facility has one immutable canonical InfectionSourceId; adapters and physical overlays must match it, and mixed-source composition requires an explicit future policy.
+  - id: source-adapter-isolation
+    statement: Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.
   - id: controlled-effects
     statement: Every PM-authorized non-replayable physical effect has a persisted idempotency lease before execution; a RUNNING lease after restart is visible and never replayed implicitly.
   - id: pm-threat-combat
@@ -71,11 +73,11 @@ critical_flows:
     verification: critical-code
   - id: pm-staged-infection-biome
     path: PM threat tier -> persisted tier-pinned overlay job -> registered test-mine cells -> provenance pre/postconditions -> baseline cleanup
-    owner: neoforge test-mine template, materialization executor and SavedData migration
+    owner: neoforge test-mine template, materialization executor and SavedData schema persistence
     verification: critical-code
-  - id: pm-crimson-siege
-    path: APEX -> four PM-owned Nodes -> deterministic Crimson form -> Bloodlink I/II/III -> unsealed PM anchor -> recovery
-    owner: domain siege state plus neoforge materialization and CrimsonSandboxAdapter
+  - id: pm-source-gate
+    path: APEX -> source-adapter gate plan -> PM-persisted gate parts -> adapter presentation -> unsealed PM anchor -> recovery
+    owner: domain source-neutral gate state plus neoforge materialization and source adapter
     verification: critical-code
   - id: pm-crimson-visual-contract
     path: PM actor lifecycle/combat -> bounded CrimsonPresentationRuntime -> exact model frames, sounds and particles -> pinned Crimson client resources -> client rendering

@@ -1,14 +1,10 @@
 package io.farfrontier.palemirror;
 
 import com.mojang.logging.LogUtils;
+import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.AddPackFindersEvent;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.repository.Pack;
-import net.minecraft.server.packs.repository.PackSource;
 import org.slf4j.Logger;
 
 @Mod(PaleMirrorMod.MOD_ID)
@@ -22,11 +18,6 @@ public final class PaleMirrorMod {
     }
 
     private static void registerBuiltInPacks(AddPackFindersEvent event) {
-        event.addPackFinders(ResourceLocation.fromNamespaceAndPath(MOD_ID, "crimson_sandbox"),
-                PackType.SERVER_DATA, Component.literal("Pale Mirror Crimson Sandbox"), PackSource.BUILT_IN,
-                true, Pack.Position.TOP);
-        event.addPackFinders(ResourceLocation.fromNamespaceAndPath(MOD_ID, "spore_sandbox"),
-                PackType.SERVER_DATA, Component.literal("Pale Mirror Spore Sandbox"), PackSource.BUILT_IN,
-                true, Pack.Position.TOP);
+        AdapterRegistry.registerBuiltInPacks(event);
     }
 }

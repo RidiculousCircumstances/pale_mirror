@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.api.Capability;
+import io.farfrontier.palemirror.domain.InfectionSourceId;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
@@ -28,6 +29,10 @@ public final class ScenarioDefinitions extends SimpleJsonResourceReloadListener 
     }
 
     public static Map<ResourceLocation, ScenarioDefinition> current() { return CURRENT.get(); }
+    public static List<ScenarioDefinition> forSource(InfectionSourceId source) {
+        return CURRENT.get().values().stream().filter(value -> value.infectionSource().equals(source))
+                .sorted(java.util.Comparator.comparing(value -> value.id().toString())).toList();
+    }
 
     @Override
     protected void apply(Map<ResourceLocation, JsonElement> resources, ResourceManager manager, ProfilerFiller profiler) {
@@ -44,6 +49,7 @@ public final class ScenarioDefinitions extends SimpleJsonResourceReloadListener 
 
     private static ScenarioDefinition compile(ResourceLocation resourceId, JsonObject json) {
         ResourceLocation id = ResourceLocation.parse(requiredString(json, "id", resourceId));
+        InfectionSourceId source = new InfectionSourceId(requiredString(json, "infection_source", resourceId));
         int version = requiredInt(json, "version", resourceId);
         if (version < 1) throw new IllegalArgumentException(resourceId + " has invalid version");
         String policy = requiredString(json, "policy", resourceId);
@@ -60,7 +66,7 @@ public final class ScenarioDefinitions extends SimpleJsonResourceReloadListener 
             try { capabilities.add(Capability.valueOf(capability.getAsString())); }
             catch (IllegalArgumentException failure) { throw new IllegalArgumentException(resourceId + " declares unknown capability " + capability, failure); }
         }
-        return new ScenarioDefinition(id, version, Set.copyOf(capabilities), List.copyOf(stages), policy, cooldownSteps, encounterProfile);
+        return new ScenarioDefinition(id, source, version, Set.copyOf(capabilities), List.copyOf(stages), policy, cooldownSteps, encounterProfile);
     }
 
     private static String requiredString(JsonObject json, String name, ResourceLocation resource) {

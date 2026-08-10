@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.internal.integration.crimson;
 import java.util.Comparator;
 
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
-import io.farfrontier.palemirror.internal.world.SiegePartRef;
+import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
@@ -38,17 +38,16 @@ final class CrimsonSiegeRuntime {
         for (TestMineRecord mine : data.testMines().values().stream().sorted(Comparator.comparing(TestMineRecord::id)).toList()) {
             ServerLevel level = levelFor(server, mine);
             if (level == null) continue;
-            for (SiegePartRef part : mine.siege().parts()) {
+            for (SourceGatePartRef part : mine.gate().parts()) {
                 if (remaining == 0) return;
-                if (part.kind() == io.farfrontier.palemirror.internal.world.SiegePartKind.NODE
-                        || part.status() != SiegePartRef.Status.ACTIVE || part.entityId() == null) continue;
+                if (part.status() != SourceGatePartRef.Status.ACTIVE || part.entityId() == null) continue;
                 Entity entity = level.getEntity(part.entityId());
                 CrimsonSiegeProfile profile = CrimsonSiegeProfile.byId(part.profileId()).orElse(null);
                 if (!(entity instanceof Mob actor) || profile == null
-                        || !CrimsonSandboxAdapter.isOwnedSiegeEntity(entity, mine, part.slotId()) || !profile.matches(entity)) continue;
+                        || !CrimsonSandboxAdapter.isOwnedGatePart(entity, mine, part.slotId()) || !profile.matches(entity)) continue;
                 CrimsonCombatProfile combat = CrimsonCombatProfile.forSiege(profile);
-                String controlKey = ThreatCombatLedger.actorKey("crimson", mine.id().value(), "siege", part.slotId());
-                ThreatActorControlState state = data.threatCombat().attachActor("crimson", mine.id().value(), "siege", part.slotId(),
+                String controlKey = ThreatCombatLedger.actorKey("crimson", mine.id().value(), "gate", part.slotId());
+                ThreatActorControlState state = data.threatCombat().attachActor("crimson", mine.id().value(), "gate", part.slotId(),
                         profile.id(), actor.getUUID(), combat.hitPoints());
                 CrimsonActorRuntime.holdControlled(actor);
                 if (state.status() != ThreatActorControlState.Status.ACTIVE) continue;
@@ -70,7 +69,7 @@ final class CrimsonSiegeRuntime {
     }
 
     private static void execute(CrimsonSiegeProfile profile, CrimsonCombatProfile combat, ThreatActorControlState state,
-                                PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part,
+                                PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part,
                                 Mob actor, ServerPlayer target, long gameTick,
                                 CrimsonPresentationRuntime presentation) {
         switch (profile) {
@@ -86,7 +85,7 @@ final class CrimsonSiegeRuntime {
         }
     }
 
-    private static void melee(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+    private static void melee(PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part, Mob actor,
                               ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
         CrimsonCombatProfile stats = CrimsonCombatProfile.forSiege(CrimsonSiegeProfile.byId(part.profileId()).orElseThrow());
         if (actor.distanceToSqr(target) > stats.attackRange() * stats.attackRange()) return;
@@ -96,7 +95,7 @@ final class CrimsonSiegeRuntime {
         });
     }
 
-    private static void dash(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
+    private static void dash(PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part, Mob actor, ServerPlayer target,
                              long gameTick, CrimsonPresentationRuntime presentation) {
         Vec3 delta = target.position().subtract(actor.position());
         double horizontal = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
@@ -107,7 +106,7 @@ final class CrimsonSiegeRuntime {
         });
     }
 
-    private static void rangedPulse(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
+    private static void rangedPulse(PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part, Mob actor, ServerPlayer target,
                                     long gameTick, CrimsonPresentationRuntime presentation) {
         if (actor.distanceToSqr(target) <= 24.0D * 24.0D) {
             executeOnce(data, mine, part, actor, "pummeler_pulse", gameTick, 60L, () -> {
@@ -118,7 +117,7 @@ final class CrimsonSiegeRuntime {
         }
     }
 
-    private static void grasp(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
+    private static void grasp(PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part, Mob actor, ServerPlayer target,
                               long gameTick, CrimsonPresentationRuntime presentation) {
         if (actor.distanceToSqr(target) <= 8.0D * 8.0D) {
             executeOnce(data, mine, part, actor, "kraken_grasp", gameTick, 40L, () -> {
@@ -129,7 +128,7 @@ final class CrimsonSiegeRuntime {
         }
     }
 
-    private static void phase(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+    private static void phase(PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part, Mob actor,
                               CrimsonCombatProfile combat, ThreatActorControlState state, long gameTick) {
         executeOnce(data, mine, part, actor, "osiris_phase", gameTick, 40L, () -> {
             // Native health is presentation-only: all incoming damage was
@@ -141,7 +140,7 @@ final class CrimsonSiegeRuntime {
         });
     }
 
-    private static void bloodlinkAura(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+    private static void bloodlinkAura(PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part, Mob actor,
                                       ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
         if (actor.distanceToSqr(target) <= 10.0D * 10.0D) {
             executeOnce(data, mine, part, actor, "bloodlink_aura", gameTick, 40L, () -> {
@@ -151,7 +150,7 @@ final class CrimsonSiegeRuntime {
         }
     }
 
-    private static void executeOnce(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+    private static void executeOnce(PaleMirrorSavedData data, TestMineRecord mine, SourceGatePartRef part, Mob actor,
                                     String kind, long gameTick, long ttl, Runnable action) {
         String key = "crimson:" + kind + ":" + mine.id().value() + ":" + part.slotId() + ":" + actor.getUUID()
                 + ":" + gameTick;

@@ -1,24 +1,34 @@
 package io.farfrontier.palemirror.internal.integration.crimson;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import io.farfrontier.palemirror.api.AdapterHealth;
 import io.farfrontier.palemirror.api.Capability;
-import io.farfrontier.palemirror.api.IntegrationAdapter;
+import io.farfrontier.palemirror.domain.FacilityState;
+import io.farfrontier.palemirror.domain.GatePhaseRef;
+import io.farfrontier.palemirror.domain.GatePlanRef;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
-import io.farfrontier.palemirror.internal.adapter.ThreatActorAdapter;
+import io.farfrontier.palemirror.internal.adapter.SourceGateLayout;
+import io.farfrontier.palemirror.internal.adapter.SourceOverlayPalette;
+import io.farfrontier.palemirror.internal.adapter.SourceThreatAdapter;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
-import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
-import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
+import io.farfrontier.palemirror.internal.adapter.ActorOperationResult;
+import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
-import io.farfrontier.palemirror.internal.world.SiegePartRef;
+import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
+import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.combat.ThreatActorControlState;
 import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
 import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -27,21 +37,26 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.event.AddPackFindersEvent;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.repository.Pack;
+import net.minecraft.server.packs.repository.PackSource;
+import net.minecraft.network.chat.Component;
 
 /**
  * Isolated implementation of the pinned Crimson datapack protocol. PM owns
  * encounter identity and lifecycle; Crimson only supplies the local actor form.
  */
-public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
+public final class CrimsonSandboxAdapter implements SourceThreatAdapter {
     public static final String OBJECT_ID_KEY = "pale_mirror_object_id";
     public static final String JOB_ID_KEY = "pale_mirror_job_id";
     public static final String ROLE_KEY = "pale_mirror_role";
     public static final String SLOT_KEY = "pale_mirror_encounter_slot";
     public static final String PROFILE_KEY = "pale_mirror_crimson_profile";
     public static final String ACTOR_ROLE = "crimson_actor";
-    public static final String SIEGE_ROLE = "crimson_siege";
+    public static final String GATE_ROLE = "crimson_gate";
     public static final String CONTROL_SCHEMA_KEY = "pale_mirror_combat_schema";
-    private static final int CONTROL_SCHEMA = 15;
+    static final int CONTROL_SCHEMA = 15;
     private static final ResourceLocation CRIMSON_LOAD = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/load.mcfunction");
     private static final ResourceLocation CRIMSON_TICK = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/tick.mcfunction");
     private static final String SANDBOX_PACK_ID = "mod/pale_mirror:crimson_sandbox";
@@ -49,12 +64,60 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
     private final CrimsonPresentationRuntime presentation = new CrimsonPresentationRuntime();
     private final CrimsonActorRuntime actorRuntime = new CrimsonActorRuntime(presentation);
     private final CrimsonSiegeRuntime siegeRuntime = new CrimsonSiegeRuntime(presentation);
+    private final CrimsonGateMaterializer gateMaterializer = new CrimsonGateMaterializer(presentation);
 
     @Override
     public String id() { return "pale_mirror:crimson_sandbox"; }
 
     @Override
-    public InfectionSourceId source() { return InfectionSourceId.CRIMSON; }
+    public InfectionSourceId source() { return new InfectionSourceId("pale_mirror:crimson"); }
+
+    @Override
+    public java.util.List<String> commandAliases() { return java.util.List.of("crimson", source().value()); }
+
+    @Override
+    public Optional<io.farfrontier.palemirror.internal.adapter.BlockedSourceItem> classifyExcludedItem(net.minecraft.world.item.ItemStack stack) {
+        return CrimsonItemPolicy.classify(stack, source());
+    }
+
+    @Override
+    public void onServerStarted(MinecraftServer server) { verifySandbox(server); }
+
+    @Override
+    public void registerBuiltInPacks(AddPackFindersEvent event) {
+        event.addPackFinders(ResourceLocation.fromNamespaceAndPath("pale_mirror", "crimson_sandbox"),
+                PackType.SERVER_DATA, Component.literal("Pale Mirror Crimson Sandbox"), PackSource.BUILT_IN,
+                true, Pack.Position.TOP);
+    }
+
+    @Override
+    public List<net.minecraft.server.packs.resources.PreparableReloadListener> reloadListeners() {
+        return List.of(CrimsonGateDefinitions.INSTANCE);
+    }
+
+    @Override
+    public SourceOverlayPalette overlayPalette() { return CrimsonSandboxAdapter::overlayBlock; }
+
+    @Override
+    public Optional<GatePlanRef> gatePlan(FacilityState facility, long worldSeed) {
+        CrimsonGateDefinition definition = CrimsonGateDefinitions.defaultDefinition();
+        if (definition == null || health().status() != AdapterHealth.Status.AVAILABLE) return Optional.empty();
+        String boss = CrimsonGateDefinitions.selectBoss(definition, worldSeed, facility.id(), facility.desiredRevision() + 1L);
+        return Optional.of(new GatePlanRef(definition.id().toString(), Integer.toString(definition.version()), List.of(
+                new GatePhaseRef("nodes", List.of("node_resistance", "node_strength", "node_speed", "node_infested")),
+                new GatePhaseRef("boss", List.of("boss")),
+                new GatePhaseRef("bloodlink_i", List.of("bloodlink_i")),
+                new GatePhaseRef("bloodlink_ii", List.of("bloodlink_ii")),
+                new GatePhaseRef("bloodlink_iii", List.of("bloodlink_iii"))), Map.of("boss_profile", boss)));
+    }
+
+    @Override
+    public Optional<SourceGateLayout> gateLayout(TestMineRecord site, FacilityState facility) {
+        GatePlanRef plan = facility.gate().plan().orElse(null);
+        var phase = facility.gate().currentPhase().orElse(null);
+        if (plan == null || phase == null) return Optional.empty();
+        return gateMaterializer.layout(site, plan, phase);
+    }
 
     @Override
     public boolean matchesActor(Entity entity) { return isActor(entity); }
@@ -101,7 +164,8 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         }
         return new AdapterHealth(AdapterHealth.Status.AVAILABLE,
                 "Crimson " + version + " sandboxed: PM owns spread, phases, and actor lifecycle",
-                Set.of(Capability.CRIMSON_ENCOUNTER_ACTORS, Capability.CRIMSON_SIEGE_OBJECTS));
+                Set.of(Capability.SOURCE_ENCOUNTER_ACTORS, Capability.SOURCE_GATE,
+                        Capability.SOURCE_CONTROLLED_COMBAT));
     }
 
     private static String sourcePack(MinecraftServer server, ResourceLocation resource) {
@@ -184,58 +248,51 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         return ActorOperationResult.materialized();
     }
 
-    public ActorOperationResult ensureSiegeEntity(ServerLevel level, TestMineRecord mine, String jobId, SiegePartRef part) {
+    @Override
+    public ActorOperationResult ensureGatePart(ServerLevel level, TestMineRecord mine, String jobId, SourceGatePartRef part) {
         verifySandbox(level.getServer());
         if (health().status() != AdapterHealth.Status.AVAILABLE) return ActorOperationResult.unavailable(health().detail());
-        CrimsonSiegeProfile profile = CrimsonSiegeProfile.byId(part.profileId()).orElse(null);
-        if (profile == null) return ActorOperationResult.unavailable("Unsupported Crimson siege profile " + part.profileId());
-        if (part.entityId() != null) {
-            Entity existing = level.getEntity(part.entityId());
-            if (isOwnedSiegeEntity(existing, mine, part.slotId()) && profile.matches(existing)) {
-                mine.siege().activate(part.slotId(), part.entityId());
-                return ActorOperationResult.materialized();
-            }
-            if (existing != null) return ActorOperationResult.unavailable("Crimson siege identity conflict for slot " + part.slotId());
-        }
-        Mob entity = profile.create(level);
-        if (entity == null) return ActorOperationResult.unavailable("Could not create Crimson siege entity");
-        entity.moveTo(part.position().getX() + 0.5D, part.position().getY(), part.position().getZ() + 0.5D, 0.0F, 0.0F);
-        entity.setPersistenceRequired();
-        entity.getPersistentData().putString(OBJECT_ID_KEY, mine.id().value());
-        entity.getPersistentData().putString(JOB_ID_KEY, jobId);
-        entity.getPersistentData().putString(ROLE_KEY, SIEGE_ROLE);
-        entity.getPersistentData().putString(SLOT_KEY, part.slotId());
-        entity.getPersistentData().putString(PROFILE_KEY, profile.id());
-        if (!level.addFreshEntity(entity)) return ActorOperationResult.unavailable("Could not add Crimson siege entity to level");
-        if (!CrimsonProtocol1431.initializeSiegeEntity(level, entity, profile)
-                || !isOwnedSiegeEntity(entity, mine, part.slotId()) || !profile.matches(entity)) {
-            presentation.discardVisualChildren(entity);
-            entity.discard();
-            return ActorOperationResult.unavailable("Crimson siege initializer postcondition failed");
-        }
-        entity.getPersistentData().putInt(CONTROL_SCHEMA_KEY, CONTROL_SCHEMA);
-        CrimsonActorRuntime.holdControlled(entity);
-        presentation.spawned(level, entity, profile.id());
-        mine.siege().activate(part.slotId(), entity.getUUID());
-        attachSiegeControl(level, mine, part.slotId(), profile, entity.getUUID());
-        return ActorOperationResult.materialized();
+        return gateMaterializer.ensurePart(level, mine, jobId, part);
     }
 
-    public ActorOperationResult removeSiegeEntity(ServerLevel level, TestMineRecord mine, String slotId) {
-        SiegePartRef part = mine.siege().part(slotId).orElse(null);
-        if (part == null || part.entityId() == null) return ActorOperationResult.materialized();
-        Entity entity = level.getEntity(part.entityId());
-        if (entity != null && !isOwnedSiegeEntity(entity, mine, slotId)) {
-            return ActorOperationResult.unavailable("Crimson siege identity conflict during cleanup for slot " + slotId);
-        }
-        if (entity != null) {
-            presentation.discardVisualChildren(entity);
-            entity.discard();
-        }
-        mine.siege().remove(slotId);
-        PaleMirrorSavedData.get(level.getServer().overworld()).threatCombat()
-                .retireActor("crimson", mine.id().value(), "siege", slotId);
-        return ActorOperationResult.materialized();
+    @Override
+    public ActorOperationResult removeGatePart(ServerLevel level, TestMineRecord mine, String slotId) {
+        return gateMaterializer.removePart(level, mine, slotId);
+    }
+
+    @Override
+    public Optional<String> gatePartAt(ServerLevel level, TestMineRecord site, BlockPos position) {
+        return gateMaterializer.partAt(site, position);
+    }
+
+    @Override
+    public void onGatePartObservedDestroyed(TestMineRecord site, String slotId) {
+        gateMaterializer.observedDestroyed(site, slotId);
+    }
+
+    private static String overlayBlock(MutableCell cell, io.farfrontier.palemirror.domain.ThreatTier tier) {
+        if (!cell.infectionStage().activeAt(tier)) return cell.baselineBlock();
+        return switch (cell.infectionStage()) {
+            case FOOTHOLD -> switch (tier) {
+                case FOOTHOLD -> "minecraft:netherrack";
+                case INFESTED -> "minecraft:crimson_nylium";
+                case SIEGE, APEX -> "minecraft:nether_wart_block";
+                case DORMANT -> cell.baselineBlock();
+            };
+            case INFESTED -> switch (tier) {
+                case INFESTED -> "minecraft:netherrack";
+                case SIEGE, APEX -> "minecraft:crimson_nylium";
+                case DORMANT, FOOTHOLD -> cell.baselineBlock();
+            };
+            case SIEGE -> switch (tier) {
+                case SIEGE -> "minecraft:netherrack";
+                case APEX -> "minecraft:nether_wart_block";
+                case DORMANT, FOOTHOLD, INFESTED -> cell.baselineBlock();
+            };
+            case APEX -> tier == io.farfrontier.palemirror.domain.ThreatTier.APEX
+                    ? "minecraft:shroomlight" : cell.baselineBlock();
+            case NODE -> cell.baselineBlock();
+        };
     }
 
     /** Runs only PM-registered local actors, with a fixed work budget inside the runtime. */
@@ -269,23 +326,24 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         return ActorDamageResult.defeated();
     }
 
-    /** Server event bridge calls this for PM siege identities before native death can run. */
-    public ActorDamageResult receiveSiegeDamage(ServerLevel level, TestMineRecord site, Entity entity,
-                                                SiegePartRef part, DamageSource source, float amount) {
+    /** Server event bridge calls this for PM gate identities before native death can run. */
+    @Override
+    public ActorDamageResult receiveGateDamage(ServerLevel level, TestMineRecord site, Entity entity,
+                                               SourceGatePartRef part, DamageSource source, float amount) {
         CrimsonSiegeProfile profile = CrimsonSiegeProfile.byId(part.profileId()).orElse(null);
-        if (!(entity instanceof Mob actor) || profile == null || !isOwnedSiegeEntity(entity, site, part.slotId())) {
-            return ActorDamageResult.blocked("Crimson siege identity is stale or unsupported");
+        if (!(entity instanceof Mob actor) || profile == null || !isOwnedGatePart(entity, site, part.slotId())) {
+            return ActorDamageResult.blocked("Crimson gate identity is stale or unsupported");
         }
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
-        String key = ThreatCombatLedger.actorKey("crimson", site.id().value(), "siege", part.slotId());
+        String key = ThreatCombatLedger.actorKey("crimson", site.id().value(), "gate", part.slotId());
         ThreatActorControlState state = data.threatCombat().actor(key).orElse(null);
         if (state == null || state.status() != ThreatActorControlState.Status.ACTIVE || !actor.getUUID().equals(state.entityId())) {
-            return ActorDamageResult.blocked("Crimson siege actor lacks verified PM combat control state");
+            return ActorDamageResult.blocked("Crimson gate actor lacks verified PM combat control state");
         }
         int remaining = data.threatCombat().applyActorDamage(key, Math.max(1, Mth.ceil(amount)));
         presentation.hurt(actor, profile.id());
         if (remaining > 0) return ActorDamageResult.consumed();
-        defeatSiegeActor(data, level, site, part, actor, profile);
+        defeatGateActor(data, level, site, part, actor, profile);
         return ActorDamageResult.defeated();
     }
 
@@ -303,10 +361,10 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         data.setDirty();
     }
 
-    private void defeatSiegeActor(PaleMirrorSavedData data, ServerLevel level, TestMineRecord site, SiegePartRef part,
+    private void defeatGateActor(PaleMirrorSavedData data, ServerLevel level, TestMineRecord site, SourceGatePartRef part,
                                   Mob actor, CrimsonSiegeProfile profile) {
         long gameTick = level.getServer().overworld().getGameTime();
-        String leaseId = "pm:crimson:xp:" + site.id().value() + ":siege:" + part.slotId() + ":" + actor.getUUID();
+        String leaseId = "pm:crimson:xp:" + site.id().value() + ":gate:" + part.slotId() + ":" + actor.getUUID();
         ControlledEffectExecutor.executeOnce(data, EffectLease.planned(leaseId, leaseId, "crimson", site.id().value(),
                 part.slotId(), "defeat_xp", gameTick, gameTick + 1L), gameTick,
                 () -> ExperienceOrb.award(level, actor.position(), CrimsonCombatProfile.forSiege(profile).experience()));
@@ -337,14 +395,14 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
                 site.encounter().removed(reference.slotId());
                 data.setDirty();
             }
-            for (SiegePartRef part : site.siege().parts()) {
-                if (part.kind() == io.farfrontier.palemirror.internal.world.SiegePartKind.NODE || part.entityId() == null) continue;
+            for (SourceGatePartRef part : site.gate().parts()) {
+                if (part.entityId() == null) continue;
                 Entity entity = level.getEntity(part.entityId());
                 if (entity == null || entity.getPersistentData().getInt(CONTROL_SCHEMA_KEY) == CONTROL_SCHEMA) continue;
-                if (!isOwnedSiegeEntity(entity, site, part.slotId())) continue;
+                if (!isOwnedGatePart(entity, site, part.slotId())) continue;
                 presentation.discardVisualChildren(entity);
                 entity.discard();
-                site.siege().remove(part.slotId());
+                site.gate().remove(part.slotId());
                 data.setDirty();
             }
         }
@@ -375,7 +433,7 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         if (ACTOR_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))) {
             return CrimsonActorProfile.byId(profileId).filter(profile -> profile.matches(entity)).map(CrimsonActorProfile::id);
         }
-        if (SIEGE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))) {
+        if (GATE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))) {
             return CrimsonSiegeProfile.byId(profileId).filter(profile -> profile.matches(entity)).map(CrimsonSiegeProfile::id);
         }
         return java.util.Optional.empty();
@@ -393,14 +451,22 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
                 && !entity.getPersistentData().getString(SLOT_KEY).isBlank();
     }
 
-    public static boolean isSiegeEntity(Entity entity) {
-        return entity != null && SIEGE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
+    @Override
+    public boolean matchesGatePart(Entity entity) { return isGateEntity(entity); }
+
+    public static boolean isGateEntity(Entity entity) {
+        return entity != null && GATE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
                 && !entity.getPersistentData().getString(OBJECT_ID_KEY).isBlank()
                 && !entity.getPersistentData().getString(SLOT_KEY).isBlank();
     }
 
-    public static boolean isOwnedSiegeEntity(Entity entity, TestMineRecord mine, String slotId) {
-        return entity != null && !entity.isRemoved() && SIEGE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
+    @Override
+    public boolean matchesOwnedGatePart(Entity entity, TestMineRecord mine, String slotId) {
+        return isOwnedGatePart(entity, mine, slotId);
+    }
+
+    public static boolean isOwnedGatePart(Entity entity, TestMineRecord mine, String slotId) {
+        return entity != null && !entity.isRemoved() && GATE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
                 && mine.id().value().equals(entity.getPersistentData().getString(OBJECT_ID_KEY))
                 && slotId.equals(entity.getPersistentData().getString(SLOT_KEY));
     }
@@ -414,11 +480,11 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         data.setDirty();
     }
 
-    /** Same eager identity boundary for a siege visual. */
-    private static void attachSiegeControl(ServerLevel level, TestMineRecord mine, String slotId,
-                                           CrimsonSiegeProfile profile, java.util.UUID entityId) {
+    /** Same eager identity boundary for a source-gate visual. */
+    static void attachGateControl(ServerLevel level, TestMineRecord mine, String slotId,
+                                  CrimsonSiegeProfile profile, java.util.UUID entityId) {
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
-        data.threatCombat().attachActor("crimson", mine.id().value(), "siege", slotId, profile.id(), entityId,
+        data.threatCombat().attachActor("crimson", mine.id().value(), "gate", slotId, profile.id(), entityId,
                 CrimsonCombatProfile.forSiege(profile).hitPoints());
         data.setDirty();
     }

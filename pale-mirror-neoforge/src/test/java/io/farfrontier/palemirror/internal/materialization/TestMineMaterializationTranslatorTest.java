@@ -13,9 +13,11 @@ import io.farfrontier.palemirror.internal.world.EncounterState;
 import org.junit.jupiter.api.Test;
 
 class TestMineMaterializationTranslatorTest {
+    private static final InfectionSourceId TEST_SOURCE = new InfectionSourceId("pale_mirror:test_source");
+
     @Test
     void infectionPlanIsStableAndSeparatesOverlayFromController() {
-        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), 80, 10, 10);
+        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), TEST_SOURCE, 80, 10, 10);
         facility.infect();
 
         MaterializationPlan plan = new TestMineMaterializationTranslator().translate(facility);
@@ -29,7 +31,7 @@ class TestMineMaterializationTranslatorTest {
 
     @Test
     void encounterSlotsBecomeIndependentPersistedOperations() {
-        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), 80, 10, 10);
+        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), TEST_SOURCE, 80, 10, 10);
         facility.infect();
         EncounterProfile profile = new EncounterProfile("pale_mirror:guards", 1,
                 java.util.List.of(new EncounterProfile.ActorSlot("guard_1", "pale_mirror:crimsonified_human", ThreatTier.FOOTHOLD)));
@@ -44,7 +46,7 @@ class TestMineMaterializationTranslatorTest {
 
     @Test
     void encounterProfilesFilterActorsByPmTierInsteadOfCrimsonPhase() {
-        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), 80, 10, 10);
+        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), TEST_SOURCE, 80, 10, 10);
         facility.infect(1);
         EncounterProfile profile = new EncounterProfile("pale_mirror:tiers", 1, java.util.List.of(
                 new EncounterProfile.ActorSlot("human", "pale_mirror:crimsonified_human", ThreatTier.FOOTHOLD),
@@ -79,7 +81,7 @@ class TestMineMaterializationTranslatorTest {
 
     @Test
     void unavailableNewProfileNeverForgetsExistingActorsNeededForCleanup() {
-        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), 80, 10, 10);
+        FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:test_mine"), TEST_SOURCE, 80, 10, 10);
         facility.infect(1);
         EncounterRecord existing = new EncounterRecord("pale_mirror:legacy", "1", "pm:job:legacy", 1,
                 java.util.List.of(new EncounterActorRef("human", "pale_mirror:crimsonified_human", "minecraft:zombie",
@@ -96,7 +98,7 @@ class TestMineMaterializationTranslatorTest {
     @Test
     void sourceSelectsItsOwnSafeOverlayWithoutChangingGenericOperationVocabulary() {
         FacilityState facility = new FacilityState(new WorldObjectId("pale_mirror:spore_mine"),
-                InfectionSourceId.SPORE, 80, 10, 10);
+                new InfectionSourceId("pale_mirror:spore"), 80, 10, 10);
         facility.infect();
 
         MaterializationPlan plan = new TestMineMaterializationTranslator().translate(facility);

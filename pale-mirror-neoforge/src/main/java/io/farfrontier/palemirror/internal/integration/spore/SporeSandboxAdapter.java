@@ -5,11 +5,12 @@ import java.util.Set;
 import io.farfrontier.palemirror.api.AdapterHealth;
 import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
-import io.farfrontier.palemirror.internal.adapter.ThreatActorAdapter;
+import io.farfrontier.palemirror.internal.adapter.SourceOverlayPalette;
+import io.farfrontier.palemirror.internal.adapter.SourceThreatAdapter;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
-import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
-import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
+import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
+import io.farfrontier.palemirror.internal.adapter.ActorOperationResult;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -29,9 +30,14 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.event.AddPackFindersEvent;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.repository.Pack;
+import net.minecraft.server.packs.repository.PackSource;
 
 /**
  * Isolated Spore 2.2.0j bridge.  The adapter deliberately uses only the
@@ -47,7 +53,7 @@ import net.neoforged.fml.ModList;
  * controller; cleanup discards these forms without invoking Spore's native
  * death/remains path.
  */
-public final class SporeSandboxAdapter implements ThreatActorAdapter {
+public final class SporeSandboxAdapter implements SourceThreatAdapter {
     public static final String ROLE_KEY = VanillaAnchorAdapter.ROLE_KEY;
     public static final String SLOT_KEY = "pale_mirror_encounter_slot";
     public static final String PROFILE_KEY = "pale_mirror_spore_profile";
@@ -63,7 +69,20 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
     public String id() { return "pale_mirror:spore_sandbox"; }
 
     @Override
-    public InfectionSourceId source() { return InfectionSourceId.SPORE; }
+    public InfectionSourceId source() { return new InfectionSourceId("pale_mirror:spore"); }
+
+    @Override
+    public java.util.List<String> commandAliases() { return java.util.List.of("spore", source().value()); }
+
+    @Override
+    public SourceOverlayPalette overlayPalette() { return SporeSandboxAdapter::overlayBlock; }
+
+    @Override
+    public void registerBuiltInPacks(AddPackFindersEvent event) {
+        event.addPackFinders(ResourceLocation.fromNamespaceAndPath("pale_mirror", "spore_sandbox"),
+                PackType.SERVER_DATA, Component.literal("Pale Mirror Spore Sandbox"), PackSource.BUILT_IN,
+                true, Pack.Position.TOP);
+    }
 
     @Override
     public AdapterHealth health() {
@@ -91,8 +110,8 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         }
         return new AdapterHealth(AdapterHealth.Status.AVAILABLE,
                 "Spore " + version + " sandboxed: PM owns spread, tiers, controller and constrained combat",
-                Set.of(Capability.SPORE_ENCOUNTER_ACTORS, Capability.SPORE_CONTROLLED_COMBAT,
-                        Capability.SPORE_CONTROLLED_MOVEMENT, Capability.SPORE_GLOBAL_ISOLATION));
+                Set.of(Capability.SOURCE_ENCOUNTER_ACTORS, Capability.SOURCE_CONTROLLED_COMBAT,
+                        Capability.SOURCE_CONTROLLED_MOVEMENT, Capability.SOURCE_GLOBAL_ISOLATION));
     }
 
     @Override
@@ -249,6 +268,44 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
     }
 
     EntityType<?> acidBallType() { return BuiltInRegistries.ENTITY_TYPE.get(ResourceLocation.parse("spore:acid_ball")); }
+
+    @Override
+    public boolean rejectsUnmanagedEntity(Entity entity) { return SporeRuntimeFirewall.rejectUnmanagedEntity(entity); }
+
+    @Override
+    public java.util.Optional<io.farfrontier.palemirror.internal.adapter.BlockedSourceItem> classifyExcludedItem(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return java.util.Optional.empty();
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (!"spore".equals(itemId.getNamespace())) return java.util.Optional.empty();
+        return java.util.Optional.of(new io.farfrontier.palemirror.internal.adapter.BlockedSourceItem(
+                source().value(), itemId + "#" + stack.getCount()));
+    }
+
+    private static String overlayBlock(io.farfrontier.palemirror.internal.world.MutableCell cell,
+                                       io.farfrontier.palemirror.domain.ThreatTier tier) {
+        if (!cell.infectionStage().activeAt(tier)) return cell.baselineBlock();
+        return switch (cell.infectionStage()) {
+            case FOOTHOLD -> switch (tier) {
+                case FOOTHOLD -> "minecraft:moss_block";
+                case INFESTED -> "minecraft:mycelium";
+                case SIEGE, APEX -> "minecraft:brown_mushroom_block";
+                case DORMANT -> cell.baselineBlock();
+            };
+            case INFESTED -> switch (tier) {
+                case INFESTED -> "minecraft:moss_block";
+                case SIEGE, APEX -> "minecraft:mycelium";
+                case DORMANT, FOOTHOLD -> cell.baselineBlock();
+            };
+            case SIEGE -> switch (tier) {
+                case SIEGE -> "minecraft:moss_block";
+                case APEX -> "minecraft:brown_mushroom_block";
+                case DORMANT, FOOTHOLD, INFESTED -> cell.baselineBlock();
+            };
+            case APEX -> tier == io.farfrontier.palemirror.domain.ThreatTier.APEX
+                    ? "minecraft:verdant_froglight" : cell.baselineBlock();
+            case NODE -> cell.baselineBlock();
+        };
+    }
 
     private static void attachCombatState(ServerLevel level, TestMineRecord site, String slotId, SporeActorProfile profile,
                                           java.util.UUID entityId) {

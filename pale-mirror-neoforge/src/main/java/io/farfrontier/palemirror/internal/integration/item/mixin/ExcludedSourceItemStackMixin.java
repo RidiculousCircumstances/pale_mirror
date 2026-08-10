@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.internal.integration.item.mixin;
 
-import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
+import io.farfrontier.palemirror.internal.adapter.SourceItemFirewall;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -21,12 +21,12 @@ abstract class ExcludedSourceItemStackMixin {
     @Inject(method = "inventoryTick", at = @At("HEAD"), cancellable = true)
     private void paleMirror$blockExcludedInventoryTick(Level level, Entity entity, int slot, boolean selected,
                                                        CallbackInfo callback) {
-        if (!level.isClientSide() && ExcludedSourceItemFirewall.blocks((ItemStack) (Object) this)) callback.cancel();
+        if (!level.isClientSide() && SourceItemFirewall.blocks((ItemStack) (Object) this)) callback.cancel();
     }
 
     @Inject(method = "hurtEnemy", at = @At("HEAD"), cancellable = true)
     private void paleMirror$blockExcludedMelee(LivingEntity target, Player player, CallbackInfoReturnable<Boolean> callback) {
-        if (!player.level().isClientSide() && ExcludedSourceItemFirewall.blocks((ItemStack) (Object) this)) {
+        if (!player.level().isClientSide() && SourceItemFirewall.blocks((ItemStack) (Object) this)) {
             callback.setReturnValue(false);
         }
     }

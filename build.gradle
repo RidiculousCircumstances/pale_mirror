@@ -50,6 +50,10 @@ tasks.register('verifyJava21') {
 def architectureFile = layout.projectDirectory.file('architecture.yml').asFile
 def domainJavaSources = fileTree('pale-mirror-domain/src/main/java') { include '**/*.java' }
 def apiJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
+def genericNeoForgeJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror') {
+    include '**/*.java'
+    exclude 'internal/integration/**', 'gametest/**', 'internal/adapter/AdapterRegistry.java'
+}
 def guardedJavaSources = fileTree('.') {
     include 'pale-mirror-domain/src/**/*.java', 'pale-mirror-neoforge/src/**/*.java'
     exclude '**/build/**'
@@ -62,7 +66,8 @@ def requiredArchitectureStatements = [
         'Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.',
         'Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.',
         'Observers publish typed facts; reconciliation alone converts them into domain commands and events.',
-        'Unknown or player-owned block changes are conflicts and must not be overwritten by default.'
+        'Unknown or player-owned block changes are conflicts and must not be overwritten by default.',
+        'Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.'
 ]
 
 tasks.register('verifyArchitecture') {
@@ -102,6 +107,39 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+tasks.register('verifySourceIsolation') {
+    group = 'verification'
+    description = 'Rejects source-specific integrations leaking into domain or generic NeoForge layers.'
+    inputs.files(domainJavaSources, genericNeoForgeJavaSources)
+    doLast {
+        def forbiddenDomainTokens = ['Crimson', 'Spore', 'crimson', 'spore']
+        domainJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenDomainTokens.each { token ->
+                if (text.contains(token)) {
+                    throw new GradleException("Domain source-identity leak: ${source} references ${token}")
+                }
+            }
+        }
+
+        def forbiddenGenericReferences = [
+                'internal.integration.crimson.', 'internal.integration.spore.',
+                'CrimsonSandboxAdapter', 'SporeSandboxAdapter',
+                'CrimsonGate', 'CrimsonSiege', 'SporeSandbox',
+                'InfectionSourceId.CRIMSON', 'InfectionSourceId.SPORE',
+                'ENSURE_CRIMSON_', 'REMOVE_CRIMSON_', 'ENSURE_SPORE_', 'REMOVE_SPORE_'
+        ]
+        genericNeoForgeJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenGenericReferences.each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Source adapter boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+    }
+}
+
 tasks.register('verifyWorkspaceHygiene') {
     group = 'verification'
     description = 'Rejects tracked generated runtime state and real environment files.'
@@ -136,7 +174,8 @@ tasks.register('guardrails') {
     group = 'verification'
     description = 'Runs fast architecture and LLM-drift guardrails.'
     dependsOn tasks.named('verifyJava21'), tasks.named('verifyArchitecture'),
-            tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles')
+            tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles'),
+            tasks.named('verifySourceIsolation')
 }
 
 tasks.named('check') {

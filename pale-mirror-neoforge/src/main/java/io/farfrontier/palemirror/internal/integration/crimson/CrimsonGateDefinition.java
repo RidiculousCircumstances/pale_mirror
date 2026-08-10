@@ -1,13 +1,13 @@
-package io.farfrontier.palemirror.internal.content;
+package io.farfrontier.palemirror.internal.integration.crimson;
 
 import java.util.List;
 import java.util.Objects;
 
 import net.minecraft.resources.ResourceLocation;
 
-/** Pinned, authored pool for a PM-owned APEX siege. */
-public record CrimsonSiegeDefinition(ResourceLocation id, int version, List<String> bossProfiles) {
-    public CrimsonSiegeDefinition {
+/** Pinned authored pool for this adapter's PM-owned APEX gate. */
+record CrimsonGateDefinition(ResourceLocation id, int version, List<String> bossProfiles) {
+    CrimsonGateDefinition {
         Objects.requireNonNull(id, "id");
         if (version < 1) throw new IllegalArgumentException("version must be positive");
         bossProfiles = List.copyOf(bossProfiles);
