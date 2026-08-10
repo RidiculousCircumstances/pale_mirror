@@ -61,8 +61,8 @@
 
 ### Now
 
-- Run full critical-code verification and commit the PM-owned presentation
-  runtime change.
+- PM-owned presentation runtime is committed as `5b06325`; the complete
+  server-side, packaging and dedicated-server verification suite has passed.
 
 ### Next
 
