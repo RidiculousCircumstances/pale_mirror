@@ -2,7 +2,7 @@
 
 ## Goal (success criteria)
 
-- Maintain PM as canonical world/scenario owner and transfer source threat content through isolated, version-pinned adapters without granting third-party runtime authority.
+- Maintain PM as canonical world/scenario owner and evolve the proven threat loop into one living region: Mine -> Route -> Settlement -> Defence -> player choice -> durable consequence.
 
 ## Constraints/Assumptions
 
@@ -21,13 +21,19 @@
 - Spore global spawning/infection/evolution paths are suppressed by a top pack, exact mixins and an entity-join firewall.
 - PM effect leases are written and marked dirty before any non-replayable physical action. A `RUNNING` lease becomes `UNKNOWN_AFTER_RESTART` and is never replayed implicitly.
 - Excluded source stacks are denied at interaction, craft/smelt, pickup, `inventoryTick` and melee boundaries. Legacy stacks remain physically present but only as SavedData quarantine diagnostics.
-- Schema v16 intentionally has no legacy migration: snapshots from v5–v15 fail closed and require a new world because a source-neutral gate cannot safely infer a historical source-specific siege.
+- Schema v19 intentionally has no legacy migration: snapshots from v5–v18 fail closed and require a new world because a living-region state cannot safely infer historical source-specific and regional facts.
+- Crimson is the primary canonical threat source for the next product slice; Spore is optional/test-only unless a future scenario explicitly selects it.
+- Create 6.0.10 is an optional, version-pinned, reflection-contained read-only logistics adapter. It certifies a route only after observing the same opaque native vehicle at two named loaded stations; it never drives Create or force-loads chunks.
+- Vanilla/Integrated Villages discovery is read-only: a bounded loaded-chunk observer needs two villagers plus a stable bell/bed landmark and never creates or overwrites settlement blocks.
+- FTB Quests is an optional static journal projection. PM never reads or writes FTB progression; it seeds one non-reward chapter only if its exact PM-owned config file is absent.
 
 ## State
 
 ### Done
 
 - Core vertical slice, deterministic simulation, migration pipeline, provenance-safe materialization, restart harness and settlement flow are implemented.
+- First Living Region baseline: deterministic Settlement/Route/ResourceFlow/MigrantGroup/LivingRegion domain aggregates; an Ironhill plan bound to one observed settlement; shortage/defence consequences; `settlement_supply_crisis`; combat, Create-route and evacuation resolutions; player journal and explain/timeline/logistics commands.
+- Physical region work is a persistent mine-only campaign job. It resolves a terrain anchor, records RUNNING, and recovers idempotently; it does not replace an observed village. Core GameTests (14) and checksum-pinned Create and FTB runtime profiles pass.
 - Crimson sandbox: sixteen normal forms; APEX Nodes → deterministic boss → Bloodlink I/II/III → PM anchor; CEM/EMF/ETF visual contract, local sound/particles and PM visual children.
 - Staged test-mine biome uses 66 registered vanilla cells plus four separate Node cells; unknown changes conflict rather than overwrite.
 - Spore sandbox: no-spawn pack, global-handler mixins, entity firewall, four audited native forms, exact-tier persisted compositions, PM movement/combat/cleanup and two-start dedicated harness.
@@ -36,25 +42,25 @@
 - Crimson arrows and Spore AcidBall now use one PM projectile pipeline with a persisted target UUID, launch/impact leases, target-only damage and discard-on-restart recovery.
 - The packaged-JAR verifier requires the effect ledger and item firewall classes/config. Focused unit tests plus core, Spore and Crimson GameTest servers passed after this change.
 - The domain and generic NeoForge bridge now carry only `InfectionSourceId`, `SourceGateState`, source-neutral materialization operations and adapter contracts. Crimson/Spore identities, gate layouts, overlays and item classification live behind their adapters; `verifySourceIsolation` prevents regressions.
+- The vanilla village observer, FTB static journal, same-vehicle Create proof, full packaged integration restart harnesses (core/Crimson/Spore/Create/FTB), and Xvfb client-smoke profiles (core/Crimson/Spore/Create/FTB) are implemented. The native train traversal remains a real-world acceptance walkthrough rather than a fake GameTest vehicle.
 
 ### Now
 
-- Validate the source-neutral gate boundary with the complete unit, GameTest and packaged-JAR gate. The supported source combat roster remains PM-authoritative end-to-end.
+- Run `fullSmoke` with `PALE_MIRROR_XVFB` when no system Xvfb is installed, then perform the documented interactive Create scheduled-train and three-choice gameplay walkthroughs.
 
 ### Next
 
-- Run a graphical client smoke test with both optional source mods and capture the supported visual/animation/sound contracts.
-- Audit the remaining Spore catalogue one class at a time; add organisms, terrain and any new projectiles only after each has a persisted PM effect profile and side-effect audit.
-- Add strict client profile/visual regression harness; `runSporeClient` exists but graphical multiplayer validation remains UNCONFIRMED.
+- Add an actual authenticated client-to-dedicated-server walkthrough that exercises FTB `open_book`, then record screenshots/video of Crimson and Spore visual effects.
+- Add a true interactive scheduled-train acceptance run before Narrator v2 and natural discovery/worldgen.
 
 ## Open questions
 
-- UNCONFIRMED: real graphical client/multiplayer playthrough has not been automated.
+- UNCONFIRMED: authenticated multiplayer playthrough and the player-built native Create scheduled-train traversal; automation deliberately does not fake a Create train.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-vision-0.2-first-living-region.md`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
 - `PaleMirrorSavedData`, `SourceGateState`, `internal/adapter/`, `internal/effect/`, `internal/quarantine/`
 - `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
 - `internal/integration/crimson/CrimsonActorRuntime`, `CrimsonSiegeRuntime`, `internal/integration/spore/SporeCombatRuntime`, `SporeProjectileRuntime`

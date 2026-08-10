@@ -14,6 +14,7 @@ public final class ScenarioInstance {
     private final List<String> requiredCapabilities;
     private final String encounterProfileId;
     private final String encounterProfileVersion;
+    private final ScenarioArchetype archetype;
     private ScenarioStatus status;
     private ScenarioStatus resumeStatus;
     private String blockedReason;
@@ -29,13 +30,13 @@ public final class ScenarioInstance {
                             List<String> requiredCapabilities, ScenarioStatus status, ScenarioStatus resumeStatus,
                             String blockedReason) {
         this(id, sourceEventId, target, audience, definitionId, definitionVersion, pinnedStages, requiredCapabilities,
-                "", "", status, resumeStatus, blockedReason);
+                "", "", ScenarioArchetype.INVESTIGATION_RECOVERY, status, resumeStatus, blockedReason);
     }
 
     public ScenarioInstance(String id, String sourceEventId, WorldObjectId target, StoryAudienceId audience,
                             String definitionId, String definitionVersion, List<String> pinnedStages,
                             List<String> requiredCapabilities, String encounterProfileId, String encounterProfileVersion,
-                            ScenarioStatus status, ScenarioStatus resumeStatus, String blockedReason) {
+                            ScenarioArchetype archetype, ScenarioStatus status, ScenarioStatus resumeStatus, String blockedReason) {
         this.id = Objects.requireNonNull(id, "id");
         this.sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId");
         this.target = Objects.requireNonNull(target, "target");
@@ -46,6 +47,7 @@ public final class ScenarioInstance {
         this.requiredCapabilities = List.copyOf(requiredCapabilities);
         this.encounterProfileId = encounterProfileId == null ? "" : encounterProfileId;
         this.encounterProfileVersion = encounterProfileVersion == null ? "" : encounterProfileVersion;
+        this.archetype = archetype == null ? ScenarioArchetype.INVESTIGATION_RECOVERY : archetype;
         this.status = Objects.requireNonNull(status, "status");
         this.resumeStatus = resumeStatus;
         this.blockedReason = blockedReason == null ? "" : blockedReason;
@@ -62,6 +64,7 @@ public final class ScenarioInstance {
     public List<String> requiredCapabilities() { return requiredCapabilities; }
     public String encounterProfileId() { return encounterProfileId; }
     public String encounterProfileVersion() { return encounterProfileVersion; }
+    public ScenarioArchetype archetype() { return archetype; }
     public ScenarioStatus resumeStatus() { return resumeStatus; }
     public String blockedReason() { return blockedReason; }
     public void setStatus(ScenarioStatus status) { this.status = Objects.requireNonNull(status, "status"); }

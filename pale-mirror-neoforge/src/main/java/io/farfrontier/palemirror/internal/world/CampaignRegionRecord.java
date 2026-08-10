@@ -1,0 +1,131 @@
+package io.farfrontier.palemirror.internal.world;
+
+import java.util.Objects;
+
+import io.farfrontier.palemirror.domain.WorldObjectId;
+import net.minecraft.core.BlockPos;
+
+/** Persistent physical work for a campaign bound to an already observed settlement. */
+public final class CampaignRegionRecord {
+    private final String id;
+    private final String dimensionId;
+    private final WorldObjectId settlementId;
+    private final BlockPos settlementAnchor;
+    private final BlockPos primaryMineColumn;
+    private final BlockPos alternateMineColumn;
+    private BlockPos primaryMineAnchor;
+    private BlockPos alternateMineAnchor;
+    private CampaignRegionPresentationStatus status;
+    private String diagnostic;
+    private int nextOperationIndex;
+    private long originTrainSeenAtStep;
+    private long destinationTrainSeenAtStep;
+    private int originTrainCapacity;
+    private int destinationTrainCapacity;
+    private String originVehicleId;
+    private String destinationVehicleId;
+
+    public CampaignRegionRecord(String id, String dimensionId, WorldObjectId settlementId, BlockPos settlementAnchor,
+                                BlockPos primaryMineColumn, BlockPos alternateMineColumn,
+                                BlockPos primaryMineAnchor, BlockPos alternateMineAnchor,
+                                CampaignRegionPresentationStatus status, String diagnostic, int nextOperationIndex,
+                                long originTrainSeenAtStep, long destinationTrainSeenAtStep,
+                                int originTrainCapacity, int destinationTrainCapacity,
+                                String originVehicleId, String destinationVehicleId) {
+        this.id = Objects.requireNonNull(id, "id");
+        this.dimensionId = Objects.requireNonNull(dimensionId, "dimensionId");
+        this.settlementId = Objects.requireNonNull(settlementId, "settlementId");
+        this.settlementAnchor = Objects.requireNonNull(settlementAnchor, "settlementAnchor").immutable();
+        this.primaryMineColumn = Objects.requireNonNull(primaryMineColumn, "primaryMineColumn").immutable();
+        this.alternateMineColumn = Objects.requireNonNull(alternateMineColumn, "alternateMineColumn").immutable();
+        this.primaryMineAnchor = primaryMineAnchor == null ? null : primaryMineAnchor.immutable();
+        this.alternateMineAnchor = alternateMineAnchor == null ? null : alternateMineAnchor.immutable();
+        this.status = Objects.requireNonNull(status, "status");
+        this.diagnostic = diagnostic == null ? "" : diagnostic;
+        if (nextOperationIndex < 0 || nextOperationIndex > 2) throw new IllegalArgumentException("Invalid campaign operation index");
+        if (originTrainSeenAtStep < -1 || destinationTrainSeenAtStep < -1
+                || originTrainCapacity < 0 || destinationTrainCapacity < 0) {
+            throw new IllegalArgumentException("Invalid persisted logistics observation");
+        }
+        this.nextOperationIndex = nextOperationIndex;
+        this.originTrainSeenAtStep = originTrainSeenAtStep;
+        this.destinationTrainSeenAtStep = destinationTrainSeenAtStep;
+        this.originTrainCapacity = originTrainCapacity;
+        this.destinationTrainCapacity = destinationTrainCapacity;
+        this.originVehicleId = originVehicleId == null ? "" : originVehicleId;
+        this.destinationVehicleId = destinationVehicleId == null ? "" : destinationVehicleId;
+    }
+
+    public String id() { return id; }
+    public String jobId() { return "pm:campaign:" + id; }
+    public String dimensionId() { return dimensionId; }
+    public WorldObjectId settlementId() { return settlementId; }
+    public BlockPos settlementAnchor() { return settlementAnchor; }
+    public BlockPos primaryMineColumn() { return primaryMineColumn; }
+    public BlockPos alternateMineColumn() { return alternateMineColumn; }
+    public BlockPos primaryMineAnchor() { return primaryMineAnchor; }
+    public BlockPos alternateMineAnchor() { return alternateMineAnchor; }
+    public CampaignRegionPresentationStatus status() { return status; }
+    public String diagnostic() { return diagnostic; }
+    public int nextOperationIndex() { return nextOperationIndex; }
+    public long originTrainSeenAtStep() { return originTrainSeenAtStep; }
+    public long destinationTrainSeenAtStep() { return destinationTrainSeenAtStep; }
+    public int originTrainCapacity() { return originTrainCapacity; }
+    public int destinationTrainCapacity() { return destinationTrainCapacity; }
+    public String originVehicleId() { return originVehicleId; }
+    public String destinationVehicleId() { return destinationVehicleId; }
+    public BlockPos pendingMineColumn() { return nextOperationIndex == 0 ? primaryMineColumn : alternateMineColumn; }
+    public BlockPos pendingMineAnchor() { return nextOperationIndex == 0 ? primaryMineAnchor : alternateMineAnchor; }
+    public boolean pendingMineAnchorResolved() { return pendingMineAnchor() != null; }
+    /** Persists terrain-dependent placement before the job starts touching blocks. */
+    public void resolvePendingMineAnchor(BlockPos anchor) {
+        if (status != CampaignRegionPresentationStatus.PLANNED || pendingMineAnchorResolved()) {
+            throw new IllegalStateException("Cannot resolve an inactive or already resolved campaign mine anchor");
+        }
+        if (nextOperationIndex == 0) primaryMineAnchor = Objects.requireNonNull(anchor, "anchor").immutable();
+        else alternateMineAnchor = Objects.requireNonNull(anchor, "anchor").immutable();
+    }
+    public void completedOperation() {
+        if (status != CampaignRegionPresentationStatus.RUNNING) {
+            throw new IllegalStateException("Cannot complete a campaign operation that is not running");
+        }
+        nextOperationIndex++;
+        if (nextOperationIndex == 2) materialized();
+        else status = CampaignRegionPresentationStatus.PLANNED;
+    }
+    /** Must be saved before the executor is permitted to touch the physical world. */
+    public void startOperation() {
+        if (status != CampaignRegionPresentationStatus.PLANNED || nextOperationIndex >= 2 || !pendingMineAnchorResolved()) {
+            throw new IllegalStateException("Cannot start an invalid campaign operation");
+        }
+        status = CampaignRegionPresentationStatus.RUNNING;
+    }
+    public void materialized() { status = CampaignRegionPresentationStatus.MATERIALIZED; diagnostic = ""; }
+    public void block(String reason) { status = CampaignRegionPresentationStatus.BLOCKED; diagnostic = Objects.requireNonNull(reason, "reason"); }
+    public boolean observeRouteEndpoint(boolean origin, long simulationStep, int capacity, String vehicleId) {
+        if (simulationStep < 0 || capacity < 0 || vehicleId == null || vehicleId.isBlank()) {
+            throw new IllegalArgumentException("Invalid route observation");
+        }
+        if (origin) {
+            boolean changed = originTrainSeenAtStep != simulationStep || originTrainCapacity != capacity
+                    || !originVehicleId.equals(vehicleId);
+            originTrainSeenAtStep = simulationStep;
+            originTrainCapacity = capacity;
+            originVehicleId = vehicleId;
+            return changed;
+        }
+        boolean changed = destinationTrainSeenAtStep != simulationStep || destinationTrainCapacity != capacity
+                || !destinationVehicleId.equals(vehicleId);
+        destinationTrainSeenAtStep = simulationStep;
+        destinationTrainCapacity = capacity;
+        destinationVehicleId = vehicleId;
+        return changed;
+    }
+    public int certifiedRouteCapacity(long simulationStep, long proofWindowSteps) {
+        if (proofWindowSteps < 0 || originTrainSeenAtStep < 0 || destinationTrainSeenAtStep < 0
+                || simulationStep - originTrainSeenAtStep > proofWindowSteps
+                || simulationStep - destinationTrainSeenAtStep > proofWindowSteps
+                || originVehicleId.isBlank() || !originVehicleId.equals(destinationVehicleId)) return 0;
+        return Math.min(originTrainCapacity, destinationTrainCapacity);
+    }
+}

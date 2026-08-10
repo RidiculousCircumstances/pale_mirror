@@ -14,7 +14,31 @@ def crimsonIntegrationSha512 = rootProject.providers.gradleProperty('crimson_int
 def sporeIntegrationJar = layout.buildDirectory.file('integration/spore_1.21.1_2.2.0j_neo.jar')
 def sporeIntegrationUrl = rootProject.providers.gradleProperty('spore_integration_url').get()
 def sporeIntegrationSha512 = rootProject.providers.gradleProperty('spore_integration_sha512').get()
+def createIntegrationJar = layout.buildDirectory.file('integration/create-1.21.1-6.0.10.jar')
+def createIntegrationUrl = rootProject.providers.gradleProperty('create_integration_url').get()
+def createIntegrationSha512 = rootProject.providers.gradleProperty('create_integration_sha512').get()
+def ftbQuestsIntegrationJar = layout.buildDirectory.file('integration/ftb-quests-neoforge-2101.1.30.jar')
+def ftbLibraryIntegrationJar = layout.buildDirectory.file('integration/ftb-library-neoforge-2101.1.35.jar')
+def ftbTeamsIntegrationJar = layout.buildDirectory.file('integration/ftb-teams-neoforge-2101.1.9.jar')
+def architecturyIntegrationJar = layout.buildDirectory.file('integration/architectury-13.0.11-neoforge.jar')
+def ftbQuestsIntegrationUrl = rootProject.providers.gradleProperty('ftb_quests_integration_url').get()
+def ftbQuestsIntegrationSha512 = rootProject.providers.gradleProperty('ftb_quests_integration_sha512').get()
+def ftbLibraryIntegrationUrl = rootProject.providers.gradleProperty('ftb_library_integration_url').get()
+def ftbLibraryIntegrationSha512 = rootProject.providers.gradleProperty('ftb_library_integration_sha512').get()
+def ftbTeamsIntegrationUrl = rootProject.providers.gradleProperty('ftb_teams_integration_url').get()
+def ftbTeamsIntegrationSha512 = rootProject.providers.gradleProperty('ftb_teams_integration_sha512').get()
+def architecturyIntegrationUrl = rootProject.providers.gradleProperty('architectury_integration_url').get()
+def architecturyIntegrationSha512 = rootProject.providers.gradleProperty('architectury_integration_sha512').get()
 def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get().asFile
+def crimsonGameTestDirectory = layout.buildDirectory.dir('runs/crimson-game-test').get().asFile
+def sporeGameTestDirectory = layout.buildDirectory.dir('runs/spore-game-test').get().asFile
+def createGameTestDirectory = layout.buildDirectory.dir('runs/create-game-test').get().asFile
+def ftbGameTestDirectory = layout.buildDirectory.dir('runs/ftb-game-test').get().asFile
+def crimsonGameTestWorldDirectory = new File(crimsonGameTestDirectory, 'world')
+def sporeGameTestWorldDirectory = new File(sporeGameTestDirectory, 'world')
+def createGameTestWorldDirectory = new File(createGameTestDirectory, 'world')
+def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
+def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
 dependencies {
     implementation project(':pale-mirror-domain')
@@ -54,9 +78,41 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
         }
+        createGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/create-game-test')
+            // Create sends client payloads when mock players join. Existing
+            // mock-player suites self-skip in this adapter-only profile.
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.create_adapter_only', 'true'
+        }
+        ftbGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/ftb-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.ftb_presentation_only', 'true'
+        }
+        coreClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/core-client')
+        }
+        crimsonClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/crimson-client')
+        }
         sporeClient {
             client()
             gameDirectory = layout.buildDirectory.dir('runs/spore-client')
+        }
+        createClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/create-client')
+        }
+        ftbClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/ftb-client')
         }
     }
 
@@ -109,6 +165,8 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/internal/combat/ThreatCombatLedger.class',
                     'io/farfrontier/palemirror/internal/combat/PmProjectileRuntime.class',
                     'io/farfrontier/palemirror/internal/adapter/SourceItemFirewall.class',
+                    'io/farfrontier/palemirror/internal/integration/ftb/FtbQuestsPresentationAdapter.class',
+                    'ftb_quests_presentation/chapters/pale_mirror_first_living_region.snbt',
                     'pale_mirror.item_firewall.mixins.json'
             ].each { entry ->
                 if (jar.getEntry(entry) == null) throw new GradleException("${jarFile} is missing required PM safety entry ${entry}")
@@ -252,6 +310,7 @@ def prepareCrimsonGameTestMods = tasks.register('prepareCrimsonGameTestMods', Sy
 
 tasks.named('runCrimsonGameTestServer') {
     dependsOn prepareCrimsonGameTestMods
+    doFirst { crimsonGameTestWorldDirectory.deleteDir() }
 }
 
 tasks.register('downloadSporeIntegrationJar') {
@@ -280,6 +339,90 @@ def prepareSporeGameTestMods = tasks.register('prepareSporeGameTestMods', Sync) 
 
 tasks.named('runSporeGameTestServer') {
     dependsOn prepareSporeGameTestMods
+    doFirst { sporeGameTestWorldDirectory.deleteDir() }
+}
+
+tasks.register('downloadCreateIntegrationJar') {
+    group = 'verification'
+    description = 'Downloads the pinned Create runtime JAR and verifies SHA-512; normal builds never invoke it.'
+    outputs.file(createIntegrationJar)
+    inputs.property('url', createIntegrationUrl)
+    inputs.property('sha512', createIntegrationSha512)
+    doLast {
+        def target = createIntegrationJar.get().asFile
+        target.parentFile.mkdirs()
+        byte[] bytes = new URL(createIntegrationUrl).bytes
+        String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+        if (!actual.equalsIgnoreCase(createIntegrationSha512)) {
+            throw new GradleException("Pinned Create SHA-512 mismatch: expected ${createIntegrationSha512}, got ${actual}")
+        }
+        target.bytes = bytes
+    }
+}
+
+def prepareCreateGameTestMods = tasks.register('prepareCreateGameTestMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar)
+    into(layout.buildDirectory.dir('runs/create-game-test/mods'))
+}
+
+tasks.named('runCreateGameTestServer') {
+    dependsOn prepareCreateGameTestMods
+    doFirst { createGameTestWorldDirectory.deleteDir() }
+}
+
+tasks.register('createIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside pinned Create twice; the paired acceptance walkthrough proves real train traversal.'
+    dependsOn tasks.named('jar'), tasks.named('downloadCreateIntegrationJar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/create-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            createIntegrationJar.get().asFile.absolutePath
+}
+
+def downloadVerifiedIntegrationJar = { String taskName, def targetFile, String sourceUrl, String expectedSha512, String label ->
+    tasks.register(taskName) {
+        group = 'verification'
+        description = "Downloads the pinned ${label} runtime JAR and verifies SHA-512; normal builds never invoke it."
+        outputs.file(targetFile)
+        inputs.property('url', sourceUrl)
+        inputs.property('sha512', expectedSha512)
+        doLast {
+            def target = targetFile.get().asFile
+            target.parentFile.mkdirs()
+            byte[] bytes = new URL(sourceUrl).bytes
+            String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+            if (!actual.equalsIgnoreCase(expectedSha512)) {
+                throw new GradleException("Pinned ${label} SHA-512 mismatch: expected ${expectedSha512}, got ${actual}")
+            }
+            target.bytes = bytes
+        }
+    }
+}
+
+def downloadFtbQuestsIntegrationJar = downloadVerifiedIntegrationJar('downloadFtbQuestsIntegrationJar', ftbQuestsIntegrationJar,
+        ftbQuestsIntegrationUrl, ftbQuestsIntegrationSha512, 'FTB Quests')
+def downloadFtbLibraryIntegrationJar = downloadVerifiedIntegrationJar('downloadFtbLibraryIntegrationJar', ftbLibraryIntegrationJar,
+        ftbLibraryIntegrationUrl, ftbLibraryIntegrationSha512, 'FTB Library')
+def downloadFtbTeamsIntegrationJar = downloadVerifiedIntegrationJar('downloadFtbTeamsIntegrationJar', ftbTeamsIntegrationJar,
+        ftbTeamsIntegrationUrl, ftbTeamsIntegrationSha512, 'FTB Teams')
+def downloadArchitecturyIntegrationJar = downloadVerifiedIntegrationJar('downloadArchitecturyIntegrationJar', architecturyIntegrationJar,
+        architecturyIntegrationUrl, architecturyIntegrationSha512, 'Architectury API')
+def prepareFtbGameTestMods = tasks.register('prepareFtbGameTestMods', Sync) {
+    dependsOn downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar, downloadFtbTeamsIntegrationJar,
+            downloadArchitecturyIntegrationJar
+    from(ftbQuestsIntegrationJar, ftbLibraryIntegrationJar, ftbTeamsIntegrationJar, architecturyIntegrationJar)
+    into(layout.buildDirectory.dir('runs/ftb-game-test/mods'))
+}
+
+tasks.named('runFtbGameTestServer') {
+    dependsOn prepareFtbGameTestMods
+    doFirst {
+        ftbGameTestWorldDirectory.deleteDir()
+        ftbGameTestConfigDirectory.deleteDir()
+    }
 }
 
 def prepareSporeClientMods = tasks.register('prepareSporeClientMods', Sync) {
@@ -290,6 +433,62 @@ def prepareSporeClientMods = tasks.register('prepareSporeClientMods', Sync) {
 
 tasks.named('runSporeClient') {
     dependsOn prepareSporeClientMods
+}
+
+def prepareCoreClientMods = tasks.register('prepareCoreClientMods', Sync) {
+    into(layout.buildDirectory.dir('runs/core-client/mods'))
+}
+def prepareCrimsonClientMods = tasks.register('prepareCrimsonClientMods', Sync) {
+    dependsOn tasks.named('downloadCrimsonIntegrationJar')
+    from(crimsonIntegrationJar)
+    into(layout.buildDirectory.dir('runs/crimson-client/mods'))
+}
+def prepareCreateClientMods = tasks.register('prepareCreateClientMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar)
+    into(layout.buildDirectory.dir('runs/create-client/mods'))
+}
+def prepareFtbClientMods = tasks.register('prepareFtbClientMods', Sync) {
+    dependsOn downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar, downloadFtbTeamsIntegrationJar,
+            downloadArchitecturyIntegrationJar
+    from(ftbQuestsIntegrationJar, ftbLibraryIntegrationJar, ftbTeamsIntegrationJar, architecturyIntegrationJar)
+    into(layout.buildDirectory.dir('runs/ftb-client/mods'))
+}
+
+tasks.named('runCoreClient') { dependsOn prepareCoreClientMods }
+tasks.named('runCrimsonClient') { dependsOn prepareCrimsonClientMods }
+tasks.named('runCreateClient') { dependsOn prepareCreateClientMods }
+tasks.named('runFtbClient') { dependsOn prepareFtbClientMods }
+
+tasks.register('clientSmoke', Exec) {
+    group = 'verification'
+    description = 'Runs graphical client render/bootstrap smoke profiles; requires Xvfb or PALE_MIRROR_XVFB.'
+    dependsOn tasks.named('classes'), prepareCrimsonClientMods, prepareSporeClientMods, prepareCreateClientMods, prepareFtbClientMods
+    workingDir rootProject.projectDir
+    environment 'PALE_MIRROR_XVFB', System.getenv('PALE_MIRROR_XVFB') ?: ''
+    commandLine 'bash', 'scripts/client-smoke-harness.sh', rootProject.projectDir.absolutePath
+}
+
+tasks.register('ftbIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside the checksum-verified FTB Quests stack twice and verifies journal provisioning.'
+    dependsOn tasks.named('jar'), downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar,
+            downloadFtbTeamsIntegrationJar, downloadArchitecturyIntegrationJar
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/ftb-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            ftbQuestsIntegrationJar.get().asFile.absolutePath, ftbLibraryIntegrationJar.get().asFile.absolutePath,
+            ftbTeamsIntegrationJar.get().asFile.absolutePath, architecturyIntegrationJar.get().asFile.absolutePath
+}
+
+tasks.register('fullSmoke') {
+    group = 'verification'
+    description = 'Runs all server, optional-integration, packaged-JAR restart, and graphical client smoke gates.'
+    dependsOn tasks.named('runGameTestServer'), tasks.named('runCrimsonGameTestServer'), tasks.named('runSporeGameTestServer'),
+            tasks.named('runCreateGameTestServer'), tasks.named('runFtbGameTestServer'), tasks.named('dedicatedRestartHarness'),
+            tasks.named('crimsonIntegrationHarness'), tasks.named('sporeIntegrationHarness'), tasks.named('createIntegrationHarness'),
+            tasks.named('ftbIntegrationHarness'), tasks.named('clientSmoke')
 }
 
 tasks.register('verifySporeSandboxPackaging') {

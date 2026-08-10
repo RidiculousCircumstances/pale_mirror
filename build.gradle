@@ -124,7 +124,7 @@ tasks.register('verifySourceIsolation') {
 
         def forbiddenGenericReferences = [
                 'internal.integration.crimson.', 'internal.integration.spore.',
-                'CrimsonSandboxAdapter', 'SporeSandboxAdapter',
+                'CrimsonSandboxAdapter', 'SporeSandboxAdapter', 'CreateLogisticsAdapter', 'internal.integration.create.',
                 'CrimsonGate', 'CrimsonSiege', 'SporeSandbox',
                 'InfectionSourceId.CRIMSON', 'InfectionSourceId.SPORE',
                 'ENSURE_CRIMSON_', 'REMOVE_CRIMSON_', 'ENSURE_SPORE_', 'REMOVE_SPORE_'

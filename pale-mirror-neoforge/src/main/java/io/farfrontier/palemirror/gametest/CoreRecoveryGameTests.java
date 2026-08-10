@@ -46,6 +46,7 @@ public final class CoreRecoveryGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void testMineRecoversAfterObservedControllerDeath(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
         BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
@@ -67,14 +68,14 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 16,
-                "source-neutral snapshot must record schema v16 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 19,
+                "observed-settlement snapshot must record schema v19 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
         TestMineRecord reloadedMine = reloaded.testMines().get(mine.id());
         helper.assertTrue(reloadedMine != null && reloadedMine.job() != null,
-                "v16 snapshot must retain the persisted materialization job");
+                "v19 snapshot must retain the persisted materialization job");
         helper.assertValueEqual(reloadedMine.job().nextOperationIndex(), 1,
-                "v16 snapshot must retain completed operation progress");
+                "v19 snapshot must retain completed operation progress");
         tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
@@ -124,7 +125,7 @@ public final class CoreRecoveryGameTests {
         legacy.putInt("schemaVersion", 15);
         try {
             PaleMirrorSavedData.load(legacy, level.registryAccess());
-            throw new AssertionError("source-specific schema v15 must not be accepted as source-neutral schema v16");
+            throw new AssertionError("schema v15 must not be accepted as a v19 observed-settlement snapshot");
         } catch (IllegalStateException expected) {
             helper.assertTrue(expected.getMessage().contains("requires a new world"),
                     "legacy snapshot rejection must explain the intentional new-world boundary");
@@ -159,6 +160,7 @@ public final class CoreRecoveryGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-items", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void excludedSourceItemIsQuarantinedAndCannotApplyMelee(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
         resetPaleMirrorState(level);
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
@@ -181,6 +183,7 @@ public final class CoreRecoveryGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-biome", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void infectionBiomeProgressesByPmTierAndFailsClosedOnConflict(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
         BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
@@ -215,6 +218,7 @@ public final class CoreRecoveryGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-biome-conflict", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void infectionBiomeDoesNotOverwriteFuturePlayerChanges(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
         BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
@@ -249,6 +253,7 @@ public final class CoreRecoveryGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-crimson-roster", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void crimsonBaseRosterMaterializesByPmTier(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         if (AdapterRegistry.sourceAdapter(new InfectionSourceId("pale_mirror:crimson")).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
@@ -311,6 +316,7 @@ public final class CoreRecoveryGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-crimson-shadow", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void crimsonSandboxShadowsGlobalTick(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         if (AdapterRegistry.sourceAdapter(new InfectionSourceId("pale_mirror:crimson")).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
@@ -359,6 +365,11 @@ public final class CoreRecoveryGameTests {
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().settlements().clear();
+        data.worldState().routes().clear();
+        data.worldState().migrantGroups().clear();
+        data.worldState().livingRegions().clear();
+        data.campaignRegions().clear();
+        data.settlementObservations().clear();
         data.worldState().narratorCooldowns().clear();
         data.worldState().history().clear();
         data.worldState().setSimulationStep(0);

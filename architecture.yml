@@ -49,6 +49,12 @@ invariants:
     statement: A registered Crimson or Spore form is a visual carrier only; PM persists its identity, target, health, cooldowns, movement, effects and projectile state, intercepts every incoming vanilla-compatible damage source, and never permits native AI, hurt/death, loot, terrain or infection logic.
   - id: excluded-source-items
     statement: While Crimson and Spore item progression is out of scope, their source stacks cannot craft, pickup, interact, tick, or apply melee behavior; legacy stacks are quarantined without becoming PM state.
+  - id: logistics-observation
+    statement: A player-built logistics route becomes canonical capacity only through a typed, bounded adapter observation; PM never drives third-party transport or force-loads route chunks.
+  - id: settlement-observation
+    statement: Vanilla-compatible settlements are registered only from stable, loaded world facts; their blocks, residents and development remain outside PM write authority.
+  - id: presentation-read-only
+    statement: FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression.
 
 critical_flows:
   - id: core-recovery
@@ -106,4 +112,12 @@ critical_flows:
   - id: pm-excluded-source-item-firewall
     path: source item stack -> interaction/craft/pickup/inventory/melee boundary -> denied action -> quarantine diagnostic
     owner: neoforge ExcludedSourceItemFirewall, ItemStack mixin and event observers
+    verification: critical-code
+  - id: living-region-supply
+    path: observed settlement -> Mine -> Route -> Settlement stock -> Defence -> crisis scenario -> combat/logistics/evacuation outcome
+    owner: domain regional model plus NeoForge settlement observer, presentation and logistics bridge
+    verification: critical-code
+  - id: create-same-vehicle-proof
+    path: named loaded station -> opaque native vehicle observation -> second endpoint observation -> bounded same-vehicle proof -> canonical route capacity
+    owner: NeoForge Create adapter and regional logistics reconciliation
     verification: critical-code

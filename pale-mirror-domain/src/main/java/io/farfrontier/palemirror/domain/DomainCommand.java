@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.domain;
 
 import java.util.Objects;
+import java.util.List;
 
 /**
  * The only inputs that may make durable changes to a {@link WorldState}.
@@ -12,7 +13,10 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.PlayerEnteredFacility, DomainCommand.ThreatControllerDestroyed,
         DomainCommand.MaterializationObserved, DomainCommand.NoScenario,
         DomainCommand.SetScenarioBlocked, DomainCommand.ActivateGate,
-        DomainCommand.BypassGate, DomainCommand.GatePartDestroyed {
+        DomainCommand.BypassGate, DomainCommand.GatePartDestroyed,
+        DomainCommand.ObserveRouteCapacity, DomainCommand.EvacuateSettlement,
+        DomainCommand.RegisterLivingRegion, DomainCommand.DiscoverLivingRegion,
+        DomainCommand.TriggerFacilityInfection {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -83,6 +87,49 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public GatePartDestroyed {
             Objects.requireNonNull(facilityId, "facilityId");
             Objects.requireNonNull(slotId, "slotId");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record ObserveRouteCapacity(WorldObjectId routeId, int capacity, String causationId) implements DomainCommand {
+        public ObserveRouteCapacity {
+            Objects.requireNonNull(routeId, "routeId");
+            Objects.requireNonNull(causationId, "causationId");
+            if (capacity < 0) throw new IllegalArgumentException("Route capacity must not be negative");
+        }
+    }
+
+    record EvacuateSettlement(WorldObjectId settlementId, WorldObjectId migrantGroupId, int population,
+                              String causationId) implements DomainCommand {
+        public EvacuateSettlement {
+            Objects.requireNonNull(settlementId, "settlementId");
+            Objects.requireNonNull(migrantGroupId, "migrantGroupId");
+            Objects.requireNonNull(causationId, "causationId");
+            if (population <= 0) throw new IllegalArgumentException("Evacuated population must be positive");
+        }
+    }
+
+    record RegisterLivingRegion(LivingRegionState region, List<FacilityState> facilities,
+                                SettlementState settlement, List<RouteState> routes) implements DomainCommand {
+        public RegisterLivingRegion {
+            Objects.requireNonNull(region, "region");
+            facilities = List.copyOf(facilities);
+            Objects.requireNonNull(settlement, "settlement");
+            routes = List.copyOf(routes);
+        }
+    }
+
+    record DiscoverLivingRegion(String regionId, StoryAudienceId audience, String causationId) implements DomainCommand {
+        public DiscoverLivingRegion {
+            Objects.requireNonNull(regionId, "regionId");
+            Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record TriggerFacilityInfection(WorldObjectId facilityId, String causationId) implements DomainCommand {
+        public TriggerFacilityInfection {
+            Objects.requireNonNull(facilityId, "facilityId");
             Objects.requireNonNull(causationId, "causationId");
         }
     }

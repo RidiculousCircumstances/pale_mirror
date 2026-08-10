@@ -9,7 +9,8 @@ installer=${NEOFORGE_INSTALLER:-/home/rd/.cache/far-frontier/tools/neoforge-21.1
 java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to the Java 21 executable}
 export PATH="$(dirname "$java_bin"):$PATH"
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pale-mirror-crimson.XXXXXX")
-log_file="$runtime_dir/server.log"
+log_one="$runtime_dir/first-start.log"
+log_two="$runtime_dir/restart.log"
 
 fail() {
   printf 'Crimson integration harness failed; retained runtime: %s\n' "$runtime_dir" >&2
@@ -25,20 +26,37 @@ fail() {
   "$java_bin" -jar "$installer" --installServer . >/dev/null
 )
 printf 'eula=true\n' > "$runtime_dir/eula.txt"
-printf 'online-mode=false\nserver-port=25577\n' > "$runtime_dir/server.properties"
+printf 'online-mode=false\nserver-port=0\n' > "$runtime_dir/server.properties"
 mkdir "$runtime_dir/mods"
 cp "$mod_jar" "$crimson_jar" "$runtime_dir/mods/"
+server_pid=''
 
-setsid bash -c 'cd "$1" && exec ./run.sh nogui' harness "$runtime_dir" >"$log_file" 2>&1 &
-server_pid=$!
-for attempt in $(seq 1 90); do
-  if rg -q 'Done \([^)]*\)!' "$log_file"; then
-    kill -KILL -- "-$server_pid" 2>/dev/null || true
-    wait "$server_pid" 2>/dev/null || true
-    printf 'Crimson integration packaged-JAR smoke passed; retained runtime: %s\n' "$runtime_dir"
-    exit 0
-  fi
-  if ! kill -0 "$server_pid" 2>/dev/null; then fail; fi
-  sleep 1
-done
-fail
+stop_server() {
+  [[ -n "${server_pid:-}" ]] || return 0
+  kill -KILL -- "-$server_pid" 2>/dev/null || true
+  wait "$server_pid" 2>/dev/null || true
+  server_pid=''
+}
+trap stop_server EXIT
+
+start_server() {
+  local log_file=$1
+  setsid bash -c 'cd "$1" && exec ./run.sh nogui' harness "$runtime_dir" >"$log_file" 2>&1 &
+  server_pid=$!
+  for attempt in $(seq 1 90); do
+    if rg -q 'Done \([^)]*\)!' "$log_file"; then
+      rg -q 'Pale Mirror bootstrapped' "$log_file" || return 1
+      ! rg -q 'Mod loading has failed|Missing or unsupported mandatory dependencies|NoClassDefFoundError|Caused by: java\.lang\.ClassNotFoundException' "$log_file" || return 1
+      return 0
+    fi
+    if ! kill -0 "$server_pid" 2>/dev/null; then return 1; fi
+    sleep 1
+  done
+  return 1
+}
+
+if ! start_server "$log_one"; then fail; fi
+stop_server
+if ! start_server "$log_two"; then fail; fi
+stop_server
+printf 'Crimson integration packaged-JAR restart harness passed; retained runtime: %s\n' "$runtime_dir"

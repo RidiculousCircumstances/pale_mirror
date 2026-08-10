@@ -45,6 +45,7 @@ public final class CrimsonSiegeGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-crimson-gate", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 240)
     public static void pmControlsCrimsonSiegeClearanceChain(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         if (AdapterRegistry.sourceAdapter(SOURCE).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
@@ -112,6 +113,7 @@ public final class CrimsonSiegeGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-crimson-pummeler", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
     public static void pummelerUsesCrimsonDisplayModelContract(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         if (AdapterRegistry.sourceAdapter(SOURCE).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
@@ -149,6 +151,7 @@ public final class CrimsonSiegeGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-crimson-presentation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
     public static void pmPresentationDrivesCrimsonModelFramesAndPhases(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         if (AdapterRegistry.sourceAdapter(SOURCE).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;

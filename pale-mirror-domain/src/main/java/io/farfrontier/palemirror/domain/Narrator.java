@@ -11,7 +11,7 @@ public final class Narrator {
     }
 
     public List<DomainEvent> offerFor(WorldState state, DomainEvent event, StoryAudienceId audience, ScenarioDefinitionRef definition) {
-        if (event.type() != DomainEventType.MINE_INFECTED || state.hasNarratorDecisionForSource(event.eventId(), audience)
+        if (!supports(event.type()) || state.hasNarratorDecisionForSource(event.eventId(), audience)
                 || !state.narratorReady(audience)) {
             return List.of();
         }
@@ -24,7 +24,7 @@ public final class Narrator {
         ScenarioInstance scenario = new ScenarioInstance(
                 "pm:scenario:" + event.eventId().substring("pm:event:".length()), event.eventId(), event.subject(), audience,
                 definition.id(), definition.version(), definition.stages(), definition.requiredCapabilities(),
-                definition.encounterProfileId(), definition.encounterProfileVersion(), ScenarioStatus.OFFERED, null, "");
+                definition.encounterProfileId(), definition.encounterProfileVersion(), definition.archetype(), ScenarioStatus.OFFERED, null, "");
         state.putScenario(scenario);
         state.setNarratorCooldown(audience, state.simulationStep() + definition.cooldownSteps());
         DomainEvent offered = events.create(state, DomainEventType.SCENARIO_OFFERED, event.subject(), event.eventId());
@@ -33,7 +33,7 @@ public final class Narrator {
     }
 
     public List<DomainEvent> noScenario(WorldState state, DomainEvent event, StoryAudienceId audience, String reason) {
-        if (event.type() != DomainEventType.MINE_INFECTED || state.hasNarratorDecisionForSource(event.eventId(), audience)) {
+        if (!supports(event.type()) || state.hasNarratorDecisionForSource(event.eventId(), audience)) {
             return List.of();
         }
         DomainEvent result = events.create(state, DomainEventType.NO_SCENARIO, event.subject(), audience.value());
@@ -44,5 +44,9 @@ public final class Narrator {
 
     public List<ScenarioInstance> offeredFor(WorldState state, StoryAudienceId audience) {
         return state.scenarios().stream().filter(value -> value.audience().equals(audience) && value.status() == ScenarioStatus.OFFERED).toList();
+    }
+
+    private static boolean supports(DomainEventType type) {
+        return type == DomainEventType.MINE_INFECTED || type == DomainEventType.SETTLEMENT_SUPPLY_DISRUPTED;
     }
 }

@@ -6,6 +6,7 @@ import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
+import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
@@ -16,14 +17,22 @@ import io.farfrontier.palemirror.domain.Narrator;
 import io.farfrontier.palemirror.domain.ScenarioDefinitionRef;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
+import io.farfrontier.palemirror.domain.LivingRegionStatus;
+import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.adapter.LogisticsRouteContract;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
 import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
+import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
+import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
+import io.farfrontier.palemirror.internal.world.RegionalLogisticsRuntime;
+import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
+import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
 import io.farfrontier.palemirror.domain.SourceGateStatus;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
@@ -45,6 +54,9 @@ import net.minecraft.world.entity.Entity;
 public final class PaleMirrorRuntime {
     private static final Map<MinecraftServer, PaleMirrorRuntime> INSTANCES = new IdentityHashMap<>();
     private static final int SIMULATION_INTERVAL_TICKS = 1200;
+    private static final int LOGISTICS_OBSERVATION_INTERVAL_TICKS = 40;
+    private static final int SETTLEMENT_OBSERVATION_INTERVAL_TICKS = 200;
+    private static final int LOGISTICS_PROOF_WINDOW_STEPS = 8;
 
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
@@ -68,10 +80,18 @@ public final class PaleMirrorRuntime {
     }
 
     public static void stop(MinecraftServer server) { INSTANCES.remove(server); }
-
     public void tick() {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
-        if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) advanceSimulation(1);
+        if (server.overworld().getGameTime() % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0
+                && SettlementObservationRuntime.observeNearPlayers(server, data)) data.setDirty();
+        CampaignRegionBootstrapper.tick(server, data, commands);
+        if (server.overworld().getGameTime() % LOGISTICS_OBSERVATION_INTERVAL_TICKS == 0) {
+            handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands, LOGISTICS_PROOF_WINDOW_STEPS));
+        }
+        if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) {
+            advanceSimulation(1);
+            triggerDueRegionCrises();
+        }
         reconcilePendingGates();
         observePlayers();
         reconcileScenarioCapabilities();
@@ -101,10 +121,7 @@ public final class PaleMirrorRuntime {
     public List<DomainEvent> advanceSimulation(int steps) {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.AdvanceSimulation(steps));
-        events.forEach(event -> {
-            TestMineRecord mine = data.testMines().get(event.subject());
-            if (mine != null) offerScenario(event, mine.primaryAudience());
-        });
+        handleDomainEvents(events);
         if (!events.isEmpty()) data.setDirty();
         return events;
     }
@@ -115,6 +132,29 @@ public final class PaleMirrorRuntime {
             boolean changed = !commands.execute(data.worldState(), new DomainCommand.AcceptScenario(scenarioId)).isEmpty();
             if (changed) data.setDirty();
             return changed;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    /** Applies the deliberate non-combat crisis outcome; it creates an abstract group, never a fake caravan. */
+    public boolean evacuate(String scenarioId, StoryAudienceId audience) {
+        try {
+            var scenario = data.worldState().scenario(scenarioId).orElse(null);
+            if (scenario == null || !scenario.audience().equals(audience)
+                    || scenario.archetype() != ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
+                    || scenario.status().isTerminal()) return false;
+            var settlement = data.worldState().settlement(scenario.target()).orElse(null);
+            if (settlement == null || settlement.population() == 0) return false;
+            int population = Math.max(1, (settlement.population() * 3) / 4);
+            WorldObjectId migrants = new WorldObjectId("pale_mirror:" + scenario.target().value().substring(
+                    scenario.target().value().indexOf(':') + 1) + "_evacuation");
+            List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.EvacuateSettlement(
+                    scenario.target(), migrants, population, "player:evacuate:" + scenario.id()));
+            if (events.isEmpty()) return false;
+            handleDomainEvents(events);
+            data.setDirty();
+            return true;
         } catch (IllegalArgumentException ignored) {
             return false;
         }
@@ -136,10 +176,27 @@ public final class PaleMirrorRuntime {
 
     public String status() {
         return "step=" + data.worldState().simulationStep() + ", facilities=" + data.worldState().facilities().size()
-                + ", settlements=" + data.worldState().settlements().size() + ", scenarios=" + data.worldState().scenarios().size()
+                + ", settlements=" + data.worldState().settlements().size() + ", routes=" + data.worldState().routes().size()
+                + ", regions=" + data.worldState().livingRegions().size() + ", scenarios=" + data.worldState().scenarios().size()
                 + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count()
                 + ", effectLeases=" + data.effectLeases().leases().size() + ", combatActors=" + data.threatCombat().actors().size()
                 + ", projectiles=" + data.threatCombat().projectiles().size() + ", quarantine=" + data.quarantine().records().size();
+    }
+
+    /** Admin-facing causal state, deliberately derived from canonical state rather than the physical presentation. */
+    public String explainSettlement(String settlementId) {
+        return RegionalJournal.explainSettlement(data, settlementId);
+    }
+
+    public String timeline(String objectId) {
+        return RegionalJournal.timeline(data, objectId);
+    }
+
+    public String logisticsStatus() { return RegionalLogisticsRuntime.describe(data); }
+
+    /** Returns true only for a registered observed-settlement marker, never for an arbitrary vanilla lectern. */
+    public boolean presentSettlementJournal(ServerPlayer player, net.minecraft.core.BlockPos position) {
+        return RegionalJournal.present(data, player, position, this::audienceFor);
     }
 
     /** Records a legacy source stack without granting it PM authority or deleting player data. */
@@ -292,17 +349,60 @@ public final class PaleMirrorRuntime {
                 }
             }
         }
+        data.worldState().livingRegions().forEach(region -> {
+            if (region.status() != LivingRegionStatus.PLANNED) return;
+            data.worldRegistry().find(region.settlementId()).ifPresent(settlement -> {
+                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                    if (player.serverLevel().dimension().location().toString().equals(settlement.dimensionId())
+                            && settlement.contains(player.blockPosition())) {
+                        List<DomainEvent> events = commands.execute(data.worldState(),
+                                new DomainCommand.DiscoverLivingRegion(region.id(), audienceFor(player),
+                                        "player:" + player.getUUID()));
+                        if (!events.isEmpty()) data.setDirty();
+                    }
+                }
+            });
+        });
     }
 
     private void reconcileMaterialization() {
         materializationScheduler.schedule(server, data).forEach(this::publish);
     }
 
-    private void offerScenario(DomainEvent event, StoryAudienceId audience) {
-        InfectionSourceId source = data.worldState().facility(event.subject()).map(FacilityState::infectionSource)
-                .orElse(null);
+    private void handleDomainEvents(List<DomainEvent> events) {
+        events.forEach(event -> {
+            if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.MINE_INFECTED) {
+                boolean regionPrimary = data.worldState().livingRegions().stream()
+                        .anyMatch(region -> region.primaryFacilityId().equals(event.subject()));
+                if (!regionPrimary) {
+                    TestMineRecord mine = data.testMines().get(event.subject());
+                    if (mine != null) offerInvestigationScenario(event, mine.primaryAudience());
+                }
+            } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_SUPPLY_DISRUPTED) {
+                data.worldState().livingRegions().stream()
+                        .filter(region -> region.settlementId().equals(event.subject()) && region.primaryAudience() != null)
+                        .findFirst().ifPresent(region -> offerSettlementCrisis(event, region.primaryAudience(), region.primaryFacilityId()));
+            }
+        });
+    }
+
+    private void offerInvestigationScenario(DomainEvent event, StoryAudienceId audience) {
+        InfectionSourceId source = data.worldState().facility(event.subject()).map(FacilityState::infectionSource).orElse(null);
         if (source == null) return;
-        ScenarioDefinition definition = ScenarioDefinitions.forSource(source).stream().findFirst().orElse(null);
+        ScenarioDefinition definition = ScenarioDefinitions.forSourceAndArchetype(source, ScenarioArchetype.INVESTIGATION_RECOVERY)
+                .stream().findFirst().orElse(null);
+        offerScenario(event, audience, source, definition);
+    }
+
+    private void offerSettlementCrisis(DomainEvent event, StoryAudienceId audience, WorldObjectId primaryFacilityId) {
+        InfectionSourceId source = data.worldState().facility(primaryFacilityId).map(FacilityState::infectionSource).orElse(null);
+        if (source == null) return;
+        ScenarioDefinition definition = ScenarioDefinitions.forSourceAndArchetype(source, ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)
+                .stream().findFirst().orElse(null);
+        offerScenario(event, audience, source, definition);
+    }
+
+    private void offerScenario(DomainEvent event, StoryAudienceId audience, InfectionSourceId source, ScenarioDefinition definition) {
         if (definition == null) {
             commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "definition unavailable"));
             return;
@@ -317,7 +417,7 @@ public final class PaleMirrorRuntime {
                 : Integer.toString(EncounterDefinitions.current().get(net.minecraft.resources.ResourceLocation.parse(profileId)).version());
         ScenarioDefinitionRef pinned = new ScenarioDefinitionRef(definition.id().toString(), Integer.toString(definition.version()),
                 definition.stages(), definition.capabilities().stream().map(Enum::name).sorted().toList(), definition.cooldownSteps(),
-                profileId, profileVersion);
+                profileId, profileVersion, definition.archetype());
         commands.execute(data.worldState(), new DomainCommand.OfferScenario(event, audience, pinned));
     }
 
@@ -325,7 +425,11 @@ public final class PaleMirrorRuntime {
         data.worldState().scenarios().forEach(scenario -> {
             java.util.Set<io.farfrontier.palemirror.api.Capability> requirements = scenario.requiredCapabilities().stream()
                     .map(io.farfrontier.palemirror.api.Capability::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet());
-            FacilityState facility = data.worldState().facility(scenario.target()).orElse(null);
+            FacilityState facility = data.worldState().facility(scenario.target()).orElseGet(() ->
+                    scenario.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
+                            ? data.worldState().livingRegions().stream().filter(region -> region.settlementId().equals(scenario.target()))
+                            .findFirst().flatMap(region -> data.worldState().facility(region.primaryFacilityId())).orElse(null)
+                            : null);
             boolean gateNeedsSource = facility != null && facility.gate().status().protectsController();
             boolean available = facility != null && AdapterRegistry.supports(facility.infectionSource(), requirements)
                     && (!gateNeedsSource || AdapterRegistry.sourceAdapter(facility.infectionSource()).health().status()
@@ -349,5 +453,17 @@ public final class PaleMirrorRuntime {
                     commands.execute(data.worldState(), new DomainCommand.BypassGate(facility.id(), "pm:source-no-gate:" + facility.infectionSource().value())));
             if (!events.isEmpty()) data.setDirty();
         });
+    }
+
+    private void triggerDueRegionCrises() {
+        data.worldState().livingRegions().stream().filter(region -> region.crisisDue(data.worldState().simulationStep()))
+                .forEach(region -> {
+                    List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.TriggerFacilityInfection(
+                            region.primaryFacilityId(), "region-crisis:" + region.id()));
+                    if (!events.isEmpty()) {
+                        handleDomainEvents(events);
+                        data.setDirty();
+                    }
+                });
     }
 }

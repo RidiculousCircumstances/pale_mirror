@@ -12,10 +12,12 @@ import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
+import io.farfrontier.palemirror.internal.content.CampaignRegionDefinitions;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -60,6 +62,7 @@ public final class PaleMirrorEvents {
         event.addListener(EncounterDefinitions.INSTANCE);
         event.addListener(ScenarioDefinitions.INSTANCE);
         event.addListener(ThreatTierDefinitions.INSTANCE);
+        event.addListener(CampaignRegionDefinitions.INSTANCE);
         AdapterRegistry.reloadListeners().forEach(event::addListener);
     }
 
@@ -91,6 +94,9 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
+        if (event.getEntity().level().getServer() != null) {
+            SettlementObservationRuntime.recordDeath(event.getEntity().level().getServer(), event.getEntity());
+        }
         String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
         if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null) {
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(event.getEntity().level().getServer());
@@ -170,6 +176,12 @@ public final class PaleMirrorEvents {
         if (denyExcludedItem(event.getEntity(), event.getItemStack(), "use on block")) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
+        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+                && PaleMirrorRuntime.forServer(player.getServer()).presentSettlementJournal(player, event.getPos())) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
         }
     }
 
@@ -230,8 +242,7 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void registerCommands(RegisterCommandsEvent event) {
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("pale_mirror")
-                .requires(source -> source.hasPermission(2))
-                .then(Commands.literal("status").executes(context -> {
+                .then(Commands.literal("status").requires(source -> source.hasPermission(2)).executes(context -> {
                     context.getSource().sendSuccess(() -> Component.literal(PaleMirrorRuntime.forServer(context.getSource().getServer()).status()), false);
                     return 1;
                 }));
@@ -264,19 +275,47 @@ public final class PaleMirrorEvents {
                             else context.getSource().sendFailure(Component.translatable("pale_mirror.command.scenario.missing"));
                             return accepted ? 1 : 0;
         })));
+        scenario.then(Commands.literal("evacuate").then(Commands.argument("id", StringArgumentType.word()).executes(context -> {
+                            String id = StringArgumentType.getString(context, "id");
+                            PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
+                            boolean evacuated = runtime.evacuate(id, audienceFor(context.getSource(), runtime));
+                            if (evacuated) context.getSource().sendSuccess(() -> Component.literal("Ironhill evacuation has begun."), true);
+                            else context.getSource().sendFailure(Component.literal("No matching active settlement crisis was found."));
+                            return evacuated ? 1 : 0;
+        })));
         root.then(scenario);
-        root.then(Commands.literal("adapter").then(Commands.literal("status").executes(context -> {
+        root.then(Commands.literal("adapter").requires(source -> source.hasPermission(2)).then(Commands.literal("status").executes(context -> {
                     String health = AdapterRegistry.all().stream().map(adapter -> adapter.id() + "=" + adapter.health().status() + " (" + adapter.health().detail() + ")").reduce((a, b) -> a + "; " + b).orElse("No adapters");
                     context.getSource().sendSuccess(() -> Component.literal(health), false);
                     return 1;
         })));
-        root.then(Commands.literal("object").then(Commands.literal("inspect")
+        root.then(Commands.literal("object").requires(source -> source.hasPermission(2)).then(Commands.literal("inspect")
                 .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
                     String id = StringArgumentType.getString(context, "id");
                     context.getSource().sendSuccess(() -> Component.literal(
                             PaleMirrorRuntime.forServer(context.getSource().getServer()).inspectObject(id)), false);
                     return 1;
                 }))));
+        root.then(Commands.literal("explain").requires(source -> source.hasPermission(2)).then(Commands.literal("settlement")
+                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
+                    String id = StringArgumentType.getString(context, "id");
+                    context.getSource().sendSuccess(() -> Component.literal(
+                            PaleMirrorRuntime.forServer(context.getSource().getServer()).explainSettlement(id)), false);
+                    return 1;
+                }))));
+        root.then(Commands.literal("timeline").requires(source -> source.hasPermission(2))
+                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
+                    String id = StringArgumentType.getString(context, "id");
+                    context.getSource().sendSuccess(() -> Component.literal(
+                            PaleMirrorRuntime.forServer(context.getSource().getServer()).timeline(id)), false);
+                    return 1;
+                })));
+        root.then(Commands.literal("logistics").requires(source -> source.hasPermission(2)).then(Commands.literal("status")
+                .executes(context -> {
+                    context.getSource().sendSuccess(() -> Component.literal(
+                            PaleMirrorRuntime.forServer(context.getSource().getServer()).logisticsStatus()), false);
+                    return 1;
+                })));
         event.getDispatcher().register(root);
     }
 

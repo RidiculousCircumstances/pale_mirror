@@ -18,9 +18,9 @@ import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
+import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.domain.SourceGateStatus;
 import io.farfrontier.palemirror.domain.SourceGateState;
-import io.farfrontier.palemirror.domain.SettlementState;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.domain.WorldObjectId;
@@ -49,7 +49,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 16;
+    static final int CURRENT_SCHEMA = 19;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -59,14 +59,17 @@ public final class PaleMirrorSavedData extends SavedData {
     private final EffectLeaseLedger effectLeases;
     private final QuarantineLedger quarantine;
     private final ThreatCombatLedger threatCombat;
+    private final Map<String, CampaignRegionRecord> campaignRegions;
+    private final Map<WorldObjectId, SettlementObservationRecord> settlementObservations;
     public PaleMirrorSavedData() {
         this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
-                new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger());
+                new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger(), new LinkedHashMap<>(), new LinkedHashMap<>());
     }
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
                                 WorldObjectRegistry worldRegistry, EffectLeaseLedger effectLeases, QuarantineLedger quarantine,
-                                ThreatCombatLedger threatCombat) {
+                                ThreatCombatLedger threatCombat, Map<String, CampaignRegionRecord> campaignRegions,
+                                Map<WorldObjectId, SettlementObservationRecord> settlementObservations) {
         this.worldState = worldState;
         this.testMines = testMines;
         this.audienceMappings = audienceMappings;
@@ -75,6 +78,8 @@ public final class PaleMirrorSavedData extends SavedData {
         this.effectLeases = effectLeases;
         this.quarantine = quarantine;
         this.threatCombat = threatCombat;
+        this.campaignRegions = campaignRegions;
+        this.settlementObservations = settlementObservations;
     }
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
@@ -111,6 +116,20 @@ public final class PaleMirrorSavedData extends SavedData {
     public QuarantineLedger quarantine() { return quarantine; }
     /** Optional encounter combat state; it is never a second canonical world model. */
     public ThreatCombatLedger threatCombat() { return threatCombat; }
+    /** Physical campaign region plans; their simulation state remains in {@link #worldState()}. */
+    public Map<String, CampaignRegionRecord> campaignRegions() { return campaignRegions; }
+    /** Physical evidence from read-only village observers; never a second canonical settlement model. */
+    public Map<WorldObjectId, SettlementObservationRecord> settlementObservations() { return settlementObservations; }
+    public boolean observeSettlement(io.farfrontier.palemirror.internal.adapter.SettlementObservation observation) {
+        SettlementObservationRecord record = settlementObservations.get(observation.settlementId());
+        if (record == null) {
+            record = new SettlementObservationRecord(observation);
+            settlementObservations.put(record.id(), record);
+            if (worldRegistry.find(record.id()).isEmpty()) worldRegistry.register(record.registryEntry());
+            return true;
+        }
+        return record.observe(observation);
+    }
     public void registerTestMine(TestMineRecord mine) {
         worldRegistry.register(mine.object());
         testMines.put(mine.id(), mine);
@@ -148,7 +167,8 @@ public final class PaleMirrorSavedData extends SavedData {
             quarantine.put(record.id(), record);
         }
         return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
-                new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag));
+                new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag),
+                CampaignRegionPresentationCodec.read(tag), SettlementObservationCodec.read(tag));
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " is not compatible with schema "
@@ -187,6 +207,8 @@ public final class PaleMirrorSavedData extends SavedData {
         this.quarantine.records().forEach(record -> quarantine.add(PaleMirrorAuxiliaryPresentationCodec.writeQuarantine(record)));
         tag.put("quarantine", quarantine);
         ThreatCombatPresentationCodec.write(tag, threatCombat);
+        CampaignRegionPresentationCodec.write(tag, campaignRegions);
+        SettlementObservationCodec.write(tag, settlementObservations);
         return tag;
     }
 
@@ -223,6 +245,7 @@ public final class PaleMirrorSavedData extends SavedData {
             scenario.putString("definitionVersion", value.definitionVersion());
             scenario.putString("encounterProfile", value.encounterProfileId());
             scenario.putString("encounterProfileVersion", value.encounterProfileVersion());
+            scenario.putString("archetype", value.archetype().name());
             ListTag stages = new ListTag();
             value.pinnedStages().forEach(stage -> stages.add(net.minecraft.nbt.StringTag.valueOf(stage)));
             scenario.put("pinnedStages", stages);
@@ -235,19 +258,7 @@ public final class PaleMirrorSavedData extends SavedData {
             scenarios.add(scenario);
         });
         tag.put("scenarios", scenarios);
-        ListTag settlements = new ListTag();
-        state.settlements().forEach(value -> {
-            CompoundTag settlement = new CompoundTag();
-            settlement.putString("id", value.id().value());
-            settlement.putString("ironSource", value.ironSource().value());
-            settlement.putInt("expectedIron", value.expectedIronSupply());
-            settlement.putInt("baseDefense", value.baseDefense());
-            settlement.putInt("currentIron", value.currentIronSupply());
-            settlement.putInt("currentDefense", value.currentDefense());
-            settlement.putBoolean("supplyDisrupted", value.supplyDisrupted());
-            settlements.add(settlement);
-        });
-        tag.put("settlements", settlements);
+        RegionalStateCodec.write(tag, state);
         ListTag events = new ListTag();
         state.history().forEach(value -> {
             CompoundTag event = new CompoundTag();
@@ -350,17 +361,13 @@ public final class PaleMirrorSavedData extends SavedData {
                     new WorldObjectId(value.getString("target")), new StoryAudienceId(value.getString("audience")),
                     value.getString("definition"), value.getString("definitionVersion"), stages, capabilities,
                     value.getString("encounterProfile"), value.getString("encounterProfileVersion"),
+                    ScenarioArchetype.valueOf(value.contains("archetype", Tag.TAG_STRING)
+                            ? value.getString("archetype") : ScenarioArchetype.INVESTIGATION_RECOVERY.name()),
                     ScenarioStatus.valueOf(value.getString("status")),
                     value.contains("resumeStatus", Tag.TAG_STRING) ? ScenarioStatus.valueOf(value.getString("resumeStatus")) : null,
                     value.getString("blockedReason")));
         }
-        for (Tag element : tag.getList("settlements", Tag.TAG_COMPOUND)) {
-            CompoundTag value = (CompoundTag) element;
-            state.putSettlement(new SettlementState(new WorldObjectId(value.getString("id")),
-                    new WorldObjectId(value.getString("ironSource")), value.getInt("expectedIron"),
-                    value.getInt("baseDefense"), value.getInt("currentIron"), value.getInt("currentDefense"),
-                    value.getBoolean("supplyDisrupted")));
-        }
+        RegionalStateCodec.read(tag, state);
         for (Tag element : tag.getList("events", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
             String id = value.getString("id");

@@ -44,6 +44,7 @@ public final class SporeSandboxGameTests {
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-spore-sandbox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
     public static void pmOwnsSporeSiteAndKeepsNativeFormsDormant(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         if (AdapterRegistry.sourceAdapter(new InfectionSourceId("pale_mirror:spore")).health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
             helper.succeed();
             return;
@@ -107,14 +108,15 @@ public final class SporeSandboxGameTests {
         CompoundTag snapshot = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
         helper.assertValueEqual(PaleMirrorSavedData.load(snapshot, level.registryAccess()).worldState().facility(site.id()).orElseThrow()
                 .infectionSource(), new InfectionSourceId("pale_mirror:spore"), "restart snapshot must retain the canonical source identity");
-        CompoundTag v10Snapshot = snapshot.copy();
-        v10Snapshot.putInt("schemaVersion", 10);
-        v10Snapshot.getList("testMines", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).getCompound("encounter")
-                .getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).forEach(value -> ((CompoundTag) value).remove("combatHitPoints"));
-        helper.assertValueEqual(PaleMirrorSavedData.load(v10Snapshot, level.registryAccess()).testMines().get(site.id())
-                .encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints(),
-                io.farfrontier.palemirror.internal.world.EncounterActorRef.UNINITIALIZED_COMBAT_HIT_POINTS,
-                "v10 migration must leave physical combat health explicitly uninitialized for the adapter to restore");
+        CompoundTag legacySnapshot = snapshot.copy();
+        legacySnapshot.putInt("schemaVersion", 16);
+        try {
+            PaleMirrorSavedData.load(legacySnapshot, level.registryAccess());
+            throw new AssertionError("schema v16 must not be inferred as a v19 observed-settlement snapshot");
+        } catch (IllegalStateException expected) {
+            helper.assertTrue(expected.getMessage().contains("requires a new world"),
+                    "legacy snapshot rejection must preserve the explicit new-world boundary");
+        }
 
         int initialCombatHealth = site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints();
         helper.assertValueEqual(initialCombatHealth, 18, "PM must persist the audited Spore combat health instead of native health");
@@ -270,6 +272,11 @@ public final class SporeSandboxGameTests {
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().settlements().clear();
+        data.worldState().routes().clear();
+        data.worldState().migrantGroups().clear();
+        data.worldState().livingRegions().clear();
+        data.campaignRegions().clear();
+        data.settlementObservations().clear();
         data.worldState().narratorCooldowns().clear();
         data.worldState().history().clear();
         data.worldState().setSimulationStep(0);

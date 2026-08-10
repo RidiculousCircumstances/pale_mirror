@@ -12,6 +12,9 @@ public final class WorldState {
     private final Map<WorldObjectId, FacilityState> facilities = new LinkedHashMap<>();
     private final Map<String, ScenarioInstance> scenarios = new LinkedHashMap<>();
     private final Map<WorldObjectId, SettlementState> settlements = new LinkedHashMap<>();
+    private final Map<WorldObjectId, RouteState> routes = new LinkedHashMap<>();
+    private final Map<WorldObjectId, MigrantGroupState> migrantGroups = new LinkedHashMap<>();
+    private final Map<String, LivingRegionState> livingRegions = new LinkedHashMap<>();
     private final List<DomainEvent> history = new ArrayList<>();
     private final Map<StoryAudienceId, Long> narratorCooldowns = new LinkedHashMap<>();
     private long schemaVersion = 1;
@@ -27,13 +30,25 @@ public final class WorldState {
     public Collection<FacilityState> facilities() { return facilities.values(); }
     public Collection<ScenarioInstance> scenarios() { return scenarios.values(); }
     public Collection<SettlementState> settlements() { return settlements.values(); }
+    public Collection<RouteState> routes() { return routes.values(); }
+    public Collection<MigrantGroupState> migrantGroups() { return migrantGroups.values(); }
+    public Collection<LivingRegionState> livingRegions() { return livingRegions.values(); }
     public List<DomainEvent> history() { return history; }
     public Map<StoryAudienceId, Long> narratorCooldowns() { return narratorCooldowns; }
     public Optional<FacilityState> facility(WorldObjectId id) { return Optional.ofNullable(facilities.get(id)); }
     public Optional<ScenarioInstance> scenario(String id) { return Optional.ofNullable(scenarios.get(id)); }
+    public Optional<SettlementState> settlement(WorldObjectId id) { return Optional.ofNullable(settlements.get(id)); }
+    public Optional<RouteState> route(WorldObjectId id) { return Optional.ofNullable(routes.get(id)); }
+    public Optional<MigrantGroupState> migrantGroup(WorldObjectId id) { return Optional.ofNullable(migrantGroups.get(id)); }
+    public Optional<LivingRegionState> livingRegion(String id) { return Optional.ofNullable(livingRegions.get(id)); }
     public void putFacility(FacilityState facility) { facilities.put(facility.id(), facility); }
     public void putScenario(ScenarioInstance scenario) { scenarios.put(scenario.id(), scenario); }
     public void putSettlement(SettlementState settlement) { settlements.put(settlement.id(), settlement); }
+    public void putRoute(RouteState route) { routes.put(route.id(), route); }
+    public void putMigrantGroup(MigrantGroupState migrantGroup) { migrantGroups.put(migrantGroup.id(), migrantGroup); }
+    public void putLivingRegion(LivingRegionState region) {
+        if (livingRegions.putIfAbsent(region.id(), region) != null) throw new IllegalStateException("Duplicate living region " + region.id());
+    }
     public void addEvent(DomainEvent event) { history.add(event); }
     public boolean hasScenarioForSource(String sourceEventId, StoryAudienceId audience) {
         return scenarios.values().stream().anyMatch(value -> value.sourceEventId().equals(sourceEventId) && value.audience().equals(audience));

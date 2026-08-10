@@ -4,6 +4,8 @@ public enum ScenarioStatus {
     OFFERED,
     INVESTIGATE,
     RECOVER,
+    ASSESS,
+    RESPOND,
     RESOLVED,
     DECLINED,
     EXPIRED,

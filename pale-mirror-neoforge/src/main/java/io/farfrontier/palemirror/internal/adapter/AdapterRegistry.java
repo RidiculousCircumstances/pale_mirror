@@ -13,6 +13,8 @@ import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.integration.spore.SporeSandboxAdapter;
+import io.farfrontier.palemirror.internal.integration.create.CreateLogisticsAdapter;
+import io.farfrontier.palemirror.internal.integration.ftb.FtbQuestsPresentationAdapter;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -21,16 +23,38 @@ public final class AdapterRegistry {
     private static final VanillaAnchorAdapter VANILLA_ANCHOR = new VanillaAnchorAdapter();
     private static final CrimsonSandboxAdapter CRIMSON = new CrimsonSandboxAdapter();
     private static final SporeSandboxAdapter SPORE = new SporeSandboxAdapter();
+    private static final CreateLogisticsAdapter CREATE_LOGISTICS = new CreateLogisticsAdapter();
+    private static final VanillaVillageSettlementAdapter VANILLA_VILLAGES = new VanillaVillageSettlementAdapter();
+    private static final FtbQuestsPresentationAdapter FTB_QUESTS = new FtbQuestsPresentationAdapter();
     private static final List<SourceThreatAdapter> SOURCE_ADAPTERS = List.of(CRIMSON, SPORE);
+    private static final List<LogisticsAdapter> LOGISTICS_ADAPTERS = List.of(CREATE_LOGISTICS);
+    private static final List<SettlementAdapter> SETTLEMENT_ADAPTERS = List.of(VANILLA_VILLAGES);
     private static final Map<String, IntegrationAdapter> ADAPTERS = Map.of(
             VANILLA_ANCHOR.id(), VANILLA_ANCHOR,
             CRIMSON.id(), CRIMSON,
-            SPORE.id(), SPORE);
+            SPORE.id(), SPORE,
+            CREATE_LOGISTICS.id(), CREATE_LOGISTICS,
+            VANILLA_VILLAGES.id(), VANILLA_VILLAGES,
+            FTB_QUESTS.id(), FTB_QUESTS);
 
     private AdapterRegistry() { }
     public static List<IntegrationAdapter> all() { return ADAPTERS.values().stream().sorted(java.util.Comparator.comparing(IntegrationAdapter::id)).toList(); }
     public static VanillaAnchorAdapter vanillaAnchor() { return VANILLA_ANCHOR; }
     public static List<SourceThreatAdapter> sourceAdapters() { return SOURCE_ADAPTERS; }
+    public static List<LogisticsAdapter> logisticsAdapters() { return LOGISTICS_ADAPTERS; }
+    public static List<SettlementAdapter> settlementAdapters() { return SETTLEMENT_ADAPTERS; }
+    /** Optional generic player-facing action; no FTB type or progress crosses this boundary. */
+    public static Optional<String> scenarioJournalCommand() { return FTB_QUESTS.journalOpenCommand(); }
+    public static Optional<LogisticsRouteObservation> observeLogisticsRoute(ServerLevel level,
+                                                                             LogisticsRouteContract contract) {
+        return logisticsAdapters().stream().filter(adapter -> adapter.health().status() == AdapterHealth.Status.AVAILABLE)
+                .findFirst().map(adapter -> adapter.observe(level, contract));
+    }
+    /** All returned candidates are bounded to already loaded chunks around the caller's focus. */
+    public static List<SettlementObservation> observeSettlements(ServerLevel level, net.minecraft.core.BlockPos focus) {
+        return settlementAdapters().stream().filter(adapter -> adapter.health().status() == AdapterHealth.Status.AVAILABLE)
+                .flatMap(adapter -> adapter.observeNearby(level, focus).stream()).toList();
+    }
     public static SourceThreatAdapter sourceAdapter(InfectionSourceId source) {
         return sourceAdapters().stream().filter(adapter -> adapter.source().equals(source)).findFirst()
                 .orElseGet(() -> new UnavailableThreatActorAdapter(source));
@@ -60,6 +84,7 @@ public final class AdapterRegistry {
     }
     public static void onServerStarted(net.minecraft.server.MinecraftServer server) {
         sourceAdapters().forEach(adapter -> adapter.onServerStarted(server));
+        FTB_QUESTS.onServerStarted(server);
     }
     public static void tickRuntime(net.minecraft.server.MinecraftServer server,
                                    io.farfrontier.palemirror.internal.world.PaleMirrorSavedData data) {

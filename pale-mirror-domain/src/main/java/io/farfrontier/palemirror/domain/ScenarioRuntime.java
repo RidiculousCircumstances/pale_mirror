@@ -12,6 +12,7 @@ public final class ScenarioRuntime {
 
     public List<DomainEvent> accept(WorldState state, String scenarioId) {
         ScenarioInstance scenario = state.scenario(scenarioId).orElseThrow(() -> new IllegalArgumentException("Unknown scenario " + scenarioId));
+        if (scenario.archetype() != ScenarioArchetype.INVESTIGATION_RECOVERY) return List.of();
         if (scenario.status() != ScenarioStatus.OFFERED) return List.of();
         FacilityState facility = state.facility(scenario.target()).orElseThrow();
         if (facility.status() == FacilityStatus.RECOVERING || facility.status() == FacilityStatus.OPERATIONAL) {

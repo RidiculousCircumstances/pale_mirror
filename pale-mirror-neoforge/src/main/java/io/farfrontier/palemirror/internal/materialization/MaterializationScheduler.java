@@ -5,6 +5,7 @@ import java.util.List;
 
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
+import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
 import io.farfrontier.palemirror.domain.SourceGateStatus;
@@ -67,8 +68,8 @@ public final class MaterializationScheduler {
     }
 
     private static boolean eligibleForMaterialization(PaleMirrorSavedData data, TestMineRecord mine, FacilityState facility) {
-        return facility.status() != FacilityStatus.INFECTED || data.worldState().scenarios().stream().anyMatch(scenario ->
-                scenario.target().equals(mine.id()) && scenario.status() == ScenarioStatus.RECOVER);
+        if (facility.status() != FacilityStatus.INFECTED) return true;
+        return selectedEncounterScenario(data, mine) != null;
     }
 
     private static ServerLevel levelFor(MinecraftServer server, TestMineRecord mine) {
@@ -86,7 +87,14 @@ public final class MaterializationScheduler {
 
     private static ScenarioInstance selectedEncounterScenario(PaleMirrorSavedData data, TestMineRecord mine) {
         return data.worldState().scenarios().stream().filter(value -> value.target().equals(mine.id())
-                && value.status() == ScenarioStatus.RECOVER).findFirst().orElse(null);
+                && value.status() == ScenarioStatus.RECOVER).findFirst().orElseGet(() ->
+                data.worldState().scenarios().stream().filter(value ->
+                        value.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
+                                && value.status() == ScenarioStatus.RESPOND
+                                && data.worldState().livingRegions().stream().anyMatch(region ->
+                                region.primaryFacilityId().equals(mine.id())
+                                        && region.settlementId().equals(value.target())))
+                        .findFirst().orElse(null));
     }
 
     private static EncounterProfile encounterProfile(ScenarioInstance scenario) {

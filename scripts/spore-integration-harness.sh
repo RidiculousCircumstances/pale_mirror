@@ -27,16 +27,29 @@ fail() {
   "$java_bin" -jar "$installer" --installServer . >/dev/null
 )
 printf 'eula=true\n' > "$runtime_dir/eula.txt"
-printf 'online-mode=false\nserver-port=25578\n' > "$runtime_dir/server.properties"
+printf 'online-mode=false\nserver-port=0\n' > "$runtime_dir/server.properties"
 mkdir "$runtime_dir/mods"
 cp "$mod_jar" "$spore_jar" "$runtime_dir/mods/"
+server_pid=''
+
+stop_server() {
+  [[ -n "${server_pid:-}" ]] || return 0
+  kill -KILL -- "-$server_pid" 2>/dev/null || true
+  wait "$server_pid" 2>/dev/null || true
+  server_pid=''
+}
+trap stop_server EXIT
 
 start_server() {
   local log_file=$1
   setsid bash -c 'cd "$1" && exec ./run.sh nogui' harness "$runtime_dir" >"$log_file" 2>&1 &
   server_pid=$!
   for attempt in $(seq 1 90); do
-    if rg -q 'Done \([^)]*\)!' "$log_file"; then return 0; fi
+    if rg -q 'Done \([^)]*\)!' "$log_file"; then
+      rg -q 'Pale Mirror bootstrapped' "$log_file" || return 1
+      ! rg -q 'Mod loading has failed|Missing or unsupported mandatory dependencies|NoClassDefFoundError|Caused by: java\.lang\.ClassNotFoundException' "$log_file" || return 1
+      return 0
+    fi
     if ! kill -0 "$server_pid" 2>/dev/null; then return 1; fi
     sleep 1
   done
@@ -44,11 +57,9 @@ start_server() {
 }
 
 if ! start_server "$log_one"; then fail; fi
-kill -KILL -- "-$server_pid" 2>/dev/null || true
-wait "$server_pid" 2>/dev/null || true
+stop_server
 
 if ! start_server "$log_two"; then fail; fi
-kill -KILL -- "-$server_pid" 2>/dev/null || true
-wait "$server_pid" 2>/dev/null || true
+stop_server
 
 printf 'Spore integration packaged-JAR restart harness passed; retained runtime: %s\n' "$runtime_dir"

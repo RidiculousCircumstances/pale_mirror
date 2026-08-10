@@ -13,5 +13,11 @@ public enum Capability {
     /** PM-owned local movement for constrained source carriers. */
     SOURCE_CONTROLLED_MOVEMENT,
     /** Source integration suppresses or contains its autonomous global mechanics. */
-    SOURCE_GLOBAL_ISOLATION
+    SOURCE_GLOBAL_ISOLATION,
+    /** Read-only observation of a player-built logistics route. */
+    LOGISTICS_ROUTE_OBSERVATION,
+    /** Read-only discovery of an already generated vanilla-compatible settlement. */
+    SETTLEMENT_OBSERVATION,
+    /** Optional player-facing mirror of PM scenario state in FTB Quests. */
+    FTB_QUEST_PRESENTATION
 }

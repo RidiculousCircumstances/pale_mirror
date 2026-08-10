@@ -58,6 +58,7 @@ public final class FacilityState {
     public void setObservedRevision(long revision) { observedRevision = Math.max(observedRevision, revision); }
     public void infect() { infect(0); }
     public void infect(long simulationStep) {
+        if (status != FacilityStatus.OPERATIONAL) return;
         status = FacilityStatus.INFECTED;
         currentProduction = 0;
         threatTier = ThreatTier.FOOTHOLD;
