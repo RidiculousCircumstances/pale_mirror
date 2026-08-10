@@ -55,7 +55,8 @@ smoke CoreClient
 smoke CrimsonClient
 smoke SporeClient
 smoke CreateClient
+smoke RailwayClient
 smoke FtbClient
 smoke MillenaireClient
-printf 'Client render smoke passed for core, Crimson, Spore, Create, FTB, and Millenaire profiles.\n'
+printf 'Client render smoke passed for core, Crimson, Spore, Create, managed railway, FTB, and Millenaire profiles.\n'
 rm -rf -- "$runtime_dir"

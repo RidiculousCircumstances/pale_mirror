@@ -1,11 +1,9 @@
 package io.farfrontier.palemirror.internal;
-
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
-
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
@@ -32,6 +30,8 @@ import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
 import io.farfrontier.palemirror.internal.world.RegionalLogisticsRuntime;
 import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
+import io.farfrontier.palemirror.internal.presentation.CampaignPresentationRuntime;
+import io.farfrontier.palemirror.internal.presentation.CampaignWelcomeKit;
 import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
 import io.farfrontier.palemirror.internal.economy.ResourceTransferRuntime;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
@@ -45,6 +45,7 @@ import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.observation.GatePartDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.ManagedRailwayRuntime;
 import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.TestMineTemplate;
@@ -54,7 +55,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
-
 /** Server-thread coordinator. It is intentionally the only bridge between domain and Minecraft layers. */
 public final class PaleMirrorRuntime {
     private static final Map<MinecraftServer, PaleMirrorRuntime> INSTANCES = new IdentityHashMap<>();
@@ -62,7 +62,6 @@ public final class PaleMirrorRuntime {
     private static final int LOGISTICS_OBSERVATION_INTERVAL_TICKS = 40;
     private static final int SETTLEMENT_OBSERVATION_INTERVAL_TICKS = 200;
     private static final int LOGISTICS_PROOF_WINDOW_STEPS = 8;
-
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
     private final DomainServices domainServices = new DomainServices();
@@ -71,7 +70,6 @@ public final class PaleMirrorRuntime {
     private final ObservationReconciler reconciler = new ObservationReconciler(commands);
     private final MaterializationScheduler materializationScheduler = new MaterializationScheduler();
     private final RuntimeDebugController debug;
-
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
@@ -80,18 +78,21 @@ public final class PaleMirrorRuntime {
         if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         PmProjectileRuntime.discardUnknownAfterRestart(server, data);
         AdapterRegistry.onServerStarted(server);
+        ManagedRailwayRuntime.installPlacementAuthority(data);
     }
-
     public static PaleMirrorRuntime forServer(MinecraftServer server) {
         return INSTANCES.computeIfAbsent(server, PaleMirrorRuntime::new);
     }
-
-    public static void stop(MinecraftServer server) { INSTANCES.remove(server); }
+    public static void stop(MinecraftServer server) {
+        ManagedRailwayRuntime.stop(server);
+        INSTANCES.remove(server);
+    }
     public void tick() {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         if (server.overworld().getGameTime() % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0
                 && SettlementObservationRuntime.observeNearPlayers(server, data, commands)) data.setDirty();
         CampaignRegionBootstrapper.tick(server, data, commands, debug.automaticBindingEnabled());
+        if (ManagedRailwayRuntime.tick(server, data, commands)) data.setDirty();
         if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
         if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
         if (RefugeeCampRuntime.tick(server, data)) data.setDirty();
@@ -114,7 +115,6 @@ public final class PaleMirrorRuntime {
         AdapterRegistry.tickRuntime(server, data);
         debug.renderZoneMarkers();
     }
-
     /**
      * A facility is bound to exactly one canonical infection source at
      * creation.  Source composition is deliberately rejected by construction
@@ -129,7 +129,6 @@ public final class PaleMirrorRuntime {
         data.setDirty();
         return mine;
     }
-
     public List<DomainEvent> advanceSimulation(int steps) {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.AdvanceSimulation(steps));
@@ -137,7 +136,6 @@ public final class PaleMirrorRuntime {
         if (!events.isEmpty()) data.setDirty();
         return events;
     }
-
     public boolean accept(String scenarioId, StoryAudienceId audience) {
         try {
             if (!data.worldState().scenario(scenarioId).map(value -> value.audience().equals(audience)).orElse(false)) return false;
@@ -148,7 +146,6 @@ public final class PaleMirrorRuntime {
             return false;
         }
     }
-
     public boolean beginSettlementEvacuation(String communityId, StoryAudienceId audience, String causationId) {
         try {
             List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.BeginSettlementEvacuation(
@@ -159,7 +156,6 @@ public final class PaleMirrorRuntime {
             return false;
         }
     }
-
     public List<io.farfrontier.palemirror.domain.ScenarioInstance> offered(StoryAudienceId audience) {
         return narrator.offeredFor(data.worldState(), audience);
     }
@@ -173,7 +169,6 @@ public final class PaleMirrorRuntime {
     }
 
     public StoryAudienceId defaultAudience() { return StoryAudienceId.globalTestAudience(); }
-
     public String status() {
         return "step=" + data.worldState().simulationStep() + ", facilities=" + data.worldState().facilities().size()
                 + ", communities=" + data.worldState().communities().size() + ", places=" + data.worldState().places().size()
@@ -205,7 +200,11 @@ public final class PaleMirrorRuntime {
 
     /** Returns true only for a registered observed-settlement marker, never for an arbitrary vanilla lectern. */
     public boolean presentSettlementJournal(ServerPlayer player, net.minecraft.core.BlockPos position) {
-        return RegionalJournal.present(data, player, position, this::audienceFor);
+        return CampaignPresentationRuntime.presentJournal(data, player, position, this::audienceFor);
+    }
+
+    public void refreshRegionalLedger(ServerPlayer player, ItemStack stack) {
+        CampaignPresentationRuntime.refreshLedger(data, player, stack, audienceFor(player));
     }
 
     public ResourceTransferRuntime.InteractionResult interactWithSupplyDepot(ServerPlayer player,
@@ -381,7 +380,10 @@ public final class PaleMirrorRuntime {
                         List<DomainEvent> events = commands.execute(data.worldState(),
                                 new DomainCommand.DiscoverLivingRegion(region.id(), audienceFor(player),
                                         "player:" + player.getUUID()));
-                        if (!events.isEmpty()) data.setDirty();
+                        if (!events.isEmpty()) {
+                            CampaignWelcomeKit.grant(player, settlement);
+                            data.setDirty();
+                        }
                     }
                 }
             });
@@ -466,7 +468,6 @@ public final class PaleMirrorRuntime {
             }
         });
     }
-
     private void reconcilePendingGates() {
         data.worldState().facilities().forEach(facility -> {
             if (facility.gate().status() != SourceGateStatus.PENDING) return;
@@ -477,9 +478,11 @@ public final class PaleMirrorRuntime {
             if (!events.isEmpty()) data.setDirty();
         });
     }
-
     private void triggerDueRegionCrises() {
         data.worldState().livingRegions().stream().filter(region -> region.incidentDue(data.worldState().simulationStep()))
+                .filter(region -> java.util.Optional.ofNullable(data.campaignCommissioning().get(region.id()))
+                        .filter(record -> record.status() == io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.ACTIVE
+                                && data.worldState().simulationStep() >= record.infectionEligibleAtStep()).isPresent())
                 .forEach(region -> {
                     List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.TriggerFacilityInfection(
                             region.primaryFacilityId(), "region-crisis:" + region.id()));

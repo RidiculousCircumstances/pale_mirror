@@ -68,8 +68,8 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 24,
-                "settlement-authority snapshot must record schema v24 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 25,
+                "railway commissioning snapshot must record schema v25 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
         CompoundTag incompatible = persisted.copy();
         incompatible.putInt("schemaVersion", 19);
@@ -77,13 +77,13 @@ public final class CoreRecoveryGameTests {
             PaleMirrorSavedData.load(incompatible, level.registryAccess());
             throw new AssertionError("schema v19 must fail closed at the actor-model boundary");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("new world"), "schema rejection must explain recovery");
+            helper.assertTrue(expected.getMessage().contains("Back up the old world"), "schema rejection must explain recovery");
         }
         TestMineRecord reloadedMine = reloaded.testMines().get(mine.id());
         helper.assertTrue(reloadedMine != null && reloadedMine.job() != null,
-                "v20 snapshot must retain the persisted materialization job");
+                "current snapshot must retain the persisted materialization job");
         helper.assertValueEqual(reloadedMine.job().nextOperationIndex(), 1,
-                "v20 snapshot must retain completed operation progress");
+                "current snapshot must retain completed operation progress");
         tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
@@ -135,8 +135,8 @@ public final class CoreRecoveryGameTests {
             PaleMirrorSavedData.load(legacy, level.registryAccess());
             throw new AssertionError("schema v15 must not be accepted as a v19 observed-settlement snapshot");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("requires a new world"),
-                    "legacy snapshot rejection must explain the intentional new-world boundary");
+            helper.assertTrue(expected.getMessage().contains("Back up the old world"),
+                    "legacy snapshot rejection must explain the safe recovery boundary");
         }
 
         LivingEntity anchorEntity = (LivingEntity) level.getEntity(mine.anchorId());
@@ -374,6 +374,7 @@ public final class CoreRecoveryGameTests {
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();
         data.campaignRegions().clear();
+        data.campaignCommissioning().clear();
         data.settlementObservations().clear();
         data.worldState().narratorCooldowns().clear();
         data.worldState().history().clear();

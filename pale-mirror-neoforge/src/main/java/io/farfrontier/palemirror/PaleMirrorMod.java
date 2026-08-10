@@ -14,6 +14,7 @@ public final class PaleMirrorMod {
 
     public PaleMirrorMod(IEventBus modBus, net.neoforged.fml.ModContainer container) {
         modBus.addListener(PaleMirrorMod::registerBuiltInPacks);
+        PaleMirrorItems.register(modBus);
         AdapterRegistry.registerConfigs(container);
         LOGGER.info("Pale Mirror bootstrapped; PM-owned vanilla anchors are available.");
     }

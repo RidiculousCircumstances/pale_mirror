@@ -33,6 +33,32 @@ death event, and verifies scenario resolution, recovery, and overlay cleanup.
 For a manual server smoke test, use `./gradlew :pale-mirror-neoforge:runServer`;
 its local port is configured in the ignored `pale-mirror-neoforge/run/server.properties`.
 
+## First Living Region release candidate
+
+On a fresh product-profile world, Pale Mirror can recognize a stable loaded
+vanilla/Integrated Villages settlement and create Ironhill without replacing
+the village. The campaign materializes two provenance-preflighted MineSites,
+including a loading yard, readable entrance, descending supported drift and
+underground controller chamber.
+
+The primary Mine17–Ironhill flow is physically represented by a complete
+railway, endpoint stations and scheduled freight train built through the
+private Railway Untold `1.2.1-pm.1` managed API. Pale Mirror persists and guards
+the work and remains the owner of route capacity and `IRON`; a player-built
+alternate route is still certified separately by the read-only Create adapter.
+First recognition gives the player a survey map, welcome letter and dynamic
+native `Regional Ledger` written book.
+
+Run the exact railway profile and packaged two-start harness with:
+
+```bash
+./gradlew :pale-mirror-neoforge:runRailwayGameTestServer
+./gradlew :pale-mirror-neoforge:managedRailwayIntegrationHarness
+```
+
+Provider pin, safety ownership and the remaining graphical acceptance steps are
+documented in [managed-railway-integration.md](docs/managed-railway-integration.md).
+
 ## Core-only manual check
 
 1. Start the dev server and grant yourself permission level 4.

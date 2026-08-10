@@ -1,5 +1,4 @@
 package io.farfrontier.palemirror.internal.world;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,7 +7,6 @@ import java.util.UUID;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainEventType;
 import io.farfrontier.palemirror.domain.FacilityState;
@@ -54,8 +52,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 24;
-
+    static final int CURRENT_SCHEMA = 25;
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
@@ -69,10 +66,11 @@ public final class PaleMirrorSavedData extends SavedData {
     private final ResourceTransferLedger resourceTransfers;
     private final Map<WorldObjectId, SettlementDepotRecord> settlementDepots;
     private final Map<String, RefugeeCampRecord> refugeeCamps;
+    private final Map<String, CampaignCommissioningRecord> campaignCommissioning;
     public PaleMirrorSavedData() {
         this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
                 new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(),
-                new ResourceTransferLedger(), new LinkedHashMap<>(), new LinkedHashMap<>());
+                new ResourceTransferLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>());
     }
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
@@ -81,7 +79,8 @@ public final class PaleMirrorSavedData extends SavedData {
                                 Map<WorldObjectId, SettlementObservationRecord> settlementObservations,
                                 ResourceTransferLedger resourceTransfers,
                                 Map<WorldObjectId, SettlementDepotRecord> settlementDepots,
-                                Map<String, RefugeeCampRecord> refugeeCamps) {
+                                Map<String, RefugeeCampRecord> refugeeCamps,
+                                Map<String, CampaignCommissioningRecord> campaignCommissioning) {
         this.worldState = worldState;
         this.testMines = testMines;
         this.audienceMappings = audienceMappings;
@@ -95,6 +94,7 @@ public final class PaleMirrorSavedData extends SavedData {
         this.resourceTransfers = resourceTransfers;
         this.settlementDepots = settlementDepots;
         this.refugeeCamps = refugeeCamps;
+        this.campaignCommissioning = campaignCommissioning;
     }
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
@@ -138,6 +138,7 @@ public final class PaleMirrorSavedData extends SavedData {
     public ResourceTransferLedger resourceTransfers() { return resourceTransfers; }
     public Map<WorldObjectId, SettlementDepotRecord> settlementDepots() { return settlementDepots; }
     public Map<String, RefugeeCampRecord> refugeeCamps() { return refugeeCamps; }
+    public Map<String, CampaignCommissioningRecord> campaignCommissioning() { return campaignCommissioning; }
     public boolean observeSettlement(io.farfrontier.palemirror.internal.adapter.SettlementObservation observation) {
         SettlementObservationRecord record = settlementObservations.get(observation.settlementId());
         if (record == null) {
@@ -157,7 +158,7 @@ public final class PaleMirrorSavedData extends SavedData {
         if (version > CURRENT_SCHEMA) {
             throw new IllegalStateException("Pale Mirror data schema " + version + " is newer than this mod supports");
         }
-        if (version != CURRENT_SCHEMA) throw incompatibleSchema(version);
+        if (!isMigratable(version)) throw incompatibleSchema(version);
         CompoundTag snapshot = tag.getCompound("snapshot");
         WorldState state = readState(snapshot);
         state.setSchemaVersion(CURRENT_SCHEMA);
@@ -184,21 +185,24 @@ public final class PaleMirrorSavedData extends SavedData {
             io.farfrontier.palemirror.internal.quarantine.QuarantineRecord record = PaleMirrorAuxiliaryPresentationCodec.readQuarantine((CompoundTag) element);
             quarantine.put(record.id(), record);
         }
+        Map<String, CampaignRegionRecord> campaignRegions = CampaignRegionPresentationCodec.read(tag);
+        Map<String, CampaignCommissioningRecord> commissioning = CampaignCommissioningCodec.read(tag);
+        if (version == 24 && !campaignRegions.isEmpty()) campaignRegions.values().forEach(region ->
+                commissioning.putIfAbsent(region.id(), CampaignCommissioningRecord.legacyDisabled(region.id(),
+                        region.dimensionId(), region.settlementAnchor())));
         return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
                 new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag),
-                CampaignRegionPresentationCodec.read(tag), SettlementObservationCodec.read(tag),
+                campaignRegions, SettlementObservationCodec.read(tag),
                 EconomyPresentationCodec.readLedger(tag), EconomyPresentationCodec.readDepots(tag),
-                DisplacementPresentationCodec.read(tag));
+                DisplacementPresentationCodec.read(tag), commissioning);
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " is not compatible with schema "
-                + CURRENT_SCHEMA + ". The schema-v24 settlement authority boundary requires a new world; back up the old world before resetting its Pale Mirror data.");
+                + CURRENT_SCHEMA + ". Back up the old world before resetting its Pale Mirror data.");
     }
-
     private static boolean isMigratable(int version) {
-        return version == CURRENT_SCHEMA;
+        return version == 24 || version == CURRENT_SCHEMA;
     }
-
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("schemaVersion", CURRENT_SCHEMA);
@@ -231,9 +235,9 @@ public final class PaleMirrorSavedData extends SavedData {
         SettlementObservationCodec.write(tag, settlementObservations);
         EconomyPresentationCodec.write(tag, resourceTransfers, settlementDepots);
         DisplacementPresentationCodec.write(tag, refugeeCamps);
+        CampaignCommissioningCodec.write(tag, campaignCommissioning);
         return tag;
     }
-
     private static CompoundTag writeState(WorldState state) {
         CompoundTag tag = new CompoundTag();
         tag.putLong("simulationStep", state.simulationStep());
@@ -304,7 +308,6 @@ public final class PaleMirrorSavedData extends SavedData {
         tag.put("narratorCooldowns", cooldowns);
         return tag;
     }
-
     private static CompoundTag writeGateState(SourceGateState gate) {
         CompoundTag tag = new CompoundTag();
         tag.putString("status", gate.status().name());
@@ -338,7 +341,6 @@ public final class PaleMirrorSavedData extends SavedData {
         });
         return tag;
     }
-
     private static SourceGateState readGateState(CompoundTag tag) {
         SourceGateStatus status = SourceGateStatus.valueOf(tag.contains("status", Tag.TAG_STRING)
                 ? tag.getString("status") : SourceGateStatus.INACTIVE.name());
@@ -360,7 +362,6 @@ public final class PaleMirrorSavedData extends SavedData {
         return new SourceGateState(status, plan, tag.getInt("phase"),
                 new java.util.LinkedHashSet<>(stringList(tag.getList("destroyedParts", Tag.TAG_STRING))));
     }
-
     private static WorldState readState(CompoundTag tag) {
         WorldState state = new WorldState();
         state.setSimulationStep(tag.getLong("simulationStep"));
@@ -409,13 +410,11 @@ public final class PaleMirrorSavedData extends SavedData {
         }
         return state;
     }
-
     private static List<String> stringList(ListTag tags) {
         List<String> values = new ArrayList<>();
         for (Tag tag : tags) values.add(tag.getAsString());
         return values;
     }
-
     private static CompoundTag writeMine(TestMineRecord mine) {
         CompoundTag tag = new CompoundTag();
         tag.putString("id", mine.id().value());

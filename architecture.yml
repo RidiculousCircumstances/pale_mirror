@@ -50,7 +50,9 @@ invariants:
   - id: excluded-source-items
     statement: While Crimson and Spore item progression is out of scope, their source stacks cannot craft, pickup, interact, tick, or apply melee behavior; legacy stacks are quarantined without becoming PM state.
   - id: logistics-observation
-    statement: A player-built logistics route becomes canonical capacity only through a typed, bounded adapter observation; PM never drives third-party transport or force-loads route chunks.
+    statement: A player-built logistics route becomes canonical capacity only through a typed, bounded adapter observation; the read-only Create bridge never drives transport or force-loads route chunks.
+  - id: managed-railway-commissioning
+    statement: A PM-authored regional railway is commissioned only through the generic RailInfrastructureAdapter, a version-pinned isolated provider and schema-persisted PM authority; construction may use bounded moving chunk tickets, every block mutation is provenance-guarded, player schedule edits suspend canonical service, and PM remains the owner of route capacity and resource flow.
   - id: settlement-observation
     statement: Vanilla-compatible places are recognized only after a complete 400-tick loaded evidence window; reliability, freshness, representative membership and causal losses remain typed and separate, and missing entities never imply death or ruin.
   - id: settlement-actor
@@ -142,6 +144,10 @@ critical_flows:
   - id: create-same-vehicle-proof
     path: named loaded station -> opaque native vehicle observation -> second endpoint observation -> bounded same-vehicle proof -> canonical route capacity
     owner: NeoForge Create adapter and regional logistics reconciliation
+    verification: critical-code
+  - id: managed-regional-railway
+    path: materialized MineSite -> persisted commissioning record -> guarded full-line construction -> exact endpoint stations -> scheduled freight service -> baseline arrival -> canonical RouteContract validation -> infection eligibility
+    owner: NeoForge ManagedRailwayRuntime plus generic adapter boundary and isolated Railway Untold provider; domain owns route and flow
     verification: critical-code
   - id: settlement-resource-transfer
     path: depot interaction -> persisted PREPARED receipt -> reserved physical stack or canonical debit -> domain command/event -> physical completion -> bounded compaction

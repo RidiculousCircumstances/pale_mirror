@@ -24,6 +24,8 @@ public final class CampaignRegionRecord {
     private int destinationTrainCapacity;
     private String originVehicleId;
     private String destinationVehicleId;
+    private java.util.Map<Long, String> primaryMineBaseline = java.util.Map.of();
+    private java.util.Map<Long, String> alternateMineBaseline = java.util.Map.of();
 
     public CampaignRegionRecord(String id, String dimensionId, WorldObjectId placeId, BlockPos settlementAnchor,
                                 BlockPos primaryMineColumn, BlockPos alternateMineColumn,
@@ -74,16 +76,32 @@ public final class CampaignRegionRecord {
     public int destinationTrainCapacity() { return destinationTrainCapacity; }
     public String originVehicleId() { return originVehicleId; }
     public String destinationVehicleId() { return destinationVehicleId; }
+    public java.util.Map<Long, String> pendingMineBaseline() {
+        return nextOperationIndex == 0 ? primaryMineBaseline : alternateMineBaseline;
+    }
+    public java.util.Map<Long, String> primaryMineBaseline() { return primaryMineBaseline; }
+    public java.util.Map<Long, String> alternateMineBaseline() { return alternateMineBaseline; }
     public BlockPos pendingMineColumn() { return nextOperationIndex == 0 ? primaryMineColumn : alternateMineColumn; }
     public BlockPos pendingMineAnchor() { return nextOperationIndex == 0 ? primaryMineAnchor : alternateMineAnchor; }
     public boolean pendingMineAnchorResolved() { return pendingMineAnchor() != null; }
     /** Persists terrain-dependent placement before the job starts touching blocks. */
     public void resolvePendingMineAnchor(BlockPos anchor) {
+        resolvePendingMineAnchor(anchor, java.util.Map.of());
+    }
+    public void resolvePendingMineAnchor(BlockPos anchor, java.util.Map<Long, String> baseline) {
         if (status != CampaignRegionPresentationStatus.PLANNED || pendingMineAnchorResolved()) {
             throw new IllegalStateException("Cannot resolve an inactive or already resolved campaign mine anchor");
         }
-        if (nextOperationIndex == 0) primaryMineAnchor = Objects.requireNonNull(anchor, "anchor").immutable();
-        else alternateMineAnchor = Objects.requireNonNull(anchor, "anchor").immutable();
+        if (nextOperationIndex == 0) {
+            primaryMineAnchor = Objects.requireNonNull(anchor, "anchor").immutable();
+            primaryMineBaseline = java.util.Map.copyOf(baseline);
+        } else {
+            alternateMineAnchor = Objects.requireNonNull(anchor, "anchor").immutable();
+            alternateMineBaseline = java.util.Map.copyOf(baseline);
+        }
+    }
+    void restoreMineBaselines(java.util.Map<Long, String> primary, java.util.Map<Long, String> alternate) {
+        primaryMineBaseline = java.util.Map.copyOf(primary); alternateMineBaseline = java.util.Map.copyOf(alternate);
     }
     public void completedOperation() {
         if (status != CampaignRegionPresentationStatus.RUNNING) {

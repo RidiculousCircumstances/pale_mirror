@@ -16,6 +16,10 @@ public enum Capability {
     SOURCE_GLOBAL_ISOLATION,
     /** Read-only observation of a player-built logistics route. */
     LOGISTICS_ROUTE_OBSERVATION,
+    /** PM may commission one persisted, provenance-guarded railway connection. */
+    MANAGED_RAIL_CONNECTION,
+    /** PM may commission and park one persisted representative freight service. */
+    MANAGED_FREIGHT_SERVICE,
     /** Read-only discovery of an already generated vanilla-compatible settlement. */
     SETTLEMENT_OBSERVATION,
     /** Native settlement state can be reconciled without PM writing its actors or construction. */

@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.internal.integration.create.CreateLogisticsAdap
 import io.farfrontier.palemirror.internal.integration.ftb.FtbQuestsPresentationAdapter;
 import io.farfrontier.palemirror.internal.integration.millenaire.MillenaireIntegrationConfig;
 import io.farfrontier.palemirror.internal.integration.millenaire.MillenaireSettlementAdapter;
+import io.farfrontier.palemirror.internal.integration.railwaysuntold.RailwaysUntoldManagedAdapter;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -29,6 +30,7 @@ public final class AdapterRegistry {
     private static final VanillaVillageSettlementAdapter VANILLA_VILLAGES = new VanillaVillageSettlementAdapter();
     private static final FtbQuestsPresentationAdapter FTB_QUESTS = new FtbQuestsPresentationAdapter();
     private static final MillenaireSettlementAdapter MILLENAIRE_SETTLEMENTS = new MillenaireSettlementAdapter();
+    private static final RailwaysUntoldManagedAdapter MANAGED_RAILWAY = new RailwaysUntoldManagedAdapter();
     private static final List<SourceThreatAdapter> SOURCE_ADAPTERS = List.of(CRIMSON, SPORE);
     private static final List<LogisticsAdapter> LOGISTICS_ADAPTERS = List.of(CREATE_LOGISTICS);
     private static final List<SettlementAdapter> SETTLEMENT_ADAPTERS = List.of(VANILLA_VILLAGES, MILLENAIRE_SETTLEMENTS);
@@ -39,6 +41,7 @@ public final class AdapterRegistry {
             CREATE_LOGISTICS.id(), CREATE_LOGISTICS,
             VANILLA_VILLAGES.id(), VANILLA_VILLAGES,
             MILLENAIRE_SETTLEMENTS.id(), MILLENAIRE_SETTLEMENTS,
+            MANAGED_RAILWAY.id(), MANAGED_RAILWAY,
             FTB_QUESTS.id(), FTB_QUESTS);
 
     private AdapterRegistry() { }
@@ -47,6 +50,7 @@ public final class AdapterRegistry {
     public static List<SourceThreatAdapter> sourceAdapters() { return SOURCE_ADAPTERS; }
     public static List<LogisticsAdapter> logisticsAdapters() { return LOGISTICS_ADAPTERS; }
     public static List<SettlementAdapter> settlementAdapters() { return SETTLEMENT_ADAPTERS; }
+    public static RailInfrastructureAdapter managedRailway() { return MANAGED_RAILWAY; }
     public static boolean campaignEligible(io.farfrontier.palemirror.internal.world.SettlementObservationRecord record) {
         return !MILLENAIRE_SETTLEMENTS.owns(record) || MILLENAIRE_SETTLEMENTS.campaignEnabled();
     }
@@ -96,6 +100,8 @@ public final class AdapterRegistry {
     public static void onServerStarted(net.minecraft.server.MinecraftServer server) {
         sourceAdapters().forEach(adapter -> adapter.onServerStarted(server));
         FTB_QUESTS.onServerStarted(server);
+        all().forEach(adapter -> io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                "PM adapter {}: {} ({})", adapter.id(), adapter.health().status(), adapter.health().detail()));
     }
     public static void tickRuntime(net.minecraft.server.MinecraftServer server,
                                    io.farfrontier.palemirror.internal.world.PaleMirrorSavedData data) {

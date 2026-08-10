@@ -12,6 +12,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import io.farfrontier.palemirror.internal.adapter.RailConnectionRequest;
+import io.farfrontier.palemirror.internal.adapter.RailConnectionStatus;
+import net.minecraft.core.Direction;
 
 /** Runs as a no-op in core-only CI and proves the pinned Create observer loads when the profile is present. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
@@ -38,6 +41,22 @@ public final class CreateLogisticsGameTests {
                 "PM Missing Origin", "PM Missing Destination")).orElseThrow();
         helper.assertTrue(observation.observed() && !observation.originTrainPresent() && !observation.destinationTrainPresent(),
                 "a loaded but unconfigured world must report an explicit invalid route rather than inventing capacity");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-managed-railway", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void privateForkExposesManagedApiAndPersistsPlanBeforeWork(GameTestHelper helper) {
+        if (!ModList.get().isLoaded("railwaysuntold")) { helper.succeed(); return; }
+        var adapter = AdapterRegistry.managedRailway();
+        helper.assertValueEqual(adapter.health().status(), AdapterHealth.Status.AVAILABLE,
+                "the exact PM fork must expose managed mode");
+        BlockPos start = helper.absolutePos(new BlockPos(1, 2, 1));
+        BlockPos target = start.offset(32, 0, 0);
+        var planned = adapter.plan(helper.getLevel(), new RailConnectionRequest("pm:gametest-plan", start, target,
+                Direction.Axis.X, 64));
+        helper.assertValueEqual(planned.status(), RailConnectionStatus.PLANNED,
+                "managed connection must be persisted as PLANNED without touching blocks");
+        helper.assertTrue(!planned.planHash().isBlank(), "managed plan must expose a stable hash");
         helper.succeed();
     }
 }

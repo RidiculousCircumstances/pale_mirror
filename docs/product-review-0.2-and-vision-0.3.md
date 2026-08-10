@@ -11,8 +11,9 @@ review takes precedence.
 
 ## Current assessment
 
-Pale Mirror is an **internal product alpha and an almost-ready technological
-release candidate for 0.2**.
+Pale Mirror is an **internal product alpha and an automated technological
+release candidate for 0.2**. The implementation gate is substantially closed;
+the clean graphical player-acceptance gate remains open.
 
 The principal technical hypothesis is proven: a canonical event passes through
 a scenario, is materialized in Minecraft, accepts a player action, and returns
@@ -29,12 +30,13 @@ mine infection
 -> evacuation
 ```
 
-The product hypothesis is only partially proven. The system creates a coherent
-story, but the player still learns much of it through operator commands,
-opaque IDs, diagnostics, and technical physical objects. The live exercise
-exposed this gap directly: a floating cube represented the mine, infection and
+The product hypothesis is only partially proven. The earlier live exercise
+exposed the gap directly: a floating cube represented the mine, infection and
 freight infrastructure were not self-explanatory, and neither the affected
 resource nor the available actions were obvious without developer guidance.
+The schema-v25 release candidate now implements the corrective MineSite,
+complete managed baseline railway, welcome kit, survey map and dynamic native
+ledger, but these changes still require a fresh unaided graphical playthrough.
 
 | Area | Maturity |
 | --- | ---: |
@@ -120,9 +122,11 @@ The largest current risk is the **strong invisible engine trap**.
 
 Internally, Pale Mirror already has safe physical resource transfers,
 autonomous settlement policy, evacuation and recovery, Create route proof,
-settlement adapters, and branching scenario definitions. The player, however,
-sees a cube, a mob, a chat line, or a changed number. If the causal model has no
-clear physical and presentational counterpart, deep simulation feels random.
+settlement adapters, branching scenario definitions, a product MineSite and a
+managed freight service. The release question is now whether the player can
+read those representations without developer explanation. If the causal model
+still has no clear physical and presentational counterpart in play, deep
+simulation will continue to feel random regardless of implementation depth.
 
 Future versions must therefore be evaluated by complete stories that a player
 can understand, not by counts of classes, adapters, invariants, or supported
@@ -137,8 +141,8 @@ threat forms. A player must be able to answer:
 ## Pale Mirror 0.2 release definition
 
 The current build should not yet be declared a complete product release of
-0.2. Its technical slices are implemented, but its player-facing release gate
-is still open.
+0.2. Its technical slices and automated integration gates are implemented, but
+its player-facing release gate is still open.
 
 The release name is:
 
@@ -147,23 +151,21 @@ The release name is:
 It is complete when one region can be played from discovery to durable outcome
 without operator commands or developer explanation.
 
-### Remaining mandatory work
+### Release-gate status
 
-1. Replace the technical cube with a real `MineSite`: entrance, underground
-   section, loading endpoint, controller chamber, and physically readable
-   infection stages.
-2. Materialize the initial `LEGACY_FREIGHT_ROUTE`: mine loading site,
-   settlement receiving depot, and a readable road, corridor, or freight
-   trace. A Create railway must be understood as an upgrade or replacement,
-   not as the first explanation for a previously invisible flow.
-3. Complete a positive live end-to-end Create route test with a real scheduled
-   train.
-4. Provide dynamic player-facing presentation of the causal chain, canonical
-   stock, net flow, intervention window, consequences, and available actions.
-5. Make Ironhill a repeatable exercise or provide an automatically recreated
-   demonstration world.
+| Requirement | Implementation status | Remaining acceptance |
+| --- | --- | --- |
+| Real `MineSite` | Surface yard, framed entrance, supported descending drift and controller chamber are provenance-preflighted and persisted | Confirm terrain fit, navigation and infection readability in a fresh graphical world |
+| Readable baseline freight | The private Railway Untold PM fork builds the complete Mine17–Ironhill line, endpoint stations and scheduled freight train | Watch one healthy baseline trip and verify spatial readability without commands |
+| Positive alternate logistics | The exact Create 6.0.10 read-only adapter still certifies the same player train at both alternate endpoints | Complete the player-built scheduled-train walkthrough |
+| Dynamic presentation | A survey map, welcome letter and canonical `Regional Ledger` written book show stocks, flow, reserve, crisis, routes, choices, coordinates and history | Test comprehension with no operator explanation |
+| Repeatable exercise | A clean world automatically discovers a qualifying vanilla/Integrated Villages place and creates a fresh schema-v25 region; old v24 regions are intentionally not retrofitted | Run clean-world repetitions and record seed/location failures |
 
-These are 0.2 release debts, not work to hide inside 0.3.
+The packaged final JAR has passed a two-start dedicated harness with exact
+Create and Railway Untold dependencies, and both core and railway GameTest
+profiles pass 20/20. These are necessary evidence, not substitutes for the
+remaining product walkthrough. Details are in
+[`managed-railway-integration.md`](managed-railway-integration.md).
 
 ## Pale Mirror 0.3 — Living Frontier
 
@@ -459,8 +461,9 @@ The existing strengths remain release gates:
 
 ## Development priority
 
-1. Close 0.2: MineSite, legacy freight route, dynamic journal, real Create
-   end-to-end validation, and a repeatable exercise.
+1. Close 0.2 product acceptance: unaided graphical MineSite/baseline-train
+   playthrough, player-built alternate Create validation, choice outcomes,
+   restart continuity, and clean-world repetition.
 2. Replace singleton bootstrap with `RegionArchetype` and placement plans.
 3. Complete the three outcomes of one supply-crisis arc.
 4. Add visible recovery and evacuation consequences.

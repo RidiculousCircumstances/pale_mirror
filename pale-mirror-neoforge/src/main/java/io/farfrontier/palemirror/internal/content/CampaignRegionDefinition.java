@@ -9,4 +9,6 @@ public record CampaignRegionDefinition(ResourceLocation id, int version, Infecti
                                        int ironStockCapacity, int rationedIronDemand, int defence, long crisisDelaySteps,
                                        long rationReserveSteps, long requestReserveSteps,
                                        int defenceLossPerUnavailableStep, int stableStepsToRecover,
-                                       long routeCurrentWindowSteps, long routeExpiryWindowSteps) { }
+                                       int evacuationDefenceThreshold, long emergencyGraceSteps,
+                                       long evacuationDurationSteps, long routeCurrentWindowSteps,
+                                       long routeExpiryWindowSteps) { }

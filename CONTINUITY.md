@@ -34,11 +34,14 @@
 - Schema v22 separates population into cohort-bearing `PopulationGroup` records and adds objective grace/evacuation/displacement state. Community identity survives place loss.
 - Schema v23 adds positive settlement development: pinned surplus policy, resource reservations, physical storehouse intent, prosperity/housing and bounded growth/return-home.
 - Schema v24 pins a generic settlement field-authority profile. Millénaire 9.0.0-beta.2 is an optional exact-version read-only reconciliation profile; native villages are excluded from the campaign unless `allowMillenaireCampaign=true`.
+- Schema v25 adds restart-safe campaign railway commissioning, per-cell rail provenance and MineSite preflight baselines. v24 migrates without retrofitting a railway into an existing region; v5–v23 still fail closed.
+- The private Railway Untold 1.2.1-pm.1 fork is the executor for the complete authored Mine17–Ironhill line. PM talks only through `RailInfrastructureAdapter`, owns the commissioning record and canonical flow, follows construction with bounded moving tickets, and suspends service if a player changes its schedule.
+- The original Create 6.0.10 read-only adapter remains the proof path for a player-built alternate route; it does not overlap with PM-managed baseline railway ownership.
 - Server-side runtime debug controls are operator-only. Read commands expose typed evidence and canonical facts; manual binding uses the normal living-region registration path; destructive reset is a two-phase maintenance action that must fail closed once any PM physical work, transfer, lease, actor or projectile exists.
 - Debug visualization is ephemeral presentation: per-operator bounded particles expose observed/managed bounds and planned mine columns; advanced client tooltips expose item registry ownership and PM policy without mutating ItemStacks.
 - Debug navigation exposes dimension/coordinates and clickable operator teleports only for persisted physical anchors; canonical planned mines remain inspectable but cannot be teleported to until materialized.
 - Product status is an internal alpha and near technological 0.2 RC, not a completed gameplay release. Technology is stronger than physical legibility, player comprehension and repeatability.
-- The remaining 0.2 release gate is mandatory: real MineSite, readable legacy freight route/depot, positive live scheduled-Create-train proof, dynamic causal journal and repeatable Ironhill exercise.
+- The remaining 0.2 release gate is mandatory: authenticated graphical playthrough of automatic discovery, the managed baseline train and all player choices; automated implementation/packaging evidence alone does not declare the gameplay release complete.
 - 0.3 is `Living Frontier`: repeatable multi-region causal stories with combat, infrastructure, evacuation/refusal, visible consequences, Narrator candidate scoring and delayed aftermath. It does not broaden infection providers or commodity scope first.
 
 ## State
@@ -65,21 +68,28 @@
 - 0.2g adds generic per-field authority, stable native population reconciliation, persisted opaque native references, an isolated reflection-only Millénaire observer and default-off campaign opt-in. Domain/NeoForge tests, 15 core and Millénaire GameTests, packaged two-start restart, six-profile graphical client smoke, build and packaging pass.
 - Runtime debug toolkit adds AUTO/MANUAL observation control, explicit nearest/ID binding through the canonical registration pipeline, candidate/region/verification reports, canonical infection trigger, resource-location command arguments, per-operator zone markers, advanced item diagnostics and a tokenized fail-closed reset for wholly unmaterialized state. Seventeen GameTests include manual binding plus reset rejection/recovery; all six graphical client profiles pass with the client tooltip hook.
 - Runtime navigation lists observed settlements, canonical mines and physical registry objects with dimension/coordinates, clickable `[TP]` actions and a fail-closed distinction between planned and materialized mine locations.
+- The campaign now materializes a provenance-preflighted MineSite with a surface loading yard, supported descending drift and underground controller chamber instead of the floating cube. Unknown or crafted terrain blocks abort the whole placement before writes.
+- Railway Untold PM fork commits `af227f2`, `b9f7be4`, and `70aca1f` provide managed full-line construction, exact stations, scheduled freight service, persisted progress and a placement guard. Autonomous upstream generation is disabled in managed mode.
+- `ManagedRailwayRuntime` persists schema-v25 commissioning before work, builds the complete Mine17–Ironhill line outside observed village bounds, validates the canonical primary route only after a baseline arrival, and delays infection until five simulation steps later.
+- The native `Regional Ledger` written-book screen explains population, IRON stock/capacity/net flow/reserve, defence/crisis, route/train state, response options, coordinates and timeline. First recognition grants a survey map, letter and ledger; FTB remains an optional projection.
+- Core and exact Create/Railway GameTest profiles pass 20/20, including persisted rail-provenance conflict recovery. The packaged final PM JAR plus exact Create/Railway fork passes a clean two-start dedicated-server harness with the managed adapter available after restart.
 
 ### Now
 
-- Canonical product review is synchronized: the schema-v24 engine proves the negative living-region chain, while the player-facing 0.2 release gate remains open.
+- Schema-v25 First Living Region implementation is an automated 0.2 release candidate; live graphical product acceptance remains open.
 
 ### Next
 
-- Close 0.2 in order: real MineSite; legacy freight/loading/receiving representation; dynamic PM Journal; real scheduled Create-train E2E; clean repeatable exercise.
+- Run a clean authenticated client playthrough: automatic village recognition, welcome kit, complete baseline railway/train, delayed infection, combat recovery, alternate player-built Create route, evacuation and restart continuity.
+- Turn any usability or physical-world failures from that playthrough into bounded release fixes; do not expand 0.3 scope before the 0.2 acceptance story is understandable without operator help.
 - After the 0.2 gate, replace singleton bootstrap with `RegionArchetype`/placement plans, implement three supply-crisis outcomes, visible recovery/evacuation, multi-region Narrator scoring and delayed aftermath.
 
 ## Open questions
 
-- UNCONFIRMED: authenticated multiplayer playthrough and the player-built native Create scheduled-train traversal; automation deliberately does not fake a Create train.
+- UNCONFIRMED: authenticated multiplayer playthrough, graphical validation of the PM-managed baseline train, and the player-built alternate Create scheduled-train traversal.
+- UNAVAILABLE IN CURRENT ENVIRONMENT: the new managed-railway graphical client profile is wired into `clientSmoke`, but this run could not execute it because no Xvfb binary is installed; prior six-profile client evidence remains historical only.
 - KNOWN MODEL DEBT: Millénaire culture, relations, quests, local economy and native development remain intentionally native-owned; structure inference is bounded and missing NPCs never imply deaths.
-- UNCONFIRMED: the exact native PM Journal UI surface; FTB Quests remains an optional read-only projection, not the primary 0.3 presentation owner.
+- The v0.2 primary journal surface is a dynamically generated native written book; a richer custom 0.3 UI remains UNCONFIRMED.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set
@@ -87,5 +97,5 @@
 - `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-review-0.2-and-vision-0.3.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/runtime-debug-toolkit.md`
 - `PaleMirrorSavedData`, `SourceGateState`, `internal/adapter/`, `internal/effect/`, `internal/quarantine/`
 - `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
-- `internal/debug/`, `CampaignRegionBootstrapper`, `SettlementObservationRecord`
+- `internal/debug/`, `CampaignRegionBootstrapper`, `CampaignMineSiteTemplate`, `ManagedRailwayRuntime`, `SettlementObservationRecord`
 - `internal/integration/crimson/CrimsonActorRuntime`, `CrimsonSiegeRuntime`, `internal/integration/spore/SporeCombatRuntime`, `SporeProjectileRuntime`

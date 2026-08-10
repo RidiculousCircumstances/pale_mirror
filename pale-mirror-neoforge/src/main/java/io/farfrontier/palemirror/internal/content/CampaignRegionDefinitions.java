@@ -55,19 +55,24 @@ public final class CampaignRegionDefinitions extends SimpleJsonResourceReloadLis
         long requestReserve = requiredInt(json, "request_reserve_steps", resource);
         int defenceLoss = requiredInt(json, "defence_loss_per_unavailable_step", resource);
         int stableRecovery = requiredInt(json, "stable_recovery_steps", resource);
+        int evacuationThreshold = requiredInt(json, "evacuation_defence_threshold", resource);
+        long emergencyGrace = requiredInt(json, "emergency_grace_steps", resource);
+        long evacuationDuration = requiredInt(json, "evacuation_duration_steps", resource);
         long currentWindow = requiredInt(json, "route_current_window_steps", resource);
         long expiryWindow = requiredInt(json, "route_expiry_window_steps", resource);
         if (version < 1 || population <= 0 || production < 0 || demand < 0 || stock < 0 || stock > stockCapacity
                 || stockCapacity < 0 || rationedDemand < 0 || rationedDemand > demand
                 || defence < 0 || defence > 100 || delay < 0 || rationReserve < 0 || requestReserve < 0
                 || requestReserve > rationReserve || defenceLoss < 0 || stableRecovery < 1
-                || currentWindow < 0 || expiryWindow < currentWindow) {
+                || evacuationThreshold < 0 || evacuationThreshold > 100 || emergencyGrace < 1
+                || evacuationDuration < 1 || currentWindow < 0 || expiryWindow < currentWindow) {
             throw new IllegalArgumentException(resource + " has invalid campaign region values");
         }
         return new CampaignRegionDefinition(id, version,
                 new InfectionSourceId(requiredString(json, "infection_source", resource)), population, production, demand,
                 stock, stockCapacity, rationedDemand, defence, delay, rationReserve, requestReserve,
-                defenceLoss, stableRecovery, currentWindow, expiryWindow);
+                defenceLoss, stableRecovery, evacuationThreshold, emergencyGrace, evacuationDuration,
+                currentWindow, expiryWindow);
     }
 
     private static String requiredString(JsonObject json, String name, ResourceLocation resource) {

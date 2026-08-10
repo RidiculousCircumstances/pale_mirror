@@ -41,13 +41,13 @@ Mine -> Route -> Settlement -> Defence -> Migration -> Infrastructure
 ```
 
 This document began as product direction and now records the implementation
-history through schema v24 and slices 0.2a–0.2g. The player-facing Definition
+history through schema v25 and the First Living Region release-candidate slice. The player-facing Definition
 of 0.2 remains the release gate. The canonical settlement design is defined in
 [`settlement-actor-model.md`](settlement-actor-model.md).
 
 ## Implemented vertical-slice baseline
 
-The current branch implements one new-world-only region bound to an observed settlement:
+The current branch implements one fresh-world region bound to an observed settlement:
 
 ```text
 Ironhill (observed population; datapack baseline 80, iron demand 12, defence 55)
@@ -74,12 +74,21 @@ Ironhill (observed population; datapack baseline 80, iron demand 12, defence 55)
   `/pale_mirror explain settlement <id>`,
   `/pale_mirror timeline <id>`, and `/pale_mirror logistics status` expose
   causal and physical evidence to operators.
-- The campaign job now owns only the two controlled mine templates. It saves a
-  terrain anchor and `RUNNING` before each physical operation; after restart
-  its ensure operation reconstructs or finishes the same mine without
-  overwriting a partial or player-altered volume. It never materializes a
-  replacement settlement.
-- The first Create observation bridge is read-only and version-pinned to 6.0.10. It
+- The campaign job owns two controlled MineSites. Each captures and persists
+  the complete natural-terrain baseline before writing anything, then creates
+  a surface loading yard, framed entrance, supported descending drift and
+  underground controller chamber. A changed, crafted, block-entity or unknown
+  cell aborts placement rather than being overwritten. It never materializes
+  a replacement settlement.
+- Schema v25 commissions the complete primary Mine17–Ironhill railway through
+  a generic boundary and the exact private Railway Untold 1.2.1-pm.1 fork. PM
+  persists the connection and per-cell authority before construction, follows
+  the head with bounded temporary tickets, creates exact endpoint stations and
+  a scheduled freight service, and validates the canonical primary route only
+  after a healthy baseline arrival. The receiving station remains outside the
+  observed village's read-only bounds.
+- The Create observation bridge remains a separate read-only alternate-route
+  path, version-pinned to 6.0.10. It
   recognises two named, nearby `Track Station`s only when their chunks are
   already loaded. The same opaque native train UUID must arrive at both
   endpoints within a bounded simulation window to certify LOW/MEDIUM/HIGH
@@ -87,24 +96,31 @@ Ironhill (observed population; datapack baseline 80, iron demand 12, defence 55)
   never invent capacity or force-load chunks. The proof validates a persisted
   contract at full capacity for 8 steps, half capacity through step 24, then
   expires to zero unless another control run refreshes it.
-- FTB Quests 2101.1.30 is an optional read-only presentation adapter. It
+- The primary presentation is a dynamic native written-book `Regional Ledger`
+  backed by canonical state. A first recognized region gives the player a
+  welcome letter, survey map and ledger; its pages explain population, stock,
+  capacity, net flow, reserve, crisis, routes, response options, coordinates
+  and recent causal history without exposing opaque IDs.
+- FTB Quests 2101.1.30 remains an optional read-only presentation adapter. It
   installs one PM-owned static, no-reward chapter through FTB's public config
   and reload command, refuses to overwrite an unknown chapter collision, and
   opens it with FTB's public `open_book` command. PM never reads or writes FTB
   team progress.
 
 The core GameTest suite validates the canonical regional plan, typed village
-evidence and membership, same-vehicle route proof, and schema-v20 restart while
-explicitly rejecting schema v19.
+evidence and membership, same-vehicle route proof, and schema-v25 restart while
+explicitly rejecting unsafe legacy snapshots. Core and exact
+Create/Railway-Untold profiles pass 20/20.
 Separate checksum-pinned Create and FTB profiles boot their real mod stacks;
 the FTB profile loads the PM chapter. Packaged dedicated restart/crash harnesses
 cover core, Crimson, Spore, Create, and FTB. Graphical render bootstrap smoke
 profiles cover core, Crimson, Spore, Create, and FTB under Xvfb.
 
-An automated GameTest does not manufacture a fake Create vehicle. The real
-scheduled-train acceptance is instead a documented interactive server
-walkthrough: it must observe a player-built native train schedule at both
-stations before canonical capacity changes.
+The final packaged PM JAR plus exact Create and Railway Untold fork passes a
+clean two-start dedicated-server harness. Automated tests still do not replace
+the graphical acceptance walkthrough: the PM-managed baseline train must be
+visibly readable, and a player-built alternate Create train must be observed
+at both stations before that separate canonical capacity changes.
 
 ## What is already strong
 
@@ -563,9 +579,10 @@ operator commands:
 12. the complete Ironhill exercise can be recreated and repeated cleanly.
 
 The release gate proves a settlement actor, not the entire future settlement
-model. Evacuation is absent from schema v20; canonical evacuation,
-population groups, physical ruins, positive expansion, Millénaire ownership,
-and culture/reputation are follow-up vertical slices.
+model. Canonical evacuation/population groups, bounded physical consequences,
+positive expansion and Millénaire field ownership now exist through schemas
+v22–v24. Culture, reputation and native settlement development remain later
+work.
 
 Minimal stack:
 
@@ -577,21 +594,21 @@ Mine + Settlement + Route + ResourceFlow
 
 Investigation/Recovery + autonomous Supply disruption + alternate logistics
 
-FTB Quests: read-only presentation
-CreateAdapter: one functional logistics contract
+Native Regional Ledger: primary read-only presentation
+FTB Quests: optional read-only projection
+RailInfrastructureAdapter: PM-managed baseline freight
+CreateAdapter: player-built alternate logistics proof
 ```
 
-### Remaining model debts before release
+### Remaining acceptance debt before release
 
-The 0.2c schema-v20 synchronization closes the state-centric aggregate,
-autonomous-policy, typed-evidence, and RouteContract debts. Remaining bounded
-debts are explicit:
-
-- ordinary physical inventories still need delivery/withdrawal receipts;
-- typed evidence deliberately does not yet infer `DAMAGED`, `EMPTY`, or
-  `RUINED`, so destroyed-place reconciliation is a later slice;
-- positive development, canonical population groups, Millénaire field
-  ownership, culture and reputation remain deferred.
+The implemented slices close the actor-model, physical transfer, evacuation,
+positive-development, field-authority, MineSite, baseline-freight and dynamic
+journal debts. The remaining bounded debt is evidence from a fresh unaided
+graphical playthrough: natural discovery, the healthy baseline train, delayed
+infection, each player choice, visible consequence and restart continuity.
+Culture, reputation and broad native settlement development remain deferred
+product scope rather than 0.2 blockers.
 
 Observation freshness, structural integrity, operational state, occupancy,
 crisis, and population disposition remain separate. Missing chunks, an absent
@@ -630,10 +647,24 @@ Create same-vehicle evidence and FTB presentation.
 8. Preserve restart safety and prove that a Narrator `NO_SCENARIO` does not
    pause settlement behavior.
 
-These items are implemented in schema v20 and covered by domain, GameTest and
-restart gates. Next implement evacuation/population groups, physical ruin
-representation, positive development, Millénaire ownership reconciliation,
-and social identity as separate slices before broad natural discovery/worldgen.
+These items were implemented in schema v20 and covered by domain, GameTest and
+restart gates. Later bounded slices added evacuation/population groups,
+physical consequences, positive development and Millénaire ownership
+reconciliation without folding them back into one overloaded status.
+
+### 0.2h: physical truth and native presentation
+
+Schema v25 replaces the campaign cube with a baseline-preflighted MineSite,
+adds PM-owned full-route commissioning through the private Railway Untold fork,
+pins a healthy scheduled-train arrival before infection eligibility, and makes
+the dynamic native Regional Ledger plus survey map the primary presentation.
+Old v24 campaign regions migrate with railway commissioning disabled rather
+than receiving a destructive retrofit. See
+[`managed-railway-integration.md`](managed-railway-integration.md).
+
+The implementation has passed core and exact railway GameTests plus a clean
+packaged two-start server harness. Its remaining 0.2 work is the unaided
+graphical acceptance playthrough and bounded fixes arising from it.
 
 ## Product conclusion
 

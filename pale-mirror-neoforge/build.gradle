@@ -17,6 +17,8 @@ def sporeIntegrationSha512 = rootProject.providers.gradleProperty('spore_integra
 def createIntegrationJar = layout.buildDirectory.file('integration/create-1.21.1-6.0.10.jar')
 def createIntegrationUrl = rootProject.providers.gradleProperty('create_integration_url').get()
 def createIntegrationSha512 = rootProject.providers.gradleProperty('create_integration_sha512').get()
+def railwayUntoldIntegrationJar = file(rootProject.findProperty('railway_untold_integration_jar')
+        ?: '/home/rd/proj/railways-untold-pm/build/libs/railwaysuntold-neoforge-1.2.1-pm.1.jar')
 def ftbQuestsIntegrationJar = layout.buildDirectory.file('integration/ftb-quests-neoforge-2101.1.30.jar')
 def ftbLibraryIntegrationJar = layout.buildDirectory.file('integration/ftb-library-neoforge-2101.1.35.jar')
 def ftbTeamsIntegrationJar = layout.buildDirectory.file('integration/ftb-teams-neoforge-2101.1.9.jar')
@@ -36,12 +38,16 @@ def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get
 def crimsonGameTestDirectory = layout.buildDirectory.dir('runs/crimson-game-test').get().asFile
 def sporeGameTestDirectory = layout.buildDirectory.dir('runs/spore-game-test').get().asFile
 def createGameTestDirectory = layout.buildDirectory.dir('runs/create-game-test').get().asFile
+def railwayGameTestDirectory = layout.buildDirectory.dir('runs/railway-game-test').get().asFile
 def ftbGameTestDirectory = layout.buildDirectory.dir('runs/ftb-game-test').get().asFile
 def millenaireGameTestDirectory = layout.buildDirectory.dir('runs/millenaire-game-test').get().asFile
 def millenaireGameTestWorldDirectory = new File(millenaireGameTestDirectory, 'world')
 def crimsonGameTestWorldDirectory = new File(crimsonGameTestDirectory, 'world')
 def sporeGameTestWorldDirectory = new File(sporeGameTestDirectory, 'world')
 def createGameTestWorldDirectory = new File(createGameTestDirectory, 'world')
+def railwayGameTestWorldDirectory = new File(railwayGameTestDirectory, 'world')
+def railwayManagedConfig = layout.buildDirectory.file('runs/railway-game-test/config/railways-untold/config.toml')
+def railwayClientManagedConfig = layout.buildDirectory.file('runs/railway-client/config/railways-untold/config.toml')
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
@@ -92,6 +98,13 @@ neoForge {
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
             systemProperty 'pale_mirror.create_adapter_only', 'true'
         }
+        railwayGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/railway-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.create_adapter_only', 'true'
+        }
         ftbGameTestServer {
             type = 'gameTestServer'
             gameDirectory = layout.buildDirectory.dir('runs/ftb-game-test')
@@ -121,6 +134,10 @@ neoForge {
         createClient {
             client()
             gameDirectory = layout.buildDirectory.dir('runs/create-client')
+        }
+        railwayClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/railway-client')
         }
         ftbClient {
             client()
@@ -183,6 +200,11 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/internal/adapter/SourceItemFirewall.class',
                     'io/farfrontier/palemirror/internal/integration/ftb/FtbQuestsPresentationAdapter.class',
                     'io/farfrontier/palemirror/internal/integration/millenaire/MillenaireSettlementAdapter.class',
+                    'io/farfrontier/palemirror/internal/integration/railwaysuntold/RailwaysUntoldManagedAdapter.class',
+                    'io/farfrontier/palemirror/internal/world/ManagedRailwayRuntime.class',
+                    'io/farfrontier/palemirror/internal/world/CampaignMineSiteTemplate.class',
+                    'io/farfrontier/palemirror/internal/presentation/RegionalLedgerItem.class',
+                    'assets/pale_mirror/models/item/regional_ledger.json',
                     'ftb_quests_presentation/chapters/pale_mirror_first_living_region.snbt',
                     'pale_mirror.item_firewall.mixins.json'
             ].each { entry ->
@@ -383,9 +405,27 @@ def prepareCreateGameTestMods = tasks.register('prepareCreateGameTestMods', Sync
     into(layout.buildDirectory.dir('runs/create-game-test/mods'))
 }
 
+def prepareRailwayGameTestMods = tasks.register('prepareRailwayGameTestMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar, railwayUntoldIntegrationJar)
+    into(layout.buildDirectory.dir('runs/railway-game-test/mods'))
+    doLast {
+        if (!railwayUntoldIntegrationJar.exists()) throw new GradleException(
+                "PM Railway Untold fork is missing: ${railwayUntoldIntegrationJar}")
+        def config = railwayManagedConfig.get().asFile
+        config.parentFile.mkdirs()
+        config.text = '[features]\npaleMirrorManagedMode = true\n'
+    }
+}
+
 tasks.named('runCreateGameTestServer') {
     dependsOn prepareCreateGameTestMods
     doFirst { createGameTestWorldDirectory.deleteDir() }
+}
+
+tasks.named('runRailwayGameTestServer') {
+    dependsOn prepareRailwayGameTestMods
+    doFirst { railwayGameTestWorldDirectory.deleteDir() }
 }
 
 tasks.register('createIntegrationHarness', Exec) {
@@ -397,6 +437,20 @@ tasks.register('createIntegrationHarness', Exec) {
     environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
     commandLine 'bash', 'scripts/create-integration-harness.sh', distributableJar.get().asFile.absolutePath,
             createIntegrationJar.get().asFile.absolutePath
+}
+
+tasks.register('managedRailwayIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots PM twice beside exact Create and the private managed Railway Untold fork.'
+    dependsOn tasks.named('jar'), tasks.named('downloadCreateIntegrationJar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/managed-railway-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            createIntegrationJar.get().asFile.absolutePath, railwayUntoldIntegrationJar.absolutePath
+    doFirst {
+        if (!railwayUntoldIntegrationJar.exists()) throw new GradleException("PM Railway Untold fork is missing")
+    }
 }
 
 def downloadVerifiedIntegrationJar = { String taskName, def targetFile, String sourceUrl, String expectedSha512, String label ->
@@ -477,6 +531,18 @@ def prepareCreateClientMods = tasks.register('prepareCreateClientMods', Sync) {
     from(createIntegrationJar)
     into(layout.buildDirectory.dir('runs/create-client/mods'))
 }
+def prepareRailwayClientMods = tasks.register('prepareRailwayClientMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar, railwayUntoldIntegrationJar)
+    into(layout.buildDirectory.dir('runs/railway-client/mods'))
+    doLast {
+        if (!railwayUntoldIntegrationJar.exists()) throw new GradleException(
+                "PM Railway Untold fork is missing: ${railwayUntoldIntegrationJar}")
+        def config = railwayClientManagedConfig.get().asFile
+        config.parentFile.mkdirs()
+        config.text = '[features]\npaleMirrorManagedMode = true\n'
+    }
+}
 def prepareFtbClientMods = tasks.register('prepareFtbClientMods', Sync) {
     dependsOn downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar, downloadFtbTeamsIntegrationJar,
             downloadArchitecturyIntegrationJar
@@ -492,6 +558,7 @@ def prepareMillenaireClientMods = tasks.register('prepareMillenaireClientMods', 
 tasks.named('runCoreClient') { dependsOn prepareCoreClientMods }
 tasks.named('runCrimsonClient') { dependsOn prepareCrimsonClientMods }
 tasks.named('runCreateClient') { dependsOn prepareCreateClientMods }
+tasks.named('runRailwayClient') { dependsOn prepareRailwayClientMods }
 tasks.named('runFtbClient') { dependsOn prepareFtbClientMods }
 tasks.named('runMillenaireClient') { dependsOn prepareMillenaireClientMods }
 
@@ -499,6 +566,7 @@ tasks.register('clientSmoke', Exec) {
     group = 'verification'
     description = 'Runs graphical client render/bootstrap smoke profiles; requires Xvfb or PALE_MIRROR_XVFB.'
     dependsOn tasks.named('classes'), prepareCrimsonClientMods, prepareSporeClientMods, prepareCreateClientMods,
+            prepareRailwayClientMods,
             prepareFtbClientMods, prepareMillenaireClientMods
     workingDir rootProject.projectDir
     environment 'PALE_MIRROR_XVFB', System.getenv('PALE_MIRROR_XVFB') ?: ''
@@ -536,6 +604,7 @@ tasks.register('fullSmoke') {
             tasks.named('runCreateGameTestServer'), tasks.named('runFtbGameTestServer'),
             tasks.named('runMillenaireGameTestServer'), tasks.named('dedicatedRestartHarness'),
             tasks.named('crimsonIntegrationHarness'), tasks.named('sporeIntegrationHarness'), tasks.named('createIntegrationHarness'),
+            tasks.named('managedRailwayIntegrationHarness'),
             tasks.named('ftbIntegrationHarness'), tasks.named('millenaireIntegrationHarness'), tasks.named('clientSmoke')
 }
 

@@ -60,6 +60,8 @@ public final class CampaignRegionBootstrapper {
     private static final int PRIMARY_MINE_DISTANCE = 640;
     private static final int ALTERNATE_MINE_DISTANCE = 704;
     private static final int MATERIALIZATION_RANGE = 192;
+    private static final int MIN_SETTLEMENT_DISTANCE = 800;
+    private static final int MAX_SETTLEMENT_DISTANCE = 2_000;
 
     private CampaignRegionBootstrapper() { }
 
@@ -76,7 +78,13 @@ public final class CampaignRegionBootstrapper {
         ServerLevel level = server.overworld();
         if (!level.hasChunkAt(record.pendingMineColumn())) return;
         if (!record.pendingMineAnchorResolved()) {
-            record.resolvePendingMineAnchor(resolveAnchor(level, record.pendingMineColumn()));
+            BlockPos anchor = resolveAnchor(level, record.pendingMineColumn());
+            if (!CampaignMineSiteTemplate.isAreaLoaded(level, anchor)) return;
+            try {
+                record.resolvePendingMineAnchor(anchor, CampaignMineSiteTemplate.captureBaseline(level, anchor));
+            } catch (IllegalStateException conflict) {
+                record.block(conflict.getMessage());
+            }
             data.setDirty();
             return;
         }
@@ -86,8 +94,8 @@ public final class CampaignRegionBootstrapper {
             return;
         }
         try {
-            if (record.nextOperationIndex() == 0) ensureMine(data, level, record.primaryMineAnchor(), MINE17);
-            else if (record.nextOperationIndex() == 1) ensureMine(data, level, record.alternateMineAnchor(), RED_VALLEY);
+            if (record.nextOperationIndex() == 0) ensureMine(data, level, record.primaryMineAnchor(), MINE17, record.pendingMineBaseline());
+            else if (record.nextOperationIndex() == 1) ensureMine(data, level, record.alternateMineAnchor(), RED_VALLEY, record.pendingMineBaseline());
             else throw new IllegalStateException("Invalid campaign operation index " + record.nextOperationIndex());
             record.completedOperation();
             data.setDirty();
@@ -105,6 +113,7 @@ public final class CampaignRegionBootstrapper {
                 .filter(SettlementObservationRecord::strongEnoughForRecognition)
                 .filter(value -> value.freshness(gameTime) == ObservationFreshness.CURRENT)
                 .filter(AdapterRegistry::campaignEligible)
+                .filter(value -> productLocationEligible(server.overworld(), value.anchor()))
                 .sorted(java.util.Comparator.comparing(value -> value.id().value())).findFirst().orElse(null);
         if (observed == null) return;
         registerCanonicalPlan(server, data, commands, observed);
@@ -158,7 +167,8 @@ public final class CampaignRegionBootstrapper {
         SettlementSecurity security = new SettlementSecurity(IRONHILL, definition.defence(), definition.defence(),
                 observed.registeredGuards(), observed.registeredGuards() > 0 ? GuardCapability.PRESENT : GuardCapability.ABSENT);
         SettlementPolicy policy = new SettlementPolicy(IRONHILL, definition.rationReserveSteps(),
-                definition.requestReserveSteps(), definition.defenceLossPerUnavailableStep(), definition.stableStepsToRecover());
+                definition.requestReserveSteps(), definition.defenceLossPerUnavailableStep(), definition.stableStepsToRecover(),
+                definition.evacuationDefenceThreshold(), definition.emergencyGraceSteps(), definition.evacuationDurationSteps());
         List<WorldSite> sites = List.of(
                 new WorldSite(MINE17_DISPATCH_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
                 new WorldSite(RED_VALLEY_DISPATCH_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
@@ -172,7 +182,7 @@ public final class CampaignRegionBootstrapper {
                 new SiteCapability(RED_VALLEY_DISPATCH_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
                 new SiteCapability(IRONHILL_RECEIVING_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()));
         List<RouteContract> routes = List.of(
-                new RouteContract(MINE17_ROUTE, MINE17_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.PALE_MIRROR,
+                new RouteContract(MINE17_ROUTE, MINE17_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.MANAGED_RAILWAY,
                         ResourceKind.IRON, definition.ironProduction(), definition.routeCurrentWindowSteps(),
                         definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED),
                 new RouteContract(RED_VALLEY_ROUTE, RED_VALLEY_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.CREATE,
@@ -190,13 +200,23 @@ public final class CampaignRegionBootstrapper {
         data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(IRONHILL));
         data.campaignRegions().put(IRONHILL_ID, new CampaignRegionRecord(IRONHILL_ID,
                 observed.dimensionId(), placeId, observed.anchor(), mineColumn(server, observed.anchor(), PRIMARY_MINE_DISTANCE),
-                mineColumn(server, observed.anchor(), -ALTERNATE_MINE_DISTANCE), null, null,
+                alternateMineColumn(server, observed.anchor()), null, null,
                 CampaignRegionPresentationStatus.PLANNED, "", 0, -1, -1, 0, 0, "", ""));
         data.setDirty();
     }
 
     private static int scale(int value, int population, int baselinePopulation) {
         return (value * population + baselinePopulation - 1) / baselinePopulation;
+    }
+
+    static boolean productLocationEligible(ServerLevel level, BlockPos anchor) {
+        BlockPos spawn = level.getSharedSpawnPos();
+        long dx = (long) anchor.getX() - spawn.getX(); long dz = (long) anchor.getZ() - spawn.getZ();
+        long distanceSquared = dx * dx + dz * dz;
+        if (distanceSquared < (long) MIN_SETTLEMENT_DISTANCE * MIN_SETTLEMENT_DISTANCE
+                || distanceSquared > (long) MAX_SETTLEMENT_DISTANCE * MAX_SETTLEMENT_DISTANCE) return false;
+        int terrain = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ());
+        return Math.abs(anchor.getY() - terrain) <= 24 && level.getFluidState(anchor).isEmpty();
     }
 
     private static BlockPos mineColumn(MinecraftServer server, BlockPos settlement, int distance) {
@@ -207,6 +227,15 @@ public final class CampaignRegionBootstrapper {
             case 1 -> new BlockPos(settlement.getX() - signed, 0, settlement.getZ());
             case 2 -> new BlockPos(settlement.getX(), 0, settlement.getZ() + signed);
             default -> new BlockPos(settlement.getX(), 0, settlement.getZ() - signed);
+        };
+    }
+
+    private static BlockPos alternateMineColumn(MinecraftServer server, BlockPos settlement) {
+        BlockPos midpoint = mineColumn(server, settlement, PRIMARY_MINE_DISTANCE / 2);
+        int direction = Math.floorMod((int) (server.overworld().getSeed() ^ (server.overworld().getSeed() >>> 32)), 4);
+        return switch (direction) {
+            case 0, 1 -> midpoint.offset(0, 0, ALTERNATE_MINE_DISTANCE / 2);
+            default -> midpoint.offset(ALTERNATE_MINE_DISTANCE / 2, 0, 0);
         };
     }
 
@@ -223,14 +252,15 @@ public final class CampaignRegionBootstrapper {
 
     private static BlockPos resolveAnchor(ServerLevel level, BlockPos column) {
         int height = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
-        return new BlockPos(column.getX(), height + 8, column.getZ());
+        return new BlockPos(column.getX(), height, column.getZ());
     }
 
-    private static void ensureMine(PaleMirrorSavedData data, ServerLevel level, BlockPos anchor, WorldObjectId id) {
+    private static void ensureMine(PaleMirrorSavedData data, ServerLevel level, BlockPos anchor, WorldObjectId id,
+                                   java.util.Map<Long, String> baseline) {
         if (data.testMines().containsKey(id)) return;
-        TestMineRecord mine = TestMineTemplate.isMaterialized(level, anchor)
-                ? TestMineTemplate.observeExisting(level, anchor, id, StoryAudienceId.globalTestAudience())
-                : TestMineTemplate.place(level, anchor, id, StoryAudienceId.globalTestAudience());
+        TestMineRecord mine = CampaignMineSiteTemplate.isMaterialized(level, anchor)
+                ? CampaignMineSiteTemplate.observeExisting(level, anchor, id, StoryAudienceId.globalTestAudience())
+                : CampaignMineSiteTemplate.place(level, anchor, id, StoryAudienceId.globalTestAudience(), baseline);
         data.registerTestMine(mine);
     }
 }

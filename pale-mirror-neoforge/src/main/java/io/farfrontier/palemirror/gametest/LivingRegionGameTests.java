@@ -45,7 +45,8 @@ public final class LivingRegionGameTests {
         data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt));
         data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt + 200));
         data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt + 400));
-        CampaignRegionBootstrapper.tick(level.getServer(), data, new DomainServices().commands());
+        CampaignRegionBootstrapper.bindCandidate(level.getServer(), data, new DomainServices().commands(),
+                new WorldObjectId("pale_mirror:test_observed_village"));
         SettlementDepotRuntime.tick(level.getServer(), data);
         SettlementDepotRuntime.tick(level.getServer(), data);
         SettlementDepotRuntime.tick(level.getServer(), data);
@@ -58,7 +59,7 @@ public final class LivingRegionGameTests {
                 "canonical population starts from the observed settlement signal");
         helper.assertValueEqual(data.worldState().settlementDevelopment(settlement.id()).orElseThrow().housingCapacity(), 4,
                 "initial housing starts at observed population and grows only through verified development");
-        helper.assertValueEqual(data.worldState().economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock(), 4,
+        helper.assertValueEqual(data.worldState().economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock(), 6,
                 "the strategic stock is scaled from the observed settlement rather than a fake template population");
         helper.assertValueEqual(data.worldState().routeContract(CampaignRegionBootstrapper.RED_VALLEY_ROUTE).orElseThrow().status().name(),
                 "PLANNED", "the fallback supply route must require a later physical observation");
@@ -115,6 +116,46 @@ public final class LivingRegionGameTests {
                 "restart snapshot must retain positive development state");
         helper.assertValueEqual(reloaded.worldState().settlementAuthorityProfile(region.communityId()).orElseThrow().profileId(),
                 "pale_mirror:pm_managed", "restart snapshot must retain the immutable settlement authority contract");
+        CompoundTag schema24 = snapshot.copy();
+        schema24.putInt("schemaVersion", 24);
+        schema24.remove("campaignCommissioning");
+        PaleMirrorSavedData migrated = PaleMirrorSavedData.load(schema24, level.registryAccess());
+        helper.assertValueEqual(migrated.campaignCommissioning().get(CampaignRegionBootstrapper.IRONHILL_ID).status(),
+                io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.LEGACY_WORLD_DISABLED,
+                "schema v24 must load without retrofitting a destructive railway into an existing region");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-rail-authority", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void railwayAuthorityPersistsProvenanceAndFailsClosedOnConflict(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos start = helper.absolutePos(new BlockPos(0, 2, 0));
+        var record = io.farfrontier.palemirror.internal.world.CampaignCommissioningRecord.planned(
+                "pale_mirror:test_region", level.dimension().location().toString(), "pm:test:rail", "pm:test:service",
+                start, start.east(16), start, net.minecraft.core.Direction.Axis.X, net.minecraft.core.Direction.EAST,
+                32, "Test Origin", "Test Destination");
+        record.railBuilding("test-plan", "test-head");
+        data.campaignCommissioning().put(record.regionId(), record);
+
+        helper.assertTrue(record.authorize(level, start, Blocks.AIR.defaultBlockState(), Blocks.GRAVEL.defaultBlockState()),
+                "a natural first-touch cell inside the persisted envelope must be recordable");
+        helper.assertTrue(!record.authorize(level, start.east(), Blocks.DIAMOND_BLOCK.defaultBlockState(),
+                        Blocks.GRAVEL.defaultBlockState()),
+                "an unknown crafted first-touch cell must never be claimed");
+        helper.assertTrue(!record.authorize(level, start, Blocks.DIAMOND_BLOCK.defaultBlockState(),
+                        Blocks.AIR.defaultBlockState()),
+                "a known cell changed outside PM must become a conflict rather than be overwritten");
+        helper.assertValueEqual(record.status(),
+                io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.BLOCKED,
+                "a provenance mismatch must stop the commissioning record");
+
+        CompoundTag snapshot = data.save(new CompoundTag(), level.registryAccess());
+        var reloaded = PaleMirrorSavedData.load(snapshot, level.registryAccess()).campaignCommissioning().get(record.regionId());
+        helper.assertTrue(reloaded != null && reloaded.railCells().get(start.asLong()).conflicted(),
+                "restart must retain the baseline, last approved state and conflict marker");
         helper.succeed();
     }
 
@@ -291,6 +332,7 @@ public final class LivingRegionGameTests {
         data.resourceTransfers().clear();
         data.settlementDepots().clear();
         data.refugeeCamps().clear();
+        data.campaignCommissioning().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();

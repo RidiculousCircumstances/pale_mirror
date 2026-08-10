@@ -33,6 +33,8 @@ final class CampaignRegionPresentationCodec {
             value.putInt("destinationTrainCapacity", region.destinationTrainCapacity());
             value.putString("originVehicleId", region.originVehicleId());
             value.putString("destinationVehicleId", region.destinationVehicleId());
+            value.put("primaryMineBaseline", writeBaseline(region.primaryMineBaseline()));
+            value.put("alternateMineBaseline", writeBaseline(region.alternateMineBaseline()));
             values.add(value);
         });
         tag.put("campaignRegions", values);
@@ -54,8 +56,22 @@ final class CampaignRegionPresentationCodec {
                     ? value.getLong("destinationTrainSeenAtStep") : -1, value.getInt("originTrainCapacity"),
                     value.getInt("destinationTrainCapacity"), value.getString("originVehicleId"),
                     value.getString("destinationVehicleId"));
+            region.restoreMineBaselines(readBaseline(value.getList("primaryMineBaseline", Tag.TAG_COMPOUND)),
+                    readBaseline(value.getList("alternateMineBaseline", Tag.TAG_COMPOUND)));
             result.put(region.id(), region);
         }
+        return result;
+    }
+
+    private static ListTag writeBaseline(Map<Long, String> baseline) {
+        ListTag values = new ListTag(); baseline.forEach((position, state) -> {
+            CompoundTag value = new CompoundTag(); value.putLong("position", position); value.putString("state", state); values.add(value);
+        }); return values;
+    }
+
+    private static Map<Long, String> readBaseline(ListTag values) {
+        Map<Long, String> result = new LinkedHashMap<>();
+        for (Tag entry : values) { CompoundTag value = (CompoundTag) entry; result.put(value.getLong("position"), value.getString("state")); }
         return result;
     }
 }

@@ -114,8 +114,8 @@ public final class SporeSandboxGameTests {
             PaleMirrorSavedData.load(legacySnapshot, level.registryAccess());
             throw new AssertionError("schema v16 must not be inferred as a v19 observed-settlement snapshot");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("requires a new world"),
-                    "legacy snapshot rejection must preserve the explicit new-world boundary");
+            helper.assertTrue(expected.getMessage().contains("Back up the old world"),
+                    "legacy snapshot rejection must preserve the safe recovery boundary");
         }
 
         int initialCombatHealth = site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints();
@@ -273,6 +273,7 @@ public final class SporeSandboxGameTests {
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();
         data.campaignRegions().clear();
+        data.campaignCommissioning().clear();
         data.settlementObservations().clear();
         data.worldState().narratorCooldowns().clear();
         data.worldState().history().clear();
