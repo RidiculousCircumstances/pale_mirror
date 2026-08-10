@@ -41,7 +41,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    private static final int CURRENT_SCHEMA = 8;
+    private static final int CURRENT_SCHEMA = 9;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -124,7 +124,7 @@ public final class PaleMirrorSavedData extends SavedData {
     }
 
     private static boolean isMigratable(int version) {
-        return version == CURRENT_SCHEMA || version == 5 || version == 6 || version == 7;
+        return version == CURRENT_SCHEMA || version == 5 || version == 6 || version == 7 || version == 8;
     }
 
     /** Sequential migration of the prior released snapshot; never silently drops native references. */
@@ -140,7 +140,11 @@ public final class PaleMirrorSavedData extends SavedData {
             migrateV6ToV7(migrated);
             version = 7;
         }
-        if (version == 7) migrateV7ToV8(migrated);
+        if (version == 7) {
+            migrateV7ToV8(migrated);
+            version = 8;
+        }
+        if (version == 8) migrateV8ToV9(migrated);
         return migrated;
     }
 
@@ -219,6 +223,22 @@ public final class PaleMirrorSavedData extends SavedData {
             facility.put("siege", siege);
         }
         tag.putInt("schemaVersion", 8);
+    }
+
+    /**
+     * v9 adds stage provenance to cells.  Pre-v9 snapshots retain their four
+     * verified cells as Node slots instead of taking ownership of additional
+     * world blocks whose history PM never recorded.
+     */
+    private static void migrateV8ToV9(CompoundTag tag) {
+        for (Tag mineElement : tag.getList("testMines", Tag.TAG_COMPOUND)) {
+            CompoundTag mine = (CompoundTag) mineElement;
+            for (Tag cellElement : mine.getList("cells", Tag.TAG_COMPOUND)) {
+                CompoundTag cell = (CompoundTag) cellElement;
+                if (!cell.contains("infectionStage", Tag.TAG_STRING)) cell.putString("infectionStage", InfectionBiomeStage.NODE.name());
+            }
+        }
+        tag.putInt("schemaVersion", 9);
     }
 
     @Override
@@ -407,6 +427,7 @@ public final class PaleMirrorSavedData extends SavedData {
             CompoundTag value = new CompoundTag();
             value.putLong("pos", cell.position().asLong());
             value.putString("baseline", cell.baselineBlock());
+            value.putString("infectionStage", cell.infectionStage().name());
             value.putString("lastApplied", cell.lastAppliedBlock());
             value.putBoolean("conflicted", cell.conflicted());
             cells.add(value);
@@ -446,7 +467,9 @@ public final class PaleMirrorSavedData extends SavedData {
         for (Tag element : tag.getList("cells", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
             cells.add(new MutableCell(BlockPos.of(value.getLong("pos")), value.getString("baseline"),
-                    value.getString("lastApplied"), value.getBoolean("conflicted")));
+                    value.getString("lastApplied"), value.getBoolean("conflicted"),
+                    InfectionBiomeStage.valueOf(value.contains("infectionStage", Tag.TAG_STRING)
+                            ? value.getString("infectionStage") : InfectionBiomeStage.NODE.name())));
         }
         MaterializationJob job = null;
         if (tag.contains("job", Tag.TAG_COMPOUND)) {

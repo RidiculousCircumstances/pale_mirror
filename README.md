@@ -45,6 +45,32 @@ its local port is configured in the ignored `pale-mirror-neoforge/run/server.pro
 Use `/pale_mirror object inspect pale_mirror:test_mine` to see the PM anchor,
 optional encounter state, and persisted materialization job.
 
+## PM staged infection biome
+
+New controlled test mines use `test-mine-v2`: four dedicated Node cells plus
+66 separately registered biome cells. The biome is a PM-owned materialization
+layer, works without Crimson, and changes only when the canonical PM threat
+tier changes:
+
+| PM tier | Safe visual layer |
+| --- | --- |
+| `FOOTHOLD` | nine central `netherrack` cells |
+| `INFESTED` | the center evolves to `crimson_nylium`; a second ring becomes `netherrack` |
+| `SIEGE` | the center becomes `nether_wart_block`, the inner ring `crimson_nylium`, and the outer floor ring `netherrack` |
+| `APEX` | the outer ring also evolves to `nether_wart_block`; 21 predeclared wall/ceiling cells become `shroomlight` |
+
+The four Node cells remain outside the decorative palette and are used only by
+the PM siege chain. Every changed cell stores its baseline and last PM-applied
+block. A cell is changed only when its current block is that baseline or PM's
+last value; an unknown modification marks the cell conflicted and blocks the
+persisted job without overwriting it. Recovery restores only PM-owned cells.
+
+PM deliberately does not call Crimson terrain conversion, `fillbiome`, worldgen
+or unrestricted block scans. Schema v9 migrates existing v1 mines conservatively:
+their four recorded cells stay legacy Node cells, rather than claiming nearby
+terrain that PM did not previously own. Create a new test mine to use the full
+staged biome.
+
 Crimson is an explicitly optional, version-pinned sandbox integration. PM
 shadows Crimson's global bootstrap and tick, and remains the owner of spread,
 phases, raids, and recovery. With Crimson `1.4.3.1`, the Apex encounter has

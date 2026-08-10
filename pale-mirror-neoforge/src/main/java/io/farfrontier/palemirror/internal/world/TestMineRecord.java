@@ -45,6 +45,12 @@ public final class TestMineRecord {
     public String templateVersion() { return object.templateVersion(); }
     public StoryAudienceId primaryAudience() { return primaryAudience; }
     public List<MutableCell> mutableCells() { return mutableCells; }
+    public List<MutableCell> nodeCells() {
+        return mutableCells.stream().filter(cell -> cell.infectionStage() == InfectionBiomeStage.NODE).toList();
+    }
+    public List<MutableCell> biomeCells() {
+        return mutableCells.stream().filter(cell -> cell.infectionStage().isBiomeCell()).toList();
+    }
     public UUID anchorId() { return anchorId; }
     public EncounterRecord encounter() { return encounter; }
     public SiegeRecord siege() { return siege; }

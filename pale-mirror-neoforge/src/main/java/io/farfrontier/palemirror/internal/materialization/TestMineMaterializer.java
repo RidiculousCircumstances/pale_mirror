@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.internal.world.SiegePartRef;
 import io.farfrontier.palemirror.internal.world.SiegeRecord;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
+import io.farfrontier.palemirror.domain.ThreatTier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -20,8 +21,6 @@ import net.minecraft.world.level.block.Blocks;
  * its physical postcondition before it is advanced in its job.
  */
 public final class TestMineMaterializer {
-    private static final String OVERLAY_BLOCK = "minecraft:netherrack";
-
     public boolean executeNext(ServerLevel level, TestMineRecord mine, MaterializationJob job) {
         if (!level.hasChunkAt(mine.anchor())) return false;
         if (job.state() == JobState.COMPLETED || job.state() == JobState.BLOCKED) return job.state() == JobState.COMPLETED;
@@ -100,7 +99,7 @@ public final class TestMineMaterializer {
 
     private String execute(ServerLevel level, TestMineRecord mine, MaterializationJob job, MaterializationOperation operation) {
         return switch (operation.type()) {
-            case ENSURE_OVERLAY -> ensureOverlay(level, mine);
+            case ENSURE_OVERLAY -> ensureOverlay(level, mine, operation.target());
             case ENSURE_PM_ANCHOR -> ensureAnchor(level, mine, job.jobId());
             case REMOVE_PM_ANCHOR -> removeAnchor(level, mine);
             case ENSURE_CRIMSON_ENCOUNTER_ACTOR -> throw new IllegalStateException("Crimson actor operation must be handled as optional work");
@@ -113,19 +112,33 @@ public final class TestMineMaterializer {
         };
     }
 
-    private String ensureOverlay(ServerLevel level, TestMineRecord mine) {
-        for (MutableCell cell : mine.mutableCells()) {
-            if (hasSiegeCells(mine)) continue;
+    private String ensureOverlay(ServerLevel level, TestMineRecord mine, String tierName) {
+        ThreatTier tier;
+        try {
+            tier = ThreatTier.valueOf(tierName);
+        } catch (IllegalArgumentException failure) {
+            return "Unknown infection biome tier " + tierName;
+        }
+        if (tier == ThreatTier.DORMANT) return "Infection biome cannot materialize at DORMANT tier";
+        if (mine.mutableCells().size() > TestMineInfectionBiomePalette.MAX_REGISTERED_CELLS) {
+            return "Test mine biome exceeds the bounded registered-cell budget";
+        }
+        for (MutableCell cell : mine.biomeCells()) {
+            String desired = TestMineInfectionBiomePalette.desiredBlock(cell, tier);
+            boolean previouslyOwned = !cell.lastAppliedBlock().equals(cell.baselineBlock());
+            boolean mustApply = !desired.equals(cell.baselineBlock());
+            if (!previouslyOwned && !mustApply) continue;
             if (cell.conflicted()) return "Mutable cell " + cell.position() + " is conflicted";
             String current = blockId(level, cell.position());
             if (!current.equals(cell.baselineBlock()) && !current.equals(cell.lastAppliedBlock())) {
                 cell.conflict();
                 return "Mutable cell " + cell.position() + " was changed outside Pale Mirror";
             }
-            if (!current.equals(OVERLAY_BLOCK)) level.setBlock(cell.position(), Blocks.NETHERRACK.defaultBlockState(), 3);
-            cell.markApplied(OVERLAY_BLOCK);
+            String error = setBlock(level, cell.position(), desired);
+            if (error != null) return error;
+            cell.markApplied(desired);
         }
-        return overlaysMatch(level, mine) ? null : "Overlay postcondition failed";
+        return overlaysMatch(level, mine, tier) ? null : "Infection biome postcondition failed";
     }
 
     private String ensureAnchor(ServerLevel level, TestMineRecord mine, String jobId) {
@@ -220,30 +233,39 @@ public final class TestMineMaterializer {
 
     private String removeOverlay(ServerLevel level, TestMineRecord mine) {
         for (MutableCell cell : mine.mutableCells()) {
+            if (cell.lastAppliedBlock().equals(cell.baselineBlock())) continue;
             if (cell.conflicted()) return "Mutable cell " + cell.position() + " is conflicted";
             String current = blockId(level, cell.position());
             if (!current.equals(cell.lastAppliedBlock()) && !current.equals(cell.baselineBlock())) {
                 cell.conflict();
                 return "Mutable cell " + cell.position() + " was changed outside Pale Mirror";
             }
-            if (!current.equals(cell.baselineBlock())) {
-                Block baseline = BuiltInRegistries.BLOCK.get(ResourceLocation.parse(cell.baselineBlock()));
-                level.setBlock(cell.position(), baseline.defaultBlockState(), 3);
-            }
+            String error = setBlock(level, cell.position(), cell.baselineBlock());
+            if (error != null) return error;
             cell.markApplied(cell.baselineBlock());
         }
         return baselinesMatch(level, mine) ? null : "Overlay removal postcondition failed";
     }
 
-    private static boolean overlaysMatch(ServerLevel level, TestMineRecord mine) {
-        return hasSiegeCells(mine) || mine.mutableCells().stream()
-                .allMatch(cell -> blockId(level, cell.position()).equals(OVERLAY_BLOCK));
+    private static boolean overlaysMatch(ServerLevel level, TestMineRecord mine, ThreatTier tier) {
+        return mine.biomeCells().stream().allMatch(cell -> {
+            String desired = TestMineInfectionBiomePalette.desiredBlock(cell, tier);
+            boolean previouslyOwned = !cell.lastAppliedBlock().equals(cell.baselineBlock());
+            boolean mustApply = !desired.equals(cell.baselineBlock());
+            return !previouslyOwned && !mustApply || blockId(level, cell.position()).equals(desired);
+        });
     }
 
-    private static boolean hasSiegeCells(TestMineRecord mine) { return !mine.siege().definitionId().isBlank(); }
-
     private static boolean baselinesMatch(ServerLevel level, TestMineRecord mine) {
-        return mine.mutableCells().stream().allMatch(cell -> blockId(level, cell.position()).equals(cell.baselineBlock()));
+        return mine.mutableCells().stream().allMatch(cell -> cell.lastAppliedBlock().equals(cell.baselineBlock())
+                || blockId(level, cell.position()).equals(cell.baselineBlock()));
+    }
+
+    private static String setBlock(ServerLevel level, BlockPos position, String blockId) {
+        Block block = BuiltInRegistries.BLOCK.get(ResourceLocation.parse(blockId));
+        if (block == Blocks.AIR && !"minecraft:air".equals(blockId)) return "Unknown palette block " + blockId;
+        if (!blockId(level, position).equals(blockId)) level.setBlock(position, block.defaultBlockState(), 3);
+        return blockId(level, position).equals(blockId) ? null : "Could not apply palette block " + blockId + " at " + position;
     }
 
     private static String blockId(ServerLevel level, BlockPos pos) {

@@ -28,6 +28,9 @@
   copied Crimson assets.
 - Presentation stays inside the isolated adapter: effects are derived from
   registered PM entities and never write domain state or call Crimson runtime.
+- The staged infection biome is core-only and uses fixed vanilla blocks in
+  predeclared `test-mine-v2` cells; it never calls Crimson terrain conversion
+  or claims unrecorded cells from legacy mines.
 
 ## State
 
@@ -41,9 +44,10 @@
   its global load/tick. PM owns spread, raids, phases and actor lifecycle.
 - Sixteen PM-managed local forms are tier-selected and bounded to their site:
   seven Crimsonified, seven Decayed, Rusher and Raptor.
-- Schema v8 persists canonical `SiegeState` and physical `SiegeRecord` refs.
-  Released v7 infected facilities migrate to an explicit bypass to avoid
-  surprise locks.
+- Schema v9 persists canonical `SiegeState`, physical `SiegeRecord` refs and
+  per-cell infection-stage provenance. Released v7 threats migrate to an
+  explicit siege bypass; v8 cells migrate as legacy Node cells rather than
+  silently expanding PM ownership.
 - PM now owns four provenance-safe Node cells, deterministic boss selection
   across Juggernaut/Knight/Mangler/Pummeler/Kraken/Osiris, and three persisted
   Bloodlink gates. Only their typed destruction observations advance state.
@@ -58,11 +62,14 @@
   Raptor/Bloodlink model frames, CEM dash poses, Osiris health-phase cues and
   an Osiris Brain visual child for the complete supported PM roster. All
   presentation children are PM-owned and cleaned with their parent.
+- New `test-mine-v2` sites render a bounded staged biome: 66 biome cells move
+  through FOOTHOLD/INFESTED/SIEGE/APEX palettes while four separate Node cells
+  retain siege ownership. Conflicts block instead of overwriting external edits.
 
 ### Now
 
-- PM-owned presentation runtime is committed as `5b06325`; the complete
-  server-side, packaging and dedicated-server verification suite has passed.
+- The staged infection biome is implemented and its full critical-code suite,
+  packaged-JAR checks and Crimson dedicated-server smoke have passed.
 
 ### Next
 

@@ -133,7 +133,8 @@ public final class MaterializationScheduler {
         if (facility.status() != FacilityStatus.INFECTED) return;
         SiegeStage stage = facility.siege().stage();
         if (stage == SiegeStage.INACTIVE || stage == SiegeStage.PENDING || stage == SiegeStage.BYPASSED) return;
-        if (mine.mutableCells().size() != 4) {
+        List<io.farfrontier.palemirror.internal.world.MutableCell> nodeCells = mine.nodeCells();
+        if (nodeCells.size() != 4) {
             mine.siege().degrade("Test mine template does not expose four PM-owned node cells");
             return;
         }
@@ -141,7 +142,7 @@ public final class MaterializationScheduler {
         for (int index = 0; index < 4; index++) {
             String slot = List.of("node_resistance", "node_strength", "node_speed", "node_infested").get(index);
             parts.add(existingOrNew(mine.siege(), slot, SiegePartKind.NODE, "pale_mirror:" + slot,
-                    mine.mutableCells().get(index).position()));
+                    nodeCells.get(index).position()));
         }
         if (stage.ordinal() >= SiegeStage.BOSS.ordinal()) {
             parts.add(existingOrNew(mine.siege(), "boss", SiegePartKind.BOSS, facility.siege().bossProfileId(),

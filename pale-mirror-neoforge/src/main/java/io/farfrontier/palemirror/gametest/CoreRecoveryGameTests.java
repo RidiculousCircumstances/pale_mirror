@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.world.MutableCell;
+import io.farfrontier.palemirror.internal.world.InfectionBiomeStage;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
@@ -67,6 +68,8 @@ public final class CoreRecoveryGameTests {
                 "restart snapshot must retain completed operation progress");
         helper.assertValueEqual(reloaded.testMines().get(mine.id()).job().operations().getFirst().state().name(), "COMPLETED",
                 "restart snapshot must retain operation postcondition state");
+        helper.assertValueEqual(reloaded.testMines().get(mine.id()).biomeCells().size(), 66,
+                "restart snapshot must retain staged-biome cell provenance");
         tick(runtime, 3);
 
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
@@ -108,8 +111,9 @@ public final class CoreRecoveryGameTests {
         }
         helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.ACTIVE,
                 "registry must record the active physical representation");
-        helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.NETHERRACK)),
-                "all PM-owned overlay cells must be materialized");
+        helper.assertValueEqual(mine.nodeCells().size(), 4, "v2 mine must reserve exactly four Node cells");
+        helper.assertValueEqual(mine.biomeCells().size(), 66, "v2 mine must reserve the bounded staged-biome cells");
+        assertBiomeStage(helper, level, mine, ThreatTier.FOOTHOLD);
 
         CompoundTag legacy = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess()).copy();
         downgradeV6SnapshotToV5(legacy);
@@ -118,8 +122,18 @@ public final class CoreRecoveryGameTests {
                 "v5 controller reference must migrate to the PM anchor reference");
         helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
                 "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 8,
-                "migrated snapshot must be rewritten as schema v8");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 9,
+                "migrated snapshot must be rewritten as schema v9");
+        CompoundTag v8Presentation = persisted.copy();
+        v8Presentation.putInt("schemaVersion", 8);
+        for (Tag cellElement : v8Presentation.getList("testMines", Tag.TAG_COMPOUND).getCompound(0)
+                .getList("cells", Tag.TAG_COMPOUND)) {
+            ((CompoundTag) cellElement).remove("infectionStage");
+        }
+        PaleMirrorSavedData v9Presentation = PaleMirrorSavedData.load(v8Presentation, level.registryAccess());
+        helper.assertTrue(v9Presentation.testMines().get(mine.id()).mutableCells().stream()
+                        .allMatch(cell -> cell.infectionStage() == InfectionBiomeStage.NODE),
+                "v8 cells without stage provenance must remain legacy Node cells rather than claiming new terrain");
 
         LivingEntity anchorEntity = (LivingEntity) level.getEntity(mine.anchorId());
         helper.assertTrue(anchorEntity != null, "materialized anchor must be present by its registered UUID");
@@ -146,6 +160,74 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(settlement.currentDefense(), 40, "recovered mine must restore settlement defense");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)),
                 "overlay cleanup must restore only PM-owned baseline cells");
+        helper.succeed();
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void infectionBiomeProgressesByPmTierAndFailsClosedOnConflict(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
+        resetPaleMirrorState(level);
+        clearMineVolume(level, anchor);
+
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        player.setPos(anchor.getX() + 0.5D, anchor.getY() - 2.0D, anchor.getZ() + 0.5D);
+        TestMineRecord mine = runtime.createTestMine(player);
+        runtime.advanceSimulation(1);
+        String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
+        helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted");
+        player.setPos(anchor.getX() + 0.5D, anchor.getY() + 2.0D, anchor.getZ() + 0.5D);
+        tick(runtime, 3);
+        assertBiomeStage(helper, level, mine, ThreatTier.FOOTHOLD);
+
+        runtime.advanceSimulation(12);
+        tick(runtime, 2);
+        assertBiomeStage(helper, level, mine, ThreatTier.INFESTED);
+
+        runtime.advanceSimulation(24);
+        tick(runtime, 2);
+        assertBiomeStage(helper, level, mine, ThreatTier.SIEGE);
+
+        runtime.advanceSimulation(36);
+        tick(runtime, 2);
+        assertBiomeStage(helper, level, mine, ThreatTier.APEX);
+
+        helper.succeed();
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void infectionBiomeDoesNotOverwriteFuturePlayerChanges(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
+        resetPaleMirrorState(level);
+        clearMineVolume(level, anchor);
+
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        player.setPos(anchor.getX() + 0.5D, anchor.getY() - 2.0D, anchor.getZ() + 0.5D);
+        TestMineRecord mine = runtime.createTestMine(player);
+        MutableCell futureCell = mine.biomeCells().stream()
+                .filter(cell -> cell.infectionStage() == InfectionBiomeStage.INFESTED).findFirst().orElseThrow();
+
+        runtime.advanceSimulation(1);
+        String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
+        helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted");
+        player.setPos(anchor.getX() + 0.5D, anchor.getY() + 2.0D, anchor.getZ() + 0.5D);
+        tick(runtime, 3);
+        assertBiomeStage(helper, level, mine, ThreatTier.FOOTHOLD);
+        level.setBlock(futureCell.position(), Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+        helper.assertValueEqual(level.getBlockState(futureCell.position()).getBlock(), Blocks.GOLD_BLOCK,
+                "FOOTHOLD must not claim an inactive future cell");
+
+        runtime.advanceSimulation(12);
+        tick(runtime, 2);
+        helper.assertTrue(futureCell.conflicted(), "PM must mark the future cell conflicted when INFESTED tries to own it");
+        helper.assertValueEqual(level.getBlockState(futureCell.position()).getBlock(), Blocks.GOLD_BLOCK,
+                "PM must not overwrite an unknown/player-owned block");
+        helper.assertValueEqual(mine.job().state().name(), "BLOCKED", "conflict must visibly block the persisted job");
         helper.succeed();
     }
 
@@ -293,6 +375,40 @@ public final class CoreRecoveryGameTests {
                 capabilities.set(index, net.minecraft.nbt.StringTag.valueOf("TEST_THREAT_OBSERVATION"));
             }
         }
+    }
+
+    private static void assertBiomeStage(GameTestHelper helper, ServerLevel level, TestMineRecord mine, ThreatTier tier) {
+        for (MutableCell cell : mine.biomeCells()) {
+            helper.assertValueEqual(level.getBlockState(cell.position()).getBlock(), expectedBiomeBlock(cell.infectionStage(), tier),
+                    "biome palette must match PM tier at " + cell.position());
+        }
+        helper.assertTrue(mine.nodeCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)
+                        || level.getBlockState(cell.position()).is(Blocks.SEA_LANTERN)),
+                "biome materialization must not use Node cells as decorative overlays");
+    }
+
+    private static net.minecraft.world.level.block.Block expectedBiomeBlock(InfectionBiomeStage stage, ThreatTier tier) {
+        if (!stage.activeAt(tier)) return Blocks.DEEPSLATE_BRICKS;
+        return switch (stage) {
+            case FOOTHOLD -> switch (tier) {
+                case FOOTHOLD -> Blocks.NETHERRACK;
+                case INFESTED -> Blocks.CRIMSON_NYLIUM;
+                case SIEGE, APEX -> Blocks.NETHER_WART_BLOCK;
+                case DORMANT -> Blocks.DEEPSLATE_BRICKS;
+            };
+            case INFESTED -> switch (tier) {
+                case INFESTED -> Blocks.NETHERRACK;
+                case SIEGE, APEX -> Blocks.CRIMSON_NYLIUM;
+                case DORMANT, FOOTHOLD -> Blocks.DEEPSLATE_BRICKS;
+            };
+            case SIEGE -> switch (tier) {
+                case SIEGE -> Blocks.NETHERRACK;
+                case APEX -> Blocks.NETHER_WART_BLOCK;
+                case DORMANT, FOOTHOLD, INFESTED -> Blocks.DEEPSLATE_BRICKS;
+            };
+            case APEX -> tier == ThreatTier.APEX ? Blocks.SHROOMLIGHT : Blocks.DEEPSLATE_BRICKS;
+            case NODE -> Blocks.DEEPSLATE_BRICKS;
+        };
     }
 
     private static void tick(PaleMirrorRuntime runtime, int count) {

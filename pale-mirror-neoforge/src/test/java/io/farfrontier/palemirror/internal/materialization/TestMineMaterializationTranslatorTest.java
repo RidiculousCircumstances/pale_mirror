@@ -22,7 +22,8 @@ class TestMineMaterializationTranslatorTest {
         assertEquals(1, plan.desiredRevision());
         assertEquals(MaterializationOperationType.ENSURE_OVERLAY, plan.operations().getFirst().type());
         assertEquals(MaterializationOperationType.ENSURE_PM_ANCHOR, plan.operations().get(1).type());
-        assertEquals("pale_mirror:test_mine:1:ensure_overlay", plan.operations().getFirst().idempotencyKey());
+        assertEquals("FOOTHOLD", plan.operations().getFirst().target());
+        assertEquals("pale_mirror:test_mine:1:ensure_overlay:FOOTHOLD", plan.operations().getFirst().idempotencyKey());
     }
 
     @Test

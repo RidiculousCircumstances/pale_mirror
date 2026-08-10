@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.internal.world.SiegeRecord;
 /** Deterministically translates a mine's desired domain state into executor operations. */
 public final class TestMineMaterializationTranslator {
     public static final String POLICY_ID = "pale_mirror:pm_anchor";
-    public static final String POLICY_VERSION = "5";
+    public static final String POLICY_VERSION = "6";
 
     public MaterializationPlan translate(FacilityState facility) {
         return translate(facility, null, EncounterRecord.none(), SiegeRecord.none());
@@ -30,7 +30,8 @@ public final class TestMineMaterializationTranslator {
         long revision = facility.desiredRevision();
         if (facility.status() == FacilityStatus.INFECTED) {
             List<MaterializationOperation> operations = new ArrayList<>();
-            operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_OVERLAY, ""));
+            operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_OVERLAY,
+                    facility.threatTier().name()));
             operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_PM_ANCHOR, ""));
             if (profile != null) profile.actors().forEach(actor -> operations.add(operation(id, revision, operations.size(),
                     MaterializationOperationType.ENSURE_CRIMSON_ENCOUNTER_ACTOR, actor.id())));
