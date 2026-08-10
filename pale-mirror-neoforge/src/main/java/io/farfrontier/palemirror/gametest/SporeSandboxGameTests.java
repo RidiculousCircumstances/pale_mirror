@@ -9,6 +9,8 @@ import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.spore.SporeSandboxAdapter;
 import io.farfrontier.palemirror.internal.integration.spore.SporeRuntimeFirewall;
 import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
+import io.farfrontier.palemirror.internal.combat.PmProjectileRef;
+import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.InfectionBiomeStage;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -21,6 +23,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -144,14 +149,12 @@ public final class SporeSandboxGameTests {
 
         int afterPlayerHit = site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints();
         helper.assertTrue(!human.hurt(level.damageSources().generic(), 10_000.0F),
-                "non-player damage must be rejected so native death/remains code cannot edit the world");
-        helper.assertValueEqual(site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints(), afterPlayerHit,
-                "blocked external damage must not change PM-owned combat health");
+                "PM must consume an external vanilla damage source before native Spore death can run");
+        helper.assertTrue(level.getEntity(human.getUUID()) == null,
+                "a lethal external source must still become a PM discard without native remains");
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(site.id()).orElseThrow()
                 .status(), FacilityStatus.INFECTED, "native form damage must not resolve the PM-owned controller");
 
-        helper.assertTrue(!human.hurt(level.damageSources().playerAttack(player), 10_000.0F),
-                "a lethal player hit must become a PM discard rather than a native Spore death");
         helper.assertTrue(level.getEntity(human.getUUID()) == null, "safe PM defeat must discard the native actor immediately");
         helper.assertValueEqual(site.encounter().actor("dormant_infected_human").orElseThrow().status().name(), "DEFEATED",
                 "safe actor defeat must reconcile exactly once as a presentation-only fact");
@@ -194,6 +197,36 @@ public final class SporeSandboxGameTests {
                 "PM must materialize the audited ranged Spore form without enabling its native projectile goal");
         helper.assertValueEqual(BuiltInRegistries.ENTITY_TYPE.getKey(spitter.getType()).toString(), "spore:spitter",
                 "SIEGE composition must retain the pinned Spitter registry identity");
+        // Native AcidBall remains a visual carrier only. Its PM record binds
+        // exactly one player target, so a controller/anchor can never become
+        // an accidental projectile target while the carrier crosses the site.
+        player.setPos(spitter.getX() + 3.0D, spitter.getY(), spitter.getZ());
+        PaleMirrorSavedData projectileData = PaleMirrorSavedData.get(level.getServer().overworld());
+        String spitterKey = io.farfrontier.palemirror.internal.combat.ThreatCombatLedger.actorKey("spore", site.id().value(),
+                "encounter", "dormant_spitter");
+        helper.assertTrue(PmProjectileRuntime.launchVisualCarrier(projectileData, level, "spore", site.id().value(),
+                        spitterKey, "dormant_spitter", spitter, player, "spore:acid_ball",
+                        BuiltInRegistries.ENTITY_TYPE.get(net.minecraft.resources.ResourceLocation.parse("spore:acid_ball")),
+                        SporeSandboxAdapter.PROJECTILE_ROLE, 5.0F, level.getServer().overworld().getGameTime(), 10_000L),
+                "PM must be able to create the audited AcidBall solely through its persisted projectile pipeline");
+        PmProjectileRef sporeProjectile = projectileData.threatCombat().projectiles().stream()
+                .filter(ref -> ref.sourceId().equals("spore") && ref.targetId() != null && ref.targetId().equals(player.getUUID()))
+                .max(java.util.Comparator.comparing(PmProjectileRef::id)).orElseThrow();
+        helper.assertValueEqual(sporeProjectile.targetId(), player.getUUID(),
+                "a PM Spitter projectile must persist its one selected player target");
+        helper.assertValueEqual(PaleMirrorSavedData.load(projectileData.save(new CompoundTag(), level.registryAccess()), level.registryAccess())
+                        .threatCombat().projectile(sporeProjectile.id()).orElseThrow().targetId(), player.getUUID(),
+                "a restart snapshot must retain the projectile target rather than widening its damage authority");
+        Entity carrier = level.getEntity(sporeProjectile.entityId());
+        helper.assertTrue(carrier instanceof Projectile, "Spitter must materialize the pinned AcidBall only as a PM visual carrier");
+        LivingEntity controllerBeforeImpact = (LivingEntity) level.getEntity(site.anchorId());
+        helper.assertTrue(controllerBeforeImpact != null, "PM controller must exist before a hostile visual carrier resolves");
+        float controllerHealth = controllerBeforeImpact.getHealth();
+        helper.assertTrue(PmProjectileRuntime.handleImpact(level.getServer(), (Projectile) carrier,
+                        new EntityHitResult(controllerBeforeImpact)),
+                "PM must intercept the native visual carrier impact path");
+        helper.assertTrue(Math.abs(controllerBeforeImpact.getHealth() - controllerHealth) < 0.001F,
+                "a Spitter visual carrier must never damage the PM controller or another non-target entity");
         runtime.advanceSimulation(36);
         tick(runtime, 12);
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(site.id()).orElseThrow()
@@ -232,6 +265,7 @@ public final class SporeSandboxGameTests {
         data.reconciliationLedger().clear();
         data.effectLeases().clear();
         data.quarantine().clear();
+        data.threatCombat().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().settlements().clear();

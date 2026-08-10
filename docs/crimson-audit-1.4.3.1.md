@@ -49,8 +49,11 @@ local runtime behavior. Raptor's upstream passive writes global scores, runs
 animation functions, applies Bloodlinks, and can break doors; PM keeps only
 local invisibility plus a close-range poison/weakness aura against the selected
 in-site player. Other upstream actor passive/ability functions are not invoked.
-Vanilla AI plus the bounded PM actor runtime is the supported profile set; exact
-provenance and release restrictions are recorded in
+Every supported local form has native AI, targeting, navigation, hurt/death
+and loot behavior disabled. PM persists and executes its movement, target
+selection, health, cooldowns, melee/special effects and Skeleton/Bogged arrow
+carriers. Every vanilla-compatible incoming damage source is consumed into PM
+health before native damage can run. Exact provenance and release restrictions are recorded in
 [`crimson-content-ledger-1.4.3.1.md`](crimson-content-ledger-1.4.3.1.md).
 
 PM-native tiers (`FOOTHOLD`, `INFESTED`, `SIEGE`, `APEX`) advance
@@ -128,6 +131,12 @@ Bloodlink, raid, terrain conversion, global-score or player functions.
 Each non-replayable siege action now passes through a persisted PM effect lease
 before it applies movement, damage or status. A lease still `RUNNING` after a
 restart is retained as an explicit unknown outcome and is not executed again.
+
+Normal Skeleton, Bogged and Decayed ranged forms use the same PM projectile
+ledger as Spitter: a persisted target UUID, launch lease, source visual carrier
+and impact lease. A carrier can damage only that selected player. On restart
+active projectiles become `UNKNOWN_AFTER_RESTART` and are discarded; neither
+native arrow impact nor delayed Crimson logic is replayed.
 
 All private identifiers are confined to
 `internal/integration/crimson`. PM stores the actor UUID, slot, object ID, and

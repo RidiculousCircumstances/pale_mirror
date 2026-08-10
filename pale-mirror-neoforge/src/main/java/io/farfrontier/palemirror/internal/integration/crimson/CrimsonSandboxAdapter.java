@@ -9,15 +9,23 @@ import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.internal.adapter.ThreatActorAdapter;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
+import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.SiegePartRef;
+import io.farfrontier.palemirror.internal.combat.ThreatActorControlState;
+import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
+import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
+import io.farfrontier.palemirror.internal.effect.EffectLease;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.util.Mth;
+import net.minecraft.world.damagesource.DamageSource;
 import net.neoforged.fml.ModList;
 
 /**
@@ -32,6 +40,8 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
     public static final String PROFILE_KEY = "pale_mirror_crimson_profile";
     public static final String ACTOR_ROLE = "crimson_actor";
     public static final String SIEGE_ROLE = "crimson_siege";
+    public static final String CONTROL_SCHEMA_KEY = "pale_mirror_combat_schema";
+    private static final int CONTROL_SCHEMA = 15;
     private static final ResourceLocation CRIMSON_LOAD = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/load.mcfunction");
     private static final ResourceLocation CRIMSON_TICK = ResourceLocation.fromNamespaceAndPath("crimson_curse", "function/tick.mcfunction");
     private static final String SANDBOX_PACK_ID = "mod/pale_mirror:crimson_sandbox";
@@ -139,6 +149,8 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
             actor.discard();
             return ActorOperationResult.unavailable("Crimson sandbox initializer failed");
         }
+        actor.getPersistentData().putInt(CONTROL_SCHEMA_KEY, CONTROL_SCHEMA);
+        CrimsonActorRuntime.holdControlled(actor);
         if (!isOwnedActor(actor, mine, slot.id()) || !profile.matches(actor)) {
             presentation.discardVisualChildren(actor);
             actor.discard();
@@ -146,6 +158,7 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         }
         presentation.spawned(level, actor, profile.id());
         mine.encounter().activate(slot.id(), actor.getUUID(), profile.entityTypeId());
+        attachActorControl(level, mine, slot.id(), profile, actor.getUUID());
         return ActorOperationResult.materialized();
     }
 
@@ -166,6 +179,8 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         presentation.discardVisualChildren(entity);
         entity.discard();
         mine.encounter().removed(slotId);
+        PaleMirrorSavedData.get(level.getServer().overworld()).threatCombat()
+                .retireActor("crimson", mine.id().value(), "encounter", slotId);
         return ActorOperationResult.materialized();
     }
 
@@ -198,8 +213,11 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
             entity.discard();
             return ActorOperationResult.unavailable("Crimson siege initializer postcondition failed");
         }
+        entity.getPersistentData().putInt(CONTROL_SCHEMA_KEY, CONTROL_SCHEMA);
+        CrimsonActorRuntime.holdControlled(entity);
         presentation.spawned(level, entity, profile.id());
         mine.siege().activate(part.slotId(), entity.getUUID());
+        attachSiegeControl(level, mine, part.slotId(), profile, entity.getUUID());
         return ActorOperationResult.materialized();
     }
 
@@ -215,6 +233,8 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
             entity.discard();
         }
         mine.siege().remove(slotId);
+        PaleMirrorSavedData.get(level.getServer().overworld()).threatCombat()
+                .retireActor("crimson", mine.id().value(), "siege", slotId);
         return ActorOperationResult.materialized();
     }
 
@@ -222,9 +242,111 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
     public void tickRuntime(MinecraftServer server, PaleMirrorSavedData data) {
         if (server.overworld().getGameTime() % 100L == 0L) verifySandbox(server);
         if (health().status() == AdapterHealth.Status.AVAILABLE) {
+            replaceLegacyUncontrolledActors(server, data);
             actorRuntime.tick(server, data);
             siegeRuntime.tick(server, data);
             presentation.tick(server, data);
+        }
+    }
+
+    @Override
+    public ActorDamageResult receiveDamage(ServerLevel level, TestMineRecord site, Entity entity,
+                                           EncounterActorRef reference, DamageSource source, float amount) {
+        CrimsonActorProfile profile = CrimsonActorProfile.byId(reference.actorProfileId()).orElse(null);
+        if (!(entity instanceof Mob actor) || profile == null || !isOwnedActor(entity, site, reference.slotId())) {
+            return ActorDamageResult.blocked("Crimson actor identity is stale or unsupported");
+        }
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        String key = ThreatCombatLedger.actorKey("crimson", site.id().value(), "encounter", reference.slotId());
+        ThreatActorControlState state = data.threatCombat().actor(key).orElse(null);
+        if (state == null || state.status() != ThreatActorControlState.Status.ACTIVE || !actor.getUUID().equals(state.entityId())) {
+            return ActorDamageResult.blocked("Crimson actor lacks verified PM combat control state");
+        }
+        int remaining = data.threatCombat().applyActorDamage(key, Math.max(1, Mth.ceil(amount)));
+        presentation.hurt(actor, profile.id());
+        if (remaining > 0) return ActorDamageResult.consumed();
+        defeatActor(data, level, site, reference, actor, profile);
+        return ActorDamageResult.defeated();
+    }
+
+    /** Server event bridge calls this for PM siege identities before native death can run. */
+    public ActorDamageResult receiveSiegeDamage(ServerLevel level, TestMineRecord site, Entity entity,
+                                                SiegePartRef part, DamageSource source, float amount) {
+        CrimsonSiegeProfile profile = CrimsonSiegeProfile.byId(part.profileId()).orElse(null);
+        if (!(entity instanceof Mob actor) || profile == null || !isOwnedSiegeEntity(entity, site, part.slotId())) {
+            return ActorDamageResult.blocked("Crimson siege identity is stale or unsupported");
+        }
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        String key = ThreatCombatLedger.actorKey("crimson", site.id().value(), "siege", part.slotId());
+        ThreatActorControlState state = data.threatCombat().actor(key).orElse(null);
+        if (state == null || state.status() != ThreatActorControlState.Status.ACTIVE || !actor.getUUID().equals(state.entityId())) {
+            return ActorDamageResult.blocked("Crimson siege actor lacks verified PM combat control state");
+        }
+        int remaining = data.threatCombat().applyActorDamage(key, Math.max(1, Mth.ceil(amount)));
+        presentation.hurt(actor, profile.id());
+        if (remaining > 0) return ActorDamageResult.consumed();
+        defeatSiegeActor(data, level, site, part, actor, profile);
+        return ActorDamageResult.defeated();
+    }
+
+    private void defeatActor(PaleMirrorSavedData data, ServerLevel level, TestMineRecord site, EncounterActorRef reference,
+                             Mob actor, CrimsonActorProfile profile) {
+        long gameTick = level.getServer().overworld().getGameTime();
+        String leaseId = "pm:crimson:xp:" + site.id().value() + ":" + reference.slotId() + ":" + actor.getUUID();
+        ControlledEffectExecutor.executeOnce(data, EffectLease.planned(leaseId, leaseId, "crimson", site.id().value(),
+                reference.slotId(), "defeat_xp", gameTick, gameTick + 1L), gameTick,
+                () -> ExperienceOrb.award(level, actor.position(), CrimsonCombatProfile.forActor(profile).experience()));
+        presentation.died(actor, profile.id());
+        presentation.discardVisualChildren(actor);
+        actor.discard();
+        site.encounter().defeated(reference.slotId(), reference.entityId());
+        data.setDirty();
+    }
+
+    private void defeatSiegeActor(PaleMirrorSavedData data, ServerLevel level, TestMineRecord site, SiegePartRef part,
+                                  Mob actor, CrimsonSiegeProfile profile) {
+        long gameTick = level.getServer().overworld().getGameTime();
+        String leaseId = "pm:crimson:xp:" + site.id().value() + ":siege:" + part.slotId() + ":" + actor.getUUID();
+        ControlledEffectExecutor.executeOnce(data, EffectLease.planned(leaseId, leaseId, "crimson", site.id().value(),
+                part.slotId(), "defeat_xp", gameTick, gameTick + 1L), gameTick,
+                () -> ExperienceOrb.award(level, actor.position(), CrimsonCombatProfile.forSiege(profile).experience()));
+        presentation.died(actor, profile.id());
+        presentation.discardVisualChildren(actor);
+        actor.discard();
+        data.setDirty();
+    }
+
+    /** Legacy v14 forms are not trusted as PM combat state and are safely replaced by their desired slots. */
+    private void replaceLegacyUncontrolledActors(MinecraftServer server, PaleMirrorSavedData data) {
+        for (TestMineRecord site : data.testMines().values()) {
+            ServerLevel level = null;
+            for (ServerLevel candidate : server.getAllLevels()) {
+                if (candidate.dimension().location().toString().equals(site.dimensionId())) {
+                    level = candidate;
+                    break;
+                }
+            }
+            if (level == null) continue;
+            for (EncounterActorRef reference : site.encounter().actors()) {
+                if (reference.status() != EncounterActorRef.Status.ACTIVE || reference.entityId() == null) continue;
+                Entity entity = level.getEntity(reference.entityId());
+                if (entity == null || entity.getPersistentData().getInt(CONTROL_SCHEMA_KEY) == CONTROL_SCHEMA) continue;
+                if (!isOwnedActor(entity, site, reference.slotId())) continue;
+                presentation.discardVisualChildren(entity);
+                entity.discard();
+                site.encounter().removed(reference.slotId());
+                data.setDirty();
+            }
+            for (SiegePartRef part : site.siege().parts()) {
+                if (part.kind() == io.farfrontier.palemirror.internal.world.SiegePartKind.NODE || part.entityId() == null) continue;
+                Entity entity = level.getEntity(part.entityId());
+                if (entity == null || entity.getPersistentData().getInt(CONTROL_SCHEMA_KEY) == CONTROL_SCHEMA) continue;
+                if (!isOwnedSiegeEntity(entity, site, part.slotId())) continue;
+                presentation.discardVisualChildren(entity);
+                entity.discard();
+                site.siege().remove(part.slotId());
+                data.setDirty();
+            }
         }
     }
 
@@ -281,6 +403,24 @@ public final class CrimsonSandboxAdapter implements ThreatActorAdapter {
         return entity != null && !entity.isRemoved() && SIEGE_ROLE.equals(entity.getPersistentData().getString(ROLE_KEY))
                 && mine.id().value().equals(entity.getPersistentData().getString(OBJECT_ID_KEY))
                 && slotId.equals(entity.getPersistentData().getString(SLOT_KEY));
+    }
+
+    /** Attach combat provenance before a materialized visual can receive an incoming-damage event. */
+    private static void attachActorControl(ServerLevel level, TestMineRecord mine, String slotId,
+                                           CrimsonActorProfile profile, java.util.UUID entityId) {
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        data.threatCombat().attachActor("crimson", mine.id().value(), "encounter", slotId, profile.id(), entityId,
+                CrimsonCombatProfile.forActor(profile).hitPoints());
+        data.setDirty();
+    }
+
+    /** Same eager identity boundary for a siege visual. */
+    private static void attachSiegeControl(ServerLevel level, TestMineRecord mine, String slotId,
+                                           CrimsonSiegeProfile profile, java.util.UUID entityId) {
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        data.threatCombat().attachActor("crimson", mine.id().value(), "siege", slotId, profile.id(), entityId,
+                CrimsonCombatProfile.forSiege(profile).hitPoints());
+        data.setDirty();
     }
 
 }

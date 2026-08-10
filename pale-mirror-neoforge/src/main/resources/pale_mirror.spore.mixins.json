@@ -5,6 +5,7 @@
   "mixins": [
     "SporeGlobalRuntimeMixin",
     "SporeInfectionRuntimeMixin",
-    "SporeInfectedSafetyMixin"
+    "SporeInfectedSafetyMixin",
+    "SporeProjectileSafetyMixin"
   ]
 }

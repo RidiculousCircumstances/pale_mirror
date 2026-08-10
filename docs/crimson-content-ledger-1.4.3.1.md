@@ -12,24 +12,24 @@ tables is blocked until the author grants written permission.
 
 | PM profile | Vanilla base | Upstream reference | PM execution policy | Test |
 | --- | --- | --- | --- | --- |
-| `crimsonified_human` | zombie | `crimsonified_mob` zombie branch | vanilla AI, local stats/loot | GameTest |
-| `crimsonified_villager` | zombie villager | `crimsonified_mob` villager branch | vanilla AI, local stats/loot | GameTest |
-| `crimsonified_husk` | husk | `crimsonified_mob` husk branch | vanilla AI, local stats/loot | GameTest |
-| `crimsonified_skeleton` | skeleton | `crimsonified_mob` skeleton branch | vanilla AI, local stats/loot | GameTest |
-| `crimsonified_drowned` | drowned | `crimsonified_drowned_spawn` non-trident branch | vanilla AI, local stats/loot | GameTest |
-| `crimsonified_bogged` | bogged | `crimsonified_mob` bogged branch | vanilla AI, local stats/loot | GameTest |
-| `crimsonified_wither_skeleton` | wither skeleton | `crimsonified_mob` wither-skeleton branch | vanilla AI, local stats/loot | GameTest |
-| `decayed_human` | zombie | `decayed_mob` zombie branch | vanilla AI, local stats/loot | GameTest |
-| `decayed_villager` | zombie villager | `decayed_mob` villager branch | vanilla AI, local stats/loot | GameTest |
-| `decayed_husk` | husk | `decayed_mob` husk branch | vanilla AI, local stats/loot | GameTest |
-| `decayed_skeleton` | skeleton | `decayed_mob` skeleton branch | vanilla AI, local stats/loot | GameTest |
-| `decayed_drowned` | drowned | `decayed_drowned_spawn` non-trident branch | vanilla AI, local stats/loot | GameTest |
-| `decayed_bogged` | bogged | `decayed_mob` bogged branch | vanilla AI, local stats/loot | GameTest |
-| `decayed_wither_skeleton` | wither skeleton | `decayed_mob` wither-skeleton branch | vanilla AI, local stats/loot | GameTest |
+| `crimsonified_human` | zombie | `crimsonified_mob` zombie branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `crimsonified_villager` | zombie villager | `crimsonified_mob` villager branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `crimsonified_husk` | husk | `crimsonified_mob` husk branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `crimsonified_skeleton` | skeleton | `crimsonified_mob` skeleton branch | PM movement, target-bound PM arrow/HP | GameTest |
+| `crimsonified_drowned` | drowned | `crimsonified_drowned_spawn` non-trident branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `crimsonified_bogged` | bogged | `crimsonified_mob` bogged branch | PM movement, target-bound PM arrow/HP | GameTest |
+| `crimsonified_wither_skeleton` | wither skeleton | `crimsonified_mob` wither-skeleton branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `decayed_human` | zombie | `decayed_mob` zombie branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `decayed_villager` | zombie villager | `decayed_mob` villager branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `decayed_husk` | husk | `decayed_mob` husk branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `decayed_skeleton` | skeleton | `decayed_mob` skeleton branch | PM movement, target-bound PM arrow/HP | GameTest |
+| `decayed_drowned` | drowned | `decayed_drowned_spawn` non-trident branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
+| `decayed_bogged` | bogged | `decayed_mob` bogged branch | PM movement, target-bound PM arrow/HP | GameTest |
+| `decayed_wither_skeleton` | wither skeleton | `decayed_mob` wither-skeleton branch | PM movement, PM melee/HP; no native AI/loot | GameTest |
 | `rusher` | ravager | `rusher_summon` | PM-owned 7–11 block dash; local stats/loot | GameTest |
 | `raptor` | zombie | `raptor_summon` | PM-owned local invisibility and target aura; no door breaking | GameTest |
-| `juggernaut` | zombie | `juggernaut` local form | vanilla melee, no door breaking; PM site leash | siege GameTest |
-| `knight` | zombie | `knight` local form | vanilla melee, no door breaking; PM site leash | siege GameTest |
+| `juggernaut` | zombie | `juggernaut` local form | PM movement/melee/HP; no native AI/loot | siege GameTest |
+| `knight` | zombie | `knight` local form | PM movement/melee/HP; no native AI/loot | siege GameTest |
 | `mangler` | ravager | `mangler` local form | no AI; PM bounded dash, never terrain griefing | siege GameTest |
 | `pummeler` | ghast | `pummeler` local form | no AI; PM local non-griefing pulse | siege GameTest |
 | `kraken` | phantom | `kraken` local form | no AI; PM local close-range grasp | siege GameTest |
@@ -37,6 +37,11 @@ tables is blocked until the author grants written permission.
 | `bloodlink_i` | wither skeleton | Bloodlink I | no AI; registered PM gate and local aura | siege GameTest |
 | `bloodlink_ii` | wither skeleton | Bloodlink II | no AI; registered PM gate and local aura | siege GameTest |
 | `bloodlink_iii` | wither skeleton | Bloodlink III | no AI; registered PM gate and local aura | siege GameTest |
+
+All approved forms use `ThreatCombatLedger` for hit points, movement/action
+cooldowns and identity. Incoming vanilla-compatible damage is intercepted
+before native hurt/death/loot logic. Short-lived ranged presentation is a
+target-bound PM projectile record and is never a source-owned projectile.
 
 Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 

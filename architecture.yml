@@ -43,6 +43,8 @@ invariants:
     statement: Each facility has one immutable canonical InfectionSourceId; adapters and physical overlays must match it, and mixed-source composition requires an explicit future policy.
   - id: controlled-effects
     statement: Every PM-authorized non-replayable physical effect has a persisted idempotency lease before execution; a RUNNING lease after restart is visible and never replayed implicitly.
+  - id: pm-threat-combat
+    statement: A registered Crimson or Spore form is a visual carrier only; PM persists its identity, target, health, cooldowns, movement, effects and projectile state, intercepts every incoming vanilla-compatible damage source, and never permits native AI, hurt/death, loot, terrain or infection logic.
   - id: excluded-source-items
     statement: While Crimson and Spore item progression is out of scope, their source stacks cannot craft, pickup, interact, tick, or apply melee behavior; legacy stacks are quarantined without becoming PM state.
 
@@ -94,6 +96,10 @@ critical_flows:
   - id: pm-controlled-effect-lease
     path: PM actor action -> persisted effect lease -> physical bounded effect -> terminal receipt -> restart deduplication/compaction
     owner: neoforge ControlledEffectExecutor and EffectLeaseLedger
+    verification: critical-code
+  - id: pm-targeted-projectile
+    path: PM action -> persisted projectile target/provenance -> source visual carrier -> PM impact lease -> target-only PM damage or discard -> restart-safe expiry
+    owner: neoforge ThreatCombatLedger, PmProjectileRuntime and source-isolated projectile runtimes
     verification: critical-code
   - id: pm-excluded-source-item-firewall
     path: source item stack -> interaction/craft/pickup/inventory/melee boundary -> denied action -> quarantine diagnostic

@@ -247,6 +247,9 @@ public final class CrimsonSiegeGameTests {
         data.worldRegistry().clear();
         data.audienceMappings().clear();
         data.reconciliationLedger().clear();
+        data.effectLeases().clear();
+        data.quarantine().clear();
+        data.threatCombat().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().settlements().clear();

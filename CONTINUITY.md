@@ -30,18 +30,19 @@
 - Crimson sandbox: sixteen normal forms; APEX Nodes → deterministic boss → Bloodlink I/II/III → PM anchor; CEM/EMF/ETF visual contract, local sound/particles and PM visual children.
 - Staged test-mine biome uses 66 registered vanilla cells plus four separate Node cells; unknown changes conflict rather than overwrite.
 - Spore sandbox: no-spawn pack, global-handler mixins, entity firewall, four audited native forms, exact-tier persisted compositions, PM movement/combat/cleanup and two-start dedicated harness.
-- Schema v14 persists bounded effect leases and quarantine records; sequential v5→v14 migration creates empty records rather than inferring past physical effects.
-- Spore direct attacks and Crimson siege dash/pulse/grasp/phase/aura now execute through persisted PM effect leases.
+- Schema v15 persists PM-controlled source-actor health/cooldowns and target-bound projectile records; v14→v15 intentionally creates no inferred actor/projectile state.
+- Every supported Crimson normal/siege form and Spore roster form is a NoAI visual carrier: PM owns target choice, movement, incoming vanilla-compatible damage, HP, cooldowns, local effects, XP and cleanup.
+- Crimson arrows and Spore AcidBall now use one PM projectile pipeline with a persisted target UUID, launch/impact leases, target-only damage and discard-on-restart recovery.
 - The packaged-JAR verifier requires the effect ledger and item firewall classes/config. Focused unit tests plus core, Spore and Crimson GameTest servers passed after this change.
 
 ### Now
 
-- Controlled-effect foundation and source-item exclusion firewall are implemented. Current source combat roster is still intentionally partial.
+- The supported source combat roster is PM-authoritative end-to-end. The remaining task is validation hardening, not transferring its native combat authority.
 
 ### Next
 
-- Replace remaining Crimson vanilla-AI damage/projectile paths with PM behavior/effect profiles before adding more forms.
-- Audit the remaining Spore catalogue one class at a time; add projectiles, organisms and terrain only after each has a persisted PM effect profile and side-effect audit.
+- Run a graphical client smoke test with both optional source mods and capture the supported visual/animation/sound contracts.
+- Audit the remaining Spore catalogue one class at a time; add organisms, terrain and any new projectiles only after each has a persisted PM effect profile and side-effect audit.
 - Add strict client profile/visual regression harness; `runSporeClient` exists but graphical multiplayer validation remains UNCONFIRMED.
 
 ## Open questions
@@ -53,5 +54,5 @@
 
 - `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/crimson-audit-1.4.3.1.md`, `docs/spore-audit-2.2.0j.md`
 - `PaleMirrorSavedData`, `PaleMirrorSnapshotMigrations`, `internal/effect/`, `internal/quarantine/`
-- `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/integration/item/`
-- `internal/integration/crimson/CrimsonSiegeRuntime`, `internal/integration/spore/SporeCombatRuntime`
+- `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
+- `internal/integration/crimson/CrimsonActorRuntime`, `CrimsonSiegeRuntime`, `internal/integration/spore/SporeCombatRuntime`, `SporeProjectileRuntime`

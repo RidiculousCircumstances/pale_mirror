@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
+import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
@@ -44,19 +45,27 @@ final class SporeCombatRuntime {
                 ServerPlayer target = target(level, site, actor, profile);
                 if (target == null) continue;
                 actor.lookAt(EntityAnchorArgument.Anchor.EYES, target.getEyePosition());
-                boolean[] landed = {false};
-                String key = "spore:attack:" + site.id().value() + ":" + reference.slotId() + ":"
-                        + actor.getUUID() + ":" + gameTick;
-                EffectLease lease = EffectLease.planned("pm:" + key, key, "spore", site.id().value(), reference.slotId(),
-                        "direct_attack", gameTick, gameTick + profile.attackCooldownTicks());
-                ControlledEffectExecutor.executeOnce(data, lease, gameTick, () -> {
-                    landed[0] = target.hurt(level.damageSources().mobAttack(actor), profile.attackDamage());
-                    level.playSound(null, actor.blockPosition(), profile.attackSound(), SoundSource.HOSTILE, 0.8F, 1.0F);
-                    if (landed[0]) {
-                        level.sendParticles(ParticleTypes.SPORE_BLOSSOM_AIR, target.getX(), target.getY() + target.getBbHeight() * 0.5D,
-                                target.getZ(), 5, 0.2D, 0.3D, 0.2D, 0.01D);
-                    }
-                });
+                if (profile == SporeActorProfile.SPITTER) {
+                    PmProjectileRuntime.launchVisualCarrier(data, level, "spore", site.id().value(),
+                            io.farfrontier.palemirror.internal.combat.ThreatCombatLedger.actorKey("spore", site.id().value(),
+                                    "encounter", reference.slotId()), reference.slotId(), actor, target, "spore:acid_ball",
+                            adapter.acidBallType(), SporeSandboxAdapter.PROJECTILE_ROLE, profile.attackDamage(), gameTick,
+                            reference.actionCounter());
+                } else {
+                    boolean[] landed = {false};
+                    String key = "spore:attack:" + site.id().value() + ":" + reference.slotId() + ":"
+                            + actor.getUUID() + ":" + gameTick;
+                    EffectLease lease = EffectLease.planned("pm:" + key, key, "spore", site.id().value(), reference.slotId(),
+                            "direct_attack", gameTick, gameTick + profile.attackCooldownTicks());
+                    ControlledEffectExecutor.executeOnce(data, lease, gameTick, () -> {
+                        landed[0] = target.hurt(level.damageSources().mobAttack(actor), profile.attackDamage());
+                        level.playSound(null, actor.blockPosition(), profile.attackSound(), SoundSource.HOSTILE, 0.8F, 1.0F);
+                        if (landed[0]) {
+                            level.sendParticles(ParticleTypes.SPORE_BLOSSOM_AIR, target.getX(), target.getY() + target.getBbHeight() * 0.5D,
+                                    target.getZ(), 5, 0.2D, 0.3D, 0.2D, 0.01D);
+                        }
+                    });
+                }
                 site.encounter().scheduleRuntime(reference.slotId(), gameTick + profile.attackCooldownTicks());
                 data.setDirty();
                 remaining--;

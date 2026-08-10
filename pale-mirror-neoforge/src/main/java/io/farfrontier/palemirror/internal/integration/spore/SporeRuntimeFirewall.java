@@ -34,6 +34,12 @@ public final class SporeRuntimeFirewall {
         return true;
     }
 
+    /** PM moves and impacts its tagged visual projectile carrier itself. */
+    public static boolean suppressOwnedProjectile(Entity entity) {
+        if (!enabled() || entity == null) return false;
+        return SporeSandboxAdapter.PROJECTILE_ROLE.equals(entity.getPersistentData().getString(VanillaAnchorAdapter.ROLE_KEY));
+    }
+
     public static void observeGlobalHook() {
         if (enabled()) hookObserved = true;
     }
@@ -41,7 +47,8 @@ public final class SporeRuntimeFirewall {
     public static boolean hookObserved() { return hookObserved; }
 
     private static boolean isOwnedActor(Entity entity) {
-        return SporeSandboxAdapter.ACTOR_ROLE.equals(entity.getPersistentData().getString(VanillaAnchorAdapter.ROLE_KEY))
+        String role = entity.getPersistentData().getString(VanillaAnchorAdapter.ROLE_KEY);
+        return (SporeSandboxAdapter.ACTOR_ROLE.equals(role) || SporeSandboxAdapter.PROJECTILE_ROLE.equals(role))
                 && !entity.getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY).isBlank()
                 && !entity.getPersistentData().getString(SporeSandboxAdapter.SLOT_KEY).isBlank();
     }

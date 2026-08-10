@@ -14,7 +14,7 @@ final class PaleMirrorSnapshotMigrations {
     static boolean isMigratable(int version) {
         return version == PaleMirrorSavedData.CURRENT_SCHEMA || version == 5 || version == 6
                 || version == 7 || version == 8 || version == 9 || version == 10 || version == 11 || version == 12
-                || version == 13;
+                || version == 13 || version == 14;
     }
 
     static CompoundTag migrate(CompoundTag source) {
@@ -29,7 +29,8 @@ final class PaleMirrorSnapshotMigrations {
         if (version == 10) { migrateV10ToV11(migrated); version = 11; }
         if (version == 11) { migrateV11ToV12(migrated); version = 12; }
         if (version == 12) { migrateV12ToV13(migrated); version = 13; }
-        if (version == 13) migrateV13ToV14(migrated);
+        if (version == 13) { migrateV13ToV14(migrated); version = 14; }
+        if (version == 14) migrateV14ToV15(migrated);
         return migrated;
     }
 
@@ -182,5 +183,16 @@ final class PaleMirrorSnapshotMigrations {
         if (!tag.contains("effectLeases", Tag.TAG_LIST)) tag.put("effectLeases", new ListTag());
         if (!tag.contains("quarantine", Tag.TAG_LIST)) tag.put("quarantine", new ListTag());
         tag.putInt("schemaVersion", 14);
+    }
+
+    /**
+     * v15 intentionally does not adopt native health from a representation.
+     * A legacy live actor is safely replaced from its desired PM slot on its
+     * next materialization pass instead.
+     */
+    private static void migrateV14ToV15(CompoundTag tag) {
+        if (!tag.contains("threatCombatActors", Tag.TAG_LIST)) tag.put("threatCombatActors", new ListTag());
+        if (!tag.contains("pmProjectiles", Tag.TAG_LIST)) tag.put("pmProjectiles", new ListTag());
+        tag.putInt("schemaVersion", 15);
     }
 }

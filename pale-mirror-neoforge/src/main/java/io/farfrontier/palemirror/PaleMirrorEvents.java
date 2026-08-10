@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdap
 import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
 import io.farfrontier.palemirror.internal.integration.spore.SporeRuntimeFirewall;
 import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
+import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
@@ -36,6 +37,7 @@ import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -84,6 +86,14 @@ public final class PaleMirrorEvents {
         if (!event.getLevel().isClientSide() && SporeRuntimeFirewall.rejectUnmanagedEntity(event.getEntity())) {
             event.setCanceled(true);
         }
+    }
+
+    /** PM-tagged projectile carriers never execute their own hit path. */
+    @SubscribeEvent
+    public static void onProjectileImpact(ProjectileImpactEvent event) {
+        if (event.getProjectile().level().getServer() != null
+                && PmProjectileRuntime.handleImpact(event.getProjectile().level().getServer(), event.getProjectile(),
+                event.getRayTraceResult())) event.setCanceled(true);
     }
 
     @SubscribeEvent

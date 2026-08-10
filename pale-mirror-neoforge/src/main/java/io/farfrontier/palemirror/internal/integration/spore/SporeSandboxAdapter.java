@@ -13,6 +13,10 @@ import io.farfrontier.palemirror.internal.integration.ActorOperationResult;
 import io.farfrontier.palemirror.internal.world.EncounterActorRef;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
+import io.farfrontier.palemirror.internal.combat.ThreatActorControlState;
+import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
+import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
+import io.farfrontier.palemirror.internal.effect.EffectLease;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -25,6 +29,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
 
@@ -47,10 +52,12 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
     public static final String SLOT_KEY = "pale_mirror_encounter_slot";
     public static final String PROFILE_KEY = "pale_mirror_spore_profile";
     public static final String ACTOR_ROLE = "spore_actor";
+    public static final String PROJECTILE_ROLE = "spore_projectile";
     public static final String MOD_ID = "spore";
     public static final String VERSION = "2.2.0j";
     private final SporeCombatRuntime combatRuntime = new SporeCombatRuntime();
     private final SporeMovementRuntime movementRuntime = new SporeMovementRuntime();
+    private final SporeProjectileRuntime projectileRuntime = new SporeProjectileRuntime();
 
     @Override
     public String id() { return "pale_mirror:spore_sandbox"; }
@@ -79,6 +86,9 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
                         "Spore registry is missing required combat sound " + profile.attackSoundId(), Set.of());
             }
         }
+        if (!BuiltInRegistries.ENTITY_TYPE.containsKey(ResourceLocation.parse("spore:acid_ball"))) {
+            return new AdapterHealth(AdapterHealth.Status.BLOCKED, "Spore registry is missing required projectile spore:acid_ball", Set.of());
+        }
         return new AdapterHealth(AdapterHealth.Status.AVAILABLE,
                 "Spore " + version + " sandboxed: PM owns spread, tiers, controller and constrained combat",
                 Set.of(Capability.SPORE_ENCOUNTER_ACTORS, Capability.SPORE_CONTROLLED_COMBAT,
@@ -102,6 +112,7 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
                 holdConstrained(existing);
                 site.encounter().activate(slot.id(), reference.entityId(), profile.entityTypeId());
                 site.encounter().initializeCombatHitPoints(slot.id(), profile.combatHitPoints());
+                attachCombatState(level, site, slot.id(), profile, reference.entityId());
                 return ActorOperationResult.materialized();
             }
             if (existing != null) return ActorOperationResult.unavailable("Spore actor identity conflict for slot " + slot.id());
@@ -128,6 +139,7 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         }
         site.encounter().activate(slot.id(), actor.getUUID(), profile.entityTypeId());
         site.encounter().initializeCombatHitPoints(slot.id(), profile.combatHitPoints());
+        attachCombatState(level, site, slot.id(), profile, actor.getUUID());
         return ActorOperationResult.materialized();
     }
 
@@ -148,6 +160,8 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         }
         entity.discard();
         site.encounter().removed(slotId);
+        PaleMirrorSavedData.get(level.getServer().overworld()).threatCombat()
+                .retireActor("spore", site.id().value(), "encounter", slotId);
         return ActorOperationResult.materialized();
     }
 
@@ -164,29 +178,35 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
                 && slotId.equals(entity.getPersistentData().getString(SLOT_KEY));
     }
 
-    /**
-     * PM consumes player damage into its persisted encounter health.  All
-     * other sources are rejected so a native Spore {@code hurt}/{@code die}
-     * path can never gain authority over this site.
-     */
+    /** PM accepts vanilla-compatible incoming damage but never invokes Spore hurt/death behaviour. */
     @Override
     public ActorDamageResult receiveDamage(ServerLevel level, TestMineRecord site, Entity entity,
                                            EncounterActorRef reference, DamageSource source, float amount) {
         if (!matchesOwnedActor(entity, site, reference.slotId()) || reference.status() != EncounterActorRef.Status.ACTIVE) {
             return ActorDamageResult.blocked("Spore actor identity is stale or not active");
         }
-        if (!(source.getEntity() instanceof ServerPlayer player) || player.isSpectator()
-                || player.serverLevel() != level || !site.contains(player.blockPosition()) || !site.contains(entity.blockPosition())) {
-            return ActorDamageResult.blocked("Only a player inside the PM threat site may damage its constrained Spore actor");
-        }
         SporeActorProfile profile = SporeActorProfile.byId(reference.actorProfileId()).orElse(null);
         if (profile == null) return ActorDamageResult.blocked("Unsupported Spore combat profile " + reference.actorProfileId());
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        String key = ThreatCombatLedger.actorKey("spore", site.id().value(), "encounter", reference.slotId());
+        ThreatActorControlState state = data.threatCombat().actor(key).orElse(null);
+        if (state == null || state.status() != ThreatActorControlState.Status.ACTIVE || !entity.getUUID().equals(state.entityId())) {
+            return ActorDamageResult.blocked("Spore actor lacks verified PM combat control state");
+        }
         site.encounter().initializeCombatHitPoints(reference.slotId(), profile.combatHitPoints());
-        int remaining = site.encounter().consumeCombatHitPoints(reference.slotId(), Math.max(1, Mth.ceil(amount)));
+        int damage = Math.max(1, Mth.ceil(amount));
+        int remaining = data.threatCombat().applyActorDamage(key, damage);
+        site.encounter().consumeCombatHitPoints(reference.slotId(), damage);
         level.broadcastEntityEvent(entity, (byte) 2);
         level.playSound(null, entity.blockPosition(), profile.attackSound(), SoundSource.HOSTILE, 0.65F, 0.8F);
         if (remaining > 0) return ActorDamageResult.consumed();
+        long gameTick = level.getServer().overworld().getGameTime();
+        String leaseId = "pm:spore:xp:" + site.id().value() + ":" + reference.slotId() + ":" + entity.getUUID();
+        ControlledEffectExecutor.executeOnce(data, EffectLease.planned(leaseId, leaseId, "spore", site.id().value(), reference.slotId(),
+                "defeat_xp", gameTick, gameTick + 1L), gameTick,
+                () -> ExperienceOrb.award(level, entity.position(), sporeExperience(profile)));
         entity.discard();
+        site.encounter().defeated(reference.slotId(), reference.entityId());
         return ActorDamageResult.defeated();
     }
 
@@ -204,6 +224,7 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         }
         movementRuntime.tick(server, data, this);
         combatRuntime.tick(server, data, this);
+        projectileRuntime.tick(server, data);
     }
 
     private static String entityTypeId(Entity entity) {
@@ -225,5 +246,23 @@ public final class SporeSandboxAdapter implements ThreatActorAdapter {
         mob.setLastHurtByMob(null);
         mob.getNavigation().stop();
         mob.setDeltaMovement(Vec3.ZERO);
+    }
+
+    EntityType<?> acidBallType() { return BuiltInRegistries.ENTITY_TYPE.get(ResourceLocation.parse("spore:acid_ball")); }
+
+    private static void attachCombatState(ServerLevel level, TestMineRecord site, String slotId, SporeActorProfile profile,
+                                          java.util.UUID entityId) {
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        data.threatCombat().attachActor("spore", site.id().value(), "encounter", slotId, profile.id(), entityId,
+                profile.combatHitPoints());
+        data.setDirty();
+    }
+
+    private static int sporeExperience(SporeActorProfile profile) {
+        return switch (profile) {
+            case INFECTED_HUMAN, INFECTED_HUSK -> 3;
+            case BRAIOMIL -> 7;
+            case SPITTER -> 6;
+        };
     }
 }

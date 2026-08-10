@@ -60,11 +60,13 @@ site-local forms.
 - a bounded PM executor selects only a nearby player inside the same registered
   site and applies profile-owned damage/sound/particle presentation on a
   persisted cooldown and persisted PM effect lease. Human/Husk forms follow a fixed safe patrol lattice;
-  Braiomil takes one safe PM step toward a player; Spitter stays stationary
-  and uses PM ranged pressure. No actor uses native navigation, targeting,
-  projectiles, infection, evolution or terrain work;
-- incoming player damage is converted to PM-owned persisted combat HP before
-  Spore's `hurt` path runs; all non-player/out-of-site damage is rejected;
+  Braiomil takes one safe PM step toward a player; Spitter launches its pinned
+  `spore:acid_ball` only as a PM-owned visual carrier. PM owns the carrier's
+  target UUID, flight, impact, damage and restart expiry. No actor uses native
+  navigation, targeting, projectile hit logic, infection, evolution or terrain work;
+- every vanilla-compatible incoming damage source is converted to PM-owned
+  persisted combat HP before Spore's `hurt` path runs; no source/site filter
+  discards legitimate vanilla player or environmental damage;
 - a lethal PM combat hit discards the actor and emits one typed presentation
   observation, instead of calling native `die` and its remains path;
 - never used as the controller or clearance condition. The PM anchor remains
@@ -75,7 +77,7 @@ The encounter datapack uses exact-tier compositions (`FOOTHOLD`, `INFESTED`,
 desired revision, then the chosen composition id and actor refs are persisted
 in `EncounterRecord`. The translator reads that record, not the live datapack,
 while the job is executing; reload therefore cannot reshuffle an active site.
-Schema v14 adds the crash-safe effect lease ledger, after v13 added this
+Schema v15 adds the crash-safe PM threat-combat and projectile ledger, after v14 added the effect lease ledger and v13 added this
 composition pin and v12 added independent PM movement scheduling.
 
 The PM vanilla anchor remains the unique controller.  It alone converts an
@@ -94,13 +96,15 @@ The Spore GameTest profile boots the checksum-pinned JAR and proves:
    health/cooldown/movement state;
 4. source identity survives a SavedData round trip;
 5. a forged observation from the wrong source is rejected; and
-6. only a player in the site may damage a constrained form; external damage is
-   rejected, a lethal approved hit leaves no Spore remains, and a defeated form
+6. every vanilla-compatible source can damage a constrained form through PM
+   health; a lethal approved hit leaves no Spore remains, and a defeated form
    never respawns on a later desired revision; and
 7. unmanaged Spore entities are rejected at the server entity boundary; and
 8. controller clearance removes remaining native forms through PM cleanup.
 9. a constrained native attack is recorded as a completed PM effect lease and
-   survives a SavedData round trip, so it cannot be replayed after restart.
+   survives a SavedData round trip, so it cannot be replayed after restart; and
+10. the AcidBall carrier has one persisted player target and cannot hurt the
+    PM controller or an unrelated entity.
 
 `sporeIntegrationHarness` additionally installs a clean NeoForge dedicated
 runtime, starts the final packaged PM JAR next to the pinned Spore JAR,
@@ -109,9 +113,8 @@ mixin/dependency boundary and normal server restart independently of Gradle's
 development classpath. `runSporeClient` prepares the equivalent client runtime
 for visual inspection; it requires an actual graphical session.
 
-It does not enable native Spore combat AI, native projectiles, terrain,
-organisms, raids, hiveminds, or the un-audited content catalogue. In
-particular, native projectile transfer needs a separately persisted
-PM-provenance/effect record before it can be safely permitted through the
-firewall. Each additional capability still requires its own isolated
-side-effect audit.
+It does not enable native Spore combat AI, native projectile logic, terrain,
+organisms, raids, hiveminds, or the un-audited content catalogue. The one
+approved visual carrier is `spore:acid_ball`: its native tick and hit paths
+are suppressed, and PM's persisted projectile record owns it end-to-end. Each
+additional capability still requires its own isolated side-effect audit.

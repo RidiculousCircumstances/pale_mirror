@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.internal.world.SiegePartRef;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
+import io.farfrontier.palemirror.internal.combat.ThreatActorControlState;
+import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -44,32 +46,58 @@ final class CrimsonSiegeRuntime {
                 CrimsonSiegeProfile profile = CrimsonSiegeProfile.byId(part.profileId()).orElse(null);
                 if (!(entity instanceof Mob actor) || profile == null
                         || !CrimsonSandboxAdapter.isOwnedSiegeEntity(entity, mine, part.slotId()) || !profile.matches(entity)) continue;
+                CrimsonCombatProfile combat = CrimsonCombatProfile.forSiege(profile);
+                String controlKey = ThreatCombatLedger.actorKey("crimson", mine.id().value(), "siege", part.slotId());
+                ThreatActorControlState state = data.threatCombat().attachActor("crimson", mine.id().value(), "siege", part.slotId(),
+                        profile.id(), actor.getUUID(), combat.hitPoints());
+                CrimsonActorRuntime.holdControlled(actor);
+                if (state.status() != ThreatActorControlState.Status.ACTIVE) continue;
                 keepInsideThreatSite(mine, actor);
                 ServerPlayer target = nearestTarget(level, mine, actor);
-                if (target != null) actor.setTarget(target);
-                else actor.setTarget(null);
-                if (target != null) execute(profile, data, mine, part, actor, target, gameTick, presentation);
+                if (target != null && combat.movementPerTick() > 0.0D && state.nextMovementTick() <= gameTick) {
+                    moveToward(actor, target, combat.movementPerTick());
+                    data.threatCombat().scheduleActorMovement(controlKey, gameTick + 1L, state.routeCursor() + 1);
+                    data.setDirty();
+                }
+                if (target != null && state.nextActionTick() <= gameTick) {
+                    execute(profile, combat, state, data, mine, part, actor, target, gameTick, presentation);
+                    data.threatCombat().scheduleActorAction(controlKey, gameTick + combat.attackCooldown());
+                    data.setDirty();
+                }
                 remaining--;
             }
         }
     }
 
-    private static void execute(CrimsonSiegeProfile profile, PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part,
+    private static void execute(CrimsonSiegeProfile profile, CrimsonCombatProfile combat, ThreatActorControlState state,
+                                PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part,
                                 Mob actor, ServerPlayer target, long gameTick,
                                 CrimsonPresentationRuntime presentation) {
         switch (profile) {
             case MANGLER -> dash(data, mine, part, actor, target, gameTick, presentation);
             case PUMMELER -> rangedPulse(data, mine, part, actor, target, gameTick, presentation);
             case KRAKEN -> grasp(data, mine, part, actor, target, gameTick, presentation);
-            case OSIRIS -> phase(data, mine, part, actor, gameTick);
+            case OSIRIS -> {
+                phase(data, mine, part, actor, combat, state, gameTick);
+                melee(data, mine, part, actor, target, gameTick, presentation);
+            }
             case BLOODLINK_I, BLOODLINK_II, BLOODLINK_III -> bloodlinkAura(data, mine, part, actor, target, gameTick, presentation);
-            case JUGGERNAUT, KNIGHT -> { /* native melee is bounded by the selected target and site leash. */ }
+            case JUGGERNAUT, KNIGHT -> melee(data, mine, part, actor, target, gameTick, presentation);
         }
+    }
+
+    private static void melee(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+                              ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
+        CrimsonCombatProfile stats = CrimsonCombatProfile.forSiege(CrimsonSiegeProfile.byId(part.profileId()).orElseThrow());
+        if (actor.distanceToSqr(target) > stats.attackRange() * stats.attackRange()) return;
+        executeOnce(data, mine, part, actor, "melee", gameTick, stats.attackCooldown(), () -> {
+            target.hurt(actor.level().damageSources().mobAttack(actor), stats.damage());
+            presentation.attacked(actor, part.profileId());
+        });
     }
 
     private static void dash(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
                              long gameTick, CrimsonPresentationRuntime presentation) {
-        if (!due(actor, gameTick, 40L)) return;
         Vec3 delta = target.position().subtract(actor.position());
         double horizontal = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (horizontal < 4.0D || horizontal > 20.0D) return;
@@ -81,7 +109,7 @@ final class CrimsonSiegeRuntime {
 
     private static void rangedPulse(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
                                     long gameTick, CrimsonPresentationRuntime presentation) {
-        if (actor.distanceToSqr(target) <= 24.0D * 24.0D && due(actor, gameTick, 60L)) {
+        if (actor.distanceToSqr(target) <= 24.0D * 24.0D) {
             executeOnce(data, mine, part, actor, "pummeler_pulse", gameTick, 60L, () -> {
                 target.hurt(actor.level().damageSources().mobAttack(actor), 6.0F);
                 target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 60, 0, true, false));
@@ -92,7 +120,7 @@ final class CrimsonSiegeRuntime {
 
     private static void grasp(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
                               long gameTick, CrimsonPresentationRuntime presentation) {
-        if (actor.distanceToSqr(target) <= 8.0D * 8.0D && due(actor, gameTick, 40L)) {
+        if (actor.distanceToSqr(target) <= 8.0D * 8.0D) {
             executeOnce(data, mine, part, actor, "kraken_grasp", gameTick, 40L, () -> {
                 target.hurt(actor.level().damageSources().mobAttack(actor), 5.0F);
                 target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 1, true, false));
@@ -101,10 +129,13 @@ final class CrimsonSiegeRuntime {
         }
     }
 
-    private static void phase(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, long gameTick) {
-        if (!due(actor, gameTick, 40L)) return;
+    private static void phase(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+                              CrimsonCombatProfile combat, ThreatActorControlState state, long gameTick) {
         executeOnce(data, mine, part, actor, "osiris_phase", gameTick, 40L, () -> {
-            float ratio = actor.getHealth() / actor.getMaxHealth();
+            // Native health is presentation-only: all incoming damage was
+            // intercepted before it could modify this entity. The PM combat
+            // ledger is therefore the sole valid input for a phase change.
+            float ratio = (float) state.hitPoints() / combat.hitPoints();
             int amplifier = ratio <= 0.25F ? 2 : ratio <= 0.50F ? 1 : 0;
             actor.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 60, amplifier, true, false));
         });
@@ -112,7 +143,7 @@ final class CrimsonSiegeRuntime {
 
     private static void bloodlinkAura(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
                                       ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
-        if (actor.distanceToSqr(target) <= 10.0D * 10.0D && due(actor, gameTick, 40L)) {
+        if (actor.distanceToSqr(target) <= 10.0D * 10.0D) {
             executeOnce(data, mine, part, actor, "bloodlink_aura", gameTick, 40L, () -> {
                 target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 80, 0, true, false));
                 presentation.bloodlinkAura(actor);
@@ -126,10 +157,6 @@ final class CrimsonSiegeRuntime {
                 + ":" + gameTick;
         ControlledEffectExecutor.executeOnce(data, EffectLease.planned("pm:" + key, key, "crimson", mine.id().value(),
                 part.slotId(), kind, gameTick, gameTick + ttl), gameTick, action);
-    }
-
-    private static boolean due(Mob actor, long gameTick, long period) {
-        return Math.floorMod(gameTick + actor.getUUID().getLeastSignificantBits(), period) == 0L;
     }
 
     private static ServerPlayer nearestTarget(ServerLevel level, TestMineRecord mine, Mob actor) {
@@ -151,6 +178,15 @@ final class CrimsonSiegeRuntime {
                 Mth.clamp(actor.getZ(), minZ + 0.5D, maxZ + 0.5D), actor.getYRot(), actor.getXRot());
         actor.setDeltaMovement(Vec3.ZERO);
         actor.getNavigation().stop();
+    }
+
+    private static void moveToward(Mob actor, ServerPlayer target, double speed) {
+        Vec3 delta = target.position().subtract(actor.position());
+        double horizontal = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        if (horizontal < 2.2D) return;
+        actor.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, target.getEyePosition());
+        actor.move(net.minecraft.world.entity.MoverType.SELF, new Vec3(delta.x / horizontal * speed, 0.0D,
+                delta.z / horizontal * speed));
     }
 
     private static ServerLevel levelFor(MinecraftServer server, TestMineRecord mine) {

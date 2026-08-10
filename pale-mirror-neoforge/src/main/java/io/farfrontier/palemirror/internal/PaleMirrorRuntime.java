@@ -20,6 +20,8 @@ import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
+import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
+import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
@@ -60,6 +62,8 @@ public final class PaleMirrorRuntime {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
         if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
+        if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
+        PmProjectileRuntime.discardUnknownAfterRestart(server, data);
         AdapterRegistry.crimson().verifySandbox(server);
     }
 
@@ -79,6 +83,7 @@ public final class PaleMirrorRuntime {
         long gameTick = server.overworld().getGameTime();
         if (data.effectLeases().expireDue(gameTick)) data.setDirty();
         if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
+        if (data.threatCombat().expireAndCompact(gameTick)) data.setDirty();
         AdapterRegistry.crimson().tickRuntime(server, data);
         AdapterRegistry.spore().tickRuntime(server, data);
     }
@@ -157,7 +162,8 @@ public final class PaleMirrorRuntime {
         return "step=" + data.worldState().simulationStep() + ", facilities=" + data.worldState().facilities().size()
                 + ", settlements=" + data.worldState().settlements().size() + ", scenarios=" + data.worldState().scenarios().size()
                 + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count()
-                + ", effectLeases=" + data.effectLeases().leases().size() + ", quarantine=" + data.quarantine().records().size();
+                + ", effectLeases=" + data.effectLeases().leases().size() + ", combatActors=" + data.threatCombat().actors().size()
+                + ", projectiles=" + data.threatCombat().projectiles().size() + ", quarantine=" + data.quarantine().records().size();
     }
 
     /** Records a legacy source stack without granting it PM authority or deleting player data. */
@@ -238,6 +244,7 @@ public final class PaleMirrorRuntime {
      * presentation, while an adapter can never directly alter a facility.
      */
     public ActorDamageResult receiveSourceActorDamage(Entity entity, DamageSource source, float amount) {
+        if (CrimsonSandboxAdapter.isSiegeEntity(entity)) return receiveCrimsonSiegeDamage(entity, source, amount);
         var claimant = AdapterRegistry.threatActors().stream().filter(adapter -> adapter.matchesActor(entity)).findFirst().orElse(null);
         if (claimant == null) return ActorDamageResult.passThrough();
         if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM actor is not in a server level");
@@ -267,6 +274,27 @@ public final class PaleMirrorRuntime {
             return result;
         } catch (IllegalArgumentException ignored) {
             return ActorDamageResult.blocked("PM actor contains an invalid persisted world object id");
+        }
+    }
+
+    private ActorDamageResult receiveCrimsonSiegeDamage(Entity entity, DamageSource source, float amount) {
+        if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM siege actor is not in a server level");
+        String objectId = entity.getPersistentData().getString(CrimsonSandboxAdapter.OBJECT_ID_KEY);
+        String slotId = entity.getPersistentData().getString(CrimsonSandboxAdapter.SLOT_KEY);
+        try {
+            WorldObjectId facilityId = new WorldObjectId(objectId);
+            TestMineRecord mine = data.testMines().get(facilityId);
+            if (mine == null || !mine.dimensionId().equals(level.dimension().location().toString())) {
+                return ActorDamageResult.blocked("PM siege actor is not attached to its registered site");
+            }
+            var part = mine.siege().part(slotId).orElse(null);
+            if (part == null || !entity.getUUID().equals(part.entityId())) return ActorDamageResult.blocked("PM siege actor identity is stale");
+            ActorDamageResult result = AdapterRegistry.crimson().receiveSiegeDamage(level, mine, entity, part, source, amount);
+            if (result.intercepts()) data.setDirty();
+            if (result.disposition() == ActorDamageResult.Disposition.DEFEATED) siegeEntityDestroyed(objectId, slotId, entity.getUUID());
+            return result;
+        } catch (IllegalArgumentException ignored) {
+            return ActorDamageResult.blocked("PM siege actor contains invalid provenance");
         }
     }
 

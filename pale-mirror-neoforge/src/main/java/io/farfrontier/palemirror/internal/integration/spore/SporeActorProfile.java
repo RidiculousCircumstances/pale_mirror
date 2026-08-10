@@ -16,9 +16,9 @@ enum SporeActorProfile {
     BRAIOMIL("pale_mirror:spore_braiomil", "spore:braiomil", 40, 6.0F, 4.5D, 50, "spore:braiomil_attack",
             MovementPolicy.PURSUE, 5),
     /**
-     * Uses PM's ranged-pressure executor for damage and cooldowns.  The
-     * native projectile path remains deliberately disabled until it has a
-     * separately persisted projectile/effect provenance record.
+     * Uses PM's ranged-pressure executor and a persisted PM projectile
+     * record. AcidBall is a visual carrier; its native tick/hit path remains
+     * disabled.
      */
     SPITTER("pale_mirror:spore_spitter", "spore:spitter", 30, 3.0F, 12.0D, 50, "spore:spitter_spit",
             MovementPolicy.STATIONARY, 0);

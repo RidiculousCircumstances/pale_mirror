@@ -35,6 +35,7 @@ import io.farfrontier.palemirror.internal.effect.EffectLeaseState;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineKind;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineLedger;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineRecord;
+import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -48,7 +49,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 14;
+    static final int CURRENT_SCHEMA = 15;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
@@ -57,13 +58,15 @@ public final class PaleMirrorSavedData extends SavedData {
     private final WorldObjectRegistry worldRegistry;
     private final EffectLeaseLedger effectLeases;
     private final QuarantineLedger quarantine;
+    private final ThreatCombatLedger threatCombat;
     public PaleMirrorSavedData() {
         this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
-                new EffectLeaseLedger(), new QuarantineLedger());
+                new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger());
     }
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
-                                WorldObjectRegistry worldRegistry, EffectLeaseLedger effectLeases, QuarantineLedger quarantine) {
+                                WorldObjectRegistry worldRegistry, EffectLeaseLedger effectLeases, QuarantineLedger quarantine,
+                                ThreatCombatLedger threatCombat) {
         this.worldState = worldState;
         this.testMines = testMines;
         this.audienceMappings = audienceMappings;
@@ -71,6 +74,7 @@ public final class PaleMirrorSavedData extends SavedData {
         this.worldRegistry = worldRegistry;
         this.effectLeases = effectLeases;
         this.quarantine = quarantine;
+        this.threatCombat = threatCombat;
     }
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
@@ -105,6 +109,8 @@ public final class PaleMirrorSavedData extends SavedData {
     public EffectLeaseLedger effectLeases() { return effectLeases; }
     /** Legacy foreign objects are diagnosed here, never adopted as PM state. */
     public QuarantineLedger quarantine() { return quarantine; }
+    /** Optional encounter combat state; it is never a second canonical world model. */
+    public ThreatCombatLedger threatCombat() { return threatCombat; }
     public void registerTestMine(TestMineRecord mine) {
         worldRegistry.register(mine.object());
         testMines.put(mine.id(), mine);
@@ -143,7 +149,7 @@ public final class PaleMirrorSavedData extends SavedData {
             quarantine.put(record.id(), record);
         }
         return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
-                new EffectLeaseLedger(leases), new QuarantineLedger(quarantine));
+                new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag));
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " cannot be migrated to schema "
@@ -185,6 +191,7 @@ public final class PaleMirrorSavedData extends SavedData {
         ListTag quarantine = new ListTag();
         this.quarantine.records().forEach(record -> quarantine.add(writeQuarantine(record)));
         tag.put("quarantine", quarantine);
+        ThreatCombatPresentationCodec.write(tag, threatCombat);
         return tag;
     }
 

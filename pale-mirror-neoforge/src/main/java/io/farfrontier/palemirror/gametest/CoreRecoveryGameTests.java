@@ -128,10 +128,12 @@ public final class CoreRecoveryGameTests {
                 "v5 controller reference must migrate to the PM anchor reference");
         helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
                 "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 14,
-                "migrated snapshot must be rewritten as schema v14");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 15,
+                "migrated snapshot must be rewritten as schema v15");
         helper.assertTrue(migrated.effectLeases().leases().isEmpty(),
                 "v13 migration must create an explicitly empty effect ledger rather than infer physical effects");
+        helper.assertTrue(migrated.threatCombat().actors().isEmpty() && migrated.threatCombat().projectiles().isEmpty(),
+                "v14 migration must create empty PM combat state rather than adopting native actor data");
         helper.assertValueEqual(migrated.testMines().get(mine.id()).encounter().compositionId(), "",
                 "legacy encounters must migrate to an explicitly unpinned composition rather than inventing one");
         helper.assertValueEqual(migrated.worldState().facility(mine.id()).orElseThrow().infectionSource(), InfectionSourceId.CRIMSON,
@@ -374,6 +376,7 @@ public final class CoreRecoveryGameTests {
         data.reconciliationLedger().clear();
         data.effectLeases().clear();
         data.quarantine().clear();
+        data.threatCombat().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().settlements().clear();
@@ -386,6 +389,12 @@ public final class CoreRecoveryGameTests {
 
     private static void downgradeV6SnapshotToV5(CompoundTag tag) {
         tag.putInt("schemaVersion", 5);
+        // The fixture models an actual v5 snapshot, which predates all
+        // optional physical-effect and combat ledgers.
+        tag.remove("effectLeases");
+        tag.remove("quarantine");
+        tag.remove("threatCombatActors");
+        tag.remove("pmProjectiles");
         for (Tag facilityElement : tag.getCompound("snapshot").getList("facilities", Tag.TAG_COMPOUND)) {
             ((CompoundTag) facilityElement).remove("infectionSource");
         }
