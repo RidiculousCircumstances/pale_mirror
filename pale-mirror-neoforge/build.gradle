@@ -94,15 +94,20 @@ def distributableJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
 
 tasks.register('verifyPackagedJar') {
     group = 'verification'
-    description = 'Fails if the distributable mod jar does not embed the domain module.'
+    description = 'Fails if the distributable mod jar omits the domain module or PM effect/item safety boundaries.'
     dependsOn tasks.named('jar')
     inputs.file(distributableJar)
     doLast {
         def jarFile = distributableJar.get().asFile
         def jar = new java.util.jar.JarFile(jarFile)
         try {
-            if (jar.getEntry('io/farfrontier/palemirror/domain/WorldState.class') == null) {
-                throw new GradleException("${jarFile} does not embed pale-mirror-domain classes")
+            [
+                    'io/farfrontier/palemirror/domain/WorldState.class',
+                    'io/farfrontier/palemirror/internal/effect/EffectLeaseLedger.class',
+                    'io/farfrontier/palemirror/internal/integration/item/ExcludedSourceItemFirewall.class',
+                    'pale_mirror.item_firewall.mixins.json'
+            ].each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("${jarFile} is missing required PM safety entry ${entry}")
             }
         } finally {
             jar.close()

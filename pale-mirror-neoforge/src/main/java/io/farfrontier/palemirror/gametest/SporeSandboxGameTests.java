@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.spore.SporeSandboxAdapter;
 import io.farfrontier.palemirror.internal.integration.spore.SporeRuntimeFirewall;
+import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.world.InfectionBiomeStage;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -21,6 +22,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomModelData;
+import net.minecraft.core.component.DataComponents;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -41,6 +46,10 @@ public final class SporeSandboxGameTests {
         helper.assertTrue(SporeRuntimeFirewall.hookObserved(),
                 "exact-version Spore runtime hooks must be active before PM materializes a source actor");
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
+        ItemStack crimsonEncodedLegacyItem = new ItemStack(Items.NETHERITE_SWORD);
+        crimsonEncodedLegacyItem.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(5_450_080));
+        helper.assertValueEqual(ExcludedSourceItemFirewall.classify(crimsonEncodedLegacyItem).orElseThrow().sourceId(), "crimson",
+                "excluded Crimson custom-model stacks must be identified before source use hooks can run");
         BlockPos playerStart = helper.absolutePos(new BlockPos(0, 3, 0));
         BlockPos siteAnchor = playerStart.above(2).offset(16, 0, 0);
         reset(level);
@@ -123,6 +132,15 @@ public final class SporeSandboxGameTests {
                 "PM constrained-combat runtime must schedule one bounded attack while a player is inside the site");
         helper.assertTrue(afterCombatAction.nextRuntimeTick() > 0,
                 "PM must persist the next combat cooldown rather than relying on native Spore AI");
+        var attackLease = PaleMirrorSavedData.get(level.getServer().overworld()).effectLeases().leases().stream()
+                .filter(lease -> lease.kind().equals("direct_attack") && lease.facilityId().equals(site.id().value()))
+                .findFirst().orElseThrow();
+        helper.assertValueEqual(attackLease.state().name(), "COMPLETED",
+                "Spore damage must pass through a persisted PM effect lease before touching the player");
+        helper.assertValueEqual(PaleMirrorSavedData.load(PaleMirrorSavedData.get(level.getServer().overworld())
+                        .save(new CompoundTag(), level.registryAccess()), level.registryAccess()).effectLeases().find(attackLease.id())
+                        .orElseThrow().state().name(), "COMPLETED",
+                "completed PM effect leases must survive a restart snapshot for deduplication");
 
         int afterPlayerHit = site.encounter().actor("dormant_infected_human").orElseThrow().combatHitPoints();
         helper.assertTrue(!human.hurt(level.damageSources().generic(), 10_000.0F),
@@ -212,6 +230,8 @@ public final class SporeSandboxGameTests {
         data.worldRegistry().clear();
         data.audienceMappings().clear();
         data.reconciliationLedger().clear();
+        data.effectLeases().clear();
+        data.quarantine().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().settlements().clear();

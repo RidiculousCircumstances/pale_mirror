@@ -5,6 +5,8 @@ import java.util.Comparator;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.SiegePartRef;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
+import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
+import io.farfrontier.palemirror.internal.effect.EffectLease;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -46,61 +48,84 @@ final class CrimsonSiegeRuntime {
                 ServerPlayer target = nearestTarget(level, mine, actor);
                 if (target != null) actor.setTarget(target);
                 else actor.setTarget(null);
-                if (target != null) execute(profile, actor, target, gameTick, presentation);
+                if (target != null) execute(profile, data, mine, part, actor, target, gameTick, presentation);
                 remaining--;
             }
         }
     }
 
-    private static void execute(CrimsonSiegeProfile profile, Mob actor, ServerPlayer target, long gameTick,
+    private static void execute(CrimsonSiegeProfile profile, PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part,
+                                Mob actor, ServerPlayer target, long gameTick,
                                 CrimsonPresentationRuntime presentation) {
         switch (profile) {
-            case MANGLER -> dash(actor, target, gameTick, presentation);
-            case PUMMELER -> rangedPulse(actor, target, gameTick, presentation);
-            case KRAKEN -> grasp(actor, target, gameTick, presentation);
-            case OSIRIS -> phase(actor, gameTick);
-            case BLOODLINK_I, BLOODLINK_II, BLOODLINK_III -> bloodlinkAura(actor, target, gameTick, presentation);
+            case MANGLER -> dash(data, mine, part, actor, target, gameTick, presentation);
+            case PUMMELER -> rangedPulse(data, mine, part, actor, target, gameTick, presentation);
+            case KRAKEN -> grasp(data, mine, part, actor, target, gameTick, presentation);
+            case OSIRIS -> phase(data, mine, part, actor, gameTick);
+            case BLOODLINK_I, BLOODLINK_II, BLOODLINK_III -> bloodlinkAura(data, mine, part, actor, target, gameTick, presentation);
             case JUGGERNAUT, KNIGHT -> { /* native melee is bounded by the selected target and site leash. */ }
         }
     }
 
-    private static void dash(Mob actor, ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
+    private static void dash(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
+                             long gameTick, CrimsonPresentationRuntime presentation) {
         if (!due(actor, gameTick, 40L)) return;
         Vec3 delta = target.position().subtract(actor.position());
         double horizontal = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (horizontal < 4.0D || horizontal > 20.0D) return;
-        actor.setDeltaMovement(delta.x / horizontal * 0.8D, 0.25D, delta.z / horizontal * 0.8D);
-        presentation.manglerDash(actor);
+        executeOnce(data, mine, part, actor, "dash", gameTick, 40L, () -> {
+            actor.setDeltaMovement(delta.x / horizontal * 0.8D, 0.25D, delta.z / horizontal * 0.8D);
+            presentation.manglerDash(actor);
+        });
     }
 
-    private static void rangedPulse(Mob actor, ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
+    private static void rangedPulse(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
+                                    long gameTick, CrimsonPresentationRuntime presentation) {
         if (actor.distanceToSqr(target) <= 24.0D * 24.0D && due(actor, gameTick, 60L)) {
-            target.hurt(actor.level().damageSources().mobAttack(actor), 6.0F);
-            target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 60, 0, true, false));
-            presentation.pummelerPulse(actor, target);
+            executeOnce(data, mine, part, actor, "pummeler_pulse", gameTick, 60L, () -> {
+                target.hurt(actor.level().damageSources().mobAttack(actor), 6.0F);
+                target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 60, 0, true, false));
+                presentation.pummelerPulse(actor, target);
+            });
         }
     }
 
-    private static void grasp(Mob actor, ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
+    private static void grasp(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, ServerPlayer target,
+                              long gameTick, CrimsonPresentationRuntime presentation) {
         if (actor.distanceToSqr(target) <= 8.0D * 8.0D && due(actor, gameTick, 40L)) {
-            target.hurt(actor.level().damageSources().mobAttack(actor), 5.0F);
-            target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 1, true, false));
-            presentation.krakenGrasp(actor, target);
+            executeOnce(data, mine, part, actor, "kraken_grasp", gameTick, 40L, () -> {
+                target.hurt(actor.level().damageSources().mobAttack(actor), 5.0F);
+                target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 1, true, false));
+                presentation.krakenGrasp(actor, target);
+            });
         }
     }
 
-    private static void phase(Mob actor, long gameTick) {
+    private static void phase(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor, long gameTick) {
         if (!due(actor, gameTick, 40L)) return;
-        float ratio = actor.getHealth() / actor.getMaxHealth();
-        int amplifier = ratio <= 0.25F ? 2 : ratio <= 0.50F ? 1 : 0;
-        actor.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 60, amplifier, true, false));
+        executeOnce(data, mine, part, actor, "osiris_phase", gameTick, 40L, () -> {
+            float ratio = actor.getHealth() / actor.getMaxHealth();
+            int amplifier = ratio <= 0.25F ? 2 : ratio <= 0.50F ? 1 : 0;
+            actor.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 60, amplifier, true, false));
+        });
     }
 
-    private static void bloodlinkAura(Mob actor, ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
+    private static void bloodlinkAura(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+                                      ServerPlayer target, long gameTick, CrimsonPresentationRuntime presentation) {
         if (actor.distanceToSqr(target) <= 10.0D * 10.0D && due(actor, gameTick, 40L)) {
-            target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 80, 0, true, false));
-            presentation.bloodlinkAura(actor);
+            executeOnce(data, mine, part, actor, "bloodlink_aura", gameTick, 40L, () -> {
+                target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 80, 0, true, false));
+                presentation.bloodlinkAura(actor);
+            });
         }
+    }
+
+    private static void executeOnce(PaleMirrorSavedData data, TestMineRecord mine, SiegePartRef part, Mob actor,
+                                    String kind, long gameTick, long ttl, Runnable action) {
+        String key = "crimson:" + kind + ":" + mine.id().value() + ":" + part.slotId() + ":" + actor.getUUID()
+                + ":" + gameTick;
+        ControlledEffectExecutor.executeOnce(data, EffectLease.planned("pm:" + key, key, "crimson", mine.id().value(),
+                part.slotId(), kind, gameTick, gameTick + ttl), gameTick, action);
     }
 
     private static boolean due(Mob actor, long gameTick, long period) {

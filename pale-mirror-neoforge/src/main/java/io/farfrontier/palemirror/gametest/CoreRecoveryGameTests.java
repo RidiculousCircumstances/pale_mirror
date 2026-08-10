@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
+import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.InfectionBiomeStage;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -27,6 +28,10 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomModelData;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -123,8 +128,10 @@ public final class CoreRecoveryGameTests {
                 "v5 controller reference must migrate to the PM anchor reference");
         helper.assertValueEqual(migrated.worldState().scenario(scenarioId).orElseThrow().encounterProfileId(),
                 "pale_mirror:crimson_mine_guards", "v5 migration must preserve the pinned encounter profile");
-        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 13,
-                "migrated snapshot must be rewritten as schema v13");
+        helper.assertValueEqual(migrated.save(new CompoundTag(), level.registryAccess()).getInt("schemaVersion"), 14,
+                "migrated snapshot must be rewritten as schema v14");
+        helper.assertTrue(migrated.effectLeases().leases().isEmpty(),
+                "v13 migration must create an explicitly empty effect ledger rather than infer physical effects");
         helper.assertValueEqual(migrated.testMines().get(mine.id()).encounter().compositionId(), "",
                 "legacy encounters must migrate to an explicitly unpinned composition rather than inventing one");
         helper.assertValueEqual(migrated.worldState().facility(mine.id()).orElseThrow().infectionSource(), InfectionSourceId.CRIMSON,
@@ -165,6 +172,28 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(settlement.currentDefense(), 40, "recovered mine must restore settlement defense");
         helper.assertTrue(mine.mutableCells().stream().allMatch(cell -> level.getBlockState(cell.position()).is(Blocks.DEEPSLATE_BRICKS)),
                 "overlay cleanup must restore only PM-owned baseline cells");
+        helper.succeed();
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void excludedSourceItemIsQuarantinedAndCannotApplyMelee(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        resetPaleMirrorState(level);
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ItemStack legacyCrimsonStack = new ItemStack(Items.NETHERITE_SWORD);
+        legacyCrimsonStack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(5_450_080));
+        helper.assertTrue(ExcludedSourceItemFirewall.blocks(legacyCrimsonStack),
+                "private Crimson item model range must be classified as excluded content");
+        Zombie target = new Zombie(EntityType.ZOMBIE, level);
+        target.setPos(player.getX() + 1.0D, player.getY(), player.getZ());
+        level.addFreshEntity(target);
+        helper.assertTrue(!legacyCrimsonStack.hurtEnemy(target, player),
+                "ItemStack firewall must deny legacy source melee before item behavior runs");
+        PaleMirrorRuntime.forServer(level.getServer()).quarantineLegacyItem(player, "crimson", "minecraft:netherite_sword#model=5450080",
+                "GameTest legacy stack");
+        helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).quarantine().records().size(), 1,
+                "legacy item quarantine must be persisted separately from canonical PM world state");
         helper.succeed();
     }
 
@@ -343,6 +372,8 @@ public final class CoreRecoveryGameTests {
         data.worldRegistry().clear();
         data.audienceMappings().clear();
         data.reconciliationLedger().clear();
+        data.effectLeases().clear();
+        data.quarantine().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().settlements().clear();

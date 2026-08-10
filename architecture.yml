@@ -41,6 +41,10 @@ invariants:
     statement: Missing optional integrations degrade to explicit adapter health states and must not block the core slice.
   - id: source-identity
     statement: Each facility has one immutable canonical InfectionSourceId; adapters and physical overlays must match it, and mixed-source composition requires an explicit future policy.
+  - id: controlled-effects
+    statement: Every PM-authorized non-replayable physical effect has a persisted idempotency lease before execution; a RUNNING lease after restart is visible and never replayed implicitly.
+  - id: excluded-source-items
+    statement: While Crimson and Spore item progression is out of scope, their source stacks cannot craft, pickup, interact, tick, or apply melee behavior; legacy stacks are quarantined without becoming PM state.
 
 critical_flows:
   - id: core-recovery
@@ -86,4 +90,12 @@ critical_flows:
   - id: pm-spore-global-isolation
     path: exact Spore pin -> top built-in no-spawn datapack plus isolated global-handler mixins -> entity-join provenance firewall -> PM-local actor materialization only
     owner: neoforge SporeRuntimeFirewall and the spore_sandbox built-in pack
+    verification: critical-code
+  - id: pm-controlled-effect-lease
+    path: PM actor action -> persisted effect lease -> physical bounded effect -> terminal receipt -> restart deduplication/compaction
+    owner: neoforge ControlledEffectExecutor and EffectLeaseLedger
+    verification: critical-code
+  - id: pm-excluded-source-item-firewall
+    path: source item stack -> interaction/craft/pickup/inventory/melee boundary -> denied action -> quarantine diagnostic
+    owner: neoforge ExcludedSourceItemFirewall, ItemStack mixin and event observers
     verification: critical-code

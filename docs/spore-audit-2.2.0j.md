@@ -59,7 +59,7 @@ site-local forms.
   over registered PM references;
 - a bounded PM executor selects only a nearby player inside the same registered
   site and applies profile-owned damage/sound/particle presentation on a
-  persisted cooldown. Human/Husk forms follow a fixed safe patrol lattice;
+  persisted cooldown and persisted PM effect lease. Human/Husk forms follow a fixed safe patrol lattice;
   Braiomil takes one safe PM step toward a player; Spitter stays stationary
   and uses PM ranged pressure. No actor uses native navigation, targeting,
   projectiles, infection, evolution or terrain work;
@@ -75,7 +75,8 @@ The encounter datapack uses exact-tier compositions (`FOOTHOLD`, `INFESTED`,
 desired revision, then the chosen composition id and actor refs are persisted
 in `EncounterRecord`. The translator reads that record, not the live datapack,
 while the job is executing; reload therefore cannot reshuffle an active site.
-Schema v13 adds this pin, after v12 added independent PM movement scheduling.
+Schema v14 adds the crash-safe effect lease ledger, after v13 added this
+composition pin and v12 added independent PM movement scheduling.
 
 The PM vanilla anchor remains the unique controller.  It alone converts an
 observed destruction into `RECOVERING`; Spore actor observations cannot alter
@@ -98,6 +99,8 @@ The Spore GameTest profile boots the checksum-pinned JAR and proves:
    never respawns on a later desired revision; and
 7. unmanaged Spore entities are rejected at the server entity boundary; and
 8. controller clearance removes remaining native forms through PM cleanup.
+9. a constrained native attack is recorded as a completed PM effect lease and
+   survives a SavedData round trip, so it cannot be replayed after restart.
 
 `sporeIntegrationHarness` additionally installs a clean NeoForge dedicated
 runtime, starts the final packaged PM JAR next to the pinned Spore JAR,

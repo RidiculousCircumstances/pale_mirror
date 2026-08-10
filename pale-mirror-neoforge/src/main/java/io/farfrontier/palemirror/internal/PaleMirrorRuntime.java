@@ -59,6 +59,7 @@ public final class PaleMirrorRuntime {
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
+        if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         AdapterRegistry.crimson().verifySandbox(server);
     }
 
@@ -75,6 +76,9 @@ public final class PaleMirrorRuntime {
         observePlayers();
         reconcileScenarioCapabilities();
         reconcileMaterialization();
+        long gameTick = server.overworld().getGameTime();
+        if (data.effectLeases().expireDue(gameTick)) data.setDirty();
+        if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
         AdapterRegistry.crimson().tickRuntime(server, data);
         AdapterRegistry.spore().tickRuntime(server, data);
     }
@@ -152,7 +156,15 @@ public final class PaleMirrorRuntime {
     public String status() {
         return "step=" + data.worldState().simulationStep() + ", facilities=" + data.worldState().facilities().size()
                 + ", settlements=" + data.worldState().settlements().size() + ", scenarios=" + data.worldState().scenarios().size()
-                + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count();
+                + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count()
+                + ", effectLeases=" + data.effectLeases().leases().size() + ", quarantine=" + data.quarantine().records().size();
+    }
+
+    /** Records a legacy source stack without granting it PM authority or deleting player data. */
+    public void quarantineLegacyItem(ServerPlayer player, String sourceId, String fingerprint, String reason) {
+        data.quarantine().observe(sourceId, io.farfrontier.palemirror.internal.quarantine.QuarantineKind.ITEM_STACK,
+                fingerprint, player.getUUID(), server.overworld().getGameTime(), reason);
+        data.setDirty();
     }
 
     public String inspectObject(String objectId) {

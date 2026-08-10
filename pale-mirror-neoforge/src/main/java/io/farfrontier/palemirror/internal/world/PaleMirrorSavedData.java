@@ -29,6 +29,12 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationOperati
 import io.farfrontier.palemirror.internal.materialization.MaterializationOperationType;
 import io.farfrontier.palemirror.internal.materialization.OperationState;
 import io.farfrontier.palemirror.internal.observation.ReconciliationLedger;
+import io.farfrontier.palemirror.internal.effect.EffectLease;
+import io.farfrontier.palemirror.internal.effect.EffectLeaseLedger;
+import io.farfrontier.palemirror.internal.effect.EffectLeaseState;
+import io.farfrontier.palemirror.internal.quarantine.QuarantineKind;
+import io.farfrontier.palemirror.internal.quarantine.QuarantineLedger;
+import io.farfrontier.palemirror.internal.quarantine.QuarantineRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -42,24 +48,29 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 13;
+    static final int CURRENT_SCHEMA = 14;
 
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
     private final ReconciliationLedger reconciliationLedger;
     private final WorldObjectRegistry worldRegistry;
+    private final EffectLeaseLedger effectLeases;
+    private final QuarantineLedger quarantine;
     public PaleMirrorSavedData() {
-        this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry());
+        this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
+                new EffectLeaseLedger(), new QuarantineLedger());
     }
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
-                                WorldObjectRegistry worldRegistry) {
+                                WorldObjectRegistry worldRegistry, EffectLeaseLedger effectLeases, QuarantineLedger quarantine) {
         this.worldState = worldState;
         this.testMines = testMines;
         this.audienceMappings = audienceMappings;
         this.reconciliationLedger = reconciliationLedger;
         this.worldRegistry = worldRegistry;
+        this.effectLeases = effectLeases;
+        this.quarantine = quarantine;
     }
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
@@ -90,6 +101,10 @@ public final class PaleMirrorSavedData extends SavedData {
     public Map<String, StoryAudienceId> audienceMappings() { return audienceMappings; }
     public ReconciliationLedger reconciliationLedger() { return reconciliationLedger; }
     public WorldObjectRegistry worldRegistry() { return worldRegistry; }
+    /** Physical-effect metadata only; domain state remains the canonical outcome owner. */
+    public EffectLeaseLedger effectLeases() { return effectLeases; }
+    /** Legacy foreign objects are diagnosed here, never adopted as PM state. */
+    public QuarantineLedger quarantine() { return quarantine; }
     public void registerTestMine(TestMineRecord mine) {
         worldRegistry.register(mine.object());
         testMines.put(mine.id(), mine);
@@ -117,7 +132,18 @@ public final class PaleMirrorSavedData extends SavedData {
         }
         List<String> observations = new ArrayList<>();
         for (Tag element : tag.getList("reconciledObservations", Tag.TAG_STRING)) observations.add(element.getAsString());
-        return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry);
+        Map<String, EffectLease> leases = new LinkedHashMap<>();
+        for (Tag element : tag.getList("effectLeases", Tag.TAG_COMPOUND)) {
+            EffectLease lease = readEffectLease((CompoundTag) element);
+            leases.put(lease.id(), lease);
+        }
+        Map<String, QuarantineRecord> quarantine = new LinkedHashMap<>();
+        for (Tag element : tag.getList("quarantine", Tag.TAG_COMPOUND)) {
+            QuarantineRecord record = readQuarantine((CompoundTag) element);
+            quarantine.put(record.id(), record);
+        }
+        return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
+                new EffectLeaseLedger(leases), new QuarantineLedger(quarantine));
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " cannot be migrated to schema "
@@ -153,7 +179,58 @@ public final class PaleMirrorSavedData extends SavedData {
         ListTag observations = new ListTag();
         reconciliationLedger.appliedIds().forEach(value -> observations.add(net.minecraft.nbt.StringTag.valueOf(value)));
         tag.put("reconciledObservations", observations);
+        ListTag effectLeases = new ListTag();
+        this.effectLeases.leases().forEach(lease -> effectLeases.add(writeEffectLease(lease)));
+        tag.put("effectLeases", effectLeases);
+        ListTag quarantine = new ListTag();
+        this.quarantine.records().forEach(record -> quarantine.add(writeQuarantine(record)));
+        tag.put("quarantine", quarantine);
         return tag;
+    }
+
+    private static CompoundTag writeEffectLease(EffectLease lease) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("id", lease.id());
+        tag.putString("key", lease.idempotencyKey());
+        tag.putString("source", lease.sourceId());
+        tag.putString("facility", lease.facilityId());
+        tag.putString("slot", lease.actorSlotId());
+        tag.putString("kind", lease.kind());
+        tag.putLong("created", lease.createdAtGameTick());
+        tag.putLong("expires", lease.expiresAtGameTick());
+        tag.putString("state", lease.state().name());
+        tag.putLong("finished", lease.finishedAtGameTick());
+        if (lease.nativeReference() != null) tag.putUUID("native", lease.nativeReference());
+        tag.putString("diagnostic", lease.diagnostic());
+        return tag;
+    }
+
+    private static EffectLease readEffectLease(CompoundTag tag) {
+        return new EffectLease(tag.getString("id"), tag.getString("key"), tag.getString("source"),
+                tag.getString("facility"), tag.getString("slot"), tag.getString("kind"), tag.getLong("created"),
+                tag.getLong("expires"), EffectLeaseState.valueOf(tag.getString("state")), tag.getLong("finished"),
+                tag.hasUUID("native") ? tag.getUUID("native") : null, tag.getString("diagnostic"));
+    }
+
+    private static CompoundTag writeQuarantine(QuarantineRecord record) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("id", record.id());
+        tag.putString("source", record.sourceId());
+        tag.putString("kind", record.kind().name());
+        tag.putString("fingerprint", record.fingerprint());
+        if (record.ownerId() != null) tag.putUUID("owner", record.ownerId());
+        tag.putLong("firstSeen", record.firstSeenGameTick());
+        tag.putLong("lastSeen", record.lastSeenGameTick());
+        tag.putInt("observations", record.observations());
+        tag.putString("diagnostic", record.diagnostic());
+        return tag;
+    }
+
+    private static QuarantineRecord readQuarantine(CompoundTag tag) {
+        return new QuarantineRecord(tag.getString("id"), tag.getString("source"),
+                QuarantineKind.valueOf(tag.getString("kind")), tag.getString("fingerprint"),
+                tag.hasUUID("owner") ? tag.getUUID("owner") : null, tag.getLong("firstSeen"), tag.getLong("lastSeen"),
+                tag.getInt("observations"), tag.getString("diagnostic"));
     }
 
     private static CompoundTag writeState(WorldState state) {

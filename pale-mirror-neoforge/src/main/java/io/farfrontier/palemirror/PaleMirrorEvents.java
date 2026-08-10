@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.integration.ActorDamageResult;
 import io.farfrontier.palemirror.internal.integration.spore.SporeRuntimeFirewall;
+import io.farfrontier.palemirror.internal.integration.item.ExcludedSourceItemFirewall;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
@@ -23,6 +24,9 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -32,6 +36,11 @@ import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
+import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.common.util.TriState;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
@@ -116,6 +125,12 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onLivingAttack(LivingIncomingDamageEvent event) {
+        if (event.getSource().getEntity() instanceof ServerPlayer player
+                && (denyExcludedItem(player, player.getMainHandItem(), "melee attack")
+                || denyExcludedItem(player, player.getOffhandItem(), "melee attack"))) {
+            event.setCanceled(true);
+            return;
+        }
         String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
         if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null
                 && !PaleMirrorRuntime.forServer(event.getEntity().level().getServer()).controllerVulnerable(objectId)) {
@@ -135,6 +150,69 @@ public final class PaleMirrorEvents {
             adapter.presentDamage(event.getEntity());
             adapter.presentAttack(event.getSource().getEntity());
         });
+    }
+
+    @SubscribeEvent
+    public static void onExcludedRightClickItem(PlayerInteractEvent.RightClickItem event) {
+        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "right click")) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onExcludedRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "use on block")) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "use on entity")) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (denyExcludedItem(event.getEntity(), event.getItemStack(), "specific entity use")) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onExcludedItemUse(LivingEntityUseItemEvent.Start event) {
+        if (event.getEntity() instanceof ServerPlayer player && denyExcludedItem(player, event.getItem(), "held use")) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onExcludedItemPickup(ItemEntityPickupEvent.Pre event) {
+        if (event.getPlayer() instanceof ServerPlayer player && denyExcludedItem(player, event.getItemEntity().getItem(), "pickup")) {
+            event.setCanPickup(TriState.FALSE);
+        }
+    }
+
+    /** Recipe events are post-craft; zeroing the live output prevents excluded stacks entering the inventory. */
+    @SubscribeEvent
+    public static void onExcludedCraft(PlayerEvent.ItemCraftedEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && denyExcludedItem(player, event.getCrafting(), "craft output")) {
+            event.getCrafting().setCount(0);
+            player.containerMenu.broadcastChanges();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onExcludedSmelt(PlayerEvent.ItemSmeltedEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && denyExcludedItem(player, event.getSmelting(), "smelt output")) {
+            event.getSmelting().setCount(0);
+            player.containerMenu.broadcastChanges();
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -218,6 +296,16 @@ public final class PaleMirrorEvents {
 
     private static StoryAudienceId audienceFor(CommandSourceStack source, PaleMirrorRuntime runtime) {
         return source.getEntity() instanceof ServerPlayer player ? runtime.audienceFor(player) : runtime.defaultAudience();
+    }
+
+    private static boolean denyExcludedItem(Player player, ItemStack stack, String operation) {
+        return ExcludedSourceItemFirewall.classify(stack).map(blocked -> {
+            if (player instanceof ServerPlayer serverPlayer) {
+                PaleMirrorRuntime.forServer(serverPlayer.getServer()).quarantineLegacyItem(serverPlayer, blocked.sourceId(),
+                        blocked.fingerprint(), "Excluded source item attempted " + operation);
+            }
+            return true;
+        }).orElse(false);
     }
 
     private static int registerThreatSite(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context,

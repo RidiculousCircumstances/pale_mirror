@@ -14,6 +14,9 @@ Canonical world simulation, scenarios, materialization and reconciliation for Fa
 config="pale_mirror.spore.mixins.json"
 requiredMods=["spore"]
 
+[[mixins]]
+config="pale_mirror.item_firewall.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"

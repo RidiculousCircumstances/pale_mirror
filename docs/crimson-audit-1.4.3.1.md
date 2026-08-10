@@ -125,6 +125,10 @@ health phase; Bloodlinks use a local weakness aura. Ravager, Ghast, Phantom and
 Bloodlink autonomous AI is disabled where needed. No form calls upstream
 Bloodlink, raid, terrain conversion, global-score or player functions.
 
+Each non-replayable siege action now passes through a persisted PM effect lease
+before it applies movement, damage or status. A lease still `RUNNING` after a
+restart is retained as an explicit unknown outcome and is not executed again.
+
 All private identifiers are confined to
 `internal/integration/crimson`. PM stores the actor UUID, slot, object ID, and
 job ID; death becomes a typed observation and never resolves the PM controller.
