@@ -43,11 +43,15 @@ public final class RegionalJournal {
                     .sorted().reduce((left, right) -> left + ", " + right).orElse("none");
             return "community=" + community.id().value() + ", place=" + place.id().value() + "["
                     + place.recognition() + "/" + place.observationFreshness() + "/" + place.lastReliability() + "]"
-                    + ", population=" + community.population() + ", iron=" + iron.stock() + "/" + iron.capacity()
+                    + ", population=" + data.worldState().population(community.id()) + ", iron=" + iron.stock() + "/" + iron.capacity()
                     + " flow=" + iron.netFlow() + " reserve=" + reserve + " availability=" + iron.availability()
                     + ", policy=rationing:" + community.rationing() + ",supplyRequested:" + community.supplyRequested()
                     + ",crisis:" + community.crisisState() + ", defence=" + security.defenceReadiness() + "/"
                     + security.baseDefence() + " guards=" + security.guardCapability() + ":" + security.registeredGuards()
+                    + ", populationGroups=" + data.worldState().populationGroups(community.id()).stream()
+                    .map(group -> group.id() + ":" + group.disposition() + "=" + group.size()).toList()
+                    + ", emergency=" + data.worldState().emergencyWindow(community.id())
+                    .map(window -> window.state() + "@" + window.deadlineStep()).orElse("none")
                     + ", contracts=" + routes;
         } catch (IllegalArgumentException ignored) {
             return "Invalid settlement id " + requestedId;
@@ -81,12 +85,16 @@ public final class RegionalJournal {
         var iron = data.worldState().economy(community.id()).orElseThrow().require(ResourceKind.IRON);
         var security = data.worldState().security(community.id()).orElseThrow();
         String reserve = iron.reserveSteps().isPresent() ? Long.toString(iron.reserveSteps().getAsLong()) : "∞";
-        player.sendSystemMessage(Component.literal("Ironhill — population " + community.population() + ", defence "
+        player.sendSystemMessage(Component.literal("Ironhill — population " + data.worldState().population(community.id()) + ", defence "
                 + security.defenceReadiness() + "/" + security.baseDefence() + ", iron " + iron.stock() + "/"
                 + iron.capacity() + ", flow " + iron.netFlow() + ", reserve " + reserve + ", "
                 + iron.availability() + ", policy " + community.crisisState()));
         AdapterRegistry.scenarioJournalCommand().ifPresent(command -> player.sendSystemMessage(
                 action("[Open regional journal]", command).append(Component.literal(" — presentation only; PM owns state."))));
+        data.worldState().emergencyWindow(community.id()).filter(window ->
+                window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).ifPresent(window ->
+                player.sendSystemMessage(action("[Begin evacuation]", "/pale_mirror settlement evacuate " + community.id().value())
+                        .append(Component.literal(" — intervention window closes at simulation step " + window.deadlineStep() + "."))));
         scenarioLine(data, player, region.communityId(), audiences.apply(player));
         return true;
     }

@@ -45,4 +45,12 @@ public final class SettlementPlace {
         lastReliability = Objects.requireNonNull(reliability, "reliability");
         return true;
     }
+    public void setOccupancy(OccupancyState value) { occupancy = Objects.requireNonNull(value, "value"); }
+    public void setStructuralIntegrity(StructuralIntegrity value) { structuralIntegrity = Objects.requireNonNull(value, "value"); }
+    public boolean observeStructuralIntegrity(StructuralIntegrity value) {
+        Objects.requireNonNull(value, "value");
+        if (value.ordinal() <= structuralIntegrity.ordinal()) return false;
+        structuralIntegrity = value;
+        return true;
+    }
 }

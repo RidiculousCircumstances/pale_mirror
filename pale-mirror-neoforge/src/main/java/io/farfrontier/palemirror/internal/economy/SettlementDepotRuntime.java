@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.domain.SiteCapabilityType;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
+import io.farfrontier.palemirror.domain.StructuralIntegrity;
 import io.farfrontier.palemirror.internal.world.MutableCell;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import net.minecraft.core.BlockPos;
@@ -58,8 +59,18 @@ public final class SettlementDepotRuntime {
                 continue;
             }
             ServerLevel level = level(server, depot.dimensionId());
-            if (level == null || !level.hasChunkAt(depot.anchor()) || depot.state() == SettlementDepotState.ACTIVE
-                    || depot.state() == SettlementDepotState.BLOCKED) continue;
+            if (level == null || !level.hasChunkAt(depot.anchor()) || depot.state() == SettlementDepotState.BLOCKED) continue;
+            boolean ruined = data.worldState().communityPlaceBinding(depot.communityId())
+                    .flatMap(binding -> data.worldState().place(binding.placeId()))
+                    .map(place -> place.structuralIntegrity() == StructuralIntegrity.RUINED).orElse(false);
+            if (depot.state() == SettlementDepotState.ACTIVE && ruined) {
+                String failure = materializeRuin(level, depot);
+                depot.block(failure == null ? "Settlement place is ruined" : failure);
+                data.worldState().site(depot.siteId()).orElseThrow().setOperationalState(OperationalState.OFFLINE);
+                changed = true;
+                continue;
+            }
+            if (depot.state() == SettlementDepotState.ACTIVE) continue;
             if (depot.state() == SettlementDepotState.PLANNED) {
                 depot.start();
                 changed = true;
@@ -121,6 +132,24 @@ public final class SettlementDepotRuntime {
             String desiredId = BuiltInRegistries.BLOCK.getKey(desired).toString();
             if (!current.equals(desiredId)) level.setBlock(cell.position(), desired.defaultBlockState(), 3);
             if (!blockId(level, cell.position()).equals(desiredId)) return "Supply depot postcondition failed at " + cell.position();
+            cell.markApplied(desiredId);
+        }
+        return null;
+    }
+
+    private static String materializeRuin(ServerLevel level, SettlementDepotRecord depot) {
+        for (MutableCell cell : depot.cells()) {
+            String current = blockId(level, cell.position());
+            if (cell.conflicted() || !current.equals(cell.lastAppliedBlock())) {
+                cell.conflict();
+                return "Ruin overlay conflicts with an unknown depot change at " + cell.position();
+            }
+            Block desired = cell.position().equals(depot.interactionPosition()) ? Blocks.IRON_BARS
+                    : cell.position().equals(depot.anchor().offset(2, 1, 2)) ? Blocks.SOUL_LANTERN
+                    : Blocks.CRACKED_STONE_BRICKS;
+            String desiredId = BuiltInRegistries.BLOCK.getKey(desired).toString();
+            level.setBlock(cell.position(), desired.defaultBlockState(), 3);
+            if (!blockId(level, cell.position()).equals(desiredId)) return "Ruin overlay postcondition failed";
             cell.markApplied(desiredId);
         }
         return null;

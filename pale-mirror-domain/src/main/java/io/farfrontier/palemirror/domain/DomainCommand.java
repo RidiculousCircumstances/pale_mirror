@@ -17,7 +17,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.ValidateRouteContract, DomainCommand.ObserveSettlementPlace,
         DomainCommand.RegisterLivingRegion, DomainCommand.DiscoverLivingRegion,
         DomainCommand.TriggerFacilityInfection, DomainCommand.DepositResource,
-        DomainCommand.WithdrawResource {
+        DomainCommand.WithdrawResource, DomainCommand.BeginSettlementEvacuation {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -104,11 +104,19 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
 
     record ObserveSettlementPlace(WorldObjectId placeId, ObservationFreshness freshness,
                                   EvidenceReliability reliability, int registeredGuards,
+                                  StructuralIntegrity structuralIntegrity,
                                   String observationId, String causationId) implements DomainCommand {
+        public ObserveSettlementPlace(WorldObjectId placeId, ObservationFreshness freshness,
+                                      EvidenceReliability reliability, int registeredGuards,
+                                      String observationId, String causationId) {
+            this(placeId, freshness, reliability, registeredGuards, StructuralIntegrity.INTACT,
+                    observationId, causationId);
+        }
         public ObserveSettlementPlace {
             Objects.requireNonNull(placeId, "placeId");
             Objects.requireNonNull(freshness, "freshness");
             Objects.requireNonNull(reliability, "reliability");
+            Objects.requireNonNull(structuralIntegrity, "structuralIntegrity");
             Objects.requireNonNull(observationId, "observationId");
             Objects.requireNonNull(causationId, "causationId");
             if (registeredGuards < 0) throw new IllegalArgumentException("Registered guards must not be negative");
@@ -120,7 +128,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
                                 CommunityPlaceBinding binding, SettlementEconomy economy,
                                 SettlementSecurity security, SettlementPolicy policy, List<WorldSite> sites,
                                 List<SiteAffiliation> affiliations, List<SiteCapability> capabilities,
-                                List<RouteContract> routeContracts) implements DomainCommand {
+                                List<RouteContract> routeContracts, List<PopulationGroup> populationGroups) implements DomainCommand {
         public RegisterLivingRegion {
             Objects.requireNonNull(region, "region");
             facilities = List.copyOf(facilities);
@@ -134,6 +142,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             affiliations = List.copyOf(affiliations);
             capabilities = List.copyOf(capabilities);
             routeContracts = List.copyOf(routeContracts);
+            populationGroups = List.copyOf(populationGroups);
         }
     }
 
@@ -171,6 +180,15 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             if (amount <= 0 || minimumRemaining < 0 || transferId.isBlank()) {
                 throw new IllegalArgumentException("Invalid resource withdrawal");
             }
+        }
+    }
+
+    record BeginSettlementEvacuation(WorldObjectId communityId, StoryAudienceId audience,
+                                     String causationId) implements DomainCommand {
+        public BeginSettlementEvacuation {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(causationId, "causationId");
         }
     }
 }

@@ -23,6 +23,8 @@ import io.farfrontier.palemirror.domain.SiteAffiliation;
 import io.farfrontier.palemirror.domain.SiteAffiliationRole;
 import io.farfrontier.palemirror.domain.SiteCapability;
 import io.farfrontier.palemirror.domain.SiteCapabilityType;
+import io.farfrontier.palemirror.domain.PopulationGroup;
+import io.farfrontier.palemirror.domain.SettlementCohort;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
@@ -102,7 +104,10 @@ public final class CampaignRegionBootstrapper {
                 MINE17_ROUTE, RED_VALLEY_ROUTE, definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1);
         FacilityState primary = new FacilityState(MINE17, definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
         FacilityState alternate = new FacilityState(RED_VALLEY, definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
-        SettlementCommunity community = new SettlementCommunity(IRONHILL, population);
+        SettlementCommunity community = new SettlementCommunity(IRONHILL);
+        int guards = Math.min(population, observed.registeredGuards());
+        PopulationGroup residents = PopulationGroup.residents("pale_mirror:ironhill_residents", IRONHILL, placeId,
+                java.util.Map.of(SettlementCohort.CIVILIANS, population - guards, SettlementCohort.GUARDS, guards));
         SettlementPlace place = new SettlementPlace(placeId);
         int rationedDemand = Math.min(ironDemand, Math.max(0,
                 scale(definition.rationedIronDemand(), population, definition.population())));
@@ -133,7 +138,7 @@ public final class CampaignRegionBootstrapper {
                         definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED));
         commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
                 community, place, new CommunityPlaceBinding(IRONHILL, placeId), economy, security, policy, sites, affiliations,
-                capabilities, routes));
+                capabilities, routes, List.of(residents)));
         data.campaignRegions().put(IRONHILL_ID, new CampaignRegionRecord(IRONHILL_ID,
                 observed.dimensionId(), placeId, observed.anchor(), mineColumn(server, observed.anchor(), PRIMARY_MINE_DISTANCE),
                 mineColumn(server, observed.anchor(), -ALTERNATE_MINE_DISTANCE), null, null,

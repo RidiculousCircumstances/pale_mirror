@@ -16,6 +16,7 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
+import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
 
 /**
  * Vanilla-signals-only village observer.  Integrated Villages structures are
@@ -41,7 +42,8 @@ public final class VanillaVillageSettlementAdapter implements SettlementAdapter 
 
     @Override
     public List<SettlementObservation> observeNearby(ServerLevel level, BlockPos focus) {
-        List<Villager> villagers = level.getEntitiesOfClass(Villager.class, searchBox(focus));
+        List<Villager> villagers = level.getEntitiesOfClass(Villager.class, searchBox(focus),
+                villager -> !RefugeeCampRuntime.isRepresentative(villager));
         if (villagers.size() < MIN_VILLAGERS) return List.of();
         // The player/focus location establishes the local observation window.
         // Do not let a second loaded village win merely because its bell has a

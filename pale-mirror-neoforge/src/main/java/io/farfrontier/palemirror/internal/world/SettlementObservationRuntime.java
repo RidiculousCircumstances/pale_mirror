@@ -28,6 +28,13 @@ public final class SettlementObservationRuntime {
             for (var observation : AdapterRegistry.observeSettlements(player.serverLevel(), player.blockPosition())) {
                 changed |= data.observeSettlement(observation);
                 SettlementObservationRecord record = data.settlementObservations().get(observation.settlementId());
+                if (record != null) {
+                    changed |= record.captureStructure(player.serverLevel());
+                    var occupancy = data.worldState().place(record.id())
+                            .map(io.farfrontier.palemirror.domain.SettlementPlace::occupancy)
+                            .orElse(io.farfrontier.palemirror.domain.OccupancyState.INHABITED);
+                    changed |= record.evaluateStructure(player.serverLevel(), occupancy);
+                }
                 changed |= reconcile(data, commands, record, observation.observedAtGameTime());
             }
         }
@@ -54,6 +61,16 @@ public final class SettlementObservationRuntime {
         return true;
     }
 
+    public static boolean observePlayerBlockDamage(PaleMirrorSavedData data, DomainCommandProcessor commands,
+                                                   net.minecraft.server.level.ServerLevel level,
+                                                   net.minecraft.core.BlockPos position, java.util.UUID playerId) {
+        SettlementObservationRecord record = data.settlementObservations().values().stream()
+                .filter(value -> value.contains(level.dimension().location().toString(), position)).findFirst().orElse(null);
+        if (record == null || !record.recordStructuralDamage(position, DamageAttribution.PLAYER, level.getGameTime())) return false;
+        reconcile(data, commands, record, level.getGameTime());
+        return true;
+    }
+
     private static boolean reconcile(PaleMirrorSavedData data, DomainCommandProcessor commands,
                                      SettlementObservationRecord record, long gameTime) {
         if (record == null || data.worldState().place(record.id()).isEmpty()) return false;
@@ -61,7 +78,7 @@ public final class SettlementObservationRuntime {
         String projectionId = record.lastEvidenceId() + ":" + freshness + ":" + record.reliability()
                 + ":guards=" + record.registeredGuards();
         return !commands.execute(data.worldState(), new DomainCommand.ObserveSettlementPlace(record.id(),
-                freshness, record.reliability(), record.registeredGuards(), projectionId,
+                freshness, record.reliability(), record.registeredGuards(), record.inferredIntegrity(), projectionId,
                 "adapter:settlement:" + record.lastEvidenceType() + ":" + record.lastDamageAttribution())).isEmpty();
     }
 

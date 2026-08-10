@@ -195,7 +195,7 @@ class SimulationEngineTest {
         WorldState state = new WorldState();
         DomainServices services = new DomainServices();
         LivingRegionState region = registerLivingRegion(state, services, 24);
-        int population = state.community(region.communityId()).orElseThrow().population();
+        int population = state.population(region.communityId());
 
         assertEquals(2, services.commands().execute(state, new DomainCommand.ObserveSettlementPlace(region.placeId(),
                 ObservationFreshness.CURRENT, EvidenceReliability.CONFIRMED, 0,
@@ -204,7 +204,7 @@ class SimulationEngineTest {
                 ObservationFreshness.CURRENT, EvidenceReliability.CONFIRMED, 0,
                 "death:guard-0", "player:guard-death")).isEmpty());
         assertEquals(GuardCapability.ABSENT, state.security(region.communityId()).orElseThrow().guardCapability());
-        assertEquals(population, state.community(region.communityId()).orElseThrow().population());
+        assertEquals(population, state.population(region.communityId()));
     }
 
     @Test
@@ -283,7 +283,7 @@ class SimulationEngineTest {
         services.commands().execute(state, new DomainCommand.RegisterLivingRegion(region,
                 java.util.List.of(new FacilityState(primaryMine, TEST_SOURCE, 18, 99, 0),
                         new FacilityState(alternateMine, TEST_SOURCE, 18, 99, 0)),
-                new SettlementCommunity(communityId, 80), new SettlementPlace(placeId),
+                new SettlementCommunity(communityId), new SettlementPlace(placeId),
                 new CommunityPlaceBinding(communityId, placeId),
                 new SettlementEconomy(communityId, java.util.Map.of(ResourceKind.IRON,
                         new ResourceAccount(96, ironStock, 0, 12, 9))),
@@ -300,7 +300,9 @@ class SimulationEngineTest {
                 java.util.List.of(new RouteContract(primaryRoute, primarySite, receivingSite, RouteProvider.PALE_MIRROR,
                                 ResourceKind.IRON, 18, 8, 24, RouteContractStatus.PLANNED),
                         new RouteContract(alternateRoute, alternateSite, receivingSite, RouteProvider.CREATE,
-                                ResourceKind.IRON, 18, 8, 24, RouteContractStatus.PLANNED))));
+                        ResourceKind.IRON, 18, 8, 24, RouteContractStatus.PLANNED)),
+                java.util.List.of(PopulationGroup.residents("pale_mirror:test_residents", communityId, placeId,
+                        java.util.Map.of(SettlementCohort.CIVILIANS, 78, SettlementCohort.GUARDS, 2)))));
         return region;
     }
 }

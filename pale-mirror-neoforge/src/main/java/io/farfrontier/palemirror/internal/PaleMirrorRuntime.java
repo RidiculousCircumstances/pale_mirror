@@ -35,6 +35,7 @@ import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
 import io.farfrontier.palemirror.internal.economy.ResourceTransferRuntime;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
+import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
 import io.farfrontier.palemirror.domain.SourceGateStatus;
 import io.farfrontier.palemirror.internal.observation.Observation;
 import io.farfrontier.palemirror.internal.observation.ObservationReconciler;
@@ -90,6 +91,7 @@ public final class PaleMirrorRuntime {
         CampaignRegionBootstrapper.tick(server, data, commands);
         if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
         if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
+        if (RefugeeCampRuntime.tick(server, data)) data.setDirty();
         if (server.overworld().getGameTime() % LOGISTICS_OBSERVATION_INTERVAL_TICKS == 0) {
             handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands, LOGISTICS_PROOF_WINDOW_STEPS));
         }
@@ -137,6 +139,17 @@ public final class PaleMirrorRuntime {
             boolean changed = !commands.execute(data.worldState(), new DomainCommand.AcceptScenario(scenarioId)).isEmpty();
             if (changed) data.setDirty();
             return changed;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    public boolean beginSettlementEvacuation(String communityId, StoryAudienceId audience, String causationId) {
+        try {
+            List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.BeginSettlementEvacuation(
+                    new WorldObjectId(communityId), audience, causationId));
+            if (!events.isEmpty()) data.setDirty();
+            return !events.isEmpty();
         } catch (IllegalArgumentException ignored) {
             return false;
         }
@@ -260,6 +273,10 @@ public final class PaleMirrorRuntime {
                                     + data.worldState().facility(mine.id()).map(FacilityState::desiredRevision).orElse(0L),
                                     mine.id(), slot, "block:" + position.asLong())));
         }
+    }
+
+    public void settlementBlockDamaged(ServerLevel level, net.minecraft.core.BlockPos position, UUID playerId) {
+        if (SettlementObservationRuntime.observePlayerBlockDamage(data, commands, level, position, playerId)) data.setDirty();
     }
 
     public List<DomainEvent> publish(Observation observation) {

@@ -33,6 +33,11 @@ import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
 import io.farfrontier.palemirror.domain.WorldState;
+import io.farfrontier.palemirror.domain.PopulationGroup;
+import io.farfrontier.palemirror.domain.PopulationDisposition;
+import io.farfrontier.palemirror.domain.SettlementCohort;
+import io.farfrontier.palemirror.domain.SettlementEmergencyWindow;
+import io.farfrontier.palemirror.domain.EmergencyWindowState;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -53,6 +58,8 @@ final class RegionalStateCodec {
         tag.put("siteCapabilities", list(state.siteCapabilities().stream().map(RegionalStateCodec::writeCapability).toList()));
         tag.put("routeContracts", list(state.routeContracts().stream().map(RegionalStateCodec::writeContract).toList()));
         tag.put("livingRegions", list(state.livingRegions().stream().map(RegionalStateCodec::writeRegion).toList()));
+        tag.put("populationGroups", list(state.populationGroups().stream().map(RegionalStateCodec::writePopulationGroup).toList()));
+        tag.put("emergencyWindows", list(state.emergencyWindows().stream().map(RegionalStateCodec::writeEmergencyWindow).toList()));
     }
 
     static void read(CompoundTag tag, WorldState state) {
@@ -67,12 +74,13 @@ final class RegionalStateCodec {
         for (Tag value : tag.getList("siteCapabilities", Tag.TAG_COMPOUND)) state.putSiteCapability(readCapability((CompoundTag) value));
         for (Tag value : tag.getList("routeContracts", Tag.TAG_COMPOUND)) state.putRouteContract(readContract((CompoundTag) value));
         for (Tag value : tag.getList("livingRegions", Tag.TAG_COMPOUND)) state.putLivingRegion(readRegion((CompoundTag) value));
+        for (Tag value : tag.getList("populationGroups", Tag.TAG_COMPOUND)) state.putPopulationGroup(readPopulationGroup((CompoundTag) value));
+        for (Tag value : tag.getList("emergencyWindows", Tag.TAG_COMPOUND)) state.putEmergencyWindow(readEmergencyWindow((CompoundTag) value));
     }
 
     private static CompoundTag writeCommunity(SettlementCommunity value) {
         CompoundTag tag = new CompoundTag();
         tag.putString("id", value.id().value());
-        tag.putInt("population", value.population());
         tag.putBoolean("rationing", value.rationing());
         tag.putBoolean("supplyRequested", value.supplyRequested());
         tag.putString("crisis", value.crisisState().name());
@@ -81,7 +89,7 @@ final class RegionalStateCodec {
     }
 
     private static SettlementCommunity readCommunity(CompoundTag tag) {
-        return new SettlementCommunity(id(tag, "id"), tag.getInt("population"), tag.getBoolean("rationing"),
+        return new SettlementCommunity(id(tag, "id"), tag.getBoolean("rationing"),
                 tag.getBoolean("supplyRequested"), CrisisState.valueOf(tag.getString("crisis")),
                 tag.getInt("stableSupplySteps"));
     }
@@ -174,13 +182,17 @@ final class RegionalStateCodec {
         tag.putLong("requestReserveSteps", value.requestReserveSteps());
         tag.putInt("defenceLossPerUnavailableStep", value.defenceLossPerUnavailableStep());
         tag.putInt("stableStepsToRecover", value.stableStepsToRecover());
+        tag.putInt("evacuationDefenceThreshold", value.evacuationDefenceThreshold());
+        tag.putLong("emergencyGraceSteps", value.emergencyGraceSteps());
+        tag.putLong("evacuationDurationSteps", value.evacuationDurationSteps());
         return tag;
     }
 
     private static SettlementPolicy readPolicy(CompoundTag tag) {
         return new SettlementPolicy(id(tag, "community"), tag.getLong("rationReserveSteps"),
                 tag.getLong("requestReserveSteps"), tag.getInt("defenceLossPerUnavailableStep"),
-                tag.getInt("stableStepsToRecover"));
+                tag.getInt("stableStepsToRecover"), tag.getInt("evacuationDefenceThreshold"),
+                tag.getLong("emergencyGraceSteps"), tag.getLong("evacuationDurationSteps"));
     }
 
     private static CompoundTag writeSite(WorldSite value) {
@@ -270,6 +282,54 @@ final class RegionalStateCodec {
                 id(tag, "primaryFacility"), id(tag, "alternateFacility"), id(tag, "primaryRoute"), id(tag, "alternateRoute"),
                 tag.getLong("incidentDelaySteps"), audience, RecognitionState.valueOf(tag.getString("recognition")),
                 tag.getLong("discoveredAtStep"));
+    }
+
+    private static CompoundTag writePopulationGroup(PopulationGroup value) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("id", value.id());
+        tag.putString("community", value.communityId().value());
+        tag.putString("originPlace", value.originPlaceId().value());
+        tag.putString("disposition", value.disposition().name());
+        if (value.currentPlaceId() != null) tag.putString("currentPlace", value.currentPlaceId().value());
+        if (value.hostSiteId() != null) tag.putString("hostSite", value.hostSiteId().value());
+        tag.putLong("transitionDueStep", value.transitionDueStep());
+        tag.putLong("revision", value.revision());
+        ListTag cohorts = new ListTag();
+        value.cohorts().forEach((kind, amount) -> {
+            CompoundTag item = new CompoundTag();
+            item.putString("kind", kind.name());
+            item.putInt("amount", amount);
+            cohorts.add(item);
+        });
+        tag.put("cohorts", cohorts);
+        return tag;
+    }
+
+    private static PopulationGroup readPopulationGroup(CompoundTag tag) {
+        Map<SettlementCohort, Integer> cohorts = new EnumMap<>(SettlementCohort.class);
+        for (Tag value : tag.getList("cohorts", Tag.TAG_COMPOUND)) {
+            CompoundTag item = (CompoundTag) value;
+            cohorts.put(SettlementCohort.valueOf(item.getString("kind")), item.getInt("amount"));
+        }
+        return new PopulationGroup(tag.getString("id"), id(tag, "community"), cohorts, id(tag, "originPlace"),
+                PopulationDisposition.valueOf(tag.getString("disposition")),
+                tag.contains("currentPlace", Tag.TAG_STRING) ? id(tag, "currentPlace") : null,
+                tag.contains("hostSite", Tag.TAG_STRING) ? id(tag, "hostSite") : null,
+                tag.getLong("transitionDueStep"), tag.getLong("revision"));
+    }
+
+    private static CompoundTag writeEmergencyWindow(SettlementEmergencyWindow value) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("community", value.communityId().value());
+        tag.putLong("openedAtStep", value.openedAtStep());
+        tag.putLong("deadlineStep", value.deadlineStep());
+        tag.putString("state", value.state().name());
+        return tag;
+    }
+
+    private static SettlementEmergencyWindow readEmergencyWindow(CompoundTag tag) {
+        return new SettlementEmergencyWindow(id(tag, "community"), tag.getLong("openedAtStep"),
+                tag.getLong("deadlineStep"), EmergencyWindowState.valueOf(tag.getString("state")));
     }
 
     private static ListTag list(java.util.List<CompoundTag> values) {

@@ -623,6 +623,14 @@ and social identity as separate slices before broad natural discovery/worldgen.
 
 ## Product conclusion
 
+### Implemented 0.2d–0.2e boundary
+
+Schema v21 adds the PM-owned Supply Depot and restart-reconcilable physical
+IRON receipts; schema v22 adds PopulationGroup, grace-bound evacuation,
+displacement, representative camps and PM-owned ruin overlays. These are
+settlement-policy consequences, not Narrator state. Arbitrary village blocks
+and ordinary container inventories remain outside PM ownership.
+
 The technical foundation is now good enough that horizontal expansion is the
 main risk: more sources, forms, and adapters could grow without demonstrating
 that the result is an interesting game.

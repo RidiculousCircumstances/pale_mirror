@@ -12,6 +12,10 @@ import io.farfrontier.palemirror.domain.SettlementEvidenceType;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.adapter.SettlementObservation;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerLevel;
+import io.farfrontier.palemirror.domain.OccupancyState;
+import io.farfrontier.palemirror.domain.StructuralIntegrity;
 
 /** Bounded physical evidence and membership; it never becomes a second settlement simulation. */
 public final class SettlementObservationRecord {
@@ -19,6 +23,9 @@ public final class SettlementObservationRecord {
     public static final long CURRENT_MAX_AGE_TICKS = 400;
     public static final long STALE_MAX_AGE_TICKS = 2400;
     public static final int MAX_REPRESENTATIVES = 512;
+    public static final long STRUCTURE_WINDOW_TICKS = 1200;
+    public static final int MAX_STRUCTURE_SAMPLES = 64;
+    public static final int MIN_STRUCTURE_SAMPLES = 16;
 
     private final WorldObjectId id;
     private final String dimensionId;
@@ -39,6 +46,8 @@ public final class SettlementObservationRecord {
     private DamageAttribution lastDamageAttribution;
     private int observedResidentDeaths;
     private int observedGuardDeaths;
+    private final java.util.List<SettlementStructureSampleCell> structureSamples = new java.util.ArrayList<>();
+    private StructuralIntegrity inferredIntegrity = StructuralIntegrity.INTACT;
 
     public SettlementObservationRecord(SettlementObservation observation) {
         this(observation.settlementId(), observation.dimensionId(), observation.anchor(), observation.minBounds(),
@@ -103,6 +112,8 @@ public final class SettlementObservationRecord {
     public DamageAttribution lastDamageAttribution() { return lastDamageAttribution; }
     public int observedResidentDeaths() { return observedResidentDeaths; }
     public int observedGuardDeaths() { return observedGuardDeaths; }
+    public java.util.List<SettlementStructureSampleCell> structureSamples() { return java.util.List.copyOf(structureSamples); }
+    public StructuralIntegrity inferredIntegrity() { return inferredIntegrity; }
     Map<String, SettlementRepresentativeRecord> representatives() { return Map.copyOf(representatives); }
     public int registeredGuards() {
         return (int) representatives.values().stream().filter(value -> value.cohort() == SettlementCohort.GUARDS
@@ -163,9 +174,63 @@ public final class SettlementObservationRecord {
         return true;
     }
 
+    public boolean recordStructuralDamage(BlockPos position, DamageAttribution attribution, long gameTime) {
+        if (structureSamples.stream().noneMatch(value -> value.position().equals(position))) return false;
+        String evidenceId = "settlement-structure:" + position.asLong() + ":" + gameTime;
+        if (evidenceId.equals(lastEvidenceId)) return false;
+        lastEvidenceId = evidenceId;
+        lastEvidenceType = SettlementEvidenceType.STRUCTURAL_DAMAGE;
+        lastDamageAttribution = Objects.requireNonNull(attribution, "attribution");
+        reliability = EvidenceReliability.CONFIRMED;
+        return true;
+    }
+
     public WorldObjectRegistryEntry registryEntry() {
         return new WorldObjectRegistryEntry(id, dimensionId, anchor, minBounds, maxBounds,
                 "minecraft:observed_village", provenance, WorldObjectLifecycle.REPRESENTED);
+    }
+
+    public boolean captureStructure(ServerLevel level) {
+        if (!structureSamples.isEmpty() || loadedDurationTicks < STRUCTURE_WINDOW_TICKS || !lastFullBoundsLoaded) return false;
+        java.util.List<SettlementStructureSampleCell> captured = new java.util.ArrayList<>();
+        for (int y = -2; y <= 5 && captured.size() < MAX_STRUCTURE_SAMPLES; y++) {
+            for (int x = -16; x <= 16 && captured.size() < MAX_STRUCTURE_SAMPLES; x += 4) {
+                for (int z = -16; z <= 16 && captured.size() < MAX_STRUCTURE_SAMPLES; z += 4) {
+                    BlockPos pos = anchor.offset(x, y, z);
+                    if (!contains(dimensionId, pos) || !level.hasChunkAt(pos) || level.getBlockEntity(pos) != null) continue;
+                    var state = level.getBlockState(pos);
+                    if (state.isAir() || state.canBeReplaced()) continue;
+                    captured.add(new SettlementStructureSampleCell(pos,
+                            BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString()));
+                }
+            }
+        }
+        if (captured.size() < MIN_STRUCTURE_SAMPLES) return false;
+        structureSamples.addAll(captured);
+        return true;
+    }
+
+    public boolean evaluateStructure(ServerLevel level, OccupancyState occupancy) {
+        if (structureSamples.size() < MIN_STRUCTURE_SAMPLES || loadedDurationTicks < STRUCTURE_WINDOW_TICKS) return false;
+        int lost = 0;
+        for (SettlementStructureSampleCell cell : structureSamples) {
+            if (!level.hasChunkAt(cell.position())) return false;
+            var current = level.getBlockState(cell.position());
+            if (current.isAir() || current.canBeReplaced()) lost++;
+        }
+        int percentage = lost * 100 / structureSamples.size();
+        StructuralIntegrity next = percentage >= 75 && occupancy == OccupancyState.EMPTY ? StructuralIntegrity.RUINED
+                : percentage >= 25 ? StructuralIntegrity.DAMAGED : StructuralIntegrity.INTACT;
+        if (next.ordinal() <= inferredIntegrity.ordinal()) return false;
+        inferredIntegrity = next;
+        return true;
+    }
+
+    void restoreStructure(java.util.List<SettlementStructureSampleCell> samples, StructuralIntegrity integrity) {
+        if (samples.size() > MAX_STRUCTURE_SAMPLES) throw new IllegalArgumentException("Too many structure samples");
+        structureSamples.clear();
+        structureSamples.addAll(samples);
+        inferredIntegrity = Objects.requireNonNull(integrity, "integrity");
     }
 
     private void incorporateRepresentatives(SettlementObservation observation, long delta) {

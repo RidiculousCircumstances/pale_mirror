@@ -17,6 +17,8 @@ public final class WorldState {
     private final Map<WorldObjectId, SettlementEconomy> economies = new LinkedHashMap<>();
     private final Map<WorldObjectId, SettlementSecurity> securities = new LinkedHashMap<>();
     private final Map<WorldObjectId, SettlementPolicy> settlementPolicies = new LinkedHashMap<>();
+    private final Map<String, PopulationGroup> populationGroups = new LinkedHashMap<>();
+    private final Map<WorldObjectId, SettlementEmergencyWindow> emergencyWindows = new LinkedHashMap<>();
     private final Map<WorldObjectId, WorldSite> sites = new LinkedHashMap<>();
     private final Map<String, SiteAffiliation> siteAffiliations = new LinkedHashMap<>();
     private final Map<String, SiteCapability> siteCapabilities = new LinkedHashMap<>();
@@ -42,6 +44,8 @@ public final class WorldState {
     public Collection<SettlementEconomy> economies() { return economies.values(); }
     public Collection<SettlementSecurity> securities() { return securities.values(); }
     public Collection<SettlementPolicy> settlementPolicies() { return settlementPolicies.values(); }
+    public Collection<PopulationGroup> populationGroups() { return populationGroups.values(); }
+    public Collection<SettlementEmergencyWindow> emergencyWindows() { return emergencyWindows.values(); }
     public Collection<WorldSite> sites() { return sites.values(); }
     public Collection<SiteAffiliation> siteAffiliations() { return siteAffiliations.values(); }
     public Collection<SiteCapability> siteCapabilities() { return siteCapabilities.values(); }
@@ -60,6 +64,13 @@ public final class WorldState {
     public Optional<SettlementEconomy> economy(WorldObjectId communityId) { return Optional.ofNullable(economies.get(communityId)); }
     public Optional<SettlementSecurity> security(WorldObjectId communityId) { return Optional.ofNullable(securities.get(communityId)); }
     public Optional<SettlementPolicy> settlementPolicy(WorldObjectId communityId) { return Optional.ofNullable(settlementPolicies.get(communityId)); }
+    public Optional<PopulationGroup> populationGroup(String id) { return Optional.ofNullable(populationGroups.get(id)); }
+    public List<PopulationGroup> populationGroups(WorldObjectId communityId) {
+        return populationGroups.values().stream().filter(value -> value.communityId().equals(communityId))
+                .sorted(java.util.Comparator.comparing(PopulationGroup::id)).toList();
+    }
+    public int population(WorldObjectId communityId) { return populationGroups(communityId).stream().mapToInt(PopulationGroup::size).sum(); }
+    public Optional<SettlementEmergencyWindow> emergencyWindow(WorldObjectId communityId) { return Optional.ofNullable(emergencyWindows.get(communityId)); }
     public Optional<WorldSite> site(WorldObjectId id) { return Optional.ofNullable(sites.get(id)); }
     public Optional<SiteAffiliation> siteAffiliation(WorldObjectId siteId, SiteAffiliationRole role) {
         List<SiteAffiliation> matches = siteAffiliations(siteId, role);
@@ -84,6 +95,10 @@ public final class WorldState {
     public void putEconomy(SettlementEconomy economy) { economies.put(economy.communityId(), economy); }
     public void putSecurity(SettlementSecurity security) { securities.put(security.communityId(), security); }
     public void putSettlementPolicy(SettlementPolicy policy) { settlementPolicies.put(policy.communityId(), policy); }
+    public void putPopulationGroup(PopulationGroup group) {
+        if (populationGroups.putIfAbsent(group.id(), group) != null) throw new IllegalStateException("Duplicate population group " + group.id());
+    }
+    public void putEmergencyWindow(SettlementEmergencyWindow window) { emergencyWindows.put(window.communityId(), window); }
     public void putSite(WorldSite site) { sites.put(site.id(), site); }
     public void putSiteAffiliation(SiteAffiliation affiliation) {
         siteAffiliations.put(affiliationKey(affiliation.siteId(), affiliation.objectId(), affiliation.role()), affiliation);
@@ -102,6 +117,8 @@ public final class WorldState {
         economies.clear();
         securities.clear();
         settlementPolicies.clear();
+        populationGroups.clear();
+        emergencyWindows.clear();
         sites.clear();
         siteAffiliations.clear();
         siteCapabilities.clear();

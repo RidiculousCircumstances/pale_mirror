@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import io.farfrontier.palemirror.domain.StructuralIntegrity;
 
 /** Schema-v20 codec for bounded typed settlement evidence and representative membership. */
 final class SettlementObservationCodec {
@@ -39,6 +40,15 @@ final class SettlementObservationCodec {
             value.putString("lastDamageAttribution", record.lastDamageAttribution().name());
             value.putInt("residentDeaths", record.observedResidentDeaths());
             value.putInt("guardDeaths", record.observedGuardDeaths());
+            value.putString("inferredIntegrity", record.inferredIntegrity().name());
+            ListTag structure = new ListTag();
+            record.structureSamples().forEach(sample -> {
+                CompoundTag cell = new CompoundTag();
+                cell.putLong("pos", sample.position().asLong());
+                cell.putString("baseline", sample.baselineBlock());
+                structure.add(cell);
+            });
+            value.put("structureSamples", structure);
             ListTag representatives = new ListTag();
             record.representatives().values().forEach(representative -> {
                 CompoundTag member = new CompoundTag();
@@ -70,7 +80,7 @@ final class SettlementObservationCodec {
                         RepresentativeMembershipStatus.valueOf(member.getString("status")));
                 representatives.put(representative.nativeId(), representative);
             }
-            result.put(id, new SettlementObservationRecord(id, value.getString("dimension"),
+            SettlementObservationRecord record = new SettlementObservationRecord(id, value.getString("dimension"),
                     BlockPos.of(value.getLong("anchor")), BlockPos.of(value.getLong("min")),
                     BlockPos.of(value.getLong("max")), value.getInt("population"), value.getInt("guards"),
                     value.getLong("lastObserved"), value.getString("provenance"), value.getLong("loadedDuration"),
@@ -78,7 +88,15 @@ final class SettlementObservationCodec {
                     EvidenceReliability.valueOf(value.getString("reliability")), value.getString("lastEvidenceId"),
                     SettlementEvidenceType.valueOf(value.getString("lastEvidenceType")),
                     DamageAttribution.valueOf(value.getString("lastDamageAttribution")), value.getInt("residentDeaths"),
-                    value.getInt("guardDeaths"), representatives));
+                    value.getInt("guardDeaths"), representatives);
+            java.util.List<SettlementStructureSampleCell> structure = new java.util.ArrayList<>();
+            for (Tag cellTag : value.getList("structureSamples", Tag.TAG_COMPOUND)) {
+                CompoundTag cell = (CompoundTag) cellTag;
+                structure.add(new SettlementStructureSampleCell(BlockPos.of(cell.getLong("pos")), cell.getString("baseline")));
+            }
+            record.restoreStructure(structure, value.contains("inferredIntegrity", Tag.TAG_STRING)
+                    ? StructuralIntegrity.valueOf(value.getString("inferredIntegrity")) : StructuralIntegrity.INTACT);
+            result.put(id, record);
         }
         return result;
     }

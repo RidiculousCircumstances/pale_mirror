@@ -7,6 +7,7 @@ import java.util.List;
 public final class SettlementCrisisRuntime {
     public static final String PRIMARY_OUTCOME = "PRIMARY_SUPPLY_RESTORED";
     public static final String ALTERNATE_OUTCOME = "ALTERNATE_SUPPLY_VALIDATED";
+    public static final String EVACUATED_OUTCOME = "COMMUNITY_EVACUATED";
 
     private final DomainEventFactory events;
 
@@ -35,10 +36,15 @@ public final class SettlementCrisisRuntime {
             boolean alternateValidated = state.routeContract(region.alternateRouteId())
                     .map(value -> value.transferableCapacity(state.simulationStep()) >= iron.effectiveConsumption())
                     .orElse(false);
-            String outcome = primaryRecovered ? PRIMARY_OUTCOME : alternateValidated ? ALTERNATE_OUTCOME : "";
+            boolean evacuated = state.populationGroups(region.communityId()).stream().allMatch(value ->
+                    value.disposition() == PopulationDisposition.DISPLACED
+                            || value.disposition() == PopulationDisposition.RESETTLED);
+            String outcome = primaryRecovered ? PRIMARY_OUTCOME : alternateValidated ? ALTERNATE_OUTCOME
+                    : evacuated ? EVACUATED_OUTCOME : "";
             if (outcome.isEmpty() || !scenario.resolve(outcome)) continue;
-            DomainEvent outcomeEvent = events.create(state, primaryRecovered ? DomainEventType.PRIMARY_SUPPLY_RESTORED
-                    : DomainEventType.ALTERNATE_SUPPLY_VALIDATED, scenario.target(), scenario.sourceEventId());
+            DomainEventType outcomeType = primaryRecovered ? DomainEventType.PRIMARY_SUPPLY_RESTORED
+                    : alternateValidated ? DomainEventType.ALTERNATE_SUPPLY_VALIDATED : DomainEventType.COMMUNITY_EVACUATED;
+            DomainEvent outcomeEvent = events.create(state, outcomeType, scenario.target(), scenario.sourceEventId());
             DomainEvent resolved = events.create(state, DomainEventType.SCENARIO_RESOLVED,
                     scenario.target(), scenario.sourceEventId());
             state.addEvent(outcomeEvent);

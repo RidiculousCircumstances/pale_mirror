@@ -46,7 +46,8 @@ public final class LivingRegionGameTests {
         var settlement = data.worldState().community(region.communityId()).orElseThrow();
         helper.assertValueEqual(region.primaryFacilityId(), CampaignRegionBootstrapper.MINE17,
                 "Ironhill must have one canonical primary mine");
-        helper.assertValueEqual(settlement.population(), 4, "canonical population starts from the observed settlement signal");
+        helper.assertValueEqual(data.worldState().population(settlement.id()), 4,
+                "canonical population starts from the observed settlement signal");
         helper.assertValueEqual(data.worldState().economy(region.communityId()).orElseThrow().require(ResourceKind.IRON).stock(), 4,
                 "the strategic stock is scaled from the observed settlement rather than a fake template population");
         helper.assertValueEqual(data.worldState().routeContract(CampaignRegionBootstrapper.RED_VALLEY_ROUTE).orElseThrow().status().name(),
@@ -98,6 +99,8 @@ public final class LivingRegionGameTests {
                 "restart snapshot must retain causal attribution for confirmed physical evidence");
         helper.assertValueEqual(reloaded.settlementDepots().get(region.communityId()).anchor(), depot.anchor(),
                 "restart snapshot must pin the selected depot footprint");
+        helper.assertValueEqual(reloaded.worldState().population(region.communityId()), 4,
+                "restart snapshot must retain population groups as the only macro-population source");
         helper.succeed();
     }
 
@@ -164,6 +167,7 @@ public final class LivingRegionGameTests {
         data.threatCombat().clear();
         data.resourceTransfers().clear();
         data.settlementDepots().clear();
+        data.refugeeCamps().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();

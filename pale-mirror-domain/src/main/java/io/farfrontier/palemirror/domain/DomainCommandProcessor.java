@@ -9,6 +9,7 @@ public final class DomainCommandProcessor {
     private final SimulationEngine simulation;
     private final ResourceFlowSimulation resources;
     private final SettlementDecisionEngine settlementDecisions;
+    private final SettlementEmergencyRuntime settlementEmergencies;
     private final ThreatLifecycle threats;
     private final Narrator narrator;
     private final ScenarioRuntime scenarios;
@@ -17,11 +18,13 @@ public final class DomainCommandProcessor {
 
     DomainCommandProcessor(SimulationEngine simulation, ResourceFlowSimulation resources,
                            SettlementDecisionEngine settlementDecisions,
+                           SettlementEmergencyRuntime settlementEmergencies,
                            ThreatLifecycle threats, Narrator narrator,
                            ScenarioRuntime scenarios, SettlementCrisisRuntime settlementCrises, DomainEventFactory events) {
         this.simulation = Objects.requireNonNull(simulation, "simulation");
         this.resources = Objects.requireNonNull(resources, "resources");
         this.settlementDecisions = Objects.requireNonNull(settlementDecisions, "settlementDecisions");
+        this.settlementEmergencies = Objects.requireNonNull(settlementEmergencies, "settlementEmergencies");
         this.threats = Objects.requireNonNull(threats, "threats");
         this.narrator = Objects.requireNonNull(narrator, "narrator");
         this.scenarios = Objects.requireNonNull(scenarios, "scenarios");
@@ -51,6 +54,7 @@ public final class DomainCommandProcessor {
             case DomainCommand.TriggerFacilityInfection triggered -> triggerFacilityInfection(state, triggered);
             case DomainCommand.DepositResource deposited -> depositResource(state, deposited);
             case DomainCommand.WithdrawResource withdrawn -> withdrawResource(state, withdrawn);
+            case DomainCommand.BeginSettlementEvacuation evacuation -> beginSettlementEvacuation(state, evacuation);
         };
     }
 
@@ -62,6 +66,7 @@ public final class DomainCommandProcessor {
             produced.addAll(resources.reconcile(state));
             produced.addAll(settlementDecisions.reconcile(state));
             produced.addAll(settlementCrises.reconcile(state));
+            produced.addAll(settlementEmergencies.reconcile(state));
         }
         return List.copyOf(produced);
     }
@@ -152,6 +157,11 @@ public final class DomainCommandProcessor {
         if (!place.observe(command.observationId(), command.freshness(), command.reliability())) return List.of();
         List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.SETTLEMENT_OBSERVATION_RECONCILED,
                 command.placeId(), command.causationId()));
+        if (place.observeStructuralIntegrity(command.structuralIntegrity())) {
+            produced.add(recordEvent(state, command.structuralIntegrity() == StructuralIntegrity.RUINED
+                    ? DomainEventType.SETTLEMENT_PLACE_RUINED : DomainEventType.SETTLEMENT_STRUCTURE_DAMAGED,
+                    command.placeId(), command.causationId()));
+        }
         state.bindingForPlace(command.placeId()).flatMap(binding -> state.security(binding.communityId())).ifPresent(security -> {
             if (security.observeGuards(command.registeredGuards())) {
                 produced.add(recordEvent(state, DomainEventType.SETTLEMENT_GUARD_CAPABILITY_CHANGED,
@@ -207,6 +217,11 @@ public final class DomainCommandProcessor {
         if (state.community(command.community().id()).isPresent() || state.place(command.place().id()).isPresent()) {
             throw new IllegalStateException("Duplicate settlement actor identity");
         }
+        if (command.populationGroups().isEmpty() || command.populationGroups().stream()
+                .anyMatch(group -> !group.communityId().equals(command.community().id())
+                        || !group.originPlaceId().equals(command.place().id()))) {
+            throw new IllegalArgumentException("Living region population groups do not match its community/place");
+        }
         command.facilities().forEach(state::putFacility);
         state.putCommunity(command.community());
         state.putPlace(command.place());
@@ -214,6 +229,7 @@ public final class DomainCommandProcessor {
         state.putEconomy(command.economy());
         state.putSecurity(command.security());
         state.putSettlementPolicy(command.policy());
+        command.populationGroups().forEach(state::putPopulationGroup);
         command.sites().forEach(state::putSite);
         command.affiliations().forEach(state::putSiteAffiliation);
         command.capabilities().forEach(state::putSiteCapability);
@@ -256,6 +272,17 @@ public final class DomainCommandProcessor {
                 .require(command.resource());
         if (!account.debit(command.amount(), command.minimumRemaining())) return List.of();
         return record(state, DomainEventType.RESOURCE_WITHDRAWN, command.communityId(), command.transferId());
+    }
+
+    private List<DomainEvent> beginSettlementEvacuation(WorldState state,
+                                                         DomainCommand.BeginSettlementEvacuation command) {
+        LivingRegionState region = state.livingRegions().stream()
+                .filter(value -> value.communityId().equals(command.communityId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown settlement region " + command.communityId()));
+        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
+        List<DomainEvent> produced = settlementEmergencies.beginEvacuation(state, command.communityId(), command.causationId());
+        produced.forEach(state::addEvent);
+        return produced;
     }
 
     private List<DomainEvent> record(WorldState state, DomainEventType type, WorldObjectId subject, String causationId) {

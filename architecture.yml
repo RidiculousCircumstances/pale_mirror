@@ -63,6 +63,10 @@ invariants:
     statement: Physical items cross the settlement economy boundary only through a persisted bounded transfer ledger; ordinary container contents never mirror canonical stock, and reserved stacks fail closed until reconciliation completes.
   - id: pm-owned-settlement-sites
     statement: Pale Mirror materializes settlement infrastructure only inside a persisted deterministic PM-owned footprint with per-cell provenance and postconditions; observed village blocks remain read-only.
+  - id: population-separation
+    statement: SettlementCommunity owns social identity while PopulationGroup owns cohort counts and disposition; evacuation changes occupancy and location without deleting community identity or inferring deaths from missing entities.
+  - id: settlement-catastrophe-fairness
+    statement: A known critical settlement receives a persisted grace window before automatic evacuation; the objective policy continues without Narrator, and irreversible physical consequences touch only PM-owned cells.
 
 critical_flows:
   - id: core-recovery
@@ -132,4 +136,8 @@ critical_flows:
   - id: settlement-resource-transfer
     path: depot interaction -> persisted PREPARED receipt -> reserved physical stack or canonical debit -> domain command/event -> physical completion -> bounded compaction
     owner: domain economy plus NeoForge resource transfer ledger and depot executor
+    verification: critical-code
+  - id: settlement-displacement
+    path: objective critical state -> persisted grace window -> manual or automatic evacuation -> PopulationGroup disposition -> empty place -> PM-owned ruin/camp representation
+    owner: domain emergency policy plus NeoForge provenance-safe settlement presentation
     verification: critical-code

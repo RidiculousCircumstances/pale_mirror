@@ -497,3 +497,25 @@ cannot be used while reconciliation is active. Withdrawal is limited to 16
 IRON per player per simulation step and must leave two consumption steps in
 reserve. Unknown or changed depot cells block materialization rather than
 overwriting the village or player construction.
+
+## Population, loss and displacement (0.2e)
+
+Schema v22 removes population from `SettlementCommunity`. Cohort counts and
+location now belong to `PopulationGroup`, so a ruined place cannot erase the
+community's identity or memory. A critical threatened community with defence
+at or below 20 opens an eight-step intervention window. The primary audience
+may begin evacuation from the journal; otherwise deterministic settlement
+policy begins it when the window expires. Narrator does not own this fact.
+
+Evacuation takes two simulation steps and then empties the original place.
+Without a registered shelter the group becomes `DISPLACED` and PM plans a
+bounded 7x7 representative camp in loaded terrain. Camp villagers are tagged,
+NoAI presentation carriers excluded from settlement observation and trade.
+If the threat remains, the original place becomes `RUINED`, but its physical
+overlay changes only the PM-owned depot footprint.
+
+Loaded physical places may also acquire a stable sample of at most 64 solid
+cells after 1200 continuously observed ticks. Loss of at least 25 percent can
+confirm `DAMAGED`; 75 percent can confirm `RUINED` only for an already empty
+place. Player block damage is causally attributed. Missing villagers remain
+weak negative evidence and never decrement a population group.

@@ -31,6 +31,7 @@
 - A crisis is an objective simulation fact. Settlement policy acts without a scenario; Narrator only selects presentation/pacing and may return `NO_SCENARIO`.
 - Ordinary containers never mirror canonical stock. Physical delivery/withdrawal requires persisted receipts/leases; adapters declare field ownership as PM/native/derived/observed/reconciled.
 - Schema v21 is the breaking physical-economy boundary. IRON crosses through a PM-owned depot and a bounded persisted transfer ledger; ordinary barrel contents remain non-canonical.
+- Schema v22 separates population into cohort-bearing `PopulationGroup` records and adds objective grace/evacuation/displacement state. Community identity survives place loss.
 
 ## State
 
@@ -51,20 +52,21 @@
 - The vanilla village observer, FTB static journal, same-vehicle Create proof, full packaged integration restart harnesses (core/Crimson/Spore/Create/FTB), and Xvfb client-smoke profiles (core/Crimson/Spore/Create/FTB) are implemented. The native train traversal remains a real-world acceptance walkthrough rather than a fake GameTest vehicle.
 - The aggregate `fullSmoke` gate passes: five 14-test GameTest profiles, five clean packaged-JAR restart profiles, and five graphical render/audio profiles. Heavy harnesses run serially, retain failed runtimes for diagnosis, and remove successful runtimes to keep CI resource use bounded.
 - 0.2d adds all-or-nothing stock mutations, emergency-reserve withdrawal, a bounded retained transfer ledger, reserved-item reconciliation and deterministic provenance-safe supply-depot materialization. Focused domain/NeoForge tests, guardrails, build and packaged-JAR verification pass.
+- 0.2e adds an eight-step intervention window, audience-authorized or automatic evacuation, displaced/refugee-camp presentation, PM-owned ruin overlays, structural sampling and damage attribution. Unit/NeoForge tests, packaging and all 14 core GameTests pass.
 
 ### Now
 
-- 0.2d implementation is complete at schema v21; all 14 core GameTests pass with depot materialization and restart persistence checks.
+- 0.2e implementation is complete at schema v22.
 
 ### Next
 
-- Implement schema-v22 evacuation/population groups, then schema-v23 positive development and schema-v24 Millénaire ownership reconciliation.
+- Implement schema-v23 positive development, then schema-v24 Millénaire ownership reconciliation.
 - Retain the authenticated FTB/client and real scheduled-train walkthroughs as release evidence.
 
 ## Open questions
 
 - UNCONFIRMED: authenticated multiplayer playthrough and the player-built native Create scheduled-train traversal; automation deliberately does not fake a Create train.
-- KNOWN MODEL DEBT: typed evidence deliberately cannot yet infer a physically destroyed/empty place or materialize safe ruins; canonical PopulationGroup, inventory receipts, positive development and Millénaire ownership remain future slices.
+- KNOWN MODEL DEBT: positive development and Millénaire field ownership remain future slices; structure inference is deliberately bounded to a stable sample and never treats missing NPCs as deaths.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set

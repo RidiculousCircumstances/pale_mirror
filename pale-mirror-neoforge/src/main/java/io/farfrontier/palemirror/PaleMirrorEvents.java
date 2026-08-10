@@ -46,6 +46,7 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
 
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
 public final class PaleMirrorEvents {
@@ -197,6 +198,11 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (RefugeeCampRuntime.isRepresentative(event.getTarget())) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
         if (denyReservedTransfer(event.getEntity(), event.getItemStack())
                 || denyExcludedItem(event.getEntity(), event.getItemStack(), "use on entity")) {
             event.setCanceled(true);
@@ -206,6 +212,11 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (RefugeeCampRuntime.isRepresentative(event.getTarget())) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
         if (denyReservedTransfer(event.getEntity(), event.getItemStack())
                 || denyExcludedItem(event.getEntity(), event.getItemStack(), "specific entity use")) {
             event.setCanceled(true);
@@ -257,7 +268,9 @@ public final class PaleMirrorEvents {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
-            PaleMirrorRuntime.forServer(level.getServer()).gateBlockDestroyed(level, event.getPos());
+            PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
+            runtime.gateBlockDestroyed(level, event.getPos());
+            runtime.settlementBlockDamaged(level, event.getPos(), event.getPlayer().getUUID());
         }
     }
 
@@ -330,6 +343,17 @@ public final class PaleMirrorEvents {
                             PaleMirrorRuntime.forServer(context.getSource().getServer()).logisticsStatus()), false);
                     return 1;
                 })));
+        root.then(Commands.literal("settlement").then(Commands.literal("evacuate")
+                .then(Commands.argument("id", StringArgumentType.string()).executes(context -> {
+                    PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
+                    String id = StringArgumentType.getString(context, "id");
+                    boolean started = runtime.beginSettlementEvacuation(id, audienceFor(context.getSource(), runtime),
+                            context.getSource().getEntity() == null ? "command:server"
+                                    : "player:" + context.getSource().getEntity().getUUID());
+                    if (started) context.getSource().sendSuccess(() -> Component.literal("Evacuation started for " + id), true);
+                    else context.getSource().sendFailure(Component.literal("Evacuation is unavailable or belongs to another audience."));
+                    return started ? 1 : 0;
+                }))));
         event.getDispatcher().register(root);
     }
 
