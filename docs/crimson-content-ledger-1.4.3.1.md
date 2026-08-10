@@ -45,6 +45,15 @@ Every initializer is confined to `pale_mirror:crimson/v1431/*` and must omit:
 - infection spread, arbitrary block conversion, explosions and worldgen;
 - calls into `crimson_curse:tick`, actor passive functions or player functions.
 
+## Visual asset boundary
+
+For this private integration, visual data remains in the installed Crimson
+client JAR. PM does not package copied models or textures. It supplies the
+audited CEM-selecting names, model-carrier equipment, scale and Pummeler's
+`item_display` book carrier (`custom_model_data = 5450230`) only. The pinned
+resource contract is checked in Gradle and the Pummeler carrier is checked in
+a real NeoForge GameTest.
+
 ## PM siege constraints
 
 Nodes are not derived Crimson blocks: they are PM-owned Sea Lanterns constrained

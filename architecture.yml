@@ -65,3 +65,7 @@ critical_flows:
     path: APEX -> four PM-owned Nodes -> deterministic Crimson form -> Bloodlink I/II/III -> unsealed PM anchor -> recovery
     owner: domain siege state plus neoforge materialization and CrimsonSandboxAdapter
     verification: critical-code
+  - id: pm-crimson-visual-contract
+    path: PM actor profile -> exact entity visual name and model carrier -> pinned Crimson client resources -> client rendering
+    owner: neoforge CrimsonSandboxAdapter and pinned Crimson client pack
+    verification: critical-code

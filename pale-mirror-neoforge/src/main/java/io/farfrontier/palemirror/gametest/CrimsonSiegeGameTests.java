@@ -2,13 +2,19 @@ package io.farfrontier.palemirror.gametest;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.SiegeStage;
+import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.ThreatTier;
+import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.integration.crimson.ActorOperationResult;
 import io.farfrontier.palemirror.internal.integration.crimson.CrimsonSandboxAdapter;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.SiegePartKind;
+import io.farfrontier.palemirror.internal.world.SiegePartRef;
+import io.farfrontier.palemirror.internal.world.SiegeRecord;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
+import io.farfrontier.palemirror.internal.world.TestMineTemplate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTest;
@@ -90,6 +96,42 @@ public final class CrimsonSiegeGameTests {
         controller.die(level.damageSources().generic());
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState().facility(mine.id()).orElseThrow()
                 .siege().stage(), SiegeStage.INACTIVE, "clearing the unsealed controller must reset only the canonical siege state");
+        helper.succeed();
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
+    public static void pummelerUsesCrimsonDisplayModelContract(GameTestHelper helper) {
+        if (AdapterRegistry.crimson().health().status() != io.farfrontier.palemirror.api.AdapterHealth.Status.AVAILABLE) {
+            helper.succeed();
+            return;
+        }
+        ServerLevel level = helper.getLevel();
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
+        clearMineVolume(level, anchor);
+        TestMineRecord mine = TestMineTemplate.place(level, anchor, new WorldObjectId("pale_mirror:visual_test"),
+                StoryAudienceId.globalTestAudience());
+        SiegePartRef pummeler = new SiegePartRef("visual_pummeler", SiegePartKind.BOSS, "pale_mirror:pummeler",
+                anchor.above(), null, SiegePartRef.Status.MISSING);
+        mine.setSiege(new SiegeRecord("pale_mirror:crimson_apex", "1", 1L, java.util.List.of(pummeler), ""));
+
+        ActorOperationResult result = AdapterRegistry.crimson().ensureSiegeEntity(level, mine, "pm:visual-test", pummeler);
+        helper.assertValueEqual(result.status(), ActorOperationResult.Status.MATERIALIZED,
+                "Pummeler must materialize only when its visual initializer succeeds");
+        LivingEntity entity = (LivingEntity) level.getEntity(mine.siege().part("visual_pummeler").orElseThrow().entityId());
+        helper.assertTrue(entity != null && entity.getName().getString().equals("Pummeler"),
+                "Pummeler name must select Crimson's client model contract");
+        var display = entity.getPassengers().stream().filter(value -> value.getTags().contains("PM_Pummeler_Visual"))
+                .findFirst().orElse(null);
+        helper.assertTrue(display != null && display.getType() == net.minecraft.world.entity.EntityType.ITEM_DISPLAY,
+                "Pummeler must retain its PM-owned Crimson item-display passenger");
+        CompoundTag visualData = display.saveWithoutId(new CompoundTag());
+        helper.assertValueEqual(visualData.getCompound("item").getString("id"), "minecraft:book",
+                "Pummeler display must use the Crimson book model carrier");
+        helper.assertValueEqual(visualData.getCompound("item").getCompound("components")
+                .getInt("minecraft:custom_model_data"), 5450230,
+                "Pummeler display must select Crimson model 5450230");
+        AdapterRegistry.crimson().removeSiegeEntity(level, mine, "visual_pummeler");
         helper.succeed();
     }
 

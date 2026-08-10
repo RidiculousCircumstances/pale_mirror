@@ -61,10 +61,29 @@ infection, phase, raid, terrain, or tick functions. If the pinned adapter is
 unavailable while this chain is active, the scenario visibly blocks; core-only
 worlds bypass the optional chain rather than receiving a surprise lock.
 
+## Crimson visuals in the private pack
+
+Pale Mirror does not copy Crimson assets. In the private Far Frontier pack,
+the installed pinned Crimson JAR supplies its client resources and the already
+installed Entity Model Features 3.2.4 / Entity Texture Features 7.1 bridge
+interprets its CEM rules. PM makes those resources render by creating the same vanilla base
+entities, exact CEM-selecting names, equipment and scale used by the audited
+local forms. The Pummeler also has its Crimson custom-model item-display
+passenger. This keeps visual assets in Crimson while PM keeps the lifecycle,
+AI policy and world state.
+
+The runtime fails the operation rather than accepting a visually malformed
+actor: PM verifies the exact name for every roster/siege profile and verifies
+the Pummeler passenger. `verifyCrimsonVisualContract` compares all required
+CEM names and the Pummeler model entry with the checksum-pinned Crimson JAR.
+It is a resource-contract check; an actual rendered-frame check still requires
+a graphical client playthrough.
+
 Run the real Crimson actor and tick-isolation GameTest with:
 
 ```bash
 ./gradlew :pale-mirror-neoforge:runCrimsonGameTestServer
+./gradlew :pale-mirror-neoforge:verifyCrimsonVisualContract
 ```
 
 Run the isolated packaged-JAR boot profile with:

@@ -146,6 +146,40 @@ tasks.register('verifyCrimsonSandboxPackaging') {
     }
 }
 
+tasks.register('verifyCrimsonVisualContract') {
+    group = 'verification'
+    description = 'Verifies that the pinned Crimson client pack still exposes every PM actor CEM and display-model contract.'
+    dependsOn tasks.named('downloadCrimsonIntegrationJar')
+    inputs.file(crimsonIntegrationJar)
+    doLast {
+        def expected = [
+                'assets/minecraft/optifine/cem/zombie.properties'          : ['name.1="Osiris"', 'name.3="Crimsonified Human"', 'name.4="Decayed Human"', 'name.5="Knight"', 'name.6="Juggernaut"'],
+                'assets/minecraft/optifine/cem/zombie_villager.properties' : ['name.1="Crimsonified Villager"', 'name.2="Decayed Villager"'],
+                'assets/minecraft/optifine/cem/husk.properties'            : ['name.1="Crimsonified Husk"', 'name.2="Decayed Husk"'],
+                'assets/minecraft/optifine/cem/skeleton.properties'        : ['name.1="Crimsonified Skeleton"', 'name.2="Decayed Skeleton"'],
+                'assets/minecraft/optifine/cem/drowned.properties'         : ['name.1="Crimsonified Drowned"', 'name.3="Decayed Drowned"'],
+                'assets/minecraft/optifine/cem/bogged.properties'          : ['name.1="Crimsonified Bogged"', 'name.2="Decayed Bogged"'],
+                'assets/minecraft/optifine/cem/wither_skeleton.properties' : ['name.1="Crimsonified Wither Skeleton"', 'name.2="Decayed Wither Skeleton"', 'name.3="Stage I Bloodlink"', 'name.4="Stage II Bloodlink"', 'name.5="Stage III Bloodlink"'],
+                'assets/minecraft/optifine/cem/ravager.properties'         : ['name.2="Rusher"', 'name.3="Mangler"'],
+                'assets/minecraft/optifine/cem/phantom.properties'         : ['name.4="Kraken"'],
+                'assets/minecraft/models/item/book.json'                   : ['custom_model_data":5450230', 'crimson_curse/pummeler']
+        ]
+        def jar = new java.util.jar.JarFile(crimsonIntegrationJar.get().asFile)
+        try {
+            expected.each { entry, fragments ->
+                def resource = jar.getJarEntry(entry)
+                if (resource == null) throw new GradleException("Pinned Crimson visual resource is missing: ${entry}")
+                String text = jar.getInputStream(resource).getText('UTF-8')
+                fragments.each { fragment ->
+                    if (!text.contains(fragment)) throw new GradleException("Pinned Crimson visual contract changed: ${entry} lacks ${fragment}")
+                }
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
 tasks.register('dedicatedRestartHarness', Exec) {
     group = 'verification'
     description = 'Boots the final JAR in a clean NeoForge runtime, crashes it, and verifies restart.'
@@ -189,7 +223,7 @@ tasks.named('runCrimsonGameTestServer') {
 tasks.register('crimsonIntegrationHarness', Exec) {
     group = 'verification'
     description = 'Boots the final PM JAR beside the checksum-verified pinned Crimson JAR in a clean dedicated runtime.'
-    dependsOn tasks.named('verifyCrimsonSandboxPackaging'), tasks.named('downloadCrimsonIntegrationJar')
+    dependsOn tasks.named('verifyCrimsonSandboxPackaging'), tasks.named('verifyCrimsonVisualContract')
     workingDir rootProject.projectDir
     def harnessLauncher = javaToolchains.launcherFor {
         languageVersion = JavaLanguageVersion.of(21)

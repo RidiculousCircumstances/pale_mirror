@@ -23,6 +23,9 @@
 - At APEX, an available sandbox runs `4 Nodes → deterministic boss →
   Bloodlink I/II/III → PM anchor`; adapter loss blocks the scenario. Core-only
   activation bypasses the optional chain instead of changing core behavior.
+- This private integration reuses the pinned Crimson client resources already
+  installed by the pack; PM owns the exact CEM-selecting entity data, not
+  copied Crimson assets.
 
 ## State
 
@@ -44,21 +47,26 @@
   Bloodlink gates. Only their typed destruction observations advance state.
 - PM controller damage is rejected before the chain is clear. All new entities
   carry PM provenance; their local runtime is bounded, non-global and non-griefing.
-- Core and Crimson GameTests pass, including the full siege clearance chain.
+- Every normal and siege actor profile now validates the exact visual name that
+  selects its Crimson CEM form. Siege initializers restore audited visual
+  equipment/scale; Pummeler has a PM-owned Crimson model-display passenger.
+- The pinned-resource verifier covers all used CEM names and Pummeler's model
+  carrier; a GameTest verifies the Pummeler passenger contract.
 
 ### Now
 
-- Siege implementation is complete locally; full critical-code verification and
-  final commit remain for the current change.
+- Run full critical-code verification and commit the local visual-contract
+  change.
 
 ### Next
 
-- Run clean packaged-JAR/restart profiles with the new siege data, then audit
-  manual multiplayer/client behavior and resource-pack presentation.
+- Perform a graphical client/multiplayer pass against the private pack to
+  validate rendered frames and animations, then tune effects deliberately.
 
 ## Open questions
 
-- UNCONFIRMED: a real-client/multiplayer siege playthrough has not been automated.
+- UNCONFIRMED: a real-client/multiplayer siege playthrough has not been automated;
+  the current evidence covers pinned resources and server-side visual data.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set

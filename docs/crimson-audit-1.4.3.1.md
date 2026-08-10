@@ -57,6 +57,24 @@ PM-native tiers (`FOOTHOLD`, `INFESTED`, `SIEGE`, `APEX`) advance
 deterministically in the domain and select encounter roster entries. They do
 not read, write, or mirror Crimson's global Phase/Points/Mass values.
 
+## Client visual contract
+
+This is a private, non-distributed integration. PM therefore consumes the
+client assets already present in the pinned Crimson JAR; it does not copy its
+models or textures. The private pack's Entity Model Features 3.2.4 and Entity
+Texture Features 7.1 load those CEM resources. Crimson's CEM rules select most forms by the vanilla
+entity's exact custom name. Each PM profile has that name as a postcondition,
+so a materialization whose initializer loses the visual identity is discarded
+instead of becoming a generic vanilla mob. PM also recreates the audited
+scale/equipment/model carriers for the siege forms.
+
+Pummeler has no ghast CEM rule. It is rendered through a PM-owned
+`item_display` passenger carrying the Crimson book model value `5450230`; the
+passenger is part of the Pummeler postcondition and is removed with its
+registered PM parent. `verifyCrimsonVisualContract` checks every used CEM name
+and this display-model entry against the pinned JAR. It validates resources and
+server-side entity data, not pixels rendered by a live graphical client.
+
 ## PM-owned siege profile
 
 At `APEX`, the optional sandbox materializes a separate, PM-owned clearance
