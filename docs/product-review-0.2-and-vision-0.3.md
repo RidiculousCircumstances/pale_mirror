@@ -34,9 +34,10 @@ The product hypothesis is only partially proven. The earlier live exercise
 exposed the gap directly: a floating cube represented the mine, infection and
 freight infrastructure were not self-explanatory, and neither the affected
 resource nor the available actions were obvious without developer guidance.
-The schema-v25 release candidate now implements the corrective MineSite,
-complete managed baseline railway, welcome kit, survey map and dynamic native
-ledger, but these changes still require a fresh unaided graphical playthrough.
+The schema-v27 release candidate now implements the corrective MineSite,
+complete low-tech vanilla baseline corridor, welcome kit, survey map and
+dynamic native ledger, but these changes still require a fresh unaided
+graphical playthrough.
 
 | Area | Maturity |
 | --- | ---: |
@@ -156,15 +157,16 @@ without operator commands or developer explanation.
 | Requirement | Implementation status | Remaining acceptance |
 | --- | --- | --- |
 | Real `MineSite` | Surface yard, framed entrance, supported descending drift and controller chamber are provenance-preflighted and persisted | Confirm terrain fit, navigation and infection readability in a fresh graphical world |
-| Readable baseline freight | The private Railway Untold PM fork builds the complete Mine17–Ironhill line, endpoint stations and scheduled freight train | Watch one healthy baseline trip and verify spatial readability without commands |
+| Readable baseline freight | PM builds a complete Mine17–Ironhill vanilla minecart corridor, loading yard and receiving platform through naturally loaded chunks | Traverse the line and verify that its physical relationship is readable without commands |
 | Positive alternate logistics | The exact Create 6.0.10 read-only adapter still certifies the same player train at both alternate endpoints | Complete the player-built scheduled-train walkthrough |
 | Dynamic presentation | A survey map, welcome letter and canonical `Regional Ledger` written book show stocks, flow, reserve, crisis, routes, choices, coordinates and history | Test comprehension with no operator explanation |
 | Repeatable exercise | A clean world automatically discovers a qualifying vanilla/Integrated Villages place and creates a fresh schema-v25 region; old v24 regions are intentionally not retrofitted | Run clean-world repetitions and record seed/location failures |
 
-The packaged final JAR has passed a two-start dedicated harness with exact
-Create and Railway Untold dependencies, and both core and railway GameTest
-profiles pass 20/20. These are necessary evidence, not substitutes for the
-remaining product walkthrough. Details are in
+The packaged final JAR has passed its existing dedicated harnesses and the core
+and industrial-railway GameTest profiles. The new vanilla baseline has its own
+restart-safe provenance GameTests. These are necessary evidence, not
+substitutes for the remaining product walkthrough. Details are in
+[`vanilla-minecart-baseline.md`](vanilla-minecart-baseline.md) and
 [`managed-railway-integration.md`](managed-railway-integration.md).
 
 ## Pale Mirror 0.3 — Living Frontier
@@ -461,7 +463,7 @@ The existing strengths remain release gates:
 
 ## Development priority
 
-1. Close 0.2 product acceptance: unaided graphical MineSite/baseline-train
+1. Close 0.2 product acceptance: unaided graphical MineSite/baseline-corridor
    playthrough, player-built alternate Create validation, choice outcomes,
    restart continuity, and clean-world repetition.
 2. Replace singleton bootstrap with `RegionArchetype` and placement plans.

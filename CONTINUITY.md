@@ -35,16 +35,17 @@
 - Schema v23 adds positive settlement development: pinned surplus policy, resource reservations, physical storehouse intent, prosperity/housing and bounded growth/return-home.
 - Schema v24 pins a generic settlement field-authority profile. Millénaire 9.0.0-beta.2 is an optional exact-version read-only reconciliation profile; native villages are excluded from the campaign unless `allowMillenaireCampaign=true`.
 - Schema v25 adds restart-safe campaign railway commissioning, per-cell rail provenance and MineSite preflight baselines. Schema v26 replaces route tickets/heads with persisted loaded-chunk segment progress; v25 commissioned lines remain legacy, untouched plans migrate, and partial physical lines suspend fail-closed.
-- The private Railway Untold 1.2.1-pm.1 fork is the executor for the complete authored Mine17–Ironhill line. PM talks only through `RailInfrastructureAdapter`, owns the commissioning record and canonical flow, never force-loads production route chunks, and suspends service if a player changes its schedule.
+- The private Railway Untold 1.2.1-pm.1 fork remains an explicit industrial-route executor. PM talks to it only through `RailInfrastructureAdapter`, owns the commissioning record and canonical flow, never force-loads production route chunks, and suspends service if a player changes its schedule. It is not the fresh small-village baseline.
+- The baseline Mine17–Ironhill route is a low-capacity, PM-owned vanilla minecart corridor. Railway Untold/Create rail is an explicit later industrial upgrade, not default infrastructure for a small village. The domain distinguishes this provider without learning Minecraft blocks; the vanilla executor persists provenance, requires loaded chunks, and certifies abstract flow through a bounded PM-owned structural validation.
 - PM-managed railway construction persists an immutable route split at chunk boundaries (maximum 32 blocks, eight-block footprint margin). Production segments execute independently and out of order only when all footprint chunks are naturally loaded; a bounded dev profile may ticket one next footprint.
 - Provider endpoints are independent retryable freight-service postconditions. They need not be loaded simultaneously; train assembly waits only for the origin after both stations exist.
-- An authored region is baseline infrastructure, not a discovery-triggered spawn: eligible settlement recognition must autonomously preflight and materialize both MineSites and then commission the full railway. Player proximity to a planned mine is not a gate; one bounded temporary site ticket replaces the legacy proximity rule.
+- An authored region is baseline infrastructure, not a mine-discovery-triggered spawn: eligible settlement recognition autonomously preflights and materializes both MineSites, then persists the complete vanilla corridor. Its physical segments arrive only through ordinary player-loaded chunks; player proximity to a planned mine is not a special generation gate.
 - The original Create 6.0.10 read-only adapter remains the proof path for a player-built alternate route; it does not overlap with PM-managed baseline railway ownership.
 - Server-side runtime debug controls are operator-only. Read commands expose typed evidence and canonical facts; manual binding uses the normal living-region registration path; destructive reset is a two-phase maintenance action that must fail closed once any PM physical work, transfer, lease, actor or projectile exists.
 - Debug visualization is ephemeral presentation: per-operator bounded particles expose observed/managed bounds and planned mine columns; advanced client tooltips expose item registry ownership and PM policy without mutating ItemStacks.
 - Debug navigation exposes dimension/coordinates and clickable operator teleports only for persisted physical anchors; canonical planned mines remain inspectable but cannot be teleported to until materialized.
 - Product status is an internal alpha and near technological 0.2 RC, not a completed gameplay release. Technology is stronger than physical legibility, player comprehension and repeatability.
-- The remaining 0.2 release gate is mandatory: authenticated graphical playthrough of automatic discovery, the managed baseline train and all player choices; automated implementation/packaging evidence alone does not declare the gameplay release complete.
+- The remaining 0.2 release gate is mandatory: authenticated graphical playthrough of automatic discovery, the readable baseline corridor and all player choices; automated implementation/packaging evidence alone does not declare the gameplay release complete.
 - 0.3 is `Living Frontier`: repeatable multi-region causal stories with combat, infrastructure, evacuation/refusal, visible consequences, Narrator candidate scoring and delayed aftermath. It does not broaden infection providers or commodity scope first.
 
 ## State
@@ -84,18 +85,18 @@
 
 ### Now
 
-- Implementation and live upgrade are complete. The remaining evidence is gameplay acceptance on a fresh schema-v26 region: player exploration must naturally materialize the persisted corridor, merge its Create graph, place both stations and commission exactly one scheduled train.
+- Schema v27 implements the `VANILLA_MINECART` baseline route profile for fresh campaign regions, with a provenance-safe loaded-chunk executor, low-tech receiving platform and lease-authorized representative cart. V26 managed Create routes remain legacy records; no existing physical line is rewritten implicitly. Core GameTests (25/25), guardrails, build and packaged-JAR verification pass.
 
 ### Next
 
-- On a fresh schema-v26 exercise world, traverse the full corridor so chunks naturally materialize it, then verify graph merge, independent stations and one scheduled train.
-- Run a clean authenticated client playthrough: automatic village recognition, welcome kit, complete baseline railway/train, delayed infection, combat recovery, alternate player-built Create route, evacuation and restart continuity.
+- On a fresh post-change exercise world, traverse the full vanilla minecart corridor, verify the MineSite loading yard, simple receiving platform, optional representative cart and abstract IRON flow.
+- Run a clean authenticated client playthrough: automatic village recognition, welcome kit, complete baseline corridor, delayed infection, combat recovery, alternate player-built Create route, evacuation and restart continuity.
 - Turn any usability or physical-world failures from that playthrough into bounded release fixes; do not expand 0.3 scope before the 0.2 acceptance story is understandable without operator help.
 - After the 0.2 gate, replace singleton bootstrap with `RegionArchetype`/placement plans, implement three supply-crisis outcomes, visible recovery/evacuation, multi-region Narrator scoring and delayed aftermath.
 
 ## Open questions
 
-- UNCONFIRMED: authenticated multiplayer playthrough, graphical validation of the PM-managed baseline train, and the player-built alternate Create scheduled-train traversal.
+- UNCONFIRMED: authenticated multiplayer playthrough, graphical validation of the PM-managed baseline corridor/representative cart, and the player-built alternate Create scheduled-train traversal.
 - UNAVAILABLE IN CURRENT ENVIRONMENT: the new managed-railway graphical client profile is wired into `clientSmoke`, but this run could not execute it because no Xvfb binary is installed; prior six-profile client evidence remains historical only.
 - KNOWN MODEL DEBT: Millénaire culture, relations, quests, local economy and native development remain intentionally native-owned; structure inference is bounded and missing NPCs never imply deaths.
 - The v0.2 primary journal surface is a dynamically generated native written book; a richer custom 0.3 UI remains UNCONFIRMED.

@@ -18,7 +18,6 @@ import io.farfrontier.palemirror.domain.RecognitionState;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
-import io.farfrontier.palemirror.internal.adapter.LogisticsRouteContract;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
 import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
@@ -27,7 +26,6 @@ import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugController;
 import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
-import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
 import io.farfrontier.palemirror.internal.world.RegionalLogisticsRuntime;
 import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.internal.presentation.CampaignPresentationRuntime;
@@ -46,6 +44,7 @@ import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.observation.GatePartDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.ManagedRailwayRuntime;
+import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRuntime;
 import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.TestMineTemplate;
@@ -93,6 +92,7 @@ public final class PaleMirrorRuntime {
         if (server.overworld().getGameTime() % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0
                 && SettlementObservationRuntime.observeNearPlayers(server, data, commands)) data.setDirty();
         CampaignRegionBootstrapper.tick(server, data, commands, debug.automaticBindingEnabled());
+        if (VanillaMinecartRouteRuntime.tick(server, data, commands)) data.setDirty();
         if (ManagedRailwayRuntime.tick(server, data, commands)) data.setDirty();
         if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
         if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
@@ -116,11 +116,6 @@ public final class PaleMirrorRuntime {
         AdapterRegistry.tickRuntime(server, data);
         debug.renderZoneMarkers();
     }
-    /**
-     * A facility is bound to exactly one canonical infection source at
-     * creation.  Source composition is deliberately rejected by construction
-     * until a future policy defines conflict and cleanup semantics.
-     */
     public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id, InfectionSourceId source) {
         if (data.testMines().containsKey(id)) throw new IllegalStateException("PM threat site already exists: " + id.value());
         ServerLevel level = player.serverLevel();
@@ -179,7 +174,7 @@ public final class PaleMirrorRuntime {
                 + ", effectLeases=" + data.effectLeases().leases().size() + ", combatActors=" + data.threatCombat().actors().size()
                 + ", projectiles=" + data.threatCombat().projectiles().size() + ", quarantine=" + data.quarantine().records().size()
                 + ", resourceTransfers=" + data.resourceTransfers().transfers().size()
-                + ", depots=" + data.settlementDepots().size();
+                + ", depots=" + data.settlementDepots().size() + ", vanillaMinecartRoutes=" + data.vanillaMinecartRoutes().size();
     }
 
     /** Admin-facing causal state, deliberately derived from canonical state rather than the physical presentation. */
@@ -481,9 +476,7 @@ public final class PaleMirrorRuntime {
     }
     private void triggerDueRegionCrises() {
         data.worldState().livingRegions().stream().filter(region -> region.incidentDue(data.worldState().simulationStep()))
-                .filter(region -> java.util.Optional.ofNullable(data.campaignCommissioning().get(region.id()))
-                        .filter(record -> record.status() == io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.ACTIVE
-                                && data.worldState().simulationStep() >= record.infectionEligibleAtStep()).isPresent())
+                .filter(this::baselineInfrastructureReady)
                 .forEach(region -> {
                     List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.TriggerFacilityInfection(
                             region.primaryFacilityId(), "region-crisis:" + region.id()));
@@ -492,5 +485,12 @@ public final class PaleMirrorRuntime {
                         data.setDirty();
                     }
                 });
+    }
+    private boolean baselineInfrastructureReady(io.farfrontier.palemirror.domain.LivingRegionState region) {
+        var vanilla = data.vanillaMinecartRoutes().get(region.id());
+        if (vanilla != null) return vanilla.status() == io.farfrontier.palemirror.internal.world.VanillaMinecartRouteStatus.ACTIVE;
+        return java.util.Optional.ofNullable(data.campaignCommissioning().get(region.id()))
+                .filter(record -> record.status() == io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.ACTIVE
+                        && data.worldState().simulationStep() >= record.infectionEligibleAtStep()).isPresent();
     }
 }

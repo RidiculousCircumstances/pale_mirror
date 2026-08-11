@@ -41,15 +41,18 @@ the village. The campaign materializes two provenance-preflighted MineSites,
 including a loading yard, readable entrance, descending supported drift and
 underground controller chamber.
 
-The primary Mine17–Ironhill flow is physically represented by a complete
-railway, endpoint stations and scheduled freight train built through the
-private Railway Untold `1.2.1-pm.1` managed API. Pale Mirror persists and guards
-the work and remains the owner of route capacity and `IRON`; a player-built
-alternate route is still certified separately by the read-only Create adapter.
-First recognition gives the player a survey map, welcome letter and dynamic
-native `Regional Ledger` written book.
+The fresh Mine17–Ironhill baseline is a complete, low-capacity vanilla
+minecart corridor: regular rails, powered intervals, trestles and a receiving
+platform. It is planned before construction, grows only through chunks the
+player has naturally loaded, and records per-cell provenance before every
+write. Its cart is only a readable representative; Pale Mirror still owns route
+capacity and `IRON`. A player-built Create route is certified separately by the
+read-only Create adapter. Railway Untold `1.2.1-pm.1` remains an isolated,
+explicit industrial-upgrade provider rather than the default for a small
+village. First recognition gives the player a survey map, welcome letter and
+dynamic native `Regional Ledger` written book.
 
-Run the exact railway profile and packaged two-start harness with:
+Run the optional industrial railway profile and packaged two-start harness with:
 
 ```bash
 ./gradlew :pale-mirror-neoforge:runRailwayGameTestServer

@@ -16,6 +16,8 @@ public enum Capability {
     SOURCE_GLOBAL_ISOLATION,
     /** Read-only observation of a player-built logistics route. */
     LOGISTICS_ROUTE_OBSERVATION,
+    /** PM can materialize and inspect a provenance-guarded vanilla minecart corridor. */
+    VANILLA_MINECART_ROUTE,
     /** PM may commission one persisted, provenance-guarded railway connection. */
     MANAGED_RAIL_CONNECTION,
     /** PM may commission and park one persisted representative freight service. */

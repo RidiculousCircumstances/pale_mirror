@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.Heightmap;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.RouteProvider;
 
 /** Restart-safe commissioning coordinator for the product-profile legacy freight line. */
 public final class ManagedRailwayRuntime {
@@ -81,6 +82,9 @@ public final class ManagedRailwayRuntime {
         for (CampaignRegionRecord region : data.campaignRegions().values()) {
             if (region.status() != CampaignRegionPresentationStatus.MATERIALIZED || region.primaryMineAnchor() == null
                     || data.campaignCommissioning().containsKey(region.id())) continue;
+            var living = data.worldState().livingRegion(region.id()).orElse(null);
+            if (living == null || !data.worldState().routeContract(living.primaryRouteId())
+                    .map(route -> route.provider() == RouteProvider.MANAGED_RAILWAY).orElse(false)) continue;
             BlockPos start = region.primaryMineAnchor().offset(0, 0, -3);
             BlockPos target = railTarget(server.overworld(), region.settlementAnchor(), start);
             Direction.Axis axis = Math.abs(target.getX() - start.getX()) >= Math.abs(target.getZ() - start.getZ())

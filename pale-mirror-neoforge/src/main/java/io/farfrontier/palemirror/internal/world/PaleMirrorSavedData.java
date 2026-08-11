@@ -52,7 +52,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 26;
+    static final int CURRENT_SCHEMA = 27;
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
@@ -67,10 +67,11 @@ public final class PaleMirrorSavedData extends SavedData {
     private final Map<WorldObjectId, SettlementDepotRecord> settlementDepots;
     private final Map<String, RefugeeCampRecord> refugeeCamps;
     private final Map<String, CampaignCommissioningRecord> campaignCommissioning;
+    private final Map<String, VanillaMinecartRouteRecord> vanillaMinecartRoutes;
     public PaleMirrorSavedData() {
         this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
                 new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(),
-                new ResourceTransferLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>());
+                new ResourceTransferLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>());
     }
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
@@ -79,8 +80,8 @@ public final class PaleMirrorSavedData extends SavedData {
                                 Map<WorldObjectId, SettlementObservationRecord> settlementObservations,
                                 ResourceTransferLedger resourceTransfers,
                                 Map<WorldObjectId, SettlementDepotRecord> settlementDepots,
-                                Map<String, RefugeeCampRecord> refugeeCamps,
-                                Map<String, CampaignCommissioningRecord> campaignCommissioning) {
+                                Map<String, RefugeeCampRecord> refugeeCamps, Map<String, CampaignCommissioningRecord> campaignCommissioning,
+                                Map<String, VanillaMinecartRouteRecord> vanillaMinecartRoutes) {
         this.worldState = worldState;
         this.testMines = testMines;
         this.audienceMappings = audienceMappings;
@@ -95,6 +96,7 @@ public final class PaleMirrorSavedData extends SavedData {
         this.settlementDepots = settlementDepots;
         this.refugeeCamps = refugeeCamps;
         this.campaignCommissioning = campaignCommissioning;
+        this.vanillaMinecartRoutes = vanillaMinecartRoutes;
     }
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
@@ -125,20 +127,16 @@ public final class PaleMirrorSavedData extends SavedData {
     public Map<String, StoryAudienceId> audienceMappings() { return audienceMappings; }
     public ReconciliationLedger reconciliationLedger() { return reconciliationLedger; }
     public WorldObjectRegistry worldRegistry() { return worldRegistry; }
-    /** Physical-effect metadata only; domain state remains the canonical outcome owner. */
     public EffectLeaseLedger effectLeases() { return effectLeases; }
-    /** Legacy foreign objects are diagnosed here, never adopted as PM state. */
     public QuarantineLedger quarantine() { return quarantine; }
-    /** Optional encounter combat state; it is never a second canonical world model. */
     public ThreatCombatLedger threatCombat() { return threatCombat; }
-    /** Physical campaign region plans; their simulation state remains in {@link #worldState()}. */
     public Map<String, CampaignRegionRecord> campaignRegions() { return campaignRegions; }
     /** Physical evidence from read-only village observers; never a second canonical settlement model. */
     public Map<WorldObjectId, SettlementObservationRecord> settlementObservations() { return settlementObservations; }
-    public ResourceTransferLedger resourceTransfers() { return resourceTransfers; }
-    public Map<WorldObjectId, SettlementDepotRecord> settlementDepots() { return settlementDepots; }
-    public Map<String, RefugeeCampRecord> refugeeCamps() { return refugeeCamps; }
-    public Map<String, CampaignCommissioningRecord> campaignCommissioning() { return campaignCommissioning; }
+    public ResourceTransferLedger resourceTransfers() { return resourceTransfers; } public Map<WorldObjectId, SettlementDepotRecord> settlementDepots() { return settlementDepots; }
+    public Map<String, RefugeeCampRecord> refugeeCamps() { return refugeeCamps; } public Map<String, CampaignCommissioningRecord> campaignCommissioning() { return campaignCommissioning; }
+    /** Physical vanilla route jobs; the domain RouteContract remains cargo authority. */
+    public Map<String, VanillaMinecartRouteRecord> vanillaMinecartRoutes() { return vanillaMinecartRoutes; }
     public boolean observeSettlement(io.farfrontier.palemirror.internal.adapter.SettlementObservation observation) {
         SettlementObservationRecord record = settlementObservations.get(observation.settlementId());
         if (record == null) {
@@ -187,13 +185,14 @@ public final class PaleMirrorSavedData extends SavedData {
         }
         Map<String, CampaignRegionRecord> campaignRegions = CampaignRegionPresentationCodec.read(tag);
         Map<String, CampaignCommissioningRecord> commissioning = CampaignCommissioningCodec.read(tag, version);
+        Map<String, VanillaMinecartRouteRecord> minecartRoutes = VanillaMinecartRouteCodec.read(tag);
         if (version == 24 && !campaignRegions.isEmpty()) campaignRegions.values().forEach(region ->
                 commissioning.putIfAbsent(region.id(), CampaignCommissioningRecord.legacyDisabled(region.id(),
                         region.dimensionId(), region.settlementAnchor())));
         PaleMirrorSavedData loaded = new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
                 new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag),
                 campaignRegions, SettlementObservationCodec.read(tag), EconomyPresentationCodec.readLedger(tag), EconomyPresentationCodec.readDepots(tag),
-                DisplacementPresentationCodec.read(tag), commissioning);
+                DisplacementPresentationCodec.read(tag), commissioning, minecartRoutes);
         if (version < CURRENT_SCHEMA) loaded.setDirty();
         return loaded;
     }
@@ -202,7 +201,7 @@ public final class PaleMirrorSavedData extends SavedData {
                 + CURRENT_SCHEMA + ". Back up the old world before resetting its Pale Mirror data.");
     }
     private static boolean isMigratable(int version) {
-        return version == 24 || version == 25 || version == CURRENT_SCHEMA;
+        return version == 24 || version == 25 || version == 26 || version == CURRENT_SCHEMA;
     }
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
@@ -237,6 +236,7 @@ public final class PaleMirrorSavedData extends SavedData {
         EconomyPresentationCodec.write(tag, resourceTransfers, settlementDepots);
         DisplacementPresentationCodec.write(tag, refugeeCamps);
         CampaignCommissioningCodec.write(tag, campaignCommissioning);
+        VanillaMinecartRouteCodec.write(tag, vanillaMinecartRoutes);
         return tag;
     }
     private static CompoundTag writeState(WorldState state) {

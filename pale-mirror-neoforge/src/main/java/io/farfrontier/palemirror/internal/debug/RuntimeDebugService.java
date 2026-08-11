@@ -145,6 +145,7 @@ public final class RuntimeDebugService {
         var security = data.worldState().security(region.communityId()).orElse(null);
         var primary = data.worldState().facility(region.primaryFacilityId()).orElse(null);
         var alternate = data.worldState().facility(region.alternateFacilityId()).orElse(null);
+        var primaryRoute = data.worldState().routeContract(region.primaryRouteId()).orElse(null);
         var route = data.worldState().routeContract(region.alternateRouteId()).orElse(null);
         StringBuilder output = new StringBuilder("Region ").append(region.id())
                 .append("\n- community=").append(region.communityId().value())
@@ -169,6 +170,12 @@ public final class RuntimeDebugService {
         }
         if (security != null) output.append("\n- defence=").append(security.defenceReadiness()).append('/').append(security.baseDefence())
                 .append(" guards=").append(security.registeredGuards()).append('/').append(security.guardCapability());
+        var minecart = data.vanillaMinecartRoutes().get(region.id());
+        if (primaryRoute != null) output.append("\n- primaryRoute=").append(primaryRoute.provider()).append(':')
+                .append(primaryRoute.status()).append('/').append(primaryRoute.freshness(data.worldState().simulationStep()))
+                .append(" capacity=").append(primaryRoute.transferableCapacity(data.worldState().simulationStep()))
+                .append(minecart == null ? "" : " physical=" + minecart.status() + " "
+                        + minecart.completedSegmentCount() + "/" + minecart.segmentCount());
         if (route != null) output.append("\n- alternateRoute=").append(route.status()).append('/').append(route.freshness(data.worldState().simulationStep()))
                 .append(" capacity=").append(route.transferableCapacity(data.worldState().simulationStep()))
                 .append(" lastValidationStep=").append(route.lastSuccessfulValidationStep());

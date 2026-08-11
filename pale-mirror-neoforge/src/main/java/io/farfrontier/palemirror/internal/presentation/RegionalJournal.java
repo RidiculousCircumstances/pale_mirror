@@ -60,14 +60,21 @@ public final class RegionalJournal {
                 + "\n" + data.worldRegistry().find(region.primaryFacilityId()).map(value -> "Mine17 chamber: " + coords(value.anchor())).orElse("Mine17: not represented")
                 + "\n" + data.worldRegistry().find(region.alternateFacilityId()).map(value -> "Red Valley: " + coords(value.anchor())).orElse("Red Valley: not represented");
         pages.add(Component.literal("PLACES\n\n" + places + "\n\nCoordinates are evidence-backed physical anchors; the ledger never teleports or force-loads them."));
+        var minecart = data.vanillaMinecartRoutes().get(region.id());
         var commissioning = data.campaignCommissioning().get(region.id());
-        pages.add(Component.literal("LEGACY FREIGHT\n\n" + (commissioning == null ? "Railway commissioning has not begun."
-                : "State: " + commissioning.status() + "\nBaseline arrivals: " + commissioning.baselineArrivals()
-                + "\nConstruction: " + commissioning.constructionPolicy()
-                + "\nSegments: " + commissioning.completedSegments() + "/" + commissioning.totalSegments()
-                + "\nTrain: " + (commissioning.nativeTrainReference().isBlank() ? "not commissioned" : "registered")
-                + (commissioning.diagnostic().isBlank() ? "" : "\nIssue: " + commissioning.diagnostic()))
-                + "\n\nThe train is representative. Canonical cargo remains abstract and cannot be duplicated through its wagons."));
+        String freight = minecart != null ? "VANILLA FREIGHT\n\nState: " + minecart.status()
+                + "\nSegments: " + minecart.completedSegmentCount() + "/" + minecart.segmentCount()
+                + "\nCarrier: " + (minecart.representativeCartId() == null ? "awaiting loaded yard" : "registered")
+                + (minecart.diagnostic().isBlank() ? "" : "\nIssue: " + minecart.diagnostic())
+                + "\n\nThis is a narrow legacy minecart line. Its cargo is abstract and cannot be duplicated from the cart."
+                : commissioning == null ? "LEGACY FREIGHT\n\nRailway commissioning has not begun."
+                : "LEGACY FREIGHT\n\nState: " + commissioning.status() + "\nBaseline arrivals: " + commissioning.baselineArrivals()
+                + "\nConstruction: " + commissioning.constructionPolicy() + "\nSegments: "
+                + commissioning.completedSegments() + "/" + commissioning.totalSegments() + "\nTrain: "
+                + (commissioning.nativeTrainReference().isBlank() ? "not commissioned" : "registered")
+                + (commissioning.diagnostic().isBlank() ? "" : "\nIssue: " + commissioning.diagnostic())
+                + "\n\nThe train is representative. Canonical cargo remains abstract and cannot be duplicated through its wagons.";
+        pages.add(Component.literal(freight));
         java.util.List<io.farfrontier.palemirror.domain.DomainEvent> relevantEvents = data.worldState().history().stream()
                 .filter(event -> event.subject().equals(community.id()) || event.subject().equals(region.primaryFacilityId())).toList();
         String events = relevantEvents.stream().skip(Math.max(0, relevantEvents.size() - 8L))

@@ -13,6 +13,7 @@ public final class UnmaterializedDebugReset {
     public static List<String> blockers(PaleMirrorSavedData data) {
         List<String> blockers = new ArrayList<>();
         if (!data.testMines().isEmpty()) blockers.add("physical test mines=" + data.testMines().size());
+        if (!data.vanillaMinecartRoutes().isEmpty()) blockers.add("vanilla minecart routes=" + data.vanillaMinecartRoutes().size());
         data.campaignRegions().values().forEach(region -> {
             if (region.status() != CampaignRegionPresentationStatus.PLANNED || region.nextOperationIndex() != 0) {
                 blockers.add("campaign job " + region.id() + "=" + region.status() + "/op" + region.nextOperationIndex());
@@ -43,6 +44,7 @@ public final class UnmaterializedDebugReset {
         data.quarantine().clear();
         data.threatCombat().clear();
         data.campaignRegions().clear();
+        data.vanillaMinecartRoutes().clear();
         data.settlementObservations().clear();
         data.resourceTransfers().clear();
         data.settlementDepots().clear();

@@ -80,13 +80,14 @@ Ironhill (observed population; datapack baseline 80, iron demand 12, defence 55)
   underground controller chamber. A changed, crafted, block-entity or unknown
   cell aborts placement rather than being overwritten. It never materializes
   a replacement settlement.
-- Schema v25 commissions the complete primary Mine17–Ironhill railway through
-  a generic boundary and the exact private Railway Untold 1.2.1-pm.1 fork. PM
-  persists the connection and per-cell authority before construction, follows
-  the head with bounded temporary tickets, creates exact endpoint stations and
-  a scheduled freight service, and validates the canonical primary route only
-  after a healthy baseline arrival. The receiving station remains outside the
-  observed village's read-only bounds.
+- Schema v27 commissions the complete primary Mine17–Ironhill corridor through
+  the built-in `VANILLA_MINECART` provider. PM persists the full cardinal plan
+  and per-cell authority before construction, writes only when the player has
+  naturally loaded a corridor chunk, and creates a low wooden receiving
+  platform outside the observed village's read-only bounds. Physical
+  postconditions validate the canonical primary route; the lease-authorized
+  minecart is visual only. Railway Untold remains an explicit later industrial
+  provider, not default infrastructure for a small village.
 - The Create observation bridge remains a separate read-only alternate-route
   path, version-pinned to 6.0.10. It
   recognises two named, nearby `Track Station`s only when their chunks are
@@ -118,7 +119,7 @@ profiles cover core, Crimson, Spore, Create, and FTB under Xvfb.
 
 The final packaged PM JAR plus exact Create and Railway Untold fork passes a
 clean two-start dedicated-server harness. Automated tests still do not replace
-the graphical acceptance walkthrough: the PM-managed baseline train must be
+the graphical acceptance walkthrough: the PM-managed baseline corridor must be
 visibly readable, and a player-built alternate Create train must be observed
 at both stations before that separate canonical capacity changes.
 
@@ -572,8 +573,8 @@ operator commands:
 7. the world preserves one durable result: restored supply or persistently
    weakened defence;
 8. the same state and causal history survive restart without divergence;
-9. a real `MineSite`, legacy freight representation, and receiving depot make
-   the physical relationship legible;
+9. a real `MineSite`, complete vanilla freight corridor, receiving platform,
+   and receiving depot make the physical relationship legible;
 10. a real scheduled Create train proves the positive alternate-route path;
 11. a dynamic journal explains causes, stock, flow, time, choices, and outcome;
 12. the complete Ironhill exercise can be recreated and repeated cleanly.
@@ -596,7 +597,7 @@ Investigation/Recovery + autonomous Supply disruption + alternate logistics
 
 Native Regional Ledger: primary read-only presentation
 FTB Quests: optional read-only projection
-RailInfrastructureAdapter: PM-managed baseline freight
+VanillaMinecartRailAdapter: PM-managed baseline freight
 CreateAdapter: player-built alternate logistics proof
 ```
 
@@ -605,7 +606,7 @@ CreateAdapter: player-built alternate logistics proof
 The implemented slices close the actor-model, physical transfer, evacuation,
 positive-development, field-authority, MineSite, baseline-freight and dynamic
 journal debts. The remaining bounded debt is evidence from a fresh unaided
-graphical playthrough: natural discovery, the healthy baseline train, delayed
+graphical playthrough: natural discovery, the healthy baseline corridor, delayed
 infection, each player choice, visible consequence and restart continuity.
 Culture, reputation and broad native settlement development remain deferred
 product scope rather than 0.2 blockers.
@@ -654,13 +655,13 @@ reconciliation without folding them back into one overloaded status.
 
 ### 0.2h: physical truth and native presentation
 
-Schema v25 replaces the campaign cube with a baseline-preflighted MineSite,
-adds PM-owned full-route commissioning through the private Railway Untold fork,
-pins a healthy scheduled-train arrival before infection eligibility, and makes
-the dynamic native Regional Ledger plus survey map the primary presentation.
-Old v24 campaign regions migrate with railway commissioning disabled rather
-than receiving a destructive retrofit. See
-[`managed-railway-integration.md`](managed-railway-integration.md).
+Schema v27 keeps the baseline-preflighted MineSite and replaces the expensive
+industrial default with PM-owned full-route commissioning through the built-in
+vanilla minecart provider. It persists provenance per loaded segment, pins a
+structural route validation before infection eligibility, and makes the dynamic
+native Regional Ledger plus survey map the primary presentation. Old v26
+managed-railway regions remain legacy rather than receiving a destructive
+rewrite. See [`vanilla-minecart-baseline.md`](vanilla-minecart-baseline.md).
 
 The implementation has passed core and exact railway GameTests plus a clean
 packaged two-start server harness. Its remaining 0.2 work is the unaided

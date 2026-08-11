@@ -1,16 +1,20 @@
-# Managed regional railway integration
+# Managed industrial railway integration
 
 ## Product role
 
-The First Living Region begins with a complete, physically readable freight
-railway between Mine17 and Ironhill. The line explains the primary `IRON` flow
-before a crisis occurs. It is not a per-delivery item simulation: one verified
-service establishes physical capability and Pale Mirror advances the canonical
-resource flow abstractly.
+Railway Untold is the explicit industrial upgrade profile for a First Living
+Region. A fresh small Ironhill instead begins with the built-in
+`VANILLA_MINECART` corridor documented in
+[`vanilla-minecart-baseline.md`](vanilla-minecart-baseline.md). The industrial
+line may replace or supplement that baseline only through an explicit
+`MANAGED_RAILWAY` route-provider selection. It is not a per-delivery item
+simulation: one verified service establishes physical capability and Pale
+Mirror advances canonical resource flow abstractly.
 
-This baseline is distinct from the existing Create logistics observation path:
+This industrial profile is distinct from the existing Create logistics
+observation path:
 
-- the baseline line is PM-authored and executed by the private Railway Untold
+- the industrial line is PM-authored and executed by the private Railway Untold
   fork through `RailInfrastructureAdapter`;
 - an alternate line is built and scheduled by the player, then certified by
   the read-only Create adapter after the same train reaches both registered
@@ -40,8 +44,9 @@ paleMirrorManagedMode = true
 
 Managed mode disables Railway Untold's autonomous connection generation. An
 exact version mismatch, disabled managed mode, or missing API reports a
-`BLOCKED`/`ABSENT` adapter state; PM does not silently fall back to an invisible
-primary route.
+`BLOCKED`/`ABSENT` adapter state; the fresh vanilla baseline remains available
+and PM does not silently change a selected industrial contract into another
+provider.
 
 ## Ownership boundary
 

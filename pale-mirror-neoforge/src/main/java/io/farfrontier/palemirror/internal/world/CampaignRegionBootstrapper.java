@@ -231,7 +231,7 @@ public final class CampaignRegionBootstrapper {
                 new SiteCapability(RED_VALLEY_DISPATCH_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
                 new SiteCapability(IRONHILL_RECEIVING_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()));
         List<RouteContract> routes = List.of(
-                new RouteContract(MINE17_ROUTE, MINE17_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.MANAGED_RAILWAY,
+                new RouteContract(MINE17_ROUTE, MINE17_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.VANILLA_MINECART,
                         ResourceKind.IRON, definition.ironProduction(), definition.routeCurrentWindowSteps(),
                         definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED),
                 new RouteContract(RED_VALLEY_ROUTE, RED_VALLEY_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.CREATE,

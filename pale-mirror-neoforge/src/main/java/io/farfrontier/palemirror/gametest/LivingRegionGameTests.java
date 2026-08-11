@@ -63,6 +63,9 @@ public final class LivingRegionGameTests {
                 "the strategic stock is scaled from the observed settlement rather than a fake template population");
         helper.assertValueEqual(data.worldState().routeContract(CampaignRegionBootstrapper.RED_VALLEY_ROUTE).orElseThrow().status().name(),
                 "PLANNED", "the fallback supply route must require a later physical observation");
+        helper.assertValueEqual(data.worldState().routeContract(region.primaryRouteId()).orElseThrow().provider(),
+                io.farfrontier.palemirror.domain.RouteProvider.VANILLA_MINECART,
+                "a fresh small settlement must receive a narrow vanilla baseline route, not industrial Create track");
         helper.assertTrue(data.campaignRegions().containsKey(CampaignRegionBootstrapper.IRONHILL_ID),
                 "physical coordinates are persisted separately from the canonical region aggregate");
         var depot = data.settlementDepots().get(CampaignRegionBootstrapper.IRONHILL);
@@ -429,6 +432,7 @@ public final class LivingRegionGameTests {
         data.settlementDepots().clear();
         data.refugeeCamps().clear();
         data.campaignCommissioning().clear();
+        data.vanillaMinecartRoutes().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();
