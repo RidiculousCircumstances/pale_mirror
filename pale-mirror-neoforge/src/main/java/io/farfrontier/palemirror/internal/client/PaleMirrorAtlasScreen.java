@@ -9,6 +9,10 @@ import net.minecraft.network.chat.Component;
 
 /** Compact native UI: a read-only region explanation plus server-authorized action buttons. */
 public final class PaleMirrorAtlasScreen extends Screen {
+    private static final int PANEL_MAX_WIDTH = 500;
+    private static final int PANEL_MARGIN = 16;
+    private static final int HEADER_HEIGHT = 42;
+    private static final int REGION_HEIGHT = 82;
     private PaleMirrorAtlasClient.Snapshot snapshot;
 
     public PaleMirrorAtlasScreen(PaleMirrorAtlasClient.Snapshot snapshot) {
@@ -29,54 +33,57 @@ public final class PaleMirrorAtlasScreen extends Screen {
     @Override
     protected void rebuildWidgets() {
         clearWidgets();
-        int left = (width - 520) / 2;
-        int top = (height - Math.min(330, 68 + snapshot.regions().size() * 82)) / 2;
+        Layout layout = layout();
         for (int index = 0; index < snapshot.regions().size(); index++) {
             PaleMirrorAtlasClient.Region region = snapshot.regions().get(index);
-            int row = top + 43 + index * 82;
+            int row = layout.top() + HEADER_HEIGHT + 1 + index * REGION_HEIGHT;
+            int actionLeft = layout.right() - 138;
             if (!region.scenarioId().isBlank() && "OFFERED".equals(region.scenarioStatus())) {
                 addRenderableWidget(Button.builder(Component.translatable("screen.pale_mirror.atlas.accept"), ignored ->
                         PaleMirrorNetwork.sendAction(AtlasActionPayload.Action.ACCEPT_SCENARIO, region.scenarioId()))
-                        .bounds(left + 382, row + 4, 60, 18).build());
+                        .bounds(actionLeft, row + 4, 60, 18).build());
                 addRenderableWidget(Button.builder(Component.translatable("screen.pale_mirror.atlas.decline"), ignored ->
                         PaleMirrorNetwork.sendAction(AtlasActionPayload.Action.DECLINE_SCENARIO, region.scenarioId()))
-                        .bounds(left + 446, row + 4, 66, 18).build());
+                        .bounds(actionLeft + 64, row + 4, 66, 18).build());
             } else if (region.canPrepareEvacuation()) {
                 addRenderableWidget(Button.builder(Component.translatable("screen.pale_mirror.atlas.prepare_shelter"), ignored ->
                         PaleMirrorNetwork.sendAction(AtlasActionPayload.Action.PREPARE_EVACUATION, region.communityId()))
-                        .bounds(left + 382, row + 4, 130, 18).build());
+                        .bounds(actionLeft, row + 4, 130, 18).build());
             }
             if (region.canBeginEvacuation()) {
                 addRenderableWidget(Button.builder(Component.translatable("screen.pale_mirror.atlas.begin_evacuation"), ignored ->
                         PaleMirrorNetwork.sendAction(AtlasActionPayload.Action.BEGIN_EVACUATION, region.communityId()))
-                        .bounds(left + 382, row + 27, 130, 18).build());
+                        .bounds(actionLeft, row + 27, 130, 18).build());
             }
         }
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), ignored -> onClose())
-                .bounds(left + 460, top + 12, 52, 18).build());
+                .bounds(layout.right() - 60, layout.top() + 10, 52, 18).build());
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
-        int panelWidth = 520;
-        int panelHeight = Math.min(330, 68 + snapshot.regions().size() * 82);
-        int left = (width - panelWidth) / 2;
-        int top = (height - panelHeight) / 2;
-        graphics.fill(left, top, left + panelWidth, top + panelHeight, 0xE5192633);
-        graphics.drawString(font, title, left + 12, top + 14, 0xD7F5FF, false);
-        graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.step", snapshot.step()), left + 12,
-                top + 27, 0xA9BBC7, false);
-        if (!snapshot.notice().isBlank()) graphics.drawString(font, snapshot.notice(), left + 12, top + panelHeight - 12,
+        Layout layout = layout();
+        // Atlas is an in-world instrument, not a modal menu. Keep the world sharp
+        // and darken only the compact panel instead of invoking Screen's fullscreen blur.
+        graphics.fill(layout.left() + 3, layout.top() + 3, layout.right() + 3, layout.bottom() + 3, 0x66000000);
+        graphics.fill(layout.left() - 1, layout.top() - 1, layout.right() + 1, layout.bottom() + 1, 0xFF5E7485);
+        graphics.fill(layout.left(), layout.top(), layout.right(), layout.bottom(), 0xF2192633);
+        graphics.drawString(font, title, layout.left() + 10, layout.top() + 12, 0xD7F5FF, false);
+        graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.step", snapshot.step()),
+                layout.left() + 10, layout.top() + 25, 0xA9BBC7, false);
+        if (!snapshot.notice().isBlank()) graphics.drawString(font, snapshot.notice(), layout.left() + 10,
+                layout.bottom() - 12,
                 0xF7D27A, false);
         if (snapshot.regions().isEmpty()) graphics.drawString(font,
-                Component.translatable("screen.pale_mirror.atlas.no_regions"), left + 12, top + 48, 0xD9D9D9, false);
+                Component.translatable("screen.pale_mirror.atlas.no_regions"), layout.left() + 10,
+                layout.top() + 44, 0xD9D9D9, false);
         for (int index = 0; index < snapshot.regions().size(); index++) drawRegion(graphics, snapshot.regions().get(index),
-                left + 12, top + 42 + index * 82);
+                layout.left() + 10, layout.top() + HEADER_HEIGHT + index * REGION_HEIGHT, layout.width());
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
-    private void drawRegion(GuiGraphics graphics, PaleMirrorAtlasClient.Region region, int x, int y) {
+    private void drawRegion(GuiGraphics graphics, PaleMirrorAtlasClient.Region region, int x, int y, int panelWidth) {
+        int secondaryX = x + Math.max(230, panelWidth - 235);
         int crisisColor = "NONE".equals(region.crisis()) ? 0x8FE1A2 : 0xF6AA78;
         graphics.drawString(font, region.name(), x, y, 0xFFFFFF, false);
         graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.crisis."
@@ -101,19 +108,27 @@ public final class PaleMirrorAtlasScreen extends Screen {
                     x, y + 60, 0x92C6E8, false);
         }
         if (!region.scenarioTitle().isBlank()) graphics.drawString(font, Component.translatable(
-                "scenario.pale_mirror." + region.scenarioTitle() + ".title"), x + 285, y + 27, 0x92C6E8, false);
+                "scenario.pale_mirror." + region.scenarioTitle() + ".title"), secondaryX, y + 27, 0x92C6E8, false);
         if ("OPEN".equals(region.emergency())) graphics.drawString(font, Component.translatable(
                 "screen.pale_mirror.atlas.intervention", region.remainingGrace(),
                 Component.translatable("screen.pale_mirror.atlas.reachability."
-                        + region.reachability().toLowerCase(java.util.Locale.ROOT))), x + 285, y + 45, 0xF6AA78, false);
+                        + region.reachability().toLowerCase(java.util.Locale.ROOT))), secondaryX, y + 45, 0xF6AA78, false);
         else if ("PLANNED".equals(region.developmentState()) && region.developmentRequired() > 0) {
             graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.development",
                     region.developmentContributed(), region.developmentRequired(), region.developmentWait(),
-                    region.developmentWaitRequired()), x + 285, y + 45, 0x8FE1A2, false);
+                    region.developmentWaitRequired()), secondaryX, y + 45, 0x8FE1A2, false);
         } else if ("ACTIVE".equals(region.developmentState())) {
             graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.development_complete"),
-                    x + 285, y + 45, 0x8FE1A2, false);
+                    secondaryX, y + 45, 0x8FE1A2, false);
         }
+    }
+
+    private Layout layout() {
+        int availableWidth = Math.max(280, width - PANEL_MARGIN * 2);
+        int panelWidth = Math.min(PANEL_MAX_WIDTH, availableWidth);
+        int requestedHeight = 58 + snapshot.regions().size() * REGION_HEIGHT;
+        int panelHeight = Math.min(Math.max(72, height - PANEL_MARGIN * 2), Math.min(330, requestedHeight));
+        return new Layout(PANEL_MARGIN, PANEL_MARGIN, panelWidth, panelHeight);
     }
 
     private static Component diagnosis(String value) {
@@ -126,4 +141,9 @@ public final class PaleMirrorAtlasScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
+
+    private record Layout(int left, int top, int width, int height) {
+        int right() { return left + width; }
+        int bottom() { return top + height; }
+    }
 }
