@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal;
 import java.util.IdentityHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.nio.charset.StandardCharsets;
@@ -10,8 +11,6 @@ import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
-import io.farfrontier.palemirror.domain.Narrator;
-import io.farfrontier.palemirror.domain.ScenarioDefinitionRef;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.RecognitionState;
@@ -20,9 +19,6 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationSchedul
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
 import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
-import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
-import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
-import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugController;
 import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
@@ -34,6 +30,7 @@ import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
 import io.farfrontier.palemirror.internal.economy.ResourceTransferRuntime;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
+import io.farfrontier.palemirror.internal.settlement.PreparedEvacuationRuntime;
 import io.farfrontier.palemirror.internal.settlement.SettlementDevelopmentRuntime;
 import io.farfrontier.palemirror.domain.SourceGateStatus;
 import io.farfrontier.palemirror.internal.observation.Observation;
@@ -65,13 +62,16 @@ public final class PaleMirrorRuntime {
     private final PaleMirrorSavedData data;
     private final DomainServices domainServices = new DomainServices();
     private final DomainCommandProcessor commands = domainServices.commands();
-    private final Narrator narrator = domainServices.narrator();
     private final ObservationReconciler reconciler = new ObservationReconciler(commands);
     private final MaterializationScheduler materializationScheduler = new MaterializationScheduler();
+    private final PreparedEvacuationRuntime evacuation;
+    private final NarrativeCandidateRuntime narrative;
     private final RuntimeDebugController debug;
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
+        this.narrative = new NarrativeCandidateRuntime(server, data, commands, domainServices.narrator(), this::audienceFor);
+        this.evacuation = new PreparedEvacuationRuntime(data, commands, this::audienceFor, this::handleDomainEvents);
         this.debug = new RuntimeDebugController(server, data, commands, this::handleDomainEvents);
         if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
@@ -96,7 +96,7 @@ public final class PaleMirrorRuntime {
         if (ManagedRailwayRuntime.tick(server, data, commands)) data.setDirty();
         if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
         if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
-        if (RefugeeCampRuntime.tick(server, data)) data.setDirty();
+        if (RefugeeCampRuntime.tick(server, data, commands)) data.setDirty();
         if (SettlementDevelopmentRuntime.tick(server, data, commands)) data.setDirty();
         if (server.overworld().getGameTime() % LOGISTICS_OBSERVATION_INTERVAL_TICKS == 0) {
             handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands, LOGISTICS_PROOF_WINDOW_STEPS));
@@ -104,6 +104,8 @@ public final class PaleMirrorRuntime {
         if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) {
             advanceSimulation(1);
             triggerDueRegionCrises();
+            offerPendingNarrativeOpportunities();
+            if (data.refugeeAnchorPermits().compact(data.worldState().simulationStep())) data.setDirty();
         }
         reconcilePendingGates();
         observePlayers();
@@ -142,18 +144,29 @@ public final class PaleMirrorRuntime {
             return false;
         }
     }
-    public boolean beginSettlementEvacuation(String communityId, StoryAudienceId audience, String causationId) {
+    public boolean decline(String scenarioId, StoryAudienceId audience) {
         try {
-            List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.BeginSettlementEvacuation(
-                    new WorldObjectId(communityId), audience, causationId));
-            if (!events.isEmpty()) data.setDirty();
-            return !events.isEmpty();
+            if (!data.worldState().scenario(scenarioId).map(value -> value.audience().equals(audience)).orElse(false)) return false;
+            boolean changed = !commands.execute(data.worldState(), new DomainCommand.DeclineScenario(scenarioId)).isEmpty();
+            if (changed) data.setDirty();
+            return changed;
         } catch (IllegalArgumentException ignored) {
             return false;
         }
     }
+    public boolean beginSettlementEvacuation(String communityId, StoryAudienceId audience, String causationId) {
+        return evacuation.begin(communityId, audience, causationId);
+    }
+
+    public boolean issueRefugeeAnchor(ServerPlayer player, String communityId) {
+        return evacuation.issue(player, communityId);
+    }
+
+    public boolean placeRefugeeAnchor(ServerPlayer player, net.minecraft.core.BlockPos anchor, ItemStack stack) {
+        return evacuation.place(player, anchor, stack);
+    }
     public List<io.farfrontier.palemirror.domain.ScenarioInstance> offered(StoryAudienceId audience) {
-        return narrator.offeredFor(data.worldState(), audience);
+        return domainServices.narrator().offeredFor(data.worldState(), audience);
     }
 
     public StoryAudienceId audienceFor(ServerPlayer player) {
@@ -391,55 +404,7 @@ public final class PaleMirrorRuntime {
     }
 
     private void handleDomainEvents(List<DomainEvent> events) {
-        events.forEach(event -> {
-            if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.MINE_INFECTED) {
-                boolean regionPrimary = data.worldState().livingRegions().stream()
-                        .anyMatch(region -> region.primaryFacilityId().equals(event.subject()));
-                if (!regionPrimary) {
-                    TestMineRecord mine = data.testMines().get(event.subject());
-                    if (mine != null) offerInvestigationScenario(event, mine.primaryAudience());
-                }
-            } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED) {
-                data.worldState().livingRegions().stream()
-                        .filter(region -> region.communityId().equals(event.subject()) && region.primaryAudience() != null)
-                        .findFirst().ifPresent(region -> offerSettlementCrisis(event, region.primaryAudience(), region.primaryFacilityId()));
-            }
-        });
-    }
-
-    private void offerInvestigationScenario(DomainEvent event, StoryAudienceId audience) {
-        InfectionSourceId source = data.worldState().facility(event.subject()).map(FacilityState::infectionSource).orElse(null);
-        if (source == null) return;
-        ScenarioDefinition definition = ScenarioDefinitions.forSourceAndArchetype(source, ScenarioArchetype.INVESTIGATION_RECOVERY)
-                .stream().findFirst().orElse(null);
-        offerScenario(event, audience, source, definition);
-    }
-
-    private void offerSettlementCrisis(DomainEvent event, StoryAudienceId audience, WorldObjectId primaryFacilityId) {
-        InfectionSourceId source = data.worldState().facility(primaryFacilityId).map(FacilityState::infectionSource).orElse(null);
-        if (source == null) return;
-        ScenarioDefinition definition = ScenarioDefinitions.forSourceAndArchetype(source, ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)
-                .stream().findFirst().orElse(null);
-        offerScenario(event, audience, source, definition);
-    }
-
-    private void offerScenario(DomainEvent event, StoryAudienceId audience, InfectionSourceId source, ScenarioDefinition definition) {
-        if (definition == null) {
-            commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "definition unavailable"));
-            return;
-        }
-        if (!AdapterRegistry.supports(source, definition.capabilities())) {
-            commands.execute(data.worldState(), new DomainCommand.NoScenario(event, audience, "required capability unavailable"));
-            return;
-        }
-        String profileId = definition.encounterProfileId();
-        String profileVersion = profileId.isBlank() ? "" : EncounterDefinitions.current()
-                .get(net.minecraft.resources.ResourceLocation.parse(profileId)) == null ? "unavailable"
-                : Integer.toString(EncounterDefinitions.current().get(net.minecraft.resources.ResourceLocation.parse(profileId)).version());
-        ScenarioDefinitionRef pinned = new ScenarioDefinitionRef(definition.id().toString(), Integer.toString(definition.version()),
-                definition.stages(), definition.capabilities().stream().map(Enum::name).sorted().toList(), definition.cooldownSteps(),
-                profileId, profileVersion, definition.archetype());
-        commands.execute(data.worldState(), new DomainCommand.OfferScenario(event, audience, pinned));
+        narrative.handleDomainEvents(events);
     }
 
     private void reconcileScenarioCapabilities() {
@@ -447,10 +412,8 @@ public final class PaleMirrorRuntime {
             java.util.Set<io.farfrontier.palemirror.api.Capability> requirements = scenario.requiredCapabilities().stream()
                     .map(io.farfrontier.palemirror.api.Capability::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet());
             FacilityState facility = data.worldState().facility(scenario.target()).orElseGet(() ->
-                    scenario.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
-                            ? data.worldState().livingRegions().stream().filter(region -> region.communityId().equals(scenario.target()))
-                            .findFirst().flatMap(region -> data.worldState().facility(region.primaryFacilityId())).orElse(null)
-                            : null);
+                    data.worldState().livingRegions().stream().filter(region -> region.communityId().equals(scenario.target()))
+                            .findFirst().flatMap(region -> data.worldState().facility(region.primaryFacilityId())).orElse(null));
             boolean gateNeedsSource = facility != null && facility.gate().status().protectsController();
             boolean available = facility != null && AdapterRegistry.supports(facility.infectionSource(), requirements)
                     && (!gateNeedsSource || AdapterRegistry.sourceAdapter(facility.infectionSource()).health().status()
@@ -475,16 +438,30 @@ public final class PaleMirrorRuntime {
         });
     }
     private void triggerDueRegionCrises() {
+        List<DomainEvent> produced = new ArrayList<>();
         data.worldState().livingRegions().stream().filter(region -> region.incidentDue(data.worldState().simulationStep()))
                 .filter(this::baselineInfrastructureReady)
                 .forEach(region -> {
                     List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.TriggerFacilityInfection(
                             region.primaryFacilityId(), "region-crisis:" + region.id()));
                     if (!events.isEmpty()) {
-                        handleDomainEvents(events);
+                        produced.addAll(events);
                         data.setDirty();
                     }
                 });
+        // Narrator sees all simultaneous regional incidents before it chooses
+        // one story for an audience, rather than taking HashMap/tick order as
+        // an accidental pacing policy.
+        if (!produced.isEmpty()) handleDomainEvents(produced);
+    }
+
+    /**
+     * Opportunities survive a pacing cooldown. They are re-derived from the
+     * canonical history rather than stored as a second mutable queue, so a
+     * restart cannot lose or duplicate the pending continuation.
+     */
+    private void offerPendingNarrativeOpportunities() {
+        narrative.offerPendingOpportunities();
     }
     private boolean baselineInfrastructureReady(io.farfrontier.palemirror.domain.LivingRegionState region) {
         var vanilla = data.vanillaMinecartRoutes().get(region.id());

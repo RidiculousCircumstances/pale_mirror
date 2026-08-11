@@ -73,6 +73,12 @@ invariants:
     statement: A known critical settlement receives a persisted grace window before automatic evacuation; the objective policy continues without Narrator, and irreversible physical consequences touch only PM-owned cells.
   - id: settlement-positive-development
     statement: Stable surplus creates a persisted domain DevelopmentIntent and reserves canonical resources; capacity, housing, prosperity and growth advance only after provenance-safe PM-owned physical work is verified.
+  - id: living-frontier-instancing
+    statement: An iron_frontier instance derives all canonical object identities from the world seed and an observed-place identity, pins its placement before materialization, and cannot share a community, route or physical job with another instance. Historical Ironhill identities are migration-only and remain immutable.
+  - id: narrator-candidate-boundary
+    statement: Narrator candidates are deterministic, transient interpretations of canonical events/history. They may select a scenario or persist NO_SCENARIO, but never create a crisis, change settlement policy, inspect Minecraft/adapters, or become a competing mutable queue.
+  - id: prepared-evacuation
+    statement: A Refugee Anchor item is only a signed player proposal. Canonical shelter registration validates audience, emergency, dimension, safe PM-owned footprint and capacity before physical camp work; camp materialization reconciles site operation through domain commands, while automatic evacuation remains possible without a player permit.
   - id: settlement-field-authority
     statement: Every campaign settlement pins a source-neutral field authority profile; native-reconciled settlements may contribute population and integrity facts while PM remains unable to move, ruin, grow or construct the native society.
   - id: operator-debug-safety
@@ -142,6 +148,14 @@ critical_flows:
   - id: living-region-supply
     path: typed place evidence -> Community/Place binding -> Mine -> RouteContract -> ResourceAccount -> SettlementPolicy -> objective crisis -> combat/logistics outcome
     owner: domain settlement actor model plus NeoForge evidence, presentation and logistics bridges
+    verification: critical-code
+  - id: living-frontier-aftermath
+    path: canonical crisis outcome -> surplus or displacement -> DevelopmentIntent/return intent -> history-derived Narrator candidate -> offered player continuation or explicit NO_SCENARIO -> verified autonomous result
+    owner: domain settlement policy/Narrator plus NeoForge presentation bridge
+    verification: critical-code
+  - id: prepared-refugee-site
+    path: emergency window -> audience-bound permit -> player placement fact -> validated shelter command -> persisted PM camp job -> physical postcondition -> operational shelter -> resettled population
+    owner: domain emergency policy plus NeoForge camp materialization bridge
     verification: critical-code
   - id: create-same-vehicle-proof
     path: named loaded station -> opaque native vehicle observation -> second endpoint observation -> bounded same-vehicle proof -> canonical route capacity

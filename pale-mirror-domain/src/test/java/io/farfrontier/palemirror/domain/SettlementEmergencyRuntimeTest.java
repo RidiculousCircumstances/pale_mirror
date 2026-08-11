@@ -40,6 +40,47 @@ class SettlementEmergencyRuntimeTest {
                 new StoryAudienceId("pm:audience:other"), "player:other")).isEmpty());
     }
 
+    @Test
+    void preparedShelterTurnsEvacuationIntoResettlementWithoutMakingItASecondPopulationSource() {
+        WorldState state = emergencyState();
+        DomainServices services = new DomainServices();
+        services.settlementEmergencies().reconcile(state);
+        WorldObjectId shelter = new WorldObjectId("pale_mirror:prepared_shelter");
+
+        assertTrue(services.commands().execute(state, new DomainCommand.RegisterEvacuationShelter(COMMUNITY,
+                StoryAudienceId.globalTestAudience(), new WorldSite(shelter, WorldSiteType.SHELTER, OperationalState.OPERATIONAL),
+                new SiteCapability(shelter, SiteCapabilityType.SHELTER, null, 80), "player:anchor")).stream()
+                .anyMatch(event -> event.type() == DomainEventType.REFUGEE_SHELTER_PREPARED));
+        services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
+                StoryAudienceId.globalTestAudience(), "player:evacuate"));
+        state.setSimulationStep(10);
+        services.settlementEmergencies().reconcile(state);
+
+        assertEquals(PopulationDisposition.RESETTLED, state.populationGroups(COMMUNITY).getFirst().disposition());
+        assertEquals(80, state.population(COMMUNITY), "the prepared camp hosts the existing group; it does not clone it");
+        assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.POPULATION_RESETTLED));
+    }
+
+    @Test
+    void shelterBoundToAnotherCommunityCannotReceiveThisEvacuation() {
+        WorldState state = emergencyState();
+        DomainServices services = new DomainServices();
+        WorldObjectId otherCommunity = new WorldObjectId("pale_mirror:other_community");
+        WorldObjectId otherShelter = new WorldObjectId("pale_mirror:other_shelter");
+        state.putSite(new WorldSite(otherShelter, WorldSiteType.SHELTER, OperationalState.OPERATIONAL));
+        state.putSiteAffiliation(new SiteAffiliation(otherShelter, otherCommunity, SiteAffiliationRole.RECIPIENT));
+        state.putSiteCapability(new SiteCapability(otherShelter, SiteCapabilityType.SHELTER, null, 80));
+
+        services.settlementEmergencies().reconcile(state);
+        state.setSimulationStep(8);
+        services.settlementEmergencies().reconcile(state);
+        state.setSimulationStep(10);
+        services.settlementEmergencies().reconcile(state);
+
+        assertEquals(PopulationDisposition.DISPLACED, state.populationGroups(COMMUNITY).getFirst().disposition(),
+                "a shelter for another community must not silently redirect this population group");
+    }
+
     private static final WorldObjectId COMMUNITY = new WorldObjectId("pale_mirror:community");
     private static final WorldObjectId PLACE = new WorldObjectId("pale_mirror:place");
     private static final WorldObjectId MINE = new WorldObjectId("pale_mirror:mine");

@@ -16,13 +16,23 @@ public final class RegionalLogisticsRuntime {
 
     public static List<DomainEvent> observe(MinecraftServer server, PaleMirrorSavedData data,
                                             DomainCommandProcessor commands, long proofWindowSteps) {
-        LivingRegionState region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElse(null);
-        CampaignRegionRecord presentation = data.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID);
-        if (region == null || presentation == null || presentation.primaryMineAnchor() == null
-                || presentation.alternateMineAnchor() == null) return List.of();
+        java.util.List<DomainEvent> all = new java.util.ArrayList<>();
+        data.worldState().livingRegions().stream().sorted(java.util.Comparator.comparing(LivingRegionState::id))
+                .forEach(region -> {
+                    CampaignRegionRecord presentation = data.campaignRegions().get(region.id());
+                    if (presentation == null || presentation.primaryMineAnchor() == null
+                            || presentation.alternateMineAnchor() == null) return;
+                    all.addAll(observeRegion(server, data, commands, proofWindowSteps, region, presentation));
+                });
+        return List.copyOf(all);
+    }
+
+    private static List<DomainEvent> observeRegion(MinecraftServer server, PaleMirrorSavedData data,
+                                                    DomainCommandProcessor commands, long proofWindowSteps,
+                                                    LivingRegionState region, CampaignRegionRecord presentation) {
+        RegionBindings bindings = RegionBindings.fromRegionId(region.id());
         LogisticsRouteContract contract = new LogisticsRouteContract(region.alternateRouteId(), presentation.alternateMineAnchor(),
-                presentation.settlementAnchor(), CampaignRegionBootstrapper.RED_VALLEY_DISPATCH,
-                CampaignRegionBootstrapper.IRONHILL_RECEIVING);
+                presentation.settlementAnchor(), bindings.alternateDispatchStation(), bindings.receivingStation());
         return AdapterRegistry.observeLogisticsRoute(server.overworld(), contract).map(observation -> {
             if (!observation.observed()) return List.<DomainEvent>of();
             boolean changed = observeEndpoints(data, presentation, observation.originTrainPresent(), observation.originCapacity(),
@@ -45,18 +55,23 @@ public final class RegionalLogisticsRuntime {
 
     /** Operator-facing facts for a real Create schedule test; no route state is changed by this query. */
     public static String describe(PaleMirrorSavedData data) {
-        CampaignRegionRecord record = data.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID);
-        if (record == null) return "No observed settlement is bound to the First Living Region.";
-        if (record.alternateMineAnchor() == null) return "Red Valley mine is not materialized; approach "
+        String result = data.campaignRegions().values().stream().sorted(java.util.Comparator.comparing(CampaignRegionRecord::id))
+                .map(record -> describeRegion(data, record)).reduce((left, right) -> left + "\n" + right).orElse("");
+        return result.isBlank() ? "No observed settlement is bound to an iron_frontier region." : result;
+    }
+
+    private static String describeRegion(PaleMirrorSavedData data, CampaignRegionRecord record) {
+        if (record.alternateMineAnchor() == null) return record.displayName() + ": alternate mine is not materialized; approach "
                 + record.alternateMineColumn().toShortString() + " first.";
-        LivingRegionState region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElse(null);
+        LivingRegionState region = data.worldState().livingRegion(record.id()).orElse(null);
         var contract = region == null ? null : data.worldState().routeContract(region.alternateRouteId()).orElse(null);
         String contractStatus = contract == null ? "missing" : contract.status() + "/"
                 + contract.health(data.worldState().simulationStep()) + "/" + contract.freshness(data.worldState().simulationStep())
                 + " capacity=" + contract.transferableCapacity(data.worldState().simulationStep())
                 + " validatedAt=" + contract.lastSuccessfulValidationStep();
-        return "Create schedule: '" + CampaignRegionBootstrapper.RED_VALLEY_DISPATCH + "' at "
-                + record.alternateMineAnchor().toShortString() + " -> '" + CampaignRegionBootstrapper.IRONHILL_RECEIVING
+        RegionBindings bindings = RegionBindings.fromRegionId(record.id());
+        return record.displayName() + " Create schedule: '" + bindings.alternateDispatchStation() + "' at "
+                + record.alternateMineAnchor().toShortString() + " -> '" + bindings.receivingStation()
                 + "' at " + record.settlementAnchor().toShortString() + "; vehicle origin=" + record.originVehicleId()
                 + " step=" + record.originTrainSeenAtStep() + ", destination=" + record.destinationVehicleId() + " step="
                 + record.destinationTrainSeenAtStep() + ", certified capacity="

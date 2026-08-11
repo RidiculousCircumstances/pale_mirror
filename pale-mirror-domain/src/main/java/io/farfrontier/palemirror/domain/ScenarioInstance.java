@@ -86,6 +86,12 @@ public final class ScenarioInstance {
         resolutionOutcome = Objects.requireNonNull(outcome, "outcome");
         return true;
     }
+    public boolean decline() {
+        if (status != ScenarioStatus.OFFERED) return false;
+        status = ScenarioStatus.DECLINED;
+        resolutionOutcome = "DECLINED";
+        return true;
+    }
     public boolean block(String reason) {
         if (status == ScenarioStatus.BLOCKED || status.isTerminal()) return false;
         resumeStatus = status;

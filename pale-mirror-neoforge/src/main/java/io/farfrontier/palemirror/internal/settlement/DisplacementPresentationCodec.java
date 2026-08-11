@@ -16,7 +16,8 @@ import net.minecraft.nbt.Tag;
 public final class DisplacementPresentationCodec {
     private DisplacementPresentationCodec() { }
 
-    public static void write(CompoundTag root, Map<String, RefugeeCampRecord> camps) {
+    public static void write(CompoundTag root, Map<String, RefugeeCampRecord> camps,
+                             RefugeeAnchorPermitLedger permits) {
         ListTag values = new ListTag();
         camps.values().forEach(camp -> {
             CompoundTag tag = new CompoundTag();
@@ -47,6 +48,18 @@ public final class DisplacementPresentationCodec {
             values.add(tag);
         });
         root.put("refugeeCamps", values);
+        ListTag permitValues = new ListTag();
+        permits.permits().forEach(permit -> {
+            CompoundTag value = new CompoundTag();
+            value.putString("id", permit.id());
+            value.putUUID("player", permit.playerId());
+            value.putString("community", permit.communityId().value());
+            value.putString("audience", permit.audience().value());
+            value.putLong("expires", permit.expiresAtStep());
+            value.putBoolean("consumed", permit.consumed());
+            permitValues.add(value);
+        });
+        root.put("refugeeAnchorPermits", permitValues);
     }
 
     public static Map<String, RefugeeCampRecord> read(CompoundTag root) {
@@ -68,5 +81,19 @@ public final class DisplacementPresentationCodec {
             values.put(camp.populationGroupId(), camp);
         }
         return values;
+    }
+
+    public static RefugeeAnchorPermitLedger readPermits(CompoundTag root) {
+        Map<String, RefugeeAnchorPermit> values = new LinkedHashMap<>();
+        for (Tag element : root.getList("refugeeAnchorPermits", Tag.TAG_COMPOUND)) {
+            CompoundTag tag = (CompoundTag) element;
+            if (!tag.hasUUID("player")) continue;
+            RefugeeAnchorPermit permit = new RefugeeAnchorPermit(tag.getString("id"), tag.getUUID("player"),
+                    new WorldObjectId(tag.getString("community")),
+                    new io.farfrontier.palemirror.domain.StoryAudienceId(tag.getString("audience")),
+                    tag.getLong("expires"), tag.getBoolean("consumed"));
+            values.put(permit.id(), permit);
+        }
+        return new RefugeeAnchorPermitLedger(values);
     }
 }

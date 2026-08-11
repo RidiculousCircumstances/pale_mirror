@@ -10,7 +10,7 @@ import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
-import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
+import io.farfrontier.palemirror.internal.world.RegionBindings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -26,9 +26,10 @@ public final class RegionalJournal {
     private RegionalJournal() { }
 
     public static WrittenBookContent ledger(PaleMirrorSavedData data, ServerPlayer player, StoryAudienceId audience) {
-        var region = data.worldState().livingRegions().stream().findFirst().orElse(null);
+        var region = regionFor(data, player.serverLevel().dimension().location().toString(), player.blockPosition(), audience);
         if (region == null) return book(java.util.List.of(Component.literal("No living region has been recognized yet.\n\n"
                 + "Explore established villages. Pale Mirror requires stable evidence before it recognizes a community.")));
+        String name = regionName(data, region.id());
         SettlementCommunity community = data.worldState().community(region.communityId()).orElse(null);
         if (community == null) return book(java.util.List.of(Component.literal("Regional records are incomplete.")));
         var economy = data.worldState().economy(community.id()).orElseThrow();
@@ -36,29 +37,39 @@ public final class RegionalJournal {
         var security = data.worldState().security(community.id()).orElseThrow();
         String reserve = iron.reserveSteps().isPresent() ? iron.reserveSteps().getAsLong() + " steps" : "stable";
         java.util.List<Component> pages = new java.util.ArrayList<>();
-        pages.add(Component.literal("IRONHILL\nRegional Ledger\n\nPopulation: " + data.worldState().population(community.id())
+        pages.add(Component.literal(name.toUpperCase(java.util.Locale.ROOT) + "\nRegional Ledger\n\nPopulation: " + data.worldState().population(community.id())
                 + "\nIron: " + iron.stock() + "/" + iron.capacity() + "\nNet flow: " + signed(iron.netFlow())
                 + "/step\nReserve: " + reserve + "\nDefence: " + security.defenceReadiness() + "/" + security.baseDefence()
                 + "\nCondition: " + community.crisisState()));
         String cause = data.worldState().routeContracts().stream().filter(route -> route.destinationEndpoint()
-                        .equals(CampaignRegionBootstrapper.IRONHILL_RECEIVING_SITE))
-                .map(route -> route.id().equals(CampaignRegionBootstrapper.MINE17_ROUTE) ? "Mine17 legacy line: "
+                        .equals(RegionBindings.fromRegionId(region.id()).receivingSiteId()))
+                .map(route -> route.id().equals(region.primaryRouteId()) ? "Legacy minecart line: "
                         + route.status() + " / " + route.freshness(data.worldState().simulationStep())
-                        : "Red Valley alternative: " + route.status() + " / " + route.freshness(data.worldState().simulationStep()))
+                        : "Alternate Create line: " + route.status() + " / " + route.freshness(data.worldState().simulationStep()))
                 .reduce((a, b) -> a + "\n" + b).orElse("No route contracts are known.");
-        pages.add(Component.literal("WHY IT MATTERS\n\nMine17 supplies strategic iron. The settlement consumes reserves whenever its route cannot deliver.\n\n"
+        pages.add(Component.literal("WHY IT MATTERS\n\nThe primary mine supplies strategic iron. The settlement consumes reserves whenever its route cannot deliver.\n\n"
                 + cause + "\n\nFalling reserves cause rationing, weaker defence and eventually evacuation."));
-        MutableComponent responses = Component.literal("AVAILABLE RESPONSES\n\n1. Clear Mine17 and let the legacy line recover.\n\n"
-                + "2. Validate a Create route from Red Valley.\n\n3. Preserve people through evacuation.\n\nIgnoring the crisis remains a choice; the world keeps its outcome.");
+        MutableComponent responses = Component.literal("AVAILABLE RESPONSES\n\n1. Clear the infected mine and let the legacy line recover.\n\n"
+                + "2. Validate a Create route from the alternate source.\n\n3. Preserve people through evacuation.\n\nIgnoring the crisis remains a choice; the world keeps its outcome.");
         data.worldState().emergencyWindow(community.id()).filter(window ->
-                window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).ifPresent(window ->
-                responses.append(Component.literal("\n\n[Begin evacuation]").withStyle(Style.EMPTY.withUnderlined(true)
+                window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).ifPresent(window -> {
+            MutableComponent prepare = Component.literal("\n\n[Prepare refugee site]").withStyle(Style.EMPTY.withUnderlined(true)
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                            "/pale_mirror settlement prepare_refugee_site " + community.id().value())));
+            responses.append(prepare);
+            if (preparedShelter(data, community.id())) {
+                MutableComponent begin = Component.literal("\n[Begin prepared evacuation]").withStyle(Style.EMPTY.withUnderlined(true)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
-                                "/pale_mirror settlement evacuate " + community.id().value())))));
+                                "/pale_mirror settlement evacuate " + community.id().value())));
+                responses.append(begin);
+            } else {
+                responses.append(Component.literal("\nPlace the issued anchor before evacuation can begin."));
+            }
+        });
         pages.add(responses);
-        String places = data.worldRegistry().find(region.placeId()).map(value -> "Ironhill: " + coords(value.anchor())).orElse("Ironhill: unknown")
-                + "\n" + data.worldRegistry().find(region.primaryFacilityId()).map(value -> "Mine17 chamber: " + coords(value.anchor())).orElse("Mine17: not represented")
-                + "\n" + data.worldRegistry().find(region.alternateFacilityId()).map(value -> "Red Valley: " + coords(value.anchor())).orElse("Red Valley: not represented");
+        String places = data.worldRegistry().find(region.placeId()).map(value -> name + ": " + coords(value.anchor())).orElse(name + ": unknown")
+                + "\n" + data.worldRegistry().find(region.primaryFacilityId()).map(value -> "Primary mine chamber: " + coords(value.anchor())).orElse("Primary mine: not represented")
+                + "\n" + data.worldRegistry().find(region.alternateFacilityId()).map(value -> "Alternate source: " + coords(value.anchor())).orElse("Alternate source: not represented");
         pages.add(Component.literal("PLACES\n\n" + places + "\n\nCoordinates are evidence-backed physical anchors; the ledger never teleports or force-loads them."));
         var minecart = data.vanillaMinecartRoutes().get(region.id());
         var commissioning = data.campaignCommissioning().get(region.id());
@@ -83,11 +94,18 @@ public final class RegionalJournal {
         pages.add(Component.literal("RECENT HISTORY\n\n" + events));
         data.worldState().scenarios().stream().filter(value -> value.audience().equals(audience) && !value.status().isTerminal())
                 .findFirst().ifPresent(scenario -> {
-                    MutableComponent page = Component.literal("ACTIVE STORY\n\nStage: " + scenario.status()
+                    MutableComponent page = Component.literal("ACTIVE STORY\n\n" + scenarioTitle(scenario)
+                            + "\n\nStage: " + scenario.status()
                             + "\nOutcome: " + (scenario.resolutionOutcome().isBlank() ? "undecided" : scenario.resolutionOutcome()));
-                    if (scenario.status() == ScenarioStatus.OFFERED) page.append(Component.literal("\n\n[Accept request]")
-                            .withStyle(Style.EMPTY.withUnderlined(true).withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
-                                    "/pale_mirror scenario accept " + scenario.id()))));
+                    if (scenario.status() == ScenarioStatus.OFFERED) {
+                        MutableComponent accept = Component.literal("\n\n[Accept request]").withStyle(Style.EMPTY.withUnderlined(true)
+                                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                                        "/pale_mirror scenario accept " + scenario.id())));
+                        MutableComponent decline = Component.literal("\n[Decline request]").withStyle(Style.EMPTY.withUnderlined(true)
+                                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                                        "/pale_mirror scenario decline " + scenario.id())));
+                        page.append(accept).append(decline);
+                    }
                     pages.add(page);
                 });
         return book(pages);
@@ -173,7 +191,7 @@ public final class RegionalJournal {
         var iron = data.worldState().economy(community.id()).orElseThrow().require(ResourceKind.IRON);
         var security = data.worldState().security(community.id()).orElseThrow();
         String reserve = iron.reserveSteps().isPresent() ? Long.toString(iron.reserveSteps().getAsLong()) : "∞";
-        player.sendSystemMessage(Component.literal("Ironhill — population " + data.worldState().population(community.id()) + ", defence "
+        player.sendSystemMessage(Component.literal(regionName(data, region.id()) + " — population " + data.worldState().population(community.id()) + ", defence "
                 + security.defenceReadiness() + "/" + security.baseDefence() + ", iron " + iron.stock() + "/"
                 + iron.capacity() + ", flow " + iron.netFlow() + ", reserve " + reserve + ", "
                 + iron.availability() + ", policy " + community.crisisState()));
@@ -189,38 +207,83 @@ public final class RegionalJournal {
                 action("[Open regional journal]", command).append(Component.literal(" — presentation only; PM owns state."))));
         data.worldState().emergencyWindow(community.id()).filter(window ->
                 window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).ifPresent(window ->
-                player.sendSystemMessage(action("[Begin evacuation]", "/pale_mirror settlement evacuate " + community.id().value())
-                        .append(Component.literal(" — intervention window closes at simulation step " + window.deadlineStep() + "."))));
-        scenarioLine(data, player, region.communityId(), audiences.apply(player));
+                player.sendSystemMessage(action("[Prepare refugee site]", "/pale_mirror settlement prepare_refugee_site " + community.id().value())
+                        .append(Component.literal(" — place the anchor, then begin evacuation before step " + window.deadlineStep() + "."))));
+        scenarioLine(data, player, region.communityId(), audiences.apply(player), regionName(data, region.id()));
         return true;
     }
 
     private static void scenarioLine(PaleMirrorSavedData data, ServerPlayer player, WorldObjectId communityId,
-                                     StoryAudienceId audience) {
+                                     StoryAudienceId audience, String name) {
         var scenario = data.worldState().scenarios().stream().filter(value -> value.audience().equals(audience)
                 && value.target().equals(communityId) && !value.status().isTerminal()).findFirst().orElse(null);
         if (scenario == null) {
             SettlementCommunity community = data.worldState().community(communityId).orElseThrow();
             player.sendSystemMessage(Component.literal(community.supplyRequested()
-                    ? "Ironhill is rationing supplies and seeking another route."
+                    ? name + " is rationing supplies and seeking another route."
                     : "The council is monitoring its mine supply line."));
             return;
         }
         if (scenario.status() == ScenarioStatus.OFFERED) {
-            player.sendSystemMessage(action("[Accept Ironhill crisis]", "/pale_mirror scenario accept " + scenario.id())
-                    .append(Component.literal(" — assess Mine17 and the alternate supply line.")));
+            player.sendSystemMessage(action("[Accept: " + scenarioTitle(scenario) + "]", "/pale_mirror scenario accept " + scenario.id())
+                    .append(Component.literal(" — " + scenarioPrompt(scenario, name))));
             return;
         }
         if (scenario.status() == ScenarioStatus.RESPOND) {
-            player.sendSystemMessage(Component.literal("Responses: clear Mine17; or validate a Create train between Red Valley Dispatch and Ironhill Receiving."));
+            player.sendSystemMessage(Component.literal(scenarioPrompt(scenario, name)));
             return;
         }
-        player.sendSystemMessage(Component.literal("Ironhill scenario: " + scenario.status() + ", outcome="
+        player.sendSystemMessage(Component.literal(scenarioTitle(scenario) + ": " + scenario.status() + ", outcome="
                 + scenario.resolutionOutcome() + "."));
     }
 
     private static MutableComponent action(String text, String command) {
         return Component.literal(text).setStyle(Style.EMPTY.withUnderlined(true)
                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command)));
+    }
+
+    private static io.farfrontier.palemirror.domain.LivingRegionState regionFor(PaleMirrorSavedData data,
+            String dimensionId, BlockPos position, StoryAudienceId audience) {
+        var local = data.worldState().livingRegions().stream().filter(candidate -> data.worldRegistry().find(candidate.placeId())
+                .filter(entry -> entry.dimensionId().equals(dimensionId)
+                        && entry.anchor().distSqr(position) <= 256L * 256L).isPresent()).findFirst();
+        if (local.isPresent()) return local.get();
+        return data.worldState().livingRegions().stream().filter(candidate -> audience.equals(candidate.primaryAudience()))
+                .sorted(java.util.Comparator.comparing(io.farfrontier.palemirror.domain.LivingRegionState::id)).findFirst().orElse(null);
+    }
+
+    private static String regionName(PaleMirrorSavedData data, String regionId) {
+        return java.util.Optional.ofNullable(data.campaignRegions().get(regionId)).map(io.farfrontier.palemirror.internal.world.CampaignRegionRecord::displayName)
+                .orElse("Iron Frontier");
+    }
+
+    private static boolean preparedShelter(PaleMirrorSavedData data, WorldObjectId communityId) {
+        int population = data.worldState().population(communityId);
+        return data.worldState().siteCapabilities().stream()
+                .filter(capability -> capability.type() == io.farfrontier.palemirror.domain.SiteCapabilityType.SHELTER)
+                .filter(capability -> capability.capacity() >= population)
+                .filter(capability -> data.worldState().siteAffiliations(capability.siteId(),
+                        io.farfrontier.palemirror.domain.SiteAffiliationRole.RECIPIENT).stream()
+                        .anyMatch(affiliation -> affiliation.objectId().equals(communityId)))
+                .anyMatch(capability -> data.worldState().site(capability.siteId()).map(site ->
+                        site.operationalState() == io.farfrontier.palemirror.domain.OperationalState.OPERATIONAL).orElse(false));
+    }
+
+    private static String scenarioTitle(io.farfrontier.palemirror.domain.ScenarioInstance scenario) {
+        return switch (scenario.archetype()) {
+            case INVESTIGATION_RECOVERY -> "Mine recovery";
+            case SETTLEMENT_SUPPLY_CRISIS -> "Settlement supply crisis";
+            case DEVELOPMENT_OPPORTUNITY -> "Recovery investment";
+            case RESETTLEMENT_OPPORTUNITY -> "Return home";
+        };
+    }
+
+    private static String scenarioPrompt(io.farfrontier.palemirror.domain.ScenarioInstance scenario, String name) {
+        return switch (scenario.archetype()) {
+            case INVESTIGATION_RECOVERY -> "Find and clear the infection threatening this site.";
+            case SETTLEMENT_SUPPLY_CRISIS -> "Clear the primary mine, validate an alternate Create train, or prepare evacuation for " + name + ".";
+            case DEVELOPMENT_OPPORTUNITY -> "Approve the community's storehouse recovery investment.";
+            case RESETTLEMENT_OPPORTUNITY -> "Approve the community's safe return from the refugee site.";
+        };
     }
 }

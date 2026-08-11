@@ -12,8 +12,16 @@ public final class ScenarioRuntime {
 
     public List<DomainEvent> accept(WorldState state, String scenarioId) {
         ScenarioInstance scenario = state.scenario(scenarioId).orElseThrow(() -> new IllegalArgumentException("Unknown scenario " + scenarioId));
-        if (scenario.archetype() != ScenarioArchetype.INVESTIGATION_RECOVERY) return List.of();
         if (scenario.status() != ScenarioStatus.OFFERED) return List.of();
+        if (scenario.archetype() == ScenarioArchetype.DEVELOPMENT_OPPORTUNITY
+                || scenario.archetype() == ScenarioArchetype.RESETTLEMENT_OPPORTUNITY) {
+            scenario.setStatus(ScenarioStatus.RESPOND);
+            DomainEvent accepted = events.create(state, DomainEventType.SCENARIO_ACCEPTED,
+                    scenario.target(), scenario.sourceEventId());
+            state.addEvent(accepted);
+            return List.of(accepted);
+        }
+        if (scenario.archetype() != ScenarioArchetype.INVESTIGATION_RECOVERY) return List.of();
         FacilityState facility = state.facility(scenario.target()).orElseThrow();
         if (facility.status() == FacilityStatus.RECOVERING || facility.status() == FacilityStatus.OPERATIONAL) {
             scenario.setStatus(ScenarioStatus.RESOLVED);
@@ -47,5 +55,20 @@ public final class ScenarioRuntime {
                     state.addEvent(event);
                     return event;
                 }).toList();
+    }
+
+    /** Resolves a presented continuation only when its autonomous domain result is already true. */
+    public List<DomainEvent> reconcileOpportunity(WorldState state, WorldObjectId communityId,
+                                                   ScenarioArchetype archetype, String outcome) {
+        return state.scenarios().stream()
+                .filter(scenario -> scenario.target().equals(communityId) && scenario.archetype() == archetype)
+                .filter(scenario -> !scenario.status().isTerminal())
+                .map(scenario -> {
+                    if (!scenario.resolve(outcome)) return null;
+                    DomainEvent event = events.create(state, DomainEventType.SCENARIO_RESOLVED,
+                            communityId, scenario.sourceEventId());
+                    state.addEvent(event);
+                    return event;
+                }).filter(java.util.Objects::nonNull).toList();
     }
 }

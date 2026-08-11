@@ -16,8 +16,10 @@ public final class CampaignPresentationRuntime {
     public static boolean presentJournal(PaleMirrorSavedData data, ServerPlayer player, BlockPos position,
                                          Function<ServerPlayer, StoryAudienceId> audiences) {
         boolean presented = RegionalJournal.present(data, player, position, audiences);
-        if (presented) data.worldState().livingRegions().stream().findFirst()
-                .flatMap(region -> data.worldRegistry().find(region.placeId()))
+        if (presented) data.worldState().livingRegions().stream()
+                .filter(region -> data.worldRegistry().find(region.placeId()).map(entry -> entry.anchor().equals(position)
+                        && entry.dimensionId().equals(player.serverLevel().dimension().location().toString())).orElse(false))
+                .findFirst().flatMap(region -> data.worldRegistry().find(region.placeId()))
                 .ifPresent(settlement -> CampaignWelcomeKit.grant(player, settlement));
         return presented;
     }

@@ -84,7 +84,8 @@ public final class SettlementDevelopmentEngine {
                     DevelopmentIntentState.PLANNED, "");
             state.putDevelopmentIntent(existing);
             produced.add(event(state, DomainEventType.SETTLEMENT_RETURN_PLANNED, development.communityId(), existing.id()));
-        } else if (eligible && existing.state() == DevelopmentIntentState.PLANNED && existing.complete()) {
+        } else if (eligible && existing.state() == DevelopmentIntentState.PLANNED
+                && !awaitingResettlementAudience(state, development.communityId()) && existing.complete()) {
             displaced.returnHome();
             place.setOccupancy(OccupancyState.INHABITED);
             development.resetGrowth();
@@ -95,6 +96,12 @@ public final class SettlementDevelopmentEngine {
     private static DevelopmentIntent intent(WorldState state, WorldObjectId communityId, DevelopmentIntentType type) {
         return state.developmentIntents().stream().filter(value -> value.communityId().equals(communityId)
                 && value.type() == type && value.state() != DevelopmentIntentState.CANCELLED).findFirst().orElse(null);
+    }
+
+    private static boolean awaitingResettlementAudience(WorldState state, WorldObjectId communityId) {
+        return state.scenarios().stream().filter(scenario -> scenario.target().equals(communityId))
+                .filter(scenario -> scenario.archetype() == ScenarioArchetype.RESETTLEMENT_OPPORTUNITY)
+                .anyMatch(scenario -> scenario.status() == ScenarioStatus.OFFERED);
     }
 
     private static WorldObjectId storageSite(WorldState state, WorldObjectId communityId) {

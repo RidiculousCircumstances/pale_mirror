@@ -313,6 +313,14 @@ public final class PaleMirrorEvents {
                             else context.getSource().sendFailure(Component.translatable("pale_mirror.command.scenario.missing"));
                             return accepted ? 1 : 0;
         })));
+        scenario.then(Commands.literal("decline").then(Commands.argument("id", StringArgumentType.greedyString()).executes(context -> {
+                            String id = StringArgumentType.getString(context, "id");
+                            PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
+                            boolean declined = runtime.decline(id, audienceFor(context.getSource(), runtime));
+                            if (declined) context.getSource().sendSuccess(() -> Component.literal("Declined scenario " + id), false);
+                            else context.getSource().sendFailure(Component.translatable("pale_mirror.command.scenario.missing"));
+                            return declined ? 1 : 0;
+        })));
         root.then(scenario);
         root.then(Commands.literal("adapter").requires(source -> source.hasPermission(2)).then(Commands.literal("status").executes(context -> {
                     String health = AdapterRegistry.all().stream().map(adapter -> adapter.id() + "=" + adapter.health().status() + " (" + adapter.health().detail() + ")").reduce((a, b) -> a + "; " + b).orElse("No adapters");
@@ -356,6 +364,19 @@ public final class PaleMirrorEvents {
                     if (started) context.getSource().sendSuccess(() -> Component.literal("Evacuation started for " + id), true);
                     else context.getSource().sendFailure(Component.literal("Evacuation is unavailable or belongs to another audience."));
                     return started ? 1 : 0;
+                }))));
+        root.then(Commands.literal("settlement").then(Commands.literal("prepare_refugee_site")
+                .then(Commands.argument("id", ResourceLocationArgument.id()).executes(context -> {
+                    if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
+                        context.getSource().sendFailure(Component.literal("Only a player can prepare a refugee site."));
+                        return 0;
+                    }
+                    PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
+                    String id = ResourceLocationArgument.getId(context, "id").toString();
+                    boolean issued = runtime.issueRefugeeAnchor(player, id);
+                    if (!issued) context.getSource().sendFailure(Component.literal(
+                            "A refugee site can only be prepared during this audience's active emergency window."));
+                    return issued ? 1 : 0;
                 }))));
         DebugCommandRegistrar.attach(root);
         event.getDispatcher().register(root);

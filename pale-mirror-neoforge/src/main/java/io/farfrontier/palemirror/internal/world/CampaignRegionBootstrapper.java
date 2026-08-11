@@ -47,6 +47,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
 /** Binds the first authored region to a read-only observed settlement; it never builds a village. */
 public final class CampaignRegionBootstrapper {
     public static final String IRONHILL_ID = "pale_mirror:ironhill_v2";
+    /** v28 authored archetype; the v27 Ironhill id remains a migration-only instance. */
+    public static final String IRON_FRONTIER_ARCHETYPE_ID = "pale_mirror:iron_frontier";
     public static final WorldObjectId IRONHILL = new WorldObjectId("pale_mirror:ironhill_community");
     public static final WorldObjectId MINE17 = new WorldObjectId("pale_mirror:mine17");
     public static final WorldObjectId RED_VALLEY = new WorldObjectId("pale_mirror:red_valley_ironworks");
@@ -57,11 +59,12 @@ public final class CampaignRegionBootstrapper {
     public static final WorldObjectId IRONHILL_RECEIVING_SITE = new WorldObjectId("pale_mirror:ironhill_receiving");
     public static final String RED_VALLEY_DISPATCH = "PM Red Valley Dispatch";
     public static final String IRONHILL_RECEIVING = "PM Ironhill Receiving";
-    private static final ResourceLocation IRONHILL_DEFINITION = ResourceLocation.parse(IRONHILL_ID);
+    private static final ResourceLocation IRON_FRONTIER_DEFINITION = ResourceLocation.parse(IRON_FRONTIER_ARCHETYPE_ID);
     private static final int PRIMARY_MINE_DISTANCE = 640;
     private static final int ALTERNATE_MINE_DISTANCE = 704;
-    private static final int MIN_SETTLEMENT_DISTANCE = 800;
-    private static final int MAX_SETTLEMENT_DISTANCE = 2_000;
+    public static final int MAX_ACTIVE_REGIONS = 3;
+    public static final int MIN_REGION_SPACING = 2_048;
+    private static final String[] DISPLAY_NAMES = {"Ironhill", "Redvale", "Stonecross", "Ashford", "Greyhaven"};
     private static final int SITE_TICKET_RADIUS = 4;
     private static final TicketType<BlockPos> SITE_COMMISSIONING_TICKET = TicketType.create(
             "pale_mirror_site_commissioning", java.util.Comparator.comparingLong(BlockPos::asLong), 100);
@@ -76,13 +79,16 @@ public final class CampaignRegionBootstrapper {
 
     public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands,
                             boolean automaticBinding) {
-        if (automaticBinding) ensureCanonicalPlan(server, data, commands);
-        CampaignRegionRecord record = data.campaignRegions().get(IRONHILL_ID);
-        if (record == null) {
-            releaseTicket(server.overworld(), IRONHILL_ID);
-            return;
-        }
-        advancePhysicalPlan(server.overworld(), data, record);
+        if (automaticBinding) ensureCanonicalPlans(server, data, commands);
+        java.util.Set<String> active = new java.util.HashSet<>();
+        data.campaignRegions().values().stream().sorted(java.util.Comparator.comparing(CampaignRegionRecord::id))
+                .forEach(record -> {
+                    active.add(record.id());
+                    advancePhysicalPlan(server.overworld(), data, record);
+                });
+        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.get(server.overworld());
+        if (tickets != null) new java.util.ArrayList<>(tickets.keySet()).stream()
+                .filter(id -> !active.contains(id)).forEach(id -> releaseTicket(server.overworld(), id));
     }
 
     /** Advances persisted PM-authored site work without requiring a player near either planned mine. */
@@ -134,8 +140,9 @@ public final class CampaignRegionBootstrapper {
             return;
         }
         try {
-            if (record.nextOperationIndex() == 0) ensureMine(data, level, record.primaryMineAnchor(), MINE17, record.pendingMineBaseline());
-            else if (record.nextOperationIndex() == 1) ensureMine(data, level, record.alternateMineAnchor(), RED_VALLEY, record.pendingMineBaseline());
+            RegionBindings bindings = RegionBindings.fromRegionId(record.id());
+            if (record.nextOperationIndex() == 0) ensureMine(data, level, record.primaryMineAnchor(), bindings.primaryMineId(), record.pendingMineBaseline());
+            else if (record.nextOperationIndex() == 1) ensureMine(data, level, record.alternateMineAnchor(), bindings.alternateMineId(), record.pendingMineBaseline());
             else throw new IllegalStateException("Invalid campaign operation index " + record.nextOperationIndex());
             record.completedOperation();
             if (record.status() == CampaignRegionPresentationStatus.MATERIALIZED) releaseTicket(level, record.id());
@@ -154,25 +161,27 @@ public final class CampaignRegionBootstrapper {
                 SITE_COMMISSIONING_TICKET, new ChunkPos(position), SITE_TICKET_RADIUS, position));
     }
 
-    private static void ensureCanonicalPlan(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
-        if (data.worldState().livingRegion(IRONHILL_ID).isPresent()) return;
+    private static void ensureCanonicalPlans(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+        if (data.worldState().livingRegions().size() >= MAX_ACTIVE_REGIONS) return;
         long gameTime = server.overworld().getGameTime();
-        SettlementObservationRecord observed = data.settlementObservations().values().stream()
+        data.settlementObservations().values().stream()
                 .filter(value -> value.dimensionId().equals(server.overworld().dimension().location().toString()))
                 .filter(SettlementObservationRecord::strongEnoughForRecognition)
                 .filter(value -> value.freshness(gameTime) == ObservationFreshness.CURRENT)
                 .filter(AdapterRegistry::campaignEligible)
                 .filter(value -> productLocationEligible(server.overworld(), value.anchor()))
-                .sorted(java.util.Comparator.comparing(value -> value.id().value())).findFirst().orElse(null);
-        if (observed == null) return;
-        registerCanonicalPlan(server, data, commands, observed);
+                .filter(value -> !boundPlace(data, value.id()))
+                .filter(value -> correctlySpaced(data, value.anchor()))
+                .sorted(java.util.Comparator.comparing(value -> value.id().value()))
+                .limit(MAX_ACTIVE_REGIONS - data.worldState().livingRegions().size())
+                .forEach(observed -> registerCanonicalPlan(server, data, commands, observed));
     }
 
     /** Explicit operator selection still uses the exact production registration pipeline. */
     public static void bindCandidate(MinecraftServer server, PaleMirrorSavedData data,
                                      DomainCommandProcessor commands, WorldObjectId candidateId) {
-        if (data.worldState().livingRegion(IRONHILL_ID).isPresent()) {
-            throw new IllegalStateException("A living region is already bound; inspect it or use the safe reset workflow");
+        if (data.worldState().livingRegions().size() >= MAX_ACTIVE_REGIONS) {
+            throw new IllegalStateException("The active living-region limit of " + MAX_ACTIVE_REGIONS + " has been reached");
         }
         SettlementObservationRecord observed = data.settlementObservations().get(candidateId);
         if (observed == null) throw new IllegalArgumentException("Unknown observed settlement " + candidateId.value());
@@ -189,69 +198,76 @@ public final class CampaignRegionBootstrapper {
         if (!AdapterRegistry.campaignEligible(observed)) {
             throw new IllegalStateException("Settlement adapter is not eligible for the living-region campaign");
         }
+        if (boundPlace(data, observed.id())) throw new IllegalStateException("Settlement already belongs to a living region");
+        if (!correctlySpaced(data, observed.anchor())) throw new IllegalStateException("Settlement is within "
+                + MIN_REGION_SPACING + " blocks of an existing living region");
         registerCanonicalPlan(server, data, commands, observed);
     }
 
     private static void registerCanonicalPlan(MinecraftServer server, PaleMirrorSavedData data,
                                               DomainCommandProcessor commands, SettlementObservationRecord observed) {
-        CampaignRegionDefinition definition = CampaignRegionDefinitions.require(IRONHILL_DEFINITION);
+        RegionBindings bindings = RegionBindings.forObserved(server.overworld().getSeed(), observed.id());
+        if (data.worldState().livingRegion(bindings.regionId()).isPresent()) return;
+        CampaignRegionDefinition definition = CampaignRegionDefinitions.require(IRON_FRONTIER_DEFINITION);
         WorldObjectId placeId = observed.id();
         int population = Math.max(1, observed.observedPopulation());
         int ironDemand = Math.max(1, scale(definition.ironDemand(), population, definition.population()));
         int initialStock = Math.max(ironDemand * 4, scale(definition.initialIronStock(), population, definition.population()));
         int capacity = Math.max(initialStock, scale(definition.ironStockCapacity(), population, definition.population()));
-        LivingRegionState region = new LivingRegionState(IRONHILL_ID, IRONHILL, placeId, MINE17, RED_VALLEY,
-                MINE17_ROUTE, RED_VALLEY_ROUTE, definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1);
-        FacilityState primary = new FacilityState(MINE17, definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
-        FacilityState alternate = new FacilityState(RED_VALLEY, definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
-        SettlementCommunity community = new SettlementCommunity(IRONHILL);
+        LivingRegionState region = new LivingRegionState(bindings.regionId(), bindings.communityId(), placeId,
+                bindings.primaryMineId(), bindings.alternateMineId(), bindings.primaryRouteId(), bindings.alternateRouteId(),
+                definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1);
+        FacilityState primary = new FacilityState(bindings.primaryMineId(), definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
+        FacilityState alternate = new FacilityState(bindings.alternateMineId(), definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
+        SettlementCommunity community = new SettlementCommunity(bindings.communityId());
         int guards = Math.min(population, observed.registeredGuards());
-        PopulationGroup residents = PopulationGroup.residents("pale_mirror:ironhill_residents", IRONHILL, placeId,
+        PopulationGroup residents = PopulationGroup.residents(bindings.regionId() + ":residents", bindings.communityId(), placeId,
                 java.util.Map.of(SettlementCohort.CIVILIANS, population - guards, SettlementCohort.GUARDS, guards));
         SettlementPlace place = new SettlementPlace(placeId);
         int rationedDemand = Math.min(ironDemand, Math.max(0,
                 scale(definition.rationedIronDemand(), population, definition.population())));
-        SettlementEconomy economy = new SettlementEconomy(IRONHILL, java.util.Map.of(ResourceKind.IRON,
+        SettlementEconomy economy = new SettlementEconomy(bindings.communityId(), java.util.Map.of(ResourceKind.IRON,
                 new ResourceAccount(capacity, initialStock, 0, ironDemand, rationedDemand)));
-        SettlementSecurity security = new SettlementSecurity(IRONHILL, definition.defence(), definition.defence(),
+        SettlementSecurity security = new SettlementSecurity(bindings.communityId(), definition.defence(), definition.defence(),
                 observed.registeredGuards(), observed.registeredGuards() > 0 ? GuardCapability.PRESENT : GuardCapability.ABSENT);
-        SettlementPolicy policy = new SettlementPolicy(IRONHILL, definition.rationReserveSteps(),
+        SettlementPolicy policy = new SettlementPolicy(bindings.communityId(), definition.rationReserveSteps(),
                 definition.requestReserveSteps(), definition.defenceLossPerUnavailableStep(), definition.stableStepsToRecover(),
                 definition.evacuationDefenceThreshold(), definition.emergencyGraceSteps(), definition.evacuationDurationSteps());
         List<WorldSite> sites = List.of(
-                new WorldSite(MINE17_DISPATCH_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
-                new WorldSite(RED_VALLEY_DISPATCH_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
-                new WorldSite(IRONHILL_RECEIVING_SITE, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL));
+                new WorldSite(bindings.primaryDispatchSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
+                new WorldSite(bindings.alternateDispatchSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
+                new WorldSite(bindings.receivingSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL));
         List<SiteAffiliation> affiliations = List.of(
-                new SiteAffiliation(MINE17_DISPATCH_SITE, MINE17, SiteAffiliationRole.SUPPLIER),
-                new SiteAffiliation(RED_VALLEY_DISPATCH_SITE, RED_VALLEY, SiteAffiliationRole.SUPPLIER),
-                new SiteAffiliation(IRONHILL_RECEIVING_SITE, IRONHILL, SiteAffiliationRole.RECIPIENT));
+                new SiteAffiliation(bindings.primaryDispatchSiteId(), bindings.primaryMineId(), SiteAffiliationRole.SUPPLIER),
+                new SiteAffiliation(bindings.alternateDispatchSiteId(), bindings.alternateMineId(), SiteAffiliationRole.SUPPLIER),
+                new SiteAffiliation(bindings.receivingSiteId(), bindings.communityId(), SiteAffiliationRole.RECIPIENT));
         List<SiteCapability> capabilities = List.of(
-                new SiteCapability(MINE17_DISPATCH_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
-                new SiteCapability(RED_VALLEY_DISPATCH_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
-                new SiteCapability(IRONHILL_RECEIVING_SITE, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()));
+                new SiteCapability(bindings.primaryDispatchSiteId(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
+                new SiteCapability(bindings.alternateDispatchSiteId(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
+                new SiteCapability(bindings.receivingSiteId(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()));
         List<RouteContract> routes = List.of(
-                new RouteContract(MINE17_ROUTE, MINE17_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.VANILLA_MINECART,
+                new RouteContract(bindings.primaryRouteId(), bindings.primaryDispatchSiteId(), bindings.receivingSiteId(), RouteProvider.VANILLA_MINECART,
                         ResourceKind.IRON, definition.ironProduction(), definition.routeCurrentWindowSteps(),
                         definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED),
-                new RouteContract(RED_VALLEY_ROUTE, RED_VALLEY_DISPATCH_SITE, IRONHILL_RECEIVING_SITE, RouteProvider.CREATE,
+                new RouteContract(bindings.alternateRouteId(), bindings.alternateDispatchSiteId(), bindings.receivingSiteId(), RouteProvider.CREATE,
                         ResourceKind.IRON, definition.ironProduction(), definition.routeCurrentWindowSteps(),
                         definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED));
         commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
-                community, place, new CommunityPlaceBinding(IRONHILL, placeId), economy, security, policy, sites, affiliations,
+                community, place, new CommunityPlaceBinding(bindings.communityId(), placeId), economy, security, policy, sites, affiliations,
                 capabilities, routes, List.of(residents)));
         SettlementAuthorityProfile authority = "pale_mirror:native_reconciled".equals(observed.authorityProfileId())
-                ? SettlementAuthorityProfile.nativeReconciled(IRONHILL)
-                : SettlementAuthorityProfile.pmManaged(IRONHILL);
+                ? SettlementAuthorityProfile.nativeReconciled(bindings.communityId())
+                : SettlementAuthorityProfile.pmManaged(bindings.communityId());
         commands.execute(data.worldState(), new DomainCommand.RegisterSettlementAuthorityProfile(authority));
-        data.worldState().putSettlementDevelopment(new SettlementDevelopment(IRONHILL, 25, 0,
+        data.worldState().putSettlementDevelopment(new SettlementDevelopment(bindings.communityId(), 25, 0,
                 population, Math.max(0, population - observed.observedPopulation() / 5), 0));
-        data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(IRONHILL));
-        BlockPos infrastructureAnchor = infrastructureAnchor(server, observed.anchor());
-        data.campaignRegions().put(IRONHILL_ID, new CampaignRegionRecord(IRONHILL_ID,
+        data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(bindings.communityId()));
+        BlockPos infrastructureAnchor = infrastructureAnchor(server, observed.anchor(), bindings.regionId());
+        data.campaignRegions().put(bindings.regionId(), new CampaignRegionRecord(bindings.regionId(),
+                definition.id().toString(), definition.version(), displayName(bindings.regionId()),
                 observed.dimensionId(), placeId, infrastructureAnchor,
-                mineColumn(server, infrastructureAnchor, PRIMARY_MINE_DISTANCE),
-                alternateMineColumn(server, infrastructureAnchor), null, null,
+                mineColumn(server, infrastructureAnchor, PRIMARY_MINE_DISTANCE, bindings.regionId()),
+                alternateMineColumn(server, infrastructureAnchor, bindings.regionId()), null, null,
                 CampaignRegionPresentationStatus.PLANNED, "", 0, -1, -1, 0, 0, "", ""));
         data.setDirty();
     }
@@ -261,11 +277,6 @@ public final class CampaignRegionBootstrapper {
     }
 
     static boolean productLocationEligible(ServerLevel level, BlockPos anchor) {
-        BlockPos spawn = level.getSharedSpawnPos();
-        long dx = (long) anchor.getX() - spawn.getX(); long dz = (long) anchor.getZ() - spawn.getZ();
-        long distanceSquared = dx * dx + dz * dz;
-        if (distanceSquared < (long) MIN_SETTLEMENT_DISTANCE * MIN_SETTLEMENT_DISTANCE
-                || distanceSquared > (long) MAX_SETTLEMENT_DISTANCE * MAX_SETTLEMENT_DISTANCE) return false;
         int terrain = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ());
         BlockPos surface = new BlockPos(anchor.getX(), Math.max(level.getMinBuildHeight(), terrain - 1), anchor.getZ());
         return anchor.getY() >= terrain - 16 && anchor.getY() <= terrain + 96
@@ -273,15 +284,15 @@ public final class CampaignRegionBootstrapper {
     }
 
     /** Keeps logistics on the settlement-facing ground even when its stable bell is in a tower. */
-    static BlockPos infrastructureAnchor(MinecraftServer server, BlockPos landmark) {
-        BlockPos column = mineColumn(server, landmark, 32);
+    static BlockPos infrastructureAnchor(MinecraftServer server, BlockPos landmark, String regionId) {
+        BlockPos column = mineColumn(server, landmark, 32, regionId);
         int terrain = server.overworld().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                 column.getX(), column.getZ());
         return new BlockPos(column.getX(), terrain, column.getZ());
     }
 
-    private static BlockPos mineColumn(MinecraftServer server, BlockPos settlement, int distance) {
-        int direction = Math.floorMod((int) (server.overworld().getSeed() ^ (server.overworld().getSeed() >>> 32)), 4);
+    private static BlockPos mineColumn(MinecraftServer server, BlockPos settlement, int distance, String regionId) {
+        int direction = direction(server.overworld().getSeed(), regionId);
         int signed = distance;
         return switch (direction) {
             case 0 -> new BlockPos(settlement.getX() + signed, 0, settlement.getZ());
@@ -291,9 +302,9 @@ public final class CampaignRegionBootstrapper {
         };
     }
 
-    private static BlockPos alternateMineColumn(MinecraftServer server, BlockPos settlement) {
-        BlockPos midpoint = mineColumn(server, settlement, PRIMARY_MINE_DISTANCE / 2);
-        int direction = Math.floorMod((int) (server.overworld().getSeed() ^ (server.overworld().getSeed() >>> 32)), 4);
+    private static BlockPos alternateMineColumn(MinecraftServer server, BlockPos settlement, String regionId) {
+        BlockPos midpoint = mineColumn(server, settlement, PRIMARY_MINE_DISTANCE / 2, regionId);
+        int direction = direction(server.overworld().getSeed(), regionId);
         return switch (direction) {
             case 0, 1 -> midpoint.offset(0, 0, ALTERNATE_MINE_DISTANCE / 2);
             default -> midpoint.offset(ALTERNATE_MINE_DISTANCE / 2, 0, 0);
@@ -312,6 +323,30 @@ public final class CampaignRegionBootstrapper {
                 ? CampaignMineSiteTemplate.observeExisting(level, anchor, id, StoryAudienceId.globalTestAudience())
                 : CampaignMineSiteTemplate.place(level, anchor, id, StoryAudienceId.globalTestAudience(), baseline);
         data.registerTestMine(mine);
+    }
+
+    private static int direction(long seed, String regionId) {
+        return Math.floorMod((int) (seed ^ (seed >>> 32) ^ regionId.hashCode()), 4);
+    }
+
+    private static boolean boundPlace(PaleMirrorSavedData data, WorldObjectId placeId) {
+        return data.worldState().livingRegions().stream().anyMatch(region -> region.placeId().equals(placeId));
+    }
+
+    private static boolean correctlySpaced(PaleMirrorSavedData data, BlockPos candidate) {
+        long required = (long) MIN_REGION_SPACING * MIN_REGION_SPACING;
+        return data.campaignRegions().values().stream().allMatch(existing -> {
+            long dx = (long) candidate.getX() - existing.settlementAnchor().getX();
+            long dz = (long) candidate.getZ() - existing.settlementAnchor().getZ();
+            return dx * dx + dz * dz >= required;
+        });
+    }
+
+    private static String displayName(String regionId) {
+        if (IRONHILL_ID.equals(regionId)) return "Ironhill";
+        int index = Math.floorMod(regionId.hashCode(), DISPLAY_NAMES.length);
+        String key = regionId.substring(regionId.lastIndexOf('_') + 1).toUpperCase(java.util.Locale.ROOT);
+        return DISPLAY_NAMES[index] + " " + key.substring(Math.max(0, key.length() - 4));
     }
 
     private static void maintainTicket(ServerLevel level, String regionId, BlockPos position) {

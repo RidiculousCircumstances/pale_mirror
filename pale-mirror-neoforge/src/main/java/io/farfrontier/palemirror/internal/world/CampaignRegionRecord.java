@@ -8,6 +8,9 @@ import net.minecraft.core.BlockPos;
 /** Persistent physical work for a campaign bound to an already observed settlement. */
 public final class CampaignRegionRecord {
     private final String id;
+    private final String archetypeId;
+    private final int layoutVersion;
+    private final String displayName;
     private final String dimensionId;
     private final WorldObjectId placeId;
     private final BlockPos settlementAnchor;
@@ -34,7 +37,25 @@ public final class CampaignRegionRecord {
                                 long originTrainSeenAtStep, long destinationTrainSeenAtStep,
                                 int originTrainCapacity, int destinationTrainCapacity,
                                 String originVehicleId, String destinationVehicleId) {
+        this(id, "pale_mirror:iron_frontier", 1, "Ironhill", dimensionId, placeId, settlementAnchor,
+                primaryMineColumn, alternateMineColumn, primaryMineAnchor, alternateMineAnchor, status, diagnostic,
+                nextOperationIndex, originTrainSeenAtStep, destinationTrainSeenAtStep, originTrainCapacity,
+                destinationTrainCapacity, originVehicleId, destinationVehicleId);
+    }
+
+    public CampaignRegionRecord(String id, String archetypeId, int layoutVersion, String displayName,
+                                String dimensionId, WorldObjectId placeId, BlockPos settlementAnchor,
+                                BlockPos primaryMineColumn, BlockPos alternateMineColumn,
+                                BlockPos primaryMineAnchor, BlockPos alternateMineAnchor,
+                                CampaignRegionPresentationStatus status, String diagnostic, int nextOperationIndex,
+                                long originTrainSeenAtStep, long destinationTrainSeenAtStep,
+                                int originTrainCapacity, int destinationTrainCapacity,
+                                String originVehicleId, String destinationVehicleId) {
         this.id = Objects.requireNonNull(id, "id");
+        this.archetypeId = Objects.requireNonNull(archetypeId, "archetypeId");
+        if (layoutVersion < 1) throw new IllegalArgumentException("Invalid region layout version");
+        this.layoutVersion = layoutVersion;
+        this.displayName = requireText(displayName, "displayName");
         this.dimensionId = Objects.requireNonNull(dimensionId, "dimensionId");
         this.placeId = Objects.requireNonNull(placeId, "placeId");
         this.settlementAnchor = Objects.requireNonNull(settlementAnchor, "settlementAnchor").immutable();
@@ -59,6 +80,9 @@ public final class CampaignRegionRecord {
     }
 
     public String id() { return id; }
+    public String archetypeId() { return archetypeId; }
+    public int layoutVersion() { return layoutVersion; }
+    public String displayName() { return displayName; }
     public String jobId() { return "pm:campaign:" + id; }
     public String dimensionId() { return dimensionId; }
     public WorldObjectId placeId() { return placeId; }
@@ -163,5 +187,10 @@ public final class CampaignRegionRecord {
                 || simulationStep - destinationTrainSeenAtStep > proofWindowSteps
                 || originVehicleId.isBlank() || !originVehicleId.equals(destinationVehicleId)) return 0;
         return Math.min(originTrainCapacity, destinationTrainCapacity);
+    }
+
+    private static String requireText(String value, String name) {
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
+        return value;
     }
 }

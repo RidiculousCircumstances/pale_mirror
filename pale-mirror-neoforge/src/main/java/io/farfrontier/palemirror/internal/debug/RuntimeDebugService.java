@@ -50,8 +50,8 @@ public final class RuntimeDebugService {
     public String discoveryStatus() {
         return "Discovery mode: " + discoveryMode + " (runtime-only; restart restores AUTO). "
                 + (automaticBindingEnabled()
-                ? "The first current STRONG eligible observation may be bound automatically."
-                : "Observations continue, but only an explicit debug bind can create the living region.");
+                ? "Up to three well-spaced CURRENT + STRONG eligible observations may be bound automatically."
+                : "Observations continue, but only an explicit debug bind can create a living region.");
     }
 
     public String setZoneMarkers(ServerPlayer player, boolean enabled) {
@@ -129,7 +129,9 @@ public final class RuntimeDebugService {
                              io.farfrontier.palemirror.domain.DomainCommandProcessor commands, WorldObjectId id) {
         try {
             CampaignRegionBootstrapper.bindCandidate(server, data, commands, id);
-            return new ActionResult(true, "Bound " + id.value() + " as " + CampaignRegionBootstrapper.IRONHILL_ID
+            String regionId = io.farfrontier.palemirror.internal.world.RegionBindings
+                    .forObserved(server.overworld().getSeed(), id).regionId();
+            return new ActionResult(true, "Bound " + id.value() + " as " + regionId
                     + " through the canonical registration pipeline.");
         } catch (IllegalArgumentException | IllegalStateException failure) {
             return new ActionResult(false, "Bind rejected: " + failure.getMessage());
@@ -137,9 +139,13 @@ public final class RuntimeDebugService {
     }
 
     public String regionStatus(PaleMirrorSavedData data) {
-        var region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElse(null);
-        CampaignRegionRecord physical = data.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID);
-        if (region == null) return "Living region is not bound. " + discoveryStatus();
+        if (data.worldState().livingRegions().isEmpty()) return "No living regions are bound. " + discoveryStatus();
+        return data.worldState().livingRegions().stream().sorted(Comparator.comparing(io.farfrontier.palemirror.domain.LivingRegionState::id))
+                .map(region -> singleRegionStatus(data, region)).collect(java.util.stream.Collectors.joining("\n\n"));
+    }
+
+    private String singleRegionStatus(PaleMirrorSavedData data, io.farfrontier.palemirror.domain.LivingRegionState region) {
+        CampaignRegionRecord physical = data.campaignRegions().get(region.id());
         var community = data.worldState().community(region.communityId()).orElse(null);
         var economy = data.worldState().economy(region.communityId()).orElse(null);
         var security = data.worldState().security(region.communityId()).orElse(null);
@@ -185,8 +191,8 @@ public final class RuntimeDebugService {
     public String verify(MinecraftServer server, PaleMirrorSavedData data) {
         boolean observed = !data.settlementObservations().isEmpty();
         boolean eligible = data.settlementObservations().values().stream().anyMatch(value -> isEligible(server, value));
-        var region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElse(null);
-        CampaignRegionRecord presentation = data.campaignRegions().get(CampaignRegionBootstrapper.IRONHILL_ID);
+        var region = data.worldState().livingRegions().stream().findFirst().orElse(null);
+        CampaignRegionRecord presentation = region == null ? null : data.campaignRegions().get(region.id());
         StringBuilder output = new StringBuilder("Pale Mirror runtime verification:")
                 .append(check(observed, false, "settlement observation", observed ? data.settlementObservations().size() + " candidate(s)" : "visit a village"))
                 .append(check(eligible, false, "recognition evidence", eligible ? "CURRENT + STRONG" : "wait 400 loaded ticks"))

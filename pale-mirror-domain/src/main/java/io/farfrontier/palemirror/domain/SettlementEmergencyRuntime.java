@@ -84,6 +84,8 @@ public final class SettlementEmergencyRuntime {
         return state.siteCapabilities().stream().filter(value -> value.type() == SiteCapabilityType.SHELTER)
                 .filter(value -> state.site(value.siteId()).map(site -> site.operationalState() == OperationalState.OPERATIONAL).orElse(false))
                 .filter(value -> value.capacity() >= state.population(communityId))
+                .filter(value -> state.siteAffiliations(value.siteId(), SiteAffiliationRole.RECIPIENT).stream()
+                        .anyMatch(affiliation -> affiliation.objectId().equals(communityId)))
                 .map(SiteCapability::siteId).sorted().findFirst().orElse(null);
     }
 

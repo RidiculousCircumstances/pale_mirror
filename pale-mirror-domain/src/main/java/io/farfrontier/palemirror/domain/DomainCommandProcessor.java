@@ -42,6 +42,7 @@ public final class DomainCommandProcessor {
             case DomainCommand.AdvanceSimulation advance -> advanceSimulation(state, advance.steps());
             case DomainCommand.OfferScenario offer -> narrator.offerFor(state, offer.sourceEvent(), offer.audience(), offer.definition());
             case DomainCommand.AcceptScenario accept -> acceptScenario(state, accept.scenarioId());
+            case DomainCommand.DeclineScenario decline -> declineScenario(state, decline.scenarioId());
             case DomainCommand.PlayerEnteredFacility entered -> scenarios.playerEntered(state, entered.audience(), entered.facilityId());
             case DomainCommand.ThreatControllerDestroyed destroyed -> reconcileDestroyedController(state, destroyed);
             case DomainCommand.MaterializationObserved observed -> reconcileMaterialization(state, observed);
@@ -58,6 +59,9 @@ public final class DomainCommandProcessor {
             case DomainCommand.DepositResource deposited -> depositResource(state, deposited);
             case DomainCommand.WithdrawResource withdrawn -> withdrawResource(state, withdrawn);
             case DomainCommand.BeginSettlementEvacuation evacuation -> beginSettlementEvacuation(state, evacuation);
+            case DomainCommand.RegisterEvacuationShelter shelter -> registerEvacuationShelter(state, shelter);
+            case DomainCommand.RegisterAutonomousRefugeeShelter shelter -> registerAutonomousRefugeeShelter(state, shelter);
+            case DomainCommand.SetWorldSiteOperational site -> setWorldSiteOperational(state, site);
             case DomainCommand.StartDevelopmentIntent intent -> startDevelopmentIntent(state, intent.intentId());
             case DomainCommand.CompleteDevelopmentIntent intent -> completeDevelopmentIntent(state, intent.intentId());
             case DomainCommand.CancelDevelopmentIntent intent -> cancelDevelopmentIntent(state, intent.intentId(), intent.reason());
@@ -75,7 +79,11 @@ public final class DomainCommandProcessor {
             produced.addAll(settlementDecisions.reconcile(state));
             produced.addAll(settlementCrises.reconcile(state));
             produced.addAll(settlementEmergencies.reconcile(state));
-            produced.addAll(settlementDevelopment.reconcile(state));
+            List<DomainEvent> developmentEvents = settlementDevelopment.reconcile(state);
+            produced.addAll(developmentEvents);
+            developmentEvents.stream().filter(event -> event.type() == DomainEventType.SETTLEMENT_RETURNED_HOME)
+                    .forEach(event -> produced.addAll(scenarios.reconcileOpportunity(state, event.subject(),
+                            ScenarioArchetype.RESETTLEMENT_OPPORTUNITY, "COMMUNITY_RETURNED_HOME")));
         }
         return List.copyOf(produced);
     }
@@ -84,6 +92,13 @@ public final class DomainCommandProcessor {
         ScenarioInstance scenario = state.scenario(scenarioId).orElseThrow(() -> new IllegalArgumentException("Unknown scenario " + scenarioId));
         return scenario.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
                 ? settlementCrises.accept(state, scenario) : scenarios.accept(state, scenarioId);
+    }
+
+    private List<DomainEvent> declineScenario(WorldState state, String scenarioId) {
+        ScenarioInstance scenario = state.scenario(scenarioId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown scenario " + scenarioId));
+        if (!scenario.decline()) return List.of();
+        return record(state, DomainEventType.SCENARIO_DECLINED, scenario.target(), scenario.sourceEventId());
     }
 
     private List<DomainEvent> reconcileScenarioCapability(WorldState state, DomainCommand.SetScenarioBlocked command) {
@@ -294,6 +309,46 @@ public final class DomainCommandProcessor {
         return produced;
     }
 
+    private List<DomainEvent> registerEvacuationShelter(WorldState state,
+            DomainCommand.RegisterEvacuationShelter command) {
+        LivingRegionState region = state.livingRegions().stream()
+                .filter(value -> value.communityId().equals(command.communityId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown settlement region " + command.communityId()));
+        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
+        if (!state.emergencyWindow(command.communityId()).map(window -> window.state() == EmergencyWindowState.OPEN).orElse(false)) {
+            return List.of();
+        }
+        return registerShelter(state, command.communityId(), command.shelter(), command.capacity(), command.causationId());
+    }
+
+    private List<DomainEvent> registerAutonomousRefugeeShelter(WorldState state,
+            DomainCommand.RegisterAutonomousRefugeeShelter command) {
+        boolean displaced = state.populationGroups(command.communityId()).stream()
+                .anyMatch(group -> group.disposition() == PopulationDisposition.DISPLACED);
+        if (!displaced) return List.of();
+        return registerShelter(state, command.communityId(), command.shelter(), command.capacity(), command.causationId());
+    }
+
+    private List<DomainEvent> registerShelter(WorldState state, WorldObjectId communityId, WorldSite shelter,
+                                               SiteCapability capacity, String causationId) {
+        if (shelter.type() != WorldSiteType.SHELTER || !capacity.siteId().equals(shelter.id())
+                || capacity.type() != SiteCapabilityType.SHELTER || capacity.capacity() < state.population(communityId)
+                || state.site(shelter.id()).isPresent()) return List.of();
+        state.putSite(shelter);
+        state.putSiteAffiliation(new SiteAffiliation(shelter.id(), communityId, SiteAffiliationRole.RECIPIENT));
+        state.putSiteCapability(capacity);
+        return record(state, DomainEventType.REFUGEE_SHELTER_PREPARED, communityId, causationId);
+    }
+
+    private List<DomainEvent> setWorldSiteOperational(WorldState state, DomainCommand.SetWorldSiteOperational command) {
+        WorldSite site = state.site(command.siteId()).orElseThrow(() -> new IllegalArgumentException("Unknown world site " + command.siteId()));
+        if (site.operationalState() == command.state()) return List.of();
+        site.setOperationalState(command.state());
+        return record(state, command.state() == OperationalState.OPERATIONAL
+                ? DomainEventType.WORLD_SITE_OPERATIONAL : DomainEventType.WORLD_SITE_OFFLINE,
+                command.siteId(), command.causationId());
+    }
+
     private List<DomainEvent> registerAuthorityProfile(WorldState state, SettlementAuthorityProfile profile) {
         if (state.community(profile.communityId()).isEmpty()) {
             throw new IllegalArgumentException("Unknown settlement community " + profile.communityId());
@@ -349,7 +404,11 @@ public final class DomainCommandProcessor {
         state.putSiteCapability(new SiteCapability(current.siteId(), current.type(), current.resource(),
                 Math.multiplyExact(current.capacity(), 2)));
         state.settlementDevelopment(intent.communityId()).orElseThrow().storehouseCompleted();
-        return record(state, DomainEventType.SETTLEMENT_STOREHOUSE_UPGRADED, intent.communityId(), intent.id());
+        List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.SETTLEMENT_STOREHOUSE_UPGRADED,
+                intent.communityId(), intent.id()));
+        produced.addAll(scenarios.reconcileOpportunity(state, intent.communityId(),
+                ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, "STOREHOUSE_UPGRADED"));
+        return List.copyOf(produced);
     }
 
     private List<DomainEvent> cancelDevelopmentIntent(WorldState state, String intentId, String reason) {

@@ -6,9 +6,9 @@ import java.util.List;
 import java.util.UUID;
 
 import io.farfrontier.palemirror.domain.OperationalState;
+import io.farfrontier.palemirror.domain.DomainCommand;
+import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.PopulationDisposition;
-import io.farfrontier.palemirror.domain.SiteAffiliation;
-import io.farfrontier.palemirror.domain.SiteAffiliationRole;
 import io.farfrontier.palemirror.domain.SiteCapability;
 import io.farfrontier.palemirror.domain.SiteCapabilityType;
 import io.farfrontier.palemirror.domain.WorldObjectId;
@@ -35,12 +35,12 @@ public final class RefugeeCampRuntime {
 
     private RefugeeCampRuntime() { }
 
-    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data) {
+    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
         boolean changed = false;
-        for (var group : data.worldState().populationGroups().stream()
-                .filter(value -> value.disposition() == PopulationDisposition.DISPLACED).toList()) {
+        for (var group : data.worldState().populationGroups()) {
             RefugeeCampRecord camp = data.refugeeCamps().get(group.id());
             if (camp == null) {
+                if (group.disposition() != PopulationDisposition.DISPLACED) continue;
                 var origin = data.worldRegistry().find(group.originPlaceId()).orElse(null);
                 if (origin == null) continue;
                 ServerLevel level = level(server, origin.dimensionId());
@@ -54,14 +54,16 @@ public final class RefugeeCampRuntime {
                 for (int slot = 0; slot < representatives; slot++) ids.add(UUID.nameUUIDFromBytes(
                         (group.id() + ":representative:" + slot).getBytes(StandardCharsets.UTF_8)));
                 camp = new RefugeeCampRecord(group.id(), group.communityId(), siteId, origin.dimensionId(), anchor,
-                        capture(level, anchor), ids, SettlementDepotState.PLANNED, "");
+                        captureCells(level, anchor), ids, SettlementDepotState.PLANNED, "");
                 data.refugeeCamps().put(group.id(), camp);
-                data.worldState().putSite(new WorldSite(siteId, WorldSiteType.SHELTER, OperationalState.DEGRADED));
-                data.worldState().putSiteAffiliation(new SiteAffiliation(siteId, group.communityId(), SiteAffiliationRole.RECIPIENT));
-                data.worldState().putSiteCapability(new SiteCapability(siteId, SiteCapabilityType.SHELTER, null, group.size()));
+                commands.execute(data.worldState(), new DomainCommand.RegisterAutonomousRefugeeShelter(group.communityId(),
+                        new WorldSite(siteId, WorldSiteType.SHELTER, OperationalState.DEGRADED),
+                        new SiteCapability(siteId, SiteCapabilityType.SHELTER, null, data.worldState().population(group.communityId())),
+                        "policy:autonomous-refugee-site:" + group.id()));
                 changed = true;
                 continue;
             }
+            if (data.worldState().site(camp.siteId()).isEmpty()) continue;
             ServerLevel level = level(server, camp.dimensionId());
             if (level == null || !level.hasChunkAt(camp.anchor()) || camp.state() == SettlementDepotState.BLOCKED) continue;
             if (camp.state() == SettlementDepotState.PLANNED) {
@@ -71,10 +73,13 @@ public final class RefugeeCampRuntime {
                 String failure = ensure(level, camp);
                 if (failure == null) {
                     camp.activate();
-                    data.worldState().site(camp.siteId()).orElseThrow().setOperationalState(OperationalState.OPERATIONAL);
+                    commands.execute(data.worldState(), new DomainCommand.SetWorldSiteOperational(camp.siteId(),
+                            OperationalState.OPERATIONAL, "materialization:refugee-camp:" + camp.populationGroupId()));
                 } else camp.block(failure);
                 changed = true;
-            } else if (ensureRepresentatives(level, camp)) changed = true;
+            } else if ((group.disposition() == PopulationDisposition.DISPLACED
+                    || group.disposition() == PopulationDisposition.RESETTLED)
+                    && ensureRepresentatives(level, camp)) changed = true;
         }
         return changed;
     }
@@ -83,7 +88,7 @@ public final class RefugeeCampRuntime {
         return entity.getPersistentData().getBoolean(REPRESENTATIVE_KEY);
     }
 
-    public static boolean cleanupReturnedGroups(MinecraftServer server, PaleMirrorSavedData data) {
+    public static boolean cleanupReturnedGroups(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
         boolean changed = false;
         for (RefugeeCampRecord camp : data.refugeeCamps().values()) {
             var group = data.worldState().populationGroup(camp.populationGroupId()).orElse(null);
@@ -94,7 +99,8 @@ public final class RefugeeCampRuntime {
             String failure = cleanup(level, camp);
             if (failure == null) {
                 camp.block("Population returned home");
-                data.worldState().site(camp.siteId()).ifPresent(site -> site.setOperationalState(OperationalState.OFFLINE));
+                commands.execute(data.worldState(), new DomainCommand.SetWorldSiteOperational(camp.siteId(),
+                        OperationalState.OFFLINE, "materialization:refugee-camp-return:" + camp.populationGroupId()));
             } else camp.block(failure);
             changed = true;
         }
@@ -114,7 +120,6 @@ public final class RefugeeCampRuntime {
             if (!blockId(level, cell.position()).equals(desiredId)) return "Refugee camp postcondition failed";
             cell.markApplied(desiredId);
         }
-        ensureRepresentatives(level, camp);
         return null;
     }
 
@@ -164,12 +169,12 @@ public final class RefugeeCampRuntime {
             int x = center.getX() + (int) Math.round(Math.cos(angle) * radius);
             int z = center.getZ() + (int) Math.round(Math.sin(angle) * radius);
             BlockPos candidate = new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
-            if (safe(level, candidate)) return candidate;
+            if (safeAnchor(level, candidate)) return candidate;
         }
         return null;
     }
 
-    private static boolean safe(ServerLevel level, BlockPos anchor) {
+    public static boolean safeAnchor(ServerLevel level, BlockPos anchor) {
         for (int x = -3; x <= 3; x++) for (int z = -3; z <= 3; z++) {
             BlockPos pos = anchor.offset(x, 0, z);
             if (!level.hasChunkAt(pos) || !level.getBlockState(pos.below()).isSolid()
@@ -179,7 +184,7 @@ public final class RefugeeCampRuntime {
         return true;
     }
 
-    private static List<MutableCell> capture(ServerLevel level, BlockPos anchor) {
+    public static List<MutableCell> captureCells(ServerLevel level, BlockPos anchor) {
         List<MutableCell> cells = new ArrayList<>();
         for (int x = -3; x <= 3; x++) for (int z = -3; z <= 3; z++) {
             if (Math.abs(x) == 3 || Math.abs(z) == 3 || x == 0 || z == 0) add(level, cells, anchor.offset(x, 0, z));

@@ -10,6 +10,7 @@ import java.util.List;
  */
 public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.OfferScenario, DomainCommand.AcceptScenario,
+        DomainCommand.DeclineScenario,
         DomainCommand.PlayerEnteredFacility, DomainCommand.ThreatControllerDestroyed,
         DomainCommand.MaterializationObserved, DomainCommand.NoScenario,
         DomainCommand.SetScenarioBlocked, DomainCommand.ActivateGate,
@@ -18,6 +19,8 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.RegisterLivingRegion, DomainCommand.DiscoverLivingRegion,
         DomainCommand.TriggerFacilityInfection, DomainCommand.DepositResource,
         DomainCommand.WithdrawResource, DomainCommand.BeginSettlementEvacuation,
+        DomainCommand.RegisterEvacuationShelter,
+        DomainCommand.RegisterAutonomousRefugeeShelter, DomainCommand.SetWorldSiteOperational,
         DomainCommand.StartDevelopmentIntent, DomainCommand.CompleteDevelopmentIntent,
         DomainCommand.CancelDevelopmentIntent, DomainCommand.RegisterSettlementAuthorityProfile,
         DomainCommand.ReconcileSettlementPopulation {
@@ -34,6 +37,10 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
 
     record AcceptScenario(String scenarioId) implements DomainCommand {
         public AcceptScenario { Objects.requireNonNull(scenarioId, "scenarioId"); }
+    }
+
+    record DeclineScenario(String scenarioId) implements DomainCommand {
+        public DeclineScenario { Objects.requireNonNull(scenarioId, "scenarioId"); }
     }
 
     record PlayerEnteredFacility(StoryAudienceId audience, WorldObjectId facilityId) implements DomainCommand {
@@ -191,6 +198,40 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public BeginSettlementEvacuation {
             Objects.requireNonNull(communityId, "communityId");
             Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    /** Registers a player-prepared physical shelter before any population moves. */
+    record RegisterEvacuationShelter(WorldObjectId communityId, StoryAudienceId audience,
+                                     WorldSite shelter, SiteCapability capacity,
+                                     String causationId) implements DomainCommand {
+        public RegisterEvacuationShelter {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(shelter, "shelter");
+            Objects.requireNonNull(capacity, "capacity");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    /** Autonomous fallback used after an unprepared community has already displaced. */
+    record RegisterAutonomousRefugeeShelter(WorldObjectId communityId, WorldSite shelter,
+                                            SiteCapability capacity, String causationId) implements DomainCommand {
+        public RegisterAutonomousRefugeeShelter {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(shelter, "shelter");
+            Objects.requireNonNull(capacity, "capacity");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    /** Reconciliation result of a persisted PM-owned physical site job. */
+    record SetWorldSiteOperational(WorldObjectId siteId, OperationalState state,
+                                   String causationId) implements DomainCommand {
+        public SetWorldSiteOperational {
+            Objects.requireNonNull(siteId, "siteId");
+            Objects.requireNonNull(state, "state");
             Objects.requireNonNull(causationId, "causationId");
         }
     }

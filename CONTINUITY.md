@@ -47,6 +47,9 @@
 - Product status: 0.2 is conditionally accepted as the technical First Living Region release. Technology remains stronger than physical legibility, player comprehension and repeatability.
 - The unaided graphical playthrough remains a non-blocking 0.2.x presentation-quality gate: its findings become bounded UX fixes and do not delay 0.3 architecture work unless they expose a canonical-state or safety failure.
 - 0.3 is `Living Frontier`: repeatable multi-region causal stories with combat, infrastructure, evacuation/refusal, visible consequences, Narrator candidate scoring and delayed aftermath. It does not broaden infection providers or commodity scope first.
+- Schema v28 is an additive 0.3 persistence boundary. `iron_frontier` binds up to three current, strong, eligible observed places separated by 2048 blocks. Each instance derives stable IDs from world seed + observed place, pins its own placement plan, route IDs and display name; a v27 `ironhill_v2` record retains its exact historical IDs and coordinates.
+- Narrator v2 scores transient candidates derived from canonical events/history, never from adapter state. Scores are integer/stable and account for urgency, significance, audience relevance, capability fit, distance, recent archetype repetition and active-story intensity. Pending crisis/development/return opportunities are re-derived from history after restart or late region discovery until a cooldown ends or `NO_SCENARIO`/offer is persisted.
+- A player may prepare an evacuation with one persisted, audience-bound Refugee Anchor permit. Stack metadata is not authority: placement is validated against the canonical emergency, region dimension, 96–160-block safe footprint and population capacity; PM then materializes only its camp cells. An unprepared settlement still evacuates autonomously to an auto-selected camp after its grace period.
 
 ## State
 
@@ -85,14 +88,16 @@
 
 ### Now
 
-- Schema v27 implements the `VANILLA_MINECART` baseline route profile for fresh campaign regions, with a provenance-safe loaded-chunk executor, low-tech receiving platform and lease-authorized representative cart. V26 managed Create routes remain legacy records; no existing physical line is rewritten implicitly. Core GameTests (25/25), guardrails, build and packaged-JAR verification pass.
+- Schema v28 starts the 0.3 `Living Frontier` implementation: repeatable `iron_frontier` instances, three independent region slots, generic region bindings/debug/journal surfaces, player-prepared Refugee Anchor camps, and recovery/resettlement continuation opportunities. Existing v27 Ironhill records remain pinned instead of being rebuilt.
+- Narrator v2 can deterministically choose the most relevant candidate across simultaneous regions, honours cooldown/novelty/intensity, persists explicit `NO_SCENARIO`, and retries history-derived delayed opportunities after pacing clears. Development waits for an offered player decision; declined or unpresented policy intents remain autonomous.
+- The core GameTest server passes 26/26 tests, including multi-region identity, v27→v28 persistence, readable opaque-ID-free scenario presentation, autonomous mine commissioning and provenance conflicts. Domain tests cover candidate selection, `NO_SCENARIO`, cooldown retry, opportunity resolution and prepared shelter resettlement.
 - The private server now runs the checksum-published schema-v27 JAR on a newly generated `world`; its former 84 MiB runtime world was moved to `.pale-mirror-backups/world-reset-pre-schema-v27-20260811T070000Z/world` and is not mounted by Minecraft. `pale_mirror:vanilla_minecart_rail` reported `AVAILABLE` after clean startup.
 - 0.2 is conditionally accepted; its remaining unaided graphical exercise is an ongoing presentation-quality check, not a blocker for 0.3.
 
 ### Next
 
-- Begin 0.3 with `RegionArchetype`/placement plans, three supply-crisis outcomes, visible recovery/evacuation, multi-region Narrator scoring and delayed aftermath.
-- In parallel, run the unaided vanilla-corridor and alternate-Create walkthroughs; classify findings as bounded 0.2.x presentation fixes unless they reveal a canonical-state, persistence or safety failure.
+- Exercise all four crisis responses in a real client world: clear the mine, certify a player-built Create route, prepare/execute evacuation, and consciously decline/ignore it. Confirm recovery/storehouse and return-home opportunities are intelligible without debug commands.
+- Run full critical-code gates (`guardrails`, packaged JAR, restart/crash and graphical profiles) against the v28 artifact; then conduct an unaided multi-region usability pass before widening commodity, threat-provider or settlement scope.
 
 ## Open questions
 
@@ -104,7 +109,7 @@
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-review-0.2-and-vision-0.3.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/runtime-debug-toolkit.md`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-review-0.2-and-vision-0.3.md`, `docs/living-frontier-0.3-implementation.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/runtime-debug-toolkit.md`
 - `PaleMirrorSavedData`, `SourceGateState`, `internal/adapter/`, `internal/effect/`, `internal/quarantine/`
 - `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
 - `internal/debug/`, `CampaignRegionBootstrapper`, `CampaignMineSiteTemplate`, `ManagedRailwayRuntime`, `SettlementObservationRecord`

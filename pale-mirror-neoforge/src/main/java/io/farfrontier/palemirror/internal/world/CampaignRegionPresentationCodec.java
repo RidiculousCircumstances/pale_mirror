@@ -17,6 +17,9 @@ final class CampaignRegionPresentationCodec {
         regions.values().forEach(region -> {
             CompoundTag value = new CompoundTag();
             value.putString("id", region.id());
+            value.putString("archetype", region.archetypeId());
+            value.putInt("layoutVersion", region.layoutVersion());
+            value.putString("displayName", region.displayName());
             value.putString("dimension", region.dimensionId());
             value.putString("place", region.placeId().value());
             value.putLong("settlementAnchor", region.settlementAnchor().asLong());
@@ -44,7 +47,13 @@ final class CampaignRegionPresentationCodec {
         Map<String, CampaignRegionRecord> result = new LinkedHashMap<>();
         for (Tag element : tag.getList("campaignRegions", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
-            CampaignRegionRecord region = new CampaignRegionRecord(value.getString("id"), value.getString("dimension"),
+            String id = value.getString("id");
+            CampaignRegionRecord region = new CampaignRegionRecord(id,
+                    value.contains("archetype", Tag.TAG_STRING) ? value.getString("archetype") : "pale_mirror:iron_frontier",
+                    value.contains("layoutVersion", Tag.TAG_INT) ? value.getInt("layoutVersion") : 1,
+                    value.contains("displayName", Tag.TAG_STRING) ? value.getString("displayName")
+                            : CampaignRegionBootstrapper.IRONHILL_ID.equals(id) ? "Ironhill" : "Iron Frontier",
+                    value.getString("dimension"),
                     new io.farfrontier.palemirror.domain.WorldObjectId(value.getString("place")),
                     BlockPos.of(value.getLong("settlementAnchor")), BlockPos.of(value.getLong("primaryMineColumn")),
                     BlockPos.of(value.getLong("alternateMineColumn")),

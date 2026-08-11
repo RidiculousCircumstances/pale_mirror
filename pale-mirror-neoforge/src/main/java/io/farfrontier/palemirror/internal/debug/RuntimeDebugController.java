@@ -8,7 +8,6 @@ import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.WorldObjectId;
-import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -66,7 +65,9 @@ public final class RuntimeDebugController {
     }
 
     public RuntimeDebugService.ActionResult triggerPrimaryInfection() {
-        var region = data.worldState().livingRegion(CampaignRegionBootstrapper.IRONHILL_ID).orElse(null);
+        var region = data.worldState().livingRegions().stream()
+                .sorted(java.util.Comparator.comparing(io.farfrontier.palemirror.domain.LivingRegionState::id))
+                .findFirst().orElse(null);
         if (region == null) return new RuntimeDebugService.ActionResult(false, "No living region is bound.");
         List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.TriggerFacilityInfection(
                 region.primaryFacilityId(), "debug:operator-trigger:" + data.worldState().simulationStep()));

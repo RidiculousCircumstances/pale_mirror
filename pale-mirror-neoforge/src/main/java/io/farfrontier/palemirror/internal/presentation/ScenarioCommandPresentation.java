@@ -18,10 +18,19 @@ public final class ScenarioCommandPresentation {
         MutableComponent output = Component.literal("Offered scenarios:").withStyle(ChatFormatting.GOLD);
         for (ScenarioInstance scenario : scenarios) {
             String command = "/pale_mirror scenario accept " + scenario.id();
-            output.append(Component.literal("\n- " + scenario.id() + " [" + scenario.status() + "] "));
+            output.append(Component.literal("\n- " + title(scenario) + " [" + scenario.status() + "] "));
             output.append(Component.literal("[ACCEPT]").setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN)
                     .withUnderlined(true).withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))));
         }
         return output;
+    }
+
+    private static String title(ScenarioInstance scenario) {
+        return switch (scenario.archetype()) {
+            case INVESTIGATION_RECOVERY -> "Mine recovery";
+            case SETTLEMENT_SUPPLY_CRISIS -> "Settlement supply crisis";
+            case DEVELOPMENT_OPPORTUNITY -> "Recovery investment";
+            case RESETTLEMENT_OPPORTUNITY -> "Return home";
+        };
     }
 }

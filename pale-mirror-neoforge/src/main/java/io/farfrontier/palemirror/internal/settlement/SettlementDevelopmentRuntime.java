@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.domain.DevelopmentIntentState;
 import io.farfrontier.palemirror.domain.DevelopmentIntentType;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.ScenarioArchetype;
+import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotState;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -19,6 +21,14 @@ public final class SettlementDevelopmentRuntime {
         for (var intent : data.worldState().developmentIntents().stream()
                 .filter(value -> value.type() == DevelopmentIntentType.UPGRADE_STOREHOUSE).toList()) {
             if (intent.state() == DevelopmentIntentState.PLANNED) {
+                // A presented development opportunity is a genuine player
+                // decision. A declined or unpresented intent remains
+                // autonomous; an offered one waits until the audience accepts.
+                boolean awaitingAudience = data.worldState().scenarios().stream()
+                        .filter(scenario -> scenario.archetype() == ScenarioArchetype.DEVELOPMENT_OPPORTUNITY)
+                        .filter(scenario -> scenario.target().equals(intent.communityId()))
+                        .anyMatch(scenario -> scenario.status() == ScenarioStatus.OFFERED);
+                if (awaitingAudience) continue;
                 if (!commands.execute(data.worldState(), new DomainCommand.StartDevelopmentIntent(intent.id())).isEmpty()) changed = true;
                 continue;
             }
@@ -38,7 +48,7 @@ public final class SettlementDevelopmentRuntime {
             else commands.execute(data.worldState(), new DomainCommand.CancelDevelopmentIntent(intent.id(), failure));
             changed = true;
         }
-        if (RefugeeCampRuntime.cleanupReturnedGroups(server, data)) changed = true;
+        if (RefugeeCampRuntime.cleanupReturnedGroups(server, data, commands)) changed = true;
         return changed;
     }
 
