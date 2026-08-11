@@ -123,6 +123,24 @@ public final class LivingRegionGameTests {
         helper.assertValueEqual(migrated.campaignCommissioning().get(CampaignRegionBootstrapper.IRONHILL_ID).status(),
                 io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.LEGACY_WORLD_DISABLED,
                 "schema v24 must load without retrofitting a destructive railway into an existing region");
+
+        CompoundTag schema25 = snapshot.copy();
+        schema25.putInt("schemaVersion", 25);
+        var commissioning = schema25.getList("campaignCommissioning", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        for (int index = 0; index < commissioning.size(); index++) {
+            CompoundTag value = commissioning.getCompound(index);
+            value.remove("constructionPolicy");
+            value.remove("completedSegments");
+            value.remove("totalSegments");
+        }
+        PaleMirrorSavedData migrated25 = PaleMirrorSavedData.load(schema25, level.registryAccess());
+        var migratedRail = migrated25.campaignCommissioning().values().stream().findFirst().orElse(null);
+        if (migratedRail != null && migratedRail.status()
+                == io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.PLANNED) {
+            helper.assertValueEqual(migratedRail.constructionPolicy(),
+                    io.farfrontier.palemirror.internal.adapter.RailConstructionPolicy.LOADED_CHUNKS_ONLY,
+                    "untouched schema v25 plan must migrate to loaded-chunks-only construction");
+        }
         helper.succeed();
     }
 
@@ -141,16 +159,24 @@ public final class LivingRegionGameTests {
         data.campaignCommissioning().put(record.regionId(), record);
 
         helper.assertTrue(record.authorize(level, start, Blocks.AIR.defaultBlockState(), Blocks.GRAVEL.defaultBlockState()),
-                "a natural first-touch cell inside the persisted envelope must be recordable");
-        helper.assertTrue(!record.authorize(level, start.east(), Blocks.DIAMOND_BLOCK.defaultBlockState(),
+                "an ordinary first-touch cell inside the persisted envelope must be recordable");
+        helper.assertTrue(record.authorize(level, start.east(), Blocks.CHEST.defaultBlockState(),
                         Blocks.GRAVEL.defaultBlockState()),
-                "an unknown crafted first-touch cell must never be claimed");
-        helper.assertTrue(!record.authorize(level, start, Blocks.DIAMOND_BLOCK.defaultBlockState(),
+                "first-generation infrastructure may replace a breakable worldgen block entity inside its envelope");
+        helper.assertTrue(record.authorize(level, start.south(), Blocks.AIR.defaultBlockState(),
+                        Blocks.CHEST.defaultBlockState()),
+                "the trusted railway provider may place its own block-entity representation during first generation");
+        helper.assertTrue(record.authorize(level, start, Blocks.DIAMOND_BLOCK.defaultBlockState(),
                         Blocks.AIR.defaultBlockState()),
-                "a known cell changed outside PM must become a conflict rather than be overwritten");
+                "first-generation construction must tolerate repeated provider transformations");
+        record.observeBaselineArrival(1);
+        record.railBuilding("repair-plan", "repair-native");
+        helper.assertTrue(!record.authorize(level, start, Blocks.DIAMOND_BLOCK.defaultBlockState(),
+                        Blocks.GRAVEL.defaultBlockState()),
+                "after commissioning, a known cell changed outside PM must become a conflict");
         helper.assertValueEqual(record.status(),
                 io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.BLOCKED,
-                "a provenance mismatch must stop the commissioning record");
+                "a provenance mismatch must stop repair reconciliation");
 
         CompoundTag snapshot = data.save(new CompoundTag(), level.registryAccess());
         var reloaded = PaleMirrorSavedData.load(snapshot, level.registryAccess()).campaignCommissioning().get(record.regionId());
@@ -159,24 +185,85 @@ public final class LivingRegionGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-autonomous-region", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 400)
+    public static void campaignMineSitesCommissionWithoutAPlayerVisitingThem(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos settlement = helper.absolutePos(new BlockPos(0, 2, 0));
+        BlockPos primary = helper.absolutePos(new BlockPos(2048, 0, 2048));
+        BlockPos alternate = primary.east(32);
+        level.setBlock(primary.atY(40), Blocks.DIRT.defaultBlockState(), 3);
+        level.setBlock(alternate.atY(40), Blocks.DIRT.defaultBlockState(), 3);
+        int surfaceY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                primary.getX(), primary.getZ());
+        level.setBlock(new BlockPos(primary.getX() - 2, surfaceY - 1, primary.getZ() - 6),
+                Blocks.TERRACOTTA.defaultBlockState(), 3);
+        var record = campaignRecord(level, settlement, primary, alternate, "pale_mirror:autonomous_region");
+        data.campaignRegions().put(record.id(), record);
+
+        helper.succeedWhen(() -> {
+            CampaignRegionBootstrapper.advancePhysicalPlan(level, data, record);
+            helper.assertTrue(record.status() != io.farfrontier.palemirror.internal.world.CampaignRegionPresentationStatus.BLOCKED,
+                    "natural remote terrain must not block autonomous MineSite commissioning: " + record.diagnostic());
+            helper.assertValueEqual(record.status(),
+                    io.farfrontier.palemirror.internal.world.CampaignRegionPresentationStatus.MATERIALIZED,
+                    "both authored MineSites must materialize without a player visiting either column");
+            helper.assertTrue(data.testMines().containsKey(CampaignRegionBootstrapper.MINE17)
+                            && data.testMines().containsKey(CampaignRegionBootstrapper.RED_VALLEY),
+                    "autonomous commissioning must persist both physical MineSite identities");
+        });
+    }
+
+    @GameTest(batch = "pm-autonomous-region", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 400)
+    public static void autonomousMineSitePreflightPreservesProtectedBlocksBeforeWrites(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos settlement = helper.absolutePos(new BlockPos(0, 2, 0));
+        BlockPos primary = helper.absolutePos(new BlockPos(-2048, 0, -2048));
+        level.getChunk(primary);
+        level.setBlock(primary.atY(40), Blocks.BEDROCK.defaultBlockState(), 3);
+        int surfaceY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                primary.getX(), primary.getZ());
+        BlockPos conflict = new BlockPos(primary.getX(), surfaceY - 1, primary.getZ());
+        var record = campaignRecord(level, settlement, primary, primary.east(32), "pale_mirror:blocked_region");
+        data.campaignRegions().put(record.id(), record);
+
+        helper.succeedWhen(() -> {
+            CampaignRegionBootstrapper.advancePhysicalPlan(level, data, record);
+            helper.assertValueEqual(record.status(),
+                    io.farfrontier.palemirror.internal.world.CampaignRegionPresentationStatus.BLOCKED,
+                    "a protected cell in the future MineSite must block the complete site before physical writes");
+            helper.assertValueEqual(level.getBlockState(conflict).getBlock(), Blocks.BEDROCK,
+                    "failed autonomous preflight must preserve an unbreakable block");
+            helper.assertTrue(data.testMines().isEmpty(),
+                    "failed preflight must not register a partially materialized MineSite");
+        });
+    }
+
     @GameTest(batch = "pm-village-observer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void vanillaVillageObserverRequiresStableSignalsAndOnlyRecordsFacts(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
         reset(data);
-        BlockPos anchor = helper.absolutePos(new net.minecraft.core.BlockPos(8, 2, 0));
+        BlockPos focus = helper.absolutePos(new net.minecraft.core.BlockPos(0, 2, 0));
+        BlockPos anchor = focus.offset(48, 24, 0);
         level.setBlock(anchor, Blocks.BELL.defaultBlockState(), 3);
         level.setBlock(anchor.east(), Blocks.RED_BED.defaultBlockState(), 3);
         level.setBlock(anchor.west(), Blocks.BLUE_BED.defaultBlockState(), 3);
         spawnVillager(level, anchor.north());
         var adapter = new VanillaVillageSettlementAdapter();
-        helper.assertTrue(adapter.observeNearby(level, anchor).isEmpty(),
+        helper.assertTrue(adapter.observeNearby(level, focus).isEmpty(),
                 "one wandering villager must not become a PM settlement");
         spawnVillager(level, anchor.south());
         helper.runAfterDelay(1, () -> {
-            var observations = adapter.observeNearby(level, anchor);
-            helper.assertTrue(!observations.isEmpty(), "two villagers and a bell must yield a stable external observation");
+            var observations = adapter.observeNearby(level, focus);
+            helper.assertTrue(!observations.isEmpty(),
+                    "a large vertical village must be observable beyond the legacy sixteen-block landmark cube");
             var observation = observations.getFirst();
             helper.assertValueEqual(observation.anchor(), anchor, "the bell must create a stable external settlement identity");
             helper.assertTrue(data.observeSettlement(observation), "first external physical observation must be persisted");
@@ -317,6 +404,15 @@ public final class LivingRegionGameTests {
         if (villager == null) throw new IllegalStateException("Could not create vanilla villager");
         villager.moveTo(position, 0.0F, 0.0F);
         level.addFreshEntity(villager);
+    }
+
+    private static io.farfrontier.palemirror.internal.world.CampaignRegionRecord campaignRecord(
+            ServerLevel level, BlockPos settlement, BlockPos primary, BlockPos alternate, String id) {
+        return new io.farfrontier.palemirror.internal.world.CampaignRegionRecord(id,
+                level.dimension().location().toString(), new WorldObjectId("pale_mirror:test_place"), settlement,
+                primary, alternate, null, null,
+                io.farfrontier.palemirror.internal.world.CampaignRegionPresentationStatus.PLANNED,
+                "", 0, -1, -1, 0, 0, "", "");
     }
 
     private static void reset(PaleMirrorSavedData data) {

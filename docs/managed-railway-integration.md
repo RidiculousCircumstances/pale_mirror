@@ -28,7 +28,7 @@ Minecraft: 1.21.1
 NeoForge: 21.1.248
 Create: 6.0.10
 managed API commits: af227f2, b9f7be4, 70aca1f
-JAR SHA-512: 2993b2274cbdc8775d7ab960feee2a2e50aa23d22486c811b426c0eb309d43fa9225ed5f69470caae87b2b09a7658216c974f95cdf0de792946f96cf066f2f73
+JAR SHA-512: 8945940277dfae78038ac7e78032f0b3a32c7db93cd643ac498dd81fb5632084c66b8bc3d8c7b35cc2bb5b6a9127c904d1329b77300052982c48ec8a2e5ad0d2
 ```
 
 The private pack must enable:
@@ -59,10 +59,16 @@ track, endpoint stations, a train and its schedule. PM calls it through generic
 DTOs. All provider class names and reflection are confined to
 `internal.integration.railwaysuntold`.
 
+The production policy is `LOADED_CHUNKS_ONLY`. `AUTONOMOUS_DEV` exists only for
+bounded harnesses and may ticket one next segment footprint at a time.
+
 ## Commissioning lifecycle
 
 ```text
-PLANNED
+eligible settlement recognized
+-> regional layout persisted
+-> both MineSites preflighted and materialized autonomously
+-> PLANNED
 -> RAIL_BUILDING
 -> RAIL_READY
 -> TRAIN_COMMISSIONING
@@ -70,16 +76,39 @@ PLANNED
 -> ACTIVE
 ```
 
-The record is saved before physical construction starts. Construction receives
-a bounded moving chunk ticket around its current head; endpoint tickets exist
-only while the service is being commissioned. There is no permanent route
-force-loading.
+MineSite commissioning starts as soon as the settlement evidence creates the
+campaign region. It uses one bounded temporary ticket around the current site,
+records terrain-dependent anchors and complete baselines before writes, and
+never waits for a player to visit either planned mine. A conflict blocks the
+region before partial site placement.
+
+The railway record and complete route geometry are saved before physical work.
+The provider splits the immutable corridor at chunk boundaries, caps a segment
+at 32 blocks and expands its eligibility footprint by eight blocks. In
+production a segment is eligible only when every footprint chunk is already
+loaded by ordinary Minecraft activity. PM and Railway Untold issue no route or
+endpoint generation tickets. Segments are independent, may complete out of
+order and appear on the first safe server ticks after their chunks load. This
+looks like world generation to the player without mutating Create block
+entities or graphs from parallel worldgen threads.
+
+Each segment persists `PLANNED -> RUNNING -> TRACK_PLACED -> COMPLETED`.
+Track placement, terrain clearing and Railway Untold supports still use its
+normal Create-aware executors. A restart after track placement recovers the
+physical postcondition and completes supports idempotently. The connection
+does not advance to `RAIL_READY` until every segment and the shared Create
+track graph are verified. No generic exploration head exists for a schema-v26
+connection.
 
 The Mine17 loading station is inside the PM-owned mine site. The receiving
 station is placed 64 blocks outside the observed village, so native village
 blocks remain read-only. A successful scheduled arrival at Ironhill validates
 the primary route. The first infection cannot be scheduled until five later
 simulation steps, giving the player a visible healthy baseline.
+
+The railway is baseline world infrastructure. Player discovery reveals the
+completed or visibly commissioning region; discovering a mine is not a command
+to generate the route.
 
 If the player edits the PM train's schedule, the service becomes `SUSPENDED`
 instead of overwriting the player change. Missing capability puts dependent
@@ -88,26 +117,44 @@ work into a visible blocked state without changing canonical stock.
 ## Safety and recovery
 
 Before every proposed block mutation, the fork asks PM's placement guard. PM
-allows only positions inside the persisted connection envelope whose current
-state still equals the recorded baseline or last PM-approved state. A first
-touch must be air, fluid, or natural terrain and may not contain a block entity.
-The only endpoint exception permits the proposed registered station. Unknown,
-crafted, player-owned or changed cells fail closed.
+allows only positions inside the persisted connection envelope. During initial
+commissioning the persisted authored corridor is the authority: first-touch
+terrain and block entities may be transformed and repeated provider writes are
+accepted until the first validated baseline arrival. Every touched cell still
+records its original state and the last provider-approved state. After that
+baseline, repair/retry work is strict: only the recorded baseline or last
+approved state may be changed, and unknown/player changes fail closed.
 
-After restart, both PM and the fork load their persisted records. Completed
-postconditions are observed rather than replayed; unfinished construction
-continues from the recorded head. Canonical route capacity is not validated
-until the full service postcondition is observed.
+Origin and destination stations are independent persisted postconditions. Each
+is placed when its own endpoint chunks load; they never need to be loaded
+simultaneously. After both exist, only the origin must be loaded to assemble
+the representative train. Not-yet-loaded endpoints remain a retryable
+`PLACING` state, not a permanent failure.
 
-Schema v24 snapshots migrate to v25 with `LEGACY_WORLD_DISABLED` commissioning.
-PM deliberately does not retrofit a railway into an already materialized old
-region. Fresh development worlds receive the full product setup.
+After restart, both PM and the fork load their persisted records. A `RUNNING`
+segment first checks physical track ownership; `TRACK_PLACED` repeats the
+idempotent ensure only to recover geometry and supports. `observedRevision` is
+not represented by segment count until these postconditions pass.
+
+Schema v26 is the chunk-driven boundary. Schema-v25 commissioned or
+train-commissioning lines load as `LEGACY` and are never rebuilt. An untouched
+v25 plan becomes `LOADED_CHUNKS_ONLY`. A partially written v25 line is suspended
+with an explicit recovery diagnostic rather than guessing which executor owns
+its blocks. Schema v24 remains `LEGACY_WORLD_DISABLED` and is not retrofitted.
 
 ## Automated evidence
 
-- Core GameTests: 20/20.
-- Exact Create + Railway Untold PM GameTests: 20/20.
+- Core GameTests: 22/22, including autonomous no-player site commissioning
+  and fail-closed MineSite preflight.
+- Exact Create + Railway Untold PM GameTests: 23/23. The added negative test
+  materializes naturally loaded segments, leaves the distant remainder
+  planned, verifies the far endpoint chunk was not generated and confirms no
+  legacy expansion head exists.
 - Fork `test build`: passed.
+- Live v25 recovery: a generic head retired 393 blocks before its target and
+  left the provider in `BUILDING`; the optimized provider replaced it once and
+  reached the persisted endpoint in 5 seconds (07:45:34–07:45:39), then
+  recovered a transient endpoint-chunk wait into a running managed train.
 - Packaged-JAR harness: installs a clean NeoForge server with only final PM,
   Create and Railway Untold JARs, starts it twice on the same world, and sees
   `pale_mirror:managed_railway: AVAILABLE` after both starts.

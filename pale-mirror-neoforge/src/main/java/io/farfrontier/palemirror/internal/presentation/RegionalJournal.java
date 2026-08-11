@@ -63,6 +63,8 @@ public final class RegionalJournal {
         var commissioning = data.campaignCommissioning().get(region.id());
         pages.add(Component.literal("LEGACY FREIGHT\n\n" + (commissioning == null ? "Railway commissioning has not begun."
                 : "State: " + commissioning.status() + "\nBaseline arrivals: " + commissioning.baselineArrivals()
+                + "\nConstruction: " + commissioning.constructionPolicy()
+                + "\nSegments: " + commissioning.completedSegments() + "/" + commissioning.totalSegments()
                 + "\nTrain: " + (commissioning.nativeTrainReference().isBlank() ? "not commissioned" : "registered")
                 + (commissioning.diagnostic().isBlank() ? "" : "\nIssue: " + commissioning.diagnostic()))
                 + "\n\nThe train is representative. Canonical cargo remains abstract and cannot be duplicated through its wagons."));

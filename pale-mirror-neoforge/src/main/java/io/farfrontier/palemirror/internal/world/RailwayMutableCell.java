@@ -20,5 +20,9 @@ public final class RailwayMutableCell {
     public String lastApprovedState() { return lastApprovedState; }
     public boolean conflicted() { return conflicted; }
     public void approve(String state) { lastApprovedState = state; }
+    public void approveFirstGeneration(String state) {
+        lastApprovedState = state;
+        conflicted = false;
+    }
     public void conflict() { conflicted = true; }
 }

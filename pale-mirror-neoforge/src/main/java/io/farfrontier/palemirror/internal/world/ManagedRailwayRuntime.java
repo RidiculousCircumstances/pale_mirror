@@ -13,26 +13,18 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.levelgen.Heightmap;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
-import net.minecraft.server.level.TicketType;
-import net.minecraft.world.level.ChunkPos;
 
 /** Restart-safe commissioning coordinator for the product-profile legacy freight line. */
 public final class ManagedRailwayRuntime {
     private static final int MAXIMUM_LINE_LENGTH = 1_200;
-    private static final TicketType<BlockPos> COMMISSIONING_TICKET = TicketType.create(
-            "pale_mirror_rail_commissioning", java.util.Comparator.comparingLong(BlockPos::asLong), 100);
-    private static final java.util.Map<ServerLevel, java.util.Map<String, BlockPos>> ACTIVE_TICKETS =
-            new java.util.IdentityHashMap<>();
 
     private ManagedRailwayRuntime() { }
 
     public static void stop(MinecraftServer server) {
-        ServerLevel level = server.overworld();
-        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.remove(level);
-        if (tickets != null) tickets.forEach((id, position) -> level.getChunkSource().removeRegionTicket(
-                COMMISSIONING_TICKET, new ChunkPos(position), 2, position));
+        // Production rail construction owns no PM chunk tickets. Natural chunk lifecycle is authoritative.
     }
 
     public static void installPlacementAuthority(PaleMirrorSavedData data) {
@@ -52,6 +44,17 @@ public final class ManagedRailwayRuntime {
         boolean changed = ensureRecords(server, data);
         for (CampaignCommissioningRecord record : data.campaignCommissioning().values()) {
             if (!record.dimensionId().equals(server.overworld().dimension().location().toString())) continue;
+            if (record.mayRetryFirstGenerationPlacement(server.overworld())) {
+                record.retryFirstGenerationPlacement();
+                RailConnectionObservation resumed = adapter.resume(server.overworld(), record.connectionId());
+                if (resumed.status() == RailConnectionStatus.BLOCKED || resumed.status() == RailConnectionStatus.FAILED
+                        || resumed.status() == RailConnectionStatus.UNAVAILABLE) record.block(resumed.diagnostic());
+                else {
+                    record.railBuilding(resumed.planHash(), resumed.nativeReference());
+                    record.observeRailProgress(resumed.completedSegments(), resumed.totalSegments(), resumed.diagnostic());
+                }
+                changed = true;
+            }
             changed |= advance(server.overworld(), record, adapter, data.worldState().simulationStep());
             changed |= validateCanonicalRoute(data, commands, record);
         }
@@ -100,8 +103,11 @@ public final class ManagedRailwayRuntime {
         int x = anchor.getX(); int z = anchor.getZ();
         if (Math.abs(dx) >= Math.abs(dz)) x += Integer.signum(dx) * 64;
         else z += Integer.signum(dz) * 64;
-        int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                x, z);
+        BlockPos targetColumn = new BlockPos(x, anchor.getY(), z);
+        // Full recognition normally keeps this nearby column loaded. Retain the persisted ground
+        // infrastructure height as the fail-closed fallback; never query an unseen column.
+        int y = level.hasChunkAt(targetColumn)
+                ? level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) : anchor.getY();
         return new BlockPos(x, y, z);
     }
 
@@ -112,8 +118,17 @@ public final class ManagedRailwayRuntime {
             case RAIL_BUILDING -> build(level, record, adapter);
             case RAIL_READY -> { record.trainCommissioning(); yield true; }
             case TRAIN_COMMISSIONING, BASELINE_VALIDATION -> commissionTrain(level, record, adapter, simulationStep);
+            case BLOCKED -> recoverProviderService(level, record, adapter);
             default -> false;
         };
+    }
+
+    private static boolean recoverProviderService(ServerLevel level, CampaignCommissioningRecord record,
+                                                  RailInfrastructureAdapter adapter) {
+        FreightServiceObservation observed = adapter.freightService(level, record.serviceId()).orElse(null);
+        if (observed == null || !RailwayRecoveryPolicy.serviceCanResume(observed.status())) return false;
+        record.resumeTrainCommissioning();
+        return true;
     }
 
     private static boolean plan(ServerLevel level, CampaignCommissioningRecord record, RailInfrastructureAdapter adapter) {
@@ -124,6 +139,7 @@ public final class ManagedRailwayRuntime {
             record.block(observed.diagnostic()); return true;
         }
         record.railBuilding(observed.planHash(), observed.nativeReference());
+        record.observeRailProgress(observed.completedSegments(), observed.totalSegments(), observed.diagnostic());
         return true;
     }
 
@@ -132,45 +148,34 @@ public final class ManagedRailwayRuntime {
         if (observed == null || observed.status() == RailConnectionStatus.PLANNED) {
             observed = adapter.start(level, record.connectionId());
         }
+        boolean changed = record.observeRailProgress(observed.completedSegments(), observed.totalSegments(),
+                observed.diagnostic());
         if (observed.status() == RailConnectionStatus.BLOCKED || observed.status() == RailConnectionStatus.FAILED) {
-            releaseTicket(level, record.connectionId());
             record.block(observed.diagnostic()); return true;
         }
-        maintainTicket(level, record.connectionId(), observed.currentPosition());
         if (observed.status() == RailConnectionStatus.VERIFYING || observed.status() == RailConnectionStatus.READY) {
-            releaseTicket(level, record.connectionId());
             record.railReady(observed.nativeReference()); return true;
         }
-        return false;
+        return changed;
     }
 
     private static boolean commissionTrain(ServerLevel level, CampaignCommissioningRecord record,
                                            RailInfrastructureAdapter adapter, long simulationStep) {
-        String originTicket = record.connectionId() + ":service-origin";
-        String destinationTicket = record.connectionId() + ":service-destination";
-        maintainTicket(level, originTicket, record.assemblyTrack());
-        maintainTicket(level, destinationTicket, record.railTarget());
-        if (!level.hasChunkAt(record.assemblyTrack()) || !level.hasChunkAt(record.railTarget())) return false;
         FreightServiceObservation observed = adapter.freightService(level, record.serviceId()).orElse(null);
         if (observed == null) observed = adapter.ensureFreightService(level, new FreightServiceRequest(record.serviceId(),
                 record.connectionId(), record.assemblyTrack(), record.assemblyDirection(), record.originStation(),
                 record.destinationStation()));
         if (observed.status() == FreightServiceStatus.BLOCKED || observed.status() == FreightServiceStatus.UNAVAILABLE) {
-            releaseTicket(level, originTicket); releaseTicket(level, destinationTicket);
             record.block(observed.diagnostic()); return true;
         }
         if (observed.status() == FreightServiceStatus.PLAYER_MANAGED) {
             record.suspend("Player changed the PM service schedule; canonical flow is paused"); return true;
         }
         boolean changed = record.observeTrain(observed.nativeReference(), observed.scheduleFingerprint());
-        if (observed.status() == FreightServiceStatus.RUNNING || observed.status() == FreightServiceStatus.PARKED) {
-            releaseTicket(level, originTicket); releaseTicket(level, destinationTicket);
-        }
         if (record.baselineArrivals() == 0 && record.destinationStation().equals(observed.currentStation())) {
             record.observeBaselineArrival(simulationStep); return true;
         }
         if (record.baselineArrivals() > 0 && simulationStep >= record.infectionEligibleAtStep()) {
-            releaseTicket(level, originTicket); releaseTicket(level, destinationTicket);
             record.activate(); return true;
         }
         return changed;
@@ -178,20 +183,4 @@ public final class ManagedRailwayRuntime {
 
     private static String safeId(String value) { return value.replace(':', '_').replace('/', '_'); }
 
-    private static void maintainTicket(ServerLevel level, String connectionId, BlockPos position) {
-        if (position == null) return;
-        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.computeIfAbsent(level, ignored -> new java.util.HashMap<>());
-        BlockPos previous = tickets.put(connectionId, position.immutable());
-        if (previous != null && !previous.equals(position)) level.getChunkSource().removeRegionTicket(
-                COMMISSIONING_TICKET, new ChunkPos(previous), 2, previous);
-        level.getChunkSource().addRegionTicket(COMMISSIONING_TICKET, new ChunkPos(position), 2, position.immutable());
-    }
-
-    private static void releaseTicket(ServerLevel level, String connectionId) {
-        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.get(level);
-        BlockPos previous = tickets == null ? null : tickets.remove(connectionId);
-        if (previous != null) level.getChunkSource().removeRegionTicket(COMMISSIONING_TICKET,
-                new ChunkPos(previous), 2, previous);
-        if (tickets != null && tickets.isEmpty()) ACTIVE_TICKETS.remove(level);
-    }
 }

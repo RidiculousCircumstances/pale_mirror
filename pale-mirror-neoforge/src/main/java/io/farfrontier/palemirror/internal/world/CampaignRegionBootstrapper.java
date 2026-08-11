@@ -40,7 +40,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Binds the first authored region to a read-only observed settlement; it never builds a village. */
@@ -59,9 +60,13 @@ public final class CampaignRegionBootstrapper {
     private static final ResourceLocation IRONHILL_DEFINITION = ResourceLocation.parse(IRONHILL_ID);
     private static final int PRIMARY_MINE_DISTANCE = 640;
     private static final int ALTERNATE_MINE_DISTANCE = 704;
-    private static final int MATERIALIZATION_RANGE = 192;
     private static final int MIN_SETTLEMENT_DISTANCE = 800;
     private static final int MAX_SETTLEMENT_DISTANCE = 2_000;
+    private static final int SITE_TICKET_RADIUS = 4;
+    private static final TicketType<BlockPos> SITE_COMMISSIONING_TICKET = TicketType.create(
+            "pale_mirror_site_commissioning", java.util.Comparator.comparingLong(BlockPos::asLong), 100);
+    private static final java.util.Map<ServerLevel, java.util.Map<String, BlockPos>> ACTIVE_TICKETS =
+            new java.util.IdentityHashMap<>();
 
     private CampaignRegionBootstrapper() { }
 
@@ -73,10 +78,44 @@ public final class CampaignRegionBootstrapper {
                             boolean automaticBinding) {
         if (automaticBinding) ensureCanonicalPlan(server, data, commands);
         CampaignRegionRecord record = data.campaignRegions().get(IRONHILL_ID);
-        if (record == null || record.status() == CampaignRegionPresentationStatus.MATERIALIZED
-                || record.status() == CampaignRegionPresentationStatus.BLOCKED || !playerIsNearPendingMine(server, record)) return;
-        ServerLevel level = server.overworld();
+        if (record == null) {
+            releaseTicket(server.overworld(), IRONHILL_ID);
+            return;
+        }
+        advancePhysicalPlan(server.overworld(), data, record);
+    }
+
+    /** Advances persisted PM-authored site work without requiring a player near either planned mine. */
+    public static void advancePhysicalPlan(ServerLevel level, PaleMirrorSavedData data, CampaignRegionRecord record) {
+        if (record.status() == CampaignRegionPresentationStatus.MATERIALIZED) {
+            releaseTicket(level, record.id());
+            return;
+        }
+        maintainTicket(level, record.id(), CampaignMineSiteTemplate.commissioningTicketAnchor(record.pendingMineColumn()));
         if (!level.hasChunkAt(record.pendingMineColumn())) return;
+        if (record.status() == CampaignRegionPresentationStatus.BLOCKED) {
+            if (record.pendingMineAnchorResolved()
+                    && record.diagnostic().startsWith("MineSite changed after planning at ")) {
+                record.retryBlockedFirstGenerationExecution();
+                data.setDirty();
+            } else {
+                if (record.pendingMineAnchorResolved() || !record.diagnostic().startsWith("MineSite conflict at ")) {
+                    releaseTicket(level, record.id());
+                    return;
+                }
+                BlockPos recoveryAnchor = resolveAnchor(level, record.pendingMineColumn());
+                if (!CampaignMineSiteTemplate.isAreaLoaded(level, recoveryAnchor)) return;
+                try {
+                    // Re-evaluate without changing state. A genuine crafted/unknown conflict remains BLOCKED and
+                    // does not become a hot retry loop; a terrain classification fixed by an update may resume.
+                    CampaignMineSiteTemplate.captureBaseline(level, recoveryAnchor);
+                    record.retryBlockedPreflight();
+                } catch (IllegalStateException stillBlocked) {
+                    releaseTicket(level, record.id());
+                    return;
+                }
+            }
+        }
         if (!record.pendingMineAnchorResolved()) {
             BlockPos anchor = resolveAnchor(level, record.pendingMineColumn());
             if (!CampaignMineSiteTemplate.isAreaLoaded(level, anchor)) return;
@@ -84,6 +123,7 @@ public final class CampaignRegionBootstrapper {
                 record.resolvePendingMineAnchor(anchor, CampaignMineSiteTemplate.captureBaseline(level, anchor));
             } catch (IllegalStateException conflict) {
                 record.block(conflict.getMessage());
+                releaseTicket(level, record.id());
             }
             data.setDirty();
             return;
@@ -98,11 +138,20 @@ public final class CampaignRegionBootstrapper {
             else if (record.nextOperationIndex() == 1) ensureMine(data, level, record.alternateMineAnchor(), RED_VALLEY, record.pendingMineBaseline());
             else throw new IllegalStateException("Invalid campaign operation index " + record.nextOperationIndex());
             record.completedOperation();
+            if (record.status() == CampaignRegionPresentationStatus.MATERIALIZED) releaseTicket(level, record.id());
             data.setDirty();
         } catch (IllegalStateException failure) {
             record.block(failure.getMessage());
+            releaseTicket(level, record.id());
             data.setDirty();
         }
+    }
+
+    public static void stop(MinecraftServer server) {
+        ServerLevel level = server.overworld();
+        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.remove(level);
+        if (tickets != null) tickets.forEach((id, position) -> level.getChunkSource().removeRegionTicket(
+                SITE_COMMISSIONING_TICKET, new ChunkPos(position), SITE_TICKET_RADIUS, position));
     }
 
     private static void ensureCanonicalPlan(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
@@ -198,9 +247,11 @@ public final class CampaignRegionBootstrapper {
         data.worldState().putSettlementDevelopment(new SettlementDevelopment(IRONHILL, 25, 0,
                 population, Math.max(0, population - observed.observedPopulation() / 5), 0));
         data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(IRONHILL));
+        BlockPos infrastructureAnchor = infrastructureAnchor(server, observed.anchor());
         data.campaignRegions().put(IRONHILL_ID, new CampaignRegionRecord(IRONHILL_ID,
-                observed.dimensionId(), placeId, observed.anchor(), mineColumn(server, observed.anchor(), PRIMARY_MINE_DISTANCE),
-                alternateMineColumn(server, observed.anchor()), null, null,
+                observed.dimensionId(), placeId, infrastructureAnchor,
+                mineColumn(server, infrastructureAnchor, PRIMARY_MINE_DISTANCE),
+                alternateMineColumn(server, infrastructureAnchor), null, null,
                 CampaignRegionPresentationStatus.PLANNED, "", 0, -1, -1, 0, 0, "", ""));
         data.setDirty();
     }
@@ -216,7 +267,17 @@ public final class CampaignRegionBootstrapper {
         if (distanceSquared < (long) MIN_SETTLEMENT_DISTANCE * MIN_SETTLEMENT_DISTANCE
                 || distanceSquared > (long) MAX_SETTLEMENT_DISTANCE * MAX_SETTLEMENT_DISTANCE) return false;
         int terrain = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ());
-        return Math.abs(anchor.getY() - terrain) <= 24 && level.getFluidState(anchor).isEmpty();
+        BlockPos surface = new BlockPos(anchor.getX(), Math.max(level.getMinBuildHeight(), terrain - 1), anchor.getZ());
+        return anchor.getY() >= terrain - 16 && anchor.getY() <= terrain + 96
+                && level.getFluidState(surface).isEmpty();
+    }
+
+    /** Keeps logistics on the settlement-facing ground even when its stable bell is in a tower. */
+    static BlockPos infrastructureAnchor(MinecraftServer server, BlockPos landmark) {
+        BlockPos column = mineColumn(server, landmark, 32);
+        int terrain = server.overworld().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                column.getX(), column.getZ());
+        return new BlockPos(column.getX(), terrain, column.getZ());
     }
 
     private static BlockPos mineColumn(MinecraftServer server, BlockPos settlement, int distance) {
@@ -239,17 +300,6 @@ public final class CampaignRegionBootstrapper {
         };
     }
 
-    private static boolean playerIsNearPendingMine(MinecraftServer server, CampaignRegionRecord record) {
-        BlockPos pending = record.pendingMineColumn();
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (!player.serverLevel().dimension().location().toString().equals(record.dimensionId())) continue;
-            long dx = player.blockPosition().getX() - pending.getX();
-            long dz = player.blockPosition().getZ() - pending.getZ();
-            if (dx * dx + dz * dz <= (long) MATERIALIZATION_RANGE * MATERIALIZATION_RANGE) return true;
-        }
-        return false;
-    }
-
     private static BlockPos resolveAnchor(ServerLevel level, BlockPos column) {
         int height = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
         return new BlockPos(column.getX(), height, column.getZ());
@@ -262,5 +312,24 @@ public final class CampaignRegionBootstrapper {
                 ? CampaignMineSiteTemplate.observeExisting(level, anchor, id, StoryAudienceId.globalTestAudience())
                 : CampaignMineSiteTemplate.place(level, anchor, id, StoryAudienceId.globalTestAudience(), baseline);
         data.registerTestMine(mine);
+    }
+
+    private static void maintainTicket(ServerLevel level, String regionId, BlockPos position) {
+        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.computeIfAbsent(level, ignored -> new java.util.HashMap<>());
+        BlockPos next = position.immutable();
+        BlockPos previous = tickets.put(regionId, next);
+        if (next.equals(previous)) return;
+        if (previous != null) level.getChunkSource().removeRegionTicket(
+                SITE_COMMISSIONING_TICKET, new ChunkPos(previous), SITE_TICKET_RADIUS, previous);
+        level.getChunkSource().addRegionTicket(
+                SITE_COMMISSIONING_TICKET, new ChunkPos(next), SITE_TICKET_RADIUS, next);
+    }
+
+    private static void releaseTicket(ServerLevel level, String regionId) {
+        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.get(level);
+        BlockPos previous = tickets == null ? null : tickets.remove(regionId);
+        if (previous != null) level.getChunkSource().removeRegionTicket(
+                SITE_COMMISSIONING_TICKET, new ChunkPos(previous), SITE_TICKET_RADIUS, previous);
+        if (tickets != null && tickets.isEmpty()) ACTIVE_TICKETS.remove(level);
     }
 }

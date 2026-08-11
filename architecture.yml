@@ -52,9 +52,9 @@ invariants:
   - id: logistics-observation
     statement: A player-built logistics route becomes canonical capacity only through a typed, bounded adapter observation; the read-only Create bridge never drives transport or force-loads route chunks.
   - id: managed-railway-commissioning
-    statement: A PM-authored regional railway is commissioned only through the generic RailInfrastructureAdapter, a version-pinned isolated provider and schema-persisted PM authority; construction may use bounded moving chunk tickets, every block mutation is provenance-guarded, player schedule edits suspend canonical service, and PM remains the owner of route capacity and resource flow.
+    statement: Recognizing an eligible campaign settlement persists one complete regional layout and immutable railway plan. Production rail materialization is independent and out of order by naturally loaded chunk footprints only; neither PM nor its provider may generate unseen route chunks. Initial authored-corridor construction records provenance while accepting provider transforms, later repairs fail closed on unknown changes, player schedule edits suspend canonical service, and PM remains the owner of route capacity and resource flow.
   - id: settlement-observation
-    statement: Vanilla-compatible places are recognized only after a complete 400-tick loaded evidence window; reliability, freshness, representative membership and causal losses remain typed and separate, and missing entities never imply death or ruin.
+    statement: Vanilla-compatible places are recognized only after a complete 400-tick loaded evidence window. Large and vertical villages resolve a stable loaded bell/home through the Minecraft POI index and require a bounded resident cluster; the player's exact position is never the identity. Reliability, freshness, representative membership and causal losses remain typed and separate, and missing entities never imply death or ruin. Campaign logistics uses a separate ground-projected infrastructure anchor so a tower bell cannot create aerial depots or rails.
   - id: settlement-actor
     statement: A settlement community, its physical place, economy, security and policy are separate canonical records; deterministic settlement policy creates crisis facts and continues acting when Narrator returns NO_SCENARIO.
   - id: route-contract
@@ -146,8 +146,8 @@ critical_flows:
     owner: NeoForge Create adapter and regional logistics reconciliation
     verification: critical-code
   - id: managed-regional-railway
-    path: materialized MineSite -> persisted commissioning record -> guarded full-line construction -> exact endpoint stations -> scheduled freight service -> baseline arrival -> canonical RouteContract validation -> infection eligibility
-    owner: NeoForge ManagedRailwayRuntime plus generic adapter boundary and isolated Railway Untold provider; domain owns route and flow
+    path: recognized eligible place -> persisted regional plan -> guarded MineSite commissioning -> schema-v26 loaded-chunks-only railway plan -> independently loaded segment footprint -> persisted RUNNING/track/support postconditions -> complete Create graph -> independently loaded endpoint stations -> origin-loaded train assembly -> baseline arrival -> strict post-baseline provenance -> canonical RouteContract validation -> infection eligibility
+    owner: NeoForge CampaignRegionBootstrapper and ManagedRailwayRuntime plus generic adapter boundary and isolated Railway Untold provider; domain owns route and flow
     verification: critical-code
   - id: settlement-resource-transfer
     path: depot interaction -> persisted PREPARED receipt -> reserved physical stack or canonical debit -> domain command/event -> physical completion -> bounded compaction

@@ -21,6 +21,11 @@ public final class CampaignMineSiteTemplate {
 
     private CampaignMineSiteTemplate() { }
 
+    /** Centers one bounded commissioning ticket over the complete yard, drift and chamber footprint. */
+    public static BlockPos commissioningTicketAnchor(BlockPos column) {
+        return column.offset(0, 0, DRIFT_LENGTH / 2);
+    }
+
     public static boolean isAreaLoaded(ServerLevel level, BlockPos surface) {
         return plan(surface).keySet().stream().allMatch(level::hasChunkAt);
     }
@@ -39,10 +44,14 @@ public final class CampaignMineSiteTemplate {
         Map<BlockPos, BlockState> plan = plan(surface);
         if (baseline.size() != plan.size()) throw new IllegalStateException("MineSite baseline is absent or incomplete");
         for (BlockPos position : plan.keySet()) {
-            String expected = baseline.get(position.asLong());
-            if (expected == null || !expected.equals(level.getBlockState(position).toString())) {
-                throw new IllegalStateException("MineSite changed after planning at " + position.toShortString());
+            if (!baseline.containsKey(position.asLong())) {
+                throw new IllegalStateException("MineSite baseline is incomplete at " + position.toShortString());
             }
+            // The first-generation footprint is authoritative. Ordinary terrain can legitimately
+            // settle between preflight and execution (snow, fluids, late feature population), so
+            // equality with the captured diagnostic snapshot is not a safety boundary here.
+            // requireWritable still rejects an unbreakable block. Once the template is placed and its
+            // mutable cells are registered, later reconciliation uses strict provenance normally.
             requireWritable(level, position);
         }
         plan.forEach((position, state) -> level.setBlock(position, state, 3));
@@ -136,12 +145,11 @@ public final class CampaignMineSiteTemplate {
     private static void requireWritable(ServerLevel level, BlockPos position) {
         if (!level.hasChunkAt(position)) throw new IllegalStateException("MineSite chunk is not loaded at " + position.toShortString());
         BlockState current = level.getBlockState(position);
-        boolean natural = current.isAir() || current.canBeReplaced() || !current.getFluidState().isEmpty()
-                || current.is(net.minecraft.tags.BlockTags.BASE_STONE_OVERWORLD)
-                || current.is(net.minecraft.tags.BlockTags.DIRT) || current.is(net.minecraft.tags.BlockTags.SAND)
-                || current.is(net.minecraft.tags.BlockTags.LOGS) || current.is(net.minecraft.tags.BlockTags.LEAVES)
-                || current.is(Blocks.GRAVEL) || current.is(Blocks.SNOW_BLOCK) || current.is(Blocks.ICE);
-        if (current.hasBlockEntity() || current.is(Blocks.BEDROCK) || !natural) {
+        // This is first-generation commissioning in a fresh, PM-selected remote footprint. It intentionally
+        // accepts ordinary solid terrain and block entities instead of trying to infer provenance from
+        // block type. After placement, registered mutable cells use the normal baseline/lastApplied rules.
+        boolean protectedBlock = current.getDestroySpeed(level, position) < 0.0F;
+        if (protectedBlock) {
             throw new IllegalStateException("MineSite conflict at " + position.toShortString());
         }
     }

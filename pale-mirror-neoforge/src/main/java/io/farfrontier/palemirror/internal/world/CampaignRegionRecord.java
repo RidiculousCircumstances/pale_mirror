@@ -120,6 +120,24 @@ public final class CampaignRegionRecord {
     }
     public void materialized() { status = CampaignRegionPresentationStatus.MATERIALIZED; diagnostic = ""; }
     public void block(String reason) { status = CampaignRegionPresentationStatus.BLOCKED; diagnostic = Objects.requireNonNull(reason, "reason"); }
+    /** Reopens only a preflight that failed before an anchor/baseline or any physical operation was persisted. */
+    public void retryBlockedPreflight() {
+        if (status != CampaignRegionPresentationStatus.BLOCKED || pendingMineAnchorResolved()
+                || !diagnostic.startsWith("MineSite conflict at ")) {
+            throw new IllegalStateException("Only an untouched MineSite preflight conflict can be retried");
+        }
+        status = CampaignRegionPresentationStatus.PLANNED;
+        diagnostic = "";
+    }
+    /** Recovers a job stopped by the superseded exact-terrain first-generation precondition. */
+    public void retryBlockedFirstGenerationExecution() {
+        if (status != CampaignRegionPresentationStatus.BLOCKED || !pendingMineAnchorResolved()
+                || !diagnostic.startsWith("MineSite changed after planning at ")) {
+            throw new IllegalStateException("Only a legacy first-generation terrain change can be retried");
+        }
+        status = CampaignRegionPresentationStatus.RUNNING;
+        diagnostic = "";
+    }
     public boolean observeRouteEndpoint(boolean origin, long simulationStep, int capacity, String vehicleId) {
         if (simulationStep < 0 || capacity < 0 || vehicleId == null || vehicleId.isBlank()) {
             throw new IllegalArgumentException("Invalid route observation");

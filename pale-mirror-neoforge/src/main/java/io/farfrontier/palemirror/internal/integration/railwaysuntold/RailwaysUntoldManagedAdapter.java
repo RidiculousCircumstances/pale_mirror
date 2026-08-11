@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.internal.adapter.FreightServiceStatus;
 import io.farfrontier.palemirror.internal.adapter.RailConnectionObservation;
 import io.farfrontier.palemirror.internal.adapter.RailConnectionRequest;
 import io.farfrontier.palemirror.internal.adapter.RailConnectionStatus;
+import io.farfrontier.palemirror.internal.adapter.RailConstructionPolicy;
 import io.farfrontier.palemirror.internal.adapter.RailInfrastructureAdapter;
 import io.farfrontier.palemirror.internal.adapter.RailPlacementAuthority;
 import net.minecraft.core.BlockPos;
@@ -33,6 +34,8 @@ public final class RailwaysUntoldManagedAdapter implements RailInfrastructureAda
     private static final String API = "com.vodmordia.railwaysuntold.api.managed.ManagedRailwayApi";
     private static final String GUARD = "com.vodmordia.railwaysuntold.api.managed.ManagedPlacementGuard";
     private static final String GUARD_DECISION = GUARD + "$Decision";
+    private static final String CONSTRUCTION_POLICY =
+            "com.vodmordia.railwaysuntold.api.managed.ManagedConstructionPolicy";
 
     @Override public String id() { return "pale_mirror:managed_railway"; }
 
@@ -85,9 +88,11 @@ public final class RailwaysUntoldManagedAdapter implements RailInfrastructureAda
 
     @Override public RailConnectionObservation plan(ServerLevel level, RailConnectionRequest request) {
         try {
+            Class<?> policyType = Class.forName(CONSTRUCTION_POLICY, false, getClass().getClassLoader());
             Object result = api().getClass().getMethod("plan", ServerLevel.class, String.class, BlockPos.class,
-                    BlockPos.class, Direction.Axis.class, int.class).invoke(api(), level, request.connectionId(),
-                    request.start(), request.target(), request.trackAxis(), request.maximumLength());
+                    BlockPos.class, Direction.Axis.class, int.class, policyType).invoke(api(), level, request.connectionId(),
+                    request.start(), request.target(), request.trackAxis(), request.maximumLength(),
+                    enumValue(policyType, request.constructionPolicy().name()));
             return connection(result);
         } catch (ReflectiveOperationException failure) { return railFailure(request.connectionId(), failure); }
     }
@@ -172,6 +177,9 @@ public final class RailwaysUntoldManagedAdapter implements RailInfrastructureAda
                     (BlockPos) type.getMethod("currentPosition").invoke(value),
                     (String) type.getMethod("planHash").invoke(value), (int) type.getMethod("plannedLength").invoke(value),
                     (int) type.getMethod("remainingDistance").invoke(value), nativeId == null ? "" : nativeId.toString(),
+                    RailConstructionPolicy.valueOf(type.getMethod("constructionPolicy").invoke(value).toString()),
+                    (int) type.getMethod("completedSegments").invoke(value),
+                    (int) type.getMethod("totalSegments").invoke(value),
                     (String) type.getMethod("diagnostic").invoke(value));
         } catch (ReflectiveOperationException failure) { throw new IllegalStateException("Invalid managed connection snapshot", failure); }
     }
@@ -189,7 +197,8 @@ public final class RailwaysUntoldManagedAdapter implements RailInfrastructureAda
     }
 
     private static RailConnectionObservation railFailure(String id, Throwable failure) {
-        return new RailConnectionObservation(id, RailConnectionStatus.BLOCKED, null, "", 0, 0, "", rootMessage(failure));
+        return new RailConnectionObservation(id, RailConnectionStatus.BLOCKED, null, "", 0, 0, "",
+                RailConstructionPolicy.LOADED_CHUNKS_ONLY, 0, 0, rootMessage(failure));
     }
 
     private static FreightServiceObservation freightFailure(String id, Throwable failure) {

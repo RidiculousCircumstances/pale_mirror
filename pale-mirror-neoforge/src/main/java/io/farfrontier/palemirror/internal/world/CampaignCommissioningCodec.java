@@ -8,6 +8,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import io.farfrontier.palemirror.internal.adapter.RailConstructionPolicy;
 
 final class CampaignCommissioningCodec {
     private CampaignCommissioningCodec() { }
@@ -26,6 +27,9 @@ final class CampaignCommissioningCodec {
             value.putString("nativeRail", record.nativeRailReference()); value.putString("nativeTrain", record.nativeTrainReference());
             value.putString("schedule", record.scheduleFingerprint()); value.putString("diagnostic", record.diagnostic());
             value.putInt("arrivals", record.baselineArrivals()); value.putLong("infectionEligible", record.infectionEligibleAtStep());
+            value.putString("constructionPolicy", record.constructionPolicy().name());
+            value.putInt("completedSegments", record.completedSegments());
+            value.putInt("totalSegments", record.totalSegments());
             ListTag cells = new ListTag();
             record.railCells().values().forEach(cell -> {
                 CompoundTag encoded = new CompoundTag(); encoded.putLong("position", cell.position().asLong());
@@ -37,7 +41,7 @@ final class CampaignCommissioningCodec {
         root.put("campaignCommissioning", values);
     }
 
-    static Map<String, CampaignCommissioningRecord> read(CompoundTag root) {
+    static Map<String, CampaignCommissioningRecord> read(CompoundTag root, int schemaVersion) {
         Map<String, CampaignCommissioningRecord> result = new LinkedHashMap<>();
         for (Tag entry : root.getList("campaignCommissioning", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) entry;
@@ -47,14 +51,26 @@ final class CampaignCommissioningCodec {
                 cells.put(position.asLong(), new RailwayMutableCell(position, cell.getString("baseline"),
                         cell.getString("lastApproved"), cell.getBoolean("conflicted")));
             }
+            CampaignCommissioningStatus status = CampaignCommissioningStatus.valueOf(value.getString("status"));
+            RailConstructionPolicy policy;
+            String diagnostic = value.getString("diagnostic");
+            if (value.contains("constructionPolicy")) {
+                policy = RailConstructionPolicy.valueOf(value.getString("constructionPolicy"));
+            } else {
+                var decision = CampaignCommissioningMigrationPolicy.classify(
+                        status, !cells.isEmpty(), diagnostic);
+                policy = decision.policy();
+                status = decision.status();
+                diagnostic = decision.diagnostic();
+            }
             CampaignCommissioningRecord record = new CampaignCommissioningRecord(value.getString("region"),
                     value.getString("dimension"), value.getString("connection"), value.getString("service"),
                     BlockPos.of(value.getLong("start")), BlockPos.of(value.getLong("target")), BlockPos.of(value.getLong("assembly")),
                     Direction.Axis.valueOf(value.getString("axis")), Direction.valueOf(value.getString("direction")),
-                    value.getInt("maximumLength"), value.getString("origin"), value.getString("destination"),
-                    CampaignCommissioningStatus.valueOf(value.getString("status")), value.getString("planHash"),
+                    value.getInt("maximumLength"), value.getString("origin"), value.getString("destination"), status, value.getString("planHash"),
                     value.getString("nativeRail"), value.getString("nativeTrain"), value.getString("schedule"),
-                    value.getString("diagnostic"), value.getInt("arrivals"), value.getLong("infectionEligible"), cells);
+                    diagnostic, value.getInt("arrivals"), value.getLong("infectionEligible"), cells,
+                    policy, value.getInt("completedSegments"), value.getInt("totalSegments"));
             result.put(record.regionId(), record);
         }
         return result;

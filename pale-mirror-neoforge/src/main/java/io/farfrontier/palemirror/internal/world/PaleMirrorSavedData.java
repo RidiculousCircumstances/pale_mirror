@@ -52,7 +52,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 25;
+    static final int CURRENT_SCHEMA = 26;
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
@@ -186,22 +186,23 @@ public final class PaleMirrorSavedData extends SavedData {
             quarantine.put(record.id(), record);
         }
         Map<String, CampaignRegionRecord> campaignRegions = CampaignRegionPresentationCodec.read(tag);
-        Map<String, CampaignCommissioningRecord> commissioning = CampaignCommissioningCodec.read(tag);
+        Map<String, CampaignCommissioningRecord> commissioning = CampaignCommissioningCodec.read(tag, version);
         if (version == 24 && !campaignRegions.isEmpty()) campaignRegions.values().forEach(region ->
                 commissioning.putIfAbsent(region.id(), CampaignCommissioningRecord.legacyDisabled(region.id(),
                         region.dimensionId(), region.settlementAnchor())));
-        return new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
+        PaleMirrorSavedData loaded = new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
                 new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag),
-                campaignRegions, SettlementObservationCodec.read(tag),
-                EconomyPresentationCodec.readLedger(tag), EconomyPresentationCodec.readDepots(tag),
+                campaignRegions, SettlementObservationCodec.read(tag), EconomyPresentationCodec.readLedger(tag), EconomyPresentationCodec.readDepots(tag),
                 DisplacementPresentationCodec.read(tag), commissioning);
+        if (version < CURRENT_SCHEMA) loaded.setDirty();
+        return loaded;
     }
     private static IllegalStateException incompatibleSchema(int version) {
         return new IllegalStateException("Pale Mirror data schema " + version + " is not compatible with schema "
                 + CURRENT_SCHEMA + ". Back up the old world before resetting its Pale Mirror data.");
     }
     private static boolean isMigratable(int version) {
-        return version == 24 || version == CURRENT_SCHEMA;
+        return version == 24 || version == 25 || version == CURRENT_SCHEMA;
     }
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {

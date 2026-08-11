@@ -84,6 +84,7 @@ public final class PaleMirrorRuntime {
         return INSTANCES.computeIfAbsent(server, PaleMirrorRuntime::new);
     }
     public static void stop(MinecraftServer server) {
+        CampaignRegionBootstrapper.stop(server);
         ManagedRailwayRuntime.stop(server);
         INSTANCES.remove(server);
     }
