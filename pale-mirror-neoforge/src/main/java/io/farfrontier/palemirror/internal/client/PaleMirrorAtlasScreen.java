@@ -82,6 +82,12 @@ public final class PaleMirrorAtlasScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
+    /** Screen.render invokes this again before rendering widgets; Atlas already owns its compact panel. */
+    @Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Deliberately no fullscreen menu texture or post-process blur.
+    }
+
     private void drawRegion(GuiGraphics graphics, PaleMirrorAtlasClient.Region region, int x, int y, int panelWidth) {
         int secondaryX = x + Math.max(230, panelWidth - 235);
         int crisisColor = "NONE".equals(region.crisis()) ? 0x8FE1A2 : 0xF6AA78;
