@@ -54,7 +54,7 @@ invariants:
   - id: managed-railway-commissioning
     statement: Railway Untold/Create is an explicit later industrial route provider, never an implicit default for a small campaign settlement. Its production materialization is independent and out of order by naturally loaded chunk footprints only; neither PM nor its provider may generate unseen route chunks. Initial authored-corridor construction records provenance while accepting provider transforms, later repairs fail closed on unknown changes, player schedule edits suspend canonical service, and PM remains the owner of route capacity and resource flow.
   - id: vanilla-minecart-baseline
-    statement: A fresh campaign region may use the built-in low-capacity VANILLA_MINECART provider. Its complete cardinal corridor is persisted before work, each loaded segment captures baseline then checks preconditions and postconditions, and only PM-owned track, trestles and a receiving platform are written. It never loads chunks, never materializes stock, blocks on block entities or unknown later changes, and validates only an abstract RouteContract; a lease-authorized cart is representational only.
+    statement: A fresh campaign region may use the built-in low-capacity VANILLA_MINECART provider. Its complete cardinal corridor is persisted before work, each loaded segment captures baseline then checks preconditions and postconditions, and only PM-owned track, trestles and a receiving platform are written. It never loads chunks or materializes stock. Critical loaded damage suspends canonical capacity until exact registered cells are repaired; unknown cells are never overwritten. A persisted lease-authorized moving cart/cargo pair is representational only and freezes outside loaded, operational supply.
   - id: settlement-observation
     statement: Vanilla-compatible places are recognized only after a complete 400-tick loaded evidence window. Large and vertical villages resolve a stable loaded bell/home through the Minecraft POI index and require a bounded resident cluster; the player's exact position is never the identity. Reliability, freshness, representative membership and causal losses remain typed and separate, and missing entities never imply death or ruin. Campaign logistics uses a separate ground-projected infrastructure anchor so a tower bell cannot create aerial depots or rails.
   - id: settlement-actor
@@ -72,9 +72,9 @@ invariants:
   - id: population-separation
     statement: SettlementCommunity owns social identity while PopulationGroup owns cohort counts and disposition; evacuation changes occupancy and location without deleting community identity or inferring deaths from missing entities.
   - id: settlement-catastrophe-fairness
-    statement: A known critical settlement receives a persisted grace window before automatic evacuation; the objective policy continues without Narrator, and irreversible physical consequences touch only PM-owned cells.
+    statement: A known critical settlement receives a persisted reachability-adjusted grace window before automatic evacuation. Abstract policy continues without Narrator, but irreversible grace pauses while the entire primary StoryAudience is offline; physical consequences touch only PM-owned cells.
   - id: settlement-positive-development
-    statement: Stable surplus creates a persisted domain DevelopmentIntent and reserves canonical resources; capacity, housing, prosperity and growth advance only after provenance-safe PM-owned physical work is verified.
+    statement: Stable surplus creates a persisted domain DevelopmentIntent with bounded project escrow. Player physical IRON crosses through idempotent receipts, or the settlement reserves the remainder after 24 qualifying steps; only a fully funded, provenance-safe verified PM-owned storehouse may advance capacity, housing, prosperity and growth.
   - id: living-frontier-instancing
     statement: An iron_frontier instance derives all canonical object identities from the world seed and an observed-place identity, pins its placement before materialization, and cannot share a community, route or physical job with another instance. Historical Ironhill identities are migration-only and remain immutable.
   - id: narrator-candidate-boundary
@@ -180,7 +180,7 @@ critical_flows:
     owner: domain emergency policy plus NeoForge provenance-safe settlement presentation
     verification: critical-code
   - id: settlement-development
-    path: stable surplus -> development pressure -> reserved IRON -> persisted intent -> PM-owned storehouse postcondition -> capacity/prosperity/housing -> bounded population growth
+    path: stable surplus -> persisted intent -> player project receipts or delayed autonomous reservation -> fully funded escrow -> PM-owned storehouse postcondition -> capacity/prosperity/housing -> bounded population growth
     owner: domain development policy plus NeoForge storehouse executor
     verification: critical-code
   - id: operator-runtime-debug

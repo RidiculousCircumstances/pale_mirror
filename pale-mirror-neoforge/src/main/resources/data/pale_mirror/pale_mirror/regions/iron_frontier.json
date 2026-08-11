@@ -1,6 +1,6 @@
 {
   "id": "pale_mirror:iron_frontier",
-  "version": 1,
+  "version": 2,
   "infection_source": "pale_mirror:crimson",
   "population": 80,
   "iron_production": 18,
@@ -9,7 +9,7 @@
   "iron_stock_capacity": 144,
   "rationed_iron_demand": 9,
   "defence": 55,
-  "crisis_delay_steps": 2,
+  "crisis_delay_steps": 5,
   "ration_reserve_steps": 10,
   "request_reserve_steps": 5,
   "defence_loss_per_unavailable_step": 8,

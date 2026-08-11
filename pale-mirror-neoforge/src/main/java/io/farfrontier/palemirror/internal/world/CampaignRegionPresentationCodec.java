@@ -25,6 +25,8 @@ final class CampaignRegionPresentationCodec {
             value.putLong("settlementAnchor", region.settlementAnchor().asLong());
             value.putLong("primaryMineColumn", region.primaryMineColumn().asLong());
             value.putLong("alternateMineColumn", region.alternateMineColumn().asLong());
+            if (region.receivingTerminalAnchor() != null) value.putLong("receivingTerminalAnchor", region.receivingTerminalAnchor().asLong());
+            if (region.depotAnchor() != null) value.putLong("depotAnchor", region.depotAnchor().asLong());
             if (region.primaryMineAnchor() != null) value.putLong("primaryMineAnchor", region.primaryMineAnchor().asLong());
             if (region.alternateMineAnchor() != null) value.putLong("alternateMineAnchor", region.alternateMineAnchor().asLong());
             value.putString("status", region.status().name());
@@ -57,6 +59,8 @@ final class CampaignRegionPresentationCodec {
                     new io.farfrontier.palemirror.domain.WorldObjectId(value.getString("place")),
                     BlockPos.of(value.getLong("settlementAnchor")), BlockPos.of(value.getLong("primaryMineColumn")),
                     BlockPos.of(value.getLong("alternateMineColumn")),
+                    value.contains("receivingTerminalAnchor", Tag.TAG_LONG) ? BlockPos.of(value.getLong("receivingTerminalAnchor")) : null,
+                    value.contains("depotAnchor", Tag.TAG_LONG) ? BlockPos.of(value.getLong("depotAnchor")) : null,
                     value.contains("primaryMineAnchor", Tag.TAG_LONG) ? BlockPos.of(value.getLong("primaryMineAnchor")) : null,
                     value.contains("alternateMineAnchor", Tag.TAG_LONG) ? BlockPos.of(value.getLong("alternateMineAnchor")) : null,
                     CampaignRegionPresentationStatus.valueOf(value.getString("status")), value.getString("diagnostic"),

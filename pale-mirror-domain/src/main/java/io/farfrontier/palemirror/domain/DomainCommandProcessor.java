@@ -55,6 +55,8 @@ public final class DomainCommandProcessor {
             case DomainCommand.ObserveSettlementPlace observed -> observeSettlementPlace(state, observed);
             case DomainCommand.RegisterLivingRegion registered -> registerLivingRegion(state, registered);
             case DomainCommand.DiscoverLivingRegion discovered -> discoverLivingRegion(state, discovered);
+            case DomainCommand.DiscoverRegionalFeature discovered -> discoverRegionalFeature(state, discovered);
+            case DomainCommand.ObserveAudienceRegionAccess observed -> observeAudienceRegionAccess(state, observed);
             case DomainCommand.TriggerFacilityInfection triggered -> triggerFacilityInfection(state, triggered);
             case DomainCommand.DepositResource deposited -> depositResource(state, deposited);
             case DomainCommand.WithdrawResource withdrawn -> withdrawResource(state, withdrawn);
@@ -63,8 +65,10 @@ public final class DomainCommandProcessor {
             case DomainCommand.RegisterAutonomousRefugeeShelter shelter -> registerAutonomousRefugeeShelter(state, shelter);
             case DomainCommand.SetWorldSiteOperational site -> setWorldSiteOperational(state, site);
             case DomainCommand.StartDevelopmentIntent intent -> startDevelopmentIntent(state, intent.intentId());
+            case DomainCommand.ContributeDevelopmentIntent contribution -> contributeDevelopmentIntent(state, contribution);
             case DomainCommand.CompleteDevelopmentIntent intent -> completeDevelopmentIntent(state, intent.intentId());
             case DomainCommand.CancelDevelopmentIntent intent -> cancelDevelopmentIntent(state, intent.intentId(), intent.reason());
+            case DomainCommand.BlockDevelopmentIntent intent -> blockDevelopmentIntent(state, intent.intentId(), intent.reason());
             case DomainCommand.RegisterSettlementAuthorityProfile authority -> registerAuthorityProfile(state, authority.profile());
             case DomainCommand.ReconcileSettlementPopulation population -> reconcileSettlementPopulation(state, population);
         };
@@ -172,7 +176,8 @@ public final class DomainCommandProcessor {
             throw new IllegalArgumentException("Route observation cannot come from a future simulation step");
         }
         if (!contract.validate(command.capacity(), command.observedStep(), command.observationId())) return List.of();
-        return record(state, DomainEventType.ROUTE_CONTRACT_VALIDATED, command.contractId(), command.causationId());
+        return record(state, command.capacity() > 0 ? DomainEventType.ROUTE_CONTRACT_VALIDATED
+                : DomainEventType.ROUTE_CONTRACT_BLOCKED, command.contractId(), command.causationId());
     }
 
     private List<DomainEvent> observeSettlementPlace(WorldState state, DomainCommand.ObserveSettlementPlace command) {
@@ -267,7 +272,42 @@ public final class DomainCommandProcessor {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown living region " + command.regionId()));
         if (!region.recognize(command.audience(), state.simulationStep())) return List.of();
         state.place(region.placeId()).orElseThrow().recognize();
+        state.requireOrCreateRegionKnowledge(command.audience(), region.id())
+                .discover(KnownRegionalFeature.SETTLEMENT, state.simulationStep());
         return record(state, DomainEventType.REGION_DISCOVERED, region.communityId(), command.causationId());
+    }
+
+    private List<DomainEvent> discoverRegionalFeature(WorldState state,
+            DomainCommand.DiscoverRegionalFeature command) {
+        LivingRegionState region = state.livingRegion(command.regionId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown living region " + command.regionId()));
+        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
+        AudienceRegionKnowledge knowledge = state.requireOrCreateRegionKnowledge(command.audience(), region.id());
+        if (!knowledge.discover(command.feature(), state.simulationStep())) return List.of();
+        return record(state, DomainEventType.REGIONAL_FEATURE_DISCOVERED, region.communityId(),
+                command.feature().name() + ":" + command.causationId());
+    }
+
+    private List<DomainEvent> observeAudienceRegionAccess(WorldState state,
+            DomainCommand.ObserveAudienceRegionAccess command) {
+        LivingRegionState region = state.livingRegion(command.regionId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown living region " + command.regionId()));
+        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
+        if (command.observedStep() > state.simulationStep()) {
+            throw new IllegalArgumentException("Audience access observation cannot come from the future");
+        }
+        AudienceRegionAccess access = state.regionAccess(command.audience(), command.regionId()).orElse(null);
+        if (access == null) {
+            state.putRegionAccess(new AudienceRegionAccess(command.audience(), command.regionId(),
+                    command.reachability(), command.present(), command.observedStep(), command.observationId()));
+            return record(state, DomainEventType.AUDIENCE_REGION_ACCESS_CHANGED, region.communityId(),
+                    command.observationId());
+        }
+        if (!access.observe(command.reachability(), command.present(), command.observedStep(), command.observationId())) {
+            return List.of();
+        }
+        return record(state, DomainEventType.AUDIENCE_REGION_ACCESS_CHANGED, region.communityId(),
+                command.observationId());
     }
 
     private List<DomainEvent> triggerFacilityInfection(WorldState state, DomainCommand.TriggerFacilityInfection command) {
@@ -392,12 +432,24 @@ public final class DomainCommandProcessor {
         return record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_STARTED, intent.communityId(), intent.id());
     }
 
+    private List<DomainEvent> contributeDevelopmentIntent(WorldState state,
+            DomainCommand.ContributeDevelopmentIntent command) {
+        DevelopmentIntent intent = state.developmentIntent(command.intentId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown development intent " + command.intentId()));
+        if (!intent.contribute(command.amount(), command.transferId())) return List.of();
+        List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_CONTRIBUTED,
+                intent.communityId(), command.transferId()));
+        if (intent.funded()) produced.add(recordEvent(state, DomainEventType.SETTLEMENT_DEVELOPMENT_FUNDED,
+                intent.communityId(), intent.id()));
+        return List.copyOf(produced);
+    }
+
     private List<DomainEvent> completeDevelopmentIntent(WorldState state, String intentId) {
         DevelopmentIntent intent = state.developmentIntent(intentId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown development intent " + intentId));
         if (intent.type() != DevelopmentIntentType.UPGRADE_STOREHOUSE || !intent.complete()) return List.of();
         ResourceAccount account = state.economy(intent.communityId()).orElseThrow().require(intent.requiredResource());
-        account.consumeReservation(intent.reservedAmount());
+        if (intent.reservedAmount() > 0) account.consumeReservation(intent.reservedAmount());
         account.expandCapacity(Math.multiplyExact(account.capacity(), 2));
         SiteCapability current = state.siteCapability(intent.targetSiteId(), SiteCapabilityType.STORAGE, intent.requiredResource())
                 .orElseThrow(() -> new IllegalStateException("Storehouse intent lost its target capability"));
@@ -414,10 +466,24 @@ public final class DomainCommandProcessor {
     private List<DomainEvent> cancelDevelopmentIntent(WorldState state, String intentId, String reason) {
         DevelopmentIntent intent = state.developmentIntent(intentId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown development intent " + intentId));
+        if (intent.contributedAmount() > 0) return blockDevelopmentIntent(state, intentId,
+                "Player-funded project cannot be cancelled: " + reason);
         if (!intent.cancel(reason)) return List.of();
-        if (intent.reservedAmount() > 0) state.economy(intent.communityId()).orElseThrow()
-                .require(intent.requiredResource()).releaseReservation(intent.reservedAmount());
+        if (intent.requiredResource() != null) {
+            ResourceAccount account = state.economy(intent.communityId()).orElseThrow().require(intent.requiredResource());
+            if (intent.reservedAmount() > 0) account.releaseReservation(intent.reservedAmount());
+            if (intent.contributedAmount() > 0 && account.credit(intent.contributedAmount()) != intent.contributedAmount()) {
+                throw new IllegalStateException("Cancelled project escrow no longer fits canonical settlement stock");
+            }
+        }
         return record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_CANCELLED, intent.communityId(), intent.id());
+    }
+
+    private List<DomainEvent> blockDevelopmentIntent(WorldState state, String intentId, String reason) {
+        DevelopmentIntent intent = state.developmentIntent(intentId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown development intent " + intentId));
+        if (!intent.block(reason)) return List.of();
+        return record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_BLOCKED, intent.communityId(), intent.id());
     }
 
     private List<DomainEvent> record(WorldState state, DomainEventType type, WorldObjectId subject, String causationId) {

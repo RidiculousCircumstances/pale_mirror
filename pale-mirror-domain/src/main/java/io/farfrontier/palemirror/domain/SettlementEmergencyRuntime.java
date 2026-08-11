@@ -21,14 +21,21 @@ public final class SettlementEmergencyRuntime {
                     && activeThreat(state, community.id())
                     && security.defenceReadiness() <= policy.evacuationDefenceThreshold();
             if (window == null && objectiveEmergency) {
-                window = new SettlementEmergencyWindow(community.id(), state.simulationStep(),
-                        state.simulationStep() + policy.emergencyGraceSteps(), EmergencyWindowState.OPEN);
+                LivingRegionState region = state.livingRegions().stream()
+                        .filter(value -> value.communityId().equals(community.id())).findFirst().orElse(null);
+                AudienceRegionAccess access = region == null || region.primaryAudience() == null ? null
+                        : state.regionAccess(region.primaryAudience(), region.id()).orElse(null);
+                AudienceRegionReachability reachability = access == null
+                        ? AudienceRegionReachability.LOCAL : access.reachability();
+                long grace = adjustedGrace(policy.emergencyGraceSteps(), reachability);
+                window = new SettlementEmergencyWindow(community.id(), state.simulationStep(), grace, grace,
+                        reachability, EmergencyWindowState.OPEN);
                 state.putEmergencyWindow(window);
                 produced.add(event(state, DomainEventType.SETTLEMENT_EMERGENCY_WINDOW_OPENED, community.id(), "policy:emergency"));
             } else if (window != null && window.state() == EmergencyWindowState.OPEN && !objectiveEmergency && window.close()) {
                 produced.add(event(state, DomainEventType.SETTLEMENT_EMERGENCY_WINDOW_CLOSED, community.id(), "policy:recovered"));
             } else if (window != null && window.state() == EmergencyWindowState.OPEN
-                    && state.simulationStep() >= window.deadlineStep()) {
+                    && window.elapse(audiencePresent(state, community.id()))) {
                 produced.addAll(beginEvacuation(state, community.id(), "policy:grace-expired"));
             }
             SettlementEmergencyWindow current = state.emergencyWindow(community.id()).orElse(null);
@@ -93,6 +100,22 @@ public final class SettlementEmergencyRuntime {
         return state.livingRegions().stream().filter(region -> region.communityId().equals(communityId))
                 .map(region -> state.facility(region.primaryFacilityId()).orElse(null))
                 .anyMatch(facility -> facility != null && facility.status() != FacilityStatus.OPERATIONAL);
+    }
+
+    static long adjustedGrace(long base, AudienceRegionReachability reachability) {
+        return switch (reachability) {
+            case LOCAL -> base;
+            case REGIONAL -> base + Math.max(1, base / 2);
+            case REMOTE -> base * 2;
+            case CONNECTED -> Math.max(1, base * 2 / 3);
+        };
+    }
+
+    private static boolean audiencePresent(WorldState state, WorldObjectId communityId) {
+        LivingRegionState region = state.livingRegions().stream()
+                .filter(value -> value.communityId().equals(communityId)).findFirst().orElse(null);
+        return region != null && region.primaryAudience() != null
+                && state.regionAccess(region.primaryAudience(), region.id()).map(AudienceRegionAccess::present).orElse(false);
     }
 
     private DomainEvent event(WorldState state, DomainEventType type, WorldObjectId subject, String causation) {

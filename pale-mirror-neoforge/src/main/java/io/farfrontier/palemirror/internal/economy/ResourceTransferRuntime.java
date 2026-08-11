@@ -41,11 +41,29 @@ public final class ResourceTransferRuntime {
         ResourceAccount account = data.worldState().economy(depot.communityId()).orElseThrow().require(ResourceKind.IRON);
         ItemStack held = player.getMainHandItem();
         ResourceTransferDirection direction;
+        ResourceTransferPurpose purpose = ResourceTransferPurpose.SETTLEMENT_STOCK;
+        String intentId = "";
         int amount;
         if (held.is(Items.IRON_INGOT) && !isReserved(held)) {
             direction = ResourceTransferDirection.DEPOSIT;
-            amount = Math.min(held.getCount(), account.capacity() - account.stock());
-            if (amount <= 0) return InteractionResult.failure("Iron reserve is already full");
+            var project = data.worldState().developmentIntents().stream()
+                    .filter(intent -> intent.communityId().equals(depot.communityId())
+                            && intent.type() == io.farfrontier.palemirror.domain.DevelopmentIntentType.UPGRADE_STOREHOUSE
+                            && intent.state() == io.farfrontier.palemirror.domain.DevelopmentIntentState.PLANNED
+                            && intent.remainingAmount() > 0)
+                    .filter(intent -> data.worldState().scenarios().stream().anyMatch(scenario ->
+                            scenario.target().equals(depot.communityId())
+                                    && scenario.archetype() == io.farfrontier.palemirror.domain.ScenarioArchetype.DEVELOPMENT_OPPORTUNITY
+                                    && scenario.status() == io.farfrontier.palemirror.domain.ScenarioStatus.RESPOND))
+                    .findFirst().orElse(null);
+            if (project != null) {
+                purpose = ResourceTransferPurpose.DEVELOPMENT_PROJECT;
+                intentId = project.id();
+                amount = Math.min(held.getCount(), project.remainingAmount());
+            } else {
+                amount = Math.min(held.getCount(), account.capacity() - account.stock());
+                if (amount <= 0) return InteractionResult.failure("Iron reserve is already full");
+            }
         } else if (held.isEmpty() && player.isShiftKeyDown()) {
             direction = ResourceTransferDirection.WITHDRAWAL;
             int emergencyReserve = account.effectiveConsumption() * 2;
@@ -59,8 +77,9 @@ public final class ResourceTransferRuntime {
         String id = "pm:resource:" + UUID.randomUUID();
         data.resourceTransfers().add(new ResourceTransfer(id, direction, player.getUUID(), depot.communityId(),
                 depot.siteId(), ResourceKind.IRON, amount, player.getInventory().selected, MAPPING_HASH,
-                data.worldState().simulationStep(), ResourceTransferState.PREPARED, ""));
-        return InteractionResult.success("Prepared " + direction.name().toLowerCase() + " of " + amount + " IRON");
+                data.worldState().simulationStep(), purpose, intentId, ResourceTransferState.PREPARED, ""));
+        return InteractionResult.success("Prepared " + (purpose == ResourceTransferPurpose.DEVELOPMENT_PROJECT
+                ? "storehouse contribution" : direction.name().toLowerCase()) + " of " + amount + " IRON");
     }
 
     public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
@@ -105,8 +124,13 @@ public final class ResourceTransferRuntime {
                 transfer.block("Reserved deposit stack is missing or changed");
                 return true;
             }
-            commands.execute(data.worldState(), new DomainCommand.DepositResource(transfer.communityId(),
-                    transfer.resource(), transfer.amount(), transfer.id()));
+            if (transfer.purpose() == ResourceTransferPurpose.DEVELOPMENT_PROJECT) {
+                commands.execute(data.worldState(), new DomainCommand.ContributeDevelopmentIntent(
+                        transfer.developmentIntentId(), transfer.amount(), transfer.id()));
+            } else {
+                commands.execute(data.worldState(), new DomainCommand.DepositResource(transfer.communityId(),
+                        transfer.resource(), transfer.amount(), transfer.id()));
+            }
             transfer.domainApplied();
             return true;
         }

@@ -50,6 +50,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
+import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter;
 
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
 public final class PaleMirrorEvents {
@@ -201,7 +202,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
-        if (RefugeeCampRuntime.isRepresentative(event.getTarget())) {
+        if (RefugeeCampRuntime.isRepresentative(event.getTarget())
+                || VanillaMinecartRailAdapter.isRepresentative(event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
             return;
@@ -215,7 +217,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
-        if (RefugeeCampRuntime.isRepresentative(event.getTarget())) {
+        if (RefugeeCampRuntime.isRepresentative(event.getTarget())
+                || VanillaMinecartRailAdapter.isRepresentative(event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
             return;

@@ -58,7 +58,12 @@ public final class PaleMirrorAtlasClient {
                          String alternateRoute, Position settlement, Position primaryMine, Position alternateMine,
                          Position depot, String primaryMineStatus, String emergency, long deadline, String scenarioId,
                          String scenarioTitle, String scenarioStatus, boolean canPrepareEvacuation,
-                         boolean canBeginEvacuation) {
+                         boolean canBeginEvacuation, boolean supplyKnown, boolean primaryRouteKnown,
+                         String primaryDiagnosis, String alternateDiagnosis, int primaryCapacity,
+                         int primaryNominalCapacity, int alternateCapacity, int alternateNominalCapacity,
+                         String developmentState, int developmentRequired, int developmentContributed,
+                         int developmentRemaining, int developmentWait, int developmentWaitRequired,
+                         long remainingGrace, String reachability) {
         private static Region read(CompoundTag value) {
             return new Region(bounded(value.getString("name"), 64), bounded(value.getString("dimension"), 96),
                     bounded(value.getString("community"), 160), bounded(value.getString("crisis"), 32), value.getInt("iron"),
@@ -70,7 +75,15 @@ public final class PaleMirrorAtlasClient {
                     bounded(value.getString("primaryMineStatus"), 32), bounded(value.getString("emergency"), 32),
                     value.getLong("deadline"), bounded(value.getString("scenario"), 160),
                     bounded(value.getString("scenarioTitle"), 96), bounded(value.getString("scenarioStatus"), 32),
-                    value.getBoolean("canPrepareEvacuation"), value.getBoolean("canBeginEvacuation"));
+                    value.getBoolean("canPrepareEvacuation"), value.getBoolean("canBeginEvacuation"),
+                    value.getBoolean("supplyKnown"), value.getBoolean("primaryRouteKnown"),
+                    bounded(value.getString("primaryDiagnosis"), 32), bounded(value.getString("alternateDiagnosis"), 32),
+                    Math.max(0, value.getInt("primaryCapacity")), Math.max(0, value.getInt("primaryNominalCapacity")),
+                    Math.max(0, value.getInt("alternateCapacity")), Math.max(0, value.getInt("alternateNominalCapacity")),
+                    bounded(value.getString("developmentState"), 32), Math.max(0, value.getInt("developmentRequired")),
+                    Math.max(0, value.getInt("developmentContributed")), Math.max(0, value.getInt("developmentRemaining")),
+                    Math.max(0, value.getInt("developmentWait")), Math.max(0, value.getInt("developmentWaitRequired")),
+                    Math.max(0L, value.getLong("remainingGrace")), bounded(value.getString("reachability"), 32));
         }
     }
 

@@ -47,7 +47,8 @@ public final class VanillaMinecartRouteRuntime {
             if (living == null || !data.worldState().routeContract(living.primaryRouteId())
                     .map(route -> route.provider() == RouteProvider.VANILLA_MINECART).orElse(false)) continue;
             BlockPos start = region.primaryMineAnchor().offset(0, 1, -3);
-            BlockPos target = railTarget(level, region.settlementAnchor(), start);
+            BlockPos target = region.layoutVersion() >= 2 ? region.receivingTerminalAnchor()
+                    : railTarget(level, region.settlementAnchor(), start);
             data.vanillaMinecartRoutes().put(region.id(), VanillaMinecartRouteRecord.planned(region.id(),
                     region.dimensionId(), living.primaryRouteId().value(), start, target));
             changed = true;
@@ -75,7 +76,8 @@ public final class VanillaMinecartRouteRuntime {
             case BUILDING -> buildLoadedSegments(level, adapter, record);
             case VERIFYING -> verifyAndActivate(level, data, commands, adapter, record);
             case ACTIVE -> refreshActiveRoute(level, data, commands, adapter, record);
-            case BLOCKED, SUSPENDED, LEGACY -> false;
+            case SUSPENDED -> recoverSuspended(level, data, commands, adapter, record);
+            case BLOCKED, LEGACY -> false;
         };
     }
 
@@ -152,25 +154,38 @@ public final class VanillaMinecartRouteRuntime {
     private static boolean refreshActiveRoute(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
                                               VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
         boolean changed = !verifyLoadedProvenance(level, adapter, record);
-        if (record.status() != VanillaMinecartRouteStatus.ACTIVE) return true;
+        if (record.status() != VanillaMinecartRouteStatus.ACTIVE) {
+            changed |= validateCanonicalRoute(data, commands, record, 0);
+            return true;
+        }
         changed |= validateCanonicalRoute(data, commands, record);
         changed |= ensureRepresentativeCart(level, data, adapter, record);
+        changed |= moveRepresentativeCart(level, data, record);
         return changed;
     }
 
     private static boolean verifyLoadedProvenance(ServerLevel level, VanillaMinecartRailAdapter adapter,
                                                    VanillaMinecartRouteRecord record) {
         var slice = record.verificationSlice(VERIFY_CELL_BUDGET);
+        boolean unchanged = true;
         for (VanillaMinecartMutableCell cell : slice) {
             if (!level.hasChunkAt(cell.position())) continue;
+            if (adapter.matchesProvenance(level.getBlockState(cell.position()), cell.lastAppliedState())) {
+                if (cell.conflicted()) { cell.clearConflict(); unchanged = false; }
+                continue;
+            }
             if (!adapter.matchesProvenance(level.getBlockState(cell.position()), cell.lastAppliedState())) {
                 cell.conflict();
-                record.block("Vanilla minecart route changed at " + cell.position().toShortString());
-                return false;
+                if (adapter.criticalInfrastructure(cell.lastAppliedState())) {
+                    record.suspend(cell.position(), "Vanilla minecart route changed at " + cell.position().toShortString());
+                    return false;
+                }
+                record.decorativeConflict("Vanilla minecart decoration changed at " + cell.position().toShortString());
+                unchanged = false;
             }
         }
         record.advanceVerificationCursor(slice.size());
-        return true;
+        return unchanged;
     }
 
     private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandProcessor commands,
@@ -178,18 +193,59 @@ public final class VanillaMinecartRouteRuntime {
         var region = data.worldState().livingRegion(record.regionId()).orElse(null);
         if (region == null) return false;
         var route = data.worldState().routeContract(region.primaryRouteId()).orElse(null);
+        return route != null && validateCanonicalRoute(data, commands, record, route.nominalCapacity());
+    }
+
+    private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandProcessor commands,
+                                                   VanillaMinecartRouteRecord record, int capacity) {
+        var region = data.worldState().livingRegion(record.regionId()).orElse(null);
+        if (region == null) return false;
+        var route = data.worldState().routeContract(region.primaryRouteId()).orElse(null);
         if (route == null || route.provider() != RouteProvider.VANILLA_MINECART) return false;
-        String observationId = "vanilla-minecart:" + record.routeId() + ":" + data.worldState().simulationStep();
+        String observationId = "vanilla-minecart:" + record.routeId() + ":" + capacity + ":"
+                + data.worldState().simulationStep() + ":" + record.status();
         if (observationId.equals(route.lastObservationId())) return false;
         return !commands.execute(data.worldState(), new DomainCommand.ValidateRouteContract(route.id(),
-                route.nominalCapacity(), data.worldState().simulationStep(), observationId,
+                capacity, data.worldState().simulationStep(), observationId,
                 "vanilla-minecart:" + record.regionId())).isEmpty();
+    }
+
+    private static boolean recoverSuspended(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
+                                            VanillaMinecartRailAdapter adapter,
+                                            VanillaMinecartRouteRecord record) {
+        boolean changed = validateCanonicalRoute(data, commands, record, 0);
+        for (long packed : record.damagedCriticalCells()) {
+            BlockPos position = BlockPos.of(packed);
+            if (!level.hasChunkAt(position)) continue;
+            VanillaMinecartMutableCell cell = record.cell(position);
+            if (cell != null && adapter.matchesProvenance(level.getBlockState(position), cell.lastAppliedState())) {
+                changed |= record.repaired(position);
+            }
+        }
+        if (record.repairComplete()) {
+            record.resume();
+            changed = true;
+            changed |= validateCanonicalRoute(data, commands, record);
+        }
+        return changed;
     }
 
     private static boolean ensureRepresentativeCart(ServerLevel level, PaleMirrorSavedData data,
                                                      VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
-        if (record.representativeCartId() != null || !level.hasChunkAt(record.start())) return false;
-        String leaseId = "pm:vanilla-minecart:carrier:" + record.regionId() + ":" + record.routeId();
+        if (record.representativeCartId() != null) {
+            int expectedIndex = Math.max(0, Math.min(record.segmentCount() - 1, (int) Math.round(record.cartProgress())));
+            BlockPos expected = record.railPosition(expectedIndex);
+            if (!level.hasChunkAt(expected) || level.getEntity(record.representativeCartId()) != null) return false;
+            if (record.representativeCargoId() != null) {
+                net.minecraft.world.entity.Entity orphan = level.getEntity(record.representativeCargoId());
+                if (orphan != null && VanillaMinecartRailAdapter.isRepresentative(orphan)) orphan.discard();
+            }
+            record.forgetMissingRepresentativeCart();
+            return true;
+        }
+        if (!level.hasChunkAt(record.start())) return false;
+        String leaseId = "pm:vanilla-minecart:carrier:" + record.regionId() + ":" + record.routeId()
+                + ":" + java.util.UUID.randomUUID();
         if (record.cartLeaseId().isBlank()) {
             record.reserveCartLease(leaseId);
             return true;
@@ -200,13 +256,40 @@ public final class VanillaMinecartRouteRuntime {
         }
         var existing = data.effectLeases().find(record.cartLeaseId()).orElse(null);
         if (existing != null && existing.state() != EffectLeaseState.PLANNED) return false;
-        AtomicReference<java.util.UUID> spawned = new AtomicReference<>();
+        AtomicReference<io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter.VisualCart> spawned = new AtomicReference<>();
         boolean executed = ControlledEffectExecutor.executeOnce(data, EffectLease.planned(record.cartLeaseId(),
                 record.cartLeaseId(), "vanilla", record.routeId(), "representative", "minecart_carrier",
                 level.getGameTime(), level.getGameTime() + 1_200L), level.getGameTime(),
                 () -> spawned.set(adapter.spawnRepresentativeCart(level, record.start(), record.routeId())));
-        if (executed && spawned.get() != null) record.observeRepresentativeCart(spawned.get());
+        if (executed && spawned.get() != null) record.observeRepresentativeCart(spawned.get().cartId(), spawned.get().cargoId());
         return executed;
+    }
+
+    private static boolean moveRepresentativeCart(ServerLevel level, PaleMirrorSavedData data,
+                                                   VanillaMinecartRouteRecord record) {
+        if (record.representativeCartId() == null) return false;
+        var region = data.worldState().livingRegion(record.regionId()).orElse(null);
+        if (region == null) return false;
+        var facility = data.worldState().facility(region.primaryFacilityId()).orElse(null);
+        var route = data.worldState().routeContract(region.primaryRouteId()).orElse(null);
+        if (facility == null || facility.status() != io.farfrontier.palemirror.domain.FacilityStatus.OPERATIONAL
+                || route == null || route.transferableCapacity(data.worldState().simulationStep()) <= 0) return false;
+        net.minecraft.world.entity.Entity cart = level.getEntity(record.representativeCartId());
+        if (cart == null) return false;
+        double proposed = record.proposedCartProgress(0.08D);
+        int lowerIndex = (int) Math.floor(proposed);
+        int upperIndex = Math.min(record.segmentCount() - 1, lowerIndex + 1);
+        BlockPos lower = record.railPosition(lowerIndex);
+        BlockPos upper = record.railPosition(upperIndex);
+        if (!level.hasChunkAt(lower) || !level.hasChunkAt(upper)) return false;
+        double fraction = proposed - lowerIndex;
+        double x = net.minecraft.util.Mth.lerp(fraction, lower.getX() + 0.5D, upper.getX() + 0.5D);
+        double y = net.minecraft.util.Mth.lerp(fraction, lower.getY() + 0.1D, upper.getY() + 0.1D);
+        double z = net.minecraft.util.Mth.lerp(fraction, lower.getZ() + 0.5D, upper.getZ() + 0.5D);
+        record.moveCart(proposed);
+        cart.moveTo(x, y, z, cart.getYRot(), cart.getXRot());
+        cart.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        return level.getGameTime() % 20L == 0L;
     }
 
     private enum PreflightResult { CAPTURED, READY, BLOCKED }

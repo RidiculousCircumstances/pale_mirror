@@ -15,8 +15,7 @@ class SettlementEmergencyRuntimeTest {
 
         assertTrue(services.settlementEmergencies().reconcile(state).stream()
                 .anyMatch(value -> value.type() == DomainEventType.SETTLEMENT_EMERGENCY_WINDOW_OPENED));
-        state.setSimulationStep(8);
-        services.settlementEmergencies().reconcile(state);
+        reconcileThrough(state, services, 8);
         assertEquals(PopulationDisposition.EVACUATING, state.populationGroups(COMMUNITY).getFirst().disposition());
         assertEquals(OccupancyState.EVACUATING, state.place(PLACE).orElseThrow().occupancy());
 
@@ -72,13 +71,39 @@ class SettlementEmergencyRuntimeTest {
         state.putSiteCapability(new SiteCapability(otherShelter, SiteCapabilityType.SHELTER, null, 80));
 
         services.settlementEmergencies().reconcile(state);
-        state.setSimulationStep(8);
-        services.settlementEmergencies().reconcile(state);
+        reconcileThrough(state, services, 8);
         state.setSimulationStep(10);
         services.settlementEmergencies().reconcile(state);
 
         assertEquals(PopulationDisposition.DISPLACED, state.populationGroups(COMMUNITY).getFirst().disposition(),
                 "a shelter for another community must not silently redirect this population group");
+    }
+
+    @Test
+    void irreversibleWindowPausesWhileAudienceIsOffline() {
+        WorldState state = emergencyState();
+        DomainServices services = new DomainServices();
+        state.regionAccess(StoryAudienceId.globalTestAudience(), "test").orElseThrow()
+                .observe(AudienceRegionReachability.REMOTE, false, 0, "offline");
+
+        services.settlementEmergencies().reconcile(state);
+        reconcileThrough(state, services, 20);
+
+        assertEquals(EmergencyWindowState.OPEN, state.emergencyWindow(COMMUNITY).orElseThrow().state());
+        assertEquals(16, state.emergencyWindow(COMMUNITY).orElseThrow().remainingGraceSteps());
+    }
+
+    @Test
+    void remoteAudienceReceivesAReachabilityAdjustedWindow() {
+        WorldState state = emergencyState();
+        state.regionAccess(StoryAudienceId.globalTestAudience(), "test").orElseThrow()
+                .observe(AudienceRegionReachability.REMOTE, true, 0, "remote");
+
+        new DomainServices().settlementEmergencies().reconcile(state);
+
+        assertEquals(16, state.emergencyWindow(COMMUNITY).orElseThrow().remainingGraceSteps());
+        assertEquals(AudienceRegionReachability.REMOTE,
+                state.emergencyWindow(COMMUNITY).orElseThrow().reachabilityAtOpen());
     }
 
     private static final WorldObjectId COMMUNITY = new WorldObjectId("pale_mirror:community");
@@ -103,6 +128,15 @@ class SettlementEmergencyRuntimeTest {
                 new WorldObjectId("pale_mirror:alternate"), new WorldObjectId("pale_mirror:route"),
                 new WorldObjectId("pale_mirror:alternate_route"), 0, StoryAudienceId.globalTestAudience(),
                 RecognitionState.RECOGNIZED, 0));
+        state.putRegionAccess(new AudienceRegionAccess(StoryAudienceId.globalTestAudience(), "test",
+                AudienceRegionReachability.LOCAL, true, 0, "initial"));
         return state;
+    }
+
+    private static void reconcileThrough(WorldState state, DomainServices services, long finalStep) {
+        for (long step = state.simulationStep() + 1; step <= finalStep; step++) {
+            state.setSimulationStep(step);
+            services.settlementEmergencies().reconcile(state);
+        }
     }
 }

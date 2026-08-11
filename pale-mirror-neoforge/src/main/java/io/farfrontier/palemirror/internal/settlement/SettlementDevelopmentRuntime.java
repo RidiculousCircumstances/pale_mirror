@@ -36,7 +36,7 @@ public final class SettlementDevelopmentRuntime {
             var depot = data.settlementDepots().get(intent.communityId());
             if (depot == null || !depot.siteId().equals(intent.targetSiteId())) continue;
             if (depot.state() == SettlementDepotState.BLOCKED) {
-                commands.execute(data.worldState(), new DomainCommand.CancelDevelopmentIntent(intent.id(), depot.diagnostic()));
+                commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), depot.diagnostic()));
                 changed = true;
                 continue;
             }
@@ -45,7 +45,7 @@ public final class SettlementDevelopmentRuntime {
             if (level == null || !level.hasChunkAt(depot.anchor())) continue;
             String failure = SettlementDepotRuntime.upgradeStorehouse(level, depot);
             if (failure == null) commands.execute(data.worldState(), new DomainCommand.CompleteDevelopmentIntent(intent.id()));
-            else commands.execute(data.worldState(), new DomainCommand.CancelDevelopmentIntent(intent.id(), failure));
+            else commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), failure));
             changed = true;
         }
         if (RefugeeCampRuntime.cleanupReturnedGroups(server, data, commands)) changed = true;

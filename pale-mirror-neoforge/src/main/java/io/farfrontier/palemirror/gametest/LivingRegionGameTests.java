@@ -35,7 +35,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class LivingRegionGameTests {
     private LivingRegionGameTests() { }
-
     @GameTest(batch = "pm-living-region", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void ironhillPlanIsCanonicalAndRestartSafe(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -52,10 +51,16 @@ public final class LivingRegionGameTests {
         SettlementDepotRuntime.tick(level.getServer(), data);
         SettlementDepotRuntime.tick(level.getServer(), data);
         SettlementDepotRuntime.tick(level.getServer(), data);
-
         RegionBindings bindings = RegionBindings.forObserved(level.getServer().overworld().getSeed(),
                 new WorldObjectId("pale_mirror:test_observed_village"));
         var region = data.worldState().livingRegion(bindings.regionId()).orElseThrow();
+        var audience = io.farfrontier.palemirror.domain.StoryAudienceId.globalTestAudience();
+        var setupCommands = new DomainServices().commands();
+        setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.DiscoverLivingRegion(region.id(), audience, "gametest:discover"));
+        setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.DiscoverRegionalFeature(region.id(), audience,
+                io.farfrontier.palemirror.domain.KnownRegionalFeature.DEPOT, "gametest:depot"));
+        setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.ObserveAudienceRegionAccess(region.id(), audience,
+                io.farfrontier.palemirror.domain.AudienceRegionReachability.LOCAL, true, data.worldState().simulationStep(), "gametest:access"));
         var settlement = data.worldState().community(region.communityId()).orElseThrow();
         helper.assertValueEqual(region.primaryFacilityId(), bindings.primaryMineId(),
                 "a region instance must have its deterministically derived primary mine");
@@ -111,7 +116,6 @@ public final class LivingRegionGameTests {
         helper.assertValueEqual(evidence.lastEvidenceType(),
                 io.farfrontier.palemirror.domain.SettlementEvidenceType.REGISTERED_GUARD_DEATH,
                 "registered guard death must be a typed confirmed fact");
-
         CompoundTag snapshot = data.save(new CompoundTag(), level.registryAccess());
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(snapshot, level.registryAccess());
         helper.assertValueEqual(reloaded.worldState().livingRegion(bindings.regionId()).orElseThrow()
@@ -130,6 +134,9 @@ public final class LivingRegionGameTests {
                 "restart snapshot must retain population groups as the only macro-population source");
         helper.assertValueEqual(reloaded.worldState().settlementDevelopment(region.communityId()).orElseThrow().prosperity(), 25,
                 "restart snapshot must retain positive development state");
+        helper.assertTrue(reloaded.worldState().regionKnowledge(audience, region.id()).orElseThrow().knows(
+                io.farfrontier.palemirror.domain.KnownRegionalFeature.DEPOT), "restart must retain audience-scoped discovery");
+        helper.assertTrue(reloaded.worldState().regionAccess(audience, region.id()).orElseThrow().present(), "restart must retain fairness evidence");
         helper.assertValueEqual(reloaded.worldState().settlementAuthorityProfile(region.communityId()).orElseThrow().profileId(),
                 "pale_mirror:pm_managed", "restart snapshot must retain the immutable settlement authority contract");
         CompoundTag schema27 = snapshot.copy();
@@ -147,7 +154,6 @@ public final class LivingRegionGameTests {
         helper.assertValueEqual(migrated.campaignCommissioning().get(bindings.regionId()).status(),
                 io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.LEGACY_WORLD_DISABLED,
                 "schema v24 must load without retrofitting a destructive railway into an existing region");
-
         CompoundTag schema25 = snapshot.copy();
         schema25.putInt("schemaVersion", 25);
         var commissioning = schema25.getList("campaignCommissioning", net.minecraft.nbt.Tag.TAG_COMPOUND);
@@ -167,7 +173,6 @@ public final class LivingRegionGameTests {
         }
         helper.succeed();
     }
-
     @GameTest(batch = "pm-rail-authority", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void railwayAuthorityPersistsProvenanceAndFailsClosedOnConflict(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -208,7 +213,6 @@ public final class LivingRegionGameTests {
                 "restart must retain the baseline, last approved state and conflict marker");
         helper.succeed();
     }
-
     @GameTest(batch = "pm-autonomous-region", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 400)
     public static void campaignMineSitesCommissionWithoutAPlayerVisitingThem(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -274,7 +278,6 @@ public final class LivingRegionGameTests {
                 "failed preflight must not register a partially materialized MineSite");
         helper.succeed();
     }
-
     @GameTest(batch = "pm-village-observer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void vanillaVillageObserverRequiresStableSignalsAndOnlyRecordsFacts(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -305,7 +308,6 @@ public final class LivingRegionGameTests {
             helper.succeed();
         });
     }
-
     @GameTest(batch = "pm-runtime-debug", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     @SuppressWarnings("removal")
     public static void manualDiscoveryAndExplicitBindUseCanonicalPipeline(GameTestHelper helper) {

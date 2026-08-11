@@ -214,9 +214,14 @@ public final class CampaignRegionBootstrapper {
         int ironDemand = Math.max(1, scale(definition.ironDemand(), population, definition.population()));
         int initialStock = Math.max(ironDemand * 4, scale(definition.initialIronStock(), population, definition.population()));
         int capacity = Math.max(initialStock, scale(definition.ironStockCapacity(), population, definition.population()));
+        BlockPos infrastructureAnchor = infrastructureAnchor(server, observed.anchor(), bindings.regionId());
+        BlockPos primaryMineColumn = mineColumn(server, infrastructureAnchor, PRIMARY_MINE_DISTANCE, bindings.regionId());
+        BlockPos receivingTerminal = receivingTerminal(server.overworld(), infrastructureAnchor, primaryMineColumn);
+        BlockPos plannedDepot = plannedDepotAnchor(server.overworld(), receivingTerminal, primaryMineColumn);
+        if (definition.version() >= 2 && plannedDepot == null) return;
         LivingRegionState region = new LivingRegionState(bindings.regionId(), bindings.communityId(), placeId,
                 bindings.primaryMineId(), bindings.alternateMineId(), bindings.primaryRouteId(), bindings.alternateRouteId(),
-                definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1);
+                definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1, definition.version() >= 2);
         FacilityState primary = new FacilityState(bindings.primaryMineId(), definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
         FacilityState alternate = new FacilityState(bindings.alternateMineId(), definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
         SettlementCommunity community = new SettlementCommunity(bindings.communityId());
@@ -262,12 +267,12 @@ public final class CampaignRegionBootstrapper {
         data.worldState().putSettlementDevelopment(new SettlementDevelopment(bindings.communityId(), 25, 0,
                 population, Math.max(0, population - observed.observedPopulation() / 5), 0));
         data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(bindings.communityId()));
-        BlockPos infrastructureAnchor = infrastructureAnchor(server, observed.anchor(), bindings.regionId());
         data.campaignRegions().put(bindings.regionId(), new CampaignRegionRecord(bindings.regionId(),
                 definition.id().toString(), definition.version(), displayName(bindings.regionId()),
                 observed.dimensionId(), placeId, infrastructureAnchor,
-                mineColumn(server, infrastructureAnchor, PRIMARY_MINE_DISTANCE, bindings.regionId()),
-                alternateMineColumn(server, infrastructureAnchor, bindings.regionId()), null, null,
+                primaryMineColumn, alternateMineColumn(server, infrastructureAnchor, bindings.regionId()),
+                definition.version() >= 2 ? receivingTerminal : null,
+                definition.version() >= 2 ? plannedDepot : null, null, null,
                 CampaignRegionPresentationStatus.PLANNED, "", 0, -1, -1, 0, 0, "", ""));
         data.setDirty();
     }
@@ -314,6 +319,41 @@ public final class CampaignRegionBootstrapper {
     private static BlockPos resolveAnchor(ServerLevel level, BlockPos column) {
         int height = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.getX(), column.getZ());
         return new BlockPos(column.getX(), height, column.getZ());
+    }
+
+    private static BlockPos receivingTerminal(ServerLevel level, BlockPos infrastructure, BlockPos primaryMine) {
+        int dx = Integer.signum(primaryMine.getX() - infrastructure.getX());
+        int dz = Integer.signum(primaryMine.getZ() - infrastructure.getZ());
+        int x = infrastructure.getX() + dx * 16;
+        int z = infrastructure.getZ() + dz * 16;
+        return new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+    }
+
+    private static BlockPos plannedDepotAnchor(ServerLevel level, BlockPos terminal, BlockPos primaryMine) {
+        boolean routeAlongX = primaryMine.getX() != terminal.getX();
+        BlockPos deterministicFallback = null;
+        for (int distance : new int[] {6, -6, 8, -8, 10, -10}) {
+            int x = terminal.getX() + (routeAlongX ? 0 : distance);
+            int z = terminal.getZ() + (routeAlongX ? distance : 0);
+            BlockPos candidate = new BlockPos(x,
+                    level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+            if (deterministicFallback == null) deterministicFallback = candidate;
+            if (depotFootprintSafe(level, candidate)) return candidate;
+        }
+        // Layout planning owns no blocks yet. Pinning a natural-terrain
+        // fallback is safe: the executor captures that exact baseline only
+        // after the footprint is naturally loaded, before its first write.
+        return deterministicFallback;
+    }
+
+    private static boolean depotFootprintSafe(ServerLevel level, BlockPos anchor) {
+        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) {
+            BlockPos pad = anchor.offset(x, 0, z);
+            if (!level.hasChunkAt(pad) || !level.getBlockState(pad.below()).isSolid()
+                    || !level.isEmptyBlock(pad) || !level.isEmptyBlock(pad.above())
+                    || level.getBlockEntity(pad) != null || level.getBlockEntity(pad.above()) != null) return false;
+        }
+        return true;
     }
 
     private static void ensureMine(PaleMirrorSavedData data, ServerLevel level, BlockPos anchor, WorldObjectId id,

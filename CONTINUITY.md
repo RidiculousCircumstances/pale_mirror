@@ -2,7 +2,7 @@
 
 ## Goal (success criteria)
 
-- Close Pale Mirror 0.2 as First Living Region: Ironhill: a player discovers, understands and resolves Mine -> Route -> Settlement -> choice -> durable consequence without operator help; then evolve it into repeatable Living Frontier regions in 0.3.
+- Complete Pale Mirror 0.3 Living Frontier as an unaided, repeatable player experience: progressively discover Ironhill, understand Mine -> vanilla route -> stock -> defence, resolve it by combat/Create/evacuation/refusal, see a physical consequence and receive one causal development continuation.
 
 ## Constraints/Assumptions
 
@@ -27,6 +27,9 @@
 - Vanilla/Integrated Villages discovery is read-only: a bounded loaded-POI observer needs two villagers plus a stable bell/home cluster and never creates or overwrites settlement blocks. Large vertical villages use a 96x48 POI window; campaign logistics receives a separate ground-projected outskirts anchor rather than inheriting a tower bell's Y coordinate.
 - FTB Quests is an optional static journal projection. PM never reads or writes FTB progression; it seeds one non-reward chapter only if its exact PM-owned config file is absent.
 - The 0.3 Atlas and optional JourneyMap integration consume a bounded server-authored snapshot; client requests are revalidated server-side, waypoints are session-only and no observed-village block is used as a PM marker.
+- 0.3 completion is feature-frozen. It adds audience-scoped progressive knowledge, a cause-first bilingual Atlas, physical/canonical vanilla-route reconciliation, offline-safe reachability windows and one contributed-or-delayed-autonomous depot-development continuation; it does not add resources, threat providers or NPC integrations.
+- The introductory layout-v2 incident waits until the audience has discovered its settlement, depot and baseline line, then delays five simulation steps. Existing layout-v1 worlds are preserved rather than retrofitted.
+- Player-assisted depot development consumes up to 24 physical IRON through its own persisted project receipts. Declined/unanswered work becomes autonomously eligible after 24 qualifying steps; old reserved intents retain legacy funding semantics.
 - Canonical settlement direction is an actor model, not one state object: `SettlementCommunity`, `SettlementPlace`, economy, security, independent `WorldSite`, freshness-bounded `RouteContract`, and deterministic `SettlementPolicy` have separate ownership; `PopulationGroup` is the next separate aggregate, not part of schema v20.
 - There is no universal settlement lifecycle or unexplained numeric confidence. Recognition, observation freshness, integrity, operation, occupancy, crisis and population disposition are orthogonal; observations use explicit evidence/reliability classes and causal attribution.
 - A crisis is an objective simulation fact. Settlement policy acts without a scenario; Narrator only selects presentation/pacing and may return `NO_SCENARIO`.
@@ -89,24 +92,24 @@
 
 ### Now
 
-- Schema v28 starts the 0.3 `Living Frontier` implementation: repeatable `iron_frontier` instances, three independent region slots, generic region bindings/debug/journal surfaces, player-prepared Refugee Anchor camps, and recovery/resettlement continuation opportunities. Existing v27 Ironhill records remain pinned instead of being rebuilt.
+- The agreed 0.3 completion scope is implemented as schema v31: audience-scoped progressive discovery, layout-v2 incident gating, cause-first bilingual Atlas/JourneyMap projection, route damage/repair, a bounded moving representative cart, reachability-adjusted offline-safe intervention windows, contributed-or-delayed-autonomous storehouse funding, a recoverable exercise reset script and optional local JSONL playtest evidence.
 - Narrator v2 can deterministically choose the most relevant candidate across simultaneous regions, honours cooldown/novelty/intensity, persists explicit `NO_SCENARIO`, and retries history-derived delayed opportunities after pacing clears. Development waits for an offered player decision; declined or unpresented policy intents remain autonomous.
-- The core GameTest server passes 26/26 tests, including multi-region identity, v27→v28 persistence, readable opaque-ID-free scenario presentation, autonomous mine commissioning and provenance conflicts. Domain tests cover candidate selection, `NO_SCENARIO`, cooldown retry, opportunity resolution and prepared shelter resettlement.
+- Core-only, exact Create 6.0.10 and exact Create/Railway Untold profiles pass 28/28 GameTests. Coverage includes multi-region identity, schema migration, audience knowledge/access persistence, readable opaque-ID-free scenario presentation, autonomous mine commissioning, project-escrow restart persistence, route damage/carrier restart recovery and provenance conflicts. Domain tests cover knowledge gating/isolation, offline/reachability fairness, idempotent project contribution, delayed autonomous funding, candidate selection, `NO_SCENARIO`, cooldown retry, opportunity resolution and prepared shelter resettlement.
+- Guardrails, unit/check, final JAR packaging verification, the clean packaged-JAR two-start dedicated harness and the exact Create/Railway Untold two-start packaged harness pass on the schema-v31 artifact.
 - 0.3 presentation now has a native `P` Atlas, server-validated scenario/evacuation actions, PM-owned nearby mine/depot signal particles and an isolated JourneyMap v2 client projection. The dedicated-server GameTest profile boots without JourneyMap; graphical verification is still pending.
 - The private server now runs the checksum-published schema-v27 JAR on a newly generated `world`; its former 84 MiB runtime world was moved to `.pale-mirror-backups/world-reset-pre-schema-v27-20260811T070000Z/world` and is not mounted by Minecraft. `pale_mirror:vanilla_minecart_rail` reported `AVAILABLE` after clean startup.
 - 0.2 is conditionally accepted; its remaining unaided graphical exercise is an ongoing presentation-quality check, not a blocker for 0.3.
 
 ### Next
 
-- Exercise all four crisis responses in a real client world: clear the mine, certify a player-built Create route, prepare/execute evacuation, and consciously decline/ignore it. Confirm recovery/storehouse and return-home opportunities are intelligible without debug commands.
-- Run full critical-code gates (`guardrails`, packaged JAR, restart/crash and graphical profiles) against the v28 artifact; then conduct an unaided multi-region usability pass before widening commodity, threat-provider or settlement scope.
+- Run the agreed human release gates: graphical/audio discovery and aftermath pass, a real scheduled Create train, one cooperative StoryAudience session and five unaided clean-room playtests. Graphical automation remains unavailable on this host without Xvfb.
 
 ## Open questions
 
 - UNCONFIRMED: authenticated multiplayer playthrough, graphical validation of the PM-managed baseline corridor/representative cart, and the player-built alternate Create scheduled-train traversal.
 - UNAVAILABLE IN CURRENT ENVIRONMENT: the new managed-railway graphical client profile is wired into `clientSmoke`, but this run could not execute it because no Xvfb binary is installed; prior six-profile client evidence remains historical only.
 - KNOWN MODEL DEBT: Millénaire culture, relations, quests, local economy and native development remain intentionally native-owned; structure inference is bounded and missing NPCs never imply deaths.
-- The new Atlas/JourneyMap UI compiles and its bounded server projection has GameTest coverage, but its graphical rendering and live JourneyMap discovery remain UNCONFIRMED until a real client run.
+- The new Atlas/JourneyMap UI compiles and its bounded server projection has GameTest coverage, but its graphical rendering and live JourneyMap discovery remain UNCONFIRMED until a real client run. Xvfb is absent in this environment, so the automated graphical profile could not be executed in this implementation run.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set

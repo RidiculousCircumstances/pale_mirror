@@ -30,6 +30,9 @@ final class VanillaMinecartRouteCodec {
             value.putString("cartLease", record.cartLeaseId());
             value.putBoolean("cartLeaseDispatched", record.cartLeaseDispatched());
             if (record.representativeCartId() != null) value.putUUID("cart", record.representativeCartId());
+            if (record.representativeCargoId() != null) value.putUUID("cargoDisplay", record.representativeCargoId());
+            value.putDouble("cartProgress", record.cartProgress());
+            value.putBoolean("cartForward", record.cartForward());
             ListTag cells = new ListTag();
             record.cells().values().forEach(cell -> {
                 CompoundTag entry = new CompoundTag();
@@ -43,6 +46,8 @@ final class VanillaMinecartRouteCodec {
             ListTag completed = new ListTag();
             record.completedSegments().stream().sorted().forEach(index -> completed.add(net.minecraft.nbt.IntTag.valueOf(index)));
             value.put("completed", completed);
+            long[] damaged = record.damagedCriticalCells().stream().mapToLong(Long::longValue).toArray();
+            value.putLongArray("damagedCriticalCells", damaged);
             values.add(value);
         });
         root.put("vanillaMinecartRoutes", values);
@@ -62,11 +67,16 @@ final class VanillaMinecartRouteCodec {
             Set<Integer> completed = new LinkedHashSet<>();
             for (Tag index : value.getList("completed", Tag.TAG_INT)) completed.add(((net.minecraft.nbt.IntTag) index).getAsInt());
             UUID cart = value.hasUUID("cart") ? value.getUUID("cart") : null;
+            UUID cargo = value.hasUUID("cargoDisplay") ? value.getUUID("cargoDisplay") : null;
+            Set<Long> damaged = new LinkedHashSet<>();
+            for (long position : value.getLongArray("damagedCriticalCells")) damaged.add(position);
             VanillaMinecartRouteRecord record = new VanillaMinecartRouteRecord(value.getString("region"),
                     value.getString("dimension"), value.getString("route"), BlockPos.of(value.getLong("start")),
                     BlockPos.of(value.getLong("target")), VanillaMinecartRouteStatus.valueOf(value.getString("status")),
-                    value.getString("diagnostic"), cells, completed, value.getInt("verificationCursor"),
-                    value.getString("cartLease"), value.getBoolean("cartLeaseDispatched"), cart);
+                    value.getString("diagnostic"), cells, completed, damaged, value.getInt("verificationCursor"),
+                    value.getString("cartLease"), value.getBoolean("cartLeaseDispatched"), cart, cargo,
+                    value.contains("cartProgress", Tag.TAG_DOUBLE) ? value.getDouble("cartProgress") : 0D,
+                    !value.contains("cartForward", Tag.TAG_BYTE) || value.getBoolean("cartForward"));
             result.put(record.regionId(), record);
         }
         return result;

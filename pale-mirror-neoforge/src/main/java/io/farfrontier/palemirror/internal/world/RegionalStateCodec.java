@@ -46,6 +46,7 @@ import io.farfrontier.palemirror.domain.DevelopmentIntentState;
 import io.farfrontier.palemirror.domain.FieldAuthority;
 import io.farfrontier.palemirror.domain.SettlementAuthorityField;
 import io.farfrontier.palemirror.domain.SettlementAuthorityProfile;
+import io.farfrontier.palemirror.domain.AudienceRegionReachability;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -66,6 +67,8 @@ final class RegionalStateCodec {
         tag.put("siteCapabilities", list(state.siteCapabilities().stream().map(RegionalStateCodec::writeCapability).toList()));
         tag.put("routeContracts", list(state.routeContracts().stream().map(RegionalStateCodec::writeContract).toList()));
         tag.put("livingRegions", list(state.livingRegions().stream().map(RegionalStateCodec::writeRegion).toList()));
+        tag.put("regionKnowledge", list(state.regionKnowledge().stream().map(AudienceRegionalStateCodec::writeKnowledge).toList()));
+        tag.put("regionAccess", list(state.regionAccess().stream().map(AudienceRegionalStateCodec::writeAccess).toList()));
         tag.put("populationGroups", list(state.populationGroups().stream().map(RegionalStateCodec::writePopulationGroup).toList()));
         tag.put("emergencyWindows", list(state.emergencyWindows().stream().map(RegionalStateCodec::writeEmergencyWindow).toList()));
         tag.put("settlementDevelopments", list(state.settlementDevelopments().stream().map(RegionalStateCodec::writeDevelopment).toList()));
@@ -87,6 +90,8 @@ final class RegionalStateCodec {
         for (Tag value : tag.getList("siteCapabilities", Tag.TAG_COMPOUND)) state.putSiteCapability(readCapability((CompoundTag) value));
         for (Tag value : tag.getList("routeContracts", Tag.TAG_COMPOUND)) state.putRouteContract(readContract((CompoundTag) value));
         for (Tag value : tag.getList("livingRegions", Tag.TAG_COMPOUND)) state.putLivingRegion(readRegion((CompoundTag) value));
+        for (Tag value : tag.getList("regionKnowledge", Tag.TAG_COMPOUND)) state.putRegionKnowledge(AudienceRegionalStateCodec.readKnowledge((CompoundTag) value));
+        for (Tag value : tag.getList("regionAccess", Tag.TAG_COMPOUND)) state.putRegionAccess(AudienceRegionalStateCodec.readAccess((CompoundTag) value));
         for (Tag value : tag.getList("populationGroups", Tag.TAG_COMPOUND)) state.putPopulationGroup(readPopulationGroup((CompoundTag) value));
         for (Tag value : tag.getList("emergencyWindows", Tag.TAG_COMPOUND)) state.putEmergencyWindow(readEmergencyWindow((CompoundTag) value));
         for (Tag value : tag.getList("settlementDevelopments", Tag.TAG_COMPOUND)) state.putSettlementDevelopment(readDevelopment((CompoundTag) value));
@@ -293,6 +298,7 @@ final class RegionalStateCodec {
         if (value.primaryAudience() != null) tag.putString("audience", value.primaryAudience().value());
         tag.putString("recognition", value.recognition().name());
         tag.putLong("discoveredAtStep", value.discoveredAtStep());
+        tag.putBoolean("knowledgeGatedIncident", value.knowledgeGatedIncident());
         return tag;
     }
 
@@ -301,7 +307,7 @@ final class RegionalStateCodec {
         return new LivingRegionState(tag.getString("id"), id(tag, "community"), id(tag, "place"),
                 id(tag, "primaryFacility"), id(tag, "alternateFacility"), id(tag, "primaryRoute"), id(tag, "alternateRoute"),
                 tag.getLong("incidentDelaySteps"), audience, RecognitionState.valueOf(tag.getString("recognition")),
-                tag.getLong("discoveredAtStep"));
+                tag.getLong("discoveredAtStep"), tag.getBoolean("knowledgeGatedIncident"));
     }
 
     private static CompoundTag writePopulationGroup(PopulationGroup value) {
@@ -343,11 +349,20 @@ final class RegionalStateCodec {
         tag.putString("community", value.communityId().value());
         tag.putLong("openedAtStep", value.openedAtStep());
         tag.putLong("deadlineStep", value.deadlineStep());
+        tag.putLong("graceSteps", value.graceSteps());
+        tag.putLong("remainingGraceSteps", value.remainingGraceSteps());
+        tag.putString("reachabilityAtOpen", value.reachabilityAtOpen().name());
         tag.putString("state", value.state().name());
         return tag;
     }
 
     private static SettlementEmergencyWindow readEmergencyWindow(CompoundTag tag) {
+        if (tag.contains("graceSteps", Tag.TAG_LONG)) {
+            return new SettlementEmergencyWindow(id(tag, "community"), tag.getLong("openedAtStep"),
+                    tag.getLong("graceSteps"), tag.getLong("remainingGraceSteps"),
+                    AudienceRegionReachability.valueOf(tag.getString("reachabilityAtOpen")),
+                    EmergencyWindowState.valueOf(tag.getString("state")));
+        }
         return new SettlementEmergencyWindow(id(tag, "community"), tag.getLong("openedAtStep"),
                 tag.getLong("deadlineStep"), EmergencyWindowState.valueOf(tag.getString("state")));
     }
@@ -377,13 +392,15 @@ final class RegionalStateCodec {
         tag.putInt("pressureSteps", value.pressureSteps());
         tag.putInt("investmentIron", value.investmentIron());
         tag.putInt("growthSteps", value.growthSteps());
+        tag.putInt("autonomousInvestmentSteps", value.autonomousInvestmentSteps());
         return tag;
     }
 
     private static SettlementDevelopmentPolicy readDevelopmentPolicy(CompoundTag tag) {
         return new SettlementDevelopmentPolicy(id(tag, "community"), tag.getString("version"),
                 tag.getInt("stockPercent"), tag.getInt("minimumDefence"), tag.getInt("pressureSteps"),
-                tag.getInt("investmentIron"), tag.getInt("growthSteps"));
+                tag.getInt("investmentIron"), tag.getInt("growthSteps"),
+                tag.contains("autonomousInvestmentSteps", Tag.TAG_INT) ? tag.getInt("autonomousInvestmentSteps") : 24);
     }
 
     private static CompoundTag writeDevelopmentIntent(DevelopmentIntent value) {
@@ -394,6 +411,17 @@ final class RegionalStateCodec {
         if (value.targetSiteId() != null) tag.putString("targetSite", value.targetSiteId().value());
         if (value.requiredResource() != null) tag.putString("resource", value.requiredResource().name());
         tag.putInt("reserved", value.reservedAmount());
+        tag.putInt("required", value.requiredAmount());
+        tag.putInt("contributed", value.contributedAmount());
+        tag.putInt("qualifyingWait", value.qualifyingWaitSteps());
+        tag.putInt("autonomousWaitRequired", value.autonomousWaitRequired());
+        ListTag receipts = new ListTag();
+        value.contributionReceipts().stream().sorted().forEach(receipt -> {
+            CompoundTag item = new CompoundTag();
+            item.putString("id", receipt);
+            receipts.add(item);
+        });
+        tag.put("contributionReceipts", receipts);
         tag.putString("policyVersion", value.policyVersion());
         tag.putString("state", value.state().name());
         tag.putString("diagnostic", value.diagnostic());
@@ -401,6 +429,20 @@ final class RegionalStateCodec {
     }
 
     private static DevelopmentIntent readDevelopmentIntent(CompoundTag tag) {
+        if (tag.contains("required", Tag.TAG_INT)) {
+            java.util.Set<String> receipts = new java.util.LinkedHashSet<>();
+            for (Tag value : tag.getList("contributionReceipts", Tag.TAG_COMPOUND)) {
+                receipts.add(((CompoundTag) value).getString("id"));
+            }
+            return new DevelopmentIntent(tag.getString("id"), id(tag, "community"),
+                    DevelopmentIntentType.valueOf(tag.getString("type")),
+                    tag.contains("targetSite", Tag.TAG_STRING) ? id(tag, "targetSite") : null,
+                    tag.contains("resource", Tag.TAG_STRING) ? ResourceKind.valueOf(tag.getString("resource")) : null,
+                    tag.getInt("required"), tag.getInt("contributed"), tag.getInt("reserved"),
+                    tag.getInt("qualifyingWait"), tag.getInt("autonomousWaitRequired"), receipts,
+                    tag.getString("policyVersion"), DevelopmentIntentState.valueOf(tag.getString("state")),
+                    tag.getString("diagnostic"));
+        }
         return new DevelopmentIntent(tag.getString("id"), id(tag, "community"),
                 DevelopmentIntentType.valueOf(tag.getString("type")),
                 tag.contains("targetSite", Tag.TAG_STRING) ? id(tag, "targetSite") : null,

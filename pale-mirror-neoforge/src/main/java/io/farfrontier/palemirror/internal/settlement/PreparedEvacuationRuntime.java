@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
+import io.farfrontier.palemirror.domain.KnownRegionalFeature;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotState;
 import io.farfrontier.palemirror.internal.presentation.RefugeeAnchorItem;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -79,7 +80,7 @@ public final class PreparedEvacuationRuntime {
                     .orElseGet(() -> {
                         var window = data.worldState().emergencyWindow(community).orElseThrow();
                         RefugeeAnchorPermit created = new RefugeeAnchorPermit("pm:refugee-permit:" + UUID.randomUUID(),
-                                player.getUUID(), community, audience, window.deadlineStep(), false);
+                                player.getUUID(), community, audience, Long.MAX_VALUE, false);
                         data.refugeeAnchorPermits().issue(created);
                         return created;
                     });
@@ -99,7 +100,10 @@ public final class PreparedEvacuationRuntime {
         String permitId = RefugeeAnchorItem.permitId(stack);
         RefugeeAnchorPermit permit = data.refugeeAnchorPermits().find(permitId).orElse(null);
         if (permit == null || !permit.usable(player.getUUID(), permit.communityId(), audiences.apply(player),
-                data.worldState().simulationStep())) return rejected(player, "This Refugee Anchor is no longer valid.");
+                data.worldState().simulationStep()) || data.worldState().emergencyWindow(permit.communityId())
+                .filter(window -> window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).isEmpty()) {
+            return rejected(player, "This Refugee Anchor is no longer valid.");
+        }
         var region = data.worldState().livingRegions().stream().filter(value -> value.communityId().equals(permit.communityId()))
                 .findFirst().orElse(null);
         var physical = region == null ? null : data.campaignRegions().get(region.id());
@@ -131,6 +135,10 @@ public final class PreparedEvacuationRuntime {
                 new SiteCapability(siteId, SiteCapabilityType.SHELTER, null, data.worldState().population(permit.communityId())),
                 "player:" + player.getUUID() + ":refugee-anchor"));
         if (events.isEmpty()) return false;
+        events = new java.util.ArrayList<>(events);
+        events.addAll(commands.execute(data.worldState(), new DomainCommand.DiscoverRegionalFeature(region.id(),
+                audiences.apply(player), KnownRegionalFeature.REFUGEE_SITE,
+                "player:" + player.getUUID() + ":refugee-anchor")));
         data.refugeeCamps().put(group.id(), camp);
         permit.consume();
         stack.shrink(1);

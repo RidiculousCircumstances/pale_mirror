@@ -13,12 +13,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.PoweredRailBlock;
 import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.RailShape;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
 
 /**
  * Isolated vanilla physical profile for early regional freight. It owns block
@@ -92,10 +95,16 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
 
     public String signature(BlockState state) { return state.toString(); }
 
+    public boolean criticalInfrastructure(String appliedState) {
+        return appliedState.contains("minecraft:rail") || appliedState.contains("minecraft:powered_rail")
+                || appliedState.contains("minecraft:redstone_block") || appliedState.contains("minecraft:gravel")
+                || appliedState.contains("minecraft:oak_fence");
+    }
+
     /** Creates exactly one non-canonical visual carrier after a persisted PM effect lease authorizes it. */
-    public java.util.UUID spawnRepresentativeCart(ServerLevel level, BlockPos rail, String routeId) {
+    public VisualCart spawnRepresentativeCart(ServerLevel level, BlockPos rail, String routeId) {
         if (!level.hasChunkAt(rail)) throw new IllegalStateException("Minecart start chunk is not loaded");
-        Entity cart = EntityType.CHEST_MINECART.create(level);
+        Entity cart = EntityType.MINECART.create(level);
         if (cart == null) throw new IllegalStateException("Vanilla chest minecart type is unavailable");
         cart.moveTo(rail.getX() + 0.5D, rail.getY() + 0.1D, rail.getZ() + 0.5D, 0.0F, 0.0F);
         cart.setNoGravity(true);
@@ -105,8 +114,32 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
         cart.getPersistentData().putString("pale_mirror_route", routeId);
         cart.getPersistentData().putString("pale_mirror_role", "representative_minecart");
         if (!level.addFreshEntity(cart)) throw new IllegalStateException("Vanilla minecart spawn was rejected");
-        return cart.getUUID();
+        Display.BlockDisplay cargo = EntityType.BLOCK_DISPLAY.create(level);
+        if (cargo == null) {
+            cart.discard();
+            throw new IllegalStateException("Vanilla block display type is unavailable");
+        }
+        CompoundTag displayData = new CompoundTag();
+        displayData.put("block_state", NbtUtils.writeBlockState(Blocks.CHEST.defaultBlockState()));
+        cargo.load(displayData);
+        cargo.setInvulnerable(true);
+        cargo.getPersistentData().putString("pale_mirror_route", routeId);
+        cargo.getPersistentData().putString("pale_mirror_role", "representative_cargo");
+        cargo.moveTo(cart.getX(), cart.getY() + 0.35D, cart.getZ(), 0F, 0F);
+        if (!level.addFreshEntity(cargo) || !cargo.startRiding(cart, true)) {
+            cargo.discard();
+            cart.discard();
+            throw new IllegalStateException("Vanilla representative cargo spawn was rejected");
+        }
+        return new VisualCart(cart.getUUID(), cargo.getUUID());
     }
+
+    public static boolean isRepresentative(Entity entity) {
+        return "representative_minecart".equals(entity.getPersistentData().getString("pale_mirror_role"))
+                || "representative_cargo".equals(entity.getPersistentData().getString("pale_mirror_role"));
+    }
+
+    public record VisualCart(java.util.UUID cartId, java.util.UUID cargoId) { }
 
     private static BlockState railState(Direction direction, boolean powered, int railY, int nextRailY, int previousRailY) {
         RailShape shape = shape(direction, railY, nextRailY, previousRailY);

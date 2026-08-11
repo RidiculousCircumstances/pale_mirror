@@ -155,7 +155,7 @@ public final class RegionalJournal {
                     + ", populationGroups=" + data.worldState().populationGroups(community.id()).stream()
                     .map(group -> group.id() + ":" + group.disposition() + "=" + group.size()).toList()
                     + ", emergency=" + data.worldState().emergencyWindow(community.id())
-                    .map(window -> window.state() + "@" + window.deadlineStep()).orElse("none")
+                    .map(window -> window.state() + ":remaining=" + window.remainingGraceSteps()).orElse("none")
                     + ", development=" + development
                     + ", authority=" + authority
                     + ", contracts=" + routes;
@@ -208,7 +208,8 @@ public final class RegionalJournal {
         data.worldState().emergencyWindow(community.id()).filter(window ->
                 window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).ifPresent(window ->
                 player.sendSystemMessage(action("[Prepare refugee site]", "/pale_mirror settlement prepare_refugee_site " + community.id().value())
-                        .append(Component.literal(" — place the anchor, then begin evacuation before step " + window.deadlineStep() + "."))));
+                        .append(Component.literal(" — place the anchor, then begin evacuation; "
+                                + window.remainingGraceSteps() + " active steps remain."))));
         scenarioLine(data, player, region.communityId(), audiences.apply(player), regionName(data, region.id()));
         return true;
     }

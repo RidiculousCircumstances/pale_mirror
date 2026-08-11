@@ -8,6 +8,7 @@ import journeymap.api.v2.common.JourneyMapPlugin;
 import journeymap.api.v2.common.waypoint.Waypoint;
 import journeymap.api.v2.common.waypoint.WaypointFactory;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 
 /**
  * Optional JourneyMap v2 client plugin. Its only input is the same bounded,
@@ -32,16 +33,16 @@ public final class PaleMirrorJourneyMapPlugin implements IClientPlugin {
         if (api == null) return;
         api.removeAll(PaleMirrorMod.MOD_ID);
         for (PaleMirrorAtlasClient.Region region : snapshot.regions()) {
-            add(region, region.settlement(), region.name() + " — settlement", 0x48B9E6,
-                    "Recognized settlement; PM state is read-only here.");
-            add(region, region.depot(), region.name() + " — supply depot", 0xE2C275,
-                    "PM-owned delivery point.");
+            add(region, region.settlement(), region.name() + " — " + tr("journeymap.pale_mirror.settlement"), 0x48B9E6,
+                    tr("journeymap.pale_mirror.settlement.description"));
+            add(region, region.depot(), region.name() + " — " + tr("journeymap.pale_mirror.depot"), 0xE2C275,
+                    tr("journeymap.pale_mirror.depot.description"));
             int mineColor = "INFECTED".equals(region.primaryMineStatus()) ? 0xD85B61 : 0x8CD38B;
             String mineDescription = "INFECTED".equals(region.primaryMineStatus())
-                    ? "Primary mine is infected; its iron supply is interrupted." : "Primary PM-owned mine site.";
-            add(region, region.primaryMine(), region.name() + " — primary mine", mineColor, mineDescription);
-            add(region, region.alternateMine(), region.name() + " — alternate source", 0xDDA65D,
-                    "Potential alternate iron source.");
+                    ? tr("journeymap.pale_mirror.mine.infected") : tr("journeymap.pale_mirror.mine.description");
+            add(region, region.primaryMine(), region.name() + " — " + tr("journeymap.pale_mirror.mine"), mineColor, mineDescription);
+            add(region, region.alternateMine(), region.name() + " — " + tr("journeymap.pale_mirror.alternate"), 0xDDA65D,
+                    tr("journeymap.pale_mirror.alternate.description"));
         }
     }
 
@@ -55,4 +56,6 @@ public final class PaleMirrorJourneyMapPlugin implements IClientPlugin {
         point.setShowDeviation(true);
         api.addWaypoint(PaleMirrorMod.MOD_ID, point);
     }
+
+    private static String tr(String key) { return Component.translatable(key).getString(); }
 }

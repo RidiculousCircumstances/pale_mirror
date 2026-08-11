@@ -27,18 +27,24 @@ public final class VanillaMinecartRouteRecord {
     private final BlockPos target;
     private final Map<Long, VanillaMinecartMutableCell> cells;
     private final Set<Integer> completedSegments;
+    private final Set<Long> damagedCriticalCells;
     private VanillaMinecartRouteStatus status;
     private String diagnostic;
     private int verificationCursor;
     private String cartLeaseId;
     private boolean cartLeaseDispatched;
     private UUID representativeCartId;
+    private UUID representativeCargoId;
+    private double cartProgress;
+    private boolean cartForward;
 
     public VanillaMinecartRouteRecord(String regionId, String dimensionId, String routeId, BlockPos start, BlockPos target,
                                       VanillaMinecartRouteStatus status, String diagnostic,
                                       Map<Long, VanillaMinecartMutableCell> cells, Set<Integer> completedSegments,
+                                      Set<Long> damagedCriticalCells,
                                       int verificationCursor, String cartLeaseId, boolean cartLeaseDispatched,
-                                      UUID representativeCartId) {
+                                      UUID representativeCartId, UUID representativeCargoId,
+                                      double cartProgress, boolean cartForward) {
         this.regionId = text(regionId, "regionId");
         this.dimensionId = text(dimensionId, "dimensionId");
         this.routeId = text(routeId, "routeId");
@@ -54,6 +60,10 @@ public final class VanillaMinecartRouteRecord {
         this.diagnostic = diagnostic == null ? "" : diagnostic;
         this.cells = new LinkedHashMap<>(cells);
         this.completedSegments = new LinkedHashSet<>(completedSegments);
+        this.damagedCriticalCells = new LinkedHashSet<>(damagedCriticalCells);
+        if (this.damagedCriticalCells.stream().anyMatch(position -> !this.cells.containsKey(position))) {
+            throw new IllegalArgumentException("Damaged route position is not a captured cell");
+        }
         if (this.completedSegments.stream().anyMatch(index -> index < 0 || index >= segmentCount())) {
             throw new IllegalArgumentException("Invalid completed vanilla rail segment");
         }
@@ -65,12 +75,19 @@ public final class VanillaMinecartRouteRecord {
             throw new IllegalArgumentException("Dispatched minecart lease is absent");
         }
         this.representativeCartId = representativeCartId;
+        this.representativeCargoId = representativeCargoId;
+        if (!Double.isFinite(cartProgress) || cartProgress < 0 || cartProgress > segmentCount() - 1D) {
+            throw new IllegalArgumentException("Invalid representative cart progress");
+        }
+        this.cartProgress = cartProgress;
+        this.cartForward = cartForward;
     }
 
     public static VanillaMinecartRouteRecord planned(String regionId, String dimensionId, String routeId,
                                                       BlockPos start, BlockPos target) {
         return new VanillaMinecartRouteRecord(regionId, dimensionId, routeId, start, target,
-                VanillaMinecartRouteStatus.PLANNED, "", Map.of(), Set.of(), 0, "", false, null);
+                VanillaMinecartRouteStatus.PLANNED, "", Map.of(), Set.of(), Set.of(), 0, "", false,
+                null, null, 0D, true);
     }
 
     public String regionId() { return regionId; }
@@ -82,12 +99,16 @@ public final class VanillaMinecartRouteRecord {
     public String diagnostic() { return diagnostic; }
     public Map<Long, VanillaMinecartMutableCell> cells() { return Map.copyOf(cells); }
     public Set<Integer> completedSegments() { return Set.copyOf(completedSegments); }
+    public Set<Long> damagedCriticalCells() { return Set.copyOf(damagedCriticalCells); }
     public int completedSegmentCount() { return completedSegments.size(); }
     public int segmentCount() { return horizontalLength() + 1; }
     public int verificationCursor() { return verificationCursor; }
     public String cartLeaseId() { return cartLeaseId; }
     public boolean cartLeaseDispatched() { return cartLeaseDispatched; }
     public UUID representativeCartId() { return representativeCartId; }
+    public UUID representativeCargoId() { return representativeCargoId; }
+    public double cartProgress() { return cartProgress; }
+    public boolean cartForward() { return cartForward; }
     public Direction direction() {
         if (target.getX() > start.getX()) return Direction.EAST;
         if (target.getX() < start.getX()) return Direction.WEST;
@@ -107,6 +128,12 @@ public final class VanillaMinecartRouteRecord {
     public int previousRailY(int index) { return railPosition(Math.max(0, index - 1)).getY(); }
     public boolean isComplete(int index) { return completedSegments.contains(index); }
     public boolean allSegmentsComplete() { return completedSegments.size() == segmentCount(); }
+    public long closestCompletedRailDistanceSqr(BlockPos position) {
+        long closest = Long.MAX_VALUE;
+        for (int index : completedSegments) closest = Math.min(closest,
+                (long) railPosition(index).distSqr(position));
+        return closest;
+    }
     public void begin() { require(VanillaMinecartRouteStatus.PLANNED); status = VanillaMinecartRouteStatus.BUILDING; }
     public boolean capture(BlockPos position, String baseline) {
         if (cells.containsKey(position.asLong())) return false;
@@ -119,7 +146,24 @@ public final class VanillaMinecartRouteRecord {
     public void verify() { require(VanillaMinecartRouteStatus.BUILDING); status = VanillaMinecartRouteStatus.VERIFYING; }
     public void activate() { require(VanillaMinecartRouteStatus.VERIFYING); status = VanillaMinecartRouteStatus.ACTIVE; diagnostic = ""; }
     public void block(String reason) { status = VanillaMinecartRouteStatus.BLOCKED; diagnostic = text(reason, "diagnostic"); }
-    public void suspend(String reason) { status = VanillaMinecartRouteStatus.SUSPENDED; diagnostic = text(reason, "diagnostic"); }
+    public void suspend(BlockPos position, String reason) {
+        damagedCriticalCells.add(position.asLong());
+        status = VanillaMinecartRouteStatus.SUSPENDED;
+        diagnostic = text(reason, "diagnostic");
+    }
+    public void decorativeConflict(String reason) { diagnostic = text(reason, "diagnostic"); }
+    public boolean repaired(BlockPos position) {
+        VanillaMinecartMutableCell cell = requireCell(position);
+        cell.clearConflict();
+        return damagedCriticalCells.remove(position.asLong());
+    }
+    public boolean repairComplete() { return damagedCriticalCells.isEmpty(); }
+    public void resume() {
+        require(VanillaMinecartRouteStatus.SUSPENDED);
+        if (!damagedCriticalCells.isEmpty()) throw new IllegalStateException("Damaged route cells remain");
+        status = VanillaMinecartRouteStatus.ACTIVE;
+        diagnostic = "";
+    }
     public void advanceVerificationCursor(int cellsChecked) {
         if (cellsChecked > 0 && !cells.isEmpty()) verificationCursor = (verificationCursor + cellsChecked) % cells.size();
     }
@@ -131,7 +175,29 @@ public final class VanillaMinecartRouteRecord {
         if (cartLeaseId.isBlank()) throw new IllegalStateException("Minecart lease must be reserved first");
         cartLeaseDispatched = true;
     }
-    public void observeRepresentativeCart(UUID id) { representativeCartId = Objects.requireNonNull(id, "id"); }
+    public void observeRepresentativeCart(UUID id, UUID cargoId) {
+        representativeCartId = Objects.requireNonNull(id, "id");
+        representativeCargoId = Objects.requireNonNull(cargoId, "cargoId");
+    }
+    public void forgetMissingRepresentativeCart() {
+        representativeCartId = null;
+        representativeCargoId = null;
+        cartLeaseId = "";
+        cartLeaseDispatched = false;
+    }
+    public double proposedCartProgress(double distance) {
+        if (!Double.isFinite(distance) || distance < 0) throw new IllegalArgumentException("Invalid cart distance");
+        double proposed = cartProgress + (cartForward ? distance : -distance);
+        return Math.max(0D, Math.min(segmentCount() - 1D, proposed));
+    }
+    public void moveCart(double progress) {
+        if (!Double.isFinite(progress) || progress < 0 || progress > segmentCount() - 1D) {
+            throw new IllegalArgumentException("Invalid cart progress");
+        }
+        cartProgress = progress;
+        if (progress <= 0D) cartForward = true;
+        else if (progress >= segmentCount() - 1D) cartForward = false;
+    }
 
     public List<VanillaMinecartMutableCell> verificationSlice(int maximum) {
         if (maximum < 1 || cells.isEmpty()) return List.of();

@@ -28,6 +28,8 @@ public final class WorldState {
     private final Map<String, SiteCapability> siteCapabilities = new LinkedHashMap<>();
     private final Map<WorldObjectId, RouteContract> routeContracts = new LinkedHashMap<>();
     private final Map<String, LivingRegionState> livingRegions = new LinkedHashMap<>();
+    private final Map<String, AudienceRegionKnowledge> regionKnowledge = new LinkedHashMap<>();
+    private final Map<String, AudienceRegionAccess> regionAccess = new LinkedHashMap<>();
     private final List<DomainEvent> history = new ArrayList<>();
     private final Map<StoryAudienceId, Long> narratorCooldowns = new LinkedHashMap<>();
     private long schemaVersion = 1;
@@ -59,6 +61,8 @@ public final class WorldState {
     public Collection<SiteCapability> siteCapabilities() { return siteCapabilities.values(); }
     public Collection<RouteContract> routeContracts() { return routeContracts.values(); }
     public Collection<LivingRegionState> livingRegions() { return livingRegions.values(); }
+    public Collection<AudienceRegionKnowledge> regionKnowledge() { return regionKnowledge.values(); }
+    public Collection<AudienceRegionAccess> regionAccess() { return regionAccess.values(); }
     public List<DomainEvent> history() { return history; }
     public Map<StoryAudienceId, Long> narratorCooldowns() { return narratorCooldowns; }
     public Optional<FacilityState> facility(WorldObjectId id) { return Optional.ofNullable(facilities.get(id)); }
@@ -99,6 +103,12 @@ public final class WorldState {
     }
     public Optional<RouteContract> routeContract(WorldObjectId id) { return Optional.ofNullable(routeContracts.get(id)); }
     public Optional<LivingRegionState> livingRegion(String id) { return Optional.ofNullable(livingRegions.get(id)); }
+    public Optional<AudienceRegionKnowledge> regionKnowledge(StoryAudienceId audience, String regionId) {
+        return Optional.ofNullable(regionKnowledge.get(knowledgeKey(audience, regionId)));
+    }
+    public Optional<AudienceRegionAccess> regionAccess(StoryAudienceId audience, String regionId) {
+        return Optional.ofNullable(regionAccess.get(knowledgeKey(audience, regionId)));
+    }
     public void putFacility(FacilityState facility) { facilities.put(facility.id(), facility); }
     public void putScenario(ScenarioInstance scenario) { scenarios.put(scenario.id(), scenario); }
     public void putCommunity(SettlementCommunity community) { communities.put(community.id(), community); }
@@ -128,6 +138,19 @@ public final class WorldState {
     public void putLivingRegion(LivingRegionState region) {
         if (livingRegions.putIfAbsent(region.id(), region) != null) throw new IllegalStateException("Duplicate living region " + region.id());
     }
+    public void putRegionKnowledge(AudienceRegionKnowledge knowledge) {
+        String key = knowledgeKey(knowledge.audience(), knowledge.regionId());
+        if (regionKnowledge.putIfAbsent(key, knowledge) != null) {
+            throw new IllegalStateException("Duplicate audience region knowledge " + key);
+        }
+    }
+    public AudienceRegionKnowledge requireOrCreateRegionKnowledge(StoryAudienceId audience, String regionId) {
+        return regionKnowledge.computeIfAbsent(knowledgeKey(audience, regionId), ignored ->
+                new AudienceRegionKnowledge(audience, regionId));
+    }
+    public void putRegionAccess(AudienceRegionAccess access) {
+        regionAccess.put(knowledgeKey(access.audience(), access.regionId()), access);
+    }
     public void clearRegionalState() {
         communities.clear();
         places.clear();
@@ -146,6 +169,8 @@ public final class WorldState {
         siteCapabilities.clear();
         routeContracts.clear();
         livingRegions.clear();
+        regionKnowledge.clear();
+        regionAccess.clear();
     }
     public void addEvent(DomainEvent event) { history.add(event); }
     public boolean hasScenarioForSource(String sourceEventId, StoryAudienceId audience) {
@@ -169,5 +194,9 @@ public final class WorldState {
 
     private static String affiliationKey(WorldObjectId siteId, WorldObjectId objectId, SiteAffiliationRole role) {
         return siteId.value() + "|" + objectId.value() + "|" + role.name();
+    }
+
+    private static String knowledgeKey(StoryAudienceId audience, String regionId) {
+        return audience.value() + "|" + regionId;
     }
 }

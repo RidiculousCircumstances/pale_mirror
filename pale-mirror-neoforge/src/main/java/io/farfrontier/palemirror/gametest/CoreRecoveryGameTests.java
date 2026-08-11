@@ -43,6 +43,30 @@ import java.util.UUID;
 public final class CoreRecoveryGameTests {
     private CoreRecoveryGameTests() { }
 
+    @GameTest(batch = "pm-development-persistence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void projectEscrowSurvivesRestartWithoutBecomingSettlementStock(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(helper.getLevel().getServer().overworld());
+        resetPaleMirrorState(helper.getLevel());
+        var intent = new io.farfrontier.palemirror.domain.DevelopmentIntent("pm:test:project",
+                new WorldObjectId("pale_mirror:test_community"),
+                io.farfrontier.palemirror.domain.DevelopmentIntentType.UPGRADE_STOREHOUSE,
+                new WorldObjectId("pale_mirror:test_depot"), io.farfrontier.palemirror.domain.ResourceKind.IRON,
+                24, 8, 0, 7, 24, java.util.Set.of("pm:receipt:one"), "test-v2",
+                io.farfrontier.palemirror.domain.DevelopmentIntentState.PLANNED, "");
+        data.worldState().putDevelopmentIntent(intent);
+
+        CompoundTag snapshot = data.save(new CompoundTag(), helper.getLevel().registryAccess());
+        var reloaded = PaleMirrorSavedData.load(snapshot, helper.getLevel().registryAccess())
+                .worldState().developmentIntent(intent.id()).orElseThrow();
+
+        helper.assertValueEqual(reloaded.contributedAmount(), 8, "restart must retain physical project escrow");
+        helper.assertValueEqual(reloaded.remainingAmount(), 16, "restart must retain only the unfunded remainder");
+        helper.assertTrue(reloaded.contributionReceipts().contains("pm:receipt:one"),
+                "restart must retain receipt deduplication authority");
+        helper.succeed();
+    }
+
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void testMineRecoversAfterObservedControllerDeath(GameTestHelper helper) {
@@ -68,8 +92,8 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 28,
-                "regional route snapshot must record schema v28 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 31,
+                "regional route snapshot must record schema v31 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
         CompoundTag incompatible = persisted.copy();
         incompatible.putInt("schemaVersion", 19);

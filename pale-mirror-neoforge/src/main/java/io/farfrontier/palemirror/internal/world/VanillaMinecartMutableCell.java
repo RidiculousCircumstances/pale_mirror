@@ -23,4 +23,5 @@ public final class VanillaMinecartMutableCell {
     public boolean accepts(String current) { return !conflicted && (baselineState.equals(current) || lastAppliedState.equals(current)); }
     public void apply(String state) { lastAppliedState = state; }
     public void conflict() { conflicted = true; }
+    public void clearConflict() { conflicted = false; }
 }

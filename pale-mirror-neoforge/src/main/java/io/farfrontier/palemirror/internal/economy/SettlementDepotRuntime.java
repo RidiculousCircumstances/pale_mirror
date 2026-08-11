@@ -44,7 +44,10 @@ public final class SettlementDepotRuntime {
                 if (place == null) continue;
                 ServerLevel level = level(server, place.dimensionId());
                 if (level == null) continue;
-                BlockPos anchor = findAnchor(level, place.anchor(), server.overworld().getSeed() ^ region.communityId().hashCode());
+                var presentation = data.campaignRegions().get(region.id());
+                BlockPos anchor = presentation != null && presentation.layoutVersion() >= 2
+                        ? presentation.depotAnchor()
+                        : findAnchor(level, place.anchor(), server.overworld().getSeed() ^ region.communityId().hashCode());
                 if (anchor == null) continue;
                 WorldObjectId siteId = new WorldObjectId(region.communityId().value() + "_supply_depot");
                 depot = new SettlementDepotRecord(siteId, region.communityId(), place.dimensionId(), anchor,

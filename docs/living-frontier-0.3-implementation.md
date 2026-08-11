@@ -4,6 +4,10 @@ This document records the implemented first 0.3 slice. Product direction and
 release gates remain canonical in
 [`product-review-0.2-and-vision-0.3.md`](product-review-0.2-and-vision-0.3.md).
 
+The subsequent readability, route-reconciliation, fairness and positive
+aftermath implementation is recorded in
+[`living-frontier-0.3-completion.md`](living-frontier-0.3-completion.md).
+
 ## Region instances
 
 `iron_frontier` is no longer a singleton campaign. A fresh world can bind up
@@ -51,7 +55,7 @@ requesting supply, degrading defence and evacuating if Narrator selects
 
 The ledger offers **Prepare refugee site** during an open emergency. The
 server issues a persisted permit bound to player, `StoryAudienceId`, community
-and emergency deadline. Its `Refugee Anchor` item only carries that permit ID.
+and the canonical open emergency window. Its `Refugee Anchor` item only carries that permit ID.
 It is accepted only when the player places it:
 
 - in the same dimension as the affected settlement;
@@ -111,12 +115,12 @@ The 0.3 slice is covered by:
 
 - domain tests for candidate ranking, `NO_SCENARIO`, cooldown retry,
   opportunity completion and shelter-hosted population;
-- core GameTests for three independent region instances, v27→v28 saved-data
-  preservation, readable clickable scenario presentation and no-player
-  MineSite commissioning;
+- core GameTests for three independent region instances, schema-v31 saved-data
+  preservation, audience discovery/access, readable scenario presentation,
+  project-escrow restart recovery and no-player MineSite commissioning;
 - existing provenance, restart, recovery, route and adapter GameTests.
 
-The core NeoForge profile currently reports **26/26 required GameTests
-passed**. Full packaged/restart/client validation is still a release gate and
-must run against the produced v28 artifact before publishing it to the private
-server.
+The core NeoForge profile currently reports **28/28 required GameTests
+passed**. Packaged/restart validation must run against the produced schema-v31
+artifact before publishing it to the private server. Graphical client
+validation remains a separate human release gate.

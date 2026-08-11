@@ -13,7 +13,6 @@ import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
-import io.farfrontier.palemirror.domain.RecognitionState;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
@@ -25,9 +24,9 @@ import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.RegionalLogisticsRuntime;
 import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.internal.presentation.CampaignPresentationRuntime;
-import io.farfrontier.palemirror.internal.presentation.CampaignWelcomeKit;
 import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
 import io.farfrontier.palemirror.internal.presentation.RegionalMarkerRuntime;
+import io.farfrontier.palemirror.internal.presentation.PlaytestMetrics;
 import io.farfrontier.palemirror.internal.presentation.atlas.RegionalAtlasProjection;
 import io.farfrontier.palemirror.internal.network.AtlasSnapshotPayload;
 import io.farfrontier.palemirror.internal.economy.ResourceTransferRuntime;
@@ -43,6 +42,7 @@ import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.observation.GatePartDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.RegionalDiscoveryRuntime;
 import io.farfrontier.palemirror.internal.world.ManagedRailwayRuntime;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRuntime;
 import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
@@ -70,12 +70,14 @@ public final class PaleMirrorRuntime {
     private final PreparedEvacuationRuntime evacuation;
     private final NarrativeCandidateRuntime narrative;
     private final RuntimeDebugController debug;
+    private final PlaytestMetrics playtestMetrics;
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
         this.narrative = new NarrativeCandidateRuntime(server, data, commands, domainServices.narrator(), this::audienceFor);
         this.evacuation = new PreparedEvacuationRuntime(data, commands, this::audienceFor, this::handleDomainEvents);
         this.debug = new RuntimeDebugController(server, data, commands, this::handleDomainEvents);
+        this.playtestMetrics = new PlaytestMetrics(server);
         if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         PmProjectileRuntime.discardUnknownAfterRestart(server, data);
@@ -105,6 +107,7 @@ public final class PaleMirrorRuntime {
             handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands, LOGISTICS_PROOF_WINDOW_STEPS));
         }
         if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) {
+            RegionalDiscoveryRuntime.observeAudienceAccess(server, data, commands, this::audienceFor, this::handleDomainEvents);
             advanceSimulation(1);
             triggerDueRegionCrises();
             offerPendingNarrativeOpportunities();
@@ -141,7 +144,9 @@ public final class PaleMirrorRuntime {
     public boolean accept(String scenarioId, StoryAudienceId audience) {
         try {
             if (!data.worldState().scenario(scenarioId).map(value -> value.audience().equals(audience)).orElse(false)) return false;
-            boolean changed = !commands.execute(data.worldState(), new DomainCommand.AcceptScenario(scenarioId)).isEmpty();
+            List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.AcceptScenario(scenarioId));
+            boolean changed = !events.isEmpty();
+            handleDomainEvents(events);
             if (changed) data.setDirty();
             return changed;
         } catch (IllegalArgumentException ignored) {
@@ -151,7 +156,9 @@ public final class PaleMirrorRuntime {
     public boolean decline(String scenarioId, StoryAudienceId audience) {
         try {
             if (!data.worldState().scenario(scenarioId).map(value -> value.audience().equals(audience)).orElse(false)) return false;
-            boolean changed = !commands.execute(data.worldState(), new DomainCommand.DeclineScenario(scenarioId)).isEmpty();
+            List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.DeclineScenario(scenarioId));
+            boolean changed = !events.isEmpty();
+            handleDomainEvents(events);
             if (changed) data.setDirty();
             return changed;
         } catch (IllegalArgumentException ignored) {
@@ -226,11 +233,15 @@ public final class PaleMirrorRuntime {
     }
 
     public AtlasSnapshotPayload atlasSnapshot(ServerPlayer player, String notice, boolean openScreen) {
-        return RegionalAtlasProjection.snapshot(data, audienceFor(player), notice, openScreen);
+        AtlasSnapshotPayload snapshot = RegionalAtlasProjection.snapshot(data, audienceFor(player), notice, openScreen);
+        if (openScreen) playtestMetrics.atlasOpened(player.getUUID(), data.worldState().simulationStep(),
+                snapshot.snapshot().getList("regions", net.minecraft.nbt.Tag.TAG_COMPOUND).size());
+        return snapshot;
     }
 
     public ResourceTransferRuntime.InteractionResult interactWithSupplyDepot(ServerPlayer player,
                                                                               net.minecraft.core.BlockPos position) {
+        RegionalDiscoveryRuntime.discoverDepot(data, commands, player, audienceFor(player), position, this::handleDomainEvents);
         ResourceTransferRuntime.InteractionResult result = ResourceTransferRuntime.prepare(data, commands, player,
                 position, audienceFor(player));
         if (result.handled() && result.success()) data.setDirty();
@@ -393,23 +404,7 @@ public final class PaleMirrorRuntime {
                 }
             }
         }
-        data.worldState().livingRegions().forEach(region -> {
-            if (region.recognition() != RecognitionState.DISCOVERED) return;
-            data.worldRegistry().find(region.placeId()).ifPresent(settlement -> {
-                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                    if (player.serverLevel().dimension().location().toString().equals(settlement.dimensionId())
-                            && settlement.contains(player.blockPosition())) {
-                        List<DomainEvent> events = commands.execute(data.worldState(),
-                                new DomainCommand.DiscoverLivingRegion(region.id(), audienceFor(player),
-                                        "player:" + player.getUUID()));
-                        if (!events.isEmpty()) {
-                            CampaignWelcomeKit.grant(player, settlement);
-                            data.setDirty();
-                        }
-                    }
-                }
-            });
-        });
+        RegionalDiscoveryRuntime.observePlayers(server, data, commands, this::audienceFor, this::handleDomainEvents);
     }
 
     private void reconcileMaterialization() {
@@ -417,6 +412,7 @@ public final class PaleMirrorRuntime {
     }
 
     private void handleDomainEvents(List<DomainEvent> events) {
+        playtestMetrics.domainEvents(events);
         narrative.handleDomainEvents(events);
     }
 
@@ -452,7 +448,9 @@ public final class PaleMirrorRuntime {
     }
     private void triggerDueRegionCrises() {
         List<DomainEvent> produced = new ArrayList<>();
-        data.worldState().livingRegions().stream().filter(region -> region.incidentDue(data.worldState().simulationStep()))
+        data.worldState().livingRegions().stream().filter(region -> region.incidentDue(data.worldState().simulationStep(),
+                        region.primaryAudience() == null ? null : data.worldState()
+                                .regionKnowledge(region.primaryAudience(), region.id()).orElse(null)))
                 .filter(this::baselineInfrastructureReady)
                 .forEach(region -> {
                     List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.TriggerFacilityInfection(

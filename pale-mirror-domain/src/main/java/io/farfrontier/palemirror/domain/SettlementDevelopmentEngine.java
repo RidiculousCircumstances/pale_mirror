@@ -36,14 +36,24 @@ public final class SettlementDevelopmentEngine {
         if (qualifies) development.qualify(); else development.decay();
         if (storehouse == null && development.developmentPressure() >= policy.pressureSteps()) {
             WorldObjectId target = storageSite(state, communityId);
-            if (target != null && iron.reserve(policy.investmentIron())) {
+            if (target != null) {
                 DevelopmentIntent created = new DevelopmentIntent("pm:development:" + communityId.value() + ":storehouse",
                         communityId, DevelopmentIntentType.UPGRADE_STOREHOUSE, target, ResourceKind.IRON,
-                        policy.investmentIron(), policy.version(), DevelopmentIntentState.PLANNED, "");
+                        policy.investmentIron(), 0, 0, 0, policy.autonomousInvestmentSteps(), java.util.Set.of(),
+                        policy.version(), DevelopmentIntentState.PLANNED, "");
                 state.putDevelopmentIntent(created);
                 development.resetPressure();
                 produced.add(event(state, DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED, communityId, created.id()));
                 storehouse = created;
+            }
+        }
+        if (storehouse != null && storehouse.state() == DevelopmentIntentState.PLANNED && qualifies
+                && !storehouse.funded()) {
+            storehouse.waitQualifiedStep();
+            if (storehouse.autonomousFundingDue() && iron.reserve(storehouse.remainingAmount())) {
+                storehouse.reserveAutonomously(storehouse.remainingAmount());
+                produced.add(event(state, DomainEventType.SETTLEMENT_DEVELOPMENT_FUNDED,
+                        communityId, "policy:autonomous-investment"));
             }
         }
         boolean pmPopulationGrowth = state.settlementAuthorityProfile(communityId)

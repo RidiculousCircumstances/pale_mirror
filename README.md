@@ -35,6 +35,10 @@ its local port is configured in the ignored `pale-mirror-neoforge/run/server.pro
 
 ## First Living Region release candidate
 
+The current 0.3 completion-candidate behavior and its repeatable playtest
+procedure are documented in
+[living-frontier-0.3-completion.md](docs/living-frontier-0.3-completion.md).
+
 On a fresh product-profile world, Pale Mirror can recognize a stable loaded
 vanilla/Integrated Villages settlement and create Ironhill without replacing
 the village. The campaign materializes two provenance-preflighted MineSites,

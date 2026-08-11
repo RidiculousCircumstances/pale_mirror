@@ -16,6 +16,8 @@ public final class CampaignRegionRecord {
     private final BlockPos settlementAnchor;
     private final BlockPos primaryMineColumn;
     private final BlockPos alternateMineColumn;
+    private final BlockPos receivingTerminalAnchor;
+    private final BlockPos depotAnchor;
     private BlockPos primaryMineAnchor;
     private BlockPos alternateMineAnchor;
     private CampaignRegionPresentationStatus status;
@@ -38,7 +40,7 @@ public final class CampaignRegionRecord {
                                 int originTrainCapacity, int destinationTrainCapacity,
                                 String originVehicleId, String destinationVehicleId) {
         this(id, "pale_mirror:iron_frontier", 1, "Ironhill", dimensionId, placeId, settlementAnchor,
-                primaryMineColumn, alternateMineColumn, primaryMineAnchor, alternateMineAnchor, status, diagnostic,
+                primaryMineColumn, alternateMineColumn, null, null, primaryMineAnchor, alternateMineAnchor, status, diagnostic,
                 nextOperationIndex, originTrainSeenAtStep, destinationTrainSeenAtStep, originTrainCapacity,
                 destinationTrainCapacity, originVehicleId, destinationVehicleId);
     }
@@ -46,6 +48,7 @@ public final class CampaignRegionRecord {
     public CampaignRegionRecord(String id, String archetypeId, int layoutVersion, String displayName,
                                 String dimensionId, WorldObjectId placeId, BlockPos settlementAnchor,
                                 BlockPos primaryMineColumn, BlockPos alternateMineColumn,
+                                BlockPos receivingTerminalAnchor, BlockPos depotAnchor,
                                 BlockPos primaryMineAnchor, BlockPos alternateMineAnchor,
                                 CampaignRegionPresentationStatus status, String diagnostic, int nextOperationIndex,
                                 long originTrainSeenAtStep, long destinationTrainSeenAtStep,
@@ -61,6 +64,11 @@ public final class CampaignRegionRecord {
         this.settlementAnchor = Objects.requireNonNull(settlementAnchor, "settlementAnchor").immutable();
         this.primaryMineColumn = Objects.requireNonNull(primaryMineColumn, "primaryMineColumn").immutable();
         this.alternateMineColumn = Objects.requireNonNull(alternateMineColumn, "alternateMineColumn").immutable();
+        this.receivingTerminalAnchor = receivingTerminalAnchor == null ? null : receivingTerminalAnchor.immutable();
+        this.depotAnchor = depotAnchor == null ? null : depotAnchor.immutable();
+        if (layoutVersion >= 2 && (this.receivingTerminalAnchor == null || this.depotAnchor == null)) {
+            throw new IllegalArgumentException("Layout-v2 requires pinned terminal and depot anchors");
+        }
         this.primaryMineAnchor = primaryMineAnchor == null ? null : primaryMineAnchor.immutable();
         this.alternateMineAnchor = alternateMineAnchor == null ? null : alternateMineAnchor.immutable();
         this.status = Objects.requireNonNull(status, "status");
@@ -89,6 +97,8 @@ public final class CampaignRegionRecord {
     public BlockPos settlementAnchor() { return settlementAnchor; }
     public BlockPos primaryMineColumn() { return primaryMineColumn; }
     public BlockPos alternateMineColumn() { return alternateMineColumn; }
+    public BlockPos receivingTerminalAnchor() { return receivingTerminalAnchor; }
+    public BlockPos depotAnchor() { return depotAnchor; }
     public BlockPos primaryMineAnchor() { return primaryMineAnchor; }
     public BlockPos alternateMineAnchor() { return alternateMineAnchor; }
     public CampaignRegionPresentationStatus status() { return status; }

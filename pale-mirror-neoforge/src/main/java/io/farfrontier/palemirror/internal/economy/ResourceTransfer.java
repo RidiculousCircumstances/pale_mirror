@@ -18,12 +18,23 @@ public final class ResourceTransfer {
     private final int inventorySlot;
     private final String mappingHash;
     private final long createdStep;
+    private final ResourceTransferPurpose purpose;
+    private final String developmentIntentId;
     private ResourceTransferState state;
     private String diagnostic;
 
     public ResourceTransfer(String id, ResourceTransferDirection direction, UUID playerId,
                             WorldObjectId communityId, WorldObjectId siteId, ResourceKind resource,
                             int amount, int inventorySlot, String mappingHash, long createdStep,
+                            ResourceTransferState state, String diagnostic) {
+        this(id, direction, playerId, communityId, siteId, resource, amount, inventorySlot, mappingHash,
+                createdStep, ResourceTransferPurpose.SETTLEMENT_STOCK, "", state, diagnostic);
+    }
+
+    public ResourceTransfer(String id, ResourceTransferDirection direction, UUID playerId,
+                            WorldObjectId communityId, WorldObjectId siteId, ResourceKind resource,
+                            int amount, int inventorySlot, String mappingHash, long createdStep,
+                            ResourceTransferPurpose purpose, String developmentIntentId,
                             ResourceTransferState state, String diagnostic) {
         this.id = requireText(id, "id");
         this.direction = Objects.requireNonNull(direction, "direction");
@@ -36,6 +47,11 @@ public final class ResourceTransfer {
         this.inventorySlot = inventorySlot;
         this.mappingHash = requireText(mappingHash, "mappingHash");
         this.createdStep = createdStep;
+        this.purpose = Objects.requireNonNull(purpose, "purpose");
+        this.developmentIntentId = developmentIntentId == null ? "" : developmentIntentId;
+        if (purpose == ResourceTransferPurpose.DEVELOPMENT_PROJECT && this.developmentIntentId.isBlank()) {
+            throw new IllegalArgumentException("Development transfer requires a pinned intent");
+        }
         this.state = Objects.requireNonNull(state, "state");
         this.diagnostic = diagnostic == null ? "" : diagnostic;
     }
@@ -50,6 +66,8 @@ public final class ResourceTransfer {
     public int inventorySlot() { return inventorySlot; }
     public String mappingHash() { return mappingHash; }
     public long createdStep() { return createdStep; }
+    public ResourceTransferPurpose purpose() { return purpose; }
+    public String developmentIntentId() { return developmentIntentId; }
     public ResourceTransferState state() { return state; }
     public String diagnostic() { return diagnostic; }
     public void physicalReserved() { transition(ResourceTransferState.PHYSICAL_RESERVED); }

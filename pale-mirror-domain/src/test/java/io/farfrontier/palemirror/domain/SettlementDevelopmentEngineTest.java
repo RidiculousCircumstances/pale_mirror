@@ -17,13 +17,17 @@ class SettlementDevelopmentEngineTest {
         DevelopmentIntent intent = state.developmentIntents().stream().findFirst().orElseThrow();
         ResourceAccount iron = state.economy(COMMUNITY).orElseThrow().require(ResourceKind.IRON);
         assertEquals(DevelopmentIntentState.PLANNED, intent.state());
-        assertEquals(24, iron.reserved());
-        assertEquals(90, iron.stock(), "planning reserves rather than consuming investment stock");
+        assertEquals(0, iron.reserved());
+        assertEquals(24, intent.remainingAmount(), "the offer opens a project escrow instead of silently taxing stock");
 
+        services.commands().execute(state, new DomainCommand.ContributeDevelopmentIntent(intent.id(), 24, "player:iron"));
+        assertTrue(services.commands().execute(state,
+                new DomainCommand.ContributeDevelopmentIntent(intent.id(), 24, "player:iron")).isEmpty(),
+                "a persisted receipt must not fund the project twice");
         services.commands().execute(state, new DomainCommand.StartDevelopmentIntent(intent.id()));
         services.commands().execute(state, new DomainCommand.CompleteDevelopmentIntent(intent.id()));
         assertEquals(200, iron.capacity());
-        assertEquals(66, iron.stock());
+        assertEquals(90, iron.stock(), "player project iron never passes through settlement stock");
         assertEquals(88, state.settlementDevelopment(COMMUNITY).orElseThrow().housingCapacity());
         assertEquals(35, state.settlementDevelopment(COMMUNITY).orElseThrow().prosperity());
 
@@ -39,6 +43,7 @@ class SettlementDevelopmentEngineTest {
         DomainServices services = new DomainServices();
         for (int step = 0; step < 6; step++) services.settlementDevelopment().reconcile(state);
         DevelopmentIntent intent = state.developmentIntents().stream().findFirst().orElseThrow();
+        while (!intent.funded()) services.settlementDevelopment().reconcile(state);
 
         services.commands().execute(state, new DomainCommand.StartDevelopmentIntent(intent.id()));
         services.commands().execute(state, new DomainCommand.CancelDevelopmentIntent(intent.id(), "physical conflict"));
@@ -71,6 +76,7 @@ class SettlementDevelopmentEngineTest {
         DomainServices services = new DomainServices();
         for (int step = 0; step < 6; step++) services.settlementDevelopment().reconcile(state);
         DevelopmentIntent intent = state.developmentIntents().stream().findFirst().orElseThrow();
+        services.commands().execute(state, new DomainCommand.ContributeDevelopmentIntent(intent.id(), 24, "player:native"));
         services.commands().execute(state, new DomainCommand.StartDevelopmentIntent(intent.id()));
         services.commands().execute(state, new DomainCommand.CompleteDevelopmentIntent(intent.id()));
         services.commands().execute(state, new DomainCommand.DepositResource(COMMUNITY, ResourceKind.IRON, 94, "test:native-restock"));

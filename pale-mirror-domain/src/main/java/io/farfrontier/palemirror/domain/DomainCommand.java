@@ -17,12 +17,16 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.BypassGate, DomainCommand.GatePartDestroyed,
         DomainCommand.ValidateRouteContract, DomainCommand.ObserveSettlementPlace,
         DomainCommand.RegisterLivingRegion, DomainCommand.DiscoverLivingRegion,
+        DomainCommand.DiscoverRegionalFeature,
+        DomainCommand.ObserveAudienceRegionAccess,
         DomainCommand.TriggerFacilityInfection, DomainCommand.DepositResource,
         DomainCommand.WithdrawResource, DomainCommand.BeginSettlementEvacuation,
         DomainCommand.RegisterEvacuationShelter,
         DomainCommand.RegisterAutonomousRefugeeShelter, DomainCommand.SetWorldSiteOperational,
         DomainCommand.StartDevelopmentIntent, DomainCommand.CompleteDevelopmentIntent,
+        DomainCommand.ContributeDevelopmentIntent,
         DomainCommand.CancelDevelopmentIntent, DomainCommand.RegisterSettlementAuthorityProfile,
+        DomainCommand.BlockDevelopmentIntent,
         DomainCommand.ReconcileSettlementPopulation {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
@@ -164,6 +168,31 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         }
     }
 
+    record DiscoverRegionalFeature(String regionId, StoryAudienceId audience,
+                                   KnownRegionalFeature feature, String causationId) implements DomainCommand {
+        public DiscoverRegionalFeature {
+            Objects.requireNonNull(regionId, "regionId");
+            Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(feature, "feature");
+            Objects.requireNonNull(causationId, "causationId");
+            if (regionId.isBlank() || causationId.isBlank()) throw new IllegalArgumentException("Blank discovery identity");
+        }
+    }
+
+    record ObserveAudienceRegionAccess(String regionId, StoryAudienceId audience,
+                                       AudienceRegionReachability reachability, boolean present,
+                                       long observedStep, String observationId) implements DomainCommand {
+        public ObserveAudienceRegionAccess {
+            Objects.requireNonNull(regionId, "regionId");
+            Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(reachability, "reachability");
+            Objects.requireNonNull(observationId, "observationId");
+            if (regionId.isBlank() || observationId.isBlank() || observedStep < 0) {
+                throw new IllegalArgumentException("Invalid audience access observation");
+            }
+        }
+    }
+
     record TriggerFacilityInfection(WorldObjectId facilityId, String causationId) implements DomainCommand {
         public TriggerFacilityInfection {
             Objects.requireNonNull(facilityId, "facilityId");
@@ -239,6 +268,15 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
     record StartDevelopmentIntent(String intentId) implements DomainCommand {
         public StartDevelopmentIntent { Objects.requireNonNull(intentId, "intentId"); }
     }
+    record ContributeDevelopmentIntent(String intentId, int amount, String transferId) implements DomainCommand {
+        public ContributeDevelopmentIntent {
+            Objects.requireNonNull(intentId, "intentId");
+            Objects.requireNonNull(transferId, "transferId");
+            if (intentId.isBlank() || transferId.isBlank() || amount <= 0) {
+                throw new IllegalArgumentException("Invalid development contribution");
+            }
+        }
+    }
     record CompleteDevelopmentIntent(String intentId) implements DomainCommand {
         public CompleteDevelopmentIntent { Objects.requireNonNull(intentId, "intentId"); }
     }
@@ -246,6 +284,13 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public CancelDevelopmentIntent {
             Objects.requireNonNull(intentId, "intentId");
             Objects.requireNonNull(reason, "reason");
+        }
+    }
+    record BlockDevelopmentIntent(String intentId, String reason) implements DomainCommand {
+        public BlockDevelopmentIntent {
+            Objects.requireNonNull(intentId, "intentId");
+            Objects.requireNonNull(reason, "reason");
+            if (intentId.isBlank() || reason.isBlank()) throw new IllegalArgumentException("Invalid development block");
         }
     }
 

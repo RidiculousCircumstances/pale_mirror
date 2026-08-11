@@ -78,6 +78,39 @@ public final class VanillaMinecartRouteGameTests {
         });
     }
 
+    @GameTest(batch = "pm-vanilla-minecart-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void damageAndRepresentativeCarrierSurviveRestart(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(helper.getLevel().getServer().overworld());
+        reset(data);
+        BlockPos start = helper.absolutePos(new BlockPos(0, 6, 0));
+        VanillaMinecartRouteRecord record = VanillaMinecartRouteRecord.planned("pale_mirror:recovery_test",
+                helper.getLevel().dimension().location().toString(), "pale_mirror:recovery_route", start, start.east(8));
+        BlockPos rail = record.railPosition(0);
+        record.capture(rail, "minecraft:air");
+        record.approve(rail, "minecraft:rail");
+        record.suspend(rail, "rail removed");
+        record.observeRepresentativeCart(java.util.UUID.randomUUID(), java.util.UUID.randomUUID());
+        record.moveCart(2.5D);
+        data.vanillaMinecartRoutes().put(record.regionId(), record);
+
+        CompoundTag snapshot = data.save(new CompoundTag(), helper.getLevel().registryAccess());
+        VanillaMinecartRouteRecord reloaded = PaleMirrorSavedData.load(snapshot, helper.getLevel().registryAccess())
+                .vanillaMinecartRoutes().get(record.regionId());
+
+        helper.assertValueEqual(reloaded.status(), VanillaMinecartRouteStatus.SUSPENDED,
+                "restart must preserve the fail-closed route state");
+        helper.assertTrue(reloaded.damagedCriticalCells().contains(rail.asLong()),
+                "restart must preserve the exact critical repair target");
+        helper.assertValueEqual(reloaded.representativeCartId(), record.representativeCartId(),
+                "restart must preserve the visual carrier identity");
+        helper.assertValueEqual(reloaded.cartProgress(), 2.5D,
+                "restart must preserve bounded representative movement progress");
+        helper.assertTrue(reloaded.repaired(rail) && reloaded.repairComplete(),
+                "restoring the registered rail postcondition must make the route resumable");
+        helper.succeed();
+    }
+
     private static void reset(PaleMirrorSavedData data) {
         data.vanillaMinecartRoutes().clear();
         data.worldState().clearRegionalState();

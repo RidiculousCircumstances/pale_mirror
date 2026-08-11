@@ -30,6 +30,8 @@ public final class EconomyPresentationCodec {
             tag.putInt("slot", value.inventorySlot());
             tag.putString("mapping", value.mappingHash());
             tag.putLong("createdStep", value.createdStep());
+            tag.putString("purpose", value.purpose().name());
+            tag.putString("developmentIntent", value.developmentIntentId());
             tag.putString("state", value.state().name());
             tag.putString("diagnostic", value.diagnostic());
             transfers.add(tag);
@@ -68,6 +70,9 @@ public final class EconomyPresentationCodec {
                     new WorldObjectId(tag.getString("community")), new WorldObjectId(tag.getString("site")),
                     ResourceKind.valueOf(tag.getString("resource")), tag.getInt("amount"), tag.getInt("slot"),
                     tag.getString("mapping"), tag.getLong("createdStep"),
+                    tag.contains("purpose", Tag.TAG_STRING) ? ResourceTransferPurpose.valueOf(tag.getString("purpose"))
+                            : ResourceTransferPurpose.SETTLEMENT_STOCK,
+                    tag.getString("developmentIntent"),
                     ResourceTransferState.valueOf(tag.getString("state")), tag.getString("diagnostic"));
             values.put(value.id(), value);
         }
