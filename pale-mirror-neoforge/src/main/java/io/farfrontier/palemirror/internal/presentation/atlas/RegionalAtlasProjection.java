@@ -72,6 +72,11 @@ public final class RegionalAtlasProjection {
         value.putString("alternateRoute", routeSummary(data, alternateRouteId));
         value.putString("primaryDiagnosis", primaryDiagnosis(data, regionId, primaryFacilityId, primaryRouteId).name());
         value.putString("alternateDiagnosis", alternateDiagnosis(data, alternateRouteId).name());
+        var minecart = data.vanillaMinecartRoutes().get(regionId);
+        if (routeKnown && minecart != null && minecart.damagedCriticalCellCount() > 0) {
+            value.putInt("primaryRepairCount", minecart.damagedCriticalCellCount());
+            putPosition(value, "primaryRepair", minecart.firstDamagedCriticalCell(), true);
+        }
         data.worldState().routeContract(new io.farfrontier.palemirror.domain.WorldObjectId(primaryRouteId)).ifPresent(route -> {
             value.putInt("primaryCapacity", route.transferableCapacity(data.worldState().simulationStep()));
             value.putInt("primaryNominalCapacity", route.nominalCapacity());

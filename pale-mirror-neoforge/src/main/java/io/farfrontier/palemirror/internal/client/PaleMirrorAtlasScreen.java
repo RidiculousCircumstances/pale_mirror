@@ -115,6 +115,11 @@ public final class PaleMirrorAtlasScreen extends Screen {
         }
         if (!region.scenarioTitle().isBlank()) graphics.drawString(font, Component.translatable(
                 "scenario.pale_mirror." + region.scenarioTitle() + ".title"), secondaryX, y + 27, 0x92C6E8, false);
+        if (region.primaryRepairCount() > 0 && region.primaryRepair().known()) {
+            graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.route_repair",
+                    region.primaryRepairCount(), region.primaryRepair().x(), region.primaryRepair().y(),
+                    region.primaryRepair().z()), secondaryX, y + 60, 0xF6AA78, false);
+        }
         if ("OPEN".equals(region.emergency())) graphics.drawString(font, Component.translatable(
                 "screen.pale_mirror.atlas.intervention", region.remainingGrace(),
                 Component.translatable("screen.pale_mirror.atlas.reachability."

@@ -136,6 +136,46 @@ public final class VanillaMinecartRouteGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-vanilla-minecart-multi-repair", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void suspendedRouteDiscoversAndReconcilesMultipleLoadedBreaks(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos start = helper.absolutePos(new BlockPos(0, 6, 0));
+        VanillaMinecartRouteRecord record = VanillaMinecartRouteRecord.planned("pale_mirror:multi_repair_test",
+                level.dimension().location().toString(), "pale_mirror:multi_repair_route", start, start.east(8));
+        BlockPos first = record.railPosition(0);
+        BlockPos second = record.railPosition(1);
+        String rail = Blocks.RAIL.defaultBlockState().toString();
+        record.capture(first, Blocks.AIR.defaultBlockState().toString());
+        record.approve(first, rail);
+        record.capture(second, Blocks.AIR.defaultBlockState().toString());
+        record.approve(second, rail);
+        record.suspend(first, "first known break");
+        level.setBlock(first.below(), Blocks.GRAVEL.defaultBlockState(), 3);
+        level.setBlock(second.below(), Blocks.GRAVEL.defaultBlockState(), 3);
+        level.setBlock(first, Blocks.RAIL.defaultBlockState(), 3);
+        level.setBlock(second, Blocks.AIR.defaultBlockState(), 3);
+        data.vanillaMinecartRoutes().put(record.regionId(), record);
+
+        VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
+        helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.SUSPENDED,
+                "repairing one cell must not resume a route while another loaded break remains");
+        helper.assertValueEqual(record.damagedCriticalCellCount(), 1,
+                "the repaired cell must clear while the newly discovered break remains tracked");
+        helper.assertValueEqual(record.firstDamagedCriticalCell(), second,
+                "repair diagnostics must advance to the next exact loaded break");
+
+        level.setBlock(second, Blocks.RAIL.defaultBlockState(), 3);
+        VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
+        helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.ACTIVE,
+                "the physical route must resume as soon as all known loaded breaks match provenance");
+        helper.assertValueEqual(record.damagedCriticalCellCount(), 0,
+                "completed repairs must clear the bounded damage set");
+        helper.succeed();
+    }
+
     private static void reset(PaleMirrorSavedData data) {
         data.vanillaMinecartRoutes().clear();
         data.worldState().clearRegionalState();

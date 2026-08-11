@@ -178,7 +178,8 @@ public final class VanillaMinecartRouteRuntime {
                 cell.conflict();
                 if (adapter.criticalInfrastructure(cell.lastAppliedState())) {
                     record.suspend(cell.position(), "Vanilla minecart route changed at " + cell.position().toShortString());
-                    return false;
+                    unchanged = false;
+                    continue;
                 }
                 record.decorativeConflict("Vanilla minecart decoration changed at " + cell.position().toShortString());
                 unchanged = false;
@@ -214,6 +215,11 @@ public final class VanillaMinecartRouteRuntime {
                                             VanillaMinecartRailAdapter adapter,
                                             VanillaMinecartRouteRecord record) {
         boolean changed = validateCanonicalRoute(data, commands, record, 0);
+        // A long line can have breaks in several independently loaded chunks. Keep
+        // discovering them while suspended instead of revealing one repair at a time.
+        int knownDamage = record.damagedCriticalCellCount();
+        verifyLoadedProvenance(level, adapter, record);
+        changed |= knownDamage != record.damagedCriticalCellCount();
         for (long packed : record.damagedCriticalCells()) {
             BlockPos position = BlockPos.of(packed);
             if (!level.hasChunkAt(position)) continue;

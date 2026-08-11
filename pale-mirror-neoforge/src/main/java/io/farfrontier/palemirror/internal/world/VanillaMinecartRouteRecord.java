@@ -100,6 +100,10 @@ public final class VanillaMinecartRouteRecord {
     public Map<Long, VanillaMinecartMutableCell> cells() { return Map.copyOf(cells); }
     public Set<Integer> completedSegments() { return Set.copyOf(completedSegments); }
     public Set<Long> damagedCriticalCells() { return Set.copyOf(damagedCriticalCells); }
+    public int damagedCriticalCellCount() { return damagedCriticalCells.size(); }
+    public BlockPos firstDamagedCriticalCell() {
+        return damagedCriticalCells.isEmpty() ? null : BlockPos.of(damagedCriticalCells.iterator().next());
+    }
     public int completedSegmentCount() { return completedSegments.size(); }
     public int segmentCount() { return horizontalLength() + 1; }
     public int verificationCursor() { return verificationCursor; }
@@ -146,16 +150,24 @@ public final class VanillaMinecartRouteRecord {
     public void verify() { require(VanillaMinecartRouteStatus.BUILDING); status = VanillaMinecartRouteStatus.VERIFYING; }
     public void activate() { require(VanillaMinecartRouteStatus.VERIFYING); status = VanillaMinecartRouteStatus.ACTIVE; diagnostic = ""; }
     public void block(String reason) { status = VanillaMinecartRouteStatus.BLOCKED; diagnostic = text(reason, "diagnostic"); }
-    public void suspend(BlockPos position, String reason) {
-        damagedCriticalCells.add(position.asLong());
+    public boolean suspend(BlockPos position, String reason) {
+        boolean added = damagedCriticalCells.add(position.asLong());
         status = VanillaMinecartRouteStatus.SUSPENDED;
-        diagnostic = text(reason, "diagnostic");
+        diagnostic = damagedCriticalCells.size() == 1 ? text(reason, "diagnostic")
+                : "Vanilla minecart route has " + damagedCriticalCells.size()
+                + " known damaged cells; first at " + firstDamagedCriticalCell().toShortString();
+        return added;
     }
     public void decorativeConflict(String reason) { diagnostic = text(reason, "diagnostic"); }
     public boolean repaired(BlockPos position) {
         VanillaMinecartMutableCell cell = requireCell(position);
         cell.clearConflict();
-        return damagedCriticalCells.remove(position.asLong());
+        boolean removed = damagedCriticalCells.remove(position.asLong());
+        if (removed && !damagedCriticalCells.isEmpty()) {
+            diagnostic = "Vanilla minecart route has " + damagedCriticalCells.size()
+                    + " known damaged cells; first at " + firstDamagedCriticalCell().toShortString();
+        }
+        return removed;
     }
     public boolean repairComplete() { return damagedCriticalCells.isEmpty(); }
     public void resume() {
