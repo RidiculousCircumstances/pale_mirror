@@ -14,6 +14,9 @@ allprojects {
 subprojects {
     repositories {
         mavenCentral()
+        // Client-only JourneyMap API.  The optional integration never ships this
+        // dependency and must remain loadable on a dedicated server without it.
+        maven { url = uri('https://maven.blamejared.com') }
     }
 
     plugins.withId('java') {
@@ -67,7 +70,8 @@ def requiredArchitectureStatements = [
         'Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.',
         'Observers publish typed facts; reconciliation alone converts them into domain commands and events.',
         'Unknown or player-owned block changes are conflicts and must not be overwritten by default.',
-        'Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.'
+        'Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.',
+        'The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence.'
 ]
 
 tasks.register('verifyArchitecture') {
@@ -128,7 +132,8 @@ tasks.register('verifySourceIsolation') {
                 'MillenaireSettlementAdapter', 'internal.integration.millenaire.',
                 'CrimsonGate', 'CrimsonSiege', 'SporeSandbox',
                 'InfectionSourceId.CRIMSON', 'InfectionSourceId.SPORE',
-                'ENSURE_CRIMSON_', 'REMOVE_CRIMSON_', 'ENSURE_SPORE_', 'REMOVE_SPORE_'
+                'ENSURE_CRIMSON_', 'REMOVE_CRIMSON_', 'ENSURE_SPORE_', 'REMOVE_SPORE_',
+                'JourneyMap', 'journeymap.'
         ]
         genericNeoForgeJavaSources.files.each { source ->
             String text = source.getText('UTF-8')

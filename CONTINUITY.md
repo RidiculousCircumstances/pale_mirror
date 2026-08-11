@@ -26,6 +26,7 @@
 - Create 6.0.10 is an optional, version-pinned, reflection-contained read-only logistics adapter. It certifies a route only after observing the same opaque native vehicle at two named loaded stations; it never drives Create or force-loads chunks.
 - Vanilla/Integrated Villages discovery is read-only: a bounded loaded-POI observer needs two villagers plus a stable bell/home cluster and never creates or overwrites settlement blocks. Large vertical villages use a 96x48 POI window; campaign logistics receives a separate ground-projected outskirts anchor rather than inheriting a tower bell's Y coordinate.
 - FTB Quests is an optional static journal projection. PM never reads or writes FTB progression; it seeds one non-reward chapter only if its exact PM-owned config file is absent.
+- The 0.3 Atlas and optional JourneyMap integration consume a bounded server-authored snapshot; client requests are revalidated server-side, waypoints are session-only and no observed-village block is used as a PM marker.
 - Canonical settlement direction is an actor model, not one state object: `SettlementCommunity`, `SettlementPlace`, economy, security, independent `WorldSite`, freshness-bounded `RouteContract`, and deterministic `SettlementPolicy` have separate ownership; `PopulationGroup` is the next separate aggregate, not part of schema v20.
 - There is no universal settlement lifecycle or unexplained numeric confidence. Recognition, observation freshness, integrity, operation, occupancy, crisis and population disposition are orthogonal; observations use explicit evidence/reliability classes and causal attribution.
 - A crisis is an objective simulation fact. Settlement policy acts without a scenario; Narrator only selects presentation/pacing and may return `NO_SCENARIO`.
@@ -91,6 +92,7 @@
 - Schema v28 starts the 0.3 `Living Frontier` implementation: repeatable `iron_frontier` instances, three independent region slots, generic region bindings/debug/journal surfaces, player-prepared Refugee Anchor camps, and recovery/resettlement continuation opportunities. Existing v27 Ironhill records remain pinned instead of being rebuilt.
 - Narrator v2 can deterministically choose the most relevant candidate across simultaneous regions, honours cooldown/novelty/intensity, persists explicit `NO_SCENARIO`, and retries history-derived delayed opportunities after pacing clears. Development waits for an offered player decision; declined or unpresented policy intents remain autonomous.
 - The core GameTest server passes 26/26 tests, including multi-region identity, v27→v28 persistence, readable opaque-ID-free scenario presentation, autonomous mine commissioning and provenance conflicts. Domain tests cover candidate selection, `NO_SCENARIO`, cooldown retry, opportunity resolution and prepared shelter resettlement.
+- 0.3 presentation now has a native `P` Atlas, server-validated scenario/evacuation actions, PM-owned nearby mine/depot signal particles and an isolated JourneyMap v2 client projection. The dedicated-server GameTest profile boots without JourneyMap; graphical verification is still pending.
 - The private server now runs the checksum-published schema-v27 JAR on a newly generated `world`; its former 84 MiB runtime world was moved to `.pale-mirror-backups/world-reset-pre-schema-v27-20260811T070000Z/world` and is not mounted by Minecraft. `pale_mirror:vanilla_minecart_rail` reported `AVAILABLE` after clean startup.
 - 0.2 is conditionally accepted; its remaining unaided graphical exercise is an ongoing presentation-quality check, not a blocker for 0.3.
 
@@ -104,12 +106,12 @@
 - UNCONFIRMED: authenticated multiplayer playthrough, graphical validation of the PM-managed baseline corridor/representative cart, and the player-built alternate Create scheduled-train traversal.
 - UNAVAILABLE IN CURRENT ENVIRONMENT: the new managed-railway graphical client profile is wired into `clientSmoke`, but this run could not execute it because no Xvfb binary is installed; prior six-profile client evidence remains historical only.
 - KNOWN MODEL DEBT: Millénaire culture, relations, quests, local economy and native development remain intentionally native-owned; structure inference is bounded and missing NPCs never imply deaths.
-- The v0.2 primary journal surface is a dynamically generated native written book; a richer custom 0.3 UI remains UNCONFIRMED.
+- The new Atlas/JourneyMap UI compiles and its bounded server projection has GameTest coverage, but its graphical rendering and live JourneyMap discovery remain UNCONFIRMED until a real client run.
 - Obtain written permission before distributing derived Crimson functions, models or tables.
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-review-0.2-and-vision-0.3.md`, `docs/living-frontier-0.3-implementation.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/runtime-debug-toolkit.md`
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/product-review-0.2-and-vision-0.3.md`, `docs/living-frontier-0.3-implementation.md`, `docs/living-frontier-presentation.md`, `docs/product-vision-0.2-first-living-region.md`, `docs/settlement-actor-model.md`, `docs/runtime-debug-toolkit.md`
 - `PaleMirrorSavedData`, `SourceGateState`, `internal/adapter/`, `internal/effect/`, `internal/quarantine/`
 - `PaleMirrorRuntime`, `PaleMirrorEvents`, `internal/combat/`, `internal/integration/item/`
 - `internal/debug/`, `CampaignRegionBootstrapper`, `CampaignMineSiteTemplate`, `ManagedRailwayRuntime`, `SettlementObservationRecord`

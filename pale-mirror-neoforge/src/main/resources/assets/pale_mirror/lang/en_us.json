@@ -5,5 +5,8 @@
   "pale_mirror.command.scenario.missing": "No matching offered scenario was found.",
   "pale_mirror.command.status": "Pale Mirror: %s",
   "item.pale_mirror.regional_ledger": "Pale Mirror Regional Ledger",
-  "item.pale_mirror.refugee_anchor": "Refugee Anchor"
+  "item.pale_mirror.refugee_anchor": "Refugee Anchor",
+  "key.pale_mirror.open_atlas": "Open Pale Mirror Atlas",
+  "key.categories.pale_mirror": "Pale Mirror",
+  "screen.pale_mirror.atlas": "Pale Mirror Atlas"
 }

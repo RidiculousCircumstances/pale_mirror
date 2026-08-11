@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugService;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugNavigator;
 import io.farfrontier.palemirror.internal.presentation.ScenarioCommandPresentation;
+import io.farfrontier.palemirror.internal.presentation.atlas.RegionalAtlasProjection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
@@ -76,6 +77,15 @@ public final class LivingRegionGameTests {
                 "a PM-owned supply depot must materialize without replacing observed village blocks");
         helper.assertValueEqual(level.getBlockState(depot.interactionPosition()).getBlock(), Blocks.BARREL,
                 "the depot interaction endpoint must have a verified physical postcondition");
+        var atlas = RegionalAtlasProjection.snapshot(data, region.primaryAudience(), "", false).snapshot();
+        var atlasCards = atlas.getList("regions", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        helper.assertValueEqual(atlasCards.size(), 1,
+                "the client Atlas must receive one bounded card for the audience-owned region");
+        helper.assertTrue(!atlasCards.getCompound(0).getString("name").isBlank()
+                        && !atlasCards.getCompound(0).getString("name").contains("pale_mirror:"),
+                "the Atlas must expose a player-facing region name rather than require an opaque region id");
+        helper.assertTrue(!atlasCards.getCompound(0).contains("regionId"),
+                "the client Atlas must not need an opaque region id to render a region card");
         var presentation = data.campaignRegions().get(bindings.regionId());
         presentation.observeRouteEndpoint(true, 7, 18, "vehicle-a");
         presentation.observeRouteEndpoint(false, 8, 18, "vehicle-b");

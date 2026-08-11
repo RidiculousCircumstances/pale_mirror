@@ -53,6 +53,9 @@ def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/c
 
 dependencies {
     implementation project(':pale-mirror-domain')
+    // API classes are referenced only by the isolated client plugin. JourneyMap
+    // itself stays optional and is never packaged into Pale Mirror.
+    compileOnly 'info.journeymap:journeymap-api-neoforge:2.0.0-1.21.1'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -204,11 +207,17 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/internal/world/ManagedRailwayRuntime.class',
                     'io/farfrontier/palemirror/internal/world/CampaignMineSiteTemplate.class',
                     'io/farfrontier/palemirror/internal/presentation/RegionalLedgerItem.class',
+                    'io/farfrontier/palemirror/internal/presentation/atlas/RegionalAtlasProjection.class',
+                    'io/farfrontier/palemirror/internal/client/PaleMirrorAtlasScreen.class',
+                    'io/farfrontier/palemirror/internal/integration/journeymap/PaleMirrorJourneyMapPlugin.class',
                     'assets/pale_mirror/models/item/regional_ledger.json',
                     'ftb_quests_presentation/chapters/pale_mirror_first_living_region.snbt',
                     'pale_mirror.item_firewall.mixins.json'
             ].each { entry ->
                 if (jar.getEntry(entry) == null) throw new GradleException("${jarFile} is missing required PM safety entry ${entry}")
+            }
+            if (jar.entries().any { entry -> entry.name.startsWith('journeymap/') }) {
+                throw new GradleException("${jarFile} must not package JourneyMap API classes")
             }
         } finally {
             jar.close()

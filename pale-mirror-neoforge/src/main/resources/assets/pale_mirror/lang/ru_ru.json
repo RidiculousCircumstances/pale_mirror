@@ -1,4 +1,7 @@
 {
   "item.pale_mirror.regional_ledger": "Региональный журнал Pale Mirror",
-  "item.pale_mirror.refugee_anchor": "Якорь лагеря беженцев"
+  "item.pale_mirror.refugee_anchor": "Якорь лагеря беженцев",
+  "key.pale_mirror.open_atlas": "Открыть атлас Pale Mirror",
+  "key.categories.pale_mirror": "Pale Mirror",
+  "screen.pale_mirror.atlas": "Атлас Pale Mirror"
 }

@@ -27,6 +27,9 @@ import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.internal.presentation.CampaignPresentationRuntime;
 import io.farfrontier.palemirror.internal.presentation.CampaignWelcomeKit;
 import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
+import io.farfrontier.palemirror.internal.presentation.RegionalMarkerRuntime;
+import io.farfrontier.palemirror.internal.presentation.atlas.RegionalAtlasProjection;
+import io.farfrontier.palemirror.internal.network.AtlasSnapshotPayload;
 import io.farfrontier.palemirror.internal.economy.ResourceTransferRuntime;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
 import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
@@ -116,6 +119,7 @@ public final class PaleMirrorRuntime {
         if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
         if (data.threatCombat().expireAndCompact(gameTick)) data.setDirty();
         AdapterRegistry.tickRuntime(server, data);
+        RegionalMarkerRuntime.tick(server, data);
         debug.renderZoneMarkers();
     }
     public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id, InfectionSourceId source) {
@@ -214,6 +218,15 @@ public final class PaleMirrorRuntime {
 
     public void refreshRegionalLedger(ServerPlayer player, ItemStack stack) {
         CampaignPresentationRuntime.refreshLedger(data, player, stack, audienceFor(player));
+    }
+
+    /** Produces a bounded read-only projection; the client never reads SavedData directly. */
+    public AtlasSnapshotPayload atlasSnapshot(ServerPlayer player, String notice) {
+        return atlasSnapshot(player, notice, true);
+    }
+
+    public AtlasSnapshotPayload atlasSnapshot(ServerPlayer player, String notice, boolean openScreen) {
+        return RegionalAtlasProjection.snapshot(data, audienceFor(player), notice, openScreen);
     }
 
     public ResourceTransferRuntime.InteractionResult interactWithSupplyDepot(ServerPlayer player,

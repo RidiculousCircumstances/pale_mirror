@@ -63,6 +63,8 @@ invariants:
     statement: Strategic flow uses persisted RouteContract validation; WorldSites may keep multiple typed affiliations and ambiguous beneficiaries fail closed; Create observations prove capability without delivering stock directly, and capacity ages from CURRENT to STALE to EXPIRED without force-loading chunks.
   - id: presentation-read-only
     statement: FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression.
+  - id: client-atlas-projection
+    statement: The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence.
   - id: transactional-resource-boundary
     statement: Physical items cross the settlement economy boundary only through a persisted bounded transfer ledger; ordinary container contents never mirror canonical stock, and reserved stacks fail closed until reconciliation completes.
   - id: pm-owned-settlement-sites
