@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.world;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -11,7 +12,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
-/** Exact persistence for PM-owned vanilla minecart corridor jobs. */
+/** Persistence for PM-owned writes plus the independently observed player-repair topology. */
 final class VanillaMinecartRouteCodec {
     private VanillaMinecartRouteCodec() { }
 
@@ -33,6 +34,20 @@ final class VanillaMinecartRouteCodec {
             if (record.representativeCargoId() != null) value.putUUID("cargoDisplay", record.representativeCargoId());
             value.putDouble("cartProgress", record.cartProgress());
             value.putBoolean("cartForward", record.cartForward());
+            ListTag railNodes = new ListTag();
+            record.observedRailShapes().forEach((position, shape) -> {
+                CompoundTag node = new CompoundTag();
+                node.putLong("position", position);
+                node.putString("shape", shape);
+                railNodes.add(node);
+            });
+            value.put("railNodes", railNodes);
+            value.putLongArray("acceptedRailPath", record.acceptedRailPath());
+            value.putLongArray("dirtyTopologyCells", record.dirtyTopologyCells().stream().mapToLong(Long::longValue).toArray());
+            value.putLongArray("dirtyTopologyChunks", record.dirtyTopologyChunks().stream().mapToLong(Long::longValue).toArray());
+            value.putInt("topologyCursor", record.topologyVerificationCursor());
+            value.putLong("topologyRevision", record.topologyRevision());
+            if (record.topologyIssue() != null) value.putLong("topologyIssue", record.topologyIssue().asLong());
             ListTag cells = new ListTag();
             record.cells().values().forEach(cell -> {
                 CompoundTag entry = new CompoundTag();
@@ -53,7 +68,7 @@ final class VanillaMinecartRouteCodec {
         root.put("vanillaMinecartRoutes", values);
     }
 
-    static Map<String, VanillaMinecartRouteRecord> read(CompoundTag root) {
+    static Map<String, VanillaMinecartRouteRecord> read(CompoundTag root, int schemaVersion) {
         Map<String, VanillaMinecartRouteRecord> result = new LinkedHashMap<>();
         for (Tag raw : root.getList("vanillaMinecartRoutes", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) raw;
@@ -77,6 +92,24 @@ final class VanillaMinecartRouteCodec {
                     value.getString("cartLease"), value.getBoolean("cartLeaseDispatched"), cart, cargo,
                     value.contains("cartProgress", Tag.TAG_DOUBLE) ? value.getDouble("cartProgress") : 0D,
                     !value.contains("cartForward", Tag.TAG_BYTE) || value.getBoolean("cartForward"));
+            if (schemaVersion >= 32 && value.contains("railNodes", Tag.TAG_LIST)) {
+                Map<Long, String> shapes = new LinkedHashMap<>();
+                for (Tag nodeRaw : value.getList("railNodes", Tag.TAG_COMPOUND)) {
+                    CompoundTag node = (CompoundTag) nodeRaw;
+                    shapes.put(node.getLong("position"), node.getString("shape"));
+                }
+                List<Long> path = java.util.Arrays.stream(value.getLongArray("acceptedRailPath")).boxed().toList();
+                Set<Long> dirtyCells = new LinkedHashSet<>();
+                for (long position : value.getLongArray("dirtyTopologyCells")) dirtyCells.add(position);
+                Set<Long> dirtyChunks = new LinkedHashSet<>();
+                for (long position : value.getLongArray("dirtyTopologyChunks")) dirtyChunks.add(position);
+                record.restoreTopology(shapes, path, dirtyCells, dirtyChunks, value.getInt("topologyCursor"),
+                        value.getLong("topologyRevision"), value.contains("topologyIssue", Tag.TAG_LONG)
+                                ? BlockPos.of(value.getLong("topologyIssue")) : null);
+            } else {
+                record.initializeAuthoredTopology();
+                record.markAllTopologyChunksDirty();
+            }
             result.put(record.regionId(), record);
         }
         return result;

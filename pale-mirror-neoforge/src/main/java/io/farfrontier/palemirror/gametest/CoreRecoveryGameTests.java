@@ -43,6 +43,46 @@ import java.util.UUID;
 public final class CoreRecoveryGameTests {
     private CoreRecoveryGameTests() { }
 
+    @SuppressWarnings("removal")
+    @GameTest(batch = "pm-passive-infection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
+    public static void infectedMineIsVisibleBeforeScenarioAcceptance(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 3, 0));
+        resetPaleMirrorState(level);
+        clearMineVolume(level, anchor);
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        player.setPos(anchor.getX() + 0.5D, anchor.getY() - 2.0D, anchor.getZ() + 0.5D);
+        TestMineRecord mine = runtime.registerThreatSite(player, new WorldObjectId("pale_mirror:passive_mine"),
+                new InfectionSourceId("pale_mirror:crimson"));
+
+        runtime.advanceSimulation(1);
+        String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
+        tick(runtime, 3);
+
+        helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
+                .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.OFFERED,
+                "passive infection must not accept the player's story implicitly");
+        assertBiomeStage(helper, level, mine, ThreatTier.FOOTHOLD);
+        helper.assertTrue(mine.anchorId() != null,
+                "canonical infection must materialize its PM controller before scenario acceptance");
+        helper.assertTrue(mine.encounter().actors().isEmpty() && mine.gate().parts().isEmpty(),
+                "combat actors and source gate parts must remain scenario-gated");
+        helper.assertValueEqual(mine.job().operations().size(), 2,
+                "the passive job must contain only overlay and PM anchor work");
+
+        helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "the offered story must remain actionable");
+        player.setPos(anchor.getX() + 0.5D, anchor.getY() + 2.0D, anchor.getZ() + 0.5D);
+        tick(runtime, 3);
+        helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
+                .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RECOVER,
+                "entering the visible infected mine must activate the encounter stage");
+        helper.assertTrue(mine.job().operations().size() > 2,
+                "scenario activation must supersede the completed passive job with pinned encounter work");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-development-persistence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void projectEscrowSurvivesRestartWithoutBecomingSettlementStock(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -92,8 +132,8 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 31,
-                "regional route snapshot must record schema v31 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 32,
+                "regional route snapshot must record schema v32 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
         CompoundTag incompatible = persisted.copy();
         incompatible.putInt("schemaVersion", 19);

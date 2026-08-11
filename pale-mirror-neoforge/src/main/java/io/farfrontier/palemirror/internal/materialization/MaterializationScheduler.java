@@ -39,19 +39,23 @@ public final class MaterializationScheduler {
         List<MaterializationPostconditionObserved> observations = new ArrayList<>();
         for (TestMineRecord mine : data.testMines().values()) {
             FacilityState facility = data.worldState().facility(mine.id()).orElse(null);
-            if (facility == null || !eligibleForMaterialization(data, mine, facility)) continue;
+            if (facility == null) continue;
             ServerLevel level = levelFor(server, mine);
             if (level == null || !level.hasChunkAt(mine.anchor()) || !playerIsNearby(server, level, mine)) continue;
 
             MaterializationJob job = mine.job();
             ScenarioInstance scenario = selectedEncounterScenario(data, mine);
             EncounterProfile profile = encounterProfile(scenario);
-            MaterializationPlan plan = translator.translate(facility, profile, mine.encounter(), mine.gate());
-            if (job == null || !job.isFor(facility.desiredRevision(), plan.policyId(), plan.policyVersion())) {
+            boolean encounterEnabled = scenario != null;
+            MaterializationPlan plan = translator.translate(facility, profile, mine.encounter(), mine.gate(), encounterEnabled);
+            if (job == null || !job.isFor(facility.desiredRevision(), plan.policyId(), plan.policyVersion())
+                    || !job.matchesOperations(plan.operations())) {
                 String jobId = "pm:job:" + mine.id().value() + ":" + facility.desiredRevision();
-                prepareEncounter(mine, facility, jobId, scenario, profile, server.overworld().getSeed());
-                prepareSourceGate(mine, facility);
-                plan = translator.translate(facility, profile, mine.encounter(), mine.gate());
+                if (encounterEnabled) {
+                    prepareEncounter(mine, facility, jobId, scenario, profile, server.overworld().getSeed());
+                    prepareSourceGate(mine, facility);
+                }
+                plan = translator.translate(facility, profile, mine.encounter(), mine.gate(), encounterEnabled);
                 mine.setJob(new MaterializationJob(jobId,
                         facility.desiredRevision(), plan.policyId(), plan.policyVersion(), JobState.PLANNED,
                         plan.operations(), 0, 0, ""));
@@ -65,11 +69,6 @@ public final class MaterializationScheduler {
                     "materialization:" + job.jobId(), mine.id(), job.desiredRevision(), job.jobId()));
         }
         return List.copyOf(observations);
-    }
-
-    private static boolean eligibleForMaterialization(PaleMirrorSavedData data, TestMineRecord mine, FacilityState facility) {
-        if (facility.status() != FacilityStatus.INFECTED) return true;
-        return selectedEncounterScenario(data, mine) != null;
     }
 
     private static ServerLevel levelFor(MinecraftServer server, TestMineRecord mine) {

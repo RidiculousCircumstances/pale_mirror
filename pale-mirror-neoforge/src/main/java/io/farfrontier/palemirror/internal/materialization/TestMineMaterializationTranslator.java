@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
 /** Deterministically translates a mine's desired domain state into executor operations. */
 public final class TestMineMaterializationTranslator {
     public static final String POLICY_ID = "pale_mirror:pm_anchor";
-    public static final String POLICY_VERSION = "7";
+    public static final String POLICY_VERSION = "8";
 
     public MaterializationPlan translate(FacilityState facility) {
         return translate(facility, null, EncounterRecord.none(), GatePresentationRecord.none());
@@ -26,6 +26,11 @@ public final class TestMineMaterializationTranslator {
 
     public MaterializationPlan translate(FacilityState facility, EncounterProfile profile, EncounterRecord encounter,
                                          GatePresentationRecord gate) {
+        return translate(facility, profile, encounter, gate, true);
+    }
+
+    public MaterializationPlan translate(FacilityState facility, EncounterProfile profile, EncounterRecord encounter,
+                                         GatePresentationRecord gate, boolean encounterEnabled) {
         WorldObjectId id = facility.id();
         long revision = facility.desiredRevision();
         if (facility.status() == FacilityStatus.INFECTED) {
@@ -39,16 +44,22 @@ public final class TestMineMaterializationTranslator {
             // executing, otherwise reload could reshuffle physical actors.
             // The profile fallback exists only for the legacy direct-plan
             // call site before an encounter record has been prepared.
-            List<String> actorSlots = profile == null ? List.of()
+            List<String> actorSlots = !encounterEnabled || profile == null ? List.of()
                     : !encounter.actors().isEmpty()
                     ? encounter.actors().stream().map(actor -> actor.slotId()).toList()
                     : profile.actors().stream().map(actor -> actor.id()).toList();
             actorSlots.forEach(slotId -> operations.add(operation(id, revision, operations.size(),
                     MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR, slotId)));
-            gate.parts().stream().filter(part -> part.status() != SourceGatePartRef.Status.DEFEATED)
+            if (!encounterEnabled) encounter.actors().stream()
+                    .filter(actor -> actor.status() == io.farfrontier.palemirror.internal.world.EncounterActorRef.Status.ACTIVE)
+                    .forEach(actor -> operations.add(operation(id, revision, operations.size(),
+                            MaterializationOperationType.REMOVE_SOURCE_ENCOUNTER_ACTOR, actor.slotId())));
+            gate.parts().stream().filter(part -> encounterEnabled || part.status() == SourceGatePartRef.Status.ACTIVE)
+                    .filter(part -> !encounterEnabled || part.status() != SourceGatePartRef.Status.DEFEATED)
                     .filter(part -> part.status() != SourceGatePartRef.Status.REMOVED)
                     .forEach(part -> operations.add(operation(id, revision, operations.size(),
-                            MaterializationOperationType.ENSURE_SOURCE_GATE_PART, part.slotId())));
+                            encounterEnabled ? MaterializationOperationType.ENSURE_SOURCE_GATE_PART
+                                    : MaterializationOperationType.REMOVE_SOURCE_GATE_PART, part.slotId())));
             return new MaterializationPlan(POLICY_ID, POLICY_VERSION, revision, operations);
         }
         List<MaterializationOperation> operations = new ArrayList<>();

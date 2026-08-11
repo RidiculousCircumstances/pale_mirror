@@ -21,7 +21,7 @@
   "screen.pale_mirror.atlas.iron": "IRON %s/%s · flow %s · reserve %s steps",
   "screen.pale_mirror.atlas.defence": "Defence %s/%s",
   "screen.pale_mirror.atlas.routes": "Primary: %s %s/%s · Alternative: %s %s/%s",
-  "screen.pale_mirror.atlas.route_repair": "Repair: %s · first %s %s %s",
+  "screen.pale_mirror.atlas.route_repair": "Rail graph disconnected: %s · near %s %s %s",
   "screen.pale_mirror.atlas.stable": "stable",
   "screen.pale_mirror.atlas.crisis.none": "Stable",
   "screen.pale_mirror.atlas.crisis.pressured": "Under pressure",

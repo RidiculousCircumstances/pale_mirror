@@ -318,6 +318,11 @@ public final class PaleMirrorRuntime {
         if (SettlementObservationRuntime.observePlayerBlockDamage(data, commands, level, position, playerId)) data.setDirty();
     }
 
+    /** Records only local physical evidence; unloaded chunks retain their last observed graph revision. */
+    public void railTopologyChanged(ServerLevel level, net.minecraft.core.BlockPos position) {
+        if (VanillaMinecartRouteRuntime.observeBlockChange(data, level, position)) data.setDirty();
+    }
+
     public List<DomainEvent> publish(Observation observation) {
         List<DomainEvent> events = reconciler.reconcile(data, observation);
         if (observation instanceof ThreatControllerDestroyed destroyed && !events.isEmpty()) {

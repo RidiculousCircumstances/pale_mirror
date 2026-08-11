@@ -182,9 +182,9 @@ public final class RuntimeDebugService {
                 .append(" capacity=").append(primaryRoute.transferableCapacity(data.worldState().simulationStep()))
                 .append(minecart == null ? "" : " physical=" + minecart.status() + " "
                         + minecart.completedSegmentCount() + "/" + minecart.segmentCount()
-                        + " knownDamage=" + minecart.damagedCriticalCellCount()
-                        + (minecart.firstDamagedCriticalCell() == null ? ""
-                        : " firstRepair=" + minecart.firstDamagedCriticalCell().toShortString()));
+                        + " graphIssue=" + minecart.topologyIssueCount()
+                        + (minecart.topologyIssue() == null ? ""
+                        : " near=" + minecart.topologyIssue().toShortString()));
         if (route != null) output.append("\n- alternateRoute=").append(route.status()).append('/').append(route.freshness(data.worldState().simulationStep()))
                 .append(" capacity=").append(route.transferableCapacity(data.worldState().simulationStep()))
                 .append(" lastValidationStep=").append(route.lastSuccessfulValidationStep());

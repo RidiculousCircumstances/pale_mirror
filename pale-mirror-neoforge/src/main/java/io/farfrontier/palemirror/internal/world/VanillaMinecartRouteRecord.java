@@ -11,6 +11,8 @@ import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.properties.RailShape;
 
 /**
  * Restart-safe physical job for a narrow authored vanilla rail corridor.
@@ -37,6 +39,13 @@ public final class VanillaMinecartRouteRecord {
     private UUID representativeCargoId;
     private double cartProgress;
     private boolean cartForward;
+    private final Map<Long, String> observedRailShapes;
+    private List<Long> acceptedRailPath;
+    private final Set<Long> dirtyTopologyCells;
+    private final Set<Long> dirtyTopologyChunks;
+    private int topologyVerificationCursor;
+    private long topologyRevision;
+    private BlockPos topologyIssue;
 
     public VanillaMinecartRouteRecord(String regionId, String dimensionId, String routeId, BlockPos start, BlockPos target,
                                       VanillaMinecartRouteStatus status, String diagnostic,
@@ -81,6 +90,40 @@ public final class VanillaMinecartRouteRecord {
         }
         this.cartProgress = cartProgress;
         this.cartForward = cartForward;
+        this.observedRailShapes = new LinkedHashMap<>();
+        this.acceptedRailPath = new ArrayList<>();
+        this.dirtyTopologyCells = new LinkedHashSet<>();
+        this.dirtyTopologyChunks = new LinkedHashSet<>();
+        this.topologyVerificationCursor = 0;
+        this.topologyRevision = 0;
+        this.topologyIssue = null;
+    }
+
+    void restoreTopology(Map<Long, String> shapes, List<Long> path, Set<Long> dirtyCells, Set<Long> dirtyChunks,
+                         int cursor, long revision, BlockPos issue) {
+        shapes.forEach((position, shape) -> {
+            BlockPos node = BlockPos.of(position);
+            if (!containsTopologyPosition(node)) throw new IllegalArgumentException("Persisted rail node outside route bounds");
+            RailShape.valueOf(shape);
+        });
+        if (path.stream().anyMatch(position -> !shapes.containsKey(position)))
+            throw new IllegalArgumentException("Persisted accepted path references an unobserved rail node");
+        if (!path.isEmpty() && (path.getFirst() != start.asLong() || path.getLast() != target.asLong()))
+            throw new IllegalArgumentException("Persisted accepted path does not bind the route endpoints");
+        if (!path.isEmpty() && VanillaRailTopology.path(shapes, start, target).isEmpty())
+            throw new IllegalArgumentException("Persisted accepted rail graph is disconnected");
+        if (dirtyCells.stream().map(BlockPos::of).anyMatch(position -> !containsTopologyPosition(position)))
+            throw new IllegalArgumentException("Persisted dirty topology cell outside route bounds");
+        if (issue != null && !containsTopologyPosition(issue))
+            throw new IllegalArgumentException("Persisted topology issue outside route bounds");
+        observedRailShapes.clear(); observedRailShapes.putAll(VanillaRailTopology.ordered(shapes));
+        acceptedRailPath = new ArrayList<>(path);
+        dirtyTopologyCells.clear(); dirtyTopologyCells.addAll(dirtyCells);
+        dirtyTopologyChunks.clear(); dirtyTopologyChunks.addAll(dirtyChunks);
+        topologyVerificationCursor = Math.max(0, cursor);
+        topologyRevision = Math.max(0L, revision);
+        topologyIssue = issue == null ? null : issue.immutable();
+        if (cartProgress > Math.max(0, travelPathSize() - 1)) cartProgress = 0D;
     }
 
     public static VanillaMinecartRouteRecord planned(String regionId, String dimensionId, String routeId,
@@ -113,6 +156,14 @@ public final class VanillaMinecartRouteRecord {
     public UUID representativeCargoId() { return representativeCargoId; }
     public double cartProgress() { return cartProgress; }
     public boolean cartForward() { return cartForward; }
+    public Map<Long, String> observedRailShapes() { return Map.copyOf(observedRailShapes); }
+    public List<Long> acceptedRailPath() { return List.copyOf(acceptedRailPath); }
+    public Set<Long> dirtyTopologyCells() { return Set.copyOf(dirtyTopologyCells); }
+    public Set<Long> dirtyTopologyChunks() { return Set.copyOf(dirtyTopologyChunks); }
+    public int topologyVerificationCursor() { return topologyVerificationCursor; }
+    public long topologyRevision() { return topologyRevision; }
+    public BlockPos topologyIssue() { return topologyIssue; }
+    public int topologyIssueCount() { return status == VanillaMinecartRouteStatus.SUSPENDED && topologyIssue != null ? 1 : 0; }
     public Direction direction() {
         if (target.getX() > start.getX()) return Direction.EAST;
         if (target.getX() < start.getX()) return Direction.WEST;
@@ -132,6 +183,11 @@ public final class VanillaMinecartRouteRecord {
     public int previousRailY(int index) { return railPosition(Math.max(0, index - 1)).getY(); }
     public boolean isComplete(int index) { return completedSegments.contains(index); }
     public boolean allSegmentsComplete() { return completedSegments.size() == segmentCount(); }
+    public int travelPathSize() { return acceptedRailPath.isEmpty() ? segmentCount() : acceptedRailPath.size(); }
+    public BlockPos travelPosition(int index) {
+        if (index < 0 || index >= travelPathSize()) throw new IllegalArgumentException("Invalid travel path index");
+        return acceptedRailPath.isEmpty() ? railPosition(index) : BlockPos.of(acceptedRailPath.get(index));
+    }
     public long closestCompletedRailDistanceSqr(BlockPos position) {
         long closest = Long.MAX_VALUE;
         for (int index : completedSegments) closest = Math.min(closest,
@@ -176,6 +232,104 @@ public final class VanillaMinecartRouteRecord {
         status = VanillaMinecartRouteStatus.ACTIVE;
         diagnostic = "";
     }
+
+    public void initializeAuthoredTopology() {
+        if (!observedRailShapes.isEmpty()) return;
+        for (int index = 0; index < segmentCount(); index++) {
+            observedRailShapes.put(railPosition(index).asLong(), authoredShape(index).name());
+        }
+        acceptedRailPath = java.util.stream.IntStream.range(0, segmentCount())
+                .mapToObj(index -> railPosition(index).asLong()).toList();
+        topologyRevision++;
+    }
+    public boolean containsTopologyPosition(BlockPos position) {
+        int horizontalMargin = 48;
+        int verticalMargin = 32;
+        return position.getX() >= Math.min(start.getX(), target.getX()) - horizontalMargin
+                && position.getX() <= Math.max(start.getX(), target.getX()) + horizontalMargin
+                && position.getZ() >= Math.min(start.getZ(), target.getZ()) - horizontalMargin
+                && position.getZ() <= Math.max(start.getZ(), target.getZ()) + horizontalMargin
+                && position.getY() >= Math.min(start.getY(), target.getY()) - verticalMargin
+                && position.getY() <= Math.max(start.getY(), target.getY()) + verticalMargin;
+    }
+    public boolean markTopologyDirty(BlockPos position) {
+        return containsTopologyPosition(position) && dirtyTopologyCells.add(position.asLong());
+    }
+    public boolean markTopologyChunkDirty(ChunkPos chunk) {
+        int minX = Math.min(start.getX(), target.getX()) - 48;
+        int maxX = Math.max(start.getX(), target.getX()) + 48;
+        int minZ = Math.min(start.getZ(), target.getZ()) - 48;
+        int maxZ = Math.max(start.getZ(), target.getZ()) + 48;
+        if (chunk.getMaxBlockX() < minX || chunk.getMinBlockX() > maxX
+                || chunk.getMaxBlockZ() < minZ || chunk.getMinBlockZ() > maxZ) return false;
+        return dirtyTopologyChunks.add(chunk.toLong());
+    }
+    public BlockPos pollDirtyTopologyCell() {
+        if (dirtyTopologyCells.isEmpty()) return null;
+        long value = dirtyTopologyCells.iterator().next(); dirtyTopologyCells.remove(value); return BlockPos.of(value);
+    }
+    public ChunkPos pollLoadedDirtyTopologyChunk(java.util.function.LongPredicate loaded) {
+        var iterator = dirtyTopologyChunks.iterator();
+        while (iterator.hasNext()) {
+            long value = iterator.next();
+            if (!loaded.test(value)) continue;
+            iterator.remove(); return new ChunkPos(value);
+        }
+        return null;
+    }
+    public boolean hasObservedRail(BlockPos position) { return observedRailShapes.containsKey(position.asLong()); }
+    public boolean observeRail(BlockPos position, RailShape shape) {
+        long key = position.asLong();
+        if (shape == null) return observedRailShapes.remove(key) != null;
+        return !shape.name().equals(observedRailShapes.put(key, shape.name()));
+    }
+    public List<BlockPos> topologyVerificationSlice(int maximum) {
+        if (maximum < 1 || acceptedRailPath.isEmpty()) return List.of();
+        List<BlockPos> result = new ArrayList<>();
+        for (int offset = 0; offset < Math.min(maximum, acceptedRailPath.size()); offset++) {
+            result.add(BlockPos.of(acceptedRailPath.get((topologyVerificationCursor + offset) % acceptedRailPath.size())));
+        }
+        topologyVerificationCursor = (topologyVerificationCursor + result.size()) % acceptedRailPath.size();
+        return List.copyOf(result);
+    }
+    public java.util.Optional<List<BlockPos>> connectedPath() {
+        return VanillaRailTopology.path(observedRailShapes, start, target);
+    }
+    public BlockPos firstMissingAcceptedRail() {
+        for (long position : acceptedRailPath) if (!observedRailShapes.containsKey(position)) return BlockPos.of(position);
+        return null;
+    }
+    public boolean acceptTopology(List<BlockPos> path) {
+        List<Long> encoded = path.stream().map(BlockPos::asLong).toList();
+        boolean changed = !encoded.equals(acceptedRailPath) || status != VanillaMinecartRouteStatus.ACTIVE
+                || !damagedCriticalCells.isEmpty();
+        acceptedRailPath = new ArrayList<>(encoded);
+        damagedCriticalCells.clear();
+        topologyIssue = null;
+        status = VanillaMinecartRouteStatus.ACTIVE;
+        diagnostic = "";
+        if (cartProgress > Math.max(0, travelPathSize() - 1)) cartProgress = 0D;
+        if (changed) topologyRevision++;
+        return changed;
+    }
+    public boolean disconnectTopology(BlockPos issue) {
+        BlockPos safeIssue = issue == null ? start : issue;
+        boolean changed = status != VanillaMinecartRouteStatus.SUSPENDED
+                || topologyIssue == null || !topologyIssue.equals(safeIssue);
+        status = VanillaMinecartRouteStatus.SUSPENDED;
+        topologyIssue = safeIssue.immutable();
+        damagedCriticalCells.clear();
+        diagnostic = "Rail graph disconnected near " + safeIssue.toShortString();
+        return changed;
+    }
+    public void markAllTopologyChunksDirty() {
+        int minChunkX = (Math.min(start.getX(), target.getX()) - 48) >> 4;
+        int maxChunkX = (Math.max(start.getX(), target.getX()) + 48) >> 4;
+        int minChunkZ = (Math.min(start.getZ(), target.getZ()) - 48) >> 4;
+        int maxChunkZ = (Math.max(start.getZ(), target.getZ()) + 48) >> 4;
+        for (int x = minChunkX; x <= maxChunkX; x++) for (int z = minChunkZ; z <= maxChunkZ; z++)
+            dirtyTopologyChunks.add(ChunkPos.asLong(x, z));
+    }
     public void advanceVerificationCursor(int cellsChecked) {
         if (cellsChecked > 0 && !cells.isEmpty()) verificationCursor = (verificationCursor + cellsChecked) % cells.size();
     }
@@ -200,15 +354,21 @@ public final class VanillaMinecartRouteRecord {
     public double proposedCartProgress(double distance) {
         if (!Double.isFinite(distance) || distance < 0) throw new IllegalArgumentException("Invalid cart distance");
         double proposed = cartProgress + (cartForward ? distance : -distance);
-        return Math.max(0D, Math.min(segmentCount() - 1D, proposed));
+        return Math.max(0D, Math.min(travelPathSize() - 1D, proposed));
     }
     public void moveCart(double progress) {
-        if (!Double.isFinite(progress) || progress < 0 || progress > segmentCount() - 1D) {
+        if (!Double.isFinite(progress) || progress < 0 || progress > travelPathSize() - 1D) {
             throw new IllegalArgumentException("Invalid cart progress");
         }
         cartProgress = progress;
         if (progress <= 0D) cartForward = true;
-        else if (progress >= segmentCount() - 1D) cartForward = false;
+        else if (progress >= travelPathSize() - 1D) cartForward = false;
+    }
+    public boolean parkCartAtOrigin() {
+        boolean changed = cartProgress != 0D || !cartForward;
+        cartProgress = 0D;
+        cartForward = true;
+        return changed;
     }
 
     public List<VanillaMinecartMutableCell> verificationSlice(int maximum) {
@@ -223,6 +383,21 @@ public final class VanillaMinecartRouteRecord {
 
     private int horizontalLength() {
         return Math.abs(target.getX() - start.getX()) + Math.abs(target.getZ() - start.getZ());
+    }
+    private RailShape authoredShape(int index) {
+        int railY = railPosition(index).getY();
+        if (nextRailY(index) > railY) return ascending(direction());
+        if (previousRailY(index) > railY) return ascending(direction().getOpposite());
+        return direction().getAxis() == Direction.Axis.X ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+    }
+    private static RailShape ascending(Direction direction) {
+        return switch (direction) {
+            case NORTH -> RailShape.ASCENDING_NORTH;
+            case SOUTH -> RailShape.ASCENDING_SOUTH;
+            case EAST -> RailShape.ASCENDING_EAST;
+            case WEST -> RailShape.ASCENDING_WEST;
+            default -> throw new IllegalArgumentException("Rail direction must be horizontal");
+        };
     }
     private VanillaMinecartMutableCell requireCell(BlockPos position) {
         VanillaMinecartMutableCell value = cell(position);

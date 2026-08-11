@@ -33,18 +33,35 @@ detailed causal history.
 The primary route is still a low-capacity vanilla corridor. A lease-authorized
 representative minecart with a visual cargo display moves only over loaded
 segments while Mine17 is operational and canonical route capacity is positive.
-It freezes rather than simulating deliveries in unloaded chunks.
+It is a singleton, non-colliding PM projection rather than physical cargo:
+loaded duplicates are removed, external impulses are discarded and it parks at
+the loading yard while the mine has no production. It never simulates deliveries
+in unloaded chunks.
 
-Loaded critical rail/support damage suspends the physical route and validates
-the canonical `RouteContract` at zero capacity. PM stores the exact damaged
-cells. When the player restores their registered postconditions, the route
-resumes and revalidates its nominal capacity. Decorative unknown changes remain
-diagnostic and are not overwritten. The cart and its progress, the damaged
-cells and the route state survive restart.
+Route health is no longer inferred from the exact PM-authored block mask. PM
+persists a graph of observed rail nodes and their connections between the fixed
+loading and receiving endpoints. A block observation updates only its loaded
+local segment; unloading a chunk does not invalidate its last accepted graph
+revision. If no connected path remains, the canonical `RouteContract` is
+validated at zero capacity. A player may repair or reroute the line with a
+different height, curves or rail positions; once the persisted graph connects
+both endpoints again, PM adopts that path and restores nominal capacity.
+
+Exact baseline/last-applied provenance still guards PM writes and cleanup, but
+is not a service-health test. Chunk-local reconciliation catches crash windows
+and changes made without an ordinary placement event. The representative cart
+and its progress follow the accepted path; topology, route status and physical
+observations survive restart.
 
 Create is unchanged as the alternate industrial path: the same observed
 vehicle must prove traversal at both registered endpoints inside the proof
 window. It is not a substitute for explaining the pre-existing baseline line.
+
+Canonical infection is also readable before the player accepts a story. When an
+infected MineSite is nearby and loaded, PM materializes the source-specific
+passive overlay and its registered controller through a persisted job. Accepting
+and entering the scenario adds combat actors and native gate mechanics; it is
+not the trigger that makes the already-existing infection visible.
 
 ## Fair intervention
 

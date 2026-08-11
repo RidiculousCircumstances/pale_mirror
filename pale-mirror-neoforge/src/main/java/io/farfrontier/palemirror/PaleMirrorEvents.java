@@ -275,8 +275,16 @@ public final class PaleMirrorEvents {
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
+            runtime.railTopologyChanged(level, event.getPos());
             runtime.gateBlockDestroyed(level, event.getPos());
             runtime.settlementBlockDamaged(level, event.getPos(), event.getPlayer().getUUID());
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onBlockPlaced(BlockEvent.EntityPlaceEvent event) {
+        if (!event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            PaleMirrorRuntime.forServer(level.getServer()).railTopologyChanged(level, event.getPos());
         }
     }
 

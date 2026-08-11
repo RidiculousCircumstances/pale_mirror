@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.gametest;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.DomainServices;
+import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
+import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRecord;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRuntime;
@@ -12,9 +14,12 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RailBlock;
+import net.minecraft.world.level.block.state.properties.RailShape;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityMobGriefingEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -25,6 +30,49 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class VanillaMinecartRouteGameTests {
     private VanillaMinecartRouteGameTests() { }
+
+    @GameTest(batch = "pm-vanilla-minecart-singleton", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void representativeCarrierDeduplicatesAndIgnoresPhysicalImpulse(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos start = helper.absolutePos(new BlockPos(0, 6, 0));
+        level.setBlock(start.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(start, Blocks.RAIL.defaultBlockState(), 3);
+        VanillaMinecartRailAdapter adapter = AdapterRegistry.vanillaMinecartRail();
+        String routeId = "pale_mirror:singleton_route";
+        var first = adapter.spawnRepresentativeCart(level, start, routeId);
+        adapter.spawnRepresentativeCart(level, start, routeId);
+
+        var reconciled = adapter.reconcileRepresentatives(level, routeId, first.cartId(), first.cargoId());
+        helper.assertTrue(reconciled.keeper() != null, "one loaded carrier must remain authoritative");
+        helper.assertValueEqual(reconciled.keeper().cartId(), first.cartId(),
+                "the persisted carrier UUID must win deterministic reconciliation");
+        long representatives = java.util.stream.StreamSupport.stream(level.getAllEntities().spliterator(), false)
+                .filter(entity -> routeId.equals(entity.getPersistentData().getString("pale_mirror_route")))
+                .filter(VanillaMinecartRailAdapter::isRepresentative).count();
+        helper.assertValueEqual(representatives, 2L,
+                "one cart plus one block-display cargo must survive duplicate cleanup");
+
+        Entity cart = level.getEntity(first.cartId());
+        helper.assertTrue(cart != null, "the reconciled carrier must remain loaded");
+        cart.noPhysics = false;
+        cart.setDeltaMovement(4.0D, 2.0D, -3.0D);
+        cart.moveTo(start.getX() + 8.5D, start.getY() + 4.0D, start.getZ() + 0.5D);
+        adapter.stabilizeRepresentativeCart(cart, start);
+        helper.assertTrue(cart.noPhysics && cart.isInvulnerable() && cart.isNoGravity(),
+                "the representative carrier must be a non-physical PM projection");
+        helper.assertTrue(cart.getDeltaMovement().lengthSqr() == 0.0D
+                        && cart.blockPosition().closerThan(start, 1.0D),
+                "player or entity impulses must be discarded and the carrier snapped to its canonical pose");
+        helper.assertTrue(cart.getPassengers().stream().anyMatch(entity -> entity.getUUID().equals(first.cargoId())),
+                "the visual chest must remain a passenger of the singleton carrier");
+        cart.getPassengers().forEach(Entity::discard);
+        cart.discard();
+        helper.succeed();
+    }
 
     @GameTest(batch = "pm-vanilla-minecart-protection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void endermenCannotGriefButOtherMobPolicyIsUnchanged(GameTestHelper helper) {
@@ -114,7 +162,8 @@ public final class VanillaMinecartRouteGameTests {
         BlockPos rail = record.railPosition(0);
         record.capture(rail, "minecraft:air");
         record.approve(rail, "minecraft:rail");
-        record.suspend(rail, "rail removed");
+        record.initializeAuthoredTopology();
+        record.disconnectTopology(rail);
         record.observeRepresentativeCart(java.util.UUID.randomUUID(), java.util.UUID.randomUUID());
         record.moveCart(2.5D);
         data.vanillaMinecartRoutes().put(record.regionId(), record);
@@ -125,14 +174,26 @@ public final class VanillaMinecartRouteGameTests {
 
         helper.assertValueEqual(reloaded.status(), VanillaMinecartRouteStatus.SUSPENDED,
                 "restart must preserve the fail-closed route state");
-        helper.assertTrue(reloaded.damagedCriticalCells().contains(rail.asLong()),
-                "restart must preserve the exact critical repair target");
+        helper.assertValueEqual(reloaded.topologyIssue(), rail,
+                "restart must preserve the graph diagnostic without requiring an exact-cell repair");
         helper.assertValueEqual(reloaded.representativeCartId(), record.representativeCartId(),
                 "restart must preserve the visual carrier identity");
         helper.assertValueEqual(reloaded.cartProgress(), 2.5D,
                 "restart must preserve bounded representative movement progress");
-        helper.assertTrue(reloaded.repaired(rail) && reloaded.repairComplete(),
-                "restoring the registered rail postcondition must make the route resumable");
+        helper.assertTrue(reloaded.acceptTopology(java.util.stream.IntStream.range(0, reloaded.segmentCount())
+                        .mapToObj(reloaded::railPosition).toList()),
+                "a connected topology must make the route resumable independently of old provenance");
+
+        CompoundTag schema31 = snapshot.copy();
+        schema31.putInt("schemaVersion", 31);
+        for (net.minecraft.nbt.Tag raw : schema31.getList("vanillaMinecartRoutes", net.minecraft.nbt.Tag.TAG_COMPOUND))
+            ((CompoundTag) raw).remove("railNodes");
+        VanillaMinecartRouteRecord migrated = PaleMirrorSavedData.load(schema31, helper.getLevel().registryAccess())
+                .vanillaMinecartRoutes().get(record.regionId());
+        helper.assertValueEqual(migrated.observedRailShapes().size(), migrated.segmentCount(),
+                "schema-v31 migration must seed the formerly authored path as its last observed graph");
+        helper.assertTrue(!migrated.dirtyTopologyChunks().isEmpty(),
+                "schema-v31 migration must schedule naturally loaded chunk reconciliation without invalidating unloads");
         helper.succeed();
     }
 
@@ -144,7 +205,7 @@ public final class VanillaMinecartRouteGameTests {
         reset(data);
         BlockPos start = helper.absolutePos(new BlockPos(0, 6, 0));
         VanillaMinecartRouteRecord record = VanillaMinecartRouteRecord.planned("pale_mirror:multi_repair_test",
-                level.dimension().location().toString(), "pale_mirror:multi_repair_route", start, start.east(8));
+                level.dimension().location().toString(), "pale_mirror:multi_repair_route", start, start.east());
         BlockPos first = record.railPosition(0);
         BlockPos second = record.railPosition(1);
         String rail = Blocks.RAIL.defaultBlockState().toString();
@@ -152,7 +213,8 @@ public final class VanillaMinecartRouteGameTests {
         record.approve(first, rail);
         record.capture(second, Blocks.AIR.defaultBlockState().toString());
         record.approve(second, rail);
-        record.suspend(first, "first known break");
+        record.initializeAuthoredTopology();
+        record.disconnectTopology(first);
         level.setBlock(first.below(), Blocks.GRAVEL.defaultBlockState(), 3);
         level.setBlock(second.below(), Blocks.GRAVEL.defaultBlockState(), 3);
         level.setBlock(first, Blocks.RAIL.defaultBlockState(), 3);
@@ -162,18 +224,59 @@ public final class VanillaMinecartRouteGameTests {
         VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
         helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.SUSPENDED,
                 "repairing one cell must not resume a route while another loaded break remains");
-        helper.assertValueEqual(record.damagedCriticalCellCount(), 1,
-                "the repaired cell must clear while the newly discovered break remains tracked");
-        helper.assertValueEqual(record.firstDamagedCriticalCell(), second,
-                "repair diagnostics must advance to the next exact loaded break");
+        helper.assertValueEqual(record.topologyIssueCount(), 1,
+                "a disconnected observed graph must retain one actionable issue marker");
+        helper.assertValueEqual(record.topologyIssue(), second,
+                "repair diagnostics must advance to the next missing accepted node");
 
         level.setBlock(second, Blocks.RAIL.defaultBlockState(), 3);
         VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
         helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.ACTIVE,
                 "the physical route must resume as soon as all known loaded breaks match provenance");
-        helper.assertValueEqual(record.damagedCriticalCellCount(), 0,
-                "completed repairs must clear the bounded damage set");
+        helper.assertValueEqual(record.topologyIssueCount(), 0,
+                "a connected replacement graph must clear its issue marker");
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-vanilla-minecart-topology", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void playerRerouteIsAcceptedByConnectivityRatherThanExactAuthoredCells(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos start = helper.absolutePos(new BlockPos(0, 6, 0));
+        BlockPos target = start.east(4);
+        VanillaMinecartRouteRecord record = VanillaMinecartRouteRecord.planned("pale_mirror:reroute_test",
+                level.dimension().location().toString(), "pale_mirror:reroute_route", start, target);
+        record.begin();
+        record.verify();
+        record.initializeAuthoredTopology();
+        record.activate();
+        data.vanillaMinecartRoutes().put(record.regionId(), record);
+
+        rail(level, start, RailShape.SOUTH_EAST);
+        rail(level, start.south(), RailShape.NORTH_SOUTH);
+        rail(level, start.south(2), RailShape.NORTH_EAST);
+        for (int x = 1; x < 4; x++) rail(level, start.south(2).east(x), RailShape.EAST_WEST);
+        rail(level, target.south(2), RailShape.NORTH_WEST);
+        rail(level, target.south(), RailShape.NORTH_SOUTH);
+        rail(level, target, RailShape.SOUTH_WEST);
+        record.markTopologyChunkDirty(new net.minecraft.world.level.ChunkPos(start));
+
+        VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
+        helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.ACTIVE,
+                "a connected player reroute must restore service without rebuilding the authored cells");
+        helper.assertValueEqual(record.acceptedRailPath().size(), 9,
+                "the persisted route graph must adopt the complete detour");
+        helper.assertTrue(record.acceptedRailPath().contains(start.south(2).east(2).asLong()),
+                "the accepted carrier path must follow the player's physical reroute");
+        helper.succeed();
+    }
+
+    private static void rail(ServerLevel level, BlockPos position, RailShape shape) {
+        level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(position, Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape), 3);
     }
 
     private static void reset(PaleMirrorSavedData data) {

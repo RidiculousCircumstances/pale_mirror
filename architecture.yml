@@ -32,7 +32,7 @@ invariants:
   - id: domain-purity
     statement: Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.
   - id: materialization-safety
-    statement: Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.
+    statement: Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions. Canonical infection materializes its passive PM-owned overlay and controller whenever the site is nearby and loaded, independently of story acceptance; combat actors and source-native gate mechanics remain explicitly scenario-gated.
   - id: observation-boundary
     statement: Observers publish typed facts; reconciliation alone converts them into domain commands and events.
   - id: conflict-safety
@@ -54,7 +54,7 @@ invariants:
   - id: managed-railway-commissioning
     statement: Railway Untold/Create is an explicit later industrial route provider, never an implicit default for a small campaign settlement. Its production materialization is independent and out of order by naturally loaded chunk footprints only; neither PM nor its provider may generate unseen route chunks. Initial authored-corridor construction records provenance while accepting provider transforms, later repairs fail closed on unknown changes, player schedule edits suspend canonical service, and PM remains the owner of route capacity and resource flow.
   - id: vanilla-minecart-baseline
-    statement: A fresh campaign region may use the built-in low-capacity VANILLA_MINECART provider. Its complete cardinal corridor is persisted before work, each loaded segment captures baseline then checks preconditions and postconditions, and only PM-owned track, trestles and a receiving platform are written. It never loads chunks or materializes stock. Critical loaded damage suspends canonical capacity, continues bounded discovery across naturally loaded route slices, and exposes known repair coordinates until exact registered cells are repaired; unknown cells are never overwritten. A persisted lease-authorized moving cart/cargo pair is representational only and freezes outside loaded, operational supply.
+    statement: A fresh campaign region may use the built-in low-capacity VANILLA_MINECART provider. Its complete cardinal corridor is persisted before work, each loaded segment captures baseline then checks preconditions and postconditions, and only PM-owned track, trestles and a receiving platform are written. It never loads chunks or materializes stock. Service health is a persisted observed RailShape graph between fixed endpoints: loaded block observations update bounded local segments, chunk unload preserves the last accepted revision, a disconnected graph suspends canonical capacity, and any connected player reroute may be adopted without matching the authored cells. Exact provenance guards later PM writes but never authorizes overwriting the adopted player path. The persisted lease-authorized cart/cargo pair is a singleton non-physical projection: loaded duplicates are reconciled deterministically, collision impulses are discarded, it follows the accepted path only during operational supply, parks at origin otherwise, and never simulates deliveries in unloaded chunks.
   - id: enderman-grief-protection
     statement: Endermen cannot pick up or place blocks in a Pale Mirror runtime. This server-wide physical-safety policy protects route supports and other infrastructure without changing the global mobGriefing rule or the behavior of other mobs.
   - id: settlement-observation
@@ -170,7 +170,7 @@ critical_flows:
     owner: NeoForge ManagedRailwayRuntime plus generic adapter boundary and isolated Railway Untold provider; domain owns route and flow
     verification: critical-code
   - id: vanilla-regional-freight
-    path: fresh eligible place -> persisted vanilla RouteProvider contract -> guarded MineSite commissioning -> persisted cardinal vanilla route job -> naturally loaded segment -> capture -> precondition -> PM-owned rail/trestle/platform postcondition -> provenance verification -> RouteContract validation -> lease-authorized representative cart
+    path: fresh eligible place -> persisted vanilla RouteProvider contract -> guarded MineSite commissioning -> persisted cardinal vanilla route job -> naturally loaded segment -> capture -> precondition -> PM-owned rail/trestle/platform postcondition -> persisted observed rail graph -> endpoint connectivity reconciliation -> RouteContract validation -> accepted-path representative cart
     owner: NeoForge VanillaMinecartRouteRuntime and isolated VanillaMinecartRailAdapter; domain owns route and flow
     verification: critical-code
   - id: settlement-resource-transfer

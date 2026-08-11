@@ -16,7 +16,7 @@
   "screen.pale_mirror.atlas.iron": "ЖЕЛЕЗО %s/%s · поток %s · резерв %s шагов",
   "screen.pale_mirror.atlas.defence": "Оборона %s/%s",
   "screen.pale_mirror.atlas.routes": "Основной: %s %s/%s · Альтернативный: %s %s/%s",
-  "screen.pale_mirror.atlas.route_repair": "Ремонт: %s · первая %s %s %s",
+  "screen.pale_mirror.atlas.route_repair": "Связность нарушена: %s · около %s %s %s",
   "screen.pale_mirror.atlas.stable": "стабилен",
   "screen.pale_mirror.atlas.crisis.none": "Стабильно",
   "screen.pale_mirror.atlas.crisis.pressured": "Под давлением",

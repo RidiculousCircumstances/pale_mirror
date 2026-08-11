@@ -49,7 +49,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 31;
+    static final int CURRENT_SCHEMA = 32;
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
@@ -177,7 +177,7 @@ public final class PaleMirrorSavedData extends SavedData {
         }
         Map<String, CampaignRegionRecord> campaignRegions = CampaignRegionPresentationCodec.read(tag);
         Map<String, CampaignCommissioningRecord> commissioning = CampaignCommissioningCodec.read(tag, version);
-        Map<String, VanillaMinecartRouteRecord> minecartRoutes = VanillaMinecartRouteCodec.read(tag);
+        Map<String, VanillaMinecartRouteRecord> minecartRoutes = VanillaMinecartRouteCodec.read(tag, version);
         if (version == 24 && !campaignRegions.isEmpty()) campaignRegions.values().forEach(region ->
                 commissioning.putIfAbsent(region.id(), CampaignCommissioningRecord.legacyDisabled(region.id(),
                         region.dimensionId(), region.settlementAnchor())));
@@ -194,7 +194,7 @@ public final class PaleMirrorSavedData extends SavedData {
     }
     private static boolean isMigratable(int version) {
         return version == 24 || version == 25 || version == 26 || version == 27 || version == 28 || version == 29
-                || version == 30
+                || version == 30 || version == 31
                 || version == CURRENT_SCHEMA;
     }
     @Override

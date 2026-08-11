@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.ChunkPos;
 
 /**
  * Core-owned executor for the early freight profile. It never asks Minecraft
@@ -25,6 +26,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 public final class VanillaMinecartRouteRuntime {
     private static final int BUILD_SEGMENT_BUDGET = 6;
     private static final int VERIFY_CELL_BUDGET = 32;
+    private static final int TOPOLOGY_CELL_RADIUS = 2;
 
     private VanillaMinecartRouteRuntime() { }
 
@@ -34,6 +36,25 @@ public final class VanillaMinecartRouteRuntime {
         for (VanillaMinecartRouteRecord record : data.vanillaMinecartRoutes().values()) {
             if (!record.dimensionId().equals(server.overworld().dimension().location().toString())) continue;
             changed |= advance(server.overworld(), data, commands, adapter, record);
+        }
+        if (server.overworld().getGameTime() % 600L == 0L) {
+            for (var player : server.getPlayerList().getPlayers()) {
+                if (player.serverLevel() != server.overworld()) continue;
+                ChunkPos center = player.chunkPosition();
+                for (VanillaMinecartRouteRecord record : data.vanillaMinecartRoutes().values()) {
+                    for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++)
+                        changed |= record.markTopologyChunkDirty(new ChunkPos(center.x + x, center.z + z));
+                }
+            }
+        }
+        return changed;
+    }
+
+    public static boolean observeBlockChange(PaleMirrorSavedData data, ServerLevel level, BlockPos position) {
+        boolean changed = false;
+        String dimension = level.dimension().location().toString();
+        for (VanillaMinecartRouteRecord record : data.vanillaMinecartRoutes().values()) {
+            if (record.dimensionId().equals(dimension)) changed |= record.markTopologyDirty(position);
         }
         return changed;
     }
@@ -147,20 +168,21 @@ public final class VanillaMinecartRouteRuntime {
             var route = region == null ? null : data.worldState().routeContract(region.primaryRouteId()).orElse(null);
             if (route == null || route.provider() != RouteProvider.VANILLA_MINECART) return false;
         }
+        record.initializeAuthoredTopology();
         record.activate();
         return true;
     }
 
     private static boolean refreshActiveRoute(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
                                               VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
-        boolean changed = !verifyLoadedProvenance(level, adapter, record);
+        boolean changed = refreshTopology(level, adapter, record);
         if (record.status() != VanillaMinecartRouteStatus.ACTIVE) {
             changed |= validateCanonicalRoute(data, commands, record, 0);
             return true;
         }
         changed |= validateCanonicalRoute(data, commands, record);
         changed |= ensureRepresentativeCart(level, data, adapter, record);
-        changed |= moveRepresentativeCart(level, data, record);
+        changed |= updateRepresentativeCart(level, data, adapter, record);
         return changed;
     }
 
@@ -215,40 +237,102 @@ public final class VanillaMinecartRouteRuntime {
                                             VanillaMinecartRailAdapter adapter,
                                             VanillaMinecartRouteRecord record) {
         boolean changed = validateCanonicalRoute(data, commands, record, 0);
-        // A long line can have breaks in several independently loaded chunks. Keep
-        // discovering them while suspended instead of revealing one repair at a time.
-        int knownDamage = record.damagedCriticalCellCount();
-        verifyLoadedProvenance(level, adapter, record);
-        changed |= knownDamage != record.damagedCriticalCellCount();
-        for (long packed : record.damagedCriticalCells()) {
-            BlockPos position = BlockPos.of(packed);
+        changed |= refreshTopology(level, adapter, record);
+        if (record.status() == VanillaMinecartRouteStatus.ACTIVE)
+            changed |= validateCanonicalRoute(data, commands, record);
+        else changed |= parkExistingRepresentative(level, adapter, record);
+        return changed;
+    }
+
+    private static boolean refreshTopology(ServerLevel level, VanillaMinecartRailAdapter adapter,
+                                           VanillaMinecartRouteRecord record) {
+        boolean changed = false;
+        BlockPos lastObserved = null;
+        BlockPos dirty;
+        int localBudget = 8;
+        while (localBudget-- > 0 && (dirty = record.pollDirtyTopologyCell()) != null) {
+            lastObserved = dirty;
+            changed |= scanLocal(level, adapter, record, dirty);
+        }
+        ChunkPos chunk = record.pollLoadedDirtyTopologyChunk(value -> {
+            ChunkPos candidate = new ChunkPos(value);
+            return level.hasChunk(candidate.x, candidate.z);
+        });
+        if (chunk != null) {
+            changed |= scanChunk(level, adapter, record, chunk);
+            lastObserved = new BlockPos(chunk.getMiddleBlockX(), record.start().getY(), chunk.getMiddleBlockZ());
+        }
+        for (BlockPos position : record.topologyVerificationSlice(VERIFY_CELL_BUDGET)) {
             if (!level.hasChunkAt(position)) continue;
-            VanillaMinecartMutableCell cell = record.cell(position);
-            if (cell != null && adapter.matchesProvenance(level.getBlockState(position), cell.lastAppliedState())) {
-                changed |= record.repaired(position);
+            var shape = adapter.observedShape(level, position);
+            if (record.observeRail(position, shape)) {
+                changed = true;
+                if (shape == null) lastObserved = position;
             }
         }
-        if (record.repairComplete()) {
-            record.resume();
-            changed = true;
-            changed |= validateCanonicalRoute(data, commands, record);
+        var path = record.connectedPath();
+        if (path.isPresent()) changed |= record.acceptTopology(path.orElseThrow());
+        else if (changed || record.status() == VanillaMinecartRouteStatus.ACTIVE) {
+            BlockPos issue = record.firstMissingAcceptedRail();
+            if (issue == null) issue = lastObserved == null ? record.topologyIssue() : lastObserved;
+            changed |= record.disconnectTopology(issue);
         }
+        return changed;
+    }
+
+    private static boolean scanLocal(ServerLevel level, VanillaMinecartRailAdapter adapter,
+                                     VanillaMinecartRouteRecord record, BlockPos center) {
+        boolean changed = false;
+        for (int x = -TOPOLOGY_CELL_RADIUS; x <= TOPOLOGY_CELL_RADIUS; x++)
+            for (int z = -TOPOLOGY_CELL_RADIUS; z <= TOPOLOGY_CELL_RADIUS; z++)
+                for (int y = -2; y <= 2; y++) {
+                    BlockPos position = center.offset(x, y, z);
+                    if (!record.containsTopologyPosition(position) || !level.hasChunkAt(position)) continue;
+                    changed |= record.observeRail(position, adapter.observedShape(level, position));
+                }
+        return changed;
+    }
+
+    private static boolean scanChunk(ServerLevel level, VanillaMinecartRailAdapter adapter,
+                                     VanillaMinecartRouteRecord record, ChunkPos chunk) {
+        boolean changed = false;
+        int minY = Math.max(level.getMinBuildHeight(), Math.min(record.start().getY(), record.target().getY()) - 32);
+        int maxY = Math.min(level.getMaxBuildHeight() - 1, Math.max(record.start().getY(), record.target().getY()) + 32);
+        for (int x = chunk.getMinBlockX(); x <= chunk.getMaxBlockX(); x++)
+            for (int z = chunk.getMinBlockZ(); z <= chunk.getMaxBlockZ(); z++)
+                for (int y = minY; y <= maxY; y++) {
+                    BlockPos position = new BlockPos(x, y, z);
+                    if (!record.containsTopologyPosition(position)) continue;
+                    var shape = adapter.observedShape(level, position);
+                    if (shape != null) changed |= record.observeRail(position, shape);
+                    else if (record.hasObservedRail(position)) changed |= record.observeRail(position, null);
+                }
         return changed;
     }
 
     private static boolean ensureRepresentativeCart(ServerLevel level, PaleMirrorSavedData data,
                                                      VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
-        if (record.representativeCartId() != null) {
-            int expectedIndex = Math.max(0, Math.min(record.segmentCount() - 1, (int) Math.round(record.cartProgress())));
-            BlockPos expected = record.railPosition(expectedIndex);
-            if (!level.hasChunkAt(expected) || level.getEntity(record.representativeCartId()) != null) return false;
-            if (record.representativeCargoId() != null) {
-                net.minecraft.world.entity.Entity orphan = level.getEntity(record.representativeCargoId());
-                if (orphan != null && VanillaMinecartRailAdapter.isRepresentative(orphan)) orphan.discard();
+        int expectedIndex = Math.max(0, Math.min(record.travelPathSize() - 1, (int) Math.round(record.cartProgress())));
+        BlockPos expected = record.travelPosition(expectedIndex);
+        net.minecraft.world.entity.Entity registered = record.representativeCartId() == null ? null
+                : level.getEntity(record.representativeCartId());
+        boolean reconcile = record.representativeCartId() == null || registered == null || level.getGameTime() % 40L == 0L;
+        if (reconcile && level.hasChunkAt(record.representativeCartId() == null ? record.start() : expected)) {
+            var reconciled = adapter.reconcileRepresentatives(level, record.routeId(), record.representativeCartId(),
+                    record.representativeCargoId());
+            if (reconciled.keeper() != null) {
+                boolean changed = reconciled.removedEntities() > 0
+                        || !reconciled.keeper().cartId().equals(record.representativeCartId())
+                        || !reconciled.keeper().cargoId().equals(record.representativeCargoId());
+                record.observeRepresentativeCart(reconciled.keeper().cartId(), reconciled.keeper().cargoId());
+                return changed;
             }
-            record.forgetMissingRepresentativeCart();
-            return true;
+            if (record.representativeCartId() != null) {
+                record.forgetMissingRepresentativeCart();
+                return true;
+            }
         }
+        if (record.representativeCartId() != null) return false;
         if (!level.hasChunkAt(record.start())) return false;
         String leaseId = "pm:vanilla-minecart:carrier:" + record.regionId() + ":" + record.routeId()
                 + ":" + java.util.UUID.randomUUID();
@@ -271,31 +355,52 @@ public final class VanillaMinecartRouteRuntime {
         return executed;
     }
 
-    private static boolean moveRepresentativeCart(ServerLevel level, PaleMirrorSavedData data,
-                                                   VanillaMinecartRouteRecord record) {
+    private static boolean updateRepresentativeCart(ServerLevel level, PaleMirrorSavedData data,
+                                                     VanillaMinecartRailAdapter adapter,
+                                                     VanillaMinecartRouteRecord record) {
         if (record.representativeCartId() == null) return false;
+        net.minecraft.world.entity.Entity cart = level.getEntity(record.representativeCartId());
+        if (cart == null) return false;
         var region = data.worldState().livingRegion(record.regionId()).orElse(null);
         if (region == null) return false;
         var facility = data.worldState().facility(region.primaryFacilityId()).orElse(null);
         var route = data.worldState().routeContract(region.primaryRouteId()).orElse(null);
         if (facility == null || facility.status() != io.farfrontier.palemirror.domain.FacilityStatus.OPERATIONAL
-                || route == null || route.transferableCapacity(data.worldState().simulationStep()) <= 0) return false;
-        net.minecraft.world.entity.Entity cart = level.getEntity(record.representativeCartId());
-        if (cart == null) return false;
+                || route == null || route.transferableCapacity(data.worldState().simulationStep()) <= 0) {
+            boolean changed = record.parkCartAtOrigin();
+            if (level.hasChunkAt(record.start())) adapter.stabilizeRepresentativeCart(cart, record.start());
+            else adapter.stabilizeRepresentativeCart(cart, cart.getX(), cart.getY(), cart.getZ());
+            return changed;
+        }
         double proposed = record.proposedCartProgress(0.08D);
         int lowerIndex = (int) Math.floor(proposed);
-        int upperIndex = Math.min(record.segmentCount() - 1, lowerIndex + 1);
-        BlockPos lower = record.railPosition(lowerIndex);
-        BlockPos upper = record.railPosition(upperIndex);
+        int upperIndex = Math.min(record.travelPathSize() - 1, lowerIndex + 1);
+        BlockPos lower = record.travelPosition(lowerIndex);
+        BlockPos upper = record.travelPosition(upperIndex);
         if (!level.hasChunkAt(lower) || !level.hasChunkAt(upper)) return false;
         double fraction = proposed - lowerIndex;
         double x = net.minecraft.util.Mth.lerp(fraction, lower.getX() + 0.5D, upper.getX() + 0.5D);
         double y = net.minecraft.util.Mth.lerp(fraction, lower.getY() + 0.1D, upper.getY() + 0.1D);
         double z = net.minecraft.util.Mth.lerp(fraction, lower.getZ() + 0.5D, upper.getZ() + 0.5D);
         record.moveCart(proposed);
-        cart.moveTo(x, y, z, cart.getYRot(), cart.getXRot());
-        cart.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        adapter.stabilizeRepresentativeCart(cart, x, y, z);
         return level.getGameTime() % 20L == 0L;
+    }
+
+    private static boolean parkExistingRepresentative(ServerLevel level, VanillaMinecartRailAdapter adapter,
+                                                       VanillaMinecartRouteRecord record) {
+        if (record.representativeCartId() == null || !level.hasChunkAt(record.start())) return false;
+        var reconciled = adapter.reconcileRepresentatives(level, record.routeId(), record.representativeCartId(),
+                record.representativeCargoId());
+        if (reconciled.keeper() == null) return false;
+        boolean parked = record.parkCartAtOrigin();
+        boolean changed = reconciled.removedEntities() > 0 || parked
+                || !reconciled.keeper().cartId().equals(record.representativeCartId())
+                || !reconciled.keeper().cargoId().equals(record.representativeCargoId());
+        record.observeRepresentativeCart(reconciled.keeper().cartId(), reconciled.keeper().cargoId());
+        net.minecraft.world.entity.Entity cart = level.getEntity(reconciled.keeper().cartId());
+        if (cart != null) adapter.stabilizeRepresentativeCart(cart, record.start());
+        return changed;
     }
 
     private enum PreflightResult { CAPTURED, READY, BLOCKED }

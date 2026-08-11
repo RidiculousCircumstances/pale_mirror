@@ -1,8 +1,12 @@
 package io.farfrontier.palemirror.internal.integration.vanilla;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import io.farfrontier.palemirror.api.AdapterHealth;
 import io.farfrontier.palemirror.api.Capability;
@@ -16,6 +20,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BaseRailBlock;
 import net.minecraft.world.level.block.PoweredRailBlock;
 import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -101,6 +106,13 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
                 || appliedState.contains("minecraft:oak_fence");
     }
 
+    /** Read-only topology observation; no provenance or ownership is implied. */
+    public RailShape observedShape(ServerLevel level, BlockPos position) {
+        BlockState state = level.getBlockState(position);
+        if (!(state.getBlock() instanceof BaseRailBlock rail)) return null;
+        return rail.getRailDirection(state, level, position, null);
+    }
+
     /** Creates exactly one non-canonical visual carrier after a persisted PM effect lease authorizes it. */
     public VisualCart spawnRepresentativeCart(ServerLevel level, BlockPos rail, String routeId) {
         if (!level.hasChunkAt(rail)) throw new IllegalStateException("Minecart start chunk is not loaded");
@@ -114,6 +126,82 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
         cart.getPersistentData().putString("pale_mirror_route", routeId);
         cart.getPersistentData().putString("pale_mirror_role", "representative_minecart");
         if (!level.addFreshEntity(cart)) throw new IllegalStateException("Vanilla minecart spawn was rejected");
+        stabilizeRepresentativeCart(cart, rail);
+        Display.BlockDisplay cargo = createRepresentativeCargo(level, cart, routeId);
+        return new VisualCart(cart.getUUID(), cargo.getUUID());
+    }
+
+    /**
+     * Selects one already-loaded carrier for this route and removes every
+     * duplicate or orphan visual. Unloaded entities are never guessed absent;
+     * they will be reconciled when their chunk becomes naturally loaded.
+     */
+    public RepresentativeReconciliation reconcileRepresentatives(ServerLevel level, String routeId,
+                                                                  UUID preferredCartId, UUID preferredCargoId) {
+        List<Entity> carts = new ArrayList<>();
+        List<Entity> cargos = new ArrayList<>();
+        for (Entity entity : level.getAllEntities()) {
+            if (!routeId.equals(entity.getPersistentData().getString("pale_mirror_route"))) continue;
+            String role = entity.getPersistentData().getString("pale_mirror_role");
+            if ("representative_minecart".equals(role)) carts.add(entity);
+            else if ("representative_cargo".equals(role)) cargos.add(entity);
+        }
+        Comparator<Entity> byIdentity = Comparator.comparing(entity -> entity.getUUID().toString());
+        carts.sort(byIdentity);
+        cargos.sort(byIdentity);
+
+        Entity keeper = carts.stream().filter(entity -> entity.getUUID().equals(preferredCartId)).findFirst()
+                .orElseGet(() -> preferredCargoId == null ? null : carts.stream()
+                        .filter(entity -> entity.getPassengers().stream()
+                                .anyMatch(passenger -> passenger.getUUID().equals(preferredCargoId)))
+                        .findFirst().orElse(null));
+        if (keeper == null && !carts.isEmpty()) keeper = carts.getFirst();
+        if (keeper == null) {
+            int removed = cargos.size();
+            cargos.forEach(Entity::discard);
+            return new RepresentativeReconciliation(null, removed);
+        }
+
+        Entity selectedCart = keeper;
+        Entity cargo = cargos.stream().filter(entity -> entity.getUUID().equals(preferredCargoId)
+                        && entity.getVehicle() == selectedCart).findFirst()
+                .orElseGet(() -> selectedCart.getPassengers().stream()
+                        .filter(passenger -> "representative_cargo".equals(
+                                passenger.getPersistentData().getString("pale_mirror_role")))
+                        .findFirst().orElse(null));
+        int removed = 0;
+        for (Entity duplicate : carts) if (duplicate != selectedCart) {
+            duplicate.discard();
+            removed++;
+        }
+        for (Entity orphan : cargos) if (orphan != cargo) {
+            orphan.discard();
+            removed++;
+        }
+        if (cargo == null) cargo = createRepresentativeCargo(level, selectedCart, routeId);
+        else if (cargo.getVehicle() != selectedCart && !cargo.startRiding(selectedCart, true)) {
+            cargo.discard();
+            cargo = createRepresentativeCargo(level, selectedCart, routeId);
+            removed++;
+        }
+        return new RepresentativeReconciliation(new VisualCart(selectedCart.getUUID(), cargo.getUUID()), removed);
+    }
+
+    /** Applies the visual carrier's authoritative, non-physical pose every tick. */
+    public void stabilizeRepresentativeCart(Entity cart, BlockPos rail) {
+        stabilizeRepresentativeCart(cart, rail.getX() + 0.5D, rail.getY() + 0.1D, rail.getZ() + 0.5D);
+    }
+
+    public void stabilizeRepresentativeCart(Entity cart, double x, double y, double z) {
+        cart.setNoGravity(true);
+        cart.setInvulnerable(true);
+        cart.noPhysics = true;
+        cart.setDeltaMovement(Vec3.ZERO);
+        cart.fallDistance = 0.0F;
+        cart.moveTo(x, y, z, cart.getYRot(), cart.getXRot());
+    }
+
+    private Display.BlockDisplay createRepresentativeCargo(ServerLevel level, Entity cart, String routeId) {
         Display.BlockDisplay cargo = EntityType.BLOCK_DISPLAY.create(level);
         if (cargo == null) {
             cart.discard();
@@ -123,6 +211,7 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
         displayData.put("block_state", NbtUtils.writeBlockState(Blocks.CHEST.defaultBlockState()));
         cargo.load(displayData);
         cargo.setInvulnerable(true);
+        cargo.noPhysics = true;
         cargo.getPersistentData().putString("pale_mirror_route", routeId);
         cargo.getPersistentData().putString("pale_mirror_role", "representative_cargo");
         cargo.moveTo(cart.getX(), cart.getY() + 0.35D, cart.getZ(), 0F, 0F);
@@ -131,7 +220,7 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
             cart.discard();
             throw new IllegalStateException("Vanilla representative cargo spawn was rejected");
         }
-        return new VisualCart(cart.getUUID(), cargo.getUUID());
+        return cargo;
     }
 
     public static boolean isRepresentative(Entity entity) {
@@ -140,6 +229,7 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
     }
 
     public record VisualCart(java.util.UUID cartId, java.util.UUID cargoId) { }
+    public record RepresentativeReconciliation(VisualCart keeper, int removedEntities) { }
 
     private static BlockState railState(Direction direction, boolean powered, int railY, int nextRailY, int previousRailY) {
         RailShape shape = shape(direction, railY, nextRailY, previousRailY);

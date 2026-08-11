@@ -46,6 +46,16 @@ public final class MaterializationJob {
         return desiredRevision == revision && state != JobState.CANCELLED
                 && policyId.equals(expectedPolicyId) && policyVersion.equals(expectedPolicyVersion);
     }
+    public boolean matchesOperations(List<MaterializationOperation> expected) {
+        if (operations.size() != expected.size()) return false;
+        for (int index = 0; index < operations.size(); index++) {
+            MaterializationOperation actual = operations.get(index);
+            MaterializationOperation desired = expected.get(index);
+            if (actual.type() != desired.type() || !actual.target().equals(desired.target())
+                    || !actual.idempotencyKey().equals(desired.idempotencyKey())) return false;
+        }
+        return true;
+    }
     public MaterializationOperation nextOperation() {
         return nextOperationIndex < operations.size() ? operations.get(nextOperationIndex) : null;
     }
