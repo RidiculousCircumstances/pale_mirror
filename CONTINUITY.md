@@ -44,8 +44,8 @@
 - Server-side runtime debug controls are operator-only. Read commands expose typed evidence and canonical facts; manual binding uses the normal living-region registration path; destructive reset is a two-phase maintenance action that must fail closed once any PM physical work, transfer, lease, actor or projectile exists.
 - Debug visualization is ephemeral presentation: per-operator bounded particles expose observed/managed bounds and planned mine columns; advanced client tooltips expose item registry ownership and PM policy without mutating ItemStacks.
 - Debug navigation exposes dimension/coordinates and clickable operator teleports only for persisted physical anchors; canonical planned mines remain inspectable but cannot be teleported to until materialized.
-- Product status is an internal alpha and near technological 0.2 RC, not a completed gameplay release. Technology is stronger than physical legibility, player comprehension and repeatability.
-- The remaining 0.2 release gate is mandatory: authenticated graphical playthrough of automatic discovery, the readable baseline corridor and all player choices; automated implementation/packaging evidence alone does not declare the gameplay release complete.
+- Product status: 0.2 is conditionally accepted as the technical First Living Region release. Technology remains stronger than physical legibility, player comprehension and repeatability.
+- The unaided graphical playthrough remains a non-blocking 0.2.x presentation-quality gate: its findings become bounded UX fixes and do not delay 0.3 architecture work unless they expose a canonical-state or safety failure.
 - 0.3 is `Living Frontier`: repeatable multi-region causal stories with combat, infrastructure, evacuation/refusal, visible consequences, Narrator candidate scoring and delayed aftermath. It does not broaden infection providers or commodity scope first.
 
 ## State
@@ -87,13 +87,12 @@
 
 - Schema v27 implements the `VANILLA_MINECART` baseline route profile for fresh campaign regions, with a provenance-safe loaded-chunk executor, low-tech receiving platform and lease-authorized representative cart. V26 managed Create routes remain legacy records; no existing physical line is rewritten implicitly. Core GameTests (25/25), guardrails, build and packaged-JAR verification pass.
 - The private server now runs the checksum-published schema-v27 JAR on a newly generated `world`; its former 84 MiB runtime world was moved to `.pale-mirror-backups/world-reset-pre-schema-v27-20260811T070000Z/world` and is not mounted by Minecraft. `pale_mirror:vanilla_minecart_rail` reported `AVAILABLE` after clean startup.
+- 0.2 is conditionally accepted; its remaining unaided graphical exercise is an ongoing presentation-quality check, not a blocker for 0.3.
 
 ### Next
 
-- On a fresh post-change exercise world, traverse the full vanilla minecart corridor, verify the MineSite loading yard, simple receiving platform, optional representative cart and abstract IRON flow.
-- Run a clean authenticated client playthrough: automatic village recognition, welcome kit, complete baseline corridor, delayed infection, combat recovery, alternate player-built Create route, evacuation and restart continuity.
-- Turn any usability or physical-world failures from that playthrough into bounded release fixes; do not expand 0.3 scope before the 0.2 acceptance story is understandable without operator help.
-- After the 0.2 gate, replace singleton bootstrap with `RegionArchetype`/placement plans, implement three supply-crisis outcomes, visible recovery/evacuation, multi-region Narrator scoring and delayed aftermath.
+- Begin 0.3 with `RegionArchetype`/placement plans, three supply-crisis outcomes, visible recovery/evacuation, multi-region Narrator scoring and delayed aftermath.
+- In parallel, run the unaided vanilla-corridor and alternate-Create walkthroughs; classify findings as bounded 0.2.x presentation fixes unless they reveal a canonical-state, persistence or safety failure.
 
 ## Open questions
 

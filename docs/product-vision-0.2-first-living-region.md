@@ -22,8 +22,8 @@ when a player can tell a causal story such as:
 
 The next product objective is to make that kind of story possible.
 
-**Current product position:** Pale Mirror is an internal product alpha and an
-almost-ready technological release candidate for 0.2. The engine is proven for
+**Current product position:** Pale Mirror 0.2 is conditionally accepted as an
+internal First Living Region release. The engine is proven for
 one managed living region and one cross-system causal chain:
 
 ```text
@@ -32,9 +32,9 @@ Mine + Threat + Route + Settlement + Scenario + Physical representation
 
 It is authoritative for the controlled world objects, settlement economy,
 policy, scenarios, and materialization in that region. The negative chain from
-infection through shortage and evacuation is implemented, but the product
-release is not complete until a player can discover, understand, and resolve
-the story without operator commands or developer explanation.
+infection through shortage and evacuation is implemented, but the full product
+target still requires a player to discover, understand, and resolve the story
+without operator commands or developer explanation.
 
 ```text
 Mine -> Route -> Settlement -> Defence -> Migration -> Infrastructure
@@ -42,7 +42,7 @@ Mine -> Route -> Settlement -> Defence -> Migration -> Infrastructure
 
 This document began as product direction and now records the implementation
 history through schema v25 and the First Living Region release-candidate slice. The player-facing Definition
-of 0.2 remains the release gate. The canonical settlement design is defined in
+of 0.2 remains a non-blocking 0.2.x presentation-quality gate. The canonical settlement design is defined in
 [`settlement-actor-model.md`](settlement-actor-model.md).
 
 ## Implemented vertical-slice baseline

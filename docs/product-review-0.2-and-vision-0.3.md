@@ -2,8 +2,8 @@
 
 ## Status of this document
 
-This is the canonical product-owner review as of 2026-08-10. It evaluates the
-implemented system, defines the remaining release gate for 0.2, and fixes the
+This is the canonical product-owner review as of 2026-08-11. It evaluates the
+implemented system, records the conditional acceptance of 0.2, and fixes the
 product direction for 0.3. Implementation history remains in
 [`product-vision-0.2-first-living-region.md`](product-vision-0.2-first-living-region.md),
 but where the two documents differ on current product status or priority, this
@@ -11,9 +11,11 @@ review takes precedence.
 
 ## Current assessment
 
-Pale Mirror is an **internal product alpha and an automated technological
-release candidate for 0.2**. The implementation gate is substantially closed;
-the clean graphical player-acceptance gate remains open.
+Pale Mirror 0.2 is a **conditionally accepted internal First Living Region
+release**. Its implementation, persistence and safety gates are closed. The
+unaided graphical walkthrough remains open as a non-blocking presentation
+quality gate: it may produce 0.2.x UX fixes, but does not delay 0.3 unless it
+reveals a canonical-state, persistence or safety failure.
 
 The principal technical hypothesis is proven: a canonical event passes through
 a scenario, is materialized in Minecraft, accepts a player action, and returns
@@ -34,7 +36,7 @@ The product hypothesis is only partially proven. The earlier live exercise
 exposed the gap directly: a floating cube represented the mine, infection and
 freight infrastructure were not self-explanatory, and neither the affected
 resource nor the available actions were obvious without developer guidance.
-The schema-v27 release candidate now implements the corrective MineSite,
+The schema-v27 release now implements the corrective MineSite,
 complete low-tech vanilla baseline corridor, welcome kit, survey map and
 dynamic native ledger, but these changes still require a fresh unaided
 graphical playthrough.
@@ -141,26 +143,28 @@ threat forms. A player must be able to answer:
 
 ## Pale Mirror 0.2 release definition
 
-The current build should not yet be declared a complete product release of
-0.2. Its technical slices and automated integration gates are implemented, but
-its player-facing release gate is still open.
+The current build is conditionally accepted as 0.2. Its technical slices and
+automated integration gates are implemented. Player-facing validation remains
+required, but is tracked as a 0.2.x quality follow-up rather than a blocker for
+the next milestone.
 
 The release name is:
 
 > **Pale Mirror 0.2 — First Living Region: Ironhill**
 
-It is complete when one region can be played from discovery to durable outcome
-without operator commands or developer explanation.
+Its product target remains one region playable from discovery to durable outcome
+without operator commands or developer explanation. This is the standard for
+the 0.2.x presentation follow-up and the first 0.3 usability exercise.
 
-### Release-gate status
+### Post-acceptance quality follow-up
 
-| Requirement | Implementation status | Remaining acceptance |
+| Requirement | Implementation status | Remaining non-blocking validation |
 | --- | --- | --- |
 | Real `MineSite` | Surface yard, framed entrance, supported descending drift and controller chamber are provenance-preflighted and persisted | Confirm terrain fit, navigation and infection readability in a fresh graphical world |
 | Readable baseline freight | PM builds a complete Mine17–Ironhill vanilla minecart corridor, loading yard and receiving platform through naturally loaded chunks | Traverse the line and verify that its physical relationship is readable without commands |
 | Positive alternate logistics | The exact Create 6.0.10 read-only adapter still certifies the same player train at both alternate endpoints | Complete the player-built scheduled-train walkthrough |
 | Dynamic presentation | A survey map, welcome letter and canonical `Regional Ledger` written book show stocks, flow, reserve, crisis, routes, choices, coordinates and history | Test comprehension with no operator explanation |
-| Repeatable exercise | A clean world automatically discovers a qualifying vanilla/Integrated Villages place and creates a fresh schema-v25 region; old v24 regions are intentionally not retrofitted | Run clean-world repetitions and record seed/location failures |
+| Repeatable exercise | A clean world automatically discovers a qualifying vanilla/Integrated Villages place and creates a fresh schema-v27 region; old v24–v26 regions are intentionally not retrofitted | Run clean-world repetitions and record seed/location failures |
 
 The packaged final JAR has passed its existing dedicated harnesses and the core
 and industrial-railway GameTest profiles. The new vanilla baseline has its own
