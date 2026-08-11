@@ -11,7 +11,12 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityMobGriefingEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -20,6 +25,26 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class VanillaMinecartRouteGameTests {
     private VanillaMinecartRouteGameTests() { }
+
+    @GameTest(batch = "pm-vanilla-minecart-protection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void endermenCannotGriefButOtherMobPolicyIsUnchanged(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        EnderMan enderman = EntityType.ENDERMAN.create(level);
+        Zombie zombie = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(enderman != null && zombie != null, "test mobs must be constructible");
+
+        EntityMobGriefingEvent endermanEvent = new EntityMobGriefingEvent(level, enderman);
+        NeoForge.EVENT_BUS.post(endermanEvent);
+        helper.assertFalse(endermanEvent.canGrief(),
+                "Endermen must never remove supports or place carried blocks around PM infrastructure");
+
+        EntityMobGriefingEvent zombieEvent = new EntityMobGriefingEvent(level, zombie);
+        boolean configuredPolicy = zombieEvent.canGrief();
+        NeoForge.EVENT_BUS.post(zombieEvent);
+        helper.assertValueEqual(zombieEvent.canGrief(), configuredPolicy,
+                "the Enderman-specific protection must not alter other mobs or the global mobGriefing rule");
+        helper.succeed();
+    }
 
     @GameTest(batch = "pm-vanilla-minecart-build", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void corridorBuildsFromPersistedProvenance(GameTestHelper helper) {
