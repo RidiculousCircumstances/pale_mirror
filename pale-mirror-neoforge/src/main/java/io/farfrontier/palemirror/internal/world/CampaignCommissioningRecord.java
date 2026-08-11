@@ -68,10 +68,18 @@ public final class CampaignCommissioningRecord {
     public static CampaignCommissioningRecord planned(String regionId, String dimensionId, String connectionId,
             String serviceId, BlockPos start, BlockPos target, BlockPos assembly, Direction.Axis axis,
             Direction direction, int maximumLength, String origin, String destination) {
+        return planned(regionId, dimensionId, connectionId, serviceId, start, target, assembly, axis,
+                direction, maximumLength, origin, destination, RailConstructionPolicy.LOADED_CHUNKS_ONLY);
+    }
+
+    public static CampaignCommissioningRecord planned(String regionId, String dimensionId, String connectionId,
+            String serviceId, BlockPos start, BlockPos target, BlockPos assembly, Direction.Axis axis,
+            Direction direction, int maximumLength, String origin, String destination,
+            RailConstructionPolicy constructionPolicy) {
         return new CampaignCommissioningRecord(regionId, dimensionId, connectionId, serviceId, start, target,
                 assembly, axis, direction, maximumLength, origin, destination, CampaignCommissioningStatus.PLANNED,
                 "", "", "", "", "", 0, -1, Map.of(),
-                RailConstructionPolicy.LOADED_CHUNKS_ONLY, 0, 0);
+                constructionPolicy, 0, 0);
     }
 
     public static CampaignCommissioningRecord legacyDisabled(String regionId, String dimensionId, BlockPos anchor) {

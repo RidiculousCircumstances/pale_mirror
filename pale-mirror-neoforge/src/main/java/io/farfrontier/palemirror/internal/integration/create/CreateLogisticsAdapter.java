@@ -54,18 +54,22 @@ public final class CreateLogisticsAdapter implements LogisticsAdapter {
         if (health().status() != AdapterHealth.Status.AVAILABLE) {
             return LogisticsRouteObservation.unobserved(health().detail());
         }
-        if (!level.hasChunkAt(contract.originAnchor()) || !level.hasChunkAt(contract.destinationAnchor())) {
-            return LogisticsRouteObservation.unobserved("Create route endpoints are not both loaded");
-        }
+        boolean originLoaded = level.hasChunkAt(contract.originAnchor());
+        boolean destinationLoaded = level.hasChunkAt(contract.destinationAnchor());
+        if (!originLoaded && !destinationLoaded) return LogisticsRouteObservation.unobserved(
+                "Neither Create route endpoint is loaded");
         try {
-            StationFact origin = findStation(level, contract.originAnchor(), contract.originStationName());
-            StationFact destination = findStation(level, contract.destinationAnchor(), contract.destinationStationName());
-            if (!origin.found() || !destination.found()) {
-                return LogisticsRouteObservation.invalid("Expected named Create stations are missing: "
-                        + contract.originStationName() + " -> " + contract.destinationStationName());
-            }
+            StationFact origin = originLoaded ? findStation(level, contract.originAnchor(), contract.originStationName())
+                    : StationFact.notObserved();
+            StationFact destination = destinationLoaded
+                    ? findStation(level, contract.destinationAnchor(), contract.destinationStationName())
+                    : StationFact.notObserved();
+            String diagnostic = !originLoaded || origin.found() ? ""
+                    : "Loaded origin is missing station '" + contract.originStationName() + "'";
+            if (destinationLoaded && !destination.found()) diagnostic += (diagnostic.isBlank() ? "" : "; ")
+                    + "loaded destination is missing station '" + contract.destinationStationName() + "'";
             return new LogisticsRouteObservation(true, origin.trainPresent(), origin.capacity(), origin.vehicleId(),
-                    destination.trainPresent(), destination.capacity(), destination.vehicleId(), "");
+                    destination.trainPresent(), destination.capacity(), destination.vehicleId(), diagnostic);
         } catch (ReflectiveOperationException failure) {
             return LogisticsRouteObservation.invalid("Create station observation failed: " + failure.getClass().getSimpleName());
         }
@@ -102,5 +106,7 @@ public final class CreateLogisticsAdapter implements LogisticsAdapter {
         return id == null ? "" : id.toString();
     }
 
-    private record StationFact(boolean found, boolean trainPresent, int capacity, String vehicleId) { }
+    private record StationFact(boolean found, boolean trainPresent, int capacity, String vehicleId) {
+        static StationFact notObserved() { return new StationFact(false, false, 0, ""); }
+    }
 }

@@ -55,7 +55,21 @@ observations survive restart.
 
 Create is unchanged as the alternate industrial path: the same observed
 vehicle must prove traversal at both registered endpoints inside the proof
-window. It is not a substitute for explaining the pre-existing baseline line.
+window. The endpoints do not need to be loaded simultaneously: PM retains each
+typed observation and only accepts matching vehicle IDs while both facts are
+fresh. It is not a substitute for explaining the pre-existing baseline line.
+
+For closed-alpha testing, a permission-level-4 operator may run
+`/pale_mirror logistics commission_red_valley [region]`. This persists a
+separate Railway Untold `AUTONOMOUS_DEV` exercise whose authority is bounded to
+one planned Red Valley → Ironhill connection and one segment footprint at a
+time. The exercise can build the line, named stations and scheduled train
+without hundreds of blocks of manual track laying. It deliberately cannot
+validate the canonical alternate route: normal read-only Create observations
+must still see the same train at Red Valley and Ironhill inside the proof
+window. Production/world-authored railway plans retain loaded-chunks-only
+policy; the exception is explicit, operator-only and intended for disposable
+playtest worlds.
 
 Canonical infection is also readable before the player accepts a story. When an
 infected MineSite is nearby and loaded, PM materializes the source-specific

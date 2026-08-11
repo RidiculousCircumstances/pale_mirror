@@ -21,6 +21,7 @@ import io.farfrontier.palemirror.domain.RouteProvider;
 /** Restart-safe commissioning coordinator for the product-profile legacy freight line. */
 public final class ManagedRailwayRuntime {
     private static final int MAXIMUM_LINE_LENGTH = 1_200;
+    private static final String RED_VALLEY_EXERCISE_SUFFIX = ":red_valley_exercise";
 
     private ManagedRailwayRuntime() { }
 
@@ -60,6 +61,83 @@ public final class ManagedRailwayRuntime {
             changed |= validateCanonicalRoute(data, commands, record);
         }
         return changed;
+    }
+
+    /**
+     * Explicit closed-alpha convenience. It persists a provider-owned Create
+     * connection and freight service for the alternate source, but never
+     * validates the canonical route directly; the ordinary read-only Create
+     * observation must still prove the same train at both endpoints.
+     */
+    public static CommissioningResult commissionRedValleyExercise(MinecraftServer server,
+                                                                   PaleMirrorSavedData data,
+                                                                   String requestedRegionId) {
+        RailInfrastructureAdapter adapter = AdapterRegistry.managedRailway();
+        if (adapter.health().status() != AdapterHealth.Status.AVAILABLE) {
+            return CommissioningResult.failure("Railway Untold managed adapter is not AVAILABLE: "
+                    + adapter.health().detail());
+        }
+        var regions = data.worldState().livingRegions().stream()
+                .filter(region -> requestedRegionId == null || requestedRegionId.isBlank()
+                        || region.id().equals(requestedRegionId))
+                .sorted(java.util.Comparator.comparing(io.farfrontier.palemirror.domain.LivingRegionState::id)).toList();
+        if (regions.isEmpty()) return CommissioningResult.failure(requestedRegionId == null || requestedRegionId.isBlank()
+                ? "No living region is available" : "Unknown living region " + requestedRegionId);
+        if ((requestedRegionId == null || requestedRegionId.isBlank()) && regions.size() != 1) {
+            return CommissioningResult.failure("More than one living region exists; specify its full region id");
+        }
+        var region = regions.getFirst();
+        CampaignRegionRecord physical = data.campaignRegions().get(region.id());
+        if (physical == null || physical.status() != CampaignRegionPresentationStatus.MATERIALIZED
+                || physical.alternateMineAnchor() == null) {
+            return CommissioningResult.failure("Red Valley MineSite is not materialized for " + region.id());
+        }
+        String exerciseId = region.id() + RED_VALLEY_EXERCISE_SUFFIX;
+        CampaignCommissioningRecord existing = data.campaignCommissioning().get(exerciseId);
+        if (existing != null) {
+            String message = "Red Valley exercise already exists at " + existing.railStart().toShortString()
+                    + " -> " + existing.railTarget().toShortString();
+            boolean stalledGraphMerge = existing.status() == CampaignCommissioningStatus.RAIL_BUILDING
+                    && existing.totalSegments() > 0
+                    && existing.completedSegments() == existing.totalSegments()
+                    && existing.diagnostic().contains("waiting for Create graph merge");
+            if (existing.status() == CampaignCommissioningStatus.BLOCKED || stalledGraphMerge) {
+                RailConnectionObservation resumed = adapter.resume(server.overworld(), existing.connectionId());
+                if (resumed.status() == RailConnectionStatus.BLOCKED || resumed.status() == RailConnectionStatus.FAILED
+                        || resumed.status() == RailConnectionStatus.UNAVAILABLE) existing.block(resumed.diagnostic());
+                else {
+                    existing.railBuilding(resumed.planHash(), resumed.nativeReference());
+                    existing.observeRailProgress(resumed.completedSegments(), resumed.totalSegments(), resumed.diagnostic());
+                    message += "; explicit retry requested";
+                }
+                data.setDirty();
+            }
+            return CommissioningResult.success(exerciseId, existing, message);
+        }
+
+        BlockPos start = physical.alternateMineAnchor().offset(0, 1, -3);
+        BlockPos target = physical.settlementAnchor();
+        int dx = target.getX() - start.getX();
+        int dz = target.getZ() - start.getZ();
+        Direction.Axis axis = Math.abs(dx) >= Math.abs(dz) ? Direction.Axis.X : Direction.Axis.Z;
+        Direction direction = axis == Direction.Axis.X ? (dx >= 0 ? Direction.EAST : Direction.WEST)
+                : (dz >= 0 ? Direction.SOUTH : Direction.NORTH);
+        int length = Math.abs(dx) + Math.abs(dz);
+        if (length < 32 || length > MAXIMUM_LINE_LENGTH) {
+            return CommissioningResult.failure("Red Valley exercise length " + length
+                    + " is outside 32.." + MAXIMUM_LINE_LENGTH);
+        }
+        RegionBindings bindings = RegionBindings.fromRegionId(region.id());
+        CampaignCommissioningRecord record = CampaignCommissioningRecord.planned(exerciseId,
+                physical.dimensionId(), "pm:" + safeId(region.id()) + ":red_valley_line",
+                "pm:" + safeId(region.id()) + ":red_valley_freight", start, target, start, axis, direction,
+                MAXIMUM_LINE_LENGTH, bindings.alternateDispatchStation(), bindings.receivingStation(),
+                io.farfrontier.palemirror.internal.adapter.RailConstructionPolicy.AUTONOMOUS_DEV);
+        data.campaignCommissioning().put(exerciseId, record);
+        data.setDirty();
+        return CommissioningResult.success(exerciseId, record,
+                "Red Valley exercise persisted at " + start.toShortString() + " -> " + target.toShortString()
+                        + "; Railway Untold will build one bounded segment footprint at a time");
     }
 
     private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandProcessor commands,
@@ -137,7 +215,8 @@ public final class ManagedRailwayRuntime {
 
     private static boolean plan(ServerLevel level, CampaignCommissioningRecord record, RailInfrastructureAdapter adapter) {
         RailConnectionObservation observed = adapter.plan(level, new RailConnectionRequest(record.connectionId(),
-                record.railStart(), record.railTarget(), record.trackAxis(), record.maximumLength()));
+                record.railStart(), record.railTarget(), record.trackAxis(), record.maximumLength(),
+                record.constructionPolicy()));
         if (observed.status() == RailConnectionStatus.BLOCKED || observed.status() == RailConnectionStatus.FAILED
                 || observed.status() == RailConnectionStatus.UNAVAILABLE) {
             record.block(observed.diagnostic()); return true;
@@ -186,5 +265,21 @@ public final class ManagedRailwayRuntime {
     }
 
     private static String safeId(String value) { return value.replace(':', '_').replace('/', '_'); }
+
+    public record CommissioningResult(boolean success, String exerciseId, CampaignCommissioningStatus status,
+                                      int completedSegments, int totalSegments, String diagnostic, String message) {
+        static CommissioningResult success(String id, CampaignCommissioningRecord record, String message) {
+            return new CommissioningResult(true, id, record.status(), record.completedSegments(),
+                    record.totalSegments(), record.diagnostic(), message);
+        }
+        static CommissioningResult failure(String message) {
+            return new CommissioningResult(false, "", null, 0, 0, "", message);
+        }
+        public String describe() {
+            return success ? message + "; id=" + exerciseId + "; status=" + status
+                    + "; segments=" + completedSegments + "/" + totalSegments
+                    + (diagnostic.isBlank() ? "" : "; diagnostic=" + diagnostic) : message;
+        }
+    }
 
 }

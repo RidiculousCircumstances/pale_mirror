@@ -359,12 +359,20 @@ public final class PaleMirrorEvents {
                             PaleMirrorRuntime.forServer(context.getSource().getServer()).timeline(id)), false);
                     return 1;
                 })));
-        root.then(Commands.literal("logistics").requires(source -> source.hasPermission(2)).then(Commands.literal("status")
-                .executes(context -> {
+        LiteralArgumentBuilder<CommandSourceStack> logistics = Commands.literal("logistics")
+                .requires(source -> source.hasPermission(2));
+        logistics.then(Commands.literal("status").executes(context -> {
                     context.getSource().sendSuccess(() -> Component.literal(
                             PaleMirrorRuntime.forServer(context.getSource().getServer()).logisticsStatus()), false);
                     return 1;
-                })));
+                }));
+        LiteralArgumentBuilder<CommandSourceStack> commissionRedValley = Commands.literal("commission_red_valley")
+                .requires(source -> source.hasPermission(4))
+                .executes(context -> commissionRedValley(context, ""));
+        commissionRedValley.then(Commands.argument("region", ResourceLocationArgument.id()).executes(context ->
+                commissionRedValley(context, ResourceLocationArgument.getId(context, "region").toString())));
+        logistics.then(commissionRedValley);
+        root.then(logistics);
         root.then(Commands.literal("settlement").then(Commands.literal("evacuate")
                 .then(Commands.argument("id", ResourceLocationArgument.id()).executes(context -> {
                     PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
@@ -395,6 +403,18 @@ public final class PaleMirrorEvents {
 
     private static StoryAudienceId audienceFor(CommandSourceStack source, PaleMirrorRuntime runtime) {
         return source.getEntity() instanceof ServerPlayer player ? runtime.audienceFor(player) : runtime.defaultAudience();
+    }
+
+    private static int commissionRedValley(
+            com.mojang.brigadier.context.CommandContext<CommandSourceStack> context, String regionId) {
+        var result = PaleMirrorRuntime.forServer(context.getSource().getServer())
+                .commissionRedValleyExercise(regionId);
+        if (result.success()) {
+            context.getSource().sendSuccess(() -> Component.literal(result.describe()), true);
+            return 1;
+        }
+        context.getSource().sendFailure(Component.literal(result.describe()));
+        return 0;
     }
 
     private static boolean denyExcludedItem(Player player, ItemStack stack, String operation) {

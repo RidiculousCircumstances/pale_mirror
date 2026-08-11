@@ -212,6 +212,10 @@ public final class PaleMirrorRuntime {
 
     public String logisticsStatus() { return RegionalLogisticsRuntime.describe(data); }
 
+    public ManagedRailwayRuntime.CommissioningResult commissionRedValleyExercise(String regionId) {
+        return ManagedRailwayRuntime.commissionRedValleyExercise(server, data, regionId);
+    }
+
     public RuntimeDebugController debug() { return debug; }
 
     public void recordSettlementDeath(Entity entity, DamageSource source) {
