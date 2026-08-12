@@ -82,13 +82,19 @@
 
 ### Now
 
-- Schema-v36 code, unit tests, 37 Core GameTests and 4 Visuals GameTests pass. Final packaging,
-  two-start harness and a clean deployed world are the remaining gates for this cutover.
+- Schema-v36 code, unit tests, 37 Core GameTests and 4 Visuals GameTests pass. Final packaged Core
+  crash/restart and Core+Visuals+Sable natural-worldgen two-start harnesses pass.
+- Commit `7e378a0` is deployed to the private server and client artifact host. The disposable old world was
+  deleted, seed `3374619285067712046` created a clean world, and the immutable 470-slice catalog became
+  ready without blocking the server thread. Its closest authored region is centered at `-587 66 1444`.
+- A 30-second post-readiness JFR showed average idle server ticks settling around 0.47–0.69 ms, with no
+  watchdog or `Can't keep up` event.
 
 ### Next
 
-- Build final JARs, run packaged restart harnesses, deploy them, delete the disposable development world and
-  verify natural generation/stamps/performance on the private server before graphical playtesting.
+- Re-run the client updater, travel naturally to the closest authored region and validate visual quality,
+  resident behavior and active-player tick cost. Use `/pale_mirror performance` during the session and take
+  a player-loaded JFR if any latency or disconnect recurs.
 
 ## Open questions
 
