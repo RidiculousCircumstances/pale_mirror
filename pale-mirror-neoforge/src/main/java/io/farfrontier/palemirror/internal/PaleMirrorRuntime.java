@@ -100,9 +100,11 @@ public final class PaleMirrorRuntime {
         CampaignRegionBootstrapper.stop(server);
         ManagedRailwayRuntime.stop(server);
         io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.clear(server);
-        INSTANCES.remove(server);
+        PaleMirrorRuntime runtime = INSTANCES.remove(server);
+        if (runtime != null) runtime.debug.close();
     }
     public void tick() {
+        debug.tick();
         work.beginTick();
         long gameTick = server.overworld().getGameTime();
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());

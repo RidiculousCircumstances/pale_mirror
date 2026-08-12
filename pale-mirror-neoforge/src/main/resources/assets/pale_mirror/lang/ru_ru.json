@@ -6,6 +6,7 @@
   "screen.pale_mirror.atlas": "Атлас Pale Mirror",
   "screen.pale_mirror.atlas.step": "Шаг симуляции %s — состояние региона",
   "screen.pale_mirror.atlas.no_regions": "Ваша группа ещё не обнаружила ни одного живого региона.",
+  "screen.pale_mirror.atlas.settlement_coordinates": "Поселение: %s %s %s",
   "screen.pale_mirror.atlas.accept": "Принять",
   "screen.pale_mirror.atlas.decline": "Отказаться",
   "screen.pale_mirror.atlas.prepare_shelter": "Подготовить убежище",

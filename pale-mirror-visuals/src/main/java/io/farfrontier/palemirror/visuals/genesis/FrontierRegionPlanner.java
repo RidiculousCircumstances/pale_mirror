@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 4;
+    public static final int DEFINITION_VERSION = 5;
     public static final int SETTLEMENT_RADIUS = 88;
     private static final int PRIMARY_MIN = 384;
     private static final int PRIMARY_SPAN = 129;
@@ -25,24 +25,33 @@ public final class FrontierRegionPlanner {
     private static final int ALTERNATE_SPAN = 257;
 
     public AuthoredRegionSeed plan(long worldSeed, int ordinal, VisualPoint anchor, FrontierClimate climate) {
-        return plan(worldSeed, ordinal, anchor, climate, (x, z) -> anchor.y());
+        return plan(worldSeed, ordinal, anchor, climate, candidates -> candidates.getFirst());
     }
 
     public AuthoredRegionSeed plan(long worldSeed, int ordinal, VisualPoint anchor, FrontierClimate climate,
                                    java.util.function.IntBinaryOperator mineHeight) {
+        return plan(worldSeed, ordinal, anchor, climate, candidates -> {
+            VisualPoint candidate = candidates.getFirst();
+            return new VisualPoint(candidate.x(), mineHeight.applyAsInt(candidate.x(), candidate.z()), candidate.z());
+        });
+    }
+
+    public AuthoredRegionSeed plan(long worldSeed, int ordinal, VisualPoint anchor, FrontierClimate climate,
+                                   MineAnchorResolver mineAnchors) {
         if (ordinal < 0) throw new IllegalArgumentException("ordinal must be non-negative");
         String source = worldSeed + ":iron_frontier:" + ordinal + ":" + anchor.x() + ":" + anchor.z();
         String key = shortHash(source);
         String planId = "pale_mirror:iron_frontier_" + key;
-        int direction = keyedInt(source, "freight_direction", 4);
+        int preferredDirection = keyedInt(source, "freight_direction", 4);
         int primaryDistance = PRIMARY_MIN + keyedInt(source, "primary_distance", PRIMARY_SPAN);
         int alternateDistance = ALTERNATE_MIN + keyedInt(source, "alternate_distance", ALTERNATE_SPAN);
+        VisualPoint primary = mineAnchors.resolve(mineCandidates(anchor, preferredDirection, primaryDistance,
+                PRIMARY_MIN, PRIMARY_MIN + PRIMARY_SPAN - 1, -1));
+        int direction = cardinalDirection(anchor, primary);
+        VisualPoint alternate = mineAnchors.resolve(mineCandidates(anchor, direction + 1, alternateDistance,
+                ALTERNATE_MIN, ALTERNATE_MIN + ALTERNATE_SPAN - 1, direction));
         VisualPoint gate = offset(anchor, direction, 78);
         VisualPoint depot = offset(anchor, direction, 58);
-        VisualPoint rawPrimary = offset(anchor, direction, primaryDistance);
-        VisualPoint primary = new VisualPoint(rawPrimary.x(), mineHeight.applyAsInt(rawPrimary.x(), rawPrimary.z()), rawPrimary.z());
-        VisualPoint rawAlternate = offset(anchor, (direction + 1) % 4, alternateDistance);
-        VisualPoint alternate = new VisualPoint(rawAlternate.x(), mineHeight.applyAsInt(rawAlternate.x(), rawAlternate.z()), rawAlternate.z());
         List<VisualModulePlacement> modules = modules(anchor, climate, direction);
         List<VisualBounds> plots = expansionPlots(anchor);
         List<ResidentSeed> residents = residents(source, modules);
@@ -55,6 +64,34 @@ public final class FrontierRegionPlanner {
                 contentHash, "minecraft:overworld", climate.name().toLowerCase(Locale.ROOT), climate.palette(), anchor,
                 bounds(anchor, SETTLEMENT_RADIUS, -8, 40), gate, depot, primary, alternate,
                 rail, modules, residents, plots, shelters);
+    }
+
+    private static List<VisualPoint> mineCandidates(VisualPoint anchor, int firstDirection, int preferredDistance,
+                                                     int minimumDistance, int maximumDistance,
+                                                     int excludedDirection) {
+        List<Integer> distances = new ArrayList<>();
+        distances.add(preferredDistance);
+        for (int delta = 16; distances.size() < 12 && delta <= maximumDistance - minimumDistance; delta += 16) {
+            int farther = preferredDistance + delta;
+            int nearer = preferredDistance - delta;
+            if (farther <= maximumDistance) distances.add(farther);
+            if (nearer >= minimumDistance) distances.add(nearer);
+        }
+        if (!distances.contains(minimumDistance)) distances.add(minimumDistance);
+        if (!distances.contains(maximumDistance)) distances.add(maximumDistance);
+        List<VisualPoint> result = new ArrayList<>();
+        for (int turn = 0; turn < 4; turn++) {
+            int direction = Math.floorMod(firstDirection + turn, 4);
+            if (excludedDirection >= 0 && direction == Math.floorMod(excludedDirection, 4)) continue;
+            for (int distance : distances) result.add(offset(anchor, direction, distance));
+        }
+        return List.copyOf(result);
+    }
+
+    private static int cardinalDirection(VisualPoint from, VisualPoint to) {
+        if (to.z() == from.z() && to.x() != from.x()) return to.x() > from.x() ? 0 : 2;
+        if (to.x() == from.x() && to.z() != from.z()) return to.z() > from.z() ? 1 : 3;
+        throw new IllegalStateException("Resolved primary MineSite is not cardinal to its settlement");
     }
 
     private static List<VisualModulePlacement> modules(VisualPoint a, FrontierClimate climate, int gateDirection) {

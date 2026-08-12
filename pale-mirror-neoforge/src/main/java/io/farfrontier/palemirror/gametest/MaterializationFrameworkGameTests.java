@@ -9,11 +9,17 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationGateway
 import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticSlotLedger;
 import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
+import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.SettlementTerritoryPolicy;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
+import net.neoforged.neoforge.event.level.BlockGrowFeatureEvent;
 
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -80,6 +86,39 @@ public final class MaterializationFrameworkGameTests {
         helper.assertTrue(result.status() == io.farfrontier.palemirror.api.GuardedWorldAccess.Status.BLOCKED,
                 "failed postcondition must block the operation");
         helper.assertBlockPresent(net.minecraft.world.level.block.Blocks.STONE, new BlockPos(1, 2, 1));
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-settlement-territory", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void settlementColumnRejectsTreesAndBackgroundHostiles(GameTestHelper helper) {
+        BlockPos inside = helper.absolutePos(new BlockPos(1, 2, 1));
+        BlockPos outside = helper.absolutePos(new BlockPos(12, 2, 12));
+        String dimension = helper.getLevel().dimension().location().toString();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(helper.getLevel().getServer().overworld());
+        data.parcels().register(new ParcelRecord("pale_mirror:test_influence:" + java.util.UUID.randomUUID(),
+                "pale_mirror:test_region", dimension, inside.offset(-2, -1, -2), inside.offset(2, 1, 2),
+                "settlement", ParcelKind.INFLUENCE, null, 0, ""));
+
+        var hostile = new MobSpawnEvent.SpawnPlacementCheck(EntityType.ZOMBIE, helper.getLevel(),
+                MobSpawnType.NATURAL, inside.above(200), helper.getLevel().getRandom(), true);
+        helper.assertTrue(SettlementTerritoryPolicy.evaluate(hostile),
+                "natural hostile spawn must be denied across the full settlement column");
+        helper.assertValueEqual(hostile.getResult(), MobSpawnEvent.SpawnPlacementCheck.Result.FAIL,
+                "settlement hostile policy must fail the placement check");
+
+        var explicit = new MobSpawnEvent.SpawnPlacementCheck(EntityType.ZOMBIE, helper.getLevel(),
+                MobSpawnType.SPAWNER, inside, helper.getLevel().getRandom(), true);
+        helper.assertTrue(!SettlementTerritoryPolicy.evaluate(explicit),
+                "explicit spawner mechanics must remain outside the settlement background policy");
+
+        var insideGrowth = new BlockGrowFeatureEvent(helper.getLevel(), helper.getLevel().getRandom(), inside, null);
+        SettlementTerritoryPolicy.evaluate(insideGrowth);
+        helper.assertTrue(insideGrowth.isCanceled(), "tree-like growth inside settlement influence must be canceled");
+
+        var outsideGrowth = new BlockGrowFeatureEvent(helper.getLevel(), helper.getLevel().getRandom(), outside, null);
+        SettlementTerritoryPolicy.evaluate(outsideGrowth);
+        helper.assertTrue(!outsideGrowth.isCanceled(), "tree-like growth outside settlement influence must remain unchanged");
         helper.succeed();
     }
 }

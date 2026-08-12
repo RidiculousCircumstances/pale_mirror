@@ -60,12 +60,21 @@ public final class VisualsGameTests {
         helper.assertValueEqual(first.chunks().keySet(), second.chunks().keySet(),
                 "compiled chunk address space must be deterministic");
         int rails = 0;
+        int cleanupOnlyColumns = 0;
         for (var entry : first.chunks().entrySet()) {
             var slice = entry.getValue();
             helper.assertValueEqual(slice.chunkKey(), entry.getKey(), "slice must retain its owning chunk");
             for (var column : slice.terrain()) helper.assertValueEqual(
                     net.minecraft.world.level.ChunkPos.asLong(column.x() >> 4, column.z() >> 4), entry.getKey(),
                     "terrain write escaped its chunk-local slice");
+            for (var column : slice.vegetation()) {
+                helper.assertValueEqual(net.minecraft.world.level.ChunkPos.asLong(column.x() >> 4, column.z() >> 4),
+                        entry.getKey(), "vegetation cleanup escaped its chunk-local slice");
+                int dx = column.x() - seed.anchor().x();
+                int dz = column.z() - seed.anchor().z();
+                if (dx * dx + dz * dz > FrontierRegionPlanner.SETTLEMENT_RADIUS
+                        * FrontierRegionPlanner.SETTLEMENT_RADIUS) cleanupOnlyColumns++;
+            }
             for (var rail : slice.rails()) {
                 helper.assertValueEqual(new net.minecraft.world.level.ChunkPos(rail.rail()).toLong(), entry.getKey(),
                         "rail write escaped its chunk-local slice");
@@ -76,6 +85,8 @@ public final class VisualsGameTests {
                     "template write escaped its chunk-local slice");
         }
         helper.assertValueEqual(rails, seed.baselineRailNodes().size(), "every authored rail node must compile once");
+        helper.assertTrue(cleanupOnlyColumns > 0,
+                "settlement compilation must include a cleanup-only halo for overhanging tree crowns");
         helper.succeed();
     }
 

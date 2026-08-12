@@ -16,7 +16,7 @@ public final class PaleMirrorAtlasScreen extends Screen {
     private static final int PANEL_MARGIN = 16;
     private static final int HEADER_HEIGHT = 42;
     private static final int FOOTER_HEIGHT = 18;
-    private static final int REGION_HEIGHT = 82;
+    private static final int REGION_HEIGHT = 94;
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int SCROLL_STEP = 36;
     private PaleMirrorAtlasClient.Snapshot snapshot;
@@ -112,29 +112,32 @@ public final class PaleMirrorAtlasScreen extends Screen {
         graphics.drawString(font, region.name(), x, y, 0xFFFFFF, false);
         graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.crisis."
                 + region.crisis().toLowerCase(java.util.Locale.ROOT)), x + 150, y, crisisColor, false);
+        if (region.settlement().known()) graphics.drawString(font, Component.translatable(
+                "screen.pale_mirror.atlas.settlement_coordinates", region.settlement().x(),
+                region.settlement().y(), region.settlement().z()), x, y + 13, 0xA9BBC7, false);
         if (!region.supplyKnown()) {
-            graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.discover_depot"), x, y + 15,
+            graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.discover_depot"), x, y + 27,
                     0xF7D27A, false);
-            graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.discovery_hint"), x, y + 30,
+            graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.discovery_hint"), x, y + 42,
                     0xC4D5E4, false);
         } else {
             graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.cause",
-                    diagnosis(region.primaryDiagnosis())), x, y + 15, 0xF7D27A, false);
+                    diagnosis(region.primaryDiagnosis())), x, y + 27, 0xF7D27A, false);
             graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.iron",
                     region.iron(), region.ironCapacity(), signed(region.netFlow()),
                     region.reserve() < 0 ? Component.translatable("screen.pale_mirror.atlas.stable") : region.reserve()),
-                    x, y + 30, 0xC4D5E4, false);
+                    x, y + 42, 0xC4D5E4, false);
             graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.defence",
-                    region.defence(), region.baseDefence()), x, y + 45, 0xC4D5E4, false);
+                    region.defence(), region.baseDefence()), x, y + 57, 0xC4D5E4, false);
             if (region.primaryRepairCount() > 0 && region.primaryRepair().known()) {
                 graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.route_repair",
                         region.primaryRepairCount(), region.primaryRepair().x(), region.primaryRepair().y(),
-                        region.primaryRepair().z()), x, y + 60, 0xF6AA78, false);
+                        region.primaryRepair().z()), x, y + 72, 0xF6AA78, false);
             } else {
                 graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.routes",
                         diagnosis(region.primaryDiagnosis()), region.primaryCapacity(), region.primaryNominalCapacity(),
                         diagnosis(region.alternateDiagnosis()), region.alternateCapacity(), region.alternateNominalCapacity()),
-                        x, y + 60, 0x92C6E8, false);
+                        x, y + 72, 0x92C6E8, false);
             }
         }
         if (!region.scenarioTitle().isBlank()) graphics.drawString(font, Component.translatable(

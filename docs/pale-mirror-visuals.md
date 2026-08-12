@@ -43,6 +43,13 @@ read-only stamp observation and resident commissioning; it never edits terrain,
 structures, MineSites or rails. The manifest and observed-stamp ledger survive
 restart, with no tickets, retrofit pass or loaded-chunk bulk construction.
 
+Settlement grading also compiles a six-block cleanup-only halo. The halo does
+not flatten or claim neighbouring ground; during fresh chunk generation it only
+removes natural tree crowns and attachments up to 32 blocks above the settlement
+base. Logs, leaves, saplings, flowers, vines, cocoa, moss, cave vegetation and
+tagged beehives are included. This prevents a trunk cut by the fort footprint
+from leaving floating foliage or bee nests just outside the grading circle.
+
 ## Settlement grammar
 
 The current `iron_frontier` grammar produces a 176-block-diameter timber fort:

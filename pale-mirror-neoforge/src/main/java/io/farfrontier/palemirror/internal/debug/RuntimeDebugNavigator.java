@@ -2,8 +2,13 @@ package io.farfrontier.palemirror.internal.debug;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.ObservationFreshness;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
@@ -23,12 +28,22 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Read-only location projections plus explicit operator teleportation to persisted physical anchors. */
 public final class RuntimeDebugNavigator {
+    private static final TicketType<UUID> DEBUG_TELEPORT_TICKET = TicketType.create(
+            "pale_mirror_debug_teleport", Comparator.comparing(UUID::toString));
+    private static final int DEBUG_TELEPORT_TICKET_DISTANCE = 0;
+    private static final long PREPARATION_TIMEOUT_TICKS = 6_000L;
+    private static final long PROGRESS_INTERVAL_TICKS = 100L;
+    private static final int MAX_CONCURRENT_PREPARATIONS = 1;
+
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
+    private final Map<UUID, PendingTeleport> pendingTeleports = new LinkedHashMap<>();
 
     public RuntimeDebugNavigator(MinecraftServer server, PaleMirrorSavedData data) {
         this.server = server;
@@ -116,10 +131,103 @@ public final class RuntimeDebugNavigator {
         ServerLevel level = server.getLevel(dimension);
         if (level == null) return new RuntimeDebugService.ActionResult(false, "Dimension is unavailable: " + entry.dimensionId());
         BlockPos anchor = entry.anchor();
+        ChunkPos chunk = new ChunkPos(anchor);
+        if (level.getChunkSource().getChunkNow(chunk.x, chunk.z) != null) {
+            return teleportNow(player, level, entry.id(), anchor);
+        }
+
+        PendingTeleport existing = pendingTeleports.get(player.getUUID());
+        if (existing != null && existing.objectId().equals(entry.id()) && existing.dimension().equals(dimension)) {
+            return new RuntimeDebugService.ActionResult(true, "Still preparing " + entry.id().value()
+                    + "; teleport will complete automatically when its physical chunk is ready.");
+        }
+        if (existing != null) {
+            pendingTeleports.remove(player.getUUID());
+            cancel(existing);
+        }
+        if (pendingTeleports.size() >= MAX_CONCURRENT_PREPARATIONS) {
+            return new RuntimeDebugService.ActionResult(false,
+                    "Another PM debug destination is already being prepared; wait for it to finish or cancel by disconnecting.");
+        }
+
+        PendingTeleport pending = new PendingTeleport(player.getUUID(), entry.id(), dimension, anchor, chunk,
+                server.overworld().getGameTime());
+        level.getChunkSource().addRegionTicket(DEBUG_TELEPORT_TICKET, chunk,
+                DEBUG_TELEPORT_TICKET_DISTANCE, player.getUUID());
+        pendingTeleports.put(player.getUUID(), pending);
+        return new RuntimeDebugService.ActionResult(true, "Preparing destination " + entry.id().value() + " in "
+                + entry.dimensionId() + " at " + anchor.getX() + "," + anchor.getZ()
+                + " without blocking the server; teleport will complete automatically.");
+    }
+
+    public void tick() {
+        long gameTick = server.overworld().getGameTime();
+        Iterator<PendingTeleport> iterator = pendingTeleports.values().iterator();
+        while (iterator.hasNext()) {
+            PendingTeleport pending = iterator.next();
+            ServerLevel level = server.getLevel(pending.dimension());
+            ServerPlayer player = server.getPlayerList().getPlayer(pending.playerId());
+            if (level == null || player == null) {
+                release(level, pending);
+                iterator.remove();
+                continue;
+            }
+            long elapsed = gameTick - pending.startedAt();
+            if (elapsed >= PREPARATION_TIMEOUT_TICKS) {
+                player.sendSystemMessage(Component.literal("PM debug teleport timed out while preparing "
+                        + pending.objectId().value() + "; no teleport was performed.").withStyle(ChatFormatting.RED));
+                release(level, pending);
+                iterator.remove();
+                continue;
+            }
+            if (level.getChunkSource().getChunkNow(pending.chunk().x, pending.chunk().z) == null) {
+                if (elapsed > 0L && elapsed % PROGRESS_INTERVAL_TICKS == 0L) {
+                    player.displayClientMessage(Component.literal("PM is preparing " + pending.objectId().value()
+                            + "… " + elapsed / 20L + "s"), true);
+                }
+                continue;
+            }
+            try {
+                RuntimeDebugService.ActionResult result = teleportNow(player, level, pending.objectId(), pending.anchor());
+                player.sendSystemMessage(Component.literal(result.message()).withStyle(ChatFormatting.GREEN));
+            } catch (RuntimeException failure) {
+                PaleMirrorMod.LOGGER.error("PM debug teleport to {} failed after chunk preparation",
+                        pending.objectId().value(), failure);
+                player.sendSystemMessage(Component.literal("PM debug teleport failed after preparing "
+                        + pending.objectId().value() + ": " + failure.getMessage()).withStyle(ChatFormatting.RED));
+            } finally {
+                release(level, pending);
+                iterator.remove();
+            }
+        }
+    }
+
+    public int pendingTeleportCount() {
+        return pendingTeleports.size();
+    }
+
+    public void close() {
+        pendingTeleports.values().forEach(this::cancel);
+        pendingTeleports.clear();
+    }
+
+    private RuntimeDebugService.ActionResult teleportNow(ServerPlayer player, ServerLevel level,
+                                                          WorldObjectId objectId, BlockPos anchor) {
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ()) + 2;
         player.teleportTo(level, anchor.getX() + 0.5D, y, anchor.getZ() + 0.5D, player.getYRot(), player.getXRot());
-        return new RuntimeDebugService.ActionResult(true, "Teleported to " + entry.id().value() + " in "
-                + entry.dimensionId() + " at " + anchor.getX() + "," + y + "," + anchor.getZ());
+        return new RuntimeDebugService.ActionResult(true, "Teleported to " + objectId.value() + " in "
+                + level.dimension().location() + " at " + anchor.getX() + "," + y + "," + anchor.getZ());
+    }
+
+    private void cancel(PendingTeleport pending) {
+        release(server.getLevel(pending.dimension()), pending);
+    }
+
+    private static void release(ServerLevel level, PendingTeleport pending) {
+        if (level != null) {
+            level.getChunkSource().removeRegionTicket(DEBUG_TELEPORT_TICKET, pending.chunk(),
+                    DEBUG_TELEPORT_TICKET_DISTANCE, pending.playerId());
+        }
     }
 
     private MutableComponent locationLine(WorldObjectId id, String dimension, BlockPos anchor, String detail,
@@ -148,4 +256,8 @@ public final class RuntimeDebugNavigator {
     }
 
     private record PlannedMine(String dimensionId, BlockPos column) { }
+
+    private record PendingTeleport(UUID playerId, WorldObjectId objectId,
+                                   ResourceKey<net.minecraft.world.level.Level> dimension,
+                                   BlockPos anchor, ChunkPos chunk, long startedAt) { }
 }

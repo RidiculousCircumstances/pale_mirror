@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod;
 import io.farfrontier.palemirror.visuals.genesis.CompiledChunkSlice;
 import io.farfrontier.palemirror.visuals.genesis.CompiledGenesisCatalog;
 import io.farfrontier.palemirror.visuals.genesis.FrontierGenesisCompiler;
+import io.farfrontier.palemirror.visuals.genesis.FrontierRegionBatchPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierTerrainSurvey;
 import io.farfrontier.palemirror.visuals.genesis.VisualGenesisAttachments;
@@ -94,22 +95,24 @@ public final class FrontierGenesisRuntime {
         FrontierTerrainSurvey survey = new FrontierTerrainSurvey();
         FrontierRegionPlanner planner = new FrontierRegionPlanner();
         long started = System.nanoTime();
-        FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, VisualServerConfig.GENESIS_REGION_COUNT.get(),
+        int requested = VisualServerConfig.GENESIS_REGION_COUNT.get();
+        int reserve = Math.min(FrontierRegionBatchPlanner.RESERVE_CANDIDATES, 64 - requested);
+        FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, requested, reserve,
                 VisualServerConfig.GENESIS_MAP_RADIUS.get(), VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
-        List<AuthoredRegionSeed> manifests = java.util.stream.IntStream.range(0, batch.sites().size()).mapToObj(ordinal -> {
-            var site = batch.sites().get(ordinal);
-            return planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(), batch.mineHeight());
-        }).toList();
+        FrontierRegionBatchPlanner.Result planned = new FrontierRegionBatchPlanner().plan(level.getSeed(), requested,
+                batch.sites(), planner, batch.mineAnchors());
+        List<AuthoredRegionSeed> manifests = planned.manifests();
         var statistics = batch.statistics();
         planningMetrics = new PlanningMetrics(manifests.size(), System.nanoTime() - started,
                 0L, statistics.cachedHeights(), statistics.heightHits(), statistics.heightMisses(),
                 statistics.siteHeightProbes(), statistics.mineHeightProbes(), statistics.biomeSamples(),
                 statistics.discardedSiteCandidates());
         PaleMirrorVisualsMod.LOGGER.info("Batch-planned {} authored regions in {} ms using {} exact site probes, "
-                        + "{} mine probes, 0 rail probes, {} unique heights, {} discarded sites and {} biome samples",
+                        + "{} mine probes, 0 rail probes, {} unique heights, {} discarded sites, "
+                        + "{} rejected region candidates and {} biome samples",
                 manifests.size(), planningMetrics.elapsedNanos() / 1_000_000L, statistics.siteHeightProbes(),
                 statistics.mineHeightProbes(), statistics.heightMisses(), statistics.discardedSiteCandidates(),
-                statistics.biomeSamples());
+                planned.rejectedRegionCandidates(), statistics.biomeSamples());
         return manifests;
     }
 

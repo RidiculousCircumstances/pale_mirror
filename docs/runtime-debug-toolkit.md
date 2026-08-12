@@ -78,6 +78,11 @@ persisted physical anchor has a clickable `[TP]` action:
 ```
 
 Teleportation is an explicit operator action and uses the target dimension and a safe surface position above the anchor.
+If the target chunk is not already `FULL`, the command first installs one runtime-only chunk ticket and returns immediately.
+Chunk generation then proceeds through Minecraft's normal asynchronous pipeline; PM polls readiness once per server tick and
+teleports only after the target is available. Only one remote debug destination is prepared at a time, progress is reported
+every five seconds, disconnect cancels the request, and success, timeout, replacement or server stop always removes the ticket.
+The navigator never calls a blocking height query against a prospective chunk.
 A canonical but not yet materialized mine reports its planned dimension/X/Z and rejects teleportation: it has no physical
 anchor yet, and the navigator never pretends that planned work has already happened.
 

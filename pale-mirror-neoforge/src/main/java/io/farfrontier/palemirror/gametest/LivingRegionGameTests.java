@@ -101,6 +101,14 @@ public final class LivingRegionGameTests {
                 "the Atlas must expose a player-facing region name rather than require an opaque region id");
         helper.assertTrue(!atlasCards.getCompound(0).contains("regionId"),
                 "the client Atlas must not need an opaque region id to render a region card");
+        helper.assertTrue(atlasCards.getCompound(0).getBoolean("settlementKnown"),
+                "a discovered settlement must expose its player-facing coordinates in the Atlas");
+        helper.assertValueEqual(atlasCards.getCompound(0).getInt("settlementX"),
+                plannedPresentation.settlementAnchor().getX(), "Atlas settlement X must match the physical anchor");
+        helper.assertValueEqual(atlasCards.getCompound(0).getInt("settlementY"),
+                plannedPresentation.settlementAnchor().getY(), "Atlas settlement Y must match the physical anchor");
+        helper.assertValueEqual(atlasCards.getCompound(0).getInt("settlementZ"),
+                plannedPresentation.settlementAnchor().getZ(), "Atlas settlement Z must match the physical anchor");
         var presentation = data.campaignRegions().get(bindings.regionId());
         presentation.observeRouteEndpoint(true, 7, 18, "vehicle-a");
         presentation.observeRouteEndpoint(false, 8, 18, "vehicle-b");

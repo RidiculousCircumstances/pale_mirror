@@ -11,6 +11,7 @@
   "screen.pale_mirror.atlas": "Pale Mirror Atlas",
   "screen.pale_mirror.atlas.step": "Simulation step %s — regional record",
   "screen.pale_mirror.atlas.no_regions": "No living region has been recognized by your group yet.",
+  "screen.pale_mirror.atlas.settlement_coordinates": "Settlement: %s %s %s",
   "screen.pale_mirror.atlas.accept": "Accept",
   "screen.pale_mirror.atlas.decline": "Decline",
   "screen.pale_mirror.atlas.prepare_shelter": "Prepare shelter",

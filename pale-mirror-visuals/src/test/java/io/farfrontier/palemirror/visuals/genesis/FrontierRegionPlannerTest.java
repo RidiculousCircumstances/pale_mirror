@@ -29,7 +29,7 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertTrue(seed.modules().size() >= 16);
         assertEquals(6, seed.expansionPlots().size());
-        assertEquals(4, seed.definitionVersion());
+        assertEquals(5, seed.definitionVersion());
     }
 
     @Test void railwayConsumesOnlyTheTwoExplicitMineAnchorQueries() {
@@ -57,6 +57,26 @@ class FrontierRegionPlannerTest {
             assertEquals(1, manhattan(seed.baselineRailNodes().get(i - 1), seed.baselineRailNodes().get(i)));
             assertTrue(Math.abs(seed.baselineRailNodes().get(i - 1).y() - seed.baselineRailNodes().get(i).y()) <= 1);
         }
+    }
+
+    @Test void dryResolverMayMovePrimaryMineAndFreightGateTogether() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        AuthoredRegionSeed seed = planner.plan(983L, 0, new VisualPoint(1500, 70, 0),
+                FrontierClimate.DRY_ARID, candidates -> {
+                    int call = calls.getAndIncrement();
+                    VisualPoint selected = call == 0
+                            ? candidates.stream().filter(point -> point.z() > 0).findFirst().orElseThrow()
+                            : candidates.getFirst();
+                    return new VisualPoint(selected.x(), 76 + call, selected.z());
+                });
+
+        assertEquals(2, calls.get());
+        assertEquals(seed.anchor().x(), seed.primaryMine().x());
+        assertTrue(seed.primaryMine().z() > seed.anchor().z());
+        assertEquals(seed.anchor().x(), seed.freightGate().x());
+        assertTrue(seed.freightGate().z() > seed.anchor().z());
+        assertEquals(seed.primaryMine().x(), seed.baselineRailNodes().getLast().x());
+        assertEquals(seed.primaryMine().z(), seed.baselineRailNodes().getLast().z());
     }
 
     private static int manhattan(VisualPoint a, VisualPoint b) {

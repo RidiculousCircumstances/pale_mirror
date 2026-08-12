@@ -76,6 +76,25 @@ class FrontierTerrainSurveyTest {
         assertTrue(failure.getMessage().contains("Cannot place 20 authored regions"));
     }
 
+    @Test void missingOptionalReserveDoesNotRejectRequestedSites() {
+        List<FrontierSiteSelector.SelectedSite> sites = new FrontierSiteSelector().selectWithReserve(
+                7L, new VisualPoint(0, 0, 0), 1, 1, 3_000, 10_000, new FakeTerrain());
+
+        assertEquals(1, sites.size());
+    }
+
+    @Test void mineFootprintRejectsWaterAtTheLoadingYardEdge() {
+        VisualPoint mine = new VisualPoint(100, 70, 200);
+        FakeTerrain terrain = new FakeTerrain();
+        terrain.waterAt = new VisualPoint(mine.x(), 0, mine.z() + FrontierTerrainSurvey.MINE_MAX_Z);
+        assertTrue(!FrontierTerrainSurvey.dryMineFootprint(mine, terrain));
+    }
+
+    @Test void exactMineSurfaceRejectsWaterColumnAndAcceptsDryGround() {
+        assertTrue(FrontierTerrainSurvey.isDrySurface(72, 72));
+        assertTrue(!FrontierTerrainSurvey.isDrySurface(63, 41));
+    }
+
     private static long distanceSquared(VisualPoint first, VisualPoint second) {
         long dx = (long) first.x() - second.x();
         long dz = (long) first.z() - second.z();
@@ -87,6 +106,7 @@ class FrontierTerrainSurveyTest {
         private int exactSamples;
         private boolean suitable = true;
         private boolean water;
+        private VisualPoint waterAt;
 
         @Override public TerrainSample exactSample(int x, int z) {
             exactSamples++;
@@ -97,7 +117,8 @@ class FrontierTerrainSurveyTest {
         @Override public FrontierSiteSelector.BiomeSample biome(int x, int z) {
             FrontierClimate climate = FrontierClimate.values()[Math.floorMod(
                     (x >> 8) + (z >> 8), FrontierClimate.values().length)];
-            return new FrontierSiteSelector.BiomeSample(climate, suitable, !suitable, 0);
+            boolean localWater = waterAt != null && waterAt.x() == x && waterAt.z() == z;
+            return new FrontierSiteSelector.BiomeSample(climate, suitable && !localWater, localWater || !suitable, 0);
         }
 
         private int height(int x, int z) {

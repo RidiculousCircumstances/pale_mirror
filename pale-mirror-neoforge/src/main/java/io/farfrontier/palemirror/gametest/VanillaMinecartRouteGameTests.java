@@ -264,8 +264,11 @@ public final class VanillaMinecartRouteGameTests {
         reroute.put(target.south(), RailShape.NORTH_SOUTH);
         reroute.put(target, RailShape.SOUTH_WEST);
         railGraph(level, reroute);
-        record.markTopologyChunkDirty(new net.minecraft.world.level.ChunkPos(start));
-        record.markTopologyChunkDirty(new net.minecraft.world.level.ChunkPos(target.south(2)));
+        // A rotated GameTest can place this tiny graph across as many as four
+        // chunk corners. Mark every chunk that actually contains the synthetic
+        // reroute instead of assuming its two extrema cover the whole graph.
+        reroute.keySet().stream().map(net.minecraft.world.level.ChunkPos::new).distinct()
+                .forEach(record::markTopologyChunkDirty);
 
         // Topology reconciliation is intentionally chunk-budgeted. Give the
         // runtime enough bounded passes to consume both dirty chunks rather

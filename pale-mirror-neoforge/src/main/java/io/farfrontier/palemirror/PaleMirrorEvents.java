@@ -47,6 +47,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.common.util.TriState;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.BlockGrowFeatureEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
@@ -55,6 +56,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
 import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter;
 import io.farfrontier.palemirror.internal.world.AmbientSpawnThrottle;
+import io.farfrontier.palemirror.internal.world.SettlementTerritoryPolicy;
 
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
 public final class PaleMirrorEvents {
@@ -92,9 +94,15 @@ public final class PaleMirrorEvents {
         PaleMirrorRuntime.forServer(event.getServer()).tick();
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onSpawnPlacementCheck(MobSpawnEvent.SpawnPlacementCheck event) {
+        if (SettlementTerritoryPolicy.evaluate(event)) return;
         AmbientSpawnThrottle.evaluate(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onBlockGrowFeature(BlockGrowFeatureEvent event) {
+        SettlementTerritoryPolicy.evaluate(event);
     }
 
     /** Source adapters may reject unmanaged native forms at the server boundary. */

@@ -33,6 +33,8 @@ public final class RuntimeDebugController {
 
     public boolean automaticBindingEnabled() { return service.automaticBindingEnabled(); }
     public void renderZoneMarkers() { service.renderZoneMarkers(server, data); }
+    public void tick() { navigator.tick(); }
+    public void close() { navigator.close(); }
     public String discoveryStatus() { return service.discoveryStatus(); }
     public String discoveryMode(RuntimeDebugService.DiscoveryMode mode) { return service.setDiscoveryMode(mode); }
     public String settlementCandidates(ServerPlayer player) { return service.settlementCandidates(server, data, player); }

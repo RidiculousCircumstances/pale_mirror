@@ -17,29 +17,45 @@ public final class FrontierSiteSelector {
 
     public List<SelectedSite> select(long worldSeed, VisualPoint spawn, int count, int mapRadius,
                                      int minimumSpacing, TerrainAccess terrain) {
+        return selectWithReserve(worldSeed, spawn, count, 0, mapRadius, minimumSpacing, terrain);
+    }
+
+    public List<SelectedSite> selectWithReserve(long worldSeed, VisualPoint spawn, int count, int reserve,
+                                                int mapRadius, int minimumSpacing, TerrainAccess terrain) {
         validate(count, mapRadius, minimumSpacing);
-        List<SelectedSite> selected = new ArrayList<>(count);
+        if (reserve < 0 || count + reserve > 64) {
+            throw new IllegalArgumentException("region count plus reserve must be between 1 and 64");
+        }
+        int targetCandidates = count + reserve;
+        List<SelectedSite> selected = new ArrayList<>(targetCandidates);
         List<Center> near = candidateCenters(worldSeed, spawn, NEAR_CANDIDATES, 1_024, 2_048, 0);
-        selectFrom(near, 1, minimumSpacing, terrain, selected,
-                MAX_EXACT_CANDIDATES_PER_REGION);
+        int nearTarget = 1 + Math.min(3, reserve);
+        selectFrom(near, nearTarget, minimumSpacing, terrain, selected,
+                nearTarget * MAX_EXACT_CANDIDATES_PER_REGION, true);
         if (selected.isEmpty()) throw impossible(count, mapRadius, minimumSpacing, 0);
-        if (count > 1) {
-            int remaining = count - 1;
+        if (targetCandidates > selected.size()) {
+            int remaining = targetCandidates - selected.size();
             int maximumDistance = mapRadius - REGION_ENVELOPE;
             int minimumDistance = Math.min(maximumDistance - 1, Math.max(2_600, minimumSpacing + 1_000));
             if (maximumDistance <= minimumDistance) throw impossible(count, mapRadius, minimumSpacing, 1);
             int remoteCount = Math.max(REMOTE_CANDIDATE_FLOOR, remaining * CANDIDATES_PER_REMOTE_REGION);
             List<Center> remote = candidateCenters(worldSeed ^ 0x6a09e667f3bcc909L, spawn, remoteCount,
                     minimumDistance, maximumDistance, NEAR_CANDIDATES);
-            selectFrom(remote, count, minimumSpacing, terrain, selected,
-                    remaining * MAX_EXACT_CANDIDATES_PER_REGION);
+            selectFrom(remote, targetCandidates, minimumSpacing, terrain, selected,
+                    remaining * MAX_EXACT_CANDIDATES_PER_REGION, false);
         }
-        if (selected.size() != count) throw impossible(count, mapRadius, minimumSpacing, selected.size());
+        // Reserve centers are opportunistic. The hard contract is the requested
+        // region count; rejecting an otherwise usable world because one optional
+        // reserve slot missed the bounded survey defeats the purpose of a reserve.
+        if (selected.size() < count) {
+            throw impossible(count, mapRadius, minimumSpacing, selected.size());
+        }
         return List.copyOf(selected);
     }
 
     private static void selectFrom(List<Center> candidates, int targetCount, int minimumSpacing,
-                                   TerrainAccess terrain, List<SelectedSite> selected, int exactBudget) {
+                                   TerrainAccess terrain, List<SelectedSite> selected, int exactBudget,
+                                   boolean nearCandidate) {
         List<RankedCenter> ranked = java.util.stream.IntStream.range(0, candidates.size()).mapToObj(index -> {
             Center center = candidates.get(index);
             return new RankedCenter(center, footprintBiome(center, terrain), index);
@@ -63,7 +79,7 @@ public final class FrontierSiteSelector {
                     terrain.recordDiscardedCandidate(candidate);
                     continue;
                 }
-                SelectedSite site = new SelectedSite(candidate, biome.climate());
+                SelectedSite site = new SelectedSite(candidate, biome.climate(), nearCandidate);
                 if (candidate.preferred()) {
                     fallbacks.forEach(value -> terrain.recordDiscardedCandidate(value.terrain()));
                     selected.add(site);
@@ -166,7 +182,11 @@ public final class FrontierSiteSelector {
             if (terrainPreference < 0) throw new IllegalArgumentException("terrainPreference must be non-negative");
         }
     }
-    public record SelectedSite(TerrainCandidate terrain, FrontierClimate climate) { }
+    public record SelectedSite(TerrainCandidate terrain, FrontierClimate climate, boolean nearCandidate) {
+        public SelectedSite(TerrainCandidate terrain, FrontierClimate climate) {
+            this(terrain, climate, false);
+        }
+    }
     private record Center(int x, int z) { }
     private record RankedCenter(Center center, BiomeSample biome, int originalIndex) { }
 }

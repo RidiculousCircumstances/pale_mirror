@@ -34,7 +34,8 @@ import net.minecraft.world.level.block.state.properties.RailShape;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 2;
+    public static final int CATALOG_VERSION = 5;
+    static final int SETTLEMENT_VEGETATION_HALO = 6;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableSlice> slices = new LinkedHashMap<>();
@@ -61,12 +62,17 @@ public final class FrontierGenesisCompiler {
                                           Map<Long, MutableSlice> slices) {
         int y = seed.anchor().y();
         int radius = FrontierRegionPlanner.SETTLEMENT_RADIUS;
-        for (int x = seed.anchor().x() - radius; x <= seed.anchor().x() + radius; x++) {
-            for (int z = seed.anchor().z() - radius; z <= seed.anchor().z() + radius; z++) {
+        int cleanupRadius = radius + SETTLEMENT_VEGETATION_HALO;
+        for (int x = seed.anchor().x() - cleanupRadius; x <= seed.anchor().x() + cleanupRadius; x++) {
+            for (int z = seed.anchor().z() - cleanupRadius; z <= seed.anchor().z() + cleanupRadius; z++) {
                 int dx = x - seed.anchor().x();
                 int dz = z - seed.anchor().z();
-                if (dx * dx + dz * dz > radius * radius) continue;
+                int distanceSquared = dx * dx + dz * dz;
+                if (distanceSquared > cleanupRadius * cleanupRadius) continue;
                 MutableSlice slice = slice(slices, x, z);
+                slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
+                        new CompiledChunkSlice.VegetationColumn(x, z, y));
+                if (distanceSquared > radius * radius) continue;
                 slice.terrain.add(new CompiledChunkSlice.TerrainColumn(x, z, y,
                         Blocks.GRASS_BLOCK.defaultBlockState(), palette.foundation()));
                 double distance = Math.sqrt(dx * dx + dz * dz);
@@ -255,13 +261,14 @@ public final class FrontierGenesisCompiler {
     private static final class MutableSlice {
         private final long key;
         private final List<CompiledChunkSlice.TerrainColumn> terrain = new ArrayList<>();
+        private final Map<Long, CompiledChunkSlice.VegetationColumn> vegetation = new LinkedHashMap<>();
         private final List<CompiledChunkSlice.RailColumn> rails = new ArrayList<>();
         private final Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
         private MutableSlice(long key) { this.key = key; }
         private CompiledChunkSlice freeze(String catalogHash) {
             String stamp = catalogHash.substring(0, 16) + ":" + Long.toUnsignedString(key, 16) + ":"
-                    + terrain.size() + ":" + rails.size() + ":" + blocks.size();
-            return new CompiledChunkSlice(key, stamp, terrain, rails, blocks);
+                    + terrain.size() + ":" + vegetation.size() + ":" + rails.size() + ":" + blocks.size();
+            return new CompiledChunkSlice(key, stamp, terrain, vegetation.values().stream().toList(), rails, blocks);
         }
     }
 }
