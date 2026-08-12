@@ -17,13 +17,15 @@ The immutable manifest contains every object identity and coordinate needed by
 core: settlement bounds, freight gate, receiving depot, Mine17, Red Valley,
 baseline rail path, modules, expansion plots and 48 resident identities.
 
-Terrain survey calls generator-only height and biome APIs on a dedicated
-planning worker. It does not load prospective chunks. The selector evaluates
-all regions in one bounded hierarchical pass: five-point coarse probes rank a
-deterministic global candidate set, a 7×7 detailed survey runs only for the
-best candidates, and every exact height is shared through one cache with mine
-and rail planning. Impossible count/radius/spacing combinations fail closed
-instead of overlapping sites. The relevant `pale-mirror-visuals-server.toml`
+Terrain survey calls generator-only biome and bounded height APIs on a dedicated
+planning worker. It does not load prospective chunks. Cheap biome-footprint checks
+rank deterministic horizontal candidates. Each accepted region then receives
+one exact center/cardinal settlement survey and two exact mine anchors; at most six site
+surveys may be attempted per requested region. Railway elevation is a
+grade-safe interpolation between its endpoints and never scans the intervening
+terrain. During natural generation each chunk uses only its own ready heightmap
+to choose local cut, fill and supports. Impossible count/radius/spacing or
+terrain combinations fail closed instead of overlapping sites. The relevant `pale-mirror-visuals-server.toml`
 settings are:
 
 ```toml

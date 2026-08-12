@@ -30,7 +30,7 @@ done
   "$java_bin" -jar "$installer" --installServer . >/dev/null
 )
 printf 'eula=true\n' > "$runtime_dir/eula.txt"
-printf 'online-mode=false\nserver-port=0\nview-distance=3\nsimulation-distance=3\n' > "$runtime_dir/server.properties"
+printf 'online-mode=false\nserver-port=0\nview-distance=3\nsimulation-distance=3\nlevel-seed=3374619285067712046\n' > "$runtime_dir/server.properties"
 mkdir "$runtime_dir/mods"
 cp "$core_jar" "$visuals_jar" "$geckolib_jar" "$villager_jar" \
   "$supplementaries_jar" "$moonlight_jar" "$sable_jar" "$runtime_dir/mods/"

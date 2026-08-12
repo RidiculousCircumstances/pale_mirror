@@ -20,12 +20,18 @@ Authored residents have a separate visual-only AI LOD in
 `pale-mirror-visuals-server.toml`. All 48 stable entities remain visible, but
 only 16 nearby residents run vanilla AI by default.
 
-Fresh-world planning is also bounded. Visuals selects every configured region
-as one batch, uses coarse probes before detailed 7×7 surveys, and shares exact
-height results across site, mine and railway planning. `performance` includes
-planning time, cache hits/misses and biome-probe counts. A pure budget test
-requires a 20-region/10,000-block survey to use fewer than 6,000 unique terrain
-samples, versus 15,680 detailed samples in the former independent algorithm.
+Fresh-world planning is also bounded. Visuals ranks deterministic horizontal
+candidates through five biome-footprint points without constructing NoiseChunks. An
+accepted region normally spends one exact five-point settlement survey and two exact mine
+anchors; rejected terrain may consume at most six such surveys per requested
+region. Railway elevation is interpolated between those anchors and performs
+zero terrain-height probes. For 20 regions this makes 140 exact probes normal
+and 640 the hard upper bound, versus 4,868 probes and 174 seconds observed in
+the previous full-modpack benchmark. `performance` reports the site, mine and
+rail probe classes separately, along with planning and catalog compile time.
+The packaged Sable profile selected 20 regions from the accepted benchmark
+seed in 1.758 seconds with 310 site probes, 40 mine probes and zero rail probes;
+the larger private-modpack gate remains the release-grade timing measurement.
 
 For an evidence-grade profile, run the server on JDK 21 and capture JFR:
 

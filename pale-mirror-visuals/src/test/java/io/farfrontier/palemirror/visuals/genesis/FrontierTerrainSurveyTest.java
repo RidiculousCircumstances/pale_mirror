@@ -30,14 +30,43 @@ class FrontierTerrainSurveyTest {
         }
     }
 
-    @Test void twentyRegionSurveyUsesHierarchicalProbeBudget() {
+    @Test void twentyRegionSurveyHasHardExactHeightBudget() {
         FakeTerrain terrain = new FakeTerrain();
-        new FrontierSiteSelector().select(42L, new VisualPoint(0, 0, 0), 20, 10_000, 1_400, terrain);
-        int legacyDetailedProbeCount = 20 * 16 * 49;
-        assertTrue(terrain.uniqueSamples() < 6_000,
-                "hierarchical batch survey must remain far below twenty independent detailed searches");
-        assertTrue(terrain.uniqueSamples() * 2 < legacyDetailedProbeCount,
-                "batch survey must use less than half the legacy terrain probes");
+        List<FrontierSiteSelector.SelectedSite> sites = new FrontierSiteSelector().select(
+                42L, new VisualPoint(0, 0, 0), 20, 10_000, 1_400, terrain);
+        java.util.concurrent.atomic.AtomicInteger mineSamples = new java.util.concurrent.atomic.AtomicInteger();
+        FrontierRegionPlanner planner = new FrontierRegionPlanner();
+        for (int ordinal = 0; ordinal < sites.size(); ordinal++) {
+            FrontierSiteSelector.SelectedSite site = sites.get(ordinal);
+            planner.plan(42L, ordinal, site.terrain().anchor(), site.climate(), (x, z) -> {
+                mineSamples.incrementAndGet();
+                return terrain.height(x, z);
+            });
+        }
+        int hardBudget = 20 * (FrontierSiteSelector.MAX_EXACT_CANDIDATES_PER_REGION
+                * FrontierSiteSelector.EXACT_SAMPLES_PER_CANDIDATE + 2);
+        assertTrue(terrain.exactSamples + mineSamples.get() <= hardBudget);
+        assertEquals(20 * FrontierSiteSelector.EXACT_SAMPLES_PER_CANDIDATE, terrain.exactSamples,
+                "flat valid terrain should consume one center/cardinal survey per region");
+        assertEquals(40, mineSamples.get(), "each region may query only its two mine anchors");
+    }
+
+    @Test void rejectedSitesConsumeBudgetAndFailClosed() {
+        FakeTerrain terrain = new FakeTerrain();
+        terrain.water = true;
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+                new FrontierSiteSelector().select(7L, new VisualPoint(0, 0, 0), 1, 10_000, 1_400, terrain));
+        assertTrue(failure.getMessage().contains("exact survey budget"));
+        assertEquals(FrontierSiteSelector.MAX_EXACT_CANDIDATES_PER_REGION
+                * FrontierSiteSelector.EXACT_SAMPLES_PER_CANDIDATE, terrain.exactSamples);
+    }
+
+    @Test void unsuitableBiomesNeverSpendExactHeightBudget() {
+        FakeTerrain terrain = new FakeTerrain();
+        terrain.suitable = false;
+        assertThrows(IllegalStateException.class, () -> new FrontierSiteSelector().select(
+                9L, new VisualPoint(0, 0, 0), 1, 10_000, 1_400, terrain));
+        assertEquals(0, terrain.exactSamples);
     }
 
     @Test void impossibleMapFailsClosedInsteadOfOverlappingRegions() {
@@ -55,21 +84,25 @@ class FrontierTerrainSurveyTest {
 
     private static final class FakeTerrain implements FrontierSiteSelector.TerrainAccess {
         private final Map<Long, TerrainSample> samples = new HashMap<>();
+        private int exactSamples;
+        private boolean suitable = true;
+        private boolean water;
 
-        @Override public TerrainSample sample(int x, int z) {
+        @Override public TerrainSample exactSample(int x, int z) {
+            exactSamples++;
             return samples.computeIfAbsent((long) x << 32 ^ Integer.toUnsignedLong(z), ignored ->
-                    new TerrainSample(x, z, height(x, z), false));
+                    new TerrainSample(x, z, height(x, z), water));
+        }
+
+        @Override public FrontierSiteSelector.BiomeSample biome(int x, int z) {
+            FrontierClimate climate = FrontierClimate.values()[Math.floorMod(
+                    (x >> 8) + (z >> 8), FrontierClimate.values().length)];
+            return new FrontierSiteSelector.BiomeSample(climate, suitable, !suitable, 0);
         }
 
         private int height(int x, int z) {
             long value = (long) x * 31L + (long) z * 17L + ((long) x * z >>> 8);
             return 68 + Math.floorMod((int) value, 7);
         }
-
-        @Override public FrontierClimate climate(int x, int z) {
-            return FrontierClimate.values()[Math.floorMod((x >> 8) + (z >> 8), FrontierClimate.values().length)];
-        }
-
-        private int uniqueSamples() { return samples.size(); }
     }
 }

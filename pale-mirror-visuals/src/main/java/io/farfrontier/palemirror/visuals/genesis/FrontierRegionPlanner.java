@@ -15,9 +15,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/** Pure deterministic layout grammar. Terrain selection supplies only the accepted surface anchor. */
+/** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 3;
+    public static final int DEFINITION_VERSION = 4;
     public static final int SETTLEMENT_RADIUS = 88;
     private static final int PRIMARY_MIN = 384;
     private static final int PRIMARY_SPAN = 129;
@@ -29,7 +29,7 @@ public final class FrontierRegionPlanner {
     }
 
     public AuthoredRegionSeed plan(long worldSeed, int ordinal, VisualPoint anchor, FrontierClimate climate,
-                                   java.util.function.IntBinaryOperator surfaceHeight) {
+                                   java.util.function.IntBinaryOperator mineHeight) {
         if (ordinal < 0) throw new IllegalArgumentException("ordinal must be non-negative");
         String source = worldSeed + ":iron_frontier:" + ordinal + ":" + anchor.x() + ":" + anchor.z();
         String key = shortHash(source);
@@ -40,15 +40,15 @@ public final class FrontierRegionPlanner {
         VisualPoint gate = offset(anchor, direction, 78);
         VisualPoint depot = offset(anchor, direction, 58);
         VisualPoint rawPrimary = offset(anchor, direction, primaryDistance);
-        VisualPoint primary = new VisualPoint(rawPrimary.x(), surfaceHeight.applyAsInt(rawPrimary.x(), rawPrimary.z()), rawPrimary.z());
+        VisualPoint primary = new VisualPoint(rawPrimary.x(), mineHeight.applyAsInt(rawPrimary.x(), rawPrimary.z()), rawPrimary.z());
         VisualPoint rawAlternate = offset(anchor, (direction + 1) % 4, alternateDistance);
-        VisualPoint alternate = new VisualPoint(rawAlternate.x(), surfaceHeight.applyAsInt(rawAlternate.x(), rawAlternate.z()), rawAlternate.z());
+        VisualPoint alternate = new VisualPoint(rawAlternate.x(), mineHeight.applyAsInt(rawAlternate.x(), rawAlternate.z()), rawAlternate.z());
         List<VisualModulePlacement> modules = modules(anchor, climate, direction);
         List<VisualBounds> plots = expansionPlots(anchor);
         List<ResidentSeed> residents = residents(source, modules);
         VisualPoint railStart = new VisualPoint(depot.x(), depot.y() + 1, depot.z());
         VisualPoint railEnd = new VisualPoint(primary.x(), primary.y() + 1, primary.z());
-        List<VisualPoint> rail = costedRail(railStart, railEnd, surfaceHeight);
+        List<VisualPoint> rail = gradedCardinalRail(railStart, railEnd);
         List<VisualPoint> shelters = shelterCandidates(anchor, direction);
         String contentHash = sha256(planId + ":" + climate + ":" + direction + ":" + modules + ":" + rail);
         return new AuthoredRegionSeed(planId, "pale_mirror:iron_frontier", DEFINITION_VERSION,
@@ -149,51 +149,23 @@ public final class FrontierRegionPlanner {
         return List.copyOf(nodes);
     }
 
-    static List<VisualPoint> costedRail(VisualPoint from, VisualPoint to,
-                                       java.util.function.IntBinaryOperator surfaceHeight) {
+    static List<VisualPoint> gradedCardinalRail(VisualPoint from, VisualPoint to) {
         int dx = Integer.signum(to.x() - from.x()); int dz = Integer.signum(to.z() - from.z());
         if (dx != 0 && dz != 0) throw new IllegalArgumentException("Frontier freight endpoints must share a cardinal axis");
-        int sideX = -dz; int sideZ = dx;
-        List<List<VisualPoint>> candidates = new ArrayList<>();
-        for (int offset : new int[]{0, -32, 32, -64, 64}) {
-            List<int[]> horizontal = new ArrayList<>();
-            appendLine(horizontal, from.x(), from.z(), from.x() + sideX * offset, from.z() + sideZ * offset);
-            appendLine(horizontal, horizontal.getLast()[0], horizontal.getLast()[1],
-                    to.x() + sideX * offset, to.z() + sideZ * offset);
-            appendLine(horizontal, horizontal.getLast()[0], horizontal.getLast()[1], to.x(), to.z());
-            candidates.add(grade(horizontal, from.y(), to.y(), surfaceHeight));
-        }
-        return candidates.stream().min(java.util.Comparator.comparingLong(path -> railCost(path, surfaceHeight)))
-                .orElseThrow();
-    }
-
-    private static void appendLine(List<int[]> result, int fromX, int fromZ, int toX, int toZ) {
-        int x = fromX; int z = fromZ;
-        if (result.isEmpty()) result.add(new int[]{x, z});
-        while (x != toX) { x += Integer.signum(toX - x); result.add(new int[]{x, z}); }
-        while (z != toZ) { z += Integer.signum(toZ - z); result.add(new int[]{x, z}); }
-    }
-
-    private static List<VisualPoint> grade(List<int[]> horizontal, int startY, int endY,
-                                           java.util.function.IntBinaryOperator surfaceHeight) {
-        List<VisualPoint> result = new ArrayList<>(horizontal.size()); int previous = startY;
-        for (int index = 0; index < horizontal.size(); index++) {
-            int[] point = horizontal.get(index); int remaining = horizontal.size() - 1 - index;
-            int desired = surfaceHeight.applyAsInt(point[0], point[1]) + 1;
-            int lower = Math.max(previous - 1, endY - remaining); int upper = Math.min(previous + 1, endY + remaining);
-            int y = index == 0 ? startY : index == horizontal.size() - 1 ? endY : Math.max(lower, Math.min(upper, desired));
-            result.add(new VisualPoint(point[0], y, point[1])); previous = y;
+        int segments = Math.abs(to.x() - from.x()) + Math.abs(to.z() - from.z());
+        int elevation = to.y() - from.y();
+        if (Math.abs(elevation) > segments) throw new IllegalArgumentException(
+                "Rail elevation exceeds grade-safe path length: " + elevation + " over " + segments);
+        List<VisualPoint> result = new ArrayList<>(segments + 1);
+        int elevationMagnitude = Math.abs(elevation);
+        int elevationSign = Integer.signum(elevation);
+        for (int index = 0; index <= segments; index++) {
+            int x = from.x() + dx * index;
+            int z = from.z() + dz * index;
+            int progressed = segments == 0 ? 0 : (elevationMagnitude * index + segments / 2) / segments;
+            result.add(new VisualPoint(x, from.y() + elevationSign * progressed, z));
         }
         return List.copyOf(result);
-    }
-
-    private static long railCost(List<VisualPoint> path, java.util.function.IntBinaryOperator surfaceHeight) {
-        long cost = path.size();
-        for (int index = 0; index < path.size(); index++) {
-            VisualPoint point = path.get(index); cost += Math.abs(point.y() - (surfaceHeight.applyAsInt(point.x(), point.z()) + 1)) * 10L;
-            if (index > 0) cost += Math.abs(point.y() - path.get(index - 1).y()) * 4L;
-        }
-        return cost;
     }
 
     private static VisualBounds bounds(VisualPoint center, int radius, int down, int up) {

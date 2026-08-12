@@ -2,8 +2,8 @@
 
 ## Goal (success criteria)
 
-- Scale fresh-world genesis to a bounded-map batch of up to 64 authored regions without repeated independent terrain surveys.
-- Keep static geometry in true chunk-local worldgen and make impossible layouts fail closed before admission.
+- Reduce full-modpack fresh-world genesis for 20 authored regions from ~174 seconds to at most 30 seconds.
+- Use biome-footprint horizontal selection, bounded five-point settlement/mine anchors, and ready current-chunk heightmaps for local worldgen adaptation; railway planning performs zero terrain-height scans.
 
 ## Constraints/Assumptions
 
@@ -26,8 +26,9 @@
 - Non-critical runtime work shares a configurable 3 ms / 256 weighted-operation admission budget. Cadence is staggered, unchanged projections are suppressed, railway health is event-driven, and `/pale_mirror performance` exposes per-work timing and deferral metrics.
 - The settlement generator uses a bounded deterministic hybrid grammar: procedural radial plan and road graph plus curated authored NBT modules. It does not use an unconstrained jigsaw walk.
 - The fort has a civic core, two functional rings, wooden palisade, freight gate/depot and at least six reserved development plots. Nominal diameter is 176 blocks and maximum footprint 192.
-- Terrain placement selects the best moderate site, rejects water/extreme terrain and then applies bounded local leveling: normal cut/fill 4 blocks, foundations 6, guaranteed-region fallback 8.
-- A pure hierarchical selector chooses all configured sites together: five-point coarse ranking, detailed 7×7 checks only for shortlisted candidates, one exact height cache shared with mine/rail planning, hard map radius and minimum spacing. The first region remains 1024–2048 blocks from spawn.
+- Terrain placement prefers dry sites with sampled relief at most 8 blocks, rejects water/extreme terrain, and permits a bounded dry fallback up to 24 blocks only after the preferred candidate fails.
+- A pure hierarchical selector chooses all configured sites together. Cheap biome-footprint ranking precedes at most six exact center/cardinal settlement surveys per requested region and one exact anchor for each mine; the railway never scans terrain height. Hard map radius and minimum spacing remain enforced. The first region remains 1024–2048 blocks from spawn.
+- Canonical railway elevation is a deterministic grade-safe interpolation between depot and mine anchors. Current-chunk `WORLD_SURFACE_WG` data controls only local cut/fill/support representation and never changes route identity or requests another chunk.
 - Mine17 is 384–512 blocks from the freight gate; Red Valley is 512–768 blocks away. The complete primary route plan exists at region genesis and materializes as its chunks naturally generate/load.
 - Three initial climate families share one grammar and role catalog but use climate palettes and local variants: temperate, cold/taiga and dry/arid.
 - The starting population is 48: 20 civilians, 14 workers, 4 specialists, 6 guards and 4 children. Each has stable identity, name, home and workplace/patrol assignment.
@@ -58,6 +59,7 @@
 - Kept all 48 authored residents visible while limiting expensive nearby vanilla AI to 16 role-prioritized carriers by default; the AI limit/radius are visual-only configuration.
 - Added persisted immutable manifests, generator-only terrain survey, deterministic three-region grammar, three climate palettes, radial forts, six expansion plots and curated private NBT modules with provenance.
 - Replaced per-region terrain searches with a configurable 1–64 region batch selector. The default remains three; a 20-region/10,000-block unit profile is deterministic, spacing-safe and capped below 6,000 unique survey samples.
+- Replaced pointwise site/rail height scanning with cheap biome-footprint ranking, a hard 640-probe exact-height ceiling for 20 regions, two mine probes per region and zero rail probes. Rail elevation is interpolated between exact endpoints; naturally generating chunks use only their ready local heightmap for cut/fill/support representation.
 - Replaced automatic observed-village campaign binding when Visuals is installed; core registers authored communities, places, facilities, sites, route contracts and exact 48-person PM-owned cohort state.
 - Added stable resident UUID commissioning, canonical-growth-only breeding, confirmed-death reconciliation and the isolated exact Villager Overhaul guard/worker/recruitment bridge.
 - Added the GeckoLib Threat Heart, four projected threat stages, infection sound/particles and depot crisis/recovery/prosperity cues. Core remains authoritative.
@@ -83,29 +85,21 @@
 
 ### Now
 
-- Batch genesis implementation and deterministic/fail-closed/probe-budget tests pass. A clean packaged
-  Sable runtime planned three regions in 4.05 seconds, generated an exact stamped slice and reopened it
-  without mutation in the two-start harness.
-- Commit `437e481` is published to the private artifact host and deployed to the playtest server. The
-  existing pinned manifests reopened unchanged; a fresh world is required to exercise the new selector.
-- Schema-v36 code, unit tests, 37 Core GameTests and 5 Visuals GameTests pass. Final packaged Core
-  crash/restart and Core+Visuals+Sable natural-worldgen two-start harnesses pass.
-- The first full-modpack 20-region benchmark used 4,868 height probes in 173.169 seconds and exposed a
-  powered-rail-at-corner compiler defect. The compiler now falls back to ordinary rail at such corners;
-  its exact regression and packaged restart harness pass before the benchmark world is recreated.
-- Commit `fa0722f` is published and deployed. Seed `54185464310597810` now has 20 pinned authored
-  manifests inside radius 10,000 with 1,400-block spacing; planning took 174.346 seconds and produced a
-  ready immutable catalog of 2,992 chunk slices. The closest region is centered at `24 68 -1864`.
-- Commit `7e378a0` is deployed to the private server and client artifact host. The disposable old world was
-  deleted, seed `3374619285067712046` created a clean world, and the immutable 470-slice catalog became
-  ready without blocking the server thread. Its closest authored region is centered at `-587 66 1444`.
-- A 30-second post-readiness JFR showed average idle server ticks settling around 0.47–0.69 ms, with no
-  watchdog or `Can't keep up` event.
+- The bounded-anchor optimization is implemented. Visual definition v4, catalog v2 and genesis SavedData
+  schema v3 intentionally reject/rebuild every earlier Visuals world; the playtest world is disposable.
+- A clean packaged Sable 20-region run on seed `3374619285067712046` planned all regions in 1.758 seconds:
+  310 exact site probes, 40 mine probes, zero rail probes, 350 unique heights, 1,833 biome samples and
+  2,900 compiled chunk slices. The former private-modpack run took 174.346 seconds and 4,868 heights.
+- Deterministic selection, spacing, fail-closed terrain handling, the combined 640-probe hard ceiling,
+  exactly two mine queries per region, grade-safe rail interpolation and current-column earthwork have
+  focused regression coverage. Core and Visuals GameTests plus packaged restart harnesses pass.
+- The private full-modpack 20-region benchmark has not yet been repeated; the packaged Sable number proves
+  the algorithmic reduction but is not the final release-grade timing result.
 
 ### Next
 
-- Reduce the full-modpack cost of uncached generator height probes before considering a higher production
-  default; the 20-region benchmark world is ready for live traversal/materialization testing.
+- Recreate and benchmark a clean 20-region private-modpack world, confirm the 30-second gate, then traverse
+  cut/fill/bridge sections in a graphical client and tune their visual policy without widening planning probes.
 
 ## Open questions
 

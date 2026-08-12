@@ -29,7 +29,18 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertTrue(seed.modules().size() >= 16);
         assertEquals(6, seed.expansionPlots().size());
-        assertEquals(3, seed.definitionVersion());
+        assertEquals(4, seed.definitionVersion());
+    }
+
+    @Test void railwayConsumesOnlyTheTwoExplicitMineAnchorQueries() {
+        java.util.concurrent.atomic.AtomicInteger queries = new java.util.concurrent.atomic.AtomicInteger();
+        AuthoredRegionSeed seed = planner.plan(983L, 0, new VisualPoint(1500, 70, 0),
+                FrontierClimate.DRY_ARID, (x, z) -> {
+                    queries.incrementAndGet();
+                    return x == 1500 && z == 0 ? 70 : 82;
+                });
+        assertEquals(2, queries.get());
+        assertEquals(seed.primaryMine().y() + 1, seed.baselineRailNodes().getLast().y());
     }
 
     @Test void mineDistancesAndRailConnectivityAreBounded() {

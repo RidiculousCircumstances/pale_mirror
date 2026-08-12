@@ -66,7 +66,10 @@ public final class FrontierGenesisRuntime {
         CompletableFuture<CompiledGenesisCatalog> future = CompletableFuture.supplyAsync(() -> {
             List<AuthoredRegionSeed> plans = ledger.manifests().isEmpty() ? plan(level) : ledger.manifests();
             READINESS.set(new GenesisReadiness(GenesisReadiness.State.COMPILING, 0, "", "Compiling chunk-local catalog"));
-            return new FrontierGenesisCompiler().compile(plans);
+            long compileStarted = System.nanoTime();
+            CompiledGenesisCatalog catalog = new FrontierGenesisCompiler().compile(plans);
+            planningMetrics = planningMetrics.withCompileNanos(System.nanoTime() - compileStarted);
+            return catalog;
         }, plannerExecutor);
         PLANNING.put(level, future);
         future.whenComplete((catalog, failure) -> event.getServer().execute(() -> {
@@ -95,15 +98,17 @@ public final class FrontierGenesisRuntime {
                 VisualServerConfig.GENESIS_MAP_RADIUS.get(), VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
         List<AuthoredRegionSeed> manifests = java.util.stream.IntStream.range(0, batch.sites().size()).mapToObj(ordinal -> {
             var site = batch.sites().get(ordinal);
-            return planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(), batch.surfaceHeight());
+            return planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(), batch.mineHeight());
         }).toList();
         var statistics = batch.statistics();
         planningMetrics = new PlanningMetrics(manifests.size(), System.nanoTime() - started,
-                statistics.cachedHeights(), statistics.heightHits(), statistics.heightMisses(),
-                statistics.biomeSamples());
-        PaleMirrorVisualsMod.LOGGER.info("Batch-planned {} authored regions in {} ms using {} height probes "
-                        + "({} cache hits) and {} biome samples", manifests.size(),
-                planningMetrics.elapsedNanos() / 1_000_000L, statistics.heightMisses(), statistics.heightHits(),
+                0L, statistics.cachedHeights(), statistics.heightHits(), statistics.heightMisses(),
+                statistics.siteHeightProbes(), statistics.mineHeightProbes(), statistics.biomeSamples(),
+                statistics.discardedSiteCandidates());
+        PaleMirrorVisualsMod.LOGGER.info("Batch-planned {} authored regions in {} ms using {} exact site probes, "
+                        + "{} mine probes, 0 rail probes, {} unique heights, {} discarded sites and {} biome samples",
+                manifests.size(), planningMetrics.elapsedNanos() / 1_000_000L, statistics.siteHeightProbes(),
+                statistics.mineHeightProbes(), statistics.heightMisses(), statistics.discardedSiteCandidates(),
                 statistics.biomeSamples());
         return manifests;
     }
@@ -213,12 +218,20 @@ public final class FrontierGenesisRuntime {
 
     private record PendingChunk(ServerLevel level, long chunk, String stamp) { }
 
-    private record PlanningMetrics(int regions, long elapsedNanos, int cachedHeights, long heightHits,
-                                   long heightMisses, long biomeSamples) {
-        private static PlanningMetrics empty() { return new PlanningMetrics(0, 0, 0, 0, 0, 0); }
+    private record PlanningMetrics(int regions, long elapsedNanos, long compileNanos, int cachedHeights,
+                                   long heightHits, long heightMisses, long siteHeightProbes,
+                                   long mineHeightProbes, long biomeSamples, long discardedSiteCandidates) {
+        private static PlanningMetrics empty() { return new PlanningMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0); }
+        private PlanningMetrics withCompileNanos(long value) {
+            return new PlanningMetrics(regions, elapsedNanos, value, cachedHeights, heightHits, heightMisses,
+                    siteHeightProbes, mineHeightProbes, biomeSamples, discardedSiteCandidates);
+        }
         private String summary() {
             return "plannedRegions=" + regions + ", planningMs=" + elapsedNanos / 1_000_000D
+                    + ", compileMs=" + compileNanos / 1_000_000D
                     + ", terrainHeightMisses=" + heightMisses + ", terrainHeightHits=" + heightHits
+                    + ", exactSiteHeightProbes=" + siteHeightProbes + ", exactMineHeightProbes=" + mineHeightProbes
+                    + ", railHeightProbes=0, discardedSiteCandidates=" + discardedSiteCandidates
                     + ", terrainBiomeSamples=" + biomeSamples + ", cachedTerrainHeights=" + cachedHeights;
         }
     }

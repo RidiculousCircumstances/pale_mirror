@@ -34,7 +34,7 @@ import net.minecraft.world.level.block.state.properties.RailShape;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 1;
+    public static final int CATALOG_VERSION = 2;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableSlice> slices = new LinkedHashMap<>();

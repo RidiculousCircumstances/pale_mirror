@@ -17,7 +17,7 @@ import net.minecraft.util.datafix.DataFixTypes;
 /** Visual-owned bounded ledger; canonical region state remains in core SavedData. */
 public final class VisualGenesisSavedData extends SavedData {
     private static final String NAME = "pale_mirror_visual_genesis";
-    private static final int SCHEMA = 2;
+    private static final int SCHEMA = 3;
     private final java.util.Map<String, String> observedChunks = new java.util.LinkedHashMap<>();
     private final Set<String> commissionedResidents = new LinkedHashSet<>();
     private final Set<String> completedModules = new LinkedHashSet<>();

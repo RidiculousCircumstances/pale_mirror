@@ -47,8 +47,15 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
 
     private static void placeRail(WorldGenLevel level, CompiledChunkSlice.RailColumn rail) {
         int surface = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, rail.rail().getX(), rail.rail().getZ());
-        for (int y = surface; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
-                new BlockPos(rail.rail().getX(), y, rail.rail().getZ()), Blocks.OAK_FENCE.defaultBlockState());
+        RailEarthwork earthwork = RailEarthwork.resolve(surface, rail.rail().getY());
+        if (earthwork == RailEarthwork.GROUND) {
+            for (int y = surface; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
+                    new BlockPos(rail.rail().getX(), y, rail.rail().getZ()), Blocks.COBBLESTONE.defaultBlockState());
+        } else if (earthwork == RailEarthwork.BRIDGE
+                && Math.floorMod(rail.rail().getX() + rail.rail().getZ(), 4) == 0) {
+            for (int y = surface; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
+                    new BlockPos(rail.rail().getX(), y, rail.rail().getZ()), Blocks.OAK_FENCE.defaultBlockState());
+        }
         setIfDifferent(level, rail.rail().below(), rail.support());
         for (int y = 0; y < 3; y++) setIfDifferent(level, rail.rail().above(y), Blocks.AIR.defaultBlockState());
         setIfDifferent(level, rail.rail(), rail.railState());

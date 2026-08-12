@@ -20,6 +20,8 @@ public record TerrainCandidate(VisualPoint anchor, int relief, int cutFillCost, 
 
     public boolean preferred() { return waterSamples == 0 && relief <= 8; }
 
+    public boolean acceptable() { return waterSamples == 0 && relief <= 24; }
+
     public static Comparator<TerrainCandidate> ordering() {
         return Comparator.comparing(TerrainCandidate::preferred).reversed()
                 .thenComparingInt(TerrainCandidate::score)
