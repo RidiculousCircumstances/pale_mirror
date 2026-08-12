@@ -90,16 +90,19 @@
 - A clean packaged Sable 20-region run on seed `3374619285067712046` planned all regions in 1.758 seconds:
   310 exact site probes, 40 mine probes, zero rail probes, 350 unique heights, 1,833 biome samples and
   2,900 compiled chunk slices. The former private-modpack run took 174.346 seconds and 4,868 heights.
+- Commit `2515df7` is published to the client artifact host and deployed to the private playtest server.
+  A clean full-modpack world on seed `-3621189047412558097` planned 20 regions in 8.289 seconds using
+  270 site probes, 40 mine probes, zero rail probes and 310 unique heights; its 2,924-slice catalog is ready.
+  The closest authored region is centered at `1160 65 -648`.
 - Deterministic selection, spacing, fail-closed terrain handling, the combined 640-probe hard ceiling,
   exactly two mine queries per region, grade-safe rail interpolation and current-column earthwork have
   focused regression coverage. Core and Visuals GameTests plus packaged restart harnesses pass.
-- The private full-modpack 20-region benchmark has not yet been repeated; the packaged Sable number proves
-  the algorithmic reduction but is not the final release-grade timing result.
+- The 30-second full-modpack planning gate is closed with 21x observed speedup over the former 174-second run.
 
 ### Next
 
-- Recreate and benchmark a clean 20-region private-modpack world, confirm the 30-second gate, then traverse
-  cut/fill/bridge sections in a graphical client and tune their visual policy without widening planning probes.
+- Traverse cut/fill/bridge sections in a graphical client and tune their visual policy without widening
+  planning probes; then confirm a server restart reopens the pinned 20-region catalog without replanning.
 
 ## Open questions
 
