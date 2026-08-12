@@ -27,6 +27,7 @@ final class SemanticSlotCodec {
             value.putString("object", slot.key().objectId());
             value.putString("module", slot.key().moduleId());
             value.putString("slot", slot.key().slotId());
+            value.putString("parcelId", slot.parcelId());
             value.putString("parcel", slot.parcelKind().name());
             value.putBoolean("conflicted", slot.conflicted());
             value.putString("diagnostic", slot.diagnostic());
@@ -58,7 +59,8 @@ final class SemanticSlotCodec {
                         NbtUtils.readBlockState(blocks, cell.getCompound("baseline")),
                         NbtUtils.readBlockState(blocks, cell.getCompound("lastApplied"))));
             }
-            SemanticSlotRecord slot = new SemanticSlotRecord(key, ParcelKind.valueOf(value.getString("parcel")), cells,
+            SemanticSlotRecord slot = new SemanticSlotRecord(key, value.getString("parcelId"),
+                    ParcelKind.valueOf(value.getString("parcel")), cells,
                     value.getBoolean("conflicted"), value.getString("diagnostic"), value.getString("resetPermit"));
             if (slots.putIfAbsent(key.value(), slot) != null) throw new IllegalStateException("Duplicate semantic slot " + key.value());
         }

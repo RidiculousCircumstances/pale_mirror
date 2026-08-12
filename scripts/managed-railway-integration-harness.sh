@@ -4,9 +4,9 @@ set -euo pipefail
 mod_jar=${1:?usage: managed-railway-integration-harness.sh pale_mirror.jar create.jar railwaysuntold-pm.jar}
 create_jar=${2:?missing Create JAR}
 railway_jar=${3:?missing PM Railway Untold JAR}
-installer=${NEOFORGE_INSTALLER:-/home/rd/.cache/far-frontier/tools/neoforge-21.1.248-installer.jar}
+installer=${NEOFORGE_INSTALLER:-${XDG_CACHE_HOME:-${HOME}/.cache}/far-frontier/tools/neoforge-21.1.248-installer.jar}
 java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to Java 21}
-export JAVA_ARGS="${JAVA_ARGS:-} -Dpale_mirror.profile=core-only"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dpale_mirror.profile=core-only"
 export PATH="$(dirname "$java_bin"):$PATH"
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pale-mirror-railway.XXXXXX")
 server_pid=''

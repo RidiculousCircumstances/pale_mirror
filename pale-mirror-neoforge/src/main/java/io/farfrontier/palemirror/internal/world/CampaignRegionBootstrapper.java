@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.internal.world;
 import java.util.List;
 import io.farfrontier.palemirror.domain.CommunityPlaceBinding;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.OperationalState;
@@ -65,11 +65,11 @@ public final class CampaignRegionBootstrapper {
     private static final String[] DISPLAY_NAMES = {"Ironhill", "Redvale", "Stonecross", "Ashford", "Greyhaven"};
     private CampaignRegionBootstrapper() { }
 
-    public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         tick(server, data, commands, true);
     }
 
-    public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands,
                             boolean automaticBinding) {
         if (automaticBinding) ensureCanonicalPlans(server, data, commands);
         data.campaignRegions().values().stream().sorted(java.util.Comparator.comparing(CampaignRegionRecord::id))
@@ -134,7 +134,7 @@ public final class CampaignRegionBootstrapper {
 
     public static void stop(MinecraftServer server) { }
 
-    private static void ensureCanonicalPlans(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    private static void ensureCanonicalPlans(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         if (data.worldState().livingRegions().size() >= MAX_ACTIVE_REGIONS) return;
         long gameTime = server.overworld().getGameTime();
         data.settlementObservations().values().stream()
@@ -152,7 +152,7 @@ public final class CampaignRegionBootstrapper {
 
     /** Explicit operator selection still uses the exact production registration pipeline. */
     public static void bindCandidate(MinecraftServer server, PaleMirrorSavedData data,
-                                     DomainCommandProcessor commands, WorldObjectId candidateId) {
+                                     DomainCommandExecutor commands, WorldObjectId candidateId) {
         if (data.worldState().livingRegions().size() >= MAX_ACTIVE_REGIONS) {
             throw new IllegalStateException("The active living-region limit of " + MAX_ACTIVE_REGIONS + " has been reached");
         }
@@ -178,7 +178,7 @@ public final class CampaignRegionBootstrapper {
     }
 
     private static void registerCanonicalPlan(MinecraftServer server, PaleMirrorSavedData data,
-                                              DomainCommandProcessor commands, SettlementObservationRecord observed) {
+                                              DomainCommandExecutor commands, SettlementObservationRecord observed) {
         RegionBindings bindings = RegionBindings.forObserved(server.overworld().getSeed(), observed.id());
         if (data.worldState().livingRegion(bindings.regionId()).isPresent()) return;
         CampaignRegionDefinition definition = CampaignRegionDefinitions.require(IRON_FRONTIER_DEFINITION);
@@ -230,16 +230,15 @@ public final class CampaignRegionBootstrapper {
                 new RouteContract(bindings.alternateRouteId(), bindings.alternateDispatchSiteId(), bindings.receivingSiteId(), RouteProvider.CREATE,
                         ResourceKind.IRON, definition.ironProduction(), definition.routeCurrentWindowSteps(),
                         definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED));
-        commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
-                community, place, new CommunityPlaceBinding(bindings.communityId(), placeId), economy, security, policy, sites, affiliations,
-                capabilities, routes, List.of(residents)));
         SettlementAuthorityProfile authority = "pale_mirror:native_reconciled".equals(observed.authorityProfileId())
                 ? SettlementAuthorityProfile.nativeReconciled(bindings.communityId())
                 : SettlementAuthorityProfile.pmManaged(bindings.communityId());
-        commands.execute(data.worldState(), new DomainCommand.RegisterSettlementAuthorityProfile(authority));
-        data.worldState().putSettlementDevelopment(new SettlementDevelopment(bindings.communityId(), 25, 0,
-                population, Math.max(0, population - observed.observedPopulation() / 5), 0));
-        data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(bindings.communityId()));
+        commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
+                community, place, new CommunityPlaceBinding(bindings.communityId(), placeId), economy, security, policy,
+                sites, affiliations, capabilities, routes, List.of(residents), List.of(),
+                new SettlementDevelopment(bindings.communityId(), 25, 0, population,
+                        Math.max(0, population - observed.observedPopulation() / 5), 0),
+                SettlementDevelopmentPolicy.defaults(bindings.communityId()), authority));
         data.campaignRegions().put(bindings.regionId(), new CampaignRegionRecord(bindings.regionId(),
                 definition.id().toString(), definition.version(), displayName(bindings.regionId()),
                 observed.dimensionId(), placeId, infrastructureAnchor,

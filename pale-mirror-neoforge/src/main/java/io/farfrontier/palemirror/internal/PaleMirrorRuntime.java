@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainCommand;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.FacilityState;
@@ -15,9 +16,11 @@ import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.internal.materialization.MaterializationScheduler;
+import io.farfrontier.palemirror.internal.domain.DomainTransaction;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
 import io.farfrontier.palemirror.internal.combat.PmProjectileRuntime;
+import io.farfrontier.palemirror.internal.combat.RuntimeCombatFacade;
 import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugController;
 import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
@@ -64,20 +67,25 @@ public final class PaleMirrorRuntime {
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
     private final DomainServices domainServices = new DomainServices();
-    private final DomainCommandProcessor commands = domainServices.commands();
-    private final ObservationReconciler reconciler = new ObservationReconciler(commands);
+    private final DomainCommandProcessor commandProcessor = domainServices.commands();
+    private final DomainCommandExecutor commands;
+    private final ObservationReconciler reconciler;
     private final MaterializationScheduler materializationScheduler = new MaterializationScheduler();
     private final PreparedEvacuationRuntime evacuation;
     private final NarrativeCandidateRuntime narrative;
     private final RuntimeDebugController debug;
     private final PlaytestMetrics playtestMetrics;
+    private final RuntimeCombatFacade combat;
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
-        this.narrative = new NarrativeCandidateRuntime(server, data, commands, domainServices.narrator(), this::audienceFor);
+        this.commands = new DomainTransaction(data, commandProcessor);
+        this.reconciler = new ObservationReconciler(commands);
+        this.narrative = new NarrativeCandidateRuntime(server, data, commands, this::audienceFor);
         this.evacuation = new PreparedEvacuationRuntime(data, commands, this::audienceFor, this::handleDomainEvents);
         this.debug = new RuntimeDebugController(server, data, commands, this::handleDomainEvents);
         this.playtestMetrics = new PlaytestMetrics(server);
+        this.combat = new RuntimeCombatFacade(data, observation -> publish(observation));
         if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         PmProjectileRuntime.discardUnknownAfterRestart(server, data);
@@ -105,7 +113,7 @@ public final class PaleMirrorRuntime {
                 !authoredProvider && debug.automaticBindingEnabled());
         if (VanillaMinecartRouteRuntime.tick(server, data, commands)) data.setDirty();
         if (ManagedRailwayRuntime.tick(server, data, commands)) data.setDirty();
-        if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
+        if (SettlementDepotRuntime.tick(server, data, commands)) data.setDirty();
         if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
         if (RefugeeCampRuntime.tick(server, data, commands)) data.setDirty();
         if (SettlementDevelopmentRuntime.tick(server, data, commands)) data.setDirty();
@@ -126,6 +134,7 @@ public final class PaleMirrorRuntime {
         long gameTick = server.overworld().getGameTime();
         if (data.effectLeases().expireDue(gameTick)) data.setDirty();
         if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
+        if (gameTick % 1200L == 0L && data.materializationJobs().compactTerminalJobs()) data.setDirty();
         if (data.threatCombat().expireAndCompact(gameTick)) data.setDirty();
         AdapterRegistry.tickRuntime(server, data);
         io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.publish(server, data);
@@ -137,7 +146,8 @@ public final class PaleMirrorRuntime {
         ServerLevel level = player.serverLevel();
         TestMineRecord mine = TestMineTemplate.place(level, player.blockPosition().above(2), id, audienceFor(player));
         data.registerTestMine(mine);
-        data.worldState().putFacility(new FacilityState(id, source, 80, 10, 10));
+        commands.execute(data.worldState(), new DomainCommand.RegisterFacility(
+                new FacilityState(id, source, 80, 10, 10), "test-mine:" + id.value()));
         data.setDirty();
         return mine;
     }
@@ -183,7 +193,10 @@ public final class PaleMirrorRuntime {
         return evacuation.place(player, anchor, stack);
     }
     public List<io.farfrontier.palemirror.domain.ScenarioInstance> offered(StoryAudienceId audience) {
-        return domainServices.narrator().offeredFor(data.worldState(), audience);
+        return data.worldState().scenarios().stream()
+                .filter(value -> value.audience().equals(audience)
+                        && value.status() == io.farfrontier.palemirror.domain.ScenarioStatus.OFFERED)
+                .toList();
     }
 
     public StoryAudienceId audienceFor(ServerPlayer player) {
@@ -276,53 +289,27 @@ public final class PaleMirrorRuntime {
     }
 
     public void threatDestroyed(String objectId, String causationId) {
-        WorldObjectId id = new WorldObjectId(objectId);
-        if (data.testMines().containsKey(id)) publish(new ThreatControllerDestroyed(
-                "controller-destroyed:" + causationId, id, causationId));
+        combat.threatDestroyed(objectId, causationId);
     }
 
     /** The event layer asks this before allowing damage to the PM controller. */
     public boolean controllerVulnerable(String objectId) {
-        try {
-            return data.worldState().facility(new WorldObjectId(objectId))
-                    .map(FacilityState::controllerVulnerable).orElse(false);
-        } catch (IllegalArgumentException ignored) {
-            return false;
-        }
+        return combat.controllerVulnerable(objectId);
     }
 
     /** All product-controller damage is consumed into the persisted PM combat ledger. */
     public ActorDamageResult receiveThreatControllerDamage(Entity entity, DamageSource source, float amount) {
-        return io.farfrontier.palemirror.internal.combat.ThreatControllerCombatRuntime.receive(
-                data, entity, source, amount, this::publish);
+        return combat.receiveThreatControllerDamage(entity, source, amount);
     }
 
     /** Reports an exact source-owned gate carrier death; stale identities are ignored. */
     public void gateEntityDestroyed(String objectId, String slotId, UUID entityId) {
-        try {
-            WorldObjectId id = new WorldObjectId(objectId);
-            TestMineRecord mine = data.testMines().get(id);
-            FacilityState facility = data.worldState().facility(id).orElse(null);
-            if (mine == null || facility == null || mine.gate().part(slotId)
-                    .filter(part -> entityId.equals(part.entityId())).isEmpty()) return;
-            publish(new GatePartDestroyed("gate-part:" + id.value() + ":" + slotId + ":" + entityId,
-                    id, slotId, "entity:" + entityId));
-        } catch (IllegalArgumentException ignored) {
-            // Entity data is not trusted provenance until it matches a registered PM reference.
-        }
+        combat.gateEntityDestroyed(objectId, slotId, entityId);
     }
 
     /** Routes a block observation to the facility's source adapter without naming the physical representation. */
     public void gateBlockDestroyed(ServerLevel level, net.minecraft.core.BlockPos position) {
-        for (TestMineRecord mine : data.testMines().values()) {
-            if (!mine.dimensionId().equals(level.dimension().location().toString())) continue;
-            FacilityState facility = data.worldState().facility(mine.id()).orElse(null);
-            if (facility == null) continue;
-            AdapterRegistry.sourceAdapter(facility.infectionSource()).gatePartAt(level, mine, position).ifPresent(slot -> publish(
-                            new GatePartDestroyed("gate-block:" + mine.id().value() + ":" + slot + ":"
-                                    + data.worldState().facility(mine.id()).map(FacilityState::desiredRevision).orElse(0L),
-                                    mine.id(), slot, "block:" + position.asLong())));
-        }
+        combat.gateBlockDestroyed(level, position);
     }
 
     public void settlementBlockDamaged(ServerLevel level, net.minecraft.core.BlockPos position, UUID playerId) {
@@ -349,64 +336,7 @@ public final class PaleMirrorRuntime {
      * presentation, while an adapter can never directly alter a facility.
      */
     public ActorDamageResult receiveSourceActorDamage(Entity entity, DamageSource source, float amount) {
-        var gateClaimant = AdapterRegistry.sourceAdapters().stream().filter(adapter -> adapter.matchesGatePart(entity)).findFirst().orElse(null);
-        if (gateClaimant != null) return receiveSourceGateDamage(gateClaimant, entity, source, amount);
-        var claimant = AdapterRegistry.sourceAdapters().stream().filter(adapter -> adapter.matchesActor(entity)).findFirst().orElse(null);
-        if (claimant == null) return ActorDamageResult.passThrough();
-        if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM actor is not in a server level");
-        String objectId = entity.getPersistentData().getString(io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter.OBJECT_ID_KEY);
-        String slotId = entity.getPersistentData().getString("pale_mirror_encounter_slot");
-        if (objectId.isBlank() || slotId.isBlank()) return ActorDamageResult.blocked("PM actor lacks persisted provenance");
-        try {
-            WorldObjectId facilityId = new WorldObjectId(objectId);
-            TestMineRecord mine = data.testMines().get(facilityId);
-            FacilityState facility = data.worldState().facility(facilityId).orElse(null);
-            if (mine == null || facility == null || !mine.dimensionId().equals(level.dimension().location().toString())) {
-                return ActorDamageResult.blocked("PM actor is not attached to its registered threat site");
-            }
-            var reference = mine.encounter().actor(slotId).orElse(null);
-            if (!claimant.source().equals(facility.infectionSource()) || reference == null
-                    || !claimant.matchesOwnedActor(entity, mine, slotId)) {
-                return ActorDamageResult.blocked("PM actor provenance does not match its canonical source and slot");
-            }
-            ActorDamageResult result = claimant.receiveDamage(level, mine, entity, reference, source, amount);
-            if (!result.intercepts()) return result;
-            data.setDirty();
-            if (result.disposition() == ActorDamageResult.Disposition.DEFEATED) {
-                String causationId = "combat:" + entity.getUUID();
-                publish(new EncounterActorDestroyed("encounter-actor-destroyed:" + claimant.source().value() + ":" + causationId,
-                        facilityId, claimant.source(), slotId, entity.getUUID()));
-            }
-            return result;
-        } catch (IllegalArgumentException ignored) {
-            return ActorDamageResult.blocked("PM actor contains an invalid persisted world object id");
-        }
-    }
-
-    private ActorDamageResult receiveSourceGateDamage(io.farfrontier.palemirror.internal.adapter.SourceThreatAdapter claimant,
-                                                      Entity entity, DamageSource source, float amount) {
-        if (!(entity.level() instanceof ServerLevel level)) return ActorDamageResult.blocked("PM gate actor is not in a server level");
-        String objectId = entity.getPersistentData().getString(io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter.OBJECT_ID_KEY);
-        String slotId = entity.getPersistentData().getString("pale_mirror_encounter_slot");
-        try {
-            WorldObjectId facilityId = new WorldObjectId(objectId);
-            TestMineRecord mine = data.testMines().get(facilityId);
-            if (mine == null || !mine.dimensionId().equals(level.dimension().location().toString())) {
-                return ActorDamageResult.blocked("PM gate actor is not attached to its registered site");
-            }
-            FacilityState facility = data.worldState().facility(facilityId).orElse(null);
-            SourceGatePartRef part = mine.gate().part(slotId).orElse(null);
-            if (facility == null || !claimant.source().equals(facility.infectionSource()) || part == null
-                    || !entity.getUUID().equals(part.entityId()) || !claimant.matchesOwnedGatePart(entity, mine, slotId)) {
-                return ActorDamageResult.blocked("PM gate actor identity is stale");
-            }
-            ActorDamageResult result = claimant.receiveGateDamage(level, mine, entity, part, source, amount);
-            if (result.intercepts()) data.setDirty();
-            if (result.disposition() == ActorDamageResult.Disposition.DEFEATED) gateEntityDestroyed(objectId, slotId, entity.getUUID());
-            return result;
-        } catch (IllegalArgumentException ignored) {
-            return ActorDamageResult.blocked("PM gate actor contains invalid provenance");
-        }
+        return combat.receiveSourceActorDamage(entity, source, amount);
     }
 
     private void observePlayers() {

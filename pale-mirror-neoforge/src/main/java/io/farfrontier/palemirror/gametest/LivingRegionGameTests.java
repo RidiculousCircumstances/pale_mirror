@@ -54,9 +54,10 @@ public final class LivingRegionGameTests {
                 level.getServer().overworld().getSeed(),
                 new WorldObjectId("pale_mirror:test_observed_village")).regionId());
         level.getChunkAt(plannedPresentation.depotAnchor());
-        SettlementDepotRuntime.tick(level.getServer(), data);
-        SettlementDepotRuntime.tick(level.getServer(), data);
-        SettlementDepotRuntime.tick(level.getServer(), data);
+        var depotCommands = new DomainServices().commands();
+        SettlementDepotRuntime.tick(level.getServer(), data, depotCommands);
+        SettlementDepotRuntime.tick(level.getServer(), data, depotCommands);
+        SettlementDepotRuntime.tick(level.getServer(), data, depotCommands);
         RegionBindings bindings = RegionBindings.forObserved(level.getServer().overworld().getSeed(),
                 new WorldObjectId("pale_mirror:test_observed_village"));
         var region = data.worldState().livingRegion(bindings.regionId()).orElseThrow();
@@ -154,7 +155,7 @@ public final class LivingRegionGameTests {
             PaleMirrorSavedData.load(schema32, level.registryAccess());
             throw new AssertionError("schema v32 must not be retrofitted with authored settlements");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("not compatible with schema 34"),
+            helper.assertTrue(expected.getMessage().contains("not compatible with schema 35"),
                     "fresh-world rejection must explain the exact schema boundary");
         }
         helper.succeed();
@@ -458,33 +459,6 @@ public final class LivingRegionGameTests {
     }
 
     static void reset(PaleMirrorSavedData data) {
-        data.testMines().clear();
-        data.worldRegistry().clear();
-        data.campaignRegions().clear();
-        data.settlementObservations().clear();
-        data.audienceMappings().clear();
-        data.reconciliationLedger().clear();
-        data.effectLeases().clear();
-        data.quarantine().clear();
-        data.threatCombat().clear();
-        data.resourceTransfers().clear();
-        data.settlementDepots().clear();
-        data.refugeeCamps().clear();
-        data.refugeeAnchorPermits().clear();
-        data.campaignCommissioning().clear();
-        data.vanillaMinecartRoutes().clear();
-        data.materializationJobs().clear();
-        data.semanticSlots().clear();
-        data.parcels().clear();
-        data.residentJourneyLeases().clear();
-        data.residentIdentities().clear();
-        data.worldState().facilities().clear();
-        data.worldState().scenarios().clear();
-        data.worldState().clearRegionalState();
-        data.worldState().narratorCooldowns().clear();
-        data.worldState().history().clear();
-        data.worldState().setSimulationStep(0);
-        data.worldState().setEventSequence(0);
-        data.setDirty();
+        GameTestStateReset.resetAll(data);
     }
 }

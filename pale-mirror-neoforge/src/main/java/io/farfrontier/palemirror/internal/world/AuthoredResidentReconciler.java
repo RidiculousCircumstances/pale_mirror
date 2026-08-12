@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.api.PaleMirrorVisuals;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.SettlementCohort;
 import java.util.ArrayList;
@@ -14,7 +14,7 @@ public final class AuthoredResidentReconciler {
     private AuthoredResidentReconciler() { }
 
     public static List<DomainEvent> reconcile(MinecraftServer server, PaleMirrorSavedData data,
-                                               DomainCommandProcessor commands) {
+                                               DomainCommandExecutor commands) {
         var provider = PaleMirrorVisuals.provider().orElse(null);
         if (provider == null) return List.of();
         List<DomainEvent> events = new ArrayList<>();

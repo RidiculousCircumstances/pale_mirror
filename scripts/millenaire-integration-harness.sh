@@ -3,9 +3,9 @@ set -euo pipefail
 
 mod_jar=${1:?usage: millenaire-integration-harness.sh /absolute/path/to/pale_mirror.jar /absolute/path/to/millenaire.jar}
 native_jar=${2:?missing Millenaire JAR}
-installer=${NEOFORGE_INSTALLER:-/home/rd/.cache/far-frontier/tools/neoforge-21.1.248-installer.jar}
+installer=${NEOFORGE_INSTALLER:-${XDG_CACHE_HOME:-${HOME}/.cache}/far-frontier/tools/neoforge-21.1.248-installer.jar}
 java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to the Java 21 executable}
-export JAVA_ARGS="${JAVA_ARGS:-} -Dpale_mirror.profile=core-only"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dpale_mirror.profile=core-only"
 export PATH="$(dirname "$java_bin"):$PATH"
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pale-mirror-millenaire.XXXXXX")
 log_one="$runtime_dir/first-start.log"

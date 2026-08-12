@@ -4,16 +4,16 @@ import java.util.List;
 import java.util.Objects;
 
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 
 /** The sole bridge which turns observed physical facts into domain commands. */
 public final class ObservationReconciler {
-    private final DomainCommandProcessor commands;
+    private final DomainCommandExecutor commands;
 
-    public ObservationReconciler(DomainCommandProcessor commands) {
+    public ObservationReconciler(DomainCommandExecutor commands) {
         this.commands = Objects.requireNonNull(commands, "commands");
     }
 

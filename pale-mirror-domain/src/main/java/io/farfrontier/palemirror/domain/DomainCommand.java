@@ -29,7 +29,10 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.BlockDevelopmentIntent,
         DomainCommand.ReconcileSettlementPopulation,
         DomainCommand.ConfirmSettlementResidentDeath,
-        DomainCommand.ObserveJourneyCheckpoint, DomainCommand.ObserveJourneyBlocked {
+        DomainCommand.ObserveJourneyCheckpoint, DomainCommand.ObserveJourneyBlocked,
+        DomainCommand.RegisterFacility, DomainCommand.RegisterWorldSite,
+        DomainCommand.RegisterDevelopmentIntent, DomainCommand.ResetWorldState,
+        DomainCommand.EvaluateNarrativeCandidates {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -145,7 +148,9 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
                                 SettlementSecurity security, SettlementPolicy policy, List<WorldSite> sites,
                                 List<SiteAffiliation> affiliations, List<SiteCapability> capabilities,
                                 List<RouteContract> routeContracts, List<PopulationGroup> populationGroups,
-                                List<WorldPath> worldPaths) implements DomainCommand {
+                                List<WorldPath> worldPaths, SettlementDevelopment development,
+                                SettlementDevelopmentPolicy developmentPolicy,
+                                SettlementAuthorityProfile authorityProfile) implements DomainCommand {
         public RegisterLivingRegion(LivingRegionState region, List<FacilityState> facilities,
                                     SettlementCommunity community, SettlementPlace place,
                                     CommunityPlaceBinding binding, SettlementEconomy economy,
@@ -153,7 +158,19 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
                                     List<SiteAffiliation> affiliations, List<SiteCapability> capabilities,
                                     List<RouteContract> routeContracts, List<PopulationGroup> populationGroups) {
             this(region, facilities, community, place, binding, economy, security, policy, sites, affiliations,
-                    capabilities, routeContracts, populationGroups, List.of());
+                    capabilities, routeContracts, populationGroups, List.of(), defaultDevelopment(community, populationGroups),
+                    SettlementDevelopmentPolicy.defaults(community.id()), SettlementAuthorityProfile.pmManaged(community.id()));
+        }
+        public RegisterLivingRegion(LivingRegionState region, List<FacilityState> facilities,
+                                    SettlementCommunity community, SettlementPlace place,
+                                    CommunityPlaceBinding binding, SettlementEconomy economy,
+                                    SettlementSecurity security, SettlementPolicy policy, List<WorldSite> sites,
+                                    List<SiteAffiliation> affiliations, List<SiteCapability> capabilities,
+                                    List<RouteContract> routeContracts, List<PopulationGroup> populationGroups,
+                                    List<WorldPath> worldPaths) {
+            this(region, facilities, community, place, binding, economy, security, policy, sites, affiliations,
+                    capabilities, routeContracts, populationGroups, worldPaths, defaultDevelopment(community, populationGroups),
+                    SettlementDevelopmentPolicy.defaults(community.id()), SettlementAuthorityProfile.pmManaged(community.id()));
         }
         public RegisterLivingRegion {
             Objects.requireNonNull(region, "region");
@@ -170,6 +187,46 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             routeContracts = List.copyOf(routeContracts);
             populationGroups = List.copyOf(populationGroups);
             worldPaths = List.copyOf(worldPaths);
+            Objects.requireNonNull(development, "development");
+            Objects.requireNonNull(developmentPolicy, "developmentPolicy");
+            Objects.requireNonNull(authorityProfile, "authorityProfile");
+        }
+    }
+
+    record RegisterFacility(FacilityState facility, String causationId) implements DomainCommand {
+        public RegisterFacility {
+            Objects.requireNonNull(facility, "facility");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record RegisterWorldSite(WorldSite site, List<SiteAffiliation> affiliations,
+                             List<SiteCapability> capabilities, String causationId) implements DomainCommand {
+        public RegisterWorldSite {
+            Objects.requireNonNull(site, "site");
+            affiliations = List.copyOf(affiliations);
+            capabilities = List.copyOf(capabilities);
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record RegisterDevelopmentIntent(DevelopmentIntent intent, String causationId) implements DomainCommand {
+        public RegisterDevelopmentIntent {
+            Objects.requireNonNull(intent, "intent");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    /** Debug/test-only reset, guarded by NeoForge physical-state preconditions. */
+    record ResetWorldState(String causationId) implements DomainCommand {
+        public ResetWorldState { Objects.requireNonNull(causationId, "causationId"); }
+    }
+
+    record EvaluateNarrativeCandidates(StoryAudienceId audience,
+                                       List<NarrativeCandidate> candidates) implements DomainCommand {
+        public EvaluateNarrativeCandidates {
+            Objects.requireNonNull(audience, "audience");
+            candidates = List.copyOf(candidates);
         }
     }
 
@@ -352,5 +409,11 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
                 throw new IllegalArgumentException("Confirmed resident death identity is blank");
             }
         }
+    }
+
+    private static SettlementDevelopment defaultDevelopment(SettlementCommunity community,
+                                                             List<PopulationGroup> populationGroups) {
+        int population = populationGroups.stream().mapToInt(PopulationGroup::size).sum();
+        return new SettlementDevelopment(community.id(), 25, 0, population, Math.max(population, 56), 0);
     }
 }

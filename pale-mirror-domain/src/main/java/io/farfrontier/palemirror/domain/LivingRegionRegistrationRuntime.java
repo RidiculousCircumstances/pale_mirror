@@ -4,6 +4,10 @@ import java.util.List;
 
 /** Validates and atomically installs one source-neutral causal-region aggregate. */
 final class LivingRegionRegistrationRuntime {
+    private final DomainEventFactory events;
+
+    LivingRegionRegistrationRuntime(DomainEventFactory events) { this.events = events; }
+
     List<DomainEvent> register(WorldState state, DomainCommand.RegisterLivingRegion command) {
         if (state.livingRegion(command.region().id()).isPresent()) return List.of();
         validateActorIdentities(command);
@@ -30,8 +34,14 @@ final class LivingRegionRegistrationRuntime {
         command.populationGroups().forEach(state::putPopulationGroup); command.sites().forEach(state::putSite);
         command.affiliations().forEach(state::putSiteAffiliation); command.capabilities().forEach(state::putSiteCapability);
         command.routeContracts().forEach(state::putRouteContract); command.worldPaths().forEach(state::putWorldPath);
+        state.putSettlementDevelopment(command.development());
+        state.putDevelopmentPolicy(command.developmentPolicy());
+        state.putSettlementAuthorityProfile(command.authorityProfile());
         state.putLivingRegion(command.region());
-        return List.of();
+        DomainEvent event = events.create(state, DomainEventType.LIVING_REGION_REGISTERED,
+                command.community().id(), "region:" + command.region().id());
+        state.addEvent(event);
+        return List.of(event);
     }
 
     private static void validateActorIdentities(DomainCommand.RegisterLivingRegion command) {
@@ -41,7 +51,10 @@ final class LivingRegionRegistrationRuntime {
                 || !command.binding().placeId().equals(command.place().id())
                 || !command.economy().communityId().equals(command.community().id())
                 || !command.security().communityId().equals(command.community().id())
-                || !command.policy().communityId().equals(command.community().id())) {
+                || !command.policy().communityId().equals(command.community().id())
+                || !command.development().communityId().equals(command.community().id())
+                || !command.developmentPolicy().communityId().equals(command.community().id())
+                || !command.authorityProfile().communityId().equals(command.community().id())) {
             throw new IllegalArgumentException("Living region actor identities do not match its definition");
         }
         if (command.facilities().stream().noneMatch(value -> value.id().equals(command.region().primaryFacilityId()))

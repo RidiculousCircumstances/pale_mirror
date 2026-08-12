@@ -28,8 +28,13 @@ public final class MaterializationGateway implements GuardedWorldAccess {
         SemanticSlotRecord slot = ledger.find(key).orElse(null);
         if (slot == null) return Result.blocked("Unknown semantic slot " + key.value());
         if (!level.hasChunkAt(position)) return Result.blocked("Target chunk is not loaded");
-        if (parcels.managedAt(level.dimension().location().toString(), position).isEmpty()) {
-            return Result.blocked("Position is outside a PM-managed parcel");
+        ParcelRecord parcel = parcels.find(slot.parcelId()).orElse(null);
+        if (parcel == null || !parcel.kind().pmManaged()
+                || !parcel.dimensionId().equals(level.dimension().location().toString()) || !parcel.contains(position)) {
+            return Result.blocked("Position is outside semantic slot parcel " + slot.parcelId());
+        }
+        if (parcel.kind() != slot.parcelKind()) {
+            return Result.blocked("Semantic slot parcel kind changed for " + key.value());
         }
         SemanticCellRecord cell = slot.cell(position);
         if (cell == null) return Result.blocked("Position is outside semantic slot " + key.value());
@@ -44,10 +49,16 @@ public final class MaterializationGateway implements GuardedWorldAccess {
             slot.conflict("Unknown change at " + position);
             return Result.blocked(slot.diagnostic());
         }
-        level.setBlock(position, desired, flags);
+        if (!level.setBlock(position, desired, flags)) {
+            return Result.blocked("Minecraft rejected block mutation at " + position);
+        }
         if (!postcondition.test(level.getBlockState(position))) {
-            return Result.blocked("Block postcondition failed at " + position + ": expected " + desired
-                    + ", observed " + level.getBlockState(position));
+            BlockState observed = level.getBlockState(position);
+            boolean rolledBack = level.setBlock(position, current, flags) && level.getBlockState(position).equals(current);
+            String diagnostic = "Block postcondition failed at " + position + ": expected " + desired
+                    + ", observed " + observed + "; rollback=" + (rolledBack ? "restored" : "failed");
+            if (!rolledBack) slot.conflict(diagnostic);
+            return Result.blocked(diagnostic);
         }
         cell.applied(level.getBlockState(position));
         return Result.applied();

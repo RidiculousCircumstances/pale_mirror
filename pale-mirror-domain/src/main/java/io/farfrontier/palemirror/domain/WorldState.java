@@ -9,6 +9,8 @@ import java.util.Optional;
 
 /** Mutable aggregate used only on the server thread. Persistence adapters own serialization. */
 public final class WorldState {
+    public static final int MAX_DETAILED_HISTORY = 2_048;
+    public static final int MAX_DETAILED_TERMINAL_JOURNEYS = 256;
     private final Map<WorldObjectId, FacilityState> facilities = new LinkedHashMap<>();
     private final Map<String, ScenarioInstance> scenarios = new LinkedHashMap<>();
     private final Map<WorldObjectId, SettlementCommunity> communities = new LinkedHashMap<>();
@@ -29,46 +31,51 @@ public final class WorldState {
     private final Map<WorldObjectId, RouteContract> routeContracts = new LinkedHashMap<>();
     private final Map<String, WorldPath> worldPaths = new LinkedHashMap<>();
     private final Map<String, WorldJourney> journeys = new LinkedHashMap<>();
+    private final Map<JourneyState, WorldJourneySummary> journeySummaries = new LinkedHashMap<>();
     private final Map<String, LivingRegionState> livingRegions = new LinkedHashMap<>();
     private final Map<String, AudienceRegionKnowledge> regionKnowledge = new LinkedHashMap<>();
     private final Map<String, AudienceRegionAccess> regionAccess = new LinkedHashMap<>();
     private final List<DomainEvent> history = new ArrayList<>();
+    private final Map<String, DomainEventSummary> historySummaries = new LinkedHashMap<>();
     private final Map<StoryAudienceId, Long> narratorCooldowns = new LinkedHashMap<>();
     private long schemaVersion = 1;
     private long simulationStep;
     private long eventSequence;
 
     public long schemaVersion() { return schemaVersion; }
-    public void setSchemaVersion(long schemaVersion) { this.schemaVersion = schemaVersion; }
+    void setSchemaVersion(long schemaVersion) { this.schemaVersion = schemaVersion; }
     public long simulationStep() { return simulationStep; }
-    public void setSimulationStep(long value) { simulationStep = value; }
-    public long nextEventSequence() { return ++eventSequence; }
-    public void setEventSequence(long value) { eventSequence = value; }
-    public Collection<FacilityState> facilities() { return facilities.values(); }
-    public Collection<ScenarioInstance> scenarios() { return scenarios.values(); }
-    public Collection<SettlementCommunity> communities() { return communities.values(); }
-    public Collection<SettlementPlace> places() { return places.values(); }
-    public Collection<CommunityPlaceBinding> communityPlaceBindings() { return communityPlaceBindings.values(); }
-    public Collection<SettlementEconomy> economies() { return economies.values(); }
-    public Collection<SettlementSecurity> securities() { return securities.values(); }
-    public Collection<SettlementPolicy> settlementPolicies() { return settlementPolicies.values(); }
-    public Collection<PopulationGroup> populationGroups() { return populationGroups.values(); }
-    public Collection<SettlementEmergencyWindow> emergencyWindows() { return emergencyWindows.values(); }
-    public Collection<SettlementDevelopment> settlementDevelopments() { return settlementDevelopments.values(); }
-    public Collection<SettlementDevelopmentPolicy> developmentPolicies() { return developmentPolicies.values(); }
-    public Collection<SettlementAuthorityProfile> settlementAuthorityProfiles() { return settlementAuthorityProfiles.values(); }
-    public Collection<DevelopmentIntent> developmentIntents() { return developmentIntents.values(); }
-    public Collection<WorldSite> sites() { return sites.values(); }
-    public Collection<SiteAffiliation> siteAffiliations() { return siteAffiliations.values(); }
-    public Collection<SiteCapability> siteCapabilities() { return siteCapabilities.values(); }
-    public Collection<RouteContract> routeContracts() { return routeContracts.values(); }
-    public Collection<WorldPath> worldPaths() { return worldPaths.values(); }
-    public Collection<WorldJourney> journeys() { return journeys.values(); }
-    public Collection<LivingRegionState> livingRegions() { return livingRegions.values(); }
-    public Collection<AudienceRegionKnowledge> regionKnowledge() { return regionKnowledge.values(); }
-    public Collection<AudienceRegionAccess> regionAccess() { return regionAccess.values(); }
-    public List<DomainEvent> history() { return history; }
-    public Map<StoryAudienceId, Long> narratorCooldowns() { return narratorCooldowns; }
+    void setSimulationStep(long value) { simulationStep = value; }
+    long nextEventSequence() { return ++eventSequence; }
+    public long eventSequence() { return eventSequence; }
+    void setEventSequence(long value) { eventSequence = value; }
+    public Collection<FacilityState> facilities() { return List.copyOf(facilities.values()); }
+    public Collection<ScenarioInstance> scenarios() { return List.copyOf(scenarios.values()); }
+    public Collection<SettlementCommunity> communities() { return List.copyOf(communities.values()); }
+    public Collection<SettlementPlace> places() { return List.copyOf(places.values()); }
+    public Collection<CommunityPlaceBinding> communityPlaceBindings() { return List.copyOf(communityPlaceBindings.values()); }
+    public Collection<SettlementEconomy> economies() { return List.copyOf(economies.values()); }
+    public Collection<SettlementSecurity> securities() { return List.copyOf(securities.values()); }
+    public Collection<SettlementPolicy> settlementPolicies() { return List.copyOf(settlementPolicies.values()); }
+    public Collection<PopulationGroup> populationGroups() { return List.copyOf(populationGroups.values()); }
+    public Collection<SettlementEmergencyWindow> emergencyWindows() { return List.copyOf(emergencyWindows.values()); }
+    public Collection<SettlementDevelopment> settlementDevelopments() { return List.copyOf(settlementDevelopments.values()); }
+    public Collection<SettlementDevelopmentPolicy> developmentPolicies() { return List.copyOf(developmentPolicies.values()); }
+    public Collection<SettlementAuthorityProfile> settlementAuthorityProfiles() { return List.copyOf(settlementAuthorityProfiles.values()); }
+    public Collection<DevelopmentIntent> developmentIntents() { return List.copyOf(developmentIntents.values()); }
+    public Collection<WorldSite> sites() { return List.copyOf(sites.values()); }
+    public Collection<SiteAffiliation> siteAffiliations() { return List.copyOf(siteAffiliations.values()); }
+    public Collection<SiteCapability> siteCapabilities() { return List.copyOf(siteCapabilities.values()); }
+    public Collection<RouteContract> routeContracts() { return List.copyOf(routeContracts.values()); }
+    public Collection<WorldPath> worldPaths() { return List.copyOf(worldPaths.values()); }
+    public Collection<WorldJourney> journeys() { return List.copyOf(journeys.values()); }
+    public Collection<WorldJourneySummary> journeySummaries() { return List.copyOf(journeySummaries.values()); }
+    public Collection<LivingRegionState> livingRegions() { return List.copyOf(livingRegions.values()); }
+    public Collection<AudienceRegionKnowledge> regionKnowledge() { return List.copyOf(regionKnowledge.values()); }
+    public Collection<AudienceRegionAccess> regionAccess() { return List.copyOf(regionAccess.values()); }
+    public List<DomainEvent> history() { return List.copyOf(history); }
+    public Collection<DomainEventSummary> historySummaries() { return List.copyOf(historySummaries.values()); }
+    public Map<StoryAudienceId, Long> narratorCooldowns() { return Map.copyOf(narratorCooldowns); }
     public Optional<FacilityState> facility(WorldObjectId id) { return Optional.ofNullable(facilities.get(id)); }
     public Optional<ScenarioInstance> scenario(String id) { return Optional.ofNullable(scenarios.get(id)); }
     public Optional<SettlementCommunity> community(WorldObjectId id) { return Optional.ofNullable(communities.get(id)); }
@@ -115,55 +122,72 @@ public final class WorldState {
     public Optional<AudienceRegionAccess> regionAccess(StoryAudienceId audience, String regionId) {
         return Optional.ofNullable(regionAccess.get(knowledgeKey(audience, regionId)));
     }
-    public void putFacility(FacilityState facility) { facilities.put(facility.id(), facility); }
-    public void putScenario(ScenarioInstance scenario) { scenarios.put(scenario.id(), scenario); }
-    public void putCommunity(SettlementCommunity community) { communities.put(community.id(), community); }
-    public void putPlace(SettlementPlace place) { places.put(place.id(), place); }
-    public void putCommunityPlaceBinding(CommunityPlaceBinding binding) { communityPlaceBindings.put(binding.communityId(), binding); }
-    public void putEconomy(SettlementEconomy economy) { economies.put(economy.communityId(), economy); }
-    public void putSecurity(SettlementSecurity security) { securities.put(security.communityId(), security); }
-    public void putSettlementPolicy(SettlementPolicy policy) { settlementPolicies.put(policy.communityId(), policy); }
-    public void putPopulationGroup(PopulationGroup group) {
+    void putFacility(FacilityState facility) { facilities.put(facility.id(), facility); }
+    void putScenario(ScenarioInstance scenario) { scenarios.put(scenario.id(), scenario); }
+    void putCommunity(SettlementCommunity community) { communities.put(community.id(), community); }
+    void putPlace(SettlementPlace place) { places.put(place.id(), place); }
+    void putCommunityPlaceBinding(CommunityPlaceBinding binding) { communityPlaceBindings.put(binding.communityId(), binding); }
+    void putEconomy(SettlementEconomy economy) { economies.put(economy.communityId(), economy); }
+    void putSecurity(SettlementSecurity security) { securities.put(security.communityId(), security); }
+    void putSettlementPolicy(SettlementPolicy policy) { settlementPolicies.put(policy.communityId(), policy); }
+    void putPopulationGroup(PopulationGroup group) {
         if (populationGroups.putIfAbsent(group.id(), group) != null) throw new IllegalStateException("Duplicate population group " + group.id());
     }
-    public void putEmergencyWindow(SettlementEmergencyWindow window) { emergencyWindows.put(window.communityId(), window); }
-    public void putSettlementDevelopment(SettlementDevelopment value) { settlementDevelopments.put(value.communityId(), value); }
-    public void putDevelopmentPolicy(SettlementDevelopmentPolicy value) { developmentPolicies.put(value.communityId(), value); }
-    public void putSettlementAuthorityProfile(SettlementAuthorityProfile value) { settlementAuthorityProfiles.put(value.communityId(), value); }
-    public void putDevelopmentIntent(DevelopmentIntent value) {
+    void putEmergencyWindow(SettlementEmergencyWindow window) { emergencyWindows.put(window.communityId(), window); }
+    void putSettlementDevelopment(SettlementDevelopment value) { settlementDevelopments.put(value.communityId(), value); }
+    void putDevelopmentPolicy(SettlementDevelopmentPolicy value) { developmentPolicies.put(value.communityId(), value); }
+    void putSettlementAuthorityProfile(SettlementAuthorityProfile value) { settlementAuthorityProfiles.put(value.communityId(), value); }
+    void putDevelopmentIntent(DevelopmentIntent value) {
         if (developmentIntents.putIfAbsent(value.id(), value) != null) throw new IllegalStateException("Duplicate development intent " + value.id());
     }
-    public void putSite(WorldSite site) { sites.put(site.id(), site); }
-    public void putSiteAffiliation(SiteAffiliation affiliation) {
+    void putSite(WorldSite site) { sites.put(site.id(), site); }
+    void putSiteAffiliation(SiteAffiliation affiliation) {
         siteAffiliations.put(affiliationKey(affiliation.siteId(), affiliation.objectId(), affiliation.role()), affiliation);
     }
-    public void putSiteCapability(SiteCapability capability) {
+    void putSiteCapability(SiteCapability capability) {
         siteCapabilities.put(capabilityKey(capability.siteId(), capability.type(), capability.resource()), capability);
     }
-    public void putRouteContract(RouteContract contract) { routeContracts.put(contract.id(), contract); }
-    public void putWorldPath(WorldPath path) {
+    void putRouteContract(RouteContract contract) { routeContracts.put(contract.id(), contract); }
+    void putWorldPath(WorldPath path) {
         if (worldPaths.putIfAbsent(path.id(), path) != null) throw new IllegalStateException("Duplicate world path " + path.id());
     }
-    public void putJourney(WorldJourney journey) {
+    void putJourney(WorldJourney journey) {
         if (journeys.putIfAbsent(journey.id(), journey) != null) throw new IllegalStateException("Duplicate journey " + journey.id());
     }
-    public void putLivingRegion(LivingRegionState region) {
+    void putJourneySummary(WorldJourneySummary summary) {
+        journeySummaries.merge(summary.outcome(), summary, (left, right) -> new WorldJourneySummary(left.outcome(),
+                Math.addExact(left.count(), right.count()), Math.addExact(left.confirmedLosses(), right.confirmedLosses()),
+                Math.max(left.lastCompletedStep(), right.lastCompletedStep())));
+    }
+    void compactTerminalJourneys() {
+        List<WorldJourney> terminal = journeys.values().stream().filter(WorldJourney::terminal)
+                .sorted(java.util.Comparator.comparingLong((WorldJourney value) -> value.startedAtStep() + value.elapsedSteps())
+                        .thenComparing(WorldJourney::id)).toList();
+        int remove = terminal.size() - MAX_DETAILED_TERMINAL_JOURNEYS;
+        for (int index = 0; index < remove; index++) {
+            WorldJourney journey = terminal.get(index);
+            journeys.remove(journey.id());
+            putJourneySummary(new WorldJourneySummary(journey.state(), 1, journey.confirmedLosses(),
+                    journey.startedAtStep() + journey.elapsedSteps()));
+        }
+    }
+    void putLivingRegion(LivingRegionState region) {
         if (livingRegions.putIfAbsent(region.id(), region) != null) throw new IllegalStateException("Duplicate living region " + region.id());
     }
-    public void putRegionKnowledge(AudienceRegionKnowledge knowledge) {
+    void putRegionKnowledge(AudienceRegionKnowledge knowledge) {
         String key = knowledgeKey(knowledge.audience(), knowledge.regionId());
         if (regionKnowledge.putIfAbsent(key, knowledge) != null) {
             throw new IllegalStateException("Duplicate audience region knowledge " + key);
         }
     }
-    public AudienceRegionKnowledge requireOrCreateRegionKnowledge(StoryAudienceId audience, String regionId) {
+    AudienceRegionKnowledge requireOrCreateRegionKnowledge(StoryAudienceId audience, String regionId) {
         return regionKnowledge.computeIfAbsent(knowledgeKey(audience, regionId), ignored ->
                 new AudienceRegionKnowledge(audience, regionId));
     }
-    public void putRegionAccess(AudienceRegionAccess access) {
+    void putRegionAccess(AudienceRegionAccess access) {
         regionAccess.put(knowledgeKey(access.audience(), access.regionId()), access);
     }
-    public void clearRegionalState() {
+    void clearRegionalState() {
         communities.clear();
         places.clear();
         communityPlaceBindings.clear();
@@ -182,11 +206,32 @@ public final class WorldState {
         routeContracts.clear();
         worldPaths.clear();
         journeys.clear();
+        journeySummaries.clear();
         livingRegions.clear();
         regionKnowledge.clear();
         regionAccess.clear();
     }
-    public void addEvent(DomainEvent event) { history.add(event); }
+    void clearAll() {
+        facilities.clear();
+        scenarios.clear();
+        clearRegionalState();
+        history.clear();
+        historySummaries.clear();
+        narratorCooldowns.clear();
+        simulationStep = 0;
+        eventSequence = 0;
+    }
+    void addEvent(DomainEvent event) {
+        history.add(event);
+        while (history.size() > MAX_DETAILED_HISTORY) summarize(history.removeFirst());
+    }
+    void putEventSummary(DomainEventSummary summary) {
+        String key = summaryKey(summary.subject(), summary.type());
+        DomainEventSummary previous = historySummaries.get(key);
+        historySummaries.put(key, previous == null ? summary : new DomainEventSummary(summary.subject(), summary.type(),
+                Math.addExact(previous.count(), summary.count()), Math.min(previous.firstStep(), summary.firstStep()),
+                Math.max(previous.lastStep(), summary.lastStep())));
+    }
     public boolean hasScenarioForSource(String sourceEventId, StoryAudienceId audience) {
         return scenarios.values().stream().anyMatch(value -> value.sourceEventId().equals(sourceEventId) && value.audience().equals(audience));
     }
@@ -198,7 +243,7 @@ public final class WorldState {
     public boolean narratorReady(StoryAudienceId audience) {
         return simulationStep >= narratorCooldowns.getOrDefault(audience, 0L);
     }
-    public void setNarratorCooldown(StoryAudienceId audience, long availableAtStep) {
+    void setNarratorCooldown(StoryAudienceId audience, long availableAtStep) {
         narratorCooldowns.put(audience, availableAtStep);
     }
 
@@ -212,5 +257,16 @@ public final class WorldState {
 
     private static String knowledgeKey(StoryAudienceId audience, String regionId) {
         return audience.value() + "|" + regionId;
+    }
+
+    private void summarize(DomainEvent event) {
+        String key = summaryKey(event.subject(), event.type());
+        historySummaries.compute(key, (ignored, existing) -> existing == null
+                ? new DomainEventSummary(event.subject(), event.type(), 1, event.simulationStep(), event.simulationStep())
+                : existing.include(event));
+    }
+
+    private static String summaryKey(WorldObjectId subject, DomainEventType type) {
+        return subject.value() + "|" + type.name();
     }
 }

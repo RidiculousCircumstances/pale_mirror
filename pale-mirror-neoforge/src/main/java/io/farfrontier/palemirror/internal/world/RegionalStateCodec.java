@@ -33,6 +33,7 @@ import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
 import io.farfrontier.palemirror.domain.WorldState;
+import io.farfrontier.palemirror.domain.WorldStateHydration;
 import io.farfrontier.palemirror.domain.PopulationGroup;
 import io.farfrontier.palemirror.domain.PopulationDisposition;
 import io.farfrontier.palemirror.domain.SettlementCohort;
@@ -79,27 +80,27 @@ final class RegionalStateCodec {
         JourneyStateCodec.write(tag, state);
     }
 
-    static void read(CompoundTag tag, WorldState state) {
-        for (Tag value : tag.getList("communities", Tag.TAG_COMPOUND)) state.putCommunity(readCommunity((CompoundTag) value));
-        for (Tag value : tag.getList("places", Tag.TAG_COMPOUND)) state.putPlace(readPlace((CompoundTag) value));
-        for (Tag value : tag.getList("communityPlaceBindings", Tag.TAG_COMPOUND)) state.putCommunityPlaceBinding(readBinding((CompoundTag) value));
-        for (Tag value : tag.getList("economies", Tag.TAG_COMPOUND)) state.putEconomy(readEconomy((CompoundTag) value));
-        for (Tag value : tag.getList("securities", Tag.TAG_COMPOUND)) state.putSecurity(readSecurity((CompoundTag) value));
-        for (Tag value : tag.getList("settlementPolicies", Tag.TAG_COMPOUND)) state.putSettlementPolicy(readPolicy((CompoundTag) value));
-        for (Tag value : tag.getList("worldSites", Tag.TAG_COMPOUND)) state.putSite(readSite((CompoundTag) value));
-        for (Tag value : tag.getList("siteAffiliations", Tag.TAG_COMPOUND)) state.putSiteAffiliation(readAffiliation((CompoundTag) value));
-        for (Tag value : tag.getList("siteCapabilities", Tag.TAG_COMPOUND)) state.putSiteCapability(readCapability((CompoundTag) value));
-        for (Tag value : tag.getList("routeContracts", Tag.TAG_COMPOUND)) state.putRouteContract(readContract((CompoundTag) value));
-        for (Tag value : tag.getList("livingRegions", Tag.TAG_COMPOUND)) state.putLivingRegion(readRegion((CompoundTag) value));
-        for (Tag value : tag.getList("regionKnowledge", Tag.TAG_COMPOUND)) state.putRegionKnowledge(AudienceRegionalStateCodec.readKnowledge((CompoundTag) value));
-        for (Tag value : tag.getList("regionAccess", Tag.TAG_COMPOUND)) state.putRegionAccess(AudienceRegionalStateCodec.readAccess((CompoundTag) value));
-        for (Tag value : tag.getList("populationGroups", Tag.TAG_COMPOUND)) state.putPopulationGroup(readPopulationGroup((CompoundTag) value));
-        for (Tag value : tag.getList("emergencyWindows", Tag.TAG_COMPOUND)) state.putEmergencyWindow(readEmergencyWindow((CompoundTag) value));
-        for (Tag value : tag.getList("settlementDevelopments", Tag.TAG_COMPOUND)) state.putSettlementDevelopment(readDevelopment((CompoundTag) value));
-        for (Tag value : tag.getList("developmentPolicies", Tag.TAG_COMPOUND)) state.putDevelopmentPolicy(readDevelopmentPolicy((CompoundTag) value));
-        for (Tag value : tag.getList("developmentIntents", Tag.TAG_COMPOUND)) state.putDevelopmentIntent(readDevelopmentIntent((CompoundTag) value));
+    static void read(CompoundTag tag, WorldStateHydration.Builder state) {
+        for (Tag value : tag.getList("communities", Tag.TAG_COMPOUND)) state.community(readCommunity((CompoundTag) value));
+        for (Tag value : tag.getList("places", Tag.TAG_COMPOUND)) state.place(readPlace((CompoundTag) value));
+        for (Tag value : tag.getList("communityPlaceBindings", Tag.TAG_COMPOUND)) state.binding(readBinding((CompoundTag) value));
+        for (Tag value : tag.getList("economies", Tag.TAG_COMPOUND)) state.economy(readEconomy((CompoundTag) value));
+        for (Tag value : tag.getList("securities", Tag.TAG_COMPOUND)) state.security(readSecurity((CompoundTag) value));
+        for (Tag value : tag.getList("settlementPolicies", Tag.TAG_COMPOUND)) state.policy(readPolicy((CompoundTag) value));
+        for (Tag value : tag.getList("worldSites", Tag.TAG_COMPOUND)) state.site(readSite((CompoundTag) value));
+        for (Tag value : tag.getList("siteAffiliations", Tag.TAG_COMPOUND)) state.affiliation(readAffiliation((CompoundTag) value));
+        for (Tag value : tag.getList("siteCapabilities", Tag.TAG_COMPOUND)) state.capability(readCapability((CompoundTag) value));
+        for (Tag value : tag.getList("routeContracts", Tag.TAG_COMPOUND)) state.route(readContract((CompoundTag) value));
+        for (Tag value : tag.getList("livingRegions", Tag.TAG_COMPOUND)) state.region(readRegion((CompoundTag) value));
+        for (Tag value : tag.getList("regionKnowledge", Tag.TAG_COMPOUND)) state.knowledge(AudienceRegionalStateCodec.readKnowledge((CompoundTag) value));
+        for (Tag value : tag.getList("regionAccess", Tag.TAG_COMPOUND)) state.access(AudienceRegionalStateCodec.readAccess((CompoundTag) value));
+        for (Tag value : tag.getList("populationGroups", Tag.TAG_COMPOUND)) state.populationGroup(readPopulationGroup((CompoundTag) value));
+        for (Tag value : tag.getList("emergencyWindows", Tag.TAG_COMPOUND)) state.emergencyWindow(readEmergencyWindow((CompoundTag) value));
+        for (Tag value : tag.getList("settlementDevelopments", Tag.TAG_COMPOUND)) state.development(readDevelopment((CompoundTag) value));
+        for (Tag value : tag.getList("developmentPolicies", Tag.TAG_COMPOUND)) state.developmentPolicy(readDevelopmentPolicy((CompoundTag) value));
+        for (Tag value : tag.getList("developmentIntents", Tag.TAG_COMPOUND)) state.developmentIntent(readDevelopmentIntent((CompoundTag) value));
         for (Tag value : tag.getList("settlementAuthorityProfiles", Tag.TAG_COMPOUND)) {
-            state.putSettlementAuthorityProfile(readAuthorityProfile((CompoundTag) value));
+            state.authorityProfile(readAuthorityProfile((CompoundTag) value));
         }
         JourneyStateCodec.read(tag, state);
     }
@@ -270,6 +271,7 @@ final class RegionalStateCodec {
         tag.putString("provider", value.provider().name());
         tag.putString("resource", value.resource().name());
         tag.putInt("nominalCapacity", value.nominalCapacity());
+        tag.putInt("allocationWeight", value.allocationWeight());
         tag.putLong("currentWindowSteps", value.currentWindowSteps());
         tag.putLong("expiryWindowSteps", value.expiryWindowSteps());
         tag.putInt("validatedCapacity", value.validatedCapacity());
@@ -283,7 +285,7 @@ final class RegionalStateCodec {
         return new RouteContract(id(tag, "id"), id(tag, "originEndpoint"), id(tag, "destinationEndpoint"),
                 RouteProvider.valueOf(tag.getString("provider")), ResourceKind.valueOf(tag.getString("resource")),
                 tag.getInt("nominalCapacity"), tag.getLong("currentWindowSteps"), tag.getLong("expiryWindowSteps"),
-                tag.getInt("validatedCapacity"), tag.getLong("lastSuccessfulValidationStep"),
+                tag.getInt("allocationWeight"), tag.getInt("validatedCapacity"), tag.getLong("lastSuccessfulValidationStep"),
                 tag.getString("lastObservationId"), RouteContractStatus.valueOf(tag.getString("status")));
     }
 

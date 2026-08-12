@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.api.ParcelKind;
 import io.farfrontier.palemirror.api.SemanticSlotKey;
 import io.farfrontier.palemirror.domain.DevelopmentIntentState;
 import io.farfrontier.palemirror.domain.DevelopmentIntentType;
+import io.farfrontier.palemirror.domain.DomainCommand;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.OperationalState;
 import io.farfrontier.palemirror.domain.ResourceKind;
 import io.farfrontier.palemirror.domain.SiteAffiliation;
@@ -23,7 +25,7 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationOperati
 import io.farfrontier.palemirror.internal.materialization.OperationState;
 import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
-import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotRegistration;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,11 +38,11 @@ import net.minecraft.world.level.block.Blocks;
 
 /** Shared-job depot executor. It never loads a chunk and never stores canonical stock in a container. */
 public final class SettlementDepotRuntime {
-    public static final String TEMPLATE_VERSION = "supply-depot-v34";
+    public static final String TEMPLATE_VERSION = "supply-depot-v35";
     public static final String CHANNEL = "settlement_depot";
     private SettlementDepotRuntime() { }
 
-    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data) {
+    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         boolean changed = false;
         for (var region : data.worldState().livingRegions().stream().sorted(Comparator.comparing(value -> value.id())).toList()) {
             SettlementDepotRecord depot = data.settlementDepots().get(region.communityId());
@@ -52,14 +54,23 @@ public final class SettlementDepotRuntime {
                 if (level == null || !level.hasChunkAt(anchor)) continue;
                 WorldObjectId siteId = new WorldObjectId(region.communityId().value() + "_supply_depot");
                 SemanticSlotKey key = new SemanticSlotKey(siteId.value(), "receiving_depot", "functional_core");
-                if (data.parcels().managedAt(place.dimensionId(), anchor).isEmpty()) data.parcels().register(
-                        new ParcelRecord(siteId.value() + ":parcel", region.id(), place.dimensionId(),
+                ParcelRecord parcel = data.parcels().parcels().stream()
+                        .filter(candidate -> candidate.dimensionId().equals(place.dimensionId())
+                                && candidate.kind() == ParcelKind.COMMUNITY && candidate.contains(anchor))
+                        .findFirst().orElse(null);
+                if (parcel == null) {
+                    parcel = new ParcelRecord(siteId.value() + ":parcel", region.id(), place.dimensionId(),
                                 anchor.offset(-3, -1, -3), anchor.offset(3, 3, 3), "supply_depot",
-                                ParcelKind.COMMUNITY, null, 0, ""));
-                if (data.semanticSlots().find(key).isEmpty()) data.semanticSlots().register(new SemanticSlotRecord(
-                        key, ParcelKind.COMMUNITY, capture(level, anchor), false, "", ""));
+                                ParcelKind.COMMUNITY, null, 0, "");
+                    data.parcels().register(parcel);
+                }
+                if (data.semanticSlots().find(key).isEmpty()) SemanticSlotRegistration.register(data.semanticSlots(),
+                        data.parcels(), key, parcel.id(), place.dimensionId(), ParcelKind.COMMUNITY, capture(level, anchor));
                 depot = new SettlementDepotRecord(siteId, region.communityId(), place.dimensionId(), anchor, key);
-                data.settlementDepots().put(region.communityId(), depot); registerSite(data, depot); changed = true; continue;
+                data.settlementDepots().put(region.communityId(), depot);
+                registerSite(data, commands, depot);
+                changed = true;
+                continue;
             }
             ServerLevel level = level(server, depot.dimensionId());
             if (level == null || !level.hasChunkAt(depot.anchor())) continue;
@@ -70,8 +81,10 @@ public final class SettlementDepotRuntime {
             if (job.state() == JobState.BLOCKED) job.start();
             String failure = execute(level, data, depot, desired, job);
             if (failure == null) {
-                job.complete(); data.worldState().site(depot.siteId()).orElseThrow().setOperationalState(
-                        desired == Desired.RUINED ? OperationalState.OFFLINE : OperationalState.OPERATIONAL);
+                job.complete();
+                commands.execute(data.worldState(), new DomainCommand.SetWorldSiteOperational(depot.siteId(),
+                        desired == Desired.RUINED ? OperationalState.OFFLINE : OperationalState.OPERATIONAL,
+                        "materialization:" + job.jobId()));
             } else job.block(failure);
             changed = true;
         }
@@ -131,12 +144,15 @@ public final class SettlementDepotRuntime {
         gateway.completeReset(depot.semanticSlot()); operation.complete(); job.advanceOperation(); return null;
     }
 
-    private static void registerSite(PaleMirrorSavedData data, SettlementDepotRecord depot) {
+    private static void registerSite(PaleMirrorSavedData data, DomainCommandExecutor commands,
+                                     SettlementDepotRecord depot) {
         if (data.worldState().site(depot.siteId()).isPresent()) return;
         int capacity = data.worldState().economy(depot.communityId()).orElseThrow().require(ResourceKind.IRON).capacity();
-        data.worldState().putSite(new WorldSite(depot.siteId(), WorldSiteType.STORAGE, OperationalState.DEGRADED));
-        data.worldState().putSiteAffiliation(new SiteAffiliation(depot.siteId(), depot.communityId(), SiteAffiliationRole.RECIPIENT));
-        data.worldState().putSiteCapability(new SiteCapability(depot.siteId(), SiteCapabilityType.STORAGE, ResourceKind.IRON, capacity));
+        commands.execute(data.worldState(), new DomainCommand.RegisterWorldSite(
+                new WorldSite(depot.siteId(), WorldSiteType.STORAGE, OperationalState.DEGRADED),
+                List.of(new SiteAffiliation(depot.siteId(), depot.communityId(), SiteAffiliationRole.RECIPIENT)),
+                List.of(new SiteCapability(depot.siteId(), SiteCapabilityType.STORAGE, ResourceKind.IRON, capacity)),
+                "depot:" + depot.siteId().value()));
     }
 
     private static List<SemanticCellRecord> capture(ServerLevel level, BlockPos anchor) {

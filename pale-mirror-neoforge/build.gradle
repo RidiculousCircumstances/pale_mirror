@@ -18,7 +18,7 @@ def createIntegrationJar = layout.buildDirectory.file('integration/create-1.21.1
 def createIntegrationUrl = rootProject.providers.gradleProperty('create_integration_url').get()
 def createIntegrationSha512 = rootProject.providers.gradleProperty('create_integration_sha512').get()
 def railwayUntoldIntegrationJar = file(rootProject.findProperty('railway_untold_integration_jar')
-        ?: '/home/rd/proj/railways-untold-pm/build/libs/railwaysuntold-neoforge-1.2.1-pm.1.jar')
+        ?: rootProject.layout.projectDirectory.file('../railways-untold-pm/build/libs/railwaysuntold-neoforge-1.2.1-pm.1.jar').asFile)
 def ftbQuestsIntegrationJar = layout.buildDirectory.file('integration/ftb-quests-neoforge-2101.1.30.jar')
 def ftbLibraryIntegrationJar = layout.buildDirectory.file('integration/ftb-library-neoforge-2101.1.35.jar')
 def ftbTeamsIntegrationJar = layout.buildDirectory.file('integration/ftb-teams-neoforge-2101.1.9.jar')
@@ -52,6 +52,7 @@ def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
 dependencies {
+    implementation project(':pale-mirror-api')
     implementation project(':pale-mirror-domain')
     // API classes are referenced only by the isolated client plugin. JourneyMap
     // itself stays optional and is never packaged into Pale Mirror.
@@ -158,6 +159,7 @@ neoForge {
     mods {
         pale_mirror {
             sourceSet sourceSets.main
+            sourceSet project(':pale-mirror-api').sourceSets.main
             sourceSet project(':pale-mirror-domain').sourceSets.main
         }
     }
@@ -183,7 +185,9 @@ sourceSets.main.resources.srcDir(generateModMetadata)
 neoForge.ideSyncTask(generateModMetadata)
 
 tasks.named('jar', Jar).configure {
+    dependsOn project(':pale-mirror-api').tasks.named('classes')
     dependsOn project(':pale-mirror-domain').tasks.named('classes')
+    from project(':pale-mirror-api').sourceSets.main.output
     from project(':pale-mirror-domain').sourceSets.main.output
 }
 
@@ -199,6 +203,7 @@ tasks.register('verifyPackagedJar') {
         def jar = new java.util.jar.JarFile(jarFile)
         try {
             [
+                    'io/farfrontier/palemirror/api/IntegrationAdapter.class',
                     'io/farfrontier/palemirror/domain/WorldState.class',
                     'io/farfrontier/palemirror/internal/effect/EffectLeaseLedger.class',
                     'io/farfrontier/palemirror/internal/combat/ThreatCombatLedger.class',

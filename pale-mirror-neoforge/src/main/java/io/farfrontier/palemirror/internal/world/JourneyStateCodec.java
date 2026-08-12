@@ -4,10 +4,12 @@ import io.farfrontier.palemirror.domain.JourneyMode;
 import io.farfrontier.palemirror.domain.JourneyRiskPolicy;
 import io.farfrontier.palemirror.domain.JourneyState;
 import io.farfrontier.palemirror.domain.WorldJourney;
+import io.farfrontier.palemirror.domain.WorldJourneySummary;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldPath;
 import io.farfrontier.palemirror.domain.WorldPathNode;
 import io.farfrontier.palemirror.domain.WorldState;
+import io.farfrontier.palemirror.domain.WorldStateHydration;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.nbt.CompoundTag;
@@ -20,11 +22,26 @@ final class JourneyStateCodec {
     static void write(CompoundTag root, WorldState state) {
         ListTag paths = new ListTag(); state.worldPaths().forEach(path -> paths.add(writePath(path))); root.put("worldPaths", paths);
         ListTag journeys = new ListTag(); state.journeys().forEach(journey -> journeys.add(writeJourney(journey))); root.put("journeys", journeys);
+        ListTag summaries = new ListTag();
+        state.journeySummaries().forEach(summary -> {
+            CompoundTag value = new CompoundTag();
+            value.putString("outcome", summary.outcome().name());
+            value.putLong("count", summary.count());
+            value.putLong("losses", summary.confirmedLosses());
+            value.putLong("lastCompleted", summary.lastCompletedStep());
+            summaries.add(value);
+        });
+        root.put("journeySummaries", summaries);
     }
 
-    static void read(CompoundTag root, WorldState state) {
-        for (Tag raw : root.getList("worldPaths", Tag.TAG_COMPOUND)) state.putWorldPath(readPath((CompoundTag) raw));
-        for (Tag raw : root.getList("journeys", Tag.TAG_COMPOUND)) state.putJourney(readJourney((CompoundTag) raw));
+    static void read(CompoundTag root, WorldStateHydration.Builder state) {
+        for (Tag raw : root.getList("worldPaths", Tag.TAG_COMPOUND)) state.path(readPath((CompoundTag) raw));
+        for (Tag raw : root.getList("journeys", Tag.TAG_COMPOUND)) state.journey(readJourney((CompoundTag) raw));
+        for (Tag raw : root.getList("journeySummaries", Tag.TAG_COMPOUND)) {
+            CompoundTag value = (CompoundTag) raw;
+            state.journeySummary(new WorldJourneySummary(JourneyState.valueOf(value.getString("outcome")),
+                    value.getLong("count"), value.getLong("losses"), value.getLong("lastCompleted")));
+        }
     }
 
     private static CompoundTag writePath(WorldPath path) {

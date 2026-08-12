@@ -15,7 +15,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.Heightmap;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.RouteProvider;
 
 /** Restart-safe commissioning coordinator for the product-profile legacy freight line. */
@@ -40,7 +40,7 @@ public final class ManagedRailwayRuntime {
         });
     }
 
-    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         RailInfrastructureAdapter adapter = AdapterRegistry.managedRailway();
         if (adapter.health().status() != AdapterHealth.Status.AVAILABLE) return false;
         boolean changed = ensureRecords(server, data);
@@ -140,7 +140,7 @@ public final class ManagedRailwayRuntime {
                         + "; Railway Untold will build one bounded segment footprint at a time");
     }
 
-    private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                                    CampaignCommissioningRecord record) {
         if (record.status() != CampaignCommissioningStatus.BASELINE_VALIDATION
                 && record.status() != CampaignCommissioningStatus.ACTIVE) return false;

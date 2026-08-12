@@ -87,13 +87,17 @@ public final class CoreRecoveryGameTests {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         PaleMirrorSavedData data = PaleMirrorSavedData.get(helper.getLevel().getServer().overworld());
         resetPaleMirrorState(helper.getLevel());
+        WorldObjectId communityId = new WorldObjectId("pale_mirror:test_community");
+        GameTestStateReset.registerMinimalCommunity(data, communityId);
+        WorldObjectId projectSiteId = new WorldObjectId(communityId.value() + "_fixture_destination");
         var intent = new io.farfrontier.palemirror.domain.DevelopmentIntent("pm:test:project",
-                new WorldObjectId("pale_mirror:test_community"),
+                communityId,
                 io.farfrontier.palemirror.domain.DevelopmentIntentType.UPGRADE_STOREHOUSE,
-                new WorldObjectId("pale_mirror:test_depot"), io.farfrontier.palemirror.domain.ResourceKind.IRON,
+                projectSiteId, io.farfrontier.palemirror.domain.ResourceKind.IRON,
                 24, 8, 0, 7, 24, java.util.Set.of("pm:receipt:one"), "test-v2",
                 io.farfrontier.palemirror.domain.DevelopmentIntentState.PLANNED, "");
-        data.worldState().putDevelopmentIntent(intent);
+        new io.farfrontier.palemirror.domain.DomainServices().commands().execute(data.worldState(),
+                new io.farfrontier.palemirror.domain.DomainCommand.RegisterDevelopmentIntent(intent, "gametest:fixture"));
 
         CompoundTag snapshot = data.save(new CompoundTag(), helper.getLevel().registryAccess());
         var reloaded = PaleMirrorSavedData.load(snapshot, helper.getLevel().registryAccess())
@@ -130,8 +134,8 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 34,
-                "fresh-world visual genesis snapshot must record schema v34 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 35,
+                "fresh-world visual genesis snapshot must record schema v35 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
         CompoundTag incompatible = persisted.copy();
         incompatible.putInt("schemaVersion", 19);
@@ -422,25 +426,7 @@ public final class CoreRecoveryGameTests {
 
     private static void resetPaleMirrorState(ServerLevel level) {
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
-        data.testMines().clear();
-        data.worldRegistry().clear();
-        data.audienceMappings().clear();
-        data.reconciliationLedger().clear();
-        data.effectLeases().clear();
-        data.quarantine().clear();
-        data.threatCombat().clear();
-        data.materializationJobs().clear();
-        data.worldState().facilities().clear();
-        data.worldState().scenarios().clear();
-        data.worldState().clearRegionalState();
-        data.campaignRegions().clear();
-        data.campaignCommissioning().clear();
-        data.settlementObservations().clear();
-        data.worldState().narratorCooldowns().clear();
-        data.worldState().history().clear();
-        data.worldState().setSimulationStep(0);
-        data.worldState().setEventSequence(0);
-        data.setDirty();
+        GameTestStateReset.resetAll(data);
     }
 
     private static void assertBiomeStage(GameTestHelper helper, ServerLevel level, TestMineRecord mine, ThreatTier tier) {

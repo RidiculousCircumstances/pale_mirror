@@ -5,7 +5,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -17,12 +17,12 @@ import net.minecraft.network.chat.Component;
 public final class RuntimeDebugController {
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
-    private final DomainCommandProcessor commands;
+    private final DomainCommandExecutor commands;
     private final Consumer<List<DomainEvent>> eventHandler;
     private final RuntimeDebugService service = new RuntimeDebugService();
     private final RuntimeDebugNavigator navigator;
 
-    public RuntimeDebugController(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    public RuntimeDebugController(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                   Consumer<List<DomainEvent>> eventHandler) {
         this.server = server;
         this.data = data;

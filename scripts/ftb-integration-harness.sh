@@ -8,9 +8,9 @@ quests_jar=${2:?missing FTB Quests JAR}
 library_jar=${3:?missing FTB Library JAR}
 teams_jar=${4:?missing FTB Teams JAR}
 architectury_jar=${5:?missing Architectury API JAR}
-installer=${NEOFORGE_INSTALLER:-/home/rd/.cache/far-frontier/tools/neoforge-21.1.248-installer.jar}
+installer=${NEOFORGE_INSTALLER:-${XDG_CACHE_HOME:-${HOME}/.cache}/far-frontier/tools/neoforge-21.1.248-installer.jar}
 java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to the Java 21 executable}
-export JAVA_ARGS="${JAVA_ARGS:-} -Dpale_mirror.profile=core-only"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dpale_mirror.profile=core-only"
 export PATH="$(dirname "$java_bin"):$PATH"
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pale-mirror-ftb.XXXXXX")
 log_one="$runtime_dir/first-start.log"

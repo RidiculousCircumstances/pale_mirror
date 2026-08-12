@@ -4,6 +4,11 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.api.ParcelKind;
 import io.farfrontier.palemirror.internal.materialization.ParcelLedger;
 import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
+import io.farfrontier.palemirror.api.SemanticSlotKey;
+import io.farfrontier.palemirror.internal.materialization.MaterializationGateway;
+import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotLedger;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -50,6 +55,31 @@ public final class MaterializationFrameworkGameTests {
                 snapshot, helper.getLevel().registryAccess());
         helper.assertTrue(reloaded.residentIdentities().retired(residentId),
                 "confirmed stable-identity retirement must survive restart");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-materialization-rollback", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void failedPostconditionRollsBackInsideExactParcel(GameTestHelper helper) {
+        BlockPos position = helper.absolutePos(new BlockPos(1, 2, 1));
+        helper.getLevel().setBlock(position, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
+        String dimension = helper.getLevel().dimension().location().toString();
+        ParcelLedger parcels = new ParcelLedger();
+        ParcelRecord parcel = new ParcelRecord("pale_mirror:exact", "pale_mirror:test_region", dimension,
+                position, position, "test", ParcelKind.COMMUNITY, null, 0, "");
+        parcels.register(parcel);
+        SemanticSlotKey key = new SemanticSlotKey("pale_mirror:test", "module", "slot");
+        SemanticSlotLedger slots = new SemanticSlotLedger();
+        slots.register(new SemanticSlotRecord(key, parcel.id(), ParcelKind.COMMUNITY,
+                java.util.List.of(new SemanticCellRecord(position,
+                        net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),
+                        net.minecraft.world.level.block.Blocks.STONE.defaultBlockState())), false, "", ""));
+        var result = new MaterializationGateway(helper.getLevel(), slots, parcels).setBlock(key, position,
+                net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(), 3, ignored -> false);
+
+        helper.assertTrue(result.status() == io.farfrontier.palemirror.api.GuardedWorldAccess.Status.BLOCKED,
+                "failed postcondition must block the operation");
+        helper.assertBlockPresent(net.minecraft.world.level.block.Blocks.STONE, new BlockPos(1, 2, 1));
         helper.succeed();
     }
 }

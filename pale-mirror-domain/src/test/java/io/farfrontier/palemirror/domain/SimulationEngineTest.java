@@ -38,8 +38,9 @@ class SimulationEngineTest {
     void negativeSimulationStepFailsVisiblyWithoutMutatingState() {
         WorldState state = new WorldState();
 
-        assertThrows(IllegalArgumentException.class, () -> new DomainServices().commands()
+        DomainCommandException failure = assertThrows(DomainCommandException.class, () -> new DomainServices().commands()
                 .execute(state, new DomainCommand.AdvanceSimulation(-1)));
+        assertEquals(DomainCommandException.Code.INVALID_INPUT, failure.code());
         assertEquals(0, state.simulationStep());
     }
 

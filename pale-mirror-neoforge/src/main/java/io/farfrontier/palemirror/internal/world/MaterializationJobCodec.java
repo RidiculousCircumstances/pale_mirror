@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationJobClas
 import io.farfrontier.palemirror.internal.materialization.MaterializationJobRegistry;
 import io.farfrontier.palemirror.internal.materialization.MaterializationOperation;
 import io.farfrontier.palemirror.internal.materialization.MaterializationOperationType;
+import io.farfrontier.palemirror.internal.materialization.MaterializationReceipt;
 import io.farfrontier.palemirror.internal.materialization.OperationState;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -15,7 +16,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
-/** Schema-v34 codec for the one global physical-work registry. */
+/** Schema-v35 codec for the one global physical-work registry. */
 final class MaterializationJobCodec {
     private MaterializationJobCodec() { }
 
@@ -23,6 +24,19 @@ final class MaterializationJobCodec {
         ListTag jobs = new ListTag();
         registry.jobs().forEach(job -> jobs.add(writeJob(job)));
         root.put("materializationJobs", jobs);
+        ListTag receipts = new ListTag();
+        registry.receipts().forEach(receipt -> {
+            CompoundTag value = new CompoundTag();
+            value.putString("id", receipt.jobId());
+            value.putString("target", receipt.targetId());
+            value.putString("channel", receipt.channel());
+            value.putLong("desiredRevision", receipt.desiredRevision());
+            value.putString("outcome", receipt.outcome().name());
+            value.putString("diagnostic", receipt.diagnostic());
+            receipts.add(value);
+        });
+        root.put("materializationReceipts", receipts);
+        root.putLong("compactedMaterializationReceipts", registry.compactedReceiptCount());
     }
 
     static MaterializationJobRegistry read(CompoundTag root) {
@@ -33,7 +47,17 @@ final class MaterializationJobCodec {
                 throw new IllegalStateException("Duplicate persisted materialization job " + job.jobId());
             }
         }
-        return new MaterializationJobRegistry(jobs);
+        Map<String, MaterializationReceipt> receipts = new LinkedHashMap<>();
+        for (Tag raw : root.getList("materializationReceipts", Tag.TAG_COMPOUND)) {
+            CompoundTag value = (CompoundTag) raw;
+            MaterializationReceipt receipt = new MaterializationReceipt(value.getString("id"), value.getString("target"),
+                    value.getString("channel"), value.getLong("desiredRevision"),
+                    JobState.valueOf(value.getString("outcome")), value.getString("diagnostic"));
+            if (receipts.putIfAbsent(receipt.jobId(), receipt) != null) {
+                throw new IllegalStateException("Duplicate persisted materialization receipt " + receipt.jobId());
+            }
+        }
+        return new MaterializationJobRegistry(jobs, receipts, root.getLong("compactedMaterializationReceipts"));
     }
 
     static CompoundTag writeJob(MaterializationJob job) {

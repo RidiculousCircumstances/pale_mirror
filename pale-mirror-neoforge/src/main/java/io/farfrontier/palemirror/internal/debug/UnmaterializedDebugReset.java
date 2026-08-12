@@ -61,13 +61,8 @@ public final class UnmaterializedDebugReset {
         data.parcels().clear();
         data.residentJourneyLeases().clear();
         data.residentIdentities().clear();
-        data.worldState().facilities().clear();
-        data.worldState().scenarios().clear();
-        data.worldState().clearRegionalState();
-        data.worldState().narratorCooldowns().clear();
-        data.worldState().history().clear();
-        data.worldState().setSimulationStep(0);
-        data.worldState().setEventSequence(0);
-        data.setDirty();
+        new io.farfrontier.palemirror.internal.domain.DomainTransaction(data,
+                new io.farfrontier.palemirror.domain.DomainServices().commands()).execute(data.worldState(),
+                        new io.farfrontier.palemirror.domain.DomainCommand.ResetWorldState("operator:unmaterialized-reset"));
     }
 }

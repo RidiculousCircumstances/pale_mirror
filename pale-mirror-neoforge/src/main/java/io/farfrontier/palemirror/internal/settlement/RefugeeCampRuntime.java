@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.internal.settlement;
 import io.farfrontier.palemirror.api.ParcelKind;
 import io.farfrontier.palemirror.api.SemanticSlotKey;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.OperationalState;
 import io.farfrontier.palemirror.domain.PopulationDisposition;
 import io.farfrontier.palemirror.internal.materialization.JobState;
@@ -15,7 +15,7 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationOperati
 import io.farfrontier.palemirror.internal.materialization.OperationState;
 import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
-import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotRegistration;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,14 +29,14 @@ import net.minecraft.world.level.block.Blocks;
 public final class RefugeeCampRuntime {
     private static final String CHANNEL = "shelter";
     private static final String POLICY = "pale_mirror:shelter_camp";
-    private static final String VERSION = "v34-1";
+    private static final String VERSION = "v35-1";
 
     private RefugeeCampRuntime() { }
 
-    /** v34 camps never fabricate representative actors; retained as a narrow call-site compatibility predicate. */
+    /** v35 camps never fabricate representative actors; retained as a narrow call-site compatibility predicate. */
     public static boolean isRepresentative(net.minecraft.world.entity.Entity entity) { return false; }
 
-    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         boolean changed = false;
         for (var group : data.worldState().populationGroups()) {
             RefugeeCampRecord camp = data.refugeeCamps().get(group.id());
@@ -75,18 +75,22 @@ public final class RefugeeCampRuntime {
                                                   io.farfrontier.palemirror.domain.WorldObjectId communityId,
                                                   io.farfrontier.palemirror.domain.WorldObjectId siteId,
                                                   ServerLevel level, BlockPos anchor) {
-        var parcel = data.parcels().reservedAt(level.dimension().location().toString(), anchor).orElse(null);
+        ParcelRecord parcel = data.parcels().reservedAt(level.dimension().location().toString(), anchor).orElse(null);
         if (parcel != null) parcel.commissionCommunity("shelter-selection:" + siteId.value());
-        if (data.parcels().managedAt(level.dimension().location().toString(), anchor).isEmpty()) {
+        if (parcel == null) parcel = data.parcels().managedAt(
+                level.dimension().location().toString(), anchor).orElse(null);
+        if (parcel == null) {
             BlockPos min = anchor.offset(-8, -2, -8); BlockPos max = anchor.offset(8, 12, 8);
-            data.parcels().register(new ParcelRecord(siteId.value() + ":parcel", siteId.value(),
+            parcel = new ParcelRecord(siteId.value() + ":parcel", siteId.value(),
                     level.dimension().location().toString(), min, max, "prepared_shelter", ParcelKind.COMMUNITY,
-                    null, 1, "prepared-site:" + siteId.value()));
+                    null, 1, "prepared-site:" + siteId.value());
+            data.parcels().register(parcel);
         }
+        String parcelId = parcel.id();
         SemanticSlotKey key = new SemanticSlotKey(siteId.value(), "camp", "footprint");
         if (data.semanticSlots().find(key).isEmpty()) {
-            data.semanticSlots().register(new SemanticSlotRecord(key, ParcelKind.COMMUNITY,
-                    captureCells(level, anchor), false, "", ""));
+            SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcelId,
+                    level.dimension().location().toString(), ParcelKind.COMMUNITY, captureCells(level, anchor));
         }
         return new RefugeeCampRecord(groupId, communityId, siteId,
                 level.dimension().location().toString(), anchor, key);
@@ -123,7 +127,7 @@ public final class RefugeeCampRuntime {
     }
 
     public static boolean cleanupReturnedGroups(MinecraftServer server, PaleMirrorSavedData data,
-                                                DomainCommandProcessor commands) {
+                                                DomainCommandExecutor commands) {
         boolean changed = false;
         for (RefugeeCampRecord camp : data.refugeeCamps().values()) {
             var group = data.worldState().populationGroup(camp.populationGroupId()).orElse(null);

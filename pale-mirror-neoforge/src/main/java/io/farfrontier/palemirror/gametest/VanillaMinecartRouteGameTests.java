@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.gametest;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.DomainServices;
+import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
@@ -106,7 +107,7 @@ public final class VanillaMinecartRouteGameTests {
         VanillaMinecartRouteRecord record = VanillaMinecartRouteRecord.planned(
                 "pale_mirror:minecart_test", level.dimension().location().toString(), "pale_mirror:test_route",
                 start, start.east());
-        data.vanillaMinecartRoutes().put(record.regionId(), record);
+        registerCanonicalRoute(data, record);
 
         helper.runAfterDelay(20, () -> {
             for (int step = 0; step < 12; step++)
@@ -139,7 +140,7 @@ public final class VanillaMinecartRouteGameTests {
         VanillaMinecartRouteRecord record = VanillaMinecartRouteRecord.planned(
                 "pale_mirror:minecart_conflict", level.dimension().location().toString(), "pale_mirror:conflict_route",
                 start, start.east(8));
-        data.vanillaMinecartRoutes().put(record.regionId(), record);
+        registerCanonicalRoute(data, record);
 
         helper.runAfterDelay(8, () -> {
             VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
@@ -166,7 +167,7 @@ public final class VanillaMinecartRouteGameTests {
         record.disconnectTopology(rail);
         record.observeRepresentativeCart(java.util.UUID.randomUUID(), java.util.UUID.randomUUID());
         record.moveCart(2.5D);
-        data.vanillaMinecartRoutes().put(record.regionId(), record);
+        registerCanonicalRoute(data, record);
 
         CompoundTag snapshot = data.save(new CompoundTag(), helper.getLevel().registryAccess());
         VanillaMinecartRouteRecord reloaded = PaleMirrorSavedData.load(snapshot, helper.getLevel().registryAccess())
@@ -190,7 +191,7 @@ public final class VanillaMinecartRouteGameTests {
             PaleMirrorSavedData.load(schema32, helper.getLevel().registryAccess());
             throw new AssertionError("schema v32 must fail closed instead of migrating an old physical graph");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("schema 34"),
+            helper.assertTrue(expected.getMessage().contains("schema 35"),
                     "fresh-world rail rejection must identify the schema boundary");
         }
         helper.succeed();
@@ -218,7 +219,7 @@ public final class VanillaMinecartRouteGameTests {
         level.setBlock(second.below(), Blocks.GRAVEL.defaultBlockState(), 3);
         level.setBlock(first, Blocks.RAIL.defaultBlockState(), 3);
         level.setBlock(second, Blocks.AIR.defaultBlockState(), 3);
-        data.vanillaMinecartRoutes().put(record.regionId(), record);
+        registerCanonicalRoute(data, record);
 
         VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
         helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.SUSPENDED,
@@ -252,7 +253,7 @@ public final class VanillaMinecartRouteGameTests {
         record.verify();
         record.initializeAuthoredTopology();
         record.activate();
-        data.vanillaMinecartRoutes().put(record.regionId(), record);
+        registerCanonicalRoute(data, record);
 
         java.util.LinkedHashMap<BlockPos, RailShape> reroute = new java.util.LinkedHashMap<>();
         reroute.put(start, RailShape.SOUTH_EAST);
@@ -292,14 +293,12 @@ public final class VanillaMinecartRouteGameTests {
                 Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape), false));
     }
 
+    private static void registerCanonicalRoute(PaleMirrorSavedData data, VanillaMinecartRouteRecord record) {
+        GameTestStateReset.registerMinimalRouteRegion(data, record.regionId(), new WorldObjectId(record.routeId()));
+        data.vanillaMinecartRoutes().put(record.regionId(), record);
+    }
+
     private static void reset(PaleMirrorSavedData data) {
-        data.vanillaMinecartRoutes().clear();
-        data.materializationJobs().clear();
-        data.semanticSlots().clear();
-        data.parcels().clear();
-        data.worldState().clearRegionalState();
-        data.worldState().setSimulationStep(0);
-        data.worldState().setEventSequence(0);
-        data.setDirty();
+        GameTestStateReset.resetAll(data);
     }
 }

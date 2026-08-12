@@ -20,7 +20,7 @@ components:
       - Minecraft
       - NeoForge
   - name: adapter_api
-    path: pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/api
+    path: pale-mirror-api (stable package io.farfrontier.palemirror.api)
     owns:
       - Narrow experimental SPI for optional integrations
     must_not_depend_on:
@@ -44,10 +44,18 @@ invariants:
   - statement: Unknown or player-owned block changes are conflicts and must not be overwritten by default.
   - id: canonical-state
     statement: Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations.
+  - id: canonical-mutation-boundary
+    statement: Production code mutates canonical WorldState only through a DomainCommandExecutor transaction; collection views are immutable, package-private mutation is reserved for the command processor, and persistence hydration is isolated to codecs.
+  - id: snapshot-integrity
+    statement: Schema-v35 snapshots are accepted only after canonical aggregate and physical-projection validation; orphan references, duplicate active jobs and mismatched exact parcel bindings fail closed before save or after hydration.
+  - id: bounded-causal-retention
+    statement: Detailed domain history, terminal journeys and terminal materialization jobs have fixed upper bounds; deterministic summaries and receipts preserve aggregate causality without allowing server-lifetime growth.
+  - id: weighted-route-allocation
+    statement: Shared facility output is allocated deterministically across active routes by destination demand and explicit route weight; route identity is used only for stable remainder ordering and never as economic priority.
   - id: domain-purity
     statement: Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.
   - id: materialization-safety
-    statement: Every long-lived physical transition is compiled from pinned semantic policy into a Core-owned persisted PRESENTATION or CAPABILITY job and executed only through the guarded NeoForge MaterializationGateway with loaded-chunk, parcel, semantic-slot, precondition and postcondition checks. Canonical infection materializes its passive PM-owned overlay and controller whenever the site is nearby and loaded, independently of story acceptance; combat actors and source-native gate mechanics remain explicitly scenario-gated.
+    statement: Every long-lived physical transition is compiled from pinned semantic policy into a Core-owned persisted PRESENTATION or CAPABILITY job and executed only through the guarded NeoForge MaterializationGateway with loaded-chunk, exact parcel identity, semantic-slot, precondition and postcondition checks plus rollback on a rejected postcondition. Canonical infection materializes its passive PM-owned overlay and controller whenever the site is nearby and loaded, independently of story acceptance; combat actors and source-native gate mechanics remain explicitly scenario-gated.
   - id: fresh-world-genesis
     statement: Fresh-world visual genesis is distinct from reconciliation materialization; a deterministic immutable manifest may author ordinary terrain only while its target chunk is naturally loading, records bounded completion before becoming player space, never force-loads prospective chunks, and has no retrofit or schema-v32 compatibility path.
   - id: visual-projection-boundary

@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.domain.DevelopmentIntent;
 import io.farfrontier.palemirror.domain.DevelopmentIntentState;
 import io.farfrontier.palemirror.domain.DevelopmentIntentType;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.StructuralIntegrity;
 import io.farfrontier.palemirror.internal.materialization.JobState;
 import io.farfrontier.palemirror.internal.materialization.MaterializationGateway;
@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationOperati
 import io.farfrontier.palemirror.internal.materialization.OperationState;
 import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotRegistration;
 import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import java.util.ArrayList;
@@ -37,10 +38,10 @@ import net.minecraft.world.level.block.state.BlockState;
 final class AuthoredSettlementProjectRuntime {
     private static final String STRUCTURAL_CHANNEL = "settlement_structure";
     private static final String DEVELOPMENT_CHANNEL = "settlement_development";
-    private static final String VERSION = "authored-project-v34-1";
+    private static final String VERSION = "authored-project-v35-1";
     private AuthoredSettlementProjectRuntime() { }
 
-    static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         var provider = PaleMirrorVisuals.provider().orElse(null);
         if (provider == null) return false;
         Map<String, AuthoredRegionSeed> seeds = provider.discoverAuthoredRegions(server.overworld()).stream()
@@ -72,7 +73,7 @@ final class AuthoredSettlementProjectRuntime {
         return changed;
     }
 
-    private static boolean structural(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean structural(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                       String placeId, StructuralIntegrity desired,
                                       DevelopmentIntent reconstruction, StructuralSlots structuralSlots) {
         if (!structuralSlots.complete()) return false;
@@ -110,7 +111,9 @@ final class AuthoredSettlementProjectRuntime {
             }
             List<SemanticCellRecord> cells = sampleShell(level, block(module.footprint().min()), block(module.footprint().max()), key.value());
             if (cells.isEmpty()) { complete = false; continue; }
-            data.semanticSlots().register(new SemanticSlotRecord(key, ParcelKind.COMMUNITY, cells, false, "", ""));
+            SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key,
+                    seed.planId() + ":parcel:module_" + index, seed.dimensionId(),
+                    ParcelKind.COMMUNITY, cells);
         }
         return new StructuralSlots(List.copyOf(keys), complete
                 && keys.stream().allMatch(key -> data.semanticSlots().find(key).isPresent()));
@@ -138,7 +141,7 @@ final class AuthoredSettlementProjectRuntime {
         return integrity == StructuralIntegrity.RUINED ? Blocks.COBBLESTONE.defaultBlockState() : cell.baselineState();
     }
 
-    private static boolean expansion(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean expansion(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                      DevelopmentIntent intent) {
         ParcelRecord parcel = data.parcels().parcels().stream().filter(value -> value.bindingId().equals(intent.targetSiteId().value()))
                 .findFirst().orElse(null);
@@ -181,7 +184,8 @@ final class AuthoredSettlementProjectRuntime {
                     for (int y = baseY + 1; y <= baseY + 3; y++) add(level, cells, new BlockPos(x, y, z));
                 }
             }
-            data.semanticSlots().register(new SemanticSlotRecord(key, ParcelKind.COMMUNITY, cells, false, "", ""));
+            SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcel.id(), parcel.dimensionId(),
+                    ParcelKind.COMMUNITY, cells);
         }
         return List.copyOf(keys);
     }

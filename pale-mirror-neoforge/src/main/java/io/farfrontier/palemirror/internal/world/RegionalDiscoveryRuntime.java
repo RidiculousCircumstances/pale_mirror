@@ -6,7 +6,7 @@ import java.util.function.Function;
 
 import io.farfrontier.palemirror.domain.AudienceRegionReachability;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.KnownRegionalFeature;
 import io.farfrontier.palemirror.domain.RecognitionState;
@@ -22,7 +22,7 @@ public final class RegionalDiscoveryRuntime {
     private RegionalDiscoveryRuntime() { }
 
     public static void observePlayers(MinecraftServer server, PaleMirrorSavedData data,
-                                      DomainCommandProcessor commands,
+                                      DomainCommandExecutor commands,
                                       Function<ServerPlayer, StoryAudienceId> audiences,
                                       Consumer<List<DomainEvent>> eventSink) {
         data.worldState().livingRegions().forEach(region -> {
@@ -70,7 +70,7 @@ public final class RegionalDiscoveryRuntime {
         });
     }
 
-    public static void discoverDepot(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    public static void discoverDepot(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                      ServerPlayer player, StoryAudienceId audience,
                                      net.minecraft.core.BlockPos position, Consumer<List<DomainEvent>> eventSink) {
         data.settlementDepots().values().stream().filter(depot -> depot.dimensionId().equals(
@@ -83,7 +83,7 @@ public final class RegionalDiscoveryRuntime {
     }
 
     public static void observeAudienceAccess(MinecraftServer server, PaleMirrorSavedData data,
-                                             DomainCommandProcessor commands,
+                                             DomainCommandExecutor commands,
                                              Function<ServerPlayer, StoryAudienceId> audiences,
                                              Consumer<List<DomainEvent>> eventSink) {
         long step = data.worldState().simulationStep();
@@ -118,7 +118,7 @@ public final class RegionalDiscoveryRuntime {
         }
     }
 
-    private static void discoverFeature(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static void discoverFeature(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                         ServerPlayer player, StoryAudienceId audience, String regionId,
                                         KnownRegionalFeature feature, String reason,
                                         Consumer<List<DomainEvent>> eventSink) {

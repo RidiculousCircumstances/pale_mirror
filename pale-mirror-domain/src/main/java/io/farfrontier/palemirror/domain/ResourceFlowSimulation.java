@@ -17,15 +17,7 @@ public final class ResourceFlowSimulation {
         refreshPaleMirrorContracts(state);
         Map<WorldObjectId, Map<ResourceKind, Integer>> available = availableProduction(state);
         Map<WorldObjectId, Map<ResourceKind, Integer>> deliveries = new LinkedHashMap<>();
-        state.routeContracts().stream().sorted(Comparator.comparing(RouteContract::id)).forEach(contract -> {
-            SiteAffiliation origin = state.siteAffiliation(contract.originEndpoint(), SiteAffiliationRole.SUPPLIER).orElse(null);
-            SiteAffiliation destination = state.siteAffiliation(contract.destinationEndpoint(), SiteAffiliationRole.RECIPIENT).orElse(null);
-            if (origin == null || destination == null) return;
-            int transferred = take(available, origin.objectId(), contract.resource(),
-                    contract.transferableCapacity(state.simulationStep()));
-            if (transferred > 0) deliveries.computeIfAbsent(destination.objectId(), ignored -> new EnumMap<>(ResourceKind.class))
-                    .merge(contract.resource(), transferred, Integer::sum);
-        });
+        allocateByDemand(state, available, deliveries);
         List<DomainEvent> produced = new ArrayList<>();
         state.economies().stream().sorted(Comparator.comparing(SettlementEconomy::communityId)).forEach(economy -> {
             SettlementCommunity community = state.community(economy.communityId()).orElseThrow();
@@ -44,6 +36,69 @@ public final class ResourceFlowSimulation {
         });
         produced.forEach(state::addEvent);
         return List.copyOf(produced);
+    }
+
+    private static void allocateByDemand(WorldState state,
+                                         Map<WorldObjectId, Map<ResourceKind, Integer>> available,
+                                         Map<WorldObjectId, Map<ResourceKind, Integer>> deliveries) {
+        Map<SupplyKey, List<FlowRequest>> grouped = new LinkedHashMap<>();
+        state.routeContracts().stream().sorted(Comparator.comparing(RouteContract::id)).forEach(contract -> {
+            SiteAffiliation origin = state.siteAffiliation(contract.originEndpoint(), SiteAffiliationRole.SUPPLIER).orElse(null);
+            SiteAffiliation destination = state.siteAffiliation(contract.destinationEndpoint(), SiteAffiliationRole.RECIPIENT).orElse(null);
+            SettlementEconomy economy = destination == null ? null : state.economy(destination.objectId()).orElse(null);
+            ResourceAccount account = economy == null ? null : economy.accounts().get(contract.resource());
+            SettlementCommunity community = destination == null ? null : state.community(destination.objectId()).orElse(null);
+            int capacity = contract.transferableCapacity(state.simulationStep());
+            if (origin == null || destination == null || account == null || community == null || capacity <= 0) return;
+            int consumption = community.rationing() ? account.rationedConsumption() : account.baseConsumption();
+            int demand = Math.max(0, account.capacity() - account.stock() + consumption - account.production());
+            if (demand <= 0) return;
+            grouped.computeIfAbsent(new SupplyKey(origin.objectId(), contract.resource()), ignored -> new ArrayList<>())
+                    .add(new FlowRequest(contract, destination.objectId(), Math.min(capacity, demand)));
+        });
+        grouped.forEach((supply, requests) -> {
+            int remainingSupply = available.getOrDefault(supply.origin(), Map.of()).getOrDefault(supply.resource(), 0);
+            Map<DemandKey, Integer> remainingDemand = new LinkedHashMap<>();
+            requests.forEach(request -> remainingDemand.merge(new DemandKey(request.destination(), supply.resource()),
+                    request.demand(), Math::max));
+            Map<FlowRequest, Integer> allocations = new LinkedHashMap<>();
+            while (remainingSupply > 0) {
+                List<FlowRequest> eligible = requests.stream().filter(request -> {
+                    int allocated = allocations.getOrDefault(request, 0);
+                    return allocated < request.demand()
+                            && remainingDemand.getOrDefault(new DemandKey(request.destination(), supply.resource()), 0) > 0;
+                }).toList();
+                if (eligible.isEmpty()) break;
+                long totalScore = eligible.stream().mapToLong(request -> (long) Math.max(1,
+                        request.demand() - allocations.getOrDefault(request, 0)) * request.contract().allocationWeight()).sum();
+                int before = remainingSupply;
+                for (FlowRequest request : eligible) {
+                    int routeRemaining = request.demand() - allocations.getOrDefault(request, 0);
+                    DemandKey demandKey = new DemandKey(request.destination(), supply.resource());
+                    int destinationRemaining = remainingDemand.getOrDefault(demandKey, 0);
+                    int proportional = (int) Math.min(Integer.MAX_VALUE,
+                            (long) before * routeRemaining * request.contract().allocationWeight() / totalScore);
+                    int assigned = Math.min(Math.min(routeRemaining, destinationRemaining),
+                            Math.min(remainingSupply, proportional));
+                    if (assigned <= 0) continue;
+                    allocations.merge(request, assigned, Integer::sum);
+                    remainingDemand.put(demandKey, destinationRemaining - assigned);
+                    remainingSupply -= assigned;
+                }
+                if (remainingSupply == before) {
+                    FlowRequest winner = eligible.getFirst();
+                    DemandKey demandKey = new DemandKey(winner.destination(), supply.resource());
+                    allocations.merge(winner, 1, Integer::sum);
+                    remainingDemand.computeIfPresent(demandKey, (ignored, value) -> value - 1);
+                    remainingSupply--;
+                }
+            }
+            int transferred = allocations.values().stream().mapToInt(Integer::intValue).sum();
+            take(available, supply.origin(), supply.resource(), transferred);
+            allocations.forEach((request, amount) -> deliveries
+                    .computeIfAbsent(request.destination(), ignored -> new EnumMap<>(ResourceKind.class))
+                    .merge(supply.resource(), amount, Integer::sum));
+        });
     }
 
     private static void refreshPaleMirrorContracts(WorldState state) {
@@ -82,4 +137,8 @@ public final class ResourceFlowSimulation {
         resources.put(resource, current - transferred);
         return transferred;
     }
+
+    private record SupplyKey(WorldObjectId origin, ResourceKind resource) { }
+    private record DemandKey(WorldObjectId destination, ResourceKind resource) { }
+    private record FlowRequest(RouteContract contract, WorldObjectId destination, int demand) { }
 }

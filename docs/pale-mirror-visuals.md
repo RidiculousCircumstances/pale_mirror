@@ -8,7 +8,7 @@ curated structure assets, resident carriers, animation, particles and sound.
 
 ## Fresh-world contract
 
-There is intentionally no retrofit path. A new v34 world pins three complete
+There is intentionally no retrofit path. A new v35 world pins three complete
 `AuthoredRegionSeed` manifests before any block is changed. The first region is
 1024–2048 blocks from spawn; two later regions are sparse at 6000–10000 blocks.
 The immutable manifest contains every object identity and coordinate needed by

@@ -61,7 +61,7 @@ tasks.register('verifyJava21') {
 
 def architectureFile = layout.projectDirectory.file('architecture.yml').asFile
 def domainJavaSources = fileTree('pale-mirror-domain/src/main/java') { include '**/*.java' }
-def apiJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
+def apiJavaSources = fileTree('pale-mirror-api/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
 def visualJavaSources = fileTree('pale-mirror-visuals/src/main/java') { include '**/*.java' }
 def genericNeoForgeJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror') {
     include '**/*.java'
@@ -76,6 +76,10 @@ def trackedFiles = providers.exec {
 }.standardOutput.asText.map { text -> text.readLines() }
 def requiredArchitectureStatements = [
         'Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations.',
+        'Production code mutates canonical WorldState only through a DomainCommandExecutor transaction; collection views are immutable, package-private mutation is reserved for the command processor, and persistence hydration is isolated to codecs.',
+        'Schema-v35 snapshots are accepted only after canonical aggregate and physical-projection validation; orphan references, duplicate active jobs and mismatched exact parcel bindings fail closed before save or after hydration.',
+        'Detailed domain history, terminal journeys and terminal materialization jobs have fixed upper bounds; deterministic summaries and receipts preserve aggregate causality without allowing server-lifetime growth.',
+        'Shared facility output is allocated deterministically across active routes by destination demand and explicit route weight; route identity is used only for stable remainder ordering and never as economic priority.',
         'Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.',
         'Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.',
         'Observers publish typed facts; reconciliation alone converts them into domain commands and events.',
@@ -118,6 +122,64 @@ tasks.register('verifyArchitecture') {
         apiJavaSources.files.each { source ->
             if (source.getText('UTF-8').contains('io.farfrontier.palemirror.internal.')) {
                 throw new GradleException("API boundary violation: ${source} imports internal implementation")
+            }
+        }
+
+        visualJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            ['io.farfrontier.palemirror.internal.', 'io.farfrontier.palemirror.domain.'].each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Visuals boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+
+        genericNeoForgeJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            if (text.contains('WorldStateHydration')
+                    && !source.path.endsWith('/internal/world/PaleMirrorSavedData.java')
+                    && !source.path.endsWith('/internal/world/RegionalStateCodec.java')
+                    && !source.path.endsWith('/internal/world/JourneyStateCodec.java')) {
+                throw new GradleException("Hydration boundary violation: ${source} references WorldStateHydration")
+            }
+            def directMutation = (text =~ /\.worldState\(\)\.(put|set|clear|add)[A-Z]\w*\(/)
+            if (directMutation.find()) {
+                throw new GradleException("Canonical state mutation bypasses DomainCommandExecutor: ${source}")
+            }
+        }
+    }
+}
+
+tasks.register('verifyJavaStyle') {
+    group = 'verification'
+    description = 'Rejects tabs, trailing whitespace and oversized Java lines without rewriting user files.'
+    inputs.files(guardedJavaSources)
+    doLast {
+        guardedJavaSources.files.each { source ->
+            source.readLines().eachWithIndex { line, index ->
+                if (line.contains('\t')) throw new GradleException("Java style: tab in ${source}:${index + 1}")
+                if (line != line.stripTrailing()) throw new GradleException("Java style: trailing whitespace in ${source}:${index + 1}")
+                if (line.length() > 250 && !line.trim().startsWith('//')) {
+                    throw new GradleException("Java style: line exceeds 250 columns in ${source}:${index + 1}")
+                }
+            }
+        }
+    }
+}
+
+tasks.register('verifyPortableConfiguration') {
+    group = 'verification'
+    description = 'Rejects checked-in machine-specific absolute project paths.'
+    inputs.files(fileTree('.') {
+        include '**/*.gradle', '**/*.properties', '**/*.sh', '**/*.ps1', '**/*.cmd'
+        exclude '**/build/**', '.gradle/**'
+    })
+    doLast {
+        inputs.files.files.each { source ->
+            String text = source.getText('UTF-8')
+            String forbiddenUnixRoot = '/home/' + 'rd/'
+            if (text.contains(forbiddenUnixRoot) || text.contains(':\\Users\\')) {
+                throw new GradleException("Machine-specific path in ${source}; use a Gradle property or repository-relative path")
             }
         }
     }
@@ -193,7 +255,8 @@ tasks.register('guardrails') {
     description = 'Runs fast architecture and LLM-drift guardrails.'
     dependsOn tasks.named('verifyJava21'), tasks.named('verifyArchitecture'),
             tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles'),
-            tasks.named('verifySourceIsolation')
+            tasks.named('verifySourceIsolation'), tasks.named('verifyJavaStyle'),
+            tasks.named('verifyPortableConfiguration')
 }
 
 tasks.named('check') {

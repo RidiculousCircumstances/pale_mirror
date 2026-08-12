@@ -2,14 +2,14 @@
 
 ## Goal (success criteria)
 
-- Complete the fresh-world schema-v34 physical-expression cutover: every long-lived PM representation uses one persisted semantic materialization framework.
-- Deliver authored settlements, MineSites, routes, residents, journeys, evacuation, damage, reconstruction and positive development without making Minecraft or Visuals a second source of truth.
+- Close the complete architecture and code-style audit through an intentionally incompatible schema-v35 cutover.
+- Make domain mutation, persistence integrity, semantic materialization, bounded history/jobs/journeys, multi-route resource allocation and the Core/Visuals API boundary enforceable by types and build gates.
 
 ## Constraints/Assumptions
 
 - Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
 - `pale-mirror-domain` remains free of Minecraft, NeoForge, persistence and adapters.
-- Existing schema-v33 and older worlds are intentionally unsupported; the development server world will be replaced.
+- Existing schema-v34 and older worlds are intentionally unsupported; the development server world will be replaced.
 - The new product profile requires Pale Mirror Core, Pale Mirror Visuals, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16. Create remains an industrial-upgrade integration.
 - Integrated Villages ARR structures may be copied and remixed for this private non-distributed mod; every imported template retains an origin/version/hash manifest.
 - Crimson 1.4.3.1 is the default infection source; Spore remains optional/test-only.
@@ -36,43 +36,54 @@
 - Population movement is a generic persisted `WorldJourney`: off-screen progress and full risk are canonical, while nearby stable residents materialize under identity leases. The default materialization limit equals population and is configurable.
 - Shelter candidates are reserved at genesis. Player choice takes priority; after the grace window settlement policy chooses a degraded fallback.
 - Damage is deterministic and policy-driven. Reconstruction is a joint staged project and may restore pristine authored state; positive development consumes resources/labour on soft reserved plots.
+- Resource production shared by multiple routes is allocated deterministically by actual demand and an explicit route weight; route identity is only a remainder tie-breaker.
+- Causal history retains a bounded detailed window plus compact per-subject/type summaries. Terminal journeys and materialization jobs have bounded receipt/summary retention.
+- The Visuals compile boundary is a dedicated `pale-mirror-api` module; documentation-only separation is insufficient.
 
 ## State
 
 ### Done
 
-- Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; schema v34 intentionally rejects all older worlds.
+- Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; schema v35 intentionally rejects all older worlds.
 - Added persisted immutable manifests, generator-only terrain survey, deterministic three-region grammar, three climate palettes, radial forts, six expansion plots and curated private NBT modules with provenance.
 - Replaced automatic observed-village campaign binding when Visuals is installed; core registers authored communities, places, facilities, sites, route contracts and exact 48-person PM-owned cohort state.
 - Added stable resident UUID commissioning, canonical-growth-only breeding, confirmed-death reconciliation and the isolated exact Villager Overhaul guard/worker/recruitment bridge.
 - Added the GeckoLib Threat Heart, four projected threat stages, infection sound/particles and depot crisis/recovery/prosperity cues. Core remains authoritative.
 - Removed first-generation mine force-loading; authored settlement work, MineSites and baseline rail work advance from naturally loaded chunks only.
-- Cut every long-lived representation over to the shared schema-v34 materialization registry, guarded gateway, exact semantic cells and parcel ledger.
+- Cut every long-lived representation over to the shared schema-v35 materialization registry, guarded gateway, exact semantic cells and parcel ledger.
 - Added explicit influence/community/public-infrastructure/reserved/player-lease parcels; player work becomes PM-managed only through an explicit commissioning permit.
 - Added canonical `WorldJourney`, deterministic off-screen travel/risk, exclusive stable-resident identity leases, bounded nearby physical groups and canonical return journeys.
 - Made the GeckoLib Threat Heart the sole product controller backed by PM combat state; the zombie anchor remains core-only test infrastructure.
 - Added reserved shelter candidates, selected/fallback refugee camps, staged authored damage, exact reconstruction and plot-based positive-development projects.
 - Added terrain-costed, grade-safe persisted baseline rail paths with arbitrary turns, loaded-chunk construction and topology-based player reroute adoption.
-- Added Visuals planner tests, 2 Visuals GameTests, JAR verification and a clean packaged Core+Visuals two-start harness. All 36 core GameTests and both Visuals GameTests pass.
+- Added Visuals planner tests, 2 Visuals GameTests, JAR verification and a clean packaged Core+Visuals two-start harness. All 37 Core GameTests and both Visuals GameTests pass.
 - Fixed the previously flaky multi-chunk player-reroute GameTest by observing both dirty chunks.
+- Extracted the experimental SPI into `pale-mirror-api`; Visuals can no longer compile against domain or Core internals, while the final Core JAR explicitly embeds the API and domain outputs.
+- Made `WorldState` collection views immutable and mutations package-private; production mutations cross `DomainCommandExecutor`/`DomainTransaction`, while a codec-only hydration builder rejects duplicate persisted identities.
+- Added schema-v35 canonical and physical integrity validation on load and save, typed command failures, atomic aggregate registration and command-owned Narrator evaluation/reset/registration paths.
+- Bound every semantic slot to one explicit parcel, added postcondition rollback, rejected duplicate current materialization jobs and compacted terminal jobs into bounded receipts.
+- Bounded detailed causal history and terminal journeys with persisted summaries; shared output now uses deterministic demand/weight allocation rather than route-ID priority.
+- Split command registration, runtime combat and test-mine persistence out of oversized coordinators; added Java style, portable-path and 500-line debt gates.
+- Verification: domain/unit and `check` pass; 37 Core and 2 Visuals GameTests pass; distribution JAR checks, clean packaged Core crash/restart and packaged Core+Visuals two-start harnesses pass.
 
 ### Now
 
-- Schema-v34 physical-expression cutover is implemented and automated release gates are green. Risk: `critical-code`.
+- Schema-v35 architecture-debt cutover complete. Risk verified as `critical-code`.
 
 ### Next
 
-- Create a fresh disposable v34 playtest world and validate temperate/cold/dry composition, full-population journey load, VO patrol quality, Threat Heart combat readability, damage/reconstruction stages and rail terrain fit with a graphical client.
-- Add player-facing preview/authorization UX for a conflicted semantic-slot pristine reset; the persisted permit boundary exists, but ordinary gameplay must not require an operator command.
+- Replace the disposable schema-v34 development world before the next product-profile playtest.
+- Run a real graphical client pass over fresh authored temperate/cold/dry regions; automated runtime gates cannot judge visual quality or encounter pacing.
 
 ## Open questions
 
-- UNCONFIRMED: final visual quality and playability until a real client visits generated temperate/cold/dry regions.
+- UNCONFIRMED: final visual quality and playability until a real client visits generated temperate/cold/dry regions after the v35 cutover.
 - The exact VO public surface plus one fail-closed recruitment mixin loads in GameTest and packaged server; live patrol/combat quality still needs client playtesting.
 - Public redistribution remains out of scope; re-audit all imported asset and dependency licences before changing that assumption.
 
 ## Working set
 
 - `AGENTS.md`, `architecture.yml`, `settings.gradle`, `build.gradle`
-- `pale-mirror-neoforge/.../api`, `PaleMirrorSavedData`, `PaleMirrorRuntime`, `CampaignRegionBootstrapper`
+- `pale-mirror-api`, domain `WorldState`/commands/history, `PaleMirrorSavedData`, materialization ledgers/gateway/jobs
+- `PaleMirrorRuntime`, `PaleMirrorEvents`, resource flow and projection publishers
 - `pale-mirror-visuals`, authored-region manifest/genesis, residents, VO bridge and Threat Heart

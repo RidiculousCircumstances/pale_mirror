@@ -11,15 +11,19 @@ import net.minecraft.core.BlockPos;
 /** Whole-slot conflict boundary with sparse per-cell precondition evidence. */
 public final class SemanticSlotRecord {
     private final SemanticSlotKey key;
+    private final String parcelId;
     private ParcelKind parcelKind;
     private final Map<Long, SemanticCellRecord> cells;
     private boolean conflicted;
     private String diagnostic;
     private String resetPermit;
 
-    public SemanticSlotRecord(SemanticSlotKey key, ParcelKind parcelKind, Collection<SemanticCellRecord> cells,
+    public SemanticSlotRecord(SemanticSlotKey key, String parcelId, ParcelKind parcelKind,
+                              Collection<SemanticCellRecord> cells,
                               boolean conflicted, String diagnostic, String resetPermit) {
         this.key = key;
+        if (parcelId == null || parcelId.isBlank()) throw new IllegalArgumentException("Semantic slot parcel is required");
+        this.parcelId = parcelId;
         this.parcelKind = parcelKind;
         this.cells = new LinkedHashMap<>();
         cells.forEach(cell -> this.cells.put(cell.position().asLong(), cell));
@@ -28,6 +32,7 @@ public final class SemanticSlotRecord {
         this.resetPermit = resetPermit == null ? "" : resetPermit;
     }
     public SemanticSlotKey key() { return key; }
+    public String parcelId() { return parcelId; }
     public ParcelKind parcelKind() { return parcelKind; }
     public List<SemanticCellRecord> cells() { return List.copyOf(cells.values()); }
     public SemanticCellRecord cell(BlockPos position) { return cells.get(position.asLong()); }

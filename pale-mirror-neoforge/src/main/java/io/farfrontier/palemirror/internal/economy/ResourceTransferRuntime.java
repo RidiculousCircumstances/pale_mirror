@@ -4,7 +4,7 @@ import java.util.Comparator;
 import java.util.UUID;
 
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.ResourceAccount;
 import io.farfrontier.palemirror.domain.ResourceKind;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -25,7 +25,7 @@ public final class ResourceTransferRuntime {
 
     private ResourceTransferRuntime() { }
 
-    public static InteractionResult prepare(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    public static InteractionResult prepare(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                             ServerPlayer player, net.minecraft.core.BlockPos position,
                                             StoryAudienceId audience) {
         SettlementDepotRecord depot = data.settlementDepots().values().stream()
@@ -83,7 +83,7 @@ public final class ResourceTransferRuntime {
                 ? "storehouse contribution" : direction.name().toLowerCase()) + " of " + amount + " IRON");
     }
 
-    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         boolean changed = false;
         for (ResourceTransfer transfer : data.resourceTransfers().transfers().stream()
                 .filter(value -> !value.state().terminal()).sorted(Comparator.comparing(ResourceTransfer::id)).toList()) {
@@ -108,7 +108,7 @@ public final class ResourceTransferRuntime {
         return changed;
     }
 
-    private static boolean advanceDeposit(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean advanceDeposit(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                           ServerPlayer player, ResourceTransfer transfer) {
         ItemStack stack = player.getInventory().getItem(transfer.inventorySlot());
         if (transfer.state() == ResourceTransferState.PREPARED) {
@@ -149,7 +149,7 @@ public final class ResourceTransferRuntime {
         return false;
     }
 
-    private static boolean advanceWithdrawal(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean advanceWithdrawal(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                              ServerPlayer player, ResourceTransfer transfer) {
         if (transfer.state() == ResourceTransferState.PREPARED) {
             ResourceAccount account = data.worldState().economy(transfer.communityId()).orElseThrow().require(transfer.resource());

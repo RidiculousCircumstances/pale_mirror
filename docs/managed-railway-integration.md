@@ -24,7 +24,7 @@ observation path:
 ## Pinned provider
 
 ```text
-repository: /home/rd/proj/railways-untold-pm
+repository: sibling private project `../railways-untold-pm`
 mod id: railwaysuntold
 version: 1.2.1-pm.1
 upstream base: Railway Untold 1.2.1

@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.domain.CommunityPlaceBinding;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.GuardCapability;
 import io.farfrontier.palemirror.domain.LivingRegionState;
@@ -50,7 +50,7 @@ import net.minecraft.server.MinecraftServer;
 public final class AuthoredRegionRegistrar {
     private AuthoredRegionRegistrar() { }
 
-    public static boolean discover(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    public static boolean discover(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         var provider = PaleMirrorVisuals.provider().orElse(null);
         if (provider == null) return false;
         boolean changed = false;
@@ -64,7 +64,7 @@ public final class AuthoredRegionRegistrar {
         return changed;
     }
 
-    static void register(PaleMirrorSavedData data, DomainCommandProcessor commands, AuthoredRegionSeed seed) {
+    static void register(PaleMirrorSavedData data, DomainCommandExecutor commands, AuthoredRegionSeed seed) {
         RegionBindings ids = RegionBindings.forAuthored(seed.planId());
         if (data.campaignRegions().containsKey(ids.regionId())) return;
         CampaignRegionDefinition definition = CampaignRegionDefinitions.require(CampaignRegionBootstrapper.IRON_FRONTIER_DEFINITION);
@@ -137,12 +137,10 @@ public final class AuthoredRegionRegistrar {
                 cohortCounts(seed));
         commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
                 community, place, new CommunityPlaceBinding(ids.communityId(), placeId), economy, security, policy,
-                sites, affiliations, capabilities, routes, List.of(residents), paths));
-        commands.execute(data.worldState(), new DomainCommand.RegisterSettlementAuthorityProfile(
+                sites, affiliations, capabilities, routes, List.of(residents), paths,
+                new SettlementDevelopment(ids.communityId(), 25, 0, population, Math.max(population, 56), 0),
+                SettlementDevelopmentPolicy.defaults(ids.communityId()),
                 SettlementAuthorityProfile.pmManaged(ids.communityId())));
-        data.worldState().putSettlementDevelopment(new SettlementDevelopment(ids.communityId(), 25, 0,
-                population, Math.max(population, 56), 0));
-        data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(ids.communityId()));
         data.campaignRegions().put(ids.regionId(), record(seed, placeId, definition));
         registerParcels(data, seed);
         List<BlockPos> freightPath = seed.baselineRailNodes().stream().map(AuthoredRegionRegistrar::block)

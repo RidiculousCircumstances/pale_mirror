@@ -50,7 +50,11 @@ public final class MaterializationScheduler {
             MaterializationPlan plan = translator.translate(facility, profile, mine.encounter(), mine.gate(), encounterEnabled);
             if (job == null || !job.isFor(facility.desiredRevision(), plan.policyId(), plan.policyVersion())
                     || !job.matchesOperations(plan.operations())) {
-                String jobId = "pm:job:" + mine.id().value() + ":" + facility.desiredRevision();
+                String planIdentity = plan.policyId() + "|" + plan.policyVersion() + "|"
+                        + plan.operations().stream().map(MaterializationOperation::idempotencyKey)
+                        .collect(java.util.stream.Collectors.joining("|"));
+                String jobId = "pm:job:" + mine.id().value() + ":" + facility.desiredRevision() + ":"
+                        + Integer.toUnsignedString(planIdentity.hashCode(), 36);
                 if (encounterEnabled) {
                     prepareEncounter(mine, facility, jobId, scenario, profile, server.overworld().getSeed());
                     prepareSourceGate(mine, facility);

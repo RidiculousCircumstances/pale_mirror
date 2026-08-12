@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Applies explicit domain commands; it does not know about Minecraft or adapters. */
-public final class DomainCommandProcessor {
+public final class DomainCommandProcessor implements DomainCommandExecutor {
     private final SimulationEngine simulation;
     private final ResourceFlowSimulation resources;
     private final SettlementDecisionEngine settlementDecisions;
@@ -17,7 +17,7 @@ public final class DomainCommandProcessor {
     private final ScenarioRuntime scenarios;
     private final SettlementCrisisRuntime settlementCrises;
     private final DomainEventFactory events;
-    private final LivingRegionRegistrationRuntime regionRegistration = new LivingRegionRegistrationRuntime();
+    private final LivingRegionRegistrationRuntime regionRegistration;
     private final DevelopmentCommandRuntime developmentCommands;
 
     DomainCommandProcessor(SimulationEngine simulation, ResourceFlowSimulation resources,
@@ -38,13 +38,20 @@ public final class DomainCommandProcessor {
         this.scenarios = Objects.requireNonNull(scenarios, "scenarios");
         this.settlementCrises = Objects.requireNonNull(settlementCrises, "settlementCrises");
         this.events = Objects.requireNonNull(events, "events");
+        this.regionRegistration = new LivingRegionRegistrationRuntime(events);
         this.developmentCommands = new DevelopmentCommandRuntime(events, scenarios);
     }
 
     public List<DomainEvent> execute(WorldState state, DomainCommand command) {
+        return executeOutcome(state, command).events();
+    }
+
+    public DomainCommandOutcome executeOutcome(WorldState state, DomainCommand command) {
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(command, "command");
-        return switch (command) {
+        List<DomainEvent> produced;
+        try {
+            produced = switch (command) {
             case DomainCommand.AdvanceSimulation advance -> advanceSimulation(state, advance.steps());
             case DomainCommand.OfferScenario offer -> narrator.offerFor(state, offer.sourceEvent(), offer.audience(), offer.definition());
             case DomainCommand.AcceptScenario accept -> acceptScenario(state, accept.scenarioId());
@@ -80,7 +87,90 @@ public final class DomainCommandProcessor {
             case DomainCommand.ConfirmSettlementResidentDeath casualty -> SettlementCasualtyRuntime.confirm(state, casualty, events);
             case DomainCommand.ObserveJourneyCheckpoint observed -> observeJourneyCheckpoint(state, observed);
             case DomainCommand.ObserveJourneyBlocked observed -> observeJourneyBlocked(state, observed);
-        };
+            case DomainCommand.RegisterFacility registered -> registerFacility(state, registered);
+            case DomainCommand.RegisterWorldSite registered -> registerWorldSite(state, registered);
+            case DomainCommand.RegisterDevelopmentIntent registered -> registerDevelopmentIntent(state, registered);
+            case DomainCommand.ResetWorldState reset -> resetWorldState(state, reset);
+            case DomainCommand.EvaluateNarrativeCandidates candidates ->
+                    narrator.offerBest(state, candidates.audience(), candidates.candidates());
+            };
+        } catch (DomainCommandException failure) {
+            throw failure;
+        } catch (java.util.NoSuchElementException failure) {
+            throw new DomainCommandException(DomainCommandException.Code.UNKNOWN_REFERENCE, command,
+                    failure.getMessage() == null ? "Referenced domain object is absent" : failure.getMessage(), failure);
+        } catch (IllegalStateException failure) {
+            throw new DomainCommandException(DomainCommandException.Code.INVARIANT_VIOLATION, command,
+                    failure.getMessage(), failure);
+        } catch (IllegalArgumentException failure) {
+            DomainCommandException.Code code = failure.getMessage() != null && failure.getMessage().startsWith("Unknown ")
+                    ? DomainCommandException.Code.UNKNOWN_REFERENCE : DomainCommandException.Code.INVALID_INPUT;
+            throw new DomainCommandException(code, command, failure.getMessage(), failure);
+        }
+        boolean changed = !produced.isEmpty()
+                || command instanceof DomainCommand.AdvanceSimulation advance && advance.steps() > 0;
+        return new DomainCommandOutcome(changed, produced);
+    }
+
+    private List<DomainEvent> registerFacility(WorldState state, DomainCommand.RegisterFacility command) {
+        if (state.facility(command.facility().id()).isPresent()) {
+            throw new IllegalStateException("Duplicate facility " + command.facility().id());
+        }
+        state.putFacility(command.facility());
+        return record(state, DomainEventType.FACILITY_REGISTERED, command.facility().id(), command.causationId());
+    }
+
+    private List<DomainEvent> registerWorldSite(WorldState state, DomainCommand.RegisterWorldSite command) {
+        if (state.site(command.site().id()).isPresent()) {
+            throw new IllegalStateException("Duplicate world site " + command.site().id());
+        }
+        if (command.affiliations().stream().anyMatch(value -> !value.siteId().equals(command.site().id()))
+                || command.capabilities().stream().anyMatch(value -> !value.siteId().equals(command.site().id()))) {
+            throw new IllegalArgumentException("World site attachments must reference the registered site");
+        }
+        command.affiliations().forEach(affiliation -> {
+            WorldObjectId objectId = affiliation.objectId();
+            boolean knownObject = state.community(objectId).isPresent() || state.place(objectId).isPresent()
+                    || state.facility(objectId).isPresent() || state.routeContract(objectId).isPresent();
+            if (!knownObject) {
+                throw new IllegalArgumentException("Unknown world site affiliation object " + objectId);
+            }
+        });
+        state.putSite(command.site());
+        command.affiliations().forEach(state::putSiteAffiliation);
+        command.capabilities().forEach(state::putSiteCapability);
+        return record(state, DomainEventType.WORLD_SITE_REGISTERED, command.site().id(), command.causationId());
+    }
+
+    private List<DomainEvent> registerDevelopmentIntent(WorldState state,
+                                                        DomainCommand.RegisterDevelopmentIntent command) {
+        if (state.community(command.intent().communityId()).isEmpty()) {
+            throw new IllegalArgumentException("Unknown development community " + command.intent().communityId());
+        }
+        if (state.developmentIntent(command.intent().id()).isPresent()) {
+            throw new IllegalStateException("Duplicate development intent " + command.intent().id());
+        }
+        if (command.intent().targetSiteId() != null
+                && state.site(command.intent().targetSiteId()).isEmpty()
+                && state.place(command.intent().targetSiteId()).isEmpty()) {
+            throw new IllegalArgumentException("Unknown development target " + command.intent().targetSiteId());
+        }
+        if (command.intent().requiredResource() != null) {
+            state.economy(command.intent().communityId()).orElseThrow(() ->
+                    new IllegalArgumentException("Unknown development economy " + command.intent().communityId()))
+                    .require(command.intent().requiredResource());
+        }
+        state.putDevelopmentIntent(command.intent());
+        return record(state, DomainEventType.DEVELOPMENT_INTENT_REGISTERED,
+                command.intent().communityId(), command.causationId());
+    }
+
+    private List<DomainEvent> resetWorldState(WorldState state, DomainCommand.ResetWorldState command) {
+        state.clearAll();
+        DomainEvent reset = events.create(state, DomainEventType.WORLD_STATE_RESET,
+                new WorldObjectId("pale_mirror:world"), command.causationId());
+        state.addEvent(reset);
+        return List.of(reset);
     }
 
     private List<DomainEvent> observeJourneyCheckpoint(WorldState state, DomainCommand.ObserveJourneyCheckpoint command) {
@@ -107,6 +197,7 @@ public final class DomainCommandProcessor {
             produced.addAll(settlementDecisions.reconcile(state));
             produced.addAll(settlementCrises.reconcile(state));
             produced.addAll(journeys.reconcile(state));
+            state.compactTerminalJourneys();
             produced.addAll(settlementEmergencies.reconcile(state));
             List<DomainEvent> developmentEvents = settlementDevelopment.reconcile(state);
             produced.addAll(developmentEvents);

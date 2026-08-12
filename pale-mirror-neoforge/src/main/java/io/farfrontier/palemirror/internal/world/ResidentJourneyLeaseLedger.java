@@ -8,7 +8,7 @@ public final class ResidentJourneyLeaseLedger {
     private final Map<String, ResidentJourneyLease> leases;
     public ResidentJourneyLeaseLedger() { this(new LinkedHashMap<>()); }
     public ResidentJourneyLeaseLedger(Map<String, ResidentJourneyLease> leases) { this.leases = new LinkedHashMap<>(leases); }
-    public Collection<ResidentJourneyLease> leases() { return leases.values(); }
+    public Collection<ResidentJourneyLease> leases() { return java.util.List.copyOf(leases.values()); }
     public ResidentJourneyLease acquire(String residentId, String journeyId) {
         ResidentJourneyLease existing = leases.get(residentId);
         if (existing != null && existing.phase() == ResidentJourneyLeasePhase.RELEASED

@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.internal.world;
 import java.util.List;
 
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
@@ -15,7 +15,7 @@ public final class RegionalLogisticsRuntime {
     private RegionalLogisticsRuntime() { }
 
     public static List<DomainEvent> observe(MinecraftServer server, PaleMirrorSavedData data,
-                                            DomainCommandProcessor commands, long proofWindowSteps) {
+                                            DomainCommandExecutor commands, long proofWindowSteps) {
         java.util.List<DomainEvent> all = new java.util.ArrayList<>();
         data.worldState().livingRegions().stream().sorted(java.util.Comparator.comparing(LivingRegionState::id))
                 .forEach(region -> {
@@ -28,7 +28,7 @@ public final class RegionalLogisticsRuntime {
     }
 
     private static List<DomainEvent> observeRegion(MinecraftServer server, PaleMirrorSavedData data,
-                                                    DomainCommandProcessor commands, long proofWindowSteps,
+                                                    DomainCommandExecutor commands, long proofWindowSteps,
                                                     LivingRegionState region, CampaignRegionRecord presentation) {
         RegionBindings bindings = RegionBindings.fromRegionId(region.id());
         LogisticsRouteContract contract = new LogisticsRouteContract(region.alternateRouteId(), presentation.alternateMineAnchor(),

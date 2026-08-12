@@ -4,7 +4,7 @@ import java.util.Comparator;
 
 import io.farfrontier.palemirror.domain.DamageAttribution;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.SettlementCohort;
 import io.farfrontier.palemirror.domain.FieldAuthority;
 import io.farfrontier.palemirror.domain.SettlementAuthorityField;
@@ -24,7 +24,7 @@ public final class SettlementObservationRuntime {
     private SettlementObservationRuntime() { }
 
     public static boolean observeNearPlayers(MinecraftServer server, PaleMirrorSavedData data,
-                                             DomainCommandProcessor commands) {
+                                             DomainCommandExecutor commands) {
         boolean changed = false;
         for (ServerPlayer player : server.getPlayerList().getPlayers().stream()
                 .sorted(Comparator.comparing(value -> value.getUUID().toString())).toList()) {
@@ -48,7 +48,7 @@ public final class SettlementObservationRuntime {
         return changed;
     }
 
-    public static boolean observeDeath(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    public static boolean observeDeath(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                        Entity entity, DamageSource source) {
         SettlementCohort cohort = entity instanceof IronGolem ? SettlementCohort.GUARDS
                 : entity instanceof Villager villager && villager.isBaby() ? SettlementCohort.CHILDREN
@@ -64,7 +64,7 @@ public final class SettlementObservationRuntime {
         return true;
     }
 
-    public static boolean observePlayerBlockDamage(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    public static boolean observePlayerBlockDamage(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                                    net.minecraft.server.level.ServerLevel level,
                                                    net.minecraft.core.BlockPos position, java.util.UUID playerId) {
         SettlementObservationRecord record = data.settlementObservations().values().stream()
@@ -74,7 +74,7 @@ public final class SettlementObservationRuntime {
         return true;
     }
 
-    private static boolean reconcile(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean reconcile(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                      SettlementObservationRecord record, long gameTime) {
         if (record == null || data.worldState().place(record.id()).isEmpty()) return false;
         var freshness = record.freshness(gameTime);

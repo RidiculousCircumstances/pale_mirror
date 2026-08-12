@@ -19,6 +19,6 @@ public final class WorldObjectRegistry {
     public WorldObjectRegistryEntry require(WorldObjectId id) {
         return find(id).orElseThrow(() -> new IllegalArgumentException("Unknown world object " + id));
     }
-    public Collection<WorldObjectRegistryEntry> entries() { return entries.values(); }
+    public Collection<WorldObjectRegistryEntry> entries() { return java.util.List.copyOf(entries.values()); }
     public void clear() { entries.clear(); }
 }

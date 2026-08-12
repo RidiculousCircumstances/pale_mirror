@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.RouteProvider;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
@@ -24,7 +24,7 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationOperati
 import io.farfrontier.palemirror.internal.materialization.OperationState;
 import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
-import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotRegistration;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -43,7 +43,7 @@ public final class VanillaMinecartRouteRuntime {
 
     private VanillaMinecartRouteRuntime() { }
 
-    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         boolean changed = ensureRecords(server.overworld(), data);
         VanillaMinecartRailAdapter adapter = AdapterRegistry.vanillaMinecartRail();
         for (VanillaMinecartRouteRecord record : data.vanillaMinecartRoutes().values()) {
@@ -103,7 +103,7 @@ public final class VanillaMinecartRouteRuntime {
         return new BlockPos(x, y, z);
     }
 
-    private static boolean advance(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean advance(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                    VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
         MaterializationJob job = ensureJob(data, record);
         if (job.state() == JobState.PLANNED) { job.start(); return true; }
@@ -206,8 +206,8 @@ public final class VanillaMinecartRouteRuntime {
             List<SemanticCellRecord> cells = plan.writes().keySet().stream().map(position -> {
                 var state = level.getBlockState(position); return new SemanticCellRecord(position, state, state);
             }).toList();
-            data.semanticSlots().register(new SemanticSlotRecord(key, ParcelKind.PUBLIC_INFRASTRUCTURE,
-                    cells, false, "", ""));
+            SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcelId, record.dimensionId(),
+                    ParcelKind.PUBLIC_INFRASTRUCTURE, cells);
         }
         return captured ? PreflightResult.CAPTURED : PreflightResult.READY;
     }
@@ -232,7 +232,7 @@ public final class VanillaMinecartRouteRuntime {
         data.materializationJobs().put(job); return job;
     }
 
-    private static boolean verifyAndActivate(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean verifyAndActivate(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                              VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
         if (!verifyLoadedProvenance(level, adapter, record)) return true;
         if (!validateCanonicalRoute(data, commands, record)) {
@@ -245,7 +245,7 @@ public final class VanillaMinecartRouteRuntime {
         return true;
     }
 
-    private static boolean refreshActiveRoute(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean refreshActiveRoute(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                               VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
         boolean changed = refreshTopology(level, adapter, record);
         if (record.status() != VanillaMinecartRouteStatus.ACTIVE) {
@@ -283,7 +283,7 @@ public final class VanillaMinecartRouteRuntime {
         return unchanged;
     }
 
-    private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                                   VanillaMinecartRouteRecord record) {
         var region = data.worldState().livingRegion(record.regionId()).orElse(null);
         if (region == null) return false;
@@ -291,7 +291,7 @@ public final class VanillaMinecartRouteRuntime {
         return route != null && validateCanonicalRoute(data, commands, record, route.nominalCapacity());
     }
 
-    private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean validateCanonicalRoute(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                                    VanillaMinecartRouteRecord record, int capacity) {
         var region = data.worldState().livingRegion(record.regionId()).orElse(null);
         if (region == null) return false;
@@ -305,7 +305,7 @@ public final class VanillaMinecartRouteRuntime {
                 "vanilla-minecart:" + record.regionId())).isEmpty();
     }
 
-    private static boolean recoverSuspended(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
+    private static boolean recoverSuspended(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                             VanillaMinecartRailAdapter adapter,
                                             VanillaMinecartRouteRecord record) {
         boolean changed = validateCanonicalRoute(data, commands, record, 0);

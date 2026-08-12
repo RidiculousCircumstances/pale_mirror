@@ -8,13 +8,12 @@ import java.util.function.Function;
 
 import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.NarrativeCandidate;
 import io.farfrontier.palemirror.domain.NarrativeCandidateType;
-import io.farfrontier.palemirror.domain.Narrator;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.domain.ScenarioDefinitionRef;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -31,16 +30,14 @@ import net.minecraft.server.level.ServerPlayer;
 final class NarrativeCandidateRuntime {
     private final MinecraftServer server;
     private final PaleMirrorSavedData data;
-    private final DomainCommandProcessor commands;
-    private final Narrator narrator;
+    private final DomainCommandExecutor commands;
     private final Function<ServerPlayer, StoryAudienceId> audiences;
 
-    NarrativeCandidateRuntime(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands,
-                              Narrator narrator, Function<ServerPlayer, StoryAudienceId> audiences) {
+    NarrativeCandidateRuntime(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands,
+                              Function<ServerPlayer, StoryAudienceId> audiences) {
         this.server = server;
         this.data = data;
         this.commands = commands;
-        this.narrator = narrator;
         this.audiences = audiences;
     }
 
@@ -127,7 +124,7 @@ final class NarrativeCandidateRuntime {
 
     private void offer(Map<StoryAudienceId, List<NarrativeCandidate>> candidates) {
         candidates.forEach((audience, values) -> {
-            if (!narrator.offerBest(data.worldState(), audience, values).isEmpty()) data.setDirty();
+            commands.execute(data.worldState(), new DomainCommand.EvaluateNarrativeCandidates(audience, values));
         });
     }
 
@@ -147,15 +144,19 @@ final class NarrativeCandidateRuntime {
     }
 
     private int distancePenalty(StoryAudienceId audience, WorldObjectId subject) {
-        net.minecraft.core.BlockPos target = data.worldRegistry().find(subject).map(value -> value.anchor()).orElse(null);
+        TargetLocation target = data.worldRegistry().find(subject)
+                .map(value -> new TargetLocation(value.dimensionId(), value.anchor())).orElse(null);
         if (target == null) target = data.worldState().livingRegions().stream().filter(region -> region.communityId().equals(subject))
                 .map(region -> data.campaignRegions().get(region.id())).filter(java.util.Objects::nonNull)
-                .map(io.farfrontier.palemirror.internal.world.CampaignRegionRecord::settlementAnchor).findFirst().orElse(null);
+                .map(region -> new TargetLocation(region.dimensionId(), region.settlementAnchor())).findFirst().orElse(null);
         if (target == null) return 50;
-        final net.minecraft.core.BlockPos position = target;
+        final TargetLocation location = target;
         int nearest = server.getPlayerList().getPlayers().stream().filter(player -> audiences.apply(player).equals(audience))
-                .filter(player -> player.serverLevel().dimension() == server.overworld().dimension())
-                .mapToInt(player -> (int) Math.min(100_000L, player.blockPosition().distManhattan(position))).min().orElse(100_000);
+                .filter(player -> player.serverLevel().dimension().location().toString().equals(location.dimensionId()))
+                .mapToInt(player -> (int) Math.min(100_000L, player.blockPosition().distManhattan(location.position())))
+                .min().orElse(100_000);
         return nearest <= 256 ? 0 : nearest <= 1_024 ? 20 : nearest <= 4_096 ? 50 : 90;
     }
+
+    private record TargetLocation(String dimensionId, net.minecraft.core.BlockPos position) { }
 }

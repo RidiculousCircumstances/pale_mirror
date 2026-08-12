@@ -118,7 +118,7 @@ public final class RuntimeDebugService {
     }
 
     public ActionResult bindNearest(MinecraftServer server, PaleMirrorSavedData data,
-                                    io.farfrontier.palemirror.domain.DomainCommandProcessor commands,
+                                    io.farfrontier.palemirror.domain.DomainCommandExecutor commands,
                                     ServerPlayer player) {
         SettlementObservationRecord nearest = nearestEligible(server, data, player);
         if (nearest == null) return new ActionResult(false, "No CURRENT + STRONG + eligible settlement in this dimension.");
@@ -126,7 +126,7 @@ public final class RuntimeDebugService {
     }
 
     public ActionResult bind(MinecraftServer server, PaleMirrorSavedData data,
-                             io.farfrontier.palemirror.domain.DomainCommandProcessor commands, WorldObjectId id) {
+                             io.farfrontier.palemirror.domain.DomainCommandExecutor commands, WorldObjectId id) {
         try {
             CampaignRegionBootstrapper.bindCandidate(server, data, commands, id);
             String regionId = io.farfrontier.palemirror.internal.world.RegionBindings

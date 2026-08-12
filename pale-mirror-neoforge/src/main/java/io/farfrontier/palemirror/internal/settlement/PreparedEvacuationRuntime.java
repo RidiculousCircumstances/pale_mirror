@@ -7,7 +7,7 @@ import java.util.function.Function;
 
 import io.farfrontier.palemirror.PaleMirrorItems;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.OperationalState;
 import io.farfrontier.palemirror.domain.PopulationDisposition;
@@ -32,11 +32,11 @@ import net.minecraft.world.item.ItemStack;
 /** Validates player-proposed evacuation camps; the item stack itself is never authority. */
 public final class PreparedEvacuationRuntime {
     private final PaleMirrorSavedData data;
-    private final DomainCommandProcessor commands;
+    private final DomainCommandExecutor commands;
     private final Function<ServerPlayer, StoryAudienceId> audiences;
     private final Consumer<List<DomainEvent>> eventHandler;
 
-    public PreparedEvacuationRuntime(PaleMirrorSavedData data, DomainCommandProcessor commands,
+    public PreparedEvacuationRuntime(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                      Function<ServerPlayer, StoryAudienceId> audiences,
                                      Consumer<List<DomainEvent>> eventHandler) {
         this.data = data;

@@ -36,8 +36,10 @@ class ResourceTransferTest {
     @Test
     void oversizedDepositDoesNotPartiallyApply() {
         WorldState state = stateWithIron(50, 45, 12);
-        assertThrows(IllegalStateException.class, () -> new DomainServices().commands().execute(state,
+        DomainCommandException failure = assertThrows(DomainCommandException.class,
+                () -> new DomainServices().commands().execute(state,
                 new DomainCommand.DepositResource(COMMUNITY, ResourceKind.IRON, 10, "transfer:overflow")));
+        assertEquals(DomainCommandException.Code.INVARIANT_VIOLATION, failure.code());
         assertEquals(45, state.economy(COMMUNITY).orElseThrow().require(ResourceKind.IRON).stock(),
                 "command validation must happen before callers prepare a physical transfer");
     }

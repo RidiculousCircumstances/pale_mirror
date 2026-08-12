@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.internal.settlement;
 import io.farfrontier.palemirror.domain.DevelopmentIntentState;
 import io.farfrontier.palemirror.domain.DevelopmentIntentType;
 import io.farfrontier.palemirror.domain.DomainCommand;
-import io.farfrontier.palemirror.domain.DomainCommandProcessor;
+import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
@@ -16,7 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 public final class SettlementDevelopmentRuntime {
     private SettlementDevelopmentRuntime() { }
 
-    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
+    public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         boolean changed = false;
         for (var intent : data.worldState().developmentIntents().stream()
                 .filter(value -> value.type() == DevelopmentIntentType.UPGRADE_STOREHOUSE

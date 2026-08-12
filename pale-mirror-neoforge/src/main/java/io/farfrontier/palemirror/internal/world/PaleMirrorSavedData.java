@@ -7,6 +7,8 @@ import java.util.UUID;
 import java.nio.file.Path;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainEventType;
+import io.farfrontier.palemirror.domain.DomainEventSummary;
+import io.farfrontier.palemirror.domain.DomainStateValidator;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.GatePhaseRef;
 import io.farfrontier.palemirror.domain.GatePlanRef;
@@ -21,6 +23,7 @@ import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldState;
+import io.farfrontier.palemirror.domain.WorldStateHydration;
 import io.farfrontier.palemirror.internal.materialization.JobState;
 import io.farfrontier.palemirror.internal.materialization.MaterializationJob;
 import io.farfrontier.palemirror.internal.materialization.MaterializationOperation;
@@ -52,7 +55,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 34;
+    static final int CURRENT_SCHEMA = 35;
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
@@ -75,7 +78,8 @@ public final class PaleMirrorSavedData extends SavedData {
     private final ResidentIdentityLedger residentIdentities;
     private final ParcelLedger parcels;
     public PaleMirrorSavedData() {
-        this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
+        this(WorldStateHydration.builder().schemaVersion(CURRENT_SCHEMA).build(), new LinkedHashMap<>(), new LinkedHashMap<>(),
+                new ReconciliationLedger(), new WorldObjectRegistry(),
                 new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(),
                 new ResourceTransferLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(), new RefugeeAnchorPermitLedger(),
                 new LinkedHashMap<>(), new LinkedHashMap<>(), new MaterializationJobRegistry(), new SemanticSlotLedger(),
@@ -173,11 +177,10 @@ public final class PaleMirrorSavedData extends SavedData {
         if (!isMigratable(version)) throw incompatibleSchema(version);
         CompoundTag snapshot = tag.getCompound("snapshot");
         WorldState state = readState(snapshot);
-        state.setSchemaVersion(CURRENT_SCHEMA);
         WorldObjectRegistry registry = WorldPresentationCodec.readRegistry(tag.getList("worldObjects", Tag.TAG_COMPOUND));
         Map<WorldObjectId, TestMineRecord> mines = new LinkedHashMap<>();
         for (Tag element : tag.getList("testMines", Tag.TAG_COMPOUND)) {
-            TestMineRecord mine = readMine((CompoundTag) element, registry);
+            TestMineRecord mine = TestMineCodec.read((CompoundTag) element, registry);
             mines.put(mine.id(), mine);
         }
         Map<String, StoryAudienceId> audiences = new LinkedHashMap<>();
@@ -209,7 +212,7 @@ public final class PaleMirrorSavedData extends SavedData {
                 DisplacementPresentationCodec.read(tag), DisplacementPresentationCodec.readPermits(tag), commissioning, minecartRoutes,
                 MaterializationJobCodec.read(tag), SemanticSlotCodec.read(tag, registries), ResidentJourneyLeaseCodec.read(tag),
                 ResidentIdentityCodec.read(tag), ParcelCodec.read(tag));
-        if (version < CURRENT_SCHEMA) loaded.setDirty();
+        loaded.validateIntegrity();
         return loaded;
     }
     private static IllegalStateException incompatibleSchema(int version) {
@@ -221,13 +224,14 @@ public final class PaleMirrorSavedData extends SavedData {
     }
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        validateIntegrity();
         tag.putInt("schemaVersion", CURRENT_SCHEMA);
         tag.put("snapshot", writeState(worldState));
         ListTag objects = new ListTag();
         worldRegistry.entries().forEach(entry -> objects.add(WorldPresentationCodec.writeRegistryEntry(entry)));
         tag.put("worldObjects", objects);
         ListTag mines = new ListTag();
-        testMines.values().forEach(mine -> mines.add(writeMine(mine)));
+        testMines.values().forEach(mine -> mines.add(TestMineCodec.write(mine)));
         tag.put("testMines", mines);
         ListTag audiences = new ListTag();
         audienceMappings.forEach((key, value) -> {
@@ -260,9 +264,15 @@ public final class PaleMirrorSavedData extends SavedData {
         ParcelCodec.write(tag, parcels);
         return tag;
     }
+
+    private void validateIntegrity() {
+        DomainStateValidator.validate(worldState, CURRENT_SCHEMA);
+        SavedDataIntegrityValidator.validate(this);
+    }
     private static CompoundTag writeState(WorldState state) {
         CompoundTag tag = new CompoundTag();
         tag.putLong("simulationStep", state.simulationStep());
+        tag.putLong("eventSequence", state.eventSequence());
         ListTag facilities = new ListTag();
         state.facilities().forEach(value -> {
             CompoundTag facility = new CompoundTag();
@@ -320,6 +330,17 @@ public final class PaleMirrorSavedData extends SavedData {
             events.add(event);
         });
         tag.put("events", events);
+        ListTag eventSummaries = new ListTag();
+        state.historySummaries().forEach(value -> {
+            CompoundTag summary = new CompoundTag();
+            summary.putString("subject", value.subject().value());
+            summary.putString("type", value.type().name());
+            summary.putLong("count", value.count());
+            summary.putLong("firstStep", value.firstStep());
+            summary.putLong("lastStep", value.lastStep());
+            eventSummaries.add(summary);
+        });
+        tag.put("eventSummaries", eventSummaries);
         ListTag cooldowns = new ListTag();
         state.narratorCooldowns().forEach((audience, availableAt) -> {
             CompoundTag cooldown = new CompoundTag();
@@ -385,13 +406,14 @@ public final class PaleMirrorSavedData extends SavedData {
                 new java.util.LinkedHashSet<>(stringList(tag.getList("destroyedParts", Tag.TAG_STRING))));
     }
     private static WorldState readState(CompoundTag tag) {
-        WorldState state = new WorldState();
-        state.setSimulationStep(tag.getLong("simulationStep"));
-        long eventSequence = 0;
+        WorldStateHydration.Builder state = WorldStateHydration.builder()
+                .schemaVersion(CURRENT_SCHEMA)
+                .simulationStep(tag.getLong("simulationStep"));
+        long eventSequence = tag.getLong("eventSequence");
         for (Tag element : tag.getList("facilities", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
             SourceGateState gate = readGateState(value.getCompound("gate"));
-            state.putFacility(new FacilityState(new WorldObjectId(value.getString("id")),
+            state.facility(new FacilityState(new WorldObjectId(value.getString("id")),
                     new InfectionSourceId(value.getString("infectionSource")), value.getInt("normalProduction"),
                     value.getInt("threshold"), value.getInt("pressure"), value.getInt("currentProduction"),
                     value.getInt("recoverySteps"), value.getLong("desiredRevision"), value.getLong("observedRevision"),
@@ -403,7 +425,7 @@ public final class PaleMirrorSavedData extends SavedData {
             CompoundTag value = (CompoundTag) element;
             List<String> stages = stringList(value.getList("pinnedStages", Tag.TAG_STRING));
             List<String> capabilities = stringList(value.getList("requiredCapabilities", Tag.TAG_STRING));
-            state.putScenario(new ScenarioInstance(value.getString("id"), value.getString("source"),
+            state.scenario(new ScenarioInstance(value.getString("id"), value.getString("source"),
                     new WorldObjectId(value.getString("target")), new StoryAudienceId(value.getString("audience")),
                     value.getString("definition"), value.getString("definitionVersion"), stages, capabilities,
                     value.getString("encounterProfile"), value.getString("encounterProfileVersion"),
@@ -414,10 +436,16 @@ public final class PaleMirrorSavedData extends SavedData {
                     value.getString("blockedReason"), value.getString("resolutionOutcome")));
         }
         RegionalStateCodec.read(tag, state);
+        for (Tag element : tag.getList("eventSummaries", Tag.TAG_COMPOUND)) {
+            CompoundTag value = (CompoundTag) element;
+            state.eventSummary(new DomainEventSummary(new WorldObjectId(value.getString("subject")),
+                    DomainEventType.valueOf(value.getString("type")), value.getLong("count"),
+                    value.getLong("firstStep"), value.getLong("lastStep")));
+        }
         for (Tag element : tag.getList("events", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) element;
             String id = value.getString("id");
-            state.addEvent(new DomainEvent(id, DomainEventType.valueOf(value.getString("type")),
+            state.event(new DomainEvent(id, DomainEventType.valueOf(value.getString("type")),
                     new WorldObjectId(value.getString("subject")), value.getLong("step"),
                     value.getString("causation"), value.getString("correlation")));
             int suffix = id.lastIndexOf(':');
@@ -425,56 +453,16 @@ public final class PaleMirrorSavedData extends SavedData {
                 try { eventSequence = Math.max(eventSequence, Long.parseLong(id.substring(suffix + 1))); } catch (NumberFormatException ignored) { }
             }
         }
-        state.setEventSequence(eventSequence);
+        state.eventSequence(eventSequence);
         for (Tag element : tag.getList("narratorCooldowns", Tag.TAG_COMPOUND)) {
             CompoundTag cooldown = (CompoundTag) element;
-            state.setNarratorCooldown(new StoryAudienceId(cooldown.getString("audience")), cooldown.getLong("availableAt"));
+            state.cooldown(new StoryAudienceId(cooldown.getString("audience")), cooldown.getLong("availableAt"));
         }
-        return state;
+        return state.build();
     }
     private static List<String> stringList(ListTag tags) {
         List<String> values = new ArrayList<>();
         for (Tag tag : tags) values.add(tag.getAsString());
         return values;
-    }
-    private static CompoundTag writeMine(TestMineRecord mine) {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("id", mine.id().value());
-        tag.putString("audience", mine.primaryAudience().value());
-        if (mine.anchorId() != null) tag.putUUID("anchor", mine.anchorId());
-        tag.put("encounter", WorldPresentationCodec.writeEncounter(mine.encounter()));
-        tag.put("gatePresentation", WorldPresentationCodec.writeGate(mine.gate()));
-        ListTag cells = new ListTag();
-        mine.mutableCells().forEach(cell -> {
-            CompoundTag value = new CompoundTag();
-            value.putLong("pos", cell.position().asLong());
-            value.putString("baseline", cell.baselineBlock());
-            value.putString("infectionStage", cell.infectionStage().name());
-            value.putString("lastApplied", cell.lastAppliedBlock());
-            value.putBoolean("conflicted", cell.conflicted());
-            cells.add(value);
-        });
-        tag.put("cells", cells);
-        return tag;
-    }
-
-    private static TestMineRecord readMine(CompoundTag tag, WorldObjectRegistry registry) {
-        List<MutableCell> cells = new ArrayList<>();
-        for (Tag element : tag.getList("cells", Tag.TAG_COMPOUND)) {
-            CompoundTag value = (CompoundTag) element;
-            cells.add(new MutableCell(BlockPos.of(value.getLong("pos")), value.getString("baseline"),
-                    value.getString("lastApplied"), value.getBoolean("conflicted"),
-                    InfectionBiomeStage.valueOf(value.contains("infectionStage", Tag.TAG_STRING)
-                            ? value.getString("infectionStage") : InfectionBiomeStage.NODE.name())));
-        }
-        UUID anchor = tag.hasUUID("anchor") ? tag.getUUID("anchor") : null;
-        EncounterRecord encounter = tag.contains("encounter", Tag.TAG_COMPOUND)
-                ? WorldPresentationCodec.readEncounter(tag.getCompound("encounter")) : EncounterRecord.none();
-        GatePresentationRecord gate = tag.contains("gatePresentation", Tag.TAG_COMPOUND)
-                ? WorldPresentationCodec.readGate(tag.getCompound("gatePresentation")) : GatePresentationRecord.none();
-        StoryAudienceId audience = tag.contains("audience", Tag.TAG_STRING)
-                ? new StoryAudienceId(tag.getString("audience")) : StoryAudienceId.globalTestAudience();
-        WorldObjectId id = new WorldObjectId(tag.getString("id"));
-        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, gate, null);
     }
 }

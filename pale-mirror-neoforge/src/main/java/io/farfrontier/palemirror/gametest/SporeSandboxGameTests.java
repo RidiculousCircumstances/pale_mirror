@@ -262,23 +262,6 @@ public final class SporeSandboxGameTests {
 
     private static void reset(ServerLevel level) {
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
-        data.testMines().clear();
-        data.worldRegistry().clear();
-        data.audienceMappings().clear();
-        data.reconciliationLedger().clear();
-        data.effectLeases().clear();
-        data.quarantine().clear();
-        data.threatCombat().clear();
-        data.worldState().facilities().clear();
-        data.worldState().scenarios().clear();
-        data.worldState().clearRegionalState();
-        data.campaignRegions().clear();
-        data.campaignCommissioning().clear();
-        data.settlementObservations().clear();
-        data.worldState().narratorCooldowns().clear();
-        data.worldState().history().clear();
-        data.worldState().setSimulationStep(0);
-        data.worldState().setEventSequence(0);
-        data.setDirty();
+        GameTestStateReset.resetAll(data);
     }
 }

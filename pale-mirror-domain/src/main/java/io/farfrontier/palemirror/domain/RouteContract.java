@@ -10,6 +10,7 @@ public final class RouteContract {
     private final RouteProvider provider;
     private final ResourceKind resource;
     private final int nominalCapacity;
+    private final int allocationWeight;
     private final long currentWindowSteps;
     private final long expiryWindowSteps;
     private int validatedCapacity;
@@ -21,23 +22,33 @@ public final class RouteContract {
                          RouteProvider provider, ResourceKind resource, int nominalCapacity,
                          long currentWindowSteps, long expiryWindowSteps, RouteContractStatus status) {
         this(id, originEndpoint, destinationEndpoint, provider, resource, nominalCapacity, currentWindowSteps,
-                expiryWindowSteps, 0, -1, "", status);
+                expiryWindowSteps, 100, 0, -1, "", status);
     }
 
     public RouteContract(WorldObjectId id, WorldObjectId originEndpoint, WorldObjectId destinationEndpoint,
                          RouteProvider provider, ResourceKind resource, int nominalCapacity,
                          long currentWindowSteps, long expiryWindowSteps, int validatedCapacity,
                          long lastSuccessfulValidationStep, String lastObservationId, RouteContractStatus status) {
+        this(id, originEndpoint, destinationEndpoint, provider, resource, nominalCapacity, currentWindowSteps,
+                expiryWindowSteps, 100, validatedCapacity, lastSuccessfulValidationStep, lastObservationId, status);
+    }
+
+    public RouteContract(WorldObjectId id, WorldObjectId originEndpoint, WorldObjectId destinationEndpoint,
+                         RouteProvider provider, ResourceKind resource, int nominalCapacity,
+                         long currentWindowSteps, long expiryWindowSteps, int allocationWeight,
+                         int validatedCapacity, long lastSuccessfulValidationStep,
+                         String lastObservationId, RouteContractStatus status) {
         this.id = Objects.requireNonNull(id, "id");
         this.originEndpoint = Objects.requireNonNull(originEndpoint, "originEndpoint");
         this.destinationEndpoint = Objects.requireNonNull(destinationEndpoint, "destinationEndpoint");
         this.provider = Objects.requireNonNull(provider, "provider");
         this.resource = Objects.requireNonNull(resource, "resource");
-        if (nominalCapacity < 0 || validatedCapacity < 0 || currentWindowSteps < 0
+        if (nominalCapacity < 0 || allocationWeight < 1 || validatedCapacity < 0 || currentWindowSteps < 0
                 || expiryWindowSteps < currentWindowSteps || lastSuccessfulValidationStep < -1) {
             throw new IllegalArgumentException("Invalid route contract values");
         }
         this.nominalCapacity = nominalCapacity;
+        this.allocationWeight = allocationWeight;
         this.currentWindowSteps = currentWindowSteps;
         this.expiryWindowSteps = expiryWindowSteps;
         this.validatedCapacity = validatedCapacity;
@@ -52,6 +63,7 @@ public final class RouteContract {
     public RouteProvider provider() { return provider; }
     public ResourceKind resource() { return resource; }
     public int nominalCapacity() { return nominalCapacity; }
+    public int allocationWeight() { return allocationWeight; }
     public long currentWindowSteps() { return currentWindowSteps; }
     public long expiryWindowSteps() { return expiryWindowSteps; }
     public int validatedCapacity() { return validatedCapacity; }
