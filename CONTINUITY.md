@@ -98,11 +98,13 @@
   exactly two mine queries per region, grade-safe rail interpolation and current-column earthwork have
   focused regression coverage. Core and Visuals GameTests plus packaged restart harnesses pass.
 - The 30-second full-modpack planning gate is closed with 21x observed speedup over the former 174-second run.
+- A same-world service restart reopened catalog `7a0bc3d129abce10` with all 2,924 slices and no
+  `Batch-planned` pass; persisted manifests therefore avoid terrain planning after the first start.
 
 ### Next
 
 - Traverse cut/fill/bridge sections in a graphical client and tune their visual policy without widening
-  planning probes; then confirm a server restart reopens the pinned 20-region catalog without replanning.
+  planning probes.
 
 ## Open questions
 
