@@ -153,6 +153,17 @@ public final class CampaignRegionRecord {
         status = CampaignRegionPresentationStatus.RUNNING;
     }
     public void materialized() { status = CampaignRegionPresentationStatus.MATERIALIZED; diagnostic = ""; }
+    /** Accepts immutable worldgen facts without replaying the superseded runtime placement state machine. */
+    public void observeWorldgenMaterialized(BlockPos primaryAnchor, BlockPos alternateAnchor) {
+        if (status == CampaignRegionPresentationStatus.MATERIALIZED) return;
+        if (status != CampaignRegionPresentationStatus.PLANNED || nextOperationIndex != 0) {
+            throw new IllegalStateException("Cannot adopt authored genesis after runtime placement has started");
+        }
+        primaryMineAnchor = Objects.requireNonNull(primaryAnchor, "primaryAnchor").immutable();
+        alternateMineAnchor = Objects.requireNonNull(alternateAnchor, "alternateAnchor").immutable();
+        nextOperationIndex = 2;
+        materialized();
+    }
     public void block(String reason) { status = CampaignRegionPresentationStatus.BLOCKED; diagnostic = Objects.requireNonNull(reason, "reason"); }
     /** Reopens only a preflight that failed before an anchor/baseline or any physical operation was persisted. */
     public void retryBlockedPreflight() {

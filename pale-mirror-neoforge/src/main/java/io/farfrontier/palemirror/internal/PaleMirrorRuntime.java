@@ -76,6 +76,7 @@ public final class PaleMirrorRuntime {
     private final RuntimeDebugController debug;
     private final PlaytestMetrics playtestMetrics;
     private final RuntimeCombatFacade combat;
+    private final RuntimeWorkCoordinator work = new RuntimeWorkCoordinator();
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
@@ -98,29 +99,55 @@ public final class PaleMirrorRuntime {
     public static void stop(MinecraftServer server) {
         CampaignRegionBootstrapper.stop(server);
         ManagedRailwayRuntime.stop(server);
+        io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.clear(server);
         INSTANCES.remove(server);
     }
     public void tick() {
+        work.beginTick();
+        long gameTick = server.overworld().getGameTime();
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
-        if (server.overworld().getGameTime() % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0
-                && SettlementObservationRuntime.observeNearPlayers(server, data, commands)) data.setDirty();
+        if (gameTick % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0) dirty(work.run("settlement-observation", 24,
+                RuntimeWorkCoordinator.Priority.BACKGROUND,
+                () -> SettlementObservationRuntime.observeNearPlayers(server, data, commands)));
         boolean authoredProvider = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().isPresent();
-        if (authoredProvider && io.farfrontier.palemirror.internal.world.AuthoredRegionRegistrar.discover(server, data, commands)) {
-            data.setDirty();
+        if (authoredProvider && work.due(gameTick, "authored-region", 20)) {
+            dirty(work.run("authored-discovery", 12, RuntimeWorkCoordinator.Priority.NORMAL,
+                    () -> io.farfrontier.palemirror.internal.world.AuthoredRegionRegistrar.discover(server, data, commands)));
+            dirty(work.run("authored-physical", 16, RuntimeWorkCoordinator.Priority.NORMAL,
+                    () -> io.farfrontier.palemirror.internal.world.AuthoredRegionRegistrar.reconcilePhysical(server, data)));
         }
-        handleDomainEvents(io.farfrontier.palemirror.internal.world.AuthoredResidentReconciler.reconcile(server, data, commands));
-        CampaignRegionBootstrapper.tick(server, data, commands,
-                !authoredProvider && debug.automaticBindingEnabled());
-        if (VanillaMinecartRouteRuntime.tick(server, data, commands)) data.setDirty();
-        if (ManagedRailwayRuntime.tick(server, data, commands)) data.setDirty();
-        if (SettlementDepotRuntime.tick(server, data, commands)) data.setDirty();
-        if (ResourceTransferRuntime.tick(server, data, commands)) data.setDirty();
-        if (RefugeeCampRuntime.tick(server, data, commands)) data.setDirty();
-        if (SettlementDevelopmentRuntime.tick(server, data, commands)) data.setDirty();
-        if (server.overworld().getGameTime() % LOGISTICS_OBSERVATION_INTERVAL_TICKS == 0) {
-            handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands, LOGISTICS_PROOF_WINDOW_STEPS));
+        if (work.due(gameTick, "resident-reconciliation", 20)) work.run("resident-reconciliation", 16,
+                RuntimeWorkCoordinator.Priority.NORMAL, () -> {
+                    handleDomainEvents(io.farfrontier.palemirror.internal.world.AuthoredResidentReconciler
+                            .reconcile(server, data, commands)); return false;
+                });
+        if (!authoredProvider && work.due(gameTick, "legacy-bootstrap", 20)) work.run("legacy-bootstrap", 32,
+                RuntimeWorkCoordinator.Priority.BACKGROUND, () -> {
+                    CampaignRegionBootstrapper.tick(server, data, commands, debug.automaticBindingEnabled());
+                    return false;
+                });
+        if (VanillaMinecartRouteRuntime.hasPendingWork(data) || work.due(gameTick, "vanilla-rail", 5))
+            dirty(work.run("vanilla-rail", 32,
+                RuntimeWorkCoordinator.Priority.NORMAL, () -> VanillaMinecartRouteRuntime.tick(server, data, commands)));
+        if (work.due(gameTick, "managed-rail", 10)) dirty(work.run("managed-rail", 24,
+                RuntimeWorkCoordinator.Priority.NORMAL, () -> ManagedRailwayRuntime.tick(server, data, commands)));
+        if (work.due(gameTick, "settlement-services", 20)) {
+            dirty(work.run("settlement-depots", 12, RuntimeWorkCoordinator.Priority.NORMAL,
+                    () -> SettlementDepotRuntime.tick(server, data, commands)));
+            dirty(work.run("resource-transfers", 12, RuntimeWorkCoordinator.Priority.NORMAL,
+                    () -> ResourceTransferRuntime.tick(server, data, commands)));
+            dirty(work.run("refugee-camps", 12, RuntimeWorkCoordinator.Priority.BACKGROUND,
+                    () -> RefugeeCampRuntime.tick(server, data, commands)));
+            dirty(work.run("settlement-development", 12, RuntimeWorkCoordinator.Priority.BACKGROUND,
+                    () -> SettlementDevelopmentRuntime.tick(server, data, commands)));
         }
-        if (server.overworld().getGameTime() % SIMULATION_INTERVAL_TICKS == 0) {
+        if (gameTick % LOGISTICS_OBSERVATION_INTERVAL_TICKS == 0) {
+            work.run("logistics-observation", 24, RuntimeWorkCoordinator.Priority.NORMAL, () -> {
+                handleDomainEvents(RegionalLogisticsRuntime.observe(server, data, commands,
+                        LOGISTICS_PROOF_WINDOW_STEPS)); return false;
+            });
+        }
+        if (gameTick % SIMULATION_INTERVAL_TICKS == 0) {
             RegionalDiscoveryRuntime.observeAudienceAccess(server, data, commands, this::audienceFor, this::handleDomainEvents);
             advanceSimulation(1);
             triggerDueRegionCrises();
@@ -131,16 +158,23 @@ public final class PaleMirrorRuntime {
         observePlayers();
         reconcileScenarioCapabilities();
         reconcileMaterialization();
-        long gameTick = server.overworld().getGameTime();
         if (data.effectLeases().expireDue(gameTick)) data.setDirty();
         if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
         if (gameTick % 1200L == 0L && data.materializationJobs().compactTerminalJobs()) data.setDirty();
         if (data.threatCombat().expireAndCompact(gameTick)) data.setDirty();
         AdapterRegistry.tickRuntime(server, data);
-        io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.publish(server, data);
-        RegionalMarkerRuntime.tick(server, data);
-        debug.renderZoneMarkers();
+        if (work.due(gameTick, "visual-projections", 10)) work.run("visual-projections", 16,
+                RuntimeWorkCoordinator.Priority.BACKGROUND, () -> {
+                    io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.publish(server, data); return false;
+                });
+        if (work.due(gameTick, "regional-markers", 20)) work.run("regional-markers", 8,
+                RuntimeWorkCoordinator.Priority.BACKGROUND, () -> { RegionalMarkerRuntime.tick(server, data); return false; });
+        if (work.due(gameTick, "debug-markers", 5)) work.run("debug-markers", 4,
+                RuntimeWorkCoordinator.Priority.BACKGROUND, () -> { debug.renderZoneMarkers(); return false; });
+        work.finishTick();
     }
+
+    private void dirty(boolean changed) { if (changed) data.setDirty(); }
     public TestMineRecord registerThreatSite(ServerPlayer player, WorldObjectId id, InfectionSourceId source) {
         if (data.testMines().containsKey(id)) throw new IllegalStateException("PM threat site already exists: " + id.value());
         ServerLevel level = player.serverLevel();
@@ -217,7 +251,14 @@ public final class PaleMirrorRuntime {
                 + ", effectLeases=" + data.effectLeases().leases().size() + ", combatActors=" + data.threatCombat().actors().size()
                 + ", projectiles=" + data.threatCombat().projectiles().size() + ", quarantine=" + data.quarantine().records().size()
                 + ", resourceTransfers=" + data.resourceTransfers().transfers().size()
-                + ", depots=" + data.settlementDepots().size() + ", vanillaMinecartRoutes=" + data.vanillaMinecartRoutes().size();
+                + ", depots=" + data.settlementDepots().size() + ", vanillaMinecartRoutes=" + data.vanillaMinecartRoutes().size()
+                + ", " + work.summary();
+    }
+
+    public String performanceStatus() {
+        return work.detailedSummary() + "\nvisuals="
+                + io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().map(provider ->
+                provider.genesisReadiness() + ", " + provider.performanceSummary()).orElse("ABSENT");
     }
 
     /** Admin-facing causal state, deliberately derived from canonical state rather than the physical presentation. */
@@ -319,6 +360,10 @@ public final class PaleMirrorRuntime {
     /** Records only local physical evidence; unloaded chunks retain their last observed graph revision. */
     public void railTopologyChanged(ServerLevel level, net.minecraft.core.BlockPos position) {
         if (VanillaMinecartRouteRuntime.observeBlockChange(data, level, position)) data.setDirty();
+    }
+
+    public void railChunkLoaded(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
+        if (VanillaMinecartRouteRuntime.observeChunkLoad(data, level, chunk)) data.setDirty();
     }
 
     public List<DomainEvent> publish(Observation observation) {

@@ -47,6 +47,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.common.util.TriState;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
@@ -313,6 +314,13 @@ public final class PaleMirrorEvents {
     public static void onBlockPlaced(BlockEvent.EntityPlaceEvent event) {
         if (!event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             PaleMirrorRuntime.forServer(level.getServer()).railTopologyChanged(level, event.getPos());
+        }
+    }
+
+    @SubscribeEvent
+    public static void onChunkLoaded(ChunkEvent.Load event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            PaleMirrorRuntime.forServer(level.getServer()).railChunkLoaded(level, event.getChunk().getPos());
         }
     }
 

@@ -17,8 +17,8 @@ import net.minecraft.util.datafix.DataFixTypes;
 /** Visual-owned bounded ledger; canonical region state remains in core SavedData. */
 public final class VisualGenesisSavedData extends SavedData {
     private static final String NAME = "pale_mirror_visual_genesis";
-    private static final int SCHEMA = 1;
-    private final Set<String> completedChunks = new LinkedHashSet<>();
+    private static final int SCHEMA = 2;
+    private final java.util.Map<String, String> observedChunks = new java.util.LinkedHashMap<>();
     private final Set<String> commissionedResidents = new LinkedHashSet<>();
     private final Set<String> completedModules = new LinkedHashSet<>();
     private final List<AuthoredRegionSeed> manifests = new ArrayList<>();
@@ -28,13 +28,14 @@ public final class VisualGenesisSavedData extends SavedData {
                 VisualGenesisSavedData::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
     }
 
-    public boolean complete(String planId, long chunk) {
-        boolean changed = completedChunks.add(planId + "@" + chunk);
+    public boolean observeChunk(long chunk, String stamp) {
+        String key = Long.toString(chunk);
+        String previous = observedChunks.put(key, stamp);
+        boolean changed = !java.util.Objects.equals(previous, stamp);
         if (changed) setDirty();
         return changed;
     }
-
-    public boolean completed(String planId, long chunk) { return completedChunks.contains(planId + "@" + chunk); }
+    public String observedStamp(long chunk) { return observedChunks.get(Long.toString(chunk)); }
 
     public boolean residentCommissioned(String residentId) { return commissionedResidents.contains(residentId); }
     public boolean commissionResident(String residentId) {
@@ -59,7 +60,8 @@ public final class VisualGenesisSavedData extends SavedData {
     private static VisualGenesisSavedData load(CompoundTag tag, HolderLookup.Provider ignored) {
         if (tag.getInt("schema") != SCHEMA) throw new IllegalStateException("Incompatible Pale Mirror Visuals genesis data");
         VisualGenesisSavedData data = new VisualGenesisSavedData();
-        for (Tag value : tag.getList("completedChunks", Tag.TAG_STRING)) data.completedChunks.add(value.getAsString());
+        CompoundTag observed = tag.getCompound("observedChunks");
+        observed.getAllKeys().forEach(key -> data.observedChunks.put(key, observed.getString(key)));
         for (Tag value : tag.getList("commissionedResidents", Tag.TAG_STRING)) data.commissionedResidents.add(value.getAsString());
         for (Tag value : tag.getList("completedModules", Tag.TAG_STRING)) data.completedModules.add(value.getAsString());
         for (Tag value : tag.getList("manifests", Tag.TAG_COMPOUND)) {
@@ -70,9 +72,10 @@ public final class VisualGenesisSavedData extends SavedData {
 
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider ignored) {
         tag.putInt("schema", SCHEMA);
-        ListTag values = new ListTag();
-        completedChunks.stream().sorted().forEach(value -> values.add(StringTag.valueOf(value)));
-        tag.put("completedChunks", values);
+        CompoundTag observed = new CompoundTag();
+        observedChunks.entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .forEach(entry -> observed.putString(entry.getKey(), entry.getValue()));
+        tag.put("observedChunks", observed);
         ListTag residents = new ListTag();
         commissionedResidents.stream().sorted().forEach(value -> residents.add(StringTag.valueOf(value)));
         tag.put("commissionedResidents", residents);

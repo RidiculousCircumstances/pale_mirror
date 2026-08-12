@@ -4,7 +4,7 @@ import java.util.List;
 
 /** Bounded read-only canonical travel projection for a physical provider. */
 public record JourneyProjection(String journeyId, String regionId, String populationGroupId,
-                                String state, double progress, int checkpointIndex,
+                                long projectionRevision, String state, double progress, int checkpointIndex,
                                 int materializationLimit, int spawnBudgetPerTick, boolean restoreAtOrigin, List<VisualPoint> path,
                                 List<String> retireAtOriginResidentIds, List<String> restoreResidentIds,
                                 List<JourneyResidentLeaseView> residentLeases) {

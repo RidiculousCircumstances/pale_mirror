@@ -62,22 +62,26 @@ public final class ResourceFlowSimulation {
             requests.forEach(request -> remainingDemand.merge(new DemandKey(request.destination(), supply.resource()),
                     request.demand(), Math::max));
             Map<FlowRequest, Integer> allocations = new LinkedHashMap<>();
-            while (remainingSupply > 0) {
+            int roundsRemaining = requests.size() + 1;
+            while (remainingSupply > 0 && roundsRemaining-- > 0) {
                 List<FlowRequest> eligible = requests.stream().filter(request -> {
                     int allocated = allocations.getOrDefault(request, 0);
                     return allocated < request.demand()
                             && remainingDemand.getOrDefault(new DemandKey(request.destination(), supply.resource()), 0) > 0;
                 }).toList();
                 if (eligible.isEmpty()) break;
-                long totalScore = eligible.stream().mapToLong(request -> (long) Math.max(1,
-                        request.demand() - allocations.getOrDefault(request, 0)) * request.contract().allocationWeight()).sum();
+                double totalScore = eligible.stream().mapToDouble(request -> (double) Math.max(1,
+                        request.demand() - allocations.getOrDefault(request, 0))
+                        * request.contract().allocationWeight()).sum();
                 int before = remainingSupply;
+                Map<FlowRequest, Double> remainders = new LinkedHashMap<>();
                 for (FlowRequest request : eligible) {
                     int routeRemaining = request.demand() - allocations.getOrDefault(request, 0);
                     DemandKey demandKey = new DemandKey(request.destination(), supply.resource());
                     int destinationRemaining = remainingDemand.getOrDefault(demandKey, 0);
-                    int proportional = (int) Math.min(Integer.MAX_VALUE,
-                            (long) before * routeRemaining * request.contract().allocationWeight() / totalScore);
+                    double exact = before * ((double) routeRemaining * request.contract().allocationWeight()) / totalScore;
+                    int proportional = (int) Math.min(Integer.MAX_VALUE, Math.floor(exact));
+                    remainders.put(request, exact - proportional);
                     int assigned = Math.min(Math.min(routeRemaining, destinationRemaining),
                             Math.min(remainingSupply, proportional));
                     if (assigned <= 0) continue;
@@ -85,13 +89,22 @@ public final class ResourceFlowSimulation {
                     remainingDemand.put(demandKey, destinationRemaining - assigned);
                     remainingSupply -= assigned;
                 }
-                if (remainingSupply == before) {
-                    FlowRequest winner = eligible.getFirst();
-                    DemandKey demandKey = new DemandKey(winner.destination(), supply.resource());
-                    allocations.merge(winner, 1, Integer::sum);
-                    remainingDemand.computeIfPresent(demandKey, (ignored, value) -> value - 1);
-                    remainingSupply--;
+                if (remainingSupply > 0) {
+                    List<FlowRequest> remainderOrder = eligible.stream().sorted(Comparator
+                            .comparingDouble((FlowRequest request) -> remainders.getOrDefault(request, 0D)).reversed()
+                            .thenComparing(request -> request.contract().id())).toList();
+                    for (FlowRequest request : remainderOrder) {
+                        if (remainingSupply <= 0) break;
+                        int allocated = allocations.getOrDefault(request, 0);
+                        DemandKey demandKey = new DemandKey(request.destination(), supply.resource());
+                        int destinationRemaining = remainingDemand.getOrDefault(demandKey, 0);
+                        if (allocated >= request.demand() || destinationRemaining <= 0) continue;
+                        allocations.merge(request, 1, Integer::sum);
+                        remainingDemand.put(demandKey, destinationRemaining - 1);
+                        remainingSupply--;
+                    }
                 }
+                if (remainingSupply == before) break;
             }
             int transferred = allocations.values().stream().mapToInt(Integer::intValue).sum();
             take(available, supply.origin(), supply.resource(), transferred);

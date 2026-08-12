@@ -28,6 +28,12 @@ public final class AuthoredVisualProvider implements VisualProvider {
 
     @Override public String id() { return "pale_mirror_visuals:authored_regions"; }
 
+    @Override public io.farfrontier.palemirror.api.GenesisReadiness genesisReadiness() {
+        return FrontierGenesisRuntime.readiness();
+    }
+
+    @Override public String performanceSummary() { return FrontierGenesisRuntime.performanceSummary(); }
+
     @Override public AdapterHealth health() {
         String failure = AuthoredAssetCatalog.verify();
         if (failure != null) return new AdapterHealth(AdapterHealth.Status.BLOCKED, failure, Set.of());
@@ -42,8 +48,15 @@ public final class AuthoredVisualProvider implements VisualProvider {
 
     @Override public boolean authoredModuleReady(ServerLevel level, AuthoredRegionSeed region,
                                                   io.farfrontier.palemirror.api.VisualModulePlacement module) {
-        String key = region.planId() + "@" + module.templateId() + "@" + module.origin();
-        return VisualGenesisSavedData.get(level).moduleCompleted(key);
+        int minX = module.footprint().min().x() >> 4; int maxX = module.footprint().max().x() >> 4;
+        int minZ = module.footprint().min().z() >> 4; int maxZ = module.footprint().max().z() >> 4;
+        VisualGenesisSavedData ledger = VisualGenesisSavedData.get(level);
+        for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
+            var expected = FrontierGenesisRuntime.compiledChunk(net.minecraft.world.level.ChunkPos.asLong(x, z));
+            if (expected == null || !expected.stamp().equals(ledger.observedStamp(
+                    net.minecraft.world.level.ChunkPos.asLong(x, z)))) return false;
+        }
+        return true;
     }
 
     @Override public void applyProjection(ServerLevel level, VisualStateProjection projection) {
@@ -106,5 +119,6 @@ public final class AuthoredVisualProvider implements VisualProvider {
         deaths.clear();
         markers.clear();
         journeys.clear();
+        threatHearts.clear();
     }
 }

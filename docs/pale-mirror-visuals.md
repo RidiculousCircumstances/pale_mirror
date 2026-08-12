@@ -8,18 +8,21 @@ curated structure assets, resident carriers, animation, particles and sound.
 
 ## Fresh-world contract
 
-There is intentionally no retrofit path. A new v35 world pins three complete
-`AuthoredRegionSeed` manifests before any block is changed. The first region is
+There is intentionally no retrofit path. A new v36 world pins three complete
+`AuthoredRegionSeed` manifests and compiles them into an immutable chunk-addressed
+catalog before players are admitted. The first region is
 1024–2048 blocks from spawn; two later regions are sparse at 6000–10000 blocks.
 The immutable manifest contains every object identity and coordinate needed by
 core: settlement bounds, freight gate, receiving depot, Mine17, Red Valley,
 baseline rail path, modules, expansion plots and 48 resident identities.
 
-Terrain survey calls generator-only height, column and biome APIs. It does not
-load prospective chunks. Once a player naturally loads an intersecting chunk,
-the visual module performs only that chunk's bounded first-generation work.
-The completion ledger and pinned manifests survive restart. At startup, loaded
-but incomplete chunks are resumed without tickets or force-loading.
+Terrain survey calls generator-only height, column and biome APIs on a dedicated
+planning worker. It does not load prospective chunks. A registered NeoForge
+worldgen feature applies only the current chunk's precompiled slice during normal
+generation, then persists a chunk attachment stamp. `ChunkEvent.Load` performs
+read-only stamp observation and resident commissioning; it never edits terrain,
+structures, MineSites or rails. The manifest and observed-stamp ledger survive
+restart, with no tickets, retrofit pass or loaded-chunk bulk construction.
 
 ## Settlement grammar
 
@@ -60,6 +63,12 @@ Missing or unloaded entities never change population. Only a confirmed death
 event for a registered UUID becomes a typed observation. Core deduplicates it,
 checks the settlement field-authority profile, and only then reduces the
 canonical cohort.
+
+All 48 carriers remain physically visible when their chunks are loaded, while
+vanilla AI is a separate visual budget. By default at most 16 nearby residents
+tick AI, prioritized by guards, specialists and workers; the remainder use
+`NoAI` until budget becomes available. `residents.activeAiLimit` and
+`residents.activeAiRadius` tune this without changing canonical population.
 
 ## Runtime materialization contract
 

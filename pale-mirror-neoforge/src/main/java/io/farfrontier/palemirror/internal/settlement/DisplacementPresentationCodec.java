@@ -9,7 +9,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
-/** Fresh-schema v35 codec; old representative actors and specialized job state deliberately do not exist. */
+/** Fresh-schema v36 codec; old representative actors and specialized job state deliberately do not exist. */
 public final class DisplacementPresentationCodec {
     private DisplacementPresentationCodec() { }
 

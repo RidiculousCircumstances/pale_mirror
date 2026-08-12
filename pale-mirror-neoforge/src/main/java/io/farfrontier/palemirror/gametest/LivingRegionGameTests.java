@@ -155,7 +155,7 @@ public final class LivingRegionGameTests {
             PaleMirrorSavedData.load(schema32, level.registryAccess());
             throw new AssertionError("schema v32 must not be retrofitted with authored settlements");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("not compatible with schema 35"),
+            helper.assertTrue(expected.getMessage().contains("not compatible with schema 36"),
                     "fresh-world rejection must explain the exact schema boundary");
         }
         helper.succeed();

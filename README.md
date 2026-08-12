@@ -52,9 +52,10 @@ underground controller chamber.
 The fresh Mine17–Ironhill baseline is a complete, low-capacity vanilla
 minecart corridor: regular rails, powered intervals, trestles and a receiving
 platform. Its terrain-costed, grade-safe path may turn around expensive terrain;
-it is planned before construction and grows only through chunks the
-player has naturally loaded, and records per-cell provenance before every
-write. Runtime health is the observed endpoint-connected rail graph, so a
+it is compiled into immutable chunk-local slices and written only by normal
+world generation when each chunk is first created. Runtime adopts exact
+generation stamps and provenance but never retrofits missing genesis geometry.
+Health is the observed endpoint-connected rail graph, so a
 connected player reroute is valid without recreating the authored geometry.
 Its cart is only a readable representative; Pale Mirror still owns route
 capacity and `IRON`. A player-built Create route is certified separately by the
@@ -63,9 +64,10 @@ explicit industrial-upgrade provider rather than the default for a small
 village. First recognition gives the player a survey map, welcome letter and
 dynamic native `Regional Ledger` written book.
 
-The authored manifest is pinned before the first chunk-local write and reused
-after restart. Prospective terrain is sampled through generator APIs; only
-naturally loaded chunks are graded or built. See
+The authored manifest is pinned before players are admitted and reused after
+restart. Prospective terrain is sampled through generator APIs; normal overworld
+generation alone grades and builds each compiled slice. Loaded-chunk events are
+read-only observations of persisted stamps. See
 [pale-mirror-visuals.md](docs/pale-mirror-visuals.md) for module boundaries,
 resident ownership, parcel commissioning, semantic reconstruction, canonical
 journeys and visual state behavior.
@@ -76,6 +78,7 @@ Run the optional industrial railway profile and packaged two-start harness with:
 ./gradlew :pale-mirror-neoforge:runRailwayGameTestServer
 ./gradlew :pale-mirror-neoforge:managedRailwayIntegrationHarness
 ./gradlew :pale-mirror-visuals:runGameTestServer
+./gradlew :pale-mirror-visuals:visualsIntegrationHarness
 ```
 
 Provider pin, safety ownership and the remaining graphical acceptance steps are

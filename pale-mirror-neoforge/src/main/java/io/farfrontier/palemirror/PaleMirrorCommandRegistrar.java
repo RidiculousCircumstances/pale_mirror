@@ -26,6 +26,11 @@ final class PaleMirrorCommandRegistrar {
                     context.getSource().sendSuccess(() -> Component.literal(PaleMirrorRuntime.forServer(context.getSource().getServer()).status()), false);
                     return 1;
                 }));
+        root.then(Commands.literal("performance").requires(source -> source.hasPermission(2)).executes(context -> {
+            context.getSource().sendSuccess(() -> Component.literal(PaleMirrorRuntime
+                    .forServer(context.getSource().getServer()).performanceStatus()), false);
+            return 1;
+        }));
         root.then(Commands.literal("testmine").then(Commands.literal("create").requires(source -> source.hasPermission(4))
                 .then(Commands.argument("source", StringArgumentType.word()).executes(context ->
                         createTestMine(context, StringArgumentType.getString(context, "source"))))));

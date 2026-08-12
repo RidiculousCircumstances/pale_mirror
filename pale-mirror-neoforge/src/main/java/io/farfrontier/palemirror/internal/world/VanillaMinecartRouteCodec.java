@@ -23,6 +23,7 @@ final class VanillaMinecartRouteCodec {
             value.putString("region", record.regionId());
             value.putString("dimension", record.dimensionId());
             value.putString("route", record.routeId());
+            value.putBoolean("worldgenAuthored", record.worldgenAuthored());
             value.putLong("start", record.start().asLong());
             value.putLong("target", record.target().asLong());
             value.putLongArray("plannedPath", record.plannedPath().stream().mapToLong(BlockPos::asLong).toArray());
@@ -89,7 +90,7 @@ final class VanillaMinecartRouteCodec {
             List<BlockPos> plannedPath = java.util.Arrays.stream(value.getLongArray("plannedPath"))
                     .mapToObj(BlockPos::of).toList();
             VanillaMinecartRouteRecord record = new VanillaMinecartRouteRecord(value.getString("region"),
-                    value.getString("dimension"), value.getString("route"), plannedPath,
+                    value.getString("dimension"), value.getString("route"), value.getBoolean("worldgenAuthored"), plannedPath,
                     VanillaMinecartRouteStatus.valueOf(value.getString("status")),
                     value.getString("diagnostic"), cells, completed, damaged, value.getInt("verificationCursor"),
                     value.getString("cartLease"), value.getBoolean("cartLeaseDispatched"), cart, cargo,

@@ -191,7 +191,7 @@ public final class VanillaMinecartRouteGameTests {
             PaleMirrorSavedData.load(schema32, helper.getLevel().registryAccess());
             throw new AssertionError("schema v32 must fail closed instead of migrating an old physical graph");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("schema 35"),
+            helper.assertTrue(expected.getMessage().contains("schema 36"),
                     "fresh-world rail rejection must identify the schema boundary");
         }
         helper.succeed();

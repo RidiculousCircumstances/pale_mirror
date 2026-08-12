@@ -39,9 +39,15 @@ import net.minecraft.world.level.ChunkPos;
 public final class VanillaMinecartRouteRuntime {
     private static final int BUILD_SEGMENT_BUDGET = 6;
     private static final int VERIFY_CELL_BUDGET = 32;
-    private static final int TOPOLOGY_CELL_RADIUS = 2;
 
     private VanillaMinecartRouteRuntime() { }
+
+    public static boolean hasPendingWork(PaleMirrorSavedData data) {
+        return data.vanillaMinecartRoutes().values().stream().anyMatch(record ->
+                record.status() == VanillaMinecartRouteStatus.PLANNED
+                        || record.status() == VanillaMinecartRouteStatus.BUILDING
+                        || record.status() == VanillaMinecartRouteStatus.VERIFYING);
+    }
 
     public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
         boolean changed = ensureRecords(server.overworld(), data);
@@ -50,15 +56,14 @@ public final class VanillaMinecartRouteRuntime {
             if (!record.dimensionId().equals(server.overworld().dimension().location().toString())) continue;
             changed |= advance(server.overworld(), data, commands, adapter, record);
         }
-        if (server.overworld().getGameTime() % 600L == 0L) {
-            for (var player : server.getPlayerList().getPlayers()) {
-                if (player.serverLevel() != server.overworld()) continue;
-                ChunkPos center = player.chunkPosition();
-                for (VanillaMinecartRouteRecord record : data.vanillaMinecartRoutes().values()) {
-                    for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++)
-                        changed |= record.markTopologyChunkDirty(new ChunkPos(center.x + x, center.z + z));
-                }
-            }
+        return changed;
+    }
+
+    public static boolean observeChunkLoad(PaleMirrorSavedData data, ServerLevel level, ChunkPos chunk) {
+        boolean changed = false;
+        String dimension = level.dimension().location().toString();
+        for (VanillaMinecartRouteRecord record : data.vanillaMinecartRoutes().values()) {
+            if (record.dimensionId().equals(dimension)) changed |= record.markTopologyChunkDirty(chunk);
         }
         return changed;
     }
@@ -137,6 +142,14 @@ public final class VanillaMinecartRouteRuntime {
                     index == 0 ? record.direction(0) : record.direction(index - 1), record.direction(index),
                     record.nextRailY(index), record.previousRailY(index), index,
                     index == record.segmentCount() - 1);
+            if (record.worldgenAuthored()) {
+                if (!adapter.postcondition(level, plan)) continue;
+                captureWorldgenSegment(level, data, adapter, record, plan, index);
+                record.complete(index);
+                budget--;
+                changed = true;
+                continue;
+            }
             PreflightResult preflight = preflight(level, data, adapter, record, plan, index);
             if (preflight == PreflightResult.BLOCKED) return true;
             if (preflight == PreflightResult.CAPTURED) {
@@ -172,6 +185,18 @@ public final class VanillaMinecartRouteRuntime {
         return changed;
     }
 
+    private static void captureWorldgenSegment(ServerLevel level, PaleMirrorSavedData data,
+                                                VanillaMinecartRailAdapter adapter,
+                                                VanillaMinecartRouteRecord record,
+                                                VanillaMinecartSegmentPlan plan, int index) {
+        for (BlockPos position : plan.writes().keySet()) {
+            String observed = adapter.signature(level.getBlockState(position));
+            record.capture(position, observed);
+            record.approve(position, observed);
+        }
+        registerSlot(level, data, record, plan, index);
+    }
+
     private static PreflightResult preflight(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRailAdapter adapter,
                                               VanillaMinecartRouteRecord record, VanillaMinecartSegmentPlan plan, int index) {
         boolean captured = false;
@@ -191,25 +216,27 @@ public final class VanillaMinecartRouteRuntime {
                 return PreflightResult.BLOCKED;
             }
         }
-        SemanticSlotKey key = routeSlot(record, index);
-        if (data.semanticSlots().find(key).isEmpty()) {
-            BlockPos min = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.min(a.getX(), b.getX()),
-                    Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()))).orElseThrow();
-            BlockPos max = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.max(a.getX(), b.getX()),
-                    Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ()))).orElseThrow();
-            String parcelId = record.routeId() + ":parcel:segment_" + index;
-            if (data.parcels().find(parcelId).isEmpty()) {
-                data.parcels().register(new ParcelRecord(parcelId, record.regionId(),
-                        record.dimensionId(), min, max, "baseline_rail", ParcelKind.PUBLIC_INFRASTRUCTURE,
-                        null, 0, ""));
-            }
-            List<SemanticCellRecord> cells = plan.writes().keySet().stream().map(position -> {
-                var state = level.getBlockState(position); return new SemanticCellRecord(position, state, state);
-            }).toList();
-            SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcelId, record.dimensionId(),
-                    ParcelKind.PUBLIC_INFRASTRUCTURE, cells);
-        }
+        registerSlot(level, data, record, plan, index);
         return captured ? PreflightResult.CAPTURED : PreflightResult.READY;
+    }
+
+    private static void registerSlot(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRouteRecord record,
+                                     VanillaMinecartSegmentPlan plan, int index) {
+        SemanticSlotKey key = routeSlot(record, index);
+        if (data.semanticSlots().find(key).isPresent()) return;
+        BlockPos min = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.min(a.getX(), b.getX()),
+                Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()))).orElseThrow();
+        BlockPos max = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.max(a.getX(), b.getX()),
+                Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ()))).orElseThrow();
+        String parcelId = record.routeId() + ":parcel:segment_" + index;
+        if (data.parcels().find(parcelId).isEmpty()) data.parcels().register(new ParcelRecord(parcelId,
+                record.regionId(), record.dimensionId(), min, max, "baseline_rail", ParcelKind.PUBLIC_INFRASTRUCTURE,
+                null, 0, ""));
+        List<SemanticCellRecord> cells = plan.writes().keySet().stream().map(position -> {
+            var state = level.getBlockState(position); return new SemanticCellRecord(position, state, state);
+        }).toList();
+        SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcelId, record.dimensionId(),
+                ParcelKind.PUBLIC_INFRASTRUCTURE, cells);
     }
 
     private static SemanticSlotKey routeSlot(VanillaMinecartRouteRecord record, int index) {
@@ -247,7 +274,7 @@ public final class VanillaMinecartRouteRuntime {
 
     private static boolean refreshActiveRoute(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                               VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
-        boolean changed = refreshTopology(level, adapter, record);
+        boolean changed = VanillaRailTopologyRuntime.refresh(level, adapter, record, VERIFY_CELL_BUDGET);
         if (record.status() != VanillaMinecartRouteStatus.ACTIVE) {
             changed |= validateCanonicalRoute(data, commands, record, 0);
             return true;
@@ -309,76 +336,10 @@ public final class VanillaMinecartRouteRuntime {
                                             VanillaMinecartRailAdapter adapter,
                                             VanillaMinecartRouteRecord record) {
         boolean changed = validateCanonicalRoute(data, commands, record, 0);
-        changed |= refreshTopology(level, adapter, record);
+        changed |= VanillaRailTopologyRuntime.refresh(level, adapter, record, VERIFY_CELL_BUDGET);
         if (record.status() == VanillaMinecartRouteStatus.ACTIVE)
             changed |= validateCanonicalRoute(data, commands, record);
         else changed |= parkExistingRepresentative(level, adapter, record);
-        return changed;
-    }
-
-    private static boolean refreshTopology(ServerLevel level, VanillaMinecartRailAdapter adapter,
-                                           VanillaMinecartRouteRecord record) {
-        boolean changed = false;
-        BlockPos lastObserved = null;
-        BlockPos dirty;
-        int localBudget = 8;
-        while (localBudget-- > 0 && (dirty = record.pollDirtyTopologyCell()) != null) {
-            lastObserved = dirty;
-            changed |= scanLocal(level, adapter, record, dirty);
-        }
-        ChunkPos chunk = record.pollLoadedDirtyTopologyChunk(value -> {
-            ChunkPos candidate = new ChunkPos(value);
-            return level.hasChunk(candidate.x, candidate.z);
-        });
-        if (chunk != null) {
-            changed |= scanChunk(level, adapter, record, chunk);
-            lastObserved = new BlockPos(chunk.getMiddleBlockX(), record.start().getY(), chunk.getMiddleBlockZ());
-        }
-        for (BlockPos position : record.topologyVerificationSlice(VERIFY_CELL_BUDGET)) {
-            if (!level.hasChunkAt(position)) continue;
-            var shape = adapter.observedShape(level, position);
-            if (record.observeRail(position, shape)) {
-                changed = true;
-                if (shape == null) lastObserved = position;
-            }
-        }
-        var path = record.connectedPath();
-        if (path.isPresent()) changed |= record.acceptTopology(path.orElseThrow());
-        else if (changed || record.status() == VanillaMinecartRouteStatus.ACTIVE) {
-            BlockPos issue = record.firstMissingAcceptedRail();
-            if (issue == null) issue = lastObserved == null ? record.topologyIssue() : lastObserved;
-            changed |= record.disconnectTopology(issue);
-        }
-        return changed;
-    }
-
-    private static boolean scanLocal(ServerLevel level, VanillaMinecartRailAdapter adapter,
-                                     VanillaMinecartRouteRecord record, BlockPos center) {
-        boolean changed = false;
-        for (int x = -TOPOLOGY_CELL_RADIUS; x <= TOPOLOGY_CELL_RADIUS; x++)
-            for (int z = -TOPOLOGY_CELL_RADIUS; z <= TOPOLOGY_CELL_RADIUS; z++)
-                for (int y = -2; y <= 2; y++) {
-                    BlockPos position = center.offset(x, y, z);
-                    if (!record.containsTopologyPosition(position) || !level.hasChunkAt(position)) continue;
-                    changed |= record.observeRail(position, adapter.observedShape(level, position));
-                }
-        return changed;
-    }
-
-    private static boolean scanChunk(ServerLevel level, VanillaMinecartRailAdapter adapter,
-                                     VanillaMinecartRouteRecord record, ChunkPos chunk) {
-        boolean changed = false;
-        int minY = Math.max(level.getMinBuildHeight(), Math.min(record.start().getY(), record.target().getY()) - 32);
-        int maxY = Math.min(level.getMaxBuildHeight() - 1, Math.max(record.start().getY(), record.target().getY()) + 32);
-        for (int x = chunk.getMinBlockX(); x <= chunk.getMaxBlockX(); x++)
-            for (int z = chunk.getMinBlockZ(); z <= chunk.getMaxBlockZ(); z++)
-                for (int y = minY; y <= maxY; y++) {
-                    BlockPos position = new BlockPos(x, y, z);
-                    if (!record.containsTopologyPosition(position)) continue;
-                    var shape = adapter.observedShape(level, position);
-                    if (shape != null) changed |= record.observeRail(position, shape);
-                    else if (record.hasObservedRail(position)) changed |= record.observeRail(position, null);
-                }
         return changed;
     }
 
@@ -388,7 +349,7 @@ public final class VanillaMinecartRouteRuntime {
         BlockPos expected = record.travelPosition(expectedIndex);
         net.minecraft.world.entity.Entity registered = record.representativeCartId() == null ? null
                 : level.getEntity(record.representativeCartId());
-        boolean reconcile = record.representativeCartId() == null || registered == null || level.getGameTime() % 40L == 0L;
+        boolean reconcile = record.representativeCartId() == null || registered == null;
         if (reconcile && level.hasChunkAt(record.representativeCartId() == null ? record.start() : expected)) {
             var reconciled = adapter.reconcileRepresentatives(level, record.routeId(), record.representativeCartId(),
                     record.representativeCargoId());

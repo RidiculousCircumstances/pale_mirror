@@ -25,6 +25,7 @@ public final class VanillaMinecartRouteRecord {
     private final String regionId;
     private final String dimensionId;
     private final String routeId;
+    private final boolean worldgenAuthored;
     private final BlockPos start;
     private final BlockPos target;
     private final List<BlockPos> plannedPath;
@@ -48,7 +49,8 @@ public final class VanillaMinecartRouteRecord {
     private long topologyRevision;
     private BlockPos topologyIssue;
 
-    public VanillaMinecartRouteRecord(String regionId, String dimensionId, String routeId, List<BlockPos> plannedPath,
+    public VanillaMinecartRouteRecord(String regionId, String dimensionId, String routeId, boolean worldgenAuthored,
+                                      List<BlockPos> plannedPath,
                                       VanillaMinecartRouteStatus status, String diagnostic,
                                       Map<Long, VanillaMinecartMutableCell> cells, Set<Integer> completedSegments,
                                       Set<Long> damagedCriticalCells,
@@ -58,6 +60,7 @@ public final class VanillaMinecartRouteRecord {
         this.regionId = text(regionId, "regionId");
         this.dimensionId = text(dimensionId, "dimensionId");
         this.routeId = text(routeId, "routeId");
+        this.worldgenAuthored = worldgenAuthored;
         this.plannedPath = plannedPath.stream().map(BlockPos::immutable).toList();
         if (this.plannedPath.size() < 2) throw new IllegalArgumentException("Vanilla minecart path needs two nodes");
         this.start = this.plannedPath.getFirst(); this.target = this.plannedPath.getLast();
@@ -135,7 +138,14 @@ public final class VanillaMinecartRouteRecord {
     }
     public static VanillaMinecartRouteRecord planned(String regionId, String dimensionId, String routeId,
                                                       List<BlockPos> path) {
-        return new VanillaMinecartRouteRecord(regionId, dimensionId, routeId, path,
+        return new VanillaMinecartRouteRecord(regionId, dimensionId, routeId, false, path,
+                VanillaMinecartRouteStatus.PLANNED, "", Map.of(), Set.of(), Set.of(), 0, "", false,
+                null, null, 0D, true);
+    }
+
+    public static VanillaMinecartRouteRecord authored(String regionId, String dimensionId, String routeId,
+                                                       List<BlockPos> path) {
+        return new VanillaMinecartRouteRecord(regionId, dimensionId, routeId, true, path,
                 VanillaMinecartRouteStatus.PLANNED, "", Map.of(), Set.of(), Set.of(), 0, "", false,
                 null, null, 0D, true);
     }
@@ -146,6 +156,7 @@ public final class VanillaMinecartRouteRecord {
     public BlockPos start() { return start; }
     public BlockPos target() { return target; }
     public List<BlockPos> plannedPath() { return plannedPath; }
+    public boolean worldgenAuthored() { return worldgenAuthored; }
     public VanillaMinecartRouteStatus status() { return status; }
     public String diagnostic() { return diagnostic; }
     public Map<Long, VanillaMinecartMutableCell> cells() { return Map.copyOf(cells); }

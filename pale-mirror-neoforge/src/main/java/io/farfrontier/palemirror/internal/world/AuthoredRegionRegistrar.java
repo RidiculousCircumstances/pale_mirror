@@ -64,6 +64,40 @@ public final class AuthoredRegionRegistrar {
         return changed;
     }
 
+    /** Reconciles generated MineSites only after all of their owning chunks are present. */
+    public static boolean reconcilePhysical(MinecraftServer server, PaleMirrorSavedData data) {
+        var provider = PaleMirrorVisuals.provider().orElse(null);
+        if (provider == null || !provider.genesisReadiness().ready()) return false;
+        boolean changed = false;
+        for (AuthoredRegionSeed seed : provider.discoverAuthoredRegions(server.overworld())) {
+            CampaignRegionRecord record = data.campaignRegions().get(seed.planId());
+            if (record == null || record.status() == CampaignRegionPresentationStatus.MATERIALIZED) continue;
+            RegionBindings ids = RegionBindings.forAuthored(seed.planId());
+            BlockPos primary = block(seed.primaryMine());
+            BlockPos alternate = block(seed.alternateMine());
+            if (CampaignMineSiteTemplate.isAreaLoaded(server.overworld(), primary)
+                    && CampaignMineSiteTemplate.isMaterialized(server.overworld(), primary)
+                    && !data.testMines().containsKey(ids.primaryMineId())) {
+                data.registerTestMine(CampaignMineSiteTemplate.observeExisting(server.overworld(), primary,
+                        ids.primaryMineId(), io.farfrontier.palemirror.domain.StoryAudienceId.globalTestAudience()));
+                changed = true;
+            }
+            if (CampaignMineSiteTemplate.isAreaLoaded(server.overworld(), alternate)
+                    && CampaignMineSiteTemplate.isMaterialized(server.overworld(), alternate)
+                    && !data.testMines().containsKey(ids.alternateMineId())) {
+                data.registerTestMine(CampaignMineSiteTemplate.observeExisting(server.overworld(), alternate,
+                        ids.alternateMineId(), io.farfrontier.palemirror.domain.StoryAudienceId.globalTestAudience()));
+                changed = true;
+            }
+            if (data.testMines().containsKey(ids.primaryMineId()) && data.testMines().containsKey(ids.alternateMineId())) {
+                record.observeWorldgenMaterialized(primary, alternate);
+                changed = true;
+            }
+        }
+        if (changed) data.setDirty();
+        return changed;
+    }
+
     static void register(PaleMirrorSavedData data, DomainCommandExecutor commands, AuthoredRegionSeed seed) {
         RegionBindings ids = RegionBindings.forAuthored(seed.planId());
         if (data.campaignRegions().containsKey(ids.regionId())) return;
@@ -146,7 +180,7 @@ public final class AuthoredRegionRegistrar {
         List<BlockPos> freightPath = seed.baselineRailNodes().stream().map(AuthoredRegionRegistrar::block)
                 .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
         java.util.Collections.reverse(freightPath);
-        data.vanillaMinecartRoutes().put(seed.planId(), VanillaMinecartRouteRecord.planned(seed.planId(),
+        data.vanillaMinecartRoutes().put(seed.planId(), VanillaMinecartRouteRecord.authored(seed.planId(),
                 seed.dimensionId(), ids.primaryRouteId().value(), freightPath));
         data.setDirty();
     }

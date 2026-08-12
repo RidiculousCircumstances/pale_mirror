@@ -7,6 +7,8 @@ import net.minecraft.world.entity.Entity;
 
 /** Experimental provider SPI. Implementations discover physical facts; they never mutate canonical state. */
 public interface VisualProvider extends IntegrationAdapter {
+    default GenesisReadiness genesisReadiness() { return GenesisReadiness.failed("Genesis readiness is unavailable"); }
+    default String performanceSummary() { return "unavailable"; }
     Collection<AuthoredRegionSeed> discoverAuthoredRegions(ServerLevel level);
     /** True only after genesis has durably completed this exact authored module. */
     default boolean authoredModuleReady(ServerLevel level, AuthoredRegionSeed region,

@@ -6,8 +6,6 @@ import java.util.Map;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.Level;
@@ -15,7 +13,7 @@ import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 
 /**
  * Bounds non-canonical background ecology without touching PM encounters or explicit game mechanics.
- * Counts are refreshed from loaded entities and are deliberately not persisted.
+ * Counts reuse Minecraft's own per-tick SpawnState and never rescan every loaded entity.
  */
 public final class AmbientSpawnThrottle {
     private static final int REFRESH_INTERVAL_TICKS = 10;
@@ -29,11 +27,11 @@ public final class AmbientSpawnThrottle {
         for (ServerLevel level : server.getAllLevels()) {
             int hostile = 0;
             int peaceful = 0;
-            for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof Mob mob) || !managedSpawnType(mob.getSpawnType())) continue;
-                Population population = population(entity.getType().getCategory());
-                if (population == Population.HOSTILE) hostile++;
-                if (population == Population.PEACEFUL) peaceful++;
+            var state = level.getChunkSource().getLastSpawnState();
+            if (state != null) for (var entry : state.getMobCategoryCounts().object2IntEntrySet()) {
+                Population population = population(entry.getKey());
+                if (population == Population.HOSTILE) hostile += entry.getIntValue();
+                if (population == Population.PEACEFUL) peaceful += entry.getIntValue();
             }
             COUNTS.put(level.dimension(), new PopulationCounts(hostile, peaceful));
         }

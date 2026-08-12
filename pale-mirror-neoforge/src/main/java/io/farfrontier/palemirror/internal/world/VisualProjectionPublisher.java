@@ -11,6 +11,9 @@ import net.minecraft.server.MinecraftServer;
 
 /** Read-only canonical projection. It grants no mutation authority to the visual provider. */
 public final class VisualProjectionPublisher {
+    private static final java.util.Map<MinecraftServer, java.util.Map<String, Long>> PUBLISHED =
+            new java.util.IdentityHashMap<>();
+
     private VisualProjectionPublisher() { }
 
     public static void publish(MinecraftServer server, PaleMirrorSavedData data) {
@@ -25,10 +28,16 @@ public final class VisualProjectionPublisher {
             var development = data.worldState().settlementDevelopment(region.communityId()).orElse(null);
             if (facility == null || community == null || place == null || economy == null) continue;
             var iron = economy.require(ResourceKind.IRON);
-            provider.applyProjection(server.overworld(), new VisualStateProjection(facility.id().value(),
-                    facility.desiredRevision(), facility.status().name(), place.structuralIntegrity().name(),
-                    iron.availability().name(), community.crisisState().name(), development == null ? "NONE"
-                    : Integer.toString(development.prosperity()), facility.threatTier().name()));
+            long revision = revision(facility.desiredRevision(), facility.status().name(),
+                    place.structuralIntegrity().name(), iron.availability().name(), community.crisisState().name(),
+                    development == null ? "NONE" : Integer.toString(development.prosperity()),
+                    facility.threatTier().name());
+            String projectionKey = "visual:" + facility.id().value();
+            if (changed(server, projectionKey, revision)) provider.applyProjection(server.overworld(),
+                    new VisualStateProjection(facility.id().value(), facility.desiredRevision(), revision,
+                            facility.status().name(), place.structuralIntegrity().name(), iron.availability().name(),
+                            community.crisisState().name(), development == null ? "NONE"
+                            : Integer.toString(development.prosperity()), facility.threatTier().name()));
         }
         publishJourneys(server, data, provider);
     }
@@ -64,13 +73,43 @@ public final class VisualProjectionPublisher {
                             lease.checkpointIndex(), lease.revision())).toList();
             if (leases.isEmpty() && !active && !restoreAtOrigin) continue;
             var points = path.nodes().stream().map(node -> new VisualPoint(node.x(), node.y(), node.z())).toList();
-            provider.applyJourneyProjection(server.overworld(), new JourneyProjection(journey.id(), region.id(),
-                    group.id(), journey.state().name(), journey.progress(), journey.checkpointIndex(), limit,
-                    PaleMirrorServerConfig.JOURNEY_SPAWN_BUDGET.get(), restoreAtOrigin, points,
-                    active ? seed.residents().stream().map(value -> value.residentId()).toList() : java.util.List.of(),
-                    restoreAtOrigin ? livingRoster.stream().map(value -> value.residentId()).toList() : java.util.List.of(),
-                    leases));
+            long revision = revision(journey.state().name(), Double.doubleToLongBits(journey.progress()),
+                    journey.checkpointIndex(), limit, restoreAtOrigin, leases.stream()
+                            .mapToLong(JourneyResidentLeaseView::revision).sum(), group.disposition().name());
+            String projectionKey = "journey:" + journey.id();
+            if (changed(server, projectionKey, revision)) provider.applyJourneyProjection(server.overworld(),
+                    new JourneyProjection(journey.id(), region.id(), group.id(), revision, journey.state().name(),
+                            journey.progress(), journey.checkpointIndex(), limit,
+                            PaleMirrorServerConfig.JOURNEY_SPAWN_BUDGET.get(), restoreAtOrigin, points,
+                            active ? seed.residents().stream().map(value -> value.residentId()).toList() : java.util.List.of(),
+                            restoreAtOrigin ? livingRoster.stream().map(value -> value.residentId()).toList() : java.util.List.of(),
+                            leases));
         }
+    }
+
+    public static void clear(MinecraftServer server) {
+        synchronized (PUBLISHED) { PUBLISHED.remove(server); }
+    }
+
+    private static boolean changed(MinecraftServer server, String key, long revision) {
+        synchronized (PUBLISHED) {
+            return !java.util.Objects.equals(PUBLISHED.computeIfAbsent(server, ignored -> new java.util.HashMap<>())
+                    .put(key, revision), revision);
+        }
+    }
+
+    private static long revision(Object... values) {
+        long hash = 0xcbf29ce484222325L;
+        for (Object value : values) {
+            String text = String.valueOf(value);
+            for (int index = 0; index < text.length(); index++) {
+                hash ^= text.charAt(index);
+                hash *= 0x100000001b3L;
+            }
+            hash ^= 0xff;
+            hash *= 0x100000001b3L;
+        }
+        return hash;
     }
 
     private static java.util.List<io.farfrontier.palemirror.api.ResidentSeed> livingRoster(

@@ -5,13 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 final class ArchitectureDebtCutoverTest {
     @Test
     void detailedHistoryCompactsIntoPerSubjectTypeSummary() {
         WorldObjectId subject = new WorldObjectId("pale_mirror:test_subject");
-        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(35)
+        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(36)
                 .eventSequence(WorldState.MAX_DETAILED_HISTORY + 7L);
         for (int index = 1; index <= WorldState.MAX_DETAILED_HISTORY + 7; index++) {
             builder.event(new DomainEvent("pm:event:" + index, DomainEventType.MINE_INFECTED,
@@ -27,17 +28,17 @@ final class ArchitectureDebtCutoverTest {
     void validatorRejectsOrphanedAggregateReference() {
         WorldObjectId missingSite = new WorldObjectId("pale_mirror:missing_site");
         WorldObjectId missingObject = new WorldObjectId("pale_mirror:missing_object");
-        WorldState state = WorldStateHydration.builder().schemaVersion(35)
+        WorldState state = WorldStateHydration.builder().schemaVersion(36)
                 .affiliation(new SiteAffiliation(missingSite, missingObject, SiteAffiliationRole.SUPPLIER))
                 .build();
 
-        assertThrows(DomainStateValidationException.class, () -> DomainStateValidator.validate(state, 35));
+        assertThrows(DomainStateValidationException.class, () -> DomainStateValidator.validate(state, 36));
     }
 
     @Test
     void hydrationRejectsDuplicateIdentityBeforeMapNormalization() {
         WorldObjectId facilityId = id("duplicate_facility");
-        var builder = WorldStateHydration.builder().schemaVersion(35)
+        var builder = WorldStateHydration.builder().schemaVersion(36)
                 .facility(new FacilityState(facilityId, new InfectionSourceId("test:threat"), 4, 10, 0))
                 .facility(new FacilityState(facilityId, new InfectionSourceId("test:threat"), 8, 10, 0));
 
@@ -52,7 +53,7 @@ final class ArchitectureDebtCutoverTest {
         WorldObjectId destinationB = id("destination_b");
         WorldObjectId communityA = id("community_a");
         WorldObjectId communityB = id("community_b");
-        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(35)
+        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(36)
                 .facility(new FacilityState(mine, new InfectionSourceId("test:threat"), 8, 100, 0))
                 .site(new WorldSite(origin, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
                 .site(new WorldSite(destinationA, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
@@ -72,6 +73,39 @@ final class ArchitectureDebtCutoverTest {
 
         assertEquals(2, state.economy(communityA).orElseThrow().require(ResourceKind.IRON).incomingFlow());
         assertEquals(6, state.economy(communityB).orElseThrow().require(ResourceKind.IRON).incomingFlow());
+    }
+
+    @Test
+    void weightedAllocationCostDoesNotScaleWithResourceUnits() {
+        WorldObjectId mine = id("large_mine");
+        WorldObjectId origin = id("large_origin");
+        WorldObjectId destinationA = id("large_destination_a");
+        WorldObjectId destinationB = id("large_destination_b");
+        WorldObjectId communityA = id("large_community_a");
+        WorldObjectId communityB = id("large_community_b");
+        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(36)
+                .facility(new FacilityState(mine, new InfectionSourceId("test:threat"), 1_000_000_000, 100, 0))
+                .site(new WorldSite(origin, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
+                .site(new WorldSite(destinationA, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
+                .site(new WorldSite(destinationB, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
+                .affiliation(new SiteAffiliation(origin, mine, SiteAffiliationRole.SUPPLIER))
+                .affiliation(new SiteAffiliation(destinationA, communityA, SiteAffiliationRole.RECIPIENT))
+                .affiliation(new SiteAffiliation(destinationB, communityB, SiteAffiliationRole.RECIPIENT))
+                .route(new RouteContract(id("large_route_a"), origin, destinationA, RouteProvider.PALE_MIRROR,
+                        ResourceKind.IRON, 1_000_000_000, 8, 24, 1, 1_000_000_000, 0, "seed-a",
+                        RouteContractStatus.VALIDATED))
+                .route(new RouteContract(id("large_route_b"), origin, destinationB, RouteProvider.PALE_MIRROR,
+                        ResourceKind.IRON, 1_000_000_000, 8, 24, 3, 1_000_000_000, 0, "seed-b",
+                        RouteContractStatus.VALIDATED));
+        addLargeCommunity(builder, communityA);
+        addLargeCommunity(builder, communityB);
+        WorldState state = builder.build();
+
+        org.junit.jupiter.api.Assertions.assertTimeout(Duration.ofMillis(250), () ->
+                new DomainServices().commands().execute(state, new DomainCommand.AdvanceSimulation(1)));
+
+        assertEquals(250_000_000, state.economy(communityA).orElseThrow().require(ResourceKind.IRON).incomingFlow());
+        assertEquals(750_000_000, state.economy(communityB).orElseThrow().require(ResourceKind.IRON).incomingFlow());
     }
 
     @Test
@@ -97,7 +131,7 @@ final class ArchitectureDebtCutoverTest {
         DevelopmentIntent intent = new DevelopmentIntent("pm:development:test", community,
                 DevelopmentIntentType.UPGRADE_STOREHOUSE, missingSite, ResourceKind.IRON,
                 10, 0, 10, 0, 1, java.util.Set.of(), "test", DevelopmentIntentState.PLANNED, "");
-        WorldState state = WorldStateHydration.builder().schemaVersion(35)
+        WorldState state = WorldStateHydration.builder().schemaVersion(36)
                 .community(new SettlementCommunity(community)).place(new SettlementPlace(place))
                 .binding(new CommunityPlaceBinding(community, place))
                 .economy(new SettlementEconomy(community, Map.of(ResourceKind.IRON, account)))
@@ -124,6 +158,21 @@ final class ArchitectureDebtCutoverTest {
                 .binding(new CommunityPlaceBinding(community, place))
                 .economy(new SettlementEconomy(community, Map.of(ResourceKind.IRON,
                         new ResourceAccount(100, 0, 0, 8, 8))))
+                .security(new SettlementSecurity(community, 50))
+                .policy(new SettlementPolicy(community, 10, 5, 8, 2))
+                .development(new SettlementDevelopment(community, 0, 0, 0, 0, 0))
+                .developmentPolicy(SettlementDevelopmentPolicy.defaults(community))
+                .authorityProfile(SettlementAuthorityProfile.pmManaged(community))
+                .populationGroup(PopulationGroup.residents(community.value() + "_residents", community, place,
+                        Map.of(SettlementCohort.CIVILIANS, 10)));
+    }
+
+    private static void addLargeCommunity(WorldStateHydration.Builder builder, WorldObjectId community) {
+        WorldObjectId place = new WorldObjectId(community.value() + "_place");
+        builder.community(new SettlementCommunity(community)).place(new SettlementPlace(place))
+                .binding(new CommunityPlaceBinding(community, place))
+                .economy(new SettlementEconomy(community, Map.of(ResourceKind.IRON,
+                        new ResourceAccount(1_000_000_000, 0, 0, 0, 0))))
                 .security(new SettlementSecurity(community, 50))
                 .policy(new SettlementPolicy(community, 10, 5, 8, 2))
                 .development(new SettlementDevelopment(community, 0, 0, 0, 0, 0))
