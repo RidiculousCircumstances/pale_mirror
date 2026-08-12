@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.visuals.genesis.FrontierChunkMaterializer;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierTerrainSurvey;
 import io.farfrontier.palemirror.visuals.resident.ResidentMaterializer;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,10 +38,13 @@ public final class FrontierGenesisRuntime {
         }
         FrontierTerrainSurvey survey = new FrontierTerrainSurvey();
         FrontierRegionPlanner planner = new FrontierRegionPlanner();
+        Map<Long, Integer> surfaceHeights = new HashMap<>();
+        java.util.function.IntBinaryOperator surfaceHeight = (x, z) -> surfaceHeights.computeIfAbsent(
+                ChunkPos.asLong(x, z), ignored -> survey.surfaceHeight(level, x, z));
         List<AuthoredRegionSeed> plans = java.util.stream.IntStream.range(0, REGION_COUNT).mapToObj(ordinal -> {
             FrontierTerrainSurvey.Result site = survey.select(level, ordinal);
             AuthoredRegionSeed seed = planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(),
-                    (x, z) -> survey.surfaceHeight(level, x, z));
+                    surfaceHeight);
             return seed;
         }).toList();
         ledger.pinManifests(plans);
