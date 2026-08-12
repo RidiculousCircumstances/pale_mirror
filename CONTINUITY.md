@@ -93,6 +93,9 @@
 - The first full-modpack 20-region benchmark used 4,868 height probes in 173.169 seconds and exposed a
   powered-rail-at-corner compiler defect. The compiler now falls back to ordinary rail at such corners;
   its exact regression and packaged restart harness pass before the benchmark world is recreated.
+- Commit `fa0722f` is published and deployed. Seed `54185464310597810` now has 20 pinned authored
+  manifests inside radius 10,000 with 1,400-block spacing; planning took 174.346 seconds and produced a
+  ready immutable catalog of 2,992 chunk slices. The closest region is centered at `24 68 -1864`.
 - Commit `7e378a0` is deployed to the private server and client artifact host. The disposable old world was
   deleted, seed `3374619285067712046` created a clean world, and the immutable 470-slice catalog became
   ready without blocking the server thread. Its closest authored region is centered at `-587 66 1444`.
@@ -101,8 +104,8 @@
 
 ### Next
 
-- Recreate the 20-region benchmark world with the fixed JAR, then reduce the full-modpack cost of uncached
-  generator height probes before considering a higher production default.
+- Reduce the full-modpack cost of uncached generator height probes before considering a higher production
+  default; the 20-region benchmark world is ready for live traversal/materialization testing.
 
 ## Open questions
 
