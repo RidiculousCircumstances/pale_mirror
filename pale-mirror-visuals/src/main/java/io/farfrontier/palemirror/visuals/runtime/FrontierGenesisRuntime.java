@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -22,7 +23,10 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 @EventBusSubscriber(modid = PaleMirrorVisualsMod.MOD_ID)
 public final class FrontierGenesisRuntime {
     private static final int REGION_COUNT = 3;
+    private static final int HEIGHT_SAMPLE_GRID = 16;
     private static final Map<ServerLevel, List<AuthoredRegionSeed>> PLANS = new IdentityHashMap<>();
+    private static final Map<ServerLevel, CompletableFuture<List<AuthoredRegionSeed>>> PLANNING =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private static final FrontierChunkMaterializer MATERIALIZER = new FrontierChunkMaterializer();
     private static final ResidentMaterializer RESIDENTS = new ResidentMaterializer();
 
@@ -36,19 +40,39 @@ public final class FrontierGenesisRuntime {
             install(level, ledger.manifests());
             return;
         }
+        CompletableFuture<List<AuthoredRegionSeed>> future = CompletableFuture.supplyAsync(() -> plan(level));
+        PLANNING.put(level, future);
+        future.whenComplete((plans, failure) -> event.getServer().execute(() -> {
+            if (PLANNING.remove(level) != future) return;
+            if (failure != null) {
+                PaleMirrorVisualsMod.LOGGER.error("Authored-region planning failed", failure);
+                return;
+            }
+            VisualGenesisSavedData current = VisualGenesisSavedData.get(level);
+            if (!current.manifests().isEmpty()) {
+                install(level, current.manifests());
+                return;
+            }
+            current.pinManifests(plans);
+            install(level, plans);
+        }));
+        PaleMirrorVisualsMod.LOGGER.info("Authored-region planning started in the background");
+    }
+
+    private static List<AuthoredRegionSeed> plan(ServerLevel level) {
         FrontierTerrainSurvey survey = new FrontierTerrainSurvey();
         FrontierRegionPlanner planner = new FrontierRegionPlanner();
         Map<Long, Integer> surfaceHeights = new HashMap<>();
-        java.util.function.IntBinaryOperator surfaceHeight = (x, z) -> surfaceHeights.computeIfAbsent(
-                ChunkPos.asLong(x, z), ignored -> survey.surfaceHeight(level, x, z));
-        List<AuthoredRegionSeed> plans = java.util.stream.IntStream.range(0, REGION_COUNT).mapToObj(ordinal -> {
+        java.util.function.IntBinaryOperator surfaceHeight = (x, z) -> {
+            int sampleX = Math.floorDiv(x, HEIGHT_SAMPLE_GRID) * HEIGHT_SAMPLE_GRID + HEIGHT_SAMPLE_GRID / 2;
+            int sampleZ = Math.floorDiv(z, HEIGHT_SAMPLE_GRID) * HEIGHT_SAMPLE_GRID + HEIGHT_SAMPLE_GRID / 2;
+            return surfaceHeights.computeIfAbsent(ChunkPos.asLong(sampleX, sampleZ),
+                    ignored -> survey.surfaceHeight(level, sampleX, sampleZ));
+        };
+        return java.util.stream.IntStream.range(0, REGION_COUNT).mapToObj(ordinal -> {
             FrontierTerrainSurvey.Result site = survey.select(level, ordinal);
-            AuthoredRegionSeed seed = planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(),
-                    surfaceHeight);
-            return seed;
+            return planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(), surfaceHeight);
         }).toList();
-        ledger.pinManifests(plans);
-        install(level, plans);
     }
 
     private static void install(ServerLevel level, List<AuthoredRegionSeed> plans) {
@@ -95,6 +119,8 @@ public final class FrontierGenesisRuntime {
 
     @SubscribeEvent
     public static void serverStopped(ServerStoppedEvent event) {
+        PLANNING.values().forEach(future -> future.cancel(true));
+        PLANNING.clear();
         PLANS.clear();
         AuthoredVisualProvider.INSTANCE.resetRuntime();
     }
