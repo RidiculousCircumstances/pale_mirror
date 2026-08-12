@@ -11,6 +11,8 @@
 - `pale-mirror-domain` remains free of Minecraft, NeoForge, persistence and adapters.
 - Existing schema-v34 and older worlds are intentionally unsupported; the development server world will be replaced.
 - The new product profile requires Pale Mirror Core, Pale Mirror Visuals, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16. Create remains an industrial-upgrade integration.
+- Millénaire is absent from the active private-pack profile after an observed 32-second village-chunk stall;
+  its read-only adapter remains an optional compatibility surface and reports `ABSENT` by design.
 - Integrated Villages ARR structures may be copied and remixed for this private non-distributed mod; every imported template retains an origin/version/hash manifest.
 - Crimson 1.4.3.1 is the default infection source; Spore remains optional/test-only.
 
@@ -65,6 +67,8 @@
 - Bounded detailed causal history and terminal journeys with persisted summaries; shared output now uses deterministic demand/weight allocation rather than route-ID priority.
 - Split command registration, runtime combat and test-mine persistence out of oversized coordinators; added Java style, portable-path and 500-line debt gates.
 - Verification: domain/unit and `check` pass; 37 Core and 2 Visuals GameTests pass; distribution JAR checks, clean packaged Core crash/restart and packaged Core+Visuals two-start harnesses pass.
+- Replaced the playtest world with a clean schema-v35 world using seed `9001648283219134473`;
+  all three authored manifests installed asynchronously and the server reached `Done` without Millénaire.
 
 ### Now
 
@@ -74,7 +78,6 @@
 
 ### Next
 
-- Replace the disposable schema-v34 development world before the next product-profile playtest.
 - Run a real graphical client pass over fresh authored temperate/cold/dry regions, including Atlas scrolling
   at the player's GUI scale; automated runtime gates cannot judge visual quality or encounter pacing.
 
