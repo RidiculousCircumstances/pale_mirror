@@ -13,6 +13,9 @@
 - The new product profile requires Pale Mirror Core, Pale Mirror Visuals, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16. Create remains an industrial-upgrade integration.
 - Millénaire is absent from the active private-pack profile after an observed 32-second village-chunk stall;
   its read-only adapter remains an optional compatibility surface and reports `ABSENT` by design.
+- Ordinary loaded ecology is intentionally sparse: ambient hostile attempts use a 0.20 acceptance chance and
+  cap 24 per active player/dimension, while passive/ambient/water attempts use 0.55 and cap 32. Explicit PM,
+  resident, breeding, structure, spawner, event and command spawns are outside this policy.
 - Integrated Villages ARR structures may be copied and remixed for this private non-distributed mod; every imported template retains an origin/version/hash manifest.
 - Crimson 1.4.3.1 is the default infection source; Spore remains optional/test-only.
 
@@ -63,6 +66,8 @@
 - Extracted the experimental SPI into `pale-mirror-api`; Visuals can no longer compile against domain or Core internals, while the final Core JAR explicitly embeds the API and domain outputs.
 - Made `WorldState` collection views immutable and mutations package-private; production mutations cross `DomainCommandExecutor`/`DomainTransaction`, while a codec-only hydration builder rejects duplicate persisted identities.
 - Added schema-v35 canonical and physical integrity validation on load and save, typed command failures, atomic aggregate registration and command-owned Narrator evaluation/reset/registration paths.
+- Added a configurable ephemeral NeoForge ambient-spawn budget that strongly reduces natural hostiles and
+  moderately reduces natural fauna without deleting existing entities or suppressing authored content.
 - Bound every semantic slot to one explicit parcel, added postcondition rollback, rejected duplicate current materialization jobs and compacted terminal jobs into bounded receipts.
 - Bounded detailed causal history and terminal journeys with persisted summaries; shared output now uses deterministic demand/weight allocation rather than route-ID priority.
 - Split command registration, runtime combat and test-mine persistence out of oversized coordinators; added Java style, portable-path and 500-line debt gates.
@@ -72,9 +77,8 @@
 
 ### Now
 
-- Schema-v35 architecture-debt cutover complete. Atlas now has a bounded vertical viewport, clipping,
-  wheel scrolling and a draggable scrollbar; scrolling action buttons follow the viewport and cannot be
-  activated while hidden. Risk verified as `small-code`; guardrails, check, build and packaged-JAR checks pass.
+- Ambient world density is bounded independently from canonical simulation. Focused policy tests, guardrails,
+  unit/check/build/packaging gates and all 37 Core GameTests pass.
 
 ### Next
 

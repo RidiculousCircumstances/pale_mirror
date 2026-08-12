@@ -37,6 +37,7 @@ import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
@@ -52,6 +53,7 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
 import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter;
+import io.farfrontier.palemirror.internal.world.AmbientSpawnThrottle;
 
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
 public final class PaleMirrorEvents {
@@ -79,12 +81,19 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
+        AmbientSpawnThrottle.clear();
         PaleMirrorRuntime.stop(event.getServer());
     }
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
+        AmbientSpawnThrottle.tick(event.getServer());
         PaleMirrorRuntime.forServer(event.getServer()).tick();
+    }
+
+    @SubscribeEvent
+    public static void onSpawnPlacementCheck(MobSpawnEvent.SpawnPlacementCheck event) {
+        AmbientSpawnThrottle.evaluate(event);
     }
 
     /** Source adapters may reject unmanaged native forms at the server boundary. */
