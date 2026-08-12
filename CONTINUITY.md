@@ -68,12 +68,15 @@
 
 ### Now
 
-- Schema-v35 architecture-debt cutover complete. Risk verified as `critical-code`.
+- Schema-v35 architecture-debt cutover complete. Atlas now has a bounded vertical viewport, clipping,
+  wheel scrolling and a draggable scrollbar; scrolling action buttons follow the viewport and cannot be
+  activated while hidden. Risk verified as `small-code`; guardrails, check, build and packaged-JAR checks pass.
 
 ### Next
 
 - Replace the disposable schema-v34 development world before the next product-profile playtest.
-- Run a real graphical client pass over fresh authored temperate/cold/dry regions; automated runtime gates cannot judge visual quality or encounter pacing.
+- Run a real graphical client pass over fresh authored temperate/cold/dry regions, including Atlas scrolling
+  at the player's GUI scale; automated runtime gates cannot judge visual quality or encounter pacing.
 
 ## Open questions
 
