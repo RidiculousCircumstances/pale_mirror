@@ -68,7 +68,7 @@
 - Made the GeckoLib Threat Heart the sole product controller backed by PM combat state; the zombie anchor remains core-only test infrastructure.
 - Added reserved shelter candidates, selected/fallback refugee camps, staged authored damage, exact reconstruction and plot-based positive-development projects.
 - Added terrain-costed, grade-safe persisted baseline rail paths with arbitrary turns, loaded-chunk construction and topology-based player reroute adoption.
-- Added Visuals planner tests, 4 Visuals GameTests including deterministic chunk-local catalog compilation and biome-feature registration under exact Sable 2.0.3, JAR verification, and a clean packaged Core+Visuals two-start harness that exercises natural generation plus persisted stamps. All 37 Core GameTests and all 4 Visuals GameTests pass.
+- Added Visuals planner tests, 5 Visuals GameTests including deterministic chunk-local catalog compilation, powered-rail corner regression and biome-feature registration under exact Sable 2.0.3, JAR verification, and a clean packaged Core+Visuals two-start harness that exercises natural generation plus persisted stamps. All 37 Core GameTests and all 5 Visuals GameTests pass.
 - Fixed the previously flaky multi-chunk player-reroute GameTest by observing both dirty chunks.
 - Extracted the experimental SPI into `pale-mirror-api`; Visuals can no longer compile against domain or Core internals, while the final Core JAR explicitly embeds the API and domain outputs.
 - Made `WorldState` collection views immutable and mutations package-private; production mutations cross `DomainCommandExecutor`/`DomainTransaction`, while a codec-only hydration builder rejects duplicate persisted identities.
@@ -78,7 +78,7 @@
 - Bound every semantic slot to one explicit parcel, added postcondition rollback, rejected duplicate current materialization jobs and compacted terminal jobs into bounded receipts.
 - Bounded detailed causal history and terminal journeys with persisted summaries; shared output now uses deterministic demand/weight allocation rather than route-ID priority.
 - Split command registration, runtime combat and test-mine persistence out of oversized coordinators; added Java style, portable-path and 500-line debt gates.
-- Verification: domain/unit and `check` pass; 37 Core and 4 Visuals GameTests pass; distribution JAR checks, clean packaged Core crash/restart and packaged Core+Visuals two-start harnesses pass.
+- Verification: domain/unit and `check` pass; 37 Core and 5 Visuals GameTests pass; distribution JAR checks, clean packaged Core crash/restart and packaged Core+Visuals two-start harnesses pass.
 - The previous schema-v35 playtest world is intentionally obsolete and must not be reused.
 
 ### Now
@@ -88,8 +88,11 @@
   without mutation in the two-start harness.
 - Commit `437e481` is published to the private artifact host and deployed to the playtest server. The
   existing pinned manifests reopened unchanged; a fresh world is required to exercise the new selector.
-- Schema-v36 code, unit tests, 37 Core GameTests and 4 Visuals GameTests pass. Final packaged Core
+- Schema-v36 code, unit tests, 37 Core GameTests and 5 Visuals GameTests pass. Final packaged Core
   crash/restart and Core+Visuals+Sable natural-worldgen two-start harnesses pass.
+- The first full-modpack 20-region benchmark used 4,868 height probes in 173.169 seconds and exposed a
+  powered-rail-at-corner compiler defect. The compiler now falls back to ordinary rail at such corners;
+  its exact regression and packaged restart harness pass before the benchmark world is recreated.
 - Commit `7e378a0` is deployed to the private server and client artifact host. The disposable old world was
   deleted, seed `3374619285067712046` created a clean world, and the immutable 470-slice catalog became
   ready without blocking the server thread. Its closest authored region is centered at `-587 66 1444`.
@@ -98,7 +101,8 @@
 
 ### Next
 
-- Benchmark a fresh high-count private world before changing the production default from three regions.
+- Recreate the 20-region benchmark world with the fixed JAR, then reduce the full-modpack cost of uncached
+  generator height probes before considering a higher production default.
 
 ## Open questions
 

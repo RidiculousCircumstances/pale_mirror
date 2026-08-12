@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.visuals.gametest;
 
 import io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod;
+import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.visuals.genesis.FrontierClimate;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
@@ -76,6 +77,33 @@ public final class VisualsGameTests {
         }
         helper.assertValueEqual(rails, seed.baselineRailNodes().size(), "every authored rail node must compile once");
         helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 40)
+    public static void poweredRailScheduleSkipsAuthoredCorners(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(54_185_464_310_597_810L, 0,
+                new VisualPoint(8000, 72, -4000), FrontierClimate.TEMPERATE, (x, z) -> 72);
+        java.util.List<VisualPoint> rail = new java.util.ArrayList<>();
+        for (int x = 0; x <= 12; x++) rail.add(new VisualPoint(8200 + x, 73, -4000));
+        for (int z = 1; z <= 13; z++) rail.add(new VisualPoint(8212, 73, -4000 + z));
+        var turning = withRail(seed, rail);
+        var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(turning));
+        var compiledRails = catalog.chunks().values().stream().flatMap(slice -> slice.rails().stream()).toList();
+        long powered = compiledRails.stream()
+                .filter(value -> value.railState().is(net.minecraft.world.level.block.Blocks.POWERED_RAIL)).count();
+        helper.assertTrue(powered > 0, "valid straight segments must retain powered rails");
+        var corner = compiledRails.stream().filter(value -> value.rail().getX() == 8212
+                && value.rail().getZ() == -4000).findFirst().orElseThrow();
+        helper.assertTrue(corner.railState().is(net.minecraft.world.level.block.Blocks.RAIL),
+                "a scheduled powered segment must fall back to ordinary rail at a corner");
+        helper.succeed();
+    }
+
+    private static AuthoredRegionSeed withRail(AuthoredRegionSeed seed, java.util.List<VisualPoint> rail) {
+        return new AuthoredRegionSeed(seed.planId(), seed.archetypeId(), seed.definitionVersion(), seed.contentHash(),
+                seed.dimensionId(), seed.climate(), seed.palette(), seed.anchor(), seed.settlementBounds(),
+                seed.freightGate(), seed.receivingDepot(), seed.primaryMine(), seed.alternateMine(), rail,
+                seed.modules(), seed.residents(), seed.expansionPlots(), seed.shelterCandidates());
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)

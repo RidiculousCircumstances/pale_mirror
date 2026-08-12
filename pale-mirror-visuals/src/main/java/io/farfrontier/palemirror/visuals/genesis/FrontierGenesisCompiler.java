@@ -191,7 +191,7 @@ public final class FrontierGenesisCompiler {
             int nextY = nodes.get(Math.min(nodes.size() - 1, index + 1)).y();
             int previousY = nodes.get(Math.max(0, index - 1)).y();
             RailShape shape = railShape(previous, next, point.y(), nextY, previousY);
-            boolean powered = index > 0 && index % 12 == 0;
+            boolean powered = index > 0 && index % 12 == 0 && supportsPoweredRail(shape);
             BlockState state = powered ? Blocks.POWERED_RAIL.defaultBlockState()
                     .setValue(PoweredRailBlock.SHAPE, shape) : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape);
             slice(slices, rail.getX(), rail.getZ()).rails.add(new CompiledChunkSlice.RailColumn(rail, state,
@@ -216,6 +216,14 @@ public final class FrontierGenesisCompiler {
         return switch (direction) {
             case EAST -> RailShape.ASCENDING_EAST; case WEST -> RailShape.ASCENDING_WEST;
             case SOUTH -> RailShape.ASCENDING_SOUTH; default -> RailShape.ASCENDING_NORTH;
+        };
+    }
+
+    private static boolean supportsPoweredRail(RailShape shape) {
+        return switch (shape) {
+            case NORTH_SOUTH, EAST_WEST, ASCENDING_EAST, ASCENDING_WEST, ASCENDING_NORTH,
+                    ASCENDING_SOUTH -> true;
+            default -> false;
         };
     }
 
