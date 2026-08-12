@@ -40,8 +40,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.TicketType;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Binds the first authored region to a read-only observed settlement; it never builds a village. */
@@ -59,18 +57,12 @@ public final class CampaignRegionBootstrapper {
     public static final WorldObjectId IRONHILL_RECEIVING_SITE = new WorldObjectId("pale_mirror:ironhill_receiving");
     public static final String RED_VALLEY_DISPATCH = "PM Red Valley Dispatch";
     public static final String IRONHILL_RECEIVING = "PM Ironhill Receiving";
-    private static final ResourceLocation IRON_FRONTIER_DEFINITION = ResourceLocation.parse(IRON_FRONTIER_ARCHETYPE_ID);
+    static final ResourceLocation IRON_FRONTIER_DEFINITION = ResourceLocation.parse(IRON_FRONTIER_ARCHETYPE_ID);
     private static final int PRIMARY_MINE_DISTANCE = 640;
     private static final int ALTERNATE_MINE_DISTANCE = 704;
     public static final int MAX_ACTIVE_REGIONS = 3;
     public static final int MIN_REGION_SPACING = 2_048;
     private static final String[] DISPLAY_NAMES = {"Ironhill", "Redvale", "Stonecross", "Ashford", "Greyhaven"};
-    private static final int SITE_TICKET_RADIUS = 4;
-    private static final TicketType<BlockPos> SITE_COMMISSIONING_TICKET = TicketType.create(
-            "pale_mirror_site_commissioning", java.util.Comparator.comparingLong(BlockPos::asLong), 100);
-    private static final java.util.Map<ServerLevel, java.util.Map<String, BlockPos>> ACTIVE_TICKETS =
-            new java.util.IdentityHashMap<>();
-
     private CampaignRegionBootstrapper() { }
 
     public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
@@ -80,24 +72,15 @@ public final class CampaignRegionBootstrapper {
     public static void tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands,
                             boolean automaticBinding) {
         if (automaticBinding) ensureCanonicalPlans(server, data, commands);
-        java.util.Set<String> active = new java.util.HashSet<>();
         data.campaignRegions().values().stream().sorted(java.util.Comparator.comparing(CampaignRegionRecord::id))
-                .forEach(record -> {
-                    active.add(record.id());
-                    advancePhysicalPlan(server.overworld(), data, record);
-                });
-        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.get(server.overworld());
-        if (tickets != null) new java.util.ArrayList<>(tickets.keySet()).stream()
-                .filter(id -> !active.contains(id)).forEach(id -> releaseTicket(server.overworld(), id));
+                .forEach(record -> advancePhysicalPlan(server.overworld(), data, record));
     }
 
     /** Advances persisted PM-authored site work without requiring a player near either planned mine. */
     public static void advancePhysicalPlan(ServerLevel level, PaleMirrorSavedData data, CampaignRegionRecord record) {
         if (record.status() == CampaignRegionPresentationStatus.MATERIALIZED) {
-            releaseTicket(level, record.id());
             return;
         }
-        maintainTicket(level, record.id(), CampaignMineSiteTemplate.commissioningTicketAnchor(record.pendingMineColumn()));
         if (!level.hasChunkAt(record.pendingMineColumn())) return;
         if (record.status() == CampaignRegionPresentationStatus.BLOCKED) {
             if (record.pendingMineAnchorResolved()
@@ -106,7 +89,6 @@ public final class CampaignRegionBootstrapper {
                 data.setDirty();
             } else {
                 if (record.pendingMineAnchorResolved() || !record.diagnostic().startsWith("MineSite conflict at ")) {
-                    releaseTicket(level, record.id());
                     return;
                 }
                 BlockPos recoveryAnchor = resolveAnchor(level, record.pendingMineColumn());
@@ -117,7 +99,6 @@ public final class CampaignRegionBootstrapper {
                     CampaignMineSiteTemplate.captureBaseline(level, recoveryAnchor);
                     record.retryBlockedPreflight();
                 } catch (IllegalStateException stillBlocked) {
-                    releaseTicket(level, record.id());
                     return;
                 }
             }
@@ -129,7 +110,6 @@ public final class CampaignRegionBootstrapper {
                 record.resolvePendingMineAnchor(anchor, CampaignMineSiteTemplate.captureBaseline(level, anchor));
             } catch (IllegalStateException conflict) {
                 record.block(conflict.getMessage());
-                releaseTicket(level, record.id());
             }
             data.setDirty();
             return;
@@ -145,21 +125,14 @@ public final class CampaignRegionBootstrapper {
             else if (record.nextOperationIndex() == 1) ensureMine(data, level, record.alternateMineAnchor(), bindings.alternateMineId(), record.pendingMineBaseline());
             else throw new IllegalStateException("Invalid campaign operation index " + record.nextOperationIndex());
             record.completedOperation();
-            if (record.status() == CampaignRegionPresentationStatus.MATERIALIZED) releaseTicket(level, record.id());
             data.setDirty();
         } catch (IllegalStateException failure) {
             record.block(failure.getMessage());
-            releaseTicket(level, record.id());
             data.setDirty();
         }
     }
 
-    public static void stop(MinecraftServer server) {
-        ServerLevel level = server.overworld();
-        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.remove(level);
-        if (tickets != null) tickets.forEach((id, position) -> level.getChunkSource().removeRegionTicket(
-                SITE_COMMISSIONING_TICKET, new ChunkPos(position), SITE_TICKET_RADIUS, position));
-    }
+    public static void stop(MinecraftServer server) { }
 
     private static void ensureCanonicalPlans(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
         if (data.worldState().livingRegions().size() >= MAX_ACTIVE_REGIONS) return;
@@ -389,22 +362,4 @@ public final class CampaignRegionBootstrapper {
         return DISPLAY_NAMES[index] + " " + key.substring(Math.max(0, key.length() - 4));
     }
 
-    private static void maintainTicket(ServerLevel level, String regionId, BlockPos position) {
-        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.computeIfAbsent(level, ignored -> new java.util.HashMap<>());
-        BlockPos next = position.immutable();
-        BlockPos previous = tickets.put(regionId, next);
-        if (next.equals(previous)) return;
-        if (previous != null) level.getChunkSource().removeRegionTicket(
-                SITE_COMMISSIONING_TICKET, new ChunkPos(previous), SITE_TICKET_RADIUS, previous);
-        level.getChunkSource().addRegionTicket(
-                SITE_COMMISSIONING_TICKET, new ChunkPos(next), SITE_TICKET_RADIUS, next);
-    }
-
-    private static void releaseTicket(ServerLevel level, String regionId) {
-        java.util.Map<String, BlockPos> tickets = ACTIVE_TICKETS.get(level);
-        BlockPos previous = tickets == null ? null : tickets.remove(regionId);
-        if (previous != null) level.getChunkSource().removeRegionTicket(
-                SITE_COMMISSIONING_TICKET, new ChunkPos(previous), SITE_TICKET_RADIUS, previous);
-        if (tickets != null && tickets.isEmpty()) ACTIVE_TICKETS.remove(level);
-    }
 }

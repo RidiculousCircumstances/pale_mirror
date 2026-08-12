@@ -9,4 +9,4 @@ plugins {
 }
 
 rootProject.name = 'pale-mirror'
-include 'pale-mirror-domain', 'pale-mirror-neoforge'
+include 'pale-mirror-domain', 'pale-mirror-neoforge', 'pale-mirror-visuals'

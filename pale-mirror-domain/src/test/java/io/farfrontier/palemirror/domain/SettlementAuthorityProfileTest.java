@@ -48,6 +48,29 @@ class SettlementAuthorityProfileTest {
         assertEquals(12, state.population(COMMUNITY));
     }
 
+    @Test
+    void confirmedManagedResidentDeathChangesOnlyPmOwnedPopulation() {
+        WorldState state = state();
+        DomainServices services = new DomainServices();
+        services.commands().execute(state, new DomainCommand.RegisterSettlementAuthorityProfile(
+                SettlementAuthorityProfile.pmManaged(COMMUNITY)));
+        var events = services.commands().execute(state, new DomainCommand.ConfirmSettlementResidentDeath(
+                COMMUNITY, "pale_mirror:native_residents", SettlementCohort.GUARDS,
+                "resident-7", "death:resident-7"));
+        assertEquals(11, state.population(COMMUNITY));
+        assertEquals(1, state.populationGroup("pale_mirror:native_residents").orElseThrow()
+                .cohorts().get(SettlementCohort.GUARDS));
+        assertTrue(events.stream().anyMatch(event -> event.type() == DomainEventType.SETTLEMENT_RESIDENT_DEATH_CONFIRMED));
+
+        WorldState nativeState = state();
+        services.commands().execute(nativeState, new DomainCommand.RegisterSettlementAuthorityProfile(
+                SettlementAuthorityProfile.nativeReconciled(COMMUNITY)));
+        assertTrue(services.commands().execute(nativeState, new DomainCommand.ConfirmSettlementResidentDeath(
+                COMMUNITY, "pale_mirror:native_residents", SettlementCohort.GUARDS,
+                "resident-7", "death:resident-7")).isEmpty());
+        assertEquals(12, nativeState.population(COMMUNITY));
+    }
+
     private static WorldState state() {
         WorldState state = new WorldState();
         SettlementCommunity community = new SettlementCommunity(COMMUNITY);

@@ -184,16 +184,15 @@ public final class VanillaMinecartRouteGameTests {
                         .mapToObj(reloaded::railPosition).toList()),
                 "a connected topology must make the route resumable independently of old provenance");
 
-        CompoundTag schema31 = snapshot.copy();
-        schema31.putInt("schemaVersion", 31);
-        for (net.minecraft.nbt.Tag raw : schema31.getList("vanillaMinecartRoutes", net.minecraft.nbt.Tag.TAG_COMPOUND))
-            ((CompoundTag) raw).remove("railNodes");
-        VanillaMinecartRouteRecord migrated = PaleMirrorSavedData.load(schema31, helper.getLevel().registryAccess())
-                .vanillaMinecartRoutes().get(record.regionId());
-        helper.assertValueEqual(migrated.observedRailShapes().size(), migrated.segmentCount(),
-                "schema-v31 migration must seed the formerly authored path as its last observed graph");
-        helper.assertTrue(!migrated.dirtyTopologyChunks().isEmpty(),
-                "schema-v31 migration must schedule naturally loaded chunk reconciliation without invalidating unloads");
+        CompoundTag schema32 = snapshot.copy();
+        schema32.putInt("schemaVersion", 32);
+        try {
+            PaleMirrorSavedData.load(schema32, helper.getLevel().registryAccess());
+            throw new AssertionError("schema v32 must fail closed instead of migrating an old physical graph");
+        } catch (IllegalStateException expected) {
+            helper.assertTrue(expected.getMessage().contains("schema 33"),
+                    "fresh-world rail rejection must identify the schema boundary");
+        }
         helper.succeed();
     }
 
@@ -263,6 +262,7 @@ public final class VanillaMinecartRouteGameTests {
         rail(level, target.south(), RailShape.NORTH_SOUTH);
         rail(level, target, RailShape.SOUTH_WEST);
         record.markTopologyChunkDirty(new net.minecraft.world.level.ChunkPos(start));
+        record.markTopologyChunkDirty(new net.minecraft.world.level.ChunkPos(target.south(2)));
 
         VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
         helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.ACTIVE,

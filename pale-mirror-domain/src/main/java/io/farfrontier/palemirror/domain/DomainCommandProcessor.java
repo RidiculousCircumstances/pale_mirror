@@ -71,6 +71,7 @@ public final class DomainCommandProcessor {
             case DomainCommand.BlockDevelopmentIntent intent -> blockDevelopmentIntent(state, intent.intentId(), intent.reason());
             case DomainCommand.RegisterSettlementAuthorityProfile authority -> registerAuthorityProfile(state, authority.profile());
             case DomainCommand.ReconcileSettlementPopulation population -> reconcileSettlementPopulation(state, population);
+            case DomainCommand.ConfirmSettlementResidentDeath casualty -> SettlementCasualtyRuntime.confirm(state, casualty, events);
         };
     }
 

@@ -1,0 +1,126 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.143'
+}
+
+base {
+    archivesName = 'pale_mirror_visuals'
+}
+
+dependencies {
+    implementation project(':pale-mirror-neoforge')
+    compileOnly files(rootProject.findProperty('villager_overhaul_integration_jar')
+            ?: '/home/rd/far-frontier-server/mods/villageroverhaul-neoforge-1.21.1-3.10.17.16.jar')
+    compileOnly files(rootProject.findProperty('geckolib_integration_jar')
+            ?: '/home/rd/far-frontier-server/mods/geckolib-neoforge-1.21.1-4.9.2.jar')
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+neoForge {
+    version = rootProject.providers.gradleProperty('neo_version').get()
+    runs {
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/visuals-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'pale_mirror_visuals'
+        }
+    }
+    mods {
+        pale_mirror_visuals {
+            sourceSet sourceSets.main
+        }
+        pale_mirror {
+            sourceSet project(':pale-mirror-neoforge').sourceSets.main
+            sourceSet project(':pale-mirror-domain').sourceSets.main
+        }
+    }
+}
+
+def visualsRuntimeJars = [
+        file(rootProject.findProperty('geckolib_integration_jar')
+                ?: '/home/rd/far-frontier-server/mods/geckolib-neoforge-1.21.1-4.9.2.jar'),
+        file(rootProject.findProperty('villager_overhaul_integration_jar')
+                ?: '/home/rd/far-frontier-server/mods/villageroverhaul-neoforge-1.21.1-3.10.17.16.jar'),
+        file(rootProject.findProperty('supplementaries_integration_jar')
+                ?: '/home/rd/far-frontier-server/mods/supplementaries-1.21.1-3.8.8-neoforge.jar'),
+        file(rootProject.findProperty('moonlight_integration_jar')
+                ?: '/home/rd/far-frontier-server/mods/moonlight-1.21.1-3.3.2-neoforge.jar')
+]
+
+def prepareVisualsGameTestMods = tasks.register('prepareVisualsGameTestMods', Sync) {
+    from visualsRuntimeJars
+    into layout.buildDirectory.dir('runs/visuals-game-test/mods')
+    doFirst {
+        def missing = visualsRuntimeJars.findAll { !it.exists() }
+        if (!missing.isEmpty()) throw new GradleException("Pinned visual runtime JARs are missing: ${missing}")
+    }
+}
+
+def visualsGameTestWorld = layout.buildDirectory.dir('runs/visuals-game-test/world').get().asFile
+tasks.named('runGameTestServer') {
+    dependsOn prepareVisualsGameTestMods
+    doFirst { visualsGameTestWorld.deleteDir() }
+}
+
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def properties = [
+            minecraft_version_range: rootProject.providers.gradleProperty('minecraft_version_range').get(),
+            neo_version            : rootProject.providers.gradleProperty('neo_version').get(),
+            loader_version_range   : rootProject.providers.gradleProperty('loader_version_range').get(),
+            mod_version            : rootProject.providers.gradleProperty('mod_version').get()
+    ]
+    inputs.properties(properties)
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+    expand(properties)
+}
+
+sourceSets.main.resources.srcDir(generateModMetadata)
+neoForge.ideSyncTask(generateModMetadata)
+
+tasks.register('verifyVisualsJar') {
+    group = 'verification'
+    dependsOn tasks.named('jar')
+    def archive = tasks.named('jar', Jar).flatMap { it.archiveFile }
+    inputs.file(archive)
+    doLast {
+        def jar = new java.util.jar.JarFile(archive.get().asFile)
+        try {
+            [
+                    'io/farfrontier/palemirror/visuals/PaleMirrorVisualsMod.class',
+                    'io/farfrontier/palemirror/visuals/genesis/FrontierRegionPlanner.class',
+                    'META-INF/neoforge.mods.toml',
+                    'pale_mirror_visuals.mixins.json',
+                    'assets/pale_mirror_visuals/textures/entity/threat_heart.png',
+                    'assets/pale_mirror_visuals/geo/threat_heart.geo.json',
+                    'data/pale_mirror_visuals/structure/temperate/residence_1.nbt'
+            ].each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Visuals JAR is missing ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.named('check') { dependsOn tasks.named('verifyVisualsJar') }
+
+tasks.register('visualsIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots final Core and Visuals JARs with pinned dependencies in a clean server twice.'
+    dependsOn tasks.named('jar'), project(':pale-mirror-neoforge').tasks.named('jar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    def coreJar = project(':pale-mirror-neoforge').tasks.named('jar', Jar).flatMap { it.archiveFile }
+    commandLine 'bash', 'scripts/visuals-integration-harness.sh', coreJar.get().asFile.absolutePath,
+            tasks.named('jar', Jar).flatMap { it.archiveFile }.get().asFile.absolutePath,
+            visualsRuntimeJars[0].absolutePath, visualsRuntimeJars[1].absolutePath,
+            visualsRuntimeJars[2].absolutePath, visualsRuntimeJars[3].absolutePath
+}

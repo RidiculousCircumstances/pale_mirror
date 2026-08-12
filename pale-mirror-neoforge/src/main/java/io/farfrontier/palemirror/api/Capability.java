@@ -27,5 +27,11 @@ public enum Capability {
     /** Native settlement state can be reconciled without PM writing its actors or construction. */
     SETTLEMENT_NATIVE_RECONCILIATION,
     /** Optional player-facing mirror of PM scenario state in FTB Quests. */
-    FTB_QUEST_PRESENTATION
+    FTB_QUEST_PRESENTATION,
+    /** Deterministic fresh-world settlement and regional infrastructure genesis. */
+    AUTHORED_REGION_GENESIS,
+    /** Persistent visual representation of PM-owned settlement residents. */
+    MANAGED_SETTLEMENT_RESIDENTS,
+    /** Dynamic physical projection of canonical settlement and threat state. */
+    DYNAMIC_WORLD_PRESENTATION
 }

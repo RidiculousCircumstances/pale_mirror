@@ -139,37 +139,14 @@ public final class LivingRegionGameTests {
         helper.assertTrue(reloaded.worldState().regionAccess(audience, region.id()).orElseThrow().present(), "restart must retain fairness evidence");
         helper.assertValueEqual(reloaded.worldState().settlementAuthorityProfile(region.communityId()).orElseThrow().profileId(),
                 "pale_mirror:pm_managed", "restart snapshot must retain the immutable settlement authority contract");
-        CompoundTag schema27 = snapshot.copy();
-        schema27.putInt("schemaVersion", 27);
-        schema27.remove("refugeeAnchorPermits");
-        PaleMirrorSavedData migrated27 = PaleMirrorSavedData.load(schema27, level.registryAccess());
-        helper.assertTrue(migrated27.worldState().livingRegion(bindings.regionId()).isPresent()
-                        && migrated27.campaignRegions().get(bindings.regionId()).settlementAnchor()
-                        .equals(presentation.settlementAnchor()),
-                "v27 migration must preserve region identity and its pinned physical placement without rewriting blocks");
-        CompoundTag schema24 = snapshot.copy();
-        schema24.putInt("schemaVersion", 24);
-        schema24.remove("campaignCommissioning");
-        PaleMirrorSavedData migrated = PaleMirrorSavedData.load(schema24, level.registryAccess());
-        helper.assertValueEqual(migrated.campaignCommissioning().get(bindings.regionId()).status(),
-                io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.LEGACY_WORLD_DISABLED,
-                "schema v24 must load without retrofitting a destructive railway into an existing region");
-        CompoundTag schema25 = snapshot.copy();
-        schema25.putInt("schemaVersion", 25);
-        var commissioning = schema25.getList("campaignCommissioning", net.minecraft.nbt.Tag.TAG_COMPOUND);
-        for (int index = 0; index < commissioning.size(); index++) {
-            CompoundTag value = commissioning.getCompound(index);
-            value.remove("constructionPolicy");
-            value.remove("completedSegments");
-            value.remove("totalSegments");
-        }
-        PaleMirrorSavedData migrated25 = PaleMirrorSavedData.load(schema25, level.registryAccess());
-        var migratedRail = migrated25.campaignCommissioning().values().stream().findFirst().orElse(null);
-        if (migratedRail != null && migratedRail.status()
-                == io.farfrontier.palemirror.internal.world.CampaignCommissioningStatus.PLANNED) {
-            helper.assertValueEqual(migratedRail.constructionPolicy(),
-                    io.farfrontier.palemirror.internal.adapter.RailConstructionPolicy.LOADED_CHUNKS_ONLY,
-                    "untouched schema v25 plan must migrate to loaded-chunks-only construction");
+        CompoundTag schema32 = snapshot.copy();
+        schema32.putInt("schemaVersion", 32);
+        try {
+            PaleMirrorSavedData.load(schema32, level.registryAccess());
+            throw new AssertionError("schema v32 must not be retrofitted with authored settlements");
+        } catch (IllegalStateException expected) {
+            helper.assertTrue(expected.getMessage().contains("not compatible with schema 33"),
+                    "fresh-world rejection must explain the exact schema boundary");
         }
         helper.succeed();
     }

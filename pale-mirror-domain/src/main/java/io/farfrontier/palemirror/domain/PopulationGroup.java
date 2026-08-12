@@ -91,6 +91,15 @@ public final class PopulationGroup {
         cohorts.merge(Objects.requireNonNull(cohort, "cohort"), amount, Math::addExact);
         revision++;
     }
+    public boolean lose(SettlementCohort cohort, int amount) {
+        if (amount <= 0) throw new IllegalArgumentException("Population loss must be positive");
+        int current = cohorts.getOrDefault(Objects.requireNonNull(cohort, "cohort"), 0);
+        if (current < amount) return false;
+        int next = current - amount;
+        if (next == 0) cohorts.remove(cohort); else cohorts.put(cohort, next);
+        revision++;
+        return true;
+    }
     public boolean reconcileCohorts(Map<SettlementCohort, Integer> observed) {
         EnumMap<SettlementCohort, Integer> next = new EnumMap<>(SettlementCohort.class);
         observed.forEach((cohort, amount) -> {

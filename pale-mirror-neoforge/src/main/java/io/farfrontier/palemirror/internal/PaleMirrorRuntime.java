@@ -96,7 +96,13 @@ public final class PaleMirrorRuntime {
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
         if (server.overworld().getGameTime() % SETTLEMENT_OBSERVATION_INTERVAL_TICKS == 0
                 && SettlementObservationRuntime.observeNearPlayers(server, data, commands)) data.setDirty();
-        CampaignRegionBootstrapper.tick(server, data, commands, debug.automaticBindingEnabled());
+        boolean authoredProvider = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().isPresent();
+        if (authoredProvider && io.farfrontier.palemirror.internal.world.AuthoredRegionRegistrar.discover(server, data, commands)) {
+            data.setDirty();
+        }
+        handleDomainEvents(io.farfrontier.palemirror.internal.world.AuthoredResidentReconciler.reconcile(server, data, commands));
+        CampaignRegionBootstrapper.tick(server, data, commands,
+                !authoredProvider && debug.automaticBindingEnabled());
         if (VanillaMinecartRouteRuntime.tick(server, data, commands)) data.setDirty();
         if (ManagedRailwayRuntime.tick(server, data, commands)) data.setDirty();
         if (SettlementDepotRuntime.tick(server, data)) data.setDirty();
@@ -122,6 +128,7 @@ public final class PaleMirrorRuntime {
         if (gameTick % 1200L == 0L && data.effectLeases().compact(gameTick)) data.setDirty();
         if (data.threatCombat().expireAndCompact(gameTick)) data.setDirty();
         AdapterRegistry.tickRuntime(server, data);
+        io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.publish(server, data);
         RegionalMarkerRuntime.tick(server, data);
         debug.renderZoneMarkers();
     }

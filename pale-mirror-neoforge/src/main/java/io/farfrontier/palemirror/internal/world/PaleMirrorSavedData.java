@@ -49,7 +49,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 32;
+    static final int CURRENT_SCHEMA = 33;
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
@@ -193,9 +193,7 @@ public final class PaleMirrorSavedData extends SavedData {
                 + CURRENT_SCHEMA + ". Back up the old world before resetting its Pale Mirror data.");
     }
     private static boolean isMigratable(int version) {
-        return version == 24 || version == 25 || version == 26 || version == 27 || version == 28 || version == 29
-                || version == 30 || version == 31
-                || version == CURRENT_SCHEMA;
+        return version == CURRENT_SCHEMA;
     }
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {

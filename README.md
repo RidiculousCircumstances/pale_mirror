@@ -13,11 +13,13 @@ Java 21 is mandatory. The Gradle toolchain resolver provisions it when needed:
 
 ```bash
 ./gradlew check
-./gradlew :pale-mirror-neoforge:build
+./gradlew :pale-mirror-neoforge:build :pale-mirror-visuals:build
 ```
 
-The distributable JAR is under `pale-mirror-neoforge/build/libs/`. `check`
-verifies that it embeds the pure domain module.
+The required product profile consists of the core JAR under
+`pale-mirror-neoforge/build/libs/` and the visual JAR under
+`pale-mirror-visuals/build/libs/`. `check` verifies core domain packaging and
+the visual asset/module contract.
 
 ## Runtime verification
 
@@ -39,9 +41,11 @@ The current 0.3 completion-candidate behavior and its repeatable playtest
 procedure are documented in
 [living-frontier-0.3-completion.md](docs/living-frontier-0.3-completion.md).
 
-On a fresh product-profile world, Pale Mirror can recognize a stable loaded
-vanilla/Integrated Villages settlement and create Ironhill without replacing
-the village. The campaign materializes two provenance-preflighted MineSites,
+On a fresh product-profile world, Pale Mirror Visuals deterministically authors
+three independent frontier regions. Each begins as a PM-owned radial timber
+fort with a civic center, freight district, 48 stable residents and reserved
+development plots. Observed vanilla/Integrated Villages places no longer
+bootstrap the default campaign. The campaign materializes two provenance-preflighted MineSites,
 including a loading yard, readable entrance, descending supported drift and
 underground controller chamber.
 
@@ -56,11 +60,18 @@ explicit industrial-upgrade provider rather than the default for a small
 village. First recognition gives the player a survey map, welcome letter and
 dynamic native `Regional Ledger` written book.
 
+The authored manifest is pinned before the first chunk-local write and reused
+after restart. Prospective terrain is sampled through generator APIs; only
+naturally loaded chunks are graded or built. See
+[pale-mirror-visuals.md](docs/pale-mirror-visuals.md) for module boundaries,
+resident ownership and visual state behavior.
+
 Run the optional industrial railway profile and packaged two-start harness with:
 
 ```bash
 ./gradlew :pale-mirror-neoforge:runRailwayGameTestServer
 ./gradlew :pale-mirror-neoforge:managedRailwayIntegrationHarness
+./gradlew :pale-mirror-visuals:runGameTestServer
 ```
 
 Provider pin, safety ownership and the remaining graphical acceptance steps are

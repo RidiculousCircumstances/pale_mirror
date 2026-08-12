@@ -25,6 +25,18 @@ components:
       - Narrow experimental SPI for optional integrations
     must_not_depend_on:
       - internal implementation types
+  - name: visuals
+    path: pale-mirror-visuals/src/main/java/io/farfrontier/palemirror/visuals
+    owns:
+      - Fresh-world regional genesis manifests, PM-owned settlement structures, stable physical residents, and dynamic visual projection
+    may_depend_on:
+      - adapter_api
+      - Minecraft
+      - NeoForge
+      - pinned visual and resident-behaviour integrations
+    must_not_depend_on:
+      - domain implementation
+      - core internal implementation
 
 invariants:
   - id: canonical-state
@@ -33,6 +45,12 @@ invariants:
     statement: Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.
   - id: materialization-safety
     statement: Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions. Canonical infection materializes its passive PM-owned overlay and controller whenever the site is nearby and loaded, independently of story acceptance; combat actors and source-native gate mechanics remain explicitly scenario-gated.
+  - id: fresh-world-genesis
+    statement: Fresh-world visual genesis is distinct from reconciliation materialization; a deterministic immutable manifest may author ordinary terrain only while its target chunk is naturally loading, records bounded completion before becoming player space, never force-loads prospective chunks, and has no retrofit or schema-v32 compatibility path.
+  - id: visual-projection-boundary
+    statement: The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions.
+  - id: managed-resident-identity
+    statement: Every PM-authored resident has a stable UUID, cohort, role, home and workplace; ambient absence never implies death, only a confirmed death of that UUID may reduce PM-owned population, recruitment is denied in the exact-version behaviour bridge, and physical births require an explicit canonical growth permit.
   - id: observation-boundary
     statement: Observers publish typed facts; reconciliation alone converts them into domain commands and events.
   - id: conflict-safety
@@ -78,7 +96,7 @@ invariants:
   - id: settlement-positive-development
     statement: Stable surplus creates a persisted domain DevelopmentIntent with bounded project escrow. Player physical IRON crosses through idempotent receipts, or the settlement reserves the remainder after 24 qualifying steps; only a fully funded, provenance-safe verified PM-owned storehouse may advance capacity, housing, prosperity and growth.
   - id: living-frontier-instancing
-    statement: An iron_frontier instance derives all canonical object identities from the world seed and an observed-place identity, pins its placement before materialization, and cannot share a community, route or physical job with another instance. Historical Ironhill identities are migration-only and remain immutable.
+    statement: An iron_frontier instance derives all canonical object identities from its deterministic fresh-world authored genesis manifest, pins settlement, mines, sites, residents and route geometry before any physical work, and cannot share a community, route, resident or physical job with another instance; observed villages never bootstrap the default campaign.
   - id: narrator-candidate-boundary
     statement: Narrator candidates are deterministic, transient interpretations of canonical events/history. They may select a scenario or persist NO_SCENARIO, but never create a crisis, change settlement policy, inspect Minecraft/adapters, or become a competing mutable queue.
   - id: prepared-evacuation
@@ -89,6 +107,18 @@ invariants:
     statement: Operator debug reads projections or invokes normal validated state transitions; navigation teleports only by explicit command to a persisted physical anchor; maintenance reset is two-phase, bounded to wholly unmaterialized PM state, rechecks every precondition at commit time, and fails closed without touching Minecraft blocks, entities, chunks or foreign state.
 
 critical_flows:
+  - id: authored-frontier-genesis
+    path: world seed plus ordinal -> generator-only terrain survey -> immutable visual manifest -> naturally loaded chunk -> bounded first-generation structure work -> core validation -> canonical LivingRegion
+    owner: visuals genesis and NeoForge authored-region registrar; domain owns the accepted region
+    verification: critical-code
+  - id: managed-resident-casualty
+    path: stable resident UUID -> confirmed physical death -> typed observation -> reconciliation deduplication -> PM-owned cohort decrement -> domain event
+    owner: visuals resident bridge plus NeoForge reconciliation and domain casualty runtime
+    verification: critical-code
+  - id: dynamic-visual-projection
+    path: canonical facility and settlement state -> immutable visual projection -> animated Threat Heart and bounded cues -> canonical cleanup projection
+    owner: NeoForge projection publisher plus visuals presentation runtime
+    verification: critical-code
   - id: core-recovery
     path: simulation -> MineInfected -> Narrator -> scenario -> materialization job -> observation -> reconciliation -> recovery
     owner: domain plus neoforge bridge

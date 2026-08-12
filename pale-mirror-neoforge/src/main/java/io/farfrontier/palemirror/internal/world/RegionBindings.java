@@ -23,6 +23,14 @@ public record RegionBindings(String regionId, WorldObjectId communityId, WorldOb
         return fromKey("iron_frontier_" + key);
     }
 
+    /** Stable identities for a visual-provider genesis manifest. */
+    public static RegionBindings forAuthored(String planId) {
+        if (planId == null || !planId.startsWith(NAMESPACE + "iron_frontier_")) {
+            throw new IllegalArgumentException("Invalid authored iron-frontier plan id " + planId);
+        }
+        return fromKey(planId.substring(NAMESPACE.length()));
+    }
+
     /** The immutable compatibility mapping for a v27 Ironhill snapshot. */
     public static RegionBindings legacyIronhill() {
         return new RegionBindings(CampaignRegionBootstrapper.IRONHILL_ID, CampaignRegionBootstrapper.IRONHILL,

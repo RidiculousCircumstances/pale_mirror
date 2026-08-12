@@ -2,118 +2,65 @@
 
 ## Goal (success criteria)
 
-- Complete Pale Mirror 0.3 Living Frontier as an unaided, repeatable player experience: progressively discover Ironhill, understand Mine -> vanilla route -> stock -> defence, resolve it by combat/Create/evacuation/refusal, see a physical consequence and receive one causal development continuation.
+- Replace the observed-village Living Frontier bootstrap with a fresh-world-only, PM-authored visual/worldgen system delivered as the required `pale_mirror_visuals` mod.
+- Generate a deterministic radial frontier fort, 48 registered residents, Mine17, Red Valley and the baseline minecart route; preserve PM canonical ownership and present later state changes through restart-safe visual jobs.
 
 ## Constraints/Assumptions
 
 - Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
-- `pale-mirror-domain` remains Minecraft/NeoForge/persistence/adapter-free.
-- Crimson 1.4.3.1 and Spore 2.2.0j are optional exact-version private integrations.
-- Source recipes, items, equipment and source-item loot are explicitly out of scope; they are blocked and quarantined rather than adopted or deleted.
-- Crimson content is ARR-licensed; public distribution of derived content needs written permission.
+- `pale-mirror-domain` remains free of Minecraft, NeoForge, persistence and adapters.
+- Existing schema-v32 and older worlds are intentionally unsupported; the development server world will be replaced.
+- The new product profile requires Pale Mirror Core, Pale Mirror Visuals, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16. Create remains an industrial-upgrade integration.
+- Integrated Villages ARR structures may be copied and remixed for this private non-distributed mod; every imported template retains an origin/version/hash manifest.
+- Crimson 1.4.3.1 is the default infection source; Spore remains optional/test-only.
 
 ## Key decisions
 
-- PM SavedData/domain state owns progression, scenarios, tiers, source-neutral gates and desired state; chunks/entities/adapters are representations.
-- A facility has one immutable `InfectionSourceId`; mixed sources need a future composition policy.
-- Third-party internals are allowed only inside isolated, version-pinned adapters; no identifiers leak to the domain or generic materialization.
-- Crimson global load/tick is shadowed; PM never reads/writes Crimson Mass, Phase, Points or raids.
-- Spore global spawning/infection/evolution paths are suppressed by a top pack, exact mixins and an entity-join firewall.
-- PM effect leases are written and marked dirty before any non-replayable physical action. A `RUNNING` lease becomes `UNKNOWN_AFTER_RESTART` and is never replayed implicitly.
-- Excluded source stacks are denied at interaction, craft/smelt, pickup, `inventoryTick` and melee boundaries. Legacy stacks remain physically present but only as SavedData quarantine diagnostics.
-- Schema v20 is the breaking Settlement Actor boundary: all v5–v19 snapshots fail closed and require a new world because community/place identity, policy, contracts and membership cannot be inferred safely.
-- Crimson is the primary canonical threat source for the next product slice; Spore is optional/test-only unless a future scenario explicitly selects it.
-- Create 6.0.10 is an optional, version-pinned, reflection-contained read-only logistics adapter. It samples either naturally loaded endpoint independently and certifies a route only after observing the same opaque native vehicle at both named stations inside the proof window; it never drives Create or force-loads chunks.
-- Vanilla/Integrated Villages discovery is read-only: a bounded loaded-POI observer needs two villagers plus a stable bell/home cluster and never creates or overwrites settlement blocks. Large vertical villages use a 96x48 POI window; campaign logistics receives a separate ground-projected outskirts anchor rather than inheriting a tower bell's Y coordinate.
-- FTB Quests is an optional static journal projection. PM never reads or writes FTB progression; it seeds one non-reward chapter only if its exact PM-owned config file is absent.
-- The 0.3 Atlas and optional JourneyMap integration consume a bounded server-authored snapshot; client requests are revalidated server-side, waypoints are session-only and no observed-village block is used as a PM marker.
-- 0.3 completion is feature-frozen. It adds audience-scoped progressive knowledge, a cause-first bilingual Atlas, physical/canonical vanilla-route reconciliation, offline-safe reachability windows and one contributed-or-delayed-autonomous depot-development continuation; it does not add resources, threat providers or NPC integrations.
-- The introductory layout-v2 incident waits until the audience has discovered its settlement, depot and baseline line, then delays five simulation steps. Existing layout-v1 worlds are preserved rather than retrofitted.
-- Player-assisted depot development consumes up to 24 physical IRON through its own persisted project receipts. Declined/unanswered work becomes autonomously eligible after 24 qualifying steps; old reserved intents retain legacy funding semantics.
-- Canonical settlement direction is an actor model, not one state object: `SettlementCommunity`, `SettlementPlace`, economy, security, independent `WorldSite`, freshness-bounded `RouteContract`, and deterministic `SettlementPolicy` have separate ownership; `PopulationGroup` is the next separate aggregate, not part of schema v20.
-- There is no universal settlement lifecycle or unexplained numeric confidence. Recognition, observation freshness, integrity, operation, occupancy, crisis and population disposition are orthogonal; observations use explicit evidence/reliability classes and causal attribution.
-- A crisis is an objective simulation fact. Settlement policy acts without a scenario; Narrator only selects presentation/pacing and may return `NO_SCENARIO`.
-- Ordinary containers never mirror canonical stock. Physical delivery/withdrawal requires persisted receipts/leases; adapters declare field ownership as PM/native/derived/observed/reconciled.
-- Schema v21 is the breaking physical-economy boundary. IRON crosses through a PM-owned depot and a bounded persisted transfer ledger; ordinary barrel contents remain non-canonical.
-- Schema v22 separates population into cohort-bearing `PopulationGroup` records and adds objective grace/evacuation/displacement state. Community identity survives place loss.
-- Schema v23 adds positive settlement development: pinned surplus policy, resource reservations, physical storehouse intent, prosperity/housing and bounded growth/return-home.
-- Schema v24 pins a generic settlement field-authority profile. Millénaire 9.0.0-beta.2 is an optional exact-version read-only reconciliation profile; native villages are excluded from the campaign unless `allowMillenaireCampaign=true`.
-- Schema v25 adds restart-safe campaign railway commissioning, per-cell rail provenance and MineSite preflight baselines. Schema v26 replaces route tickets/heads with persisted loaded-chunk segment progress; v25 commissioned lines remain legacy, untouched plans migrate, and partial physical lines suspend fail-closed.
-- The private Railway Untold 1.2.1-pm.1 fork remains an explicit industrial-route executor. PM talks to it only through `RailInfrastructureAdapter`, owns the commissioning record and canonical flow, never force-loads production route chunks, and suspends service if a player changes its schedule. A level-4 Red Valley exercise may explicitly persist `AUTONOMOUS_DEV` for one disposable-world line; this cannot certify flow and is not the fresh small-village baseline.
-- The baseline Mine17–Ironhill route is a low-capacity, PM-owned vanilla minecart corridor. Railway Untold/Create rail is an explicit later industrial upgrade, not default infrastructure for a small village. The domain distinguishes this provider without learning Minecraft blocks; the vanilla executor uses exact provenance only for safe writes and certifies service through a persisted endpoint-to-endpoint rail graph updated by loaded physical observations. Unload preserves the last accepted revision and a connected player reroute may replace the authored path.
-- Endermen are globally denied block pickup/placement through NeoForge's entity-specific griefing hook. The ordinary `mobGriefing` rule and every non-Enderman mob retain their configured behavior; this prevents ambient removal of route supports without making PM own unrelated terrain.
-- PM-managed railway construction persists an immutable route split at chunk boundaries (maximum 32 blocks, eight-block footprint margin). Production segments execute independently and out of order only when all footprint chunks are naturally loaded; the explicit Red Valley exercise may ticket exactly one next footprint through its persisted bounded dev policy.
-- Provider endpoints are independent retryable freight-service postconditions. They need not be loaded simultaneously; train assembly waits only for the origin after both stations exist.
-- An authored region is baseline infrastructure, not a mine-discovery-triggered spawn: eligible settlement recognition autonomously preflights and materializes both MineSites, then persists the complete vanilla corridor. Its physical segments arrive only through ordinary player-loaded chunks; player proximity to a planned mine is not a special generation gate.
-- The original Create 6.0.10 read-only adapter remains the proof path for both player-built and exercise-built alternate routes; Railway Untold construction never bypasses that proof or overlaps PM-managed vanilla baseline ownership.
-- Server-side runtime debug controls are operator-only. Read commands expose typed evidence and canonical facts; manual binding uses the normal living-region registration path; destructive reset is a two-phase maintenance action that must fail closed once any PM physical work, transfer, lease, actor or projectile exists.
-- Debug visualization is ephemeral presentation: per-operator bounded particles expose observed/managed bounds and planned mine columns; advanced client tooltips expose item registry ownership and PM policy without mutating ItemStacks.
-- Debug navigation exposes dimension/coordinates and clickable operator teleports only for persisted physical anchors; canonical planned mines remain inspectable but cannot be teleported to until materialized.
-- Product status: 0.2 is conditionally accepted as the technical First Living Region release. Technology remains stronger than physical legibility, player comprehension and repeatability.
-- The unaided graphical playthrough remains a non-blocking 0.2.x presentation-quality gate: its findings become bounded UX fixes and do not delay 0.3 architecture work unless they expose a canonical-state or safety failure.
-- 0.3 is `Living Frontier`: repeatable multi-region causal stories with combat, infrastructure, evacuation/refusal, visible consequences, Narrator candidate scoring and delayed aftermath. It does not broaden infection providers or commodity scope first.
-- Schema v28 is an additive 0.3 persistence boundary. `iron_frontier` binds up to three current, strong, eligible observed places separated by 2048 blocks. Each instance derives stable IDs from world seed + observed place, pins its own placement plan, route IDs and display name; a v27 `ironhill_v2` record retains its exact historical IDs and coordinates.
-- Narrator v2 scores transient candidates derived from canonical events/history, never from adapter state. Scores are integer/stable and account for urgency, significance, audience relevance, capability fit, distance, recent archetype repetition and active-story intensity. Pending crisis/development/return opportunities are re-derived from history after restart or late region discovery until a cooldown ends or `NO_SCENARIO`/offer is persisted.
-- A player may prepare an evacuation with one persisted, audience-bound Refugee Anchor permit. Stack metadata is not authority: placement is validated against the canonical emergency, region dimension, 96–160-block safe footprint and population capacity; PM then materializes only its camp cells. An unprepared settlement still evacuates autonomously to an auto-selected camp after its grace period.
+- Core owns canonical state, revisions, persisted jobs, provenance and reconciliation. Visuals owns worldgen, templates, palettes, render assets and physical behavior providers, and owns no canonical SavedData.
+- Immutable genesis terrain is produced during normal world generation from a complete `RegionSeedManifest`. Every post-gen canonical state transition uses persisted materialization jobs and never overwrites unknown player changes.
+- The settlement generator uses a bounded deterministic hybrid grammar: procedural radial plan and road graph plus curated authored NBT modules. It does not use an unconstrained jigsaw walk.
+- The fort has a civic core, two functional rings, wooden palisade, freight gate/depot and at least six reserved development plots. Nominal diameter is 176 blocks and maximum footprint 192.
+- Terrain placement selects the best moderate site, rejects water/extreme terrain and then applies bounded local leveling: normal cut/fill 4 blocks, foundations 6, guaranteed-region fallback 8.
+- The first region is placed 1024–2048 blocks from spawn; later regions are sparse at approximately 6000–10000 blocks.
+- Mine17 is 384–512 blocks from the freight gate; Red Valley is 512–768 blocks away. The complete primary route plan exists at region genesis and materializes as its chunks naturally generate/load.
+- Three initial climate families share one grammar and role catalog but use climate palettes and local variants: temperate, cold/taiga and dry/arid.
+- The starting population is 48: 20 civilians, 14 workers, 4 specialists, 6 guards and 4 children. Each has stable identity, name, home and workplace/patrol assignment.
+- Vanilla villagers are physical carriers. Exact Villager Overhaul supplies loaded guard/farmer behavior through one isolated fail-closed adapter; PM owns roles, population, defence, deaths and off-screen outcomes.
+- PM residents may trade but cannot be player-recruited. Breeding is canonical-growth-only. Missing entities are not deaths.
+- Ordinary containers are non-canonical. Only managed depot/storehouse endpoints cross the economy boundary through transfer receipts.
+- Player edits are allowed. Dynamic visual layers change only semantic mutable cells and conflict locally rather than restoring authored blocks.
+- The technical zombie controller is replaced by a GeckoLib PM Threat Heart; PM continues to own health, stages and cleanup.
 
 ## State
 
 ### Done
 
-- Core vertical slice, deterministic simulation, migration pipeline, provenance-safe materialization, restart harness and settlement flow are implemented.
-- First Living Region baseline remains proven, and 0.2c replaces its v19 prototype with schema-v20 Community/Place/Economy/Security/Policy, independent WorldSites, freshness-bounded RouteContracts, typed evidence/membership, objective crisis facts and combat/logistics outcomes. Prototype evacuation is removed.
-- Policy and contract thresholds are datapack-authored and pinned into SavedData. IRON rationing reduces demand by 25%; missing supply permanently lowers defence; Create capacity ages full through 8 steps, half through 24, then expires.
-- Physical region work is a persistent mine-only campaign job. It resolves a terrain anchor, records RUNNING, and recovers idempotently; it does not replace an observed village. Core GameTests (14) and checksum-pinned Create and FTB runtime profiles pass.
-- Crimson sandbox: sixteen normal forms; APEX Nodes → deterministic boss → Bloodlink I/II/III → PM anchor; CEM/EMF/ETF visual contract, local sound/particles and PM visual children.
-- Staged test-mine biome uses 66 registered vanilla cells plus four separate Node cells; unknown changes conflict rather than overwrite.
-- Spore sandbox: no-spawn pack, global-handler mixins, entity firewall, four audited native forms, exact-tier persisted compositions, PM movement/combat/cleanup and two-start dedicated harness.
-- Schema v15 persisted PM-controlled source-actor health/cooldowns and target-bound projectile records; the v16 source-neutral persistence boundary intentionally rejects old snapshots rather than inferring gate state.
-- Every supported Crimson normal/siege form and Spore roster form is a NoAI visual carrier: PM owns target choice, movement, incoming vanilla-compatible damage, HP, cooldowns, local effects, XP and cleanup.
-- Crimson arrows and Spore AcidBall now use one PM projectile pipeline with a persisted target UUID, launch/impact leases, target-only damage and discard-on-restart recovery.
-- The packaged-JAR verifier requires the effect ledger and item firewall classes/config. Focused unit tests plus core, Spore and Crimson GameTest servers passed after this change.
-- The domain and generic NeoForge bridge now carry only `InfectionSourceId`, `SourceGateState`, source-neutral materialization operations and adapter contracts. Crimson/Spore identities, gate layouts, overlays and item classification live behind their adapters; `verifySourceIsolation` prevents regressions.
-- The vanilla village observer, FTB static journal, same-vehicle Create proof, full packaged integration restart harnesses (core/Crimson/Spore/Create/FTB), and Xvfb client-smoke profiles (core/Crimson/Spore/Create/FTB) are implemented. The native train traversal remains a real-world acceptance walkthrough rather than a fake GameTest vehicle.
-- The aggregate `fullSmoke` gate passes: five 14-test GameTest profiles, five clean packaged-JAR restart profiles, and five graphical render/audio profiles. Heavy harnesses run serially, retain failed runtimes for diagnosis, and remove successful runtimes to keep CI resource use bounded.
-- 0.2d adds all-or-nothing stock mutations, emergency-reserve withdrawal, a bounded retained transfer ledger, reserved-item reconciliation and deterministic provenance-safe supply-depot materialization. Focused domain/NeoForge tests, guardrails, build and packaged-JAR verification pass.
-- 0.2e adds an eight-step intervention window, audience-authorized or automatic evacuation, displaced/refugee-camp presentation, PM-owned ruin overlays, structural sampling and damage attribution. Unit/NeoForge tests, packaging and all 14 core GameTests pass.
-- 0.2f adds development pressure, exactly releasable IRON reservations, restart-safe storehouse execution, doubled capacity, prosperity/housing growth, population growth and safe return-home/camp cleanup. Unit/NeoForge tests, packaging and all 14 core GameTests pass.
-- 0.2g adds generic per-field authority, stable native population reconciliation, persisted opaque native references, an isolated reflection-only Millénaire observer and default-off campaign opt-in. Domain/NeoForge tests, 15 core and Millénaire GameTests, packaged two-start restart, six-profile graphical client smoke, build and packaging pass.
-- Runtime debug toolkit adds AUTO/MANUAL observation control, explicit nearest/ID binding through the canonical registration pipeline, candidate/region/verification reports, canonical infection trigger, resource-location command arguments, per-operator zone markers, advanced item diagnostics and a tokenized fail-closed reset for wholly unmaterialized state. Seventeen GameTests include manual binding plus reset rejection/recovery; all six graphical client profiles pass with the client tooltip hook.
-- Runtime navigation lists observed settlements, canonical mines and physical registry objects with dimension/coordinates, clickable `[TP]` actions and a fail-closed distinction between planned and materialized mine locations.
-- The campaign now materializes a provenance-preflighted MineSite with a surface loading yard, supported descending drift and underground controller chamber instead of the floating cube. Unknown or crafted terrain blocks abort the whole placement before writes.
-- Railway Untold PM fork commits `af227f2`, `b9f7be4`, and `70aca1f` provide managed full-line construction, exact stations, scheduled freight service, persisted progress and a placement guard. Autonomous upstream generation is disabled in managed mode.
-- `ManagedRailwayRuntime` persists schema-v25 commissioning before work, builds the complete Mine17–Ironhill line outside observed village bounds, validates the canonical primary route only after a baseline arrival, and delays infection until five simulation steps later.
-- The native `Regional Ledger` written-book screen explains population, IRON stock/capacity/net flow/reserve, defence/crisis, route/train state, response options, coordinates and timeline. First recognition grants a survey map, letter and ledger; FTB remains an optional projection.
-- Schema v26 and the Railway Untold segment executor replace the single force-loaded construction head with a fully persisted route plan and independently replayable, chunk-bounded segments. Production touches only naturally loaded footprints; endpoint stations retry independently; train assembly waits for both stations and a loaded origin. Exact Create/Railway and core profiles pass 23/23, guardrails/build/packaging and the packaged two-start railway harness pass.
-- Live discovery exposed the legacy 16-block landmark cube and civic-anchor height as invalid for large Integrated Villages. The observer now uses loaded POIs and a bounded resident cluster, while infrastructure projects separately to ground on the settlement outskirts. Core and exact railway profiles pass 23/23 and the packaged railway restart harness passes.
+- Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; schema v33 intentionally rejects all older worlds.
+- Added persisted immutable manifests, generator-only terrain survey, deterministic three-region grammar, three climate palettes, radial forts, six expansion plots and curated private NBT modules with provenance.
+- Replaced automatic observed-village campaign binding when Visuals is installed; core registers authored communities, places, facilities, sites, route contracts and exact 48-person PM-owned cohort state.
+- Added stable resident UUID commissioning, canonical-growth-only breeding, confirmed-death reconciliation and the isolated exact Villager Overhaul guard/worker/recruitment bridge.
+- Added the GeckoLib Threat Heart, four projected threat stages, infection sound/particles and depot crisis/recovery/prosperity cues. Core remains authoritative.
+- Removed first-generation mine force-loading; authored settlement work, MineSites and baseline rail work advance from naturally loaded chunks only.
+- Added Visuals planner tests, 2 Visuals GameTests, JAR verification and a clean packaged Core+Visuals two-start harness. All 34 core GameTests pass.
+- Fixed the previously flaky multi-chunk player-reroute GameTest by observing both dirty chunks.
 
 ### Now
-- Schema v32 separates vanilla-route health from PM write provenance. The canonical route retains its last observed state across chunk unloads; block observations and bounded loaded-chunk reconciliation update a persisted `RailShape` graph, and any connected player reroute between the fixed loading/depot endpoints can restore capacity. The representative carrier follows the accepted graph path. The operator-only Red Valley exercise persists a Railway Untold `AUTONOMOUS_DEV` plan, while independently loaded Create endpoint observations remain the only alternate-route proof. A live scheduled train completed both legs in the private world and produced `VALIDATED/HEALTHY/CURRENT` capacity 12; core and exact Railway profiles pass 34/34 GameTests, guardrails and packaged-JAR verification.
-- The agreed 0.3 completion scope is implemented as schema v31: audience-scoped progressive discovery, layout-v2 incident gating, cause-first bilingual Atlas/JourneyMap projection, route damage/repair, a bounded moving representative cart, reachability-adjusted offline-safe intervention windows, contributed-or-delayed-autonomous storehouse funding, a recoverable exercise reset script and optional local JSONL playtest evidence.
-- Narrator v2 can deterministically choose the most relevant candidate across simultaneous regions, honours cooldown/novelty/intensity, persists explicit `NO_SCENARIO`, and retries history-derived delayed opportunities after pacing clears. Development waits for an offered player decision; declined or unpresented policy intents remain autonomous.
-- Core-only, exact Create 6.0.10 and exact Create/Railway Untold profiles pass 28/28 GameTests. Coverage includes multi-region identity, schema migration, audience knowledge/access persistence, readable opaque-ID-free scenario presentation, autonomous mine commissioning, project-escrow restart persistence, route damage/carrier restart recovery and provenance conflicts. Domain tests cover knowledge gating/isolation, offline/reachability fairness, idempotent project contribution, delayed autonomous funding, candidate selection, `NO_SCENARIO`, cooldown retry, opportunity resolution and prepared shelter resettlement.
-- Guardrails, unit/check, final JAR packaging verification, the clean packaged-JAR two-start dedicated harness and the exact Create/Railway Untold two-start packaged harness pass on the schema-v31 artifact.
-- 0.3 presentation now has a native `P` Atlas, server-validated scenario/evacuation actions, PM-owned nearby mine/depot signal particles and an isolated JourneyMap v2 client projection. The dedicated-server GameTest profile boots without JourneyMap; graphical verification is still pending.
-- Live-client feedback exposed both the Atlas's direct fullscreen-background call and the implicit second call from `Screen.render()`. The Atlas now explicitly no-ops its background hook and renders a compact 500-pixel maximum in-world panel with viewport-bounded geometry and right-edge-relative actions; a refreshed client artifact is required for visual confirmation.
-- Live playtesting found Endermen dismantling the baseline railway and duplicate physical minecarts being scattered by collision. Enderman pickup/placement is disabled without changing other mobs; the PM cargo carrier is now a singleton non-physical projection that removes loaded duplicates, ignores impulses and parks at the loading yard when supply is inactive.
-- Historical schema-v31 repair logic required exact PM-authored cells and could point Atlas at the former rail position after a valid player reroute. Schema v32 supersedes that health check with persisted endpoint-to-endpoint graph connectivity; exact coordinates remain provenance for safe writes, not repair requirements. Canonical infection now materializes a passive source overlay and PM controller before story acceptance, while combat actors/native gate mechanics remain gated by the active scenario.
-- The disposable private playtest server now runs checksum `b3528aeb391be8d3...` with schema-v32 graph reconciliation, passive infection presentation and singleton cargo-carrier reconciliation on its retained `world`. Startup reports all PM gameplay adapters `AVAILABLE` except optional FTB Quests.
-- `/home/rd/far-frontier-server` is a disposable development/playtest runtime. Updates, restarts and world resets do not require backups unless the user explicitly requests one.
-- 0.2 is conditionally accepted; its remaining unaided graphical exercise is an ongoing presentation-quality check, not a blocker for 0.3.
+
+- Implementation is complete and locally verified. Changes are uncommitted; no product server/install profile has been updated and no old world has been retained.
 
 ### Next
 
-- Run the agreed human release gates: graphical/audio discovery and aftermath pass, a real scheduled Create train, one cooperative StoryAudience session and five unaided clean-room playtests. Graphical automation remains unavailable on this host without Xvfb.
+- Commit the cutover when requested, publish both JARs, update server/client install manifests and create a fresh disposable v33 playtest world.
+- Perform real-client temperate/cold/dry seed-matrix review for terrain, module composition, resident behavior, Threat Heart animation/audio and encounter readability.
 
 ## Open questions
 
-- UNCONFIRMED: authenticated multiplayer playthrough, graphical validation of the PM-managed baseline corridor/representative cart, and the player-built alternate Create scheduled-train traversal.
-- UNAVAILABLE IN CURRENT ENVIRONMENT: graphical automation needs Xvfb; the new managed-railway client profile is wired but unexecuted, while prior six-profile evidence remains historical.
-- KNOWN MODEL DEBT: Millénaire culture, relations, quests, local economy and native development remain intentionally native-owned; structure inference is bounded and missing NPCs never imply deaths.
-- Atlas/JourneyMap rendering and live discovery remain UNCONFIRMED pending a real client run.
-- Obtain written permission before distributing derived Crimson functions, models or tables.
+- UNCONFIRMED: final visual quality and playability until a real client visits generated temperate/cold/dry regions.
+- The exact VO public surface plus one fail-closed recruitment mixin loads in GameTest and packaged server; live patrol/combat quality still needs client playtesting.
+- Public redistribution remains out of scope; re-audit all imported asset and dependency licences before changing that assumption.
 
 ## Working set
 
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `docs/living-frontier-0.3-completion.md`
-- `PaleMirrorSavedData`, `PaleMirrorRuntime`, `PaleMirrorEvents`, `VanillaMinecartRouteRuntime`, `VanillaMinecartRouteRecord`, `VanillaRailTopology`
+- `AGENTS.md`, `architecture.yml`, `settings.gradle`, `build.gradle`
+- `pale-mirror-neoforge/.../api`, `PaleMirrorSavedData`, `PaleMirrorRuntime`, `CampaignRegionBootstrapper`
+- `pale-mirror-visuals`, authored-region manifest/genesis, residents, VO bridge and Threat Heart

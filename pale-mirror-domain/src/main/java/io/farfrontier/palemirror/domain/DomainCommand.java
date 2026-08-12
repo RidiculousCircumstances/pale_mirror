@@ -27,7 +27,8 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.ContributeDevelopmentIntent,
         DomainCommand.CancelDevelopmentIntent, DomainCommand.RegisterSettlementAuthorityProfile,
         DomainCommand.BlockDevelopmentIntent,
-        DomainCommand.ReconcileSettlementPopulation {
+        DomainCommand.ReconcileSettlementPopulation,
+        DomainCommand.ConfirmSettlementResidentDeath {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -308,6 +309,21 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             Objects.requireNonNull(observationId, "observationId");
             Objects.requireNonNull(causationId, "causationId");
             if (populationGroupId.isBlank() || observationId.isBlank()) throw new IllegalArgumentException("Population reconciliation identity is blank");
+        }
+    }
+
+    record ConfirmSettlementResidentDeath(WorldObjectId communityId, String populationGroupId,
+                                          SettlementCohort cohort, String residentId,
+                                          String observationId) implements DomainCommand {
+        public ConfirmSettlementResidentDeath {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(populationGroupId, "populationGroupId");
+            Objects.requireNonNull(cohort, "cohort");
+            Objects.requireNonNull(residentId, "residentId");
+            Objects.requireNonNull(observationId, "observationId");
+            if (populationGroupId.isBlank() || residentId.isBlank() || observationId.isBlank()) {
+                throw new IllegalArgumentException("Confirmed resident death identity is blank");
+            }
         }
     }
 }
