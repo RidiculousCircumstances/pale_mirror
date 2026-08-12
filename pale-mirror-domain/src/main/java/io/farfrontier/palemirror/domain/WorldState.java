@@ -27,6 +27,8 @@ public final class WorldState {
     private final Map<String, SiteAffiliation> siteAffiliations = new LinkedHashMap<>();
     private final Map<String, SiteCapability> siteCapabilities = new LinkedHashMap<>();
     private final Map<WorldObjectId, RouteContract> routeContracts = new LinkedHashMap<>();
+    private final Map<String, WorldPath> worldPaths = new LinkedHashMap<>();
+    private final Map<String, WorldJourney> journeys = new LinkedHashMap<>();
     private final Map<String, LivingRegionState> livingRegions = new LinkedHashMap<>();
     private final Map<String, AudienceRegionKnowledge> regionKnowledge = new LinkedHashMap<>();
     private final Map<String, AudienceRegionAccess> regionAccess = new LinkedHashMap<>();
@@ -60,6 +62,8 @@ public final class WorldState {
     public Collection<SiteAffiliation> siteAffiliations() { return siteAffiliations.values(); }
     public Collection<SiteCapability> siteCapabilities() { return siteCapabilities.values(); }
     public Collection<RouteContract> routeContracts() { return routeContracts.values(); }
+    public Collection<WorldPath> worldPaths() { return worldPaths.values(); }
+    public Collection<WorldJourney> journeys() { return journeys.values(); }
     public Collection<LivingRegionState> livingRegions() { return livingRegions.values(); }
     public Collection<AudienceRegionKnowledge> regionKnowledge() { return regionKnowledge.values(); }
     public Collection<AudienceRegionAccess> regionAccess() { return regionAccess.values(); }
@@ -102,6 +106,8 @@ public final class WorldState {
         return Optional.ofNullable(siteCapabilities.get(capabilityKey(siteId, type, resource)));
     }
     public Optional<RouteContract> routeContract(WorldObjectId id) { return Optional.ofNullable(routeContracts.get(id)); }
+    public Optional<WorldPath> worldPath(String id) { return Optional.ofNullable(worldPaths.get(id)); }
+    public Optional<WorldJourney> journey(String id) { return Optional.ofNullable(journeys.get(id)); }
     public Optional<LivingRegionState> livingRegion(String id) { return Optional.ofNullable(livingRegions.get(id)); }
     public Optional<AudienceRegionKnowledge> regionKnowledge(StoryAudienceId audience, String regionId) {
         return Optional.ofNullable(regionKnowledge.get(knowledgeKey(audience, regionId)));
@@ -135,6 +141,12 @@ public final class WorldState {
         siteCapabilities.put(capabilityKey(capability.siteId(), capability.type(), capability.resource()), capability);
     }
     public void putRouteContract(RouteContract contract) { routeContracts.put(contract.id(), contract); }
+    public void putWorldPath(WorldPath path) {
+        if (worldPaths.putIfAbsent(path.id(), path) != null) throw new IllegalStateException("Duplicate world path " + path.id());
+    }
+    public void putJourney(WorldJourney journey) {
+        if (journeys.putIfAbsent(journey.id(), journey) != null) throw new IllegalStateException("Duplicate journey " + journey.id());
+    }
     public void putLivingRegion(LivingRegionState region) {
         if (livingRegions.putIfAbsent(region.id(), region) != null) throw new IllegalStateException("Duplicate living region " + region.id());
     }
@@ -168,6 +180,8 @@ public final class WorldState {
         siteAffiliations.clear();
         siteCapabilities.clear();
         routeContracts.clear();
+        worldPaths.clear();
+        journeys.clear();
         livingRegions.clear();
         regionKnowledge.clear();
         regionAccess.clear();

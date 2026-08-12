@@ -17,7 +17,13 @@ public final class ManagedResidentEvents {
 
     @SubscribeEvent
     public static void entityJoin(EntityJoinLevelEvent event) {
-        if (!(event.getEntity() instanceof Villager villager) || !villager.isBaby() || ManagedResident.isManaged(villager)) return;
+        if (!(event.getEntity() instanceof Villager villager)) return;
+        if (ManagedResident.isManaged(villager)
+                && AuthoredVisualProvider.INSTANCE.journeys().suppressJoin(villager)) {
+            event.setCanceled(true);
+            return;
+        }
+        if (!villager.isBaby() || ManagedResident.isManaged(villager)) return;
         String dimension = event.getLevel().dimension().location().toString();
         for (AuthoredRegionSeed region : AuthoredVisualProvider.INSTANCE.markers().discovered(dimension)) {
             var bounds = region.settlementBounds();

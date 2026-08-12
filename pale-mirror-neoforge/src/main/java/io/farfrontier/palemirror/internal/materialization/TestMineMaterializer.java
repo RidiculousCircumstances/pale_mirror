@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.WorldObjectLifecycle;
 import io.farfrontier.palemirror.domain.ThreatTier;
 import io.farfrontier.palemirror.domain.FacilityState;
+import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -23,7 +24,8 @@ import net.minecraft.world.level.block.Blocks;
  */
 public final class TestMineMaterializer {
     private static final int MAX_REGISTERED_BIOME_CELLS = 70;
-    public boolean executeNext(ServerLevel level, TestMineRecord mine, FacilityState facility, MaterializationJob job) {
+    public boolean executeNext(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine,
+                               FacilityState facility, MaterializationJob job) {
         if (!level.hasChunkAt(mine.anchor())) return false;
         if (job.state() == JobState.COMPLETED || job.state() == JobState.BLOCKED) return job.state() == JobState.COMPLETED;
         if (job.state() == JobState.PLANNED) job.start();
@@ -84,7 +86,7 @@ public final class TestMineMaterializer {
                 if (job.nextOperation() == null) completeJob(mine, job);
                 return job.state() == JobState.COMPLETED;
             }
-            String error = execute(level, mine, facility, job, operation);
+            String error = execute(level, data, mine, facility, job, operation);
             if (error != null) {
                 operation.block(error);
                 job.block(error);
@@ -99,17 +101,18 @@ public final class TestMineMaterializer {
         return job.state() == JobState.COMPLETED;
     }
 
-    private String execute(ServerLevel level, TestMineRecord mine, FacilityState facility, MaterializationJob job,
+    private String execute(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine, FacilityState facility, MaterializationJob job,
                            MaterializationOperation operation) {
         return switch (operation.type()) {
             case ENSURE_OVERLAY -> ensureOverlay(level, mine, facility, operation.target());
-            case ENSURE_PM_ANCHOR -> ensureAnchor(level, mine, job.jobId());
-            case REMOVE_PM_ANCHOR -> removeAnchor(level, mine);
+            case ENSURE_PM_ANCHOR -> ensureAnchor(level, data, mine, facility, job.jobId());
+            case REMOVE_PM_ANCHOR -> removeAnchor(level, data, mine);
             case ENSURE_SOURCE_ENCOUNTER_ACTOR -> throw new IllegalStateException("Source actor operation must be handled as optional work");
             case REMOVE_SOURCE_ENCOUNTER_ACTOR -> throw new IllegalStateException("Source actor cleanup must be handled as optional work");
             case ENSURE_SOURCE_GATE_PART -> throw new IllegalStateException("Source gate operation must be handled by its adapter");
             case REMOVE_SOURCE_GATE_PART -> throw new IllegalStateException("Source gate cleanup must be handled by its adapter");
             case REMOVE_OVERLAY -> removeOverlay(level, mine);
+            default -> "Operation " + operation.type() + " is not supported by the test-mine executor";
         };
     }
 
@@ -142,17 +145,45 @@ public final class TestMineMaterializer {
         return overlaysMatch(level, mine, facility, tier) ? null : "Infection biome postcondition failed";
     }
 
-    private String ensureAnchor(ServerLevel level, TestMineRecord mine, String jobId) {
-        if (!AdapterRegistry.vanillaAnchor().ensureAnchor(level, mine, jobId)) return "Could not create PM anchor";
-        if (!AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)) return "PM anchor postcondition failed";
+    private String ensureAnchor(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine,
+                                FacilityState facility, String jobId) {
+        if (io.farfrontier.palemirror.internal.world.ProductProfilePreflight.coreOnly()) {
+            if (!AdapterRegistry.vanillaAnchor().ensureAnchor(level, mine, jobId)) return "Could not create core-only PM anchor";
+            if (!AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)) return "Core-only PM anchor postcondition failed";
+        } else {
+            var provider = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().orElse(null);
+            if (provider == null) return "Product profile has no visual threat-controller provider";
+            int stage = Math.max(1, Math.min(4, facility.threatTier().ordinal()));
+            var projection = new io.farfrontier.palemirror.api.ThreatControllerProjection(mine.id().value(), jobId,
+                    new io.farfrontier.palemirror.api.VisualPoint(mine.anchor().getX(), mine.anchor().getY(), mine.anchor().getZ()), stage);
+            var result = provider.ensureThreatController(level, projection);
+            if (result.status() != io.farfrontier.palemirror.api.ThreatControllerResult.Status.MATERIALIZED
+                    || result.entityId() == null) return result.diagnostic().isBlank() ? "Threat Heart materialization failed" : result.diagnostic();
+            mine.setAnchorId(result.entityId());
+            data.threatCombat().attachActor("pale_mirror", mine.id().value(), "controller", "heart",
+                    "threat_heart_v1", result.entityId(), controllerHitPoints(facility.threatTier()));
+        }
         mine.object().setLifecycle(WorldObjectLifecycle.ACTIVE);
         return null;
     }
 
-    private String removeAnchor(ServerLevel level, TestMineRecord mine) {
-        AdapterRegistry.vanillaAnchor().removeAnchor(level, mine);
-        return mine.anchorId() == null && !AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)
-                ? null : "PM anchor removal postcondition failed";
+    private String removeAnchor(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine) {
+        if (io.farfrontier.palemirror.internal.world.ProductProfilePreflight.coreOnly()) {
+            AdapterRegistry.vanillaAnchor().removeAnchor(level, mine);
+            return mine.anchorId() == null && !AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)
+                    ? null : "Core-only PM anchor removal postcondition failed";
+        }
+        var provider = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().orElse(null);
+        if (provider == null) return "Product profile has no visual threat-controller provider";
+        var result = provider.removeThreatController(level, mine.id().value());
+        if (result.status() == io.farfrontier.palemirror.api.ThreatControllerResult.Status.BLOCKED) return result.diagnostic();
+        data.threatCombat().retireActor("pale_mirror", mine.id().value(), "controller", "heart");
+        mine.setAnchorId(null);
+        return null;
+    }
+
+    private static int controllerHitPoints(ThreatTier tier) {
+        return switch (tier) { case DORMANT, FOOTHOLD -> 24; case INFESTED -> 40; case SIEGE -> 64; case APEX -> 96; };
     }
 
     private ActorOperationResult ensureSourceActor(ServerLevel level, TestMineRecord mine, FacilityState facility,

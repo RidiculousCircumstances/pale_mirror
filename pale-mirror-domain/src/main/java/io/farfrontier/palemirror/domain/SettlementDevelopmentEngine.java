@@ -33,9 +33,10 @@ public final class SettlementDevelopmentEngine {
                 && iron.stock() * 100L >= iron.capacity() * (long) policy.stockPercent()
                 && security.defenceReadiness() >= policy.minimumDefence();
         DevelopmentIntent storehouse = intent(state, communityId, DevelopmentIntentType.UPGRADE_STOREHOUSE);
+        reconcileReconstruction(state, development, place, iron, produced);
         if (qualifies) development.qualify(); else development.decay();
         if (storehouse == null && development.developmentPressure() >= policy.pressureSteps()) {
-            WorldObjectId target = storageSite(state, communityId);
+            WorldObjectId target = developmentSite(state, communityId);
             if (target != null) {
                 DevelopmentIntent created = new DevelopmentIntent("pm:development:" + communityId.value() + ":storehouse",
                         communityId, DevelopmentIntentType.UPGRADE_STOREHOUSE, target, ResourceKind.IRON,
@@ -72,14 +73,54 @@ public final class SettlementDevelopmentEngine {
         reconcileReturnHome(state, development, place, iron, produced);
     }
 
+    private void reconcileReconstruction(WorldState state, SettlementDevelopment development, SettlementPlace place,
+                                         ResourceAccount iron, List<DomainEvent> produced) {
+        WorldObjectId communityId = development.communityId();
+        DevelopmentIntent reconstruction = intent(state, communityId, DevelopmentIntentType.RECONSTRUCT_PLACE);
+        boolean threatCleared = state.livingRegions().stream().filter(region -> region.communityId().equals(communityId))
+                .allMatch(region -> state.facility(region.primaryFacilityId())
+                        .map(facility -> facility.status() == FacilityStatus.OPERATIONAL).orElse(false));
+        SettlementDevelopmentPolicy policy = state.developmentPolicy(communityId).orElseThrow();
+        if (place.structuralIntegrity() != StructuralIntegrity.INTACT && threatCleared && reconstruction == null) {
+            int required = Math.multiplyExact(policy.investmentIron(), 2);
+            reconstruction = new DevelopmentIntent("pm:development:" + communityId.value() + ":reconstruction",
+                    communityId, DevelopmentIntentType.RECONSTRUCT_PLACE, place.id(), ResourceKind.IRON,
+                    required, 0, 0, 0, policy.autonomousInvestmentSteps(), java.util.Set.of(), policy.version(),
+                    DevelopmentIntentState.PLANNED, "");
+            state.putDevelopmentIntent(reconstruction);
+            produced.add(event(state, DomainEventType.SETTLEMENT_RECONSTRUCTION_PLANNED, communityId, reconstruction.id()));
+        }
+        if (reconstruction != null && reconstruction.state() == DevelopmentIntentState.PLANNED && threatCleared
+                && !reconstruction.funded() && iron.availability() != ResourceAvailability.UNAVAILABLE) {
+            reconstruction.waitQualifiedStep();
+            if (reconstruction.autonomousFundingDue() && iron.reserve(reconstruction.remainingAmount())) {
+                reconstruction.reserveAutonomously(reconstruction.remainingAmount());
+                produced.add(event(state, DomainEventType.SETTLEMENT_DEVELOPMENT_FUNDED,
+                        communityId, "policy:reconstruction-investment"));
+            }
+        }
+    }
+
     private void reconcileReturnHome(WorldState state, SettlementDevelopment development, SettlementPlace place,
                                      ResourceAccount iron, List<DomainEvent> produced) {
         if (state.settlementAuthorityProfile(development.communityId())
                 .map(profile -> !profile.relocationAllowed()).orElse(false)) return;
+        PopulationGroup returning = state.populationGroups(development.communityId()).stream()
+                .filter(group -> group.disposition() == PopulationDisposition.IN_TRANSIT && group.journeyId() != null)
+                .filter(group -> state.journey(group.journeyId()).map(journey -> journey.riskPolicy().id()
+                        .equals("pale_mirror:community_return")).orElse(false)).findFirst().orElse(null);
+        DevelopmentIntent existing = intent(state, development.communityId(), DevelopmentIntentType.RETURN_HOME);
+        if (returning != null && existing != null && existing.state() == DevelopmentIntentState.ACTIVE) {
+            WorldJourney journey = state.journey(returning.journeyId()).orElseThrow();
+            if (journey.state() == JourneyState.ARRIVED && returning.arriveHome(journey.id())) {
+                place.setOccupancy(OccupancyState.INHABITED); development.resetGrowth();
+                produced.add(event(state, DomainEventType.SETTLEMENT_RETURNED_HOME, development.communityId(), existing.id()));
+            } else if (journey.state() == JourneyState.LOST) returning.displace();
+            return;
+        }
         PopulationGroup displaced = state.populationGroups(development.communityId()).stream()
                 .filter(group -> group.disposition() == PopulationDisposition.DISPLACED
                         || group.disposition() == PopulationDisposition.RESETTLED).findFirst().orElse(null);
-        DevelopmentIntent existing = intent(state, development.communityId(), DevelopmentIntentType.RETURN_HOME);
         boolean threatCleared = state.livingRegions().stream().filter(region -> region.communityId().equals(development.communityId()))
                 .allMatch(region -> state.facility(region.primaryFacilityId())
                         .map(facility -> facility.status() == FacilityStatus.OPERATIONAL).orElse(false));
@@ -96,10 +137,15 @@ public final class SettlementDevelopmentEngine {
             produced.add(event(state, DomainEventType.SETTLEMENT_RETURN_PLANNED, development.communityId(), existing.id()));
         } else if (eligible && existing.state() == DevelopmentIntentState.PLANNED
                 && !awaitingResettlementAudience(state, development.communityId()) && existing.complete()) {
-            displaced.returnHome();
-            place.setOccupancy(OccupancyState.INHABITED);
-            development.resetGrowth();
-            produced.add(event(state, DomainEventType.SETTLEMENT_RETURNED_HOME, development.communityId(), existing.id()));
+            WorldPath path = displaced.hostSiteId() == null ? null : state.worldPaths().stream()
+                    .filter(value -> value.originSiteId().equals(displaced.hostSiteId()))
+                    .sorted(Comparator.comparing(WorldPath::id)).findFirst().orElse(null);
+            if (path == null) { existing.block("No canonical return path"); return; }
+            String journeyId = "pale_mirror:journey:return:" + displaced.id() + ":" + state.simulationStep();
+            if (!displaced.beginReturnJourney(journeyId)) { existing.block("Population cannot begin return journey"); return; }
+            state.putJourney(WorldJourney.communityReturn(journeyId, displaced.id(), path.id(), path.originSiteId(),
+                    path.destinationSiteId(), state.simulationStep(), Math.max(4, path.nodes().size() * 2L), stableSeed(journeyId)));
+            produced.add(event(state, DomainEventType.JOURNEY_STARTED, development.communityId(), existing.id()));
         }
     }
 
@@ -114,14 +160,20 @@ public final class SettlementDevelopmentEngine {
                 .anyMatch(scenario -> scenario.status() == ScenarioStatus.OFFERED);
     }
 
-    private static WorldObjectId storageSite(WorldState state, WorldObjectId communityId) {
-        return state.siteCapabilities().stream().filter(value -> value.type() == SiteCapabilityType.STORAGE)
-                .filter(value -> state.siteAffiliations(value.siteId(), SiteAffiliationRole.RECIPIENT).stream()
+    private static WorldObjectId developmentSite(WorldState state, WorldObjectId communityId) {
+        return state.sites().stream().filter(value -> value.type() == WorldSiteType.DEVELOPMENT)
+                .filter(value -> value.operationalState() != OperationalState.OPERATIONAL)
+                .filter(value -> state.siteAffiliations(value.id(), SiteAffiliationRole.RECIPIENT).stream()
                         .anyMatch(affiliation -> affiliation.objectId().equals(communityId)))
-                .map(SiteCapability::siteId).sorted().findFirst().orElse(null);
+                .map(WorldSite::id).sorted().findFirst().orElse(null);
     }
 
     private DomainEvent event(WorldState state, DomainEventType type, WorldObjectId subject, String causation) {
         return events.create(state, type, subject, causation);
+    }
+    private static long stableSeed(String value) {
+        long result = 1125899906842597L;
+        for (int index = 0; index < value.length(); index++) result = 31 * result + value.charAt(index);
+        return result;
     }
 }

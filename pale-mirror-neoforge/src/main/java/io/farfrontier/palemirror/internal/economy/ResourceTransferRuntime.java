@@ -29,7 +29,8 @@ public final class ResourceTransferRuntime {
                                             ServerPlayer player, net.minecraft.core.BlockPos position,
                                             StoryAudienceId audience) {
         SettlementDepotRecord depot = data.settlementDepots().values().stream()
-                .filter(value -> value.state() == SettlementDepotState.ACTIVE
+                .filter(value -> data.worldState().site(value.siteId()).map(site ->
+                                site.operationalState() == io.farfrontier.palemirror.domain.OperationalState.OPERATIONAL).orElse(false)
                         && value.dimensionId().equals(player.serverLevel().dimension().location().toString())
                         && value.interactionPosition().equals(position)).findFirst().orElse(null);
         if (depot == null) return InteractionResult.notHandled();

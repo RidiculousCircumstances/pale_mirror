@@ -43,7 +43,7 @@ public final class MaterializationScheduler {
             ServerLevel level = levelFor(server, mine);
             if (level == null || !level.hasChunkAt(mine.anchor()) || !playerIsNearby(server, level, mine)) continue;
 
-            MaterializationJob job = mine.job();
+            MaterializationJob job = data.materializationJobs().activeFor(mine.id().value(), "threat").orElse(null);
             ScenarioInstance scenario = selectedEncounterScenario(data, mine);
             EncounterProfile profile = encounterProfile(scenario);
             boolean encounterEnabled = scenario != null;
@@ -56,14 +56,15 @@ public final class MaterializationScheduler {
                     prepareSourceGate(mine, facility);
                 }
                 plan = translator.translate(facility, profile, mine.encounter(), mine.gate(), encounterEnabled);
-                mine.setJob(new MaterializationJob(jobId,
-                        facility.desiredRevision(), plan.policyId(), plan.policyVersion(), JobState.PLANNED,
+                if (job != null) job.cancel("Superseded by desired revision " + facility.desiredRevision());
+                data.materializationJobs().put(new MaterializationJob(jobId, mine.id().value(), "threat",
+                        MaterializationJobClass.CAPABILITY, facility.desiredRevision(), plan.policyId(), plan.policyVersion(), JobState.PLANNED,
                         plan.operations(), 0, 0, ""));
                 data.setDirty();
                 continue;
             }
             boolean wasCompleted = job.state() == JobState.COMPLETED;
-            boolean completed = executor.executeNext(level, mine, facility, job);
+            boolean completed = executor.executeNext(level, data, mine, facility, job);
             data.setDirty();
             if (!wasCompleted && completed) observations.add(new MaterializationPostconditionObserved(
                     "materialization:" + job.jobId(), mine.id(), job.desiredRevision(), job.jobId()));

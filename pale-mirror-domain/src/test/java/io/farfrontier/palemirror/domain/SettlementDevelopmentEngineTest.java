@@ -58,12 +58,19 @@ class SettlementDevelopmentEngineTest {
         WorldState state = developmentState();
         PopulationGroup group = state.populationGroups(COMMUNITY).getFirst();
         group.beginEvacuation(0);
-        group.displace();
+        group.hostAt(SHELTER);
+        state.putWorldPath(new WorldPath("pale_mirror:return", "1", SHELTER, HOME_ENDPOINT,
+                java.util.List.of(new WorldPathNode("camp", "minecraft:overworld", 100, 64, 0, true),
+                        new WorldPathNode("home", "minecraft:overworld", 0, 64, 0, true))));
         state.place(PLACE).orElseThrow().setOccupancy(OccupancyState.EMPTY);
         DomainServices services = new DomainServices();
 
         services.settlementDevelopment().reconcile(state);
-        assertEquals(PopulationDisposition.DISPLACED, group.disposition());
+        assertEquals(PopulationDisposition.RESETTLED, group.disposition());
+        services.settlementDevelopment().reconcile(state);
+        assertEquals(PopulationDisposition.IN_TRANSIT, group.disposition());
+        WorldJourney journey = state.journey(group.journeyId()).orElseThrow();
+        while (!journey.terminal()) journey.advanceAbstractStep();
         services.settlementDevelopment().reconcile(state);
         assertEquals(PopulationDisposition.RESIDENT, group.disposition());
         assertEquals(OccupancyState.INHABITED, state.place(PLACE).orElseThrow().occupancy());
@@ -89,6 +96,9 @@ class SettlementDevelopmentEngineTest {
     private static final WorldObjectId COMMUNITY = new WorldObjectId("pale_mirror:community");
     private static final WorldObjectId PLACE = new WorldObjectId("pale_mirror:place");
     private static final WorldObjectId STORAGE = new WorldObjectId("pale_mirror:depot");
+    private static final WorldObjectId DEVELOPMENT = new WorldObjectId("pale_mirror:development_plot");
+    private static final WorldObjectId SHELTER = new WorldObjectId("pale_mirror:shelter");
+    private static final WorldObjectId HOME_ENDPOINT = new WorldObjectId("pale_mirror:home_endpoint");
 
     private static WorldState developmentState() {
         WorldState state = new WorldState();
@@ -106,6 +116,8 @@ class SettlementDevelopmentEngineTest {
         state.putSite(new WorldSite(STORAGE, WorldSiteType.STORAGE, OperationalState.OPERATIONAL));
         state.putSiteAffiliation(new SiteAffiliation(STORAGE, COMMUNITY, SiteAffiliationRole.RECIPIENT));
         state.putSiteCapability(new SiteCapability(STORAGE, SiteCapabilityType.STORAGE, ResourceKind.IRON, 100));
+        state.putSite(new WorldSite(DEVELOPMENT, WorldSiteType.DEVELOPMENT, OperationalState.DEGRADED));
+        state.putSiteAffiliation(new SiteAffiliation(DEVELOPMENT, COMMUNITY, SiteAffiliationRole.RECIPIENT));
         return state;
     }
 }

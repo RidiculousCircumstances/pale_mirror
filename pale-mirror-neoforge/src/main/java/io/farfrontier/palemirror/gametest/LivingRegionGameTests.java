@@ -48,6 +48,12 @@ public final class LivingRegionGameTests {
         data.observeSettlement(observation(level, villageAnchor, 4, 1, observedAt + 400));
         CampaignRegionBootstrapper.bindCandidate(level.getServer(), data, new DomainServices().commands(),
                 new WorldObjectId("pale_mirror:test_observed_village"));
+        // The production runtime must never force-load a remote depot. This
+        // test models the player reaching the pinned receiving site explicitly.
+        var plannedPresentation = data.campaignRegions().get(RegionBindings.forObserved(
+                level.getServer().overworld().getSeed(),
+                new WorldObjectId("pale_mirror:test_observed_village")).regionId());
+        level.getChunkAt(plannedPresentation.depotAnchor());
         SettlementDepotRuntime.tick(level.getServer(), data);
         SettlementDepotRuntime.tick(level.getServer(), data);
         SettlementDepotRuntime.tick(level.getServer(), data);
@@ -78,8 +84,11 @@ public final class LivingRegionGameTests {
         helper.assertTrue(data.campaignRegions().containsKey(bindings.regionId()),
                 "physical coordinates are persisted separately from the canonical region aggregate");
         var depot = data.settlementDepots().get(bindings.communityId());
-        helper.assertTrue(depot != null && depot.state() == io.farfrontier.palemirror.internal.economy.SettlementDepotState.ACTIVE,
-                "a PM-owned supply depot must materialize without replacing observed village blocks");
+        helper.assertTrue(depot != null && io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime.state(data, depot)
+                        == io.farfrontier.palemirror.internal.economy.SettlementDepotState.ACTIVE,
+                "a PM-owned supply depot must materialize without replacing observed village blocks; state="
+                        + (depot == null ? "missing" : io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime.state(data, depot))
+                        + ", diagnostic=" + (depot == null ? "" : SettlementDepotRuntime.diagnostic(data, depot)));
         helper.assertValueEqual(level.getBlockState(depot.interactionPosition()).getBlock(), Blocks.BARREL,
                 "the depot interaction endpoint must have a verified physical postcondition");
         var atlas = RegionalAtlasProjection.snapshot(data, region.primaryAudience(), "", false).snapshot();
@@ -145,7 +154,7 @@ public final class LivingRegionGameTests {
             PaleMirrorSavedData.load(schema32, level.registryAccess());
             throw new AssertionError("schema v32 must not be retrofitted with authored settlements");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("not compatible with schema 33"),
+            helper.assertTrue(expected.getMessage().contains("not compatible with schema 34"),
                     "fresh-world rejection must explain the exact schema boundary");
         }
         helper.succeed();
@@ -464,6 +473,11 @@ public final class LivingRegionGameTests {
         data.refugeeAnchorPermits().clear();
         data.campaignCommissioning().clear();
         data.vanillaMinecartRoutes().clear();
+        data.materializationJobs().clear();
+        data.semanticSlots().clear();
+        data.parcels().clear();
+        data.residentJourneyLeases().clear();
+        data.residentIdentities().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();

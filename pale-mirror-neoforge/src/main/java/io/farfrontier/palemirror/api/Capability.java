@@ -33,5 +33,7 @@ public enum Capability {
     /** Persistent visual representation of PM-owned settlement residents. */
     MANAGED_SETTLEMENT_RESIDENTS,
     /** Dynamic physical projection of canonical settlement and threat state. */
-    DYNAMIC_WORLD_PRESENTATION
+    DYNAMIC_WORLD_PRESENTATION,
+    /** Product-profile PM-owned, combat-ledger-controlled visible threat controller. */
+    VISIBLE_PM_THREAT_CONTROLLER
 }

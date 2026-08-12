@@ -5,8 +5,7 @@ import java.util.Map;
 
 import io.farfrontier.palemirror.domain.ResourceKind;
 import io.farfrontier.palemirror.domain.WorldObjectId;
-import io.farfrontier.palemirror.internal.world.InfectionBiomeStage;
-import io.farfrontier.palemirror.internal.world.MutableCell;
+import io.farfrontier.palemirror.api.SemanticSlotKey;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -44,18 +43,9 @@ public final class EconomyPresentationCodec {
             tag.putString("community", depot.communityId().value());
             tag.putString("dimension", depot.dimensionId());
             tag.putLong("anchor", depot.anchor().asLong());
-            tag.putString("state", depot.state().name());
-            tag.putString("diagnostic", depot.diagnostic());
-            ListTag cells = new ListTag();
-            depot.cells().forEach(cell -> {
-                CompoundTag value = new CompoundTag();
-                value.putLong("pos", cell.position().asLong());
-                value.putString("baseline", cell.baselineBlock());
-                value.putString("lastApplied", cell.lastAppliedBlock());
-                value.putBoolean("conflicted", cell.conflicted());
-                cells.add(value);
-            });
-            tag.put("cells", cells);
+            tag.putString("slotObject", depot.semanticSlot().objectId());
+            tag.putString("slotModule", depot.semanticSlot().moduleId());
+            tag.putString("slotId", depot.semanticSlot().slotId());
             serializedDepots.add(tag);
         });
         root.put("settlementDepots", serializedDepots);
@@ -83,16 +73,10 @@ public final class EconomyPresentationCodec {
         Map<WorldObjectId, SettlementDepotRecord> values = new LinkedHashMap<>();
         for (Tag element : root.getList("settlementDepots", Tag.TAG_COMPOUND)) {
             CompoundTag tag = (CompoundTag) element;
-            java.util.List<MutableCell> cells = new java.util.ArrayList<>();
-            for (Tag cellElement : tag.getList("cells", Tag.TAG_COMPOUND)) {
-                CompoundTag cell = (CompoundTag) cellElement;
-                cells.add(new MutableCell(BlockPos.of(cell.getLong("pos")), cell.getString("baseline"),
-                        cell.getString("lastApplied"), cell.getBoolean("conflicted"), InfectionBiomeStage.NODE));
-            }
             SettlementDepotRecord depot = new SettlementDepotRecord(new WorldObjectId(tag.getString("site")),
                     new WorldObjectId(tag.getString("community")), tag.getString("dimension"),
-                    BlockPos.of(tag.getLong("anchor")), cells, SettlementDepotState.valueOf(tag.getString("state")),
-                    tag.getString("diagnostic"));
+                    BlockPos.of(tag.getLong("anchor")), new SemanticSlotKey(tag.getString("slotObject"),
+                    tag.getString("slotModule"), tag.getString("slotId")));
             values.put(depot.communityId(), depot);
         }
         return values;

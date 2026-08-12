@@ -69,7 +69,7 @@ public final class CoreRecoveryGameTests {
                 "canonical infection must materialize its PM controller before scenario acceptance");
         helper.assertTrue(mine.encounter().actors().isEmpty() && mine.gate().parts().isEmpty(),
                 "combat actors and source gate parts must remain scenario-gated");
-        helper.assertValueEqual(mine.job().operations().size(), 2,
+        helper.assertValueEqual(job(runtime, mine).operations().size(), 2,
                 "the passive job must contain only overlay and PM anchor work");
 
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "the offered story must remain actionable");
@@ -78,11 +78,10 @@ public final class CoreRecoveryGameTests {
         helper.assertValueEqual(PaleMirrorSavedData.get(level.getServer().overworld()).worldState()
                 .scenario(scenarioId).orElseThrow().status(), ScenarioStatus.RECOVER,
                 "entering the visible infected mine must activate the encounter stage");
-        helper.assertTrue(mine.job().operations().size() > 2,
+        helper.assertTrue(job(runtime, mine).operations().size() > 2,
                 "scenario activation must supersede the completed passive job with pinned encounter work");
         helper.succeed();
     }
-
     @GameTest(batch = "pm-development-persistence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void projectEscrowSurvivesRestartWithoutBecomingSettlementStock(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -106,7 +105,6 @@ public final class CoreRecoveryGameTests {
                 "restart must retain receipt deduplication authority");
         helper.succeed();
     }
-
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void testMineRecoversAfterObservedControllerDeath(GameTestHelper helper) {
@@ -132,8 +130,8 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 33,
-                "fresh-world visual genesis snapshot must record schema v33 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 34,
+                "fresh-world visual genesis snapshot must record schema v34 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
         CompoundTag incompatible = persisted.copy();
         incompatible.putInt("schemaVersion", 19);
@@ -144,9 +142,10 @@ public final class CoreRecoveryGameTests {
             helper.assertTrue(expected.getMessage().contains("Back up the old world"), "schema rejection must explain recovery");
         }
         TestMineRecord reloadedMine = reloaded.testMines().get(mine.id());
-        helper.assertTrue(reloadedMine != null && reloadedMine.job() != null,
+        var reloadedJob = reloaded.materializationJobs().activeFor(mine.id().value(), "threat").orElse(null);
+        helper.assertTrue(reloadedMine != null && reloadedJob != null,
                 "current snapshot must retain the persisted materialization job");
-        helper.assertValueEqual(reloadedMine.job().nextOperationIndex(), 1,
+        helper.assertValueEqual(reloadedJob.nextOperationIndex(), 1,
                 "current snapshot must retain completed operation progress");
         tick(runtime, 3);
 
@@ -163,7 +162,7 @@ public final class CoreRecoveryGameTests {
             helper.assertTrue(crimsonActor != null, "sandbox profile must materialize its persisted actor UUID");
             helper.assertTrue(crimsonActor.getTags().contains("Crimsonified_Human"),
                     "sandbox actor must receive Crimson's local actor protocol");
-            helper.assertValueEqual(mine.job().operations().get(2).state().name(), "COMPLETED",
+            helper.assertValueEqual(job(runtime, mine).operations().get(2).state().name(), "COMPLETED",
                     "available Crimson actor operation must verify its postcondition");
             CompoundTag actorSnapshot = PaleMirrorSavedData.get(level.getServer().overworld())
                     .save(new CompoundTag(), level.registryAccess());
@@ -184,7 +183,7 @@ public final class CoreRecoveryGameTests {
         } else {
             helper.assertValueEqual(mine.encounter().state(), EncounterState.DEGRADED,
                     "missing Crimson capability must degrade only encounter presentation");
-            helper.assertValueEqual(mine.job().operations().get(2).state().name(), "DEGRADED",
+            helper.assertValueEqual(job(runtime, mine).operations().get(2).state().name(), "DEGRADED",
                     "optional Crimson operation must be persisted as degraded rather than blocking recovery");
         }
         helper.assertValueEqual(mine.object().lifecycle(), WorldObjectLifecycle.ACTIVE,
@@ -228,7 +227,6 @@ public final class CoreRecoveryGameTests {
                 "overlay cleanup must restore only PM-owned baseline cells");
         helper.succeed();
     }
-
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-items", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void excludedSourceItemIsQuarantinedAndCannotApplyMelee(GameTestHelper helper) {
@@ -251,7 +249,6 @@ public final class CoreRecoveryGameTests {
                 "legacy item quarantine must be persisted separately from canonical PM world state");
         helper.succeed();
     }
-
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-biome", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void infectionBiomeProgressesByPmTierAndFailsClosedOnConflict(GameTestHelper helper) {
@@ -286,7 +283,6 @@ public final class CoreRecoveryGameTests {
 
         helper.succeed();
     }
-
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-core-biome-conflict", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void infectionBiomeDoesNotOverwriteFuturePlayerChanges(GameTestHelper helper) {
@@ -318,10 +314,9 @@ public final class CoreRecoveryGameTests {
         helper.assertTrue(futureCell.conflicted(), "PM must mark the future cell conflicted when INFESTED tries to own it");
         helper.assertValueEqual(level.getBlockState(futureCell.position()).getBlock(), Blocks.GOLD_BLOCK,
                 "PM must not overwrite an unknown/player-owned block");
-        helper.assertValueEqual(mine.job().state().name(), "BLOCKED", "conflict must visibly block the persisted job");
+        helper.assertValueEqual(job(runtime, mine).state().name(), "BLOCKED", "conflict must visibly block the persisted job");
         helper.succeed();
     }
-
     @SuppressWarnings("removal")
     @GameTest(batch = "pm-crimson-roster", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
     public static void crimsonBaseRosterMaterializesByPmTier(GameTestHelper helper) {
@@ -434,6 +429,7 @@ public final class CoreRecoveryGameTests {
         data.effectLeases().clear();
         data.quarantine().clear();
         data.threatCombat().clear();
+        data.materializationJobs().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();
@@ -483,6 +479,13 @@ public final class CoreRecoveryGameTests {
 
     private static void tick(PaleMirrorRuntime runtime, int count) {
         for (int index = 0; index < count; index++) runtime.tick();
+    }
+
+    private static io.farfrontier.palemirror.internal.materialization.MaterializationJob job(
+            PaleMirrorRuntime runtime, TestMineRecord mine) {
+        var job = runtime.materializationJob(mine.id());
+        if (job == null) throw new AssertionError("Missing materialization job for " + mine.id());
+        return job;
     }
 
     private static void advanceTier(PaleMirrorRuntime runtime, int steps, int materializationTicks) {

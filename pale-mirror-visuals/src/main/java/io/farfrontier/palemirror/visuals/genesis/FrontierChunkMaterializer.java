@@ -27,8 +27,6 @@ public final class FrontierChunkMaterializer {
         grade(level, chunk, seed, palette);
         renderRoadsAndWall(level, chunk, seed, palette);
         for (VisualModulePlacement module : seed.modules()) {
-            String key = seed.planId() + "@" + module.templateId() + "@" + module.origin();
-            if (!ledger.moduleCompleted(key)) renderModule(level, chunk, module, palette);
             templates.placeReady(level, seed, module, ledger);
         }
     }
@@ -75,30 +73,6 @@ public final class FrontierChunkMaterializer {
         for (int dx = -4; dx <= 4; dx += 8) for (int h = 1; h <= 7; h++)
             set(level, chunk, new BlockPos(gate.x() + dx, y + h, gate.z()), palette.log());
         for (int dx = -4; dx <= 4; dx++) set(level, chunk, new BlockPos(gate.x() + dx, y + 7, gate.z()), palette.log());
-    }
-
-    private static void renderModule(ServerLevel level, ChunkPos chunk, VisualModulePlacement module, FrontierPalette palette) {
-        int halfX = switch (module.role()) { case "CIVIC" -> 8; case "LOGISTICS" -> 9; default -> 5; };
-        int halfZ = switch (module.role()) { case "CIVIC" -> 6; case "LOGISTICS" -> 5; default -> 4; };
-        int baseY = module.origin().y();
-        for (int x = -halfX; x <= halfX; x++) for (int z = -halfZ; z <= halfZ; z++) {
-            BlockPos floor = new BlockPos(module.origin().x() + x, baseY + 1, module.origin().z() + z);
-            set(level, chunk, floor, palette.planks());
-            boolean edge = Math.abs(x) == halfX || Math.abs(z) == halfZ;
-            if (!edge) continue;
-            for (int h = 2; h <= 5; h++) {
-                boolean post = Math.abs(x) == halfX && Math.abs(z) == halfZ;
-                BlockState wall = post ? palette.log() : h == 4 && Math.floorMod(x + z, 4) == 0
-                        ? Blocks.GLASS_PANE.defaultBlockState() : palette.planks();
-                set(level, chunk, floor.above(h - 1), wall);
-            }
-        }
-        for (int x = -halfX - 1; x <= halfX + 1; x++) for (int z = -halfZ - 1; z <= halfZ + 1; z++) {
-            int rise = Math.max(0, (halfZ + 1) - Math.abs(z)) / 2;
-            set(level, chunk, new BlockPos(module.origin().x() + x, baseY + 6 + rise, module.origin().z() + z), palette.roof());
-        }
-        set(level, chunk, new BlockPos(module.origin().x(), baseY + 2, module.origin().z() - halfZ), Blocks.AIR.defaultBlockState());
-        set(level, chunk, new BlockPos(module.origin().x(), baseY + 3, module.origin().z() - halfZ), Blocks.AIR.defaultBlockState());
     }
 
     private static void set(ServerLevel level, ChunkPos chunk, BlockPos pos, BlockState state) {

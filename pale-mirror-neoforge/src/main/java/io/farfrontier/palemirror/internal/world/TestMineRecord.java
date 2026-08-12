@@ -18,7 +18,6 @@ public final class TestMineRecord {
     private UUID anchorId;
     private EncounterRecord encounter;
     private GatePresentationRecord gate;
-    private MaterializationJob job;
 
     public TestMineRecord(WorldObjectRegistryEntry object, StoryAudienceId primaryAudience,
                           List<MutableCell> mutableCells, UUID anchorId, EncounterRecord encounter, MaterializationJob job) {
@@ -35,7 +34,6 @@ public final class TestMineRecord {
         this.anchorId = anchorId;
         this.encounter = encounter == null ? EncounterRecord.none() : encounter;
         this.gate = gate == null ? GatePresentationRecord.none() : gate;
-        this.job = job;
     }
 
     public WorldObjectId id() { return id; }
@@ -54,11 +52,9 @@ public final class TestMineRecord {
     public UUID anchorId() { return anchorId; }
     public EncounterRecord encounter() { return encounter; }
     public GatePresentationRecord gate() { return gate; }
-    public MaterializationJob job() { return job; }
     public void setAnchorId(UUID value) { anchorId = value; }
     public void setEncounter(EncounterRecord value) { encounter = value == null ? EncounterRecord.none() : value; }
     public void setGate(GatePresentationRecord value) { gate = value == null ? GatePresentationRecord.none() : value; }
-    public void setJob(MaterializationJob value) { job = value; }
     public boolean contains(BlockPos pos) { return object.contains(pos); }
     public Optional<MutableCell> mutableCell(BlockPos position) {
         return mutableCells.stream().filter(cell -> cell.position().equals(position)).findFirst();

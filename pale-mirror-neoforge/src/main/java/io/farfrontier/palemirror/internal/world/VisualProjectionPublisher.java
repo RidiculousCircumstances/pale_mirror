@@ -1,8 +1,12 @@
 package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.api.PaleMirrorVisuals;
+import io.farfrontier.palemirror.api.JourneyProjection;
+import io.farfrontier.palemirror.api.JourneyResidentLeaseView;
+import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.api.VisualStateProjection;
 import io.farfrontier.palemirror.domain.ResourceKind;
+import io.farfrontier.palemirror.domain.PopulationDisposition;
 import net.minecraft.server.MinecraftServer;
 
 /** Read-only canonical projection. It grants no mutation authority to the visual provider. */
@@ -26,5 +30,61 @@ public final class VisualProjectionPublisher {
                     iron.availability().name(), community.crisisState().name(), development == null ? "NONE"
                     : Integer.toString(development.prosperity()), facility.threatTier().name()));
         }
+        publishJourneys(server, data, provider);
+    }
+
+    private static void publishJourneys(MinecraftServer server, PaleMirrorSavedData data,
+                                        io.farfrontier.palemirror.api.VisualProvider provider) {
+        var seeds = provider.discoverAuthoredRegions(server.overworld()).stream()
+                .collect(java.util.stream.Collectors.toMap(value -> value.planId(), value -> value));
+        for (var journey : data.worldState().journeys().stream()
+                .sorted(java.util.Comparator.comparing(value -> value.id())).toList()) {
+            var group = data.worldState().populationGroup(journey.subjectGroupId()).orElse(null);
+            var path = data.worldState().worldPath(journey.pathId()).orElse(null);
+            var region = group == null ? null : data.worldState().livingRegions().stream()
+                    .filter(value -> value.communityId().equals(group.communityId())).findFirst().orElse(null);
+            var seed = region == null ? null : seeds.get(region.id());
+            if (group == null || path == null || region == null || seed == null) continue;
+            var livingRoster = livingRoster(seed, group, data.residentIdentities());
+            int limit = PaleMirrorServerConfig.effectiveResidentLimit(livingRoster.size());
+            boolean active = journey.id().equals(group.journeyId()) || group.disposition() == PopulationDisposition.RESETTLED
+                    && journey.destinationSiteId().equals(group.hostSiteId());
+            boolean restoreAtOrigin = group.disposition() == PopulationDisposition.RESIDENT;
+            if (!active && data.residentJourneyLeases().releaseJourney(journey.id())) data.setDirty();
+            var selected = livingRoster.stream().limit(limit);
+            var leases = (active ? selected.map(resident -> {
+                        boolean missing = data.residentJourneyLeases().lease(resident.residentId()) == null;
+                        var lease = data.residentJourneyLeases().acquire(resident.residentId(), journey.id());
+                        if (missing) data.setDirty();
+                        return lease;
+                    }) : selected.map(resident -> data.residentJourneyLeases().lease(resident.residentId()))
+                            .filter(java.util.Objects::nonNull).filter(lease -> lease.journeyId().equals(journey.id())))
+                    .map(lease ->
+                    new JourneyResidentLeaseView(lease.residentId(), lease.phase().name(),
+                            lease.checkpointIndex(), lease.revision())).toList();
+            if (leases.isEmpty() && !active && !restoreAtOrigin) continue;
+            var points = path.nodes().stream().map(node -> new VisualPoint(node.x(), node.y(), node.z())).toList();
+            provider.applyJourneyProjection(server.overworld(), new JourneyProjection(journey.id(), region.id(),
+                    group.id(), journey.state().name(), journey.progress(), journey.checkpointIndex(), limit,
+                    PaleMirrorServerConfig.JOURNEY_SPAWN_BUDGET.get(), restoreAtOrigin, points,
+                    active ? seed.residents().stream().map(value -> value.residentId()).toList() : java.util.List.of(),
+                    restoreAtOrigin ? livingRoster.stream().map(value -> value.residentId()).toList() : java.util.List.of(),
+                    leases));
+        }
+    }
+
+    private static java.util.List<io.farfrontier.palemirror.api.ResidentSeed> livingRoster(
+            io.farfrontier.palemirror.api.AuthoredRegionSeed seed,
+            io.farfrontier.palemirror.domain.PopulationGroup group, ResidentIdentityLedger identities) {
+        java.util.ArrayList<io.farfrontier.palemirror.api.ResidentSeed> result = new java.util.ArrayList<>();
+        for (var cohort : io.farfrontier.palemirror.domain.SettlementCohort.values()) {
+            int required = group.cohorts().getOrDefault(cohort, 0);
+            seed.residents().stream().filter(value -> value.cohort().equals(cohort.name()))
+                    .filter(value -> !identities.retired(value.residentId())).limit(required).forEach(result::add);
+            long available = result.stream().filter(value -> value.cohort().equals(cohort.name())).count();
+            if (available != required) throw new IllegalStateException("Canonical cohort " + cohort + " requires "
+                    + required + " stable identities but authored roster provides " + available);
+        }
+        return java.util.List.copyOf(result);
     }
 }

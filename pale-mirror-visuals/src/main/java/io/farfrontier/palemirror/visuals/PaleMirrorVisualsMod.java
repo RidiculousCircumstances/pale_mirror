@@ -15,7 +15,13 @@ public final class PaleMirrorVisualsMod {
 
     public PaleMirrorVisualsMod(IEventBus modBus) {
         VisualEntityTypes.register(modBus);
+        modBus.addListener(PaleMirrorVisualsMod::registerAttributes);
         PaleMirrorVisuals.register(AuthoredVisualProvider.INSTANCE);
         LOGGER.info("Pale Mirror Visuals registered the fresh-world authored-region provider");
+    }
+
+    private static void registerAttributes(net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent event) {
+        event.put(VisualEntityTypes.THREAT_HEART.get(),
+                io.farfrontier.palemirror.visuals.threat.ThreatHeartEntity.createAttributes().build());
     }
 }

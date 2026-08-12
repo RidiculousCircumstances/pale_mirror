@@ -27,6 +27,13 @@ public final class UnmaterializedDebugReset {
         if (!data.threatCombat().actors().isEmpty()) blockers.add("combat actors=" + data.threatCombat().actors().size());
         if (!data.threatCombat().projectiles().isEmpty()) blockers.add("projectiles=" + data.threatCombat().projectiles().size());
         if (!data.worldState().developmentIntents().isEmpty()) blockers.add("development intents=" + data.worldState().developmentIntents().size());
+        if (!data.materializationJobs().jobs().isEmpty()) blockers.add("materialization jobs=" + data.materializationJobs().jobs().size());
+        if (!data.semanticSlots().slots().isEmpty()) blockers.add("semantic slots=" + data.semanticSlots().slots().size());
+        if (!data.parcels().parcels().isEmpty()) blockers.add("managed parcels=" + data.parcels().parcels().size());
+        if (!data.residentJourneyLeases().leases().isEmpty()) blockers.add("resident journey leases="
+                + data.residentJourneyLeases().leases().size());
+        if (!data.residentIdentities().retiredIds().isEmpty()) blockers.add("retired resident identities="
+                + data.residentIdentities().retiredIds().size());
         data.worldRegistry().entries().stream().filter(entry -> !"minecraft:observed_village".equals(entry.templateId()))
                 .forEach(entry -> blockers.add("managed world object=" + entry.id().value()));
         return List.copyOf(blockers);
@@ -49,6 +56,11 @@ public final class UnmaterializedDebugReset {
         data.resourceTransfers().clear();
         data.settlementDepots().clear();
         data.refugeeCamps().clear();
+        data.materializationJobs().clear();
+        data.semanticSlots().clear();
+        data.parcels().clear();
+        data.residentJourneyLeases().clear();
+        data.residentIdentities().clear();
         data.worldState().facilities().clear();
         data.worldState().scenarios().clear();
         data.worldState().clearRegionalState();

@@ -69,6 +69,9 @@ neoForge {
     version = rootProject.providers.gradleProperty('neo_version').get()
 
     runs {
+        configureEach {
+            systemProperty 'pale_mirror.profile', 'core-only'
+        }
         server {
             server()
             programArgument '--nogui'

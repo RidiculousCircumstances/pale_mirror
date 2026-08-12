@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.world;
 
 import java.util.Map;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.farfrontier.palemirror.domain.DomainCommand;
@@ -12,6 +13,18 @@ import io.farfrontier.palemirror.internal.effect.EffectLease;
 import io.farfrontier.palemirror.internal.effect.EffectLeaseState;
 import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter;
 import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartSegmentPlan;
+import io.farfrontier.palemirror.api.ParcelKind;
+import io.farfrontier.palemirror.api.SemanticSlotKey;
+import io.farfrontier.palemirror.internal.materialization.JobState;
+import io.farfrontier.palemirror.internal.materialization.MaterializationGateway;
+import io.farfrontier.palemirror.internal.materialization.MaterializationJob;
+import io.farfrontier.palemirror.internal.materialization.MaterializationJobClass;
+import io.farfrontier.palemirror.internal.materialization.MaterializationOperation;
+import io.farfrontier.palemirror.internal.materialization.MaterializationOperationType;
+import io.farfrontier.palemirror.internal.materialization.OperationState;
+import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -92,17 +105,27 @@ public final class VanillaMinecartRouteRuntime {
 
     private static boolean advance(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,
                                    VanillaMinecartRailAdapter adapter, VanillaMinecartRouteRecord record) {
-        return switch (record.status()) {
+        MaterializationJob job = ensureJob(data, record);
+        if (job.state() == JobState.PLANNED) { job.start(); return true; }
+        boolean changed = switch (record.status()) {
             case PLANNED -> { record.begin(); yield true; }
-            case BUILDING -> buildLoadedSegments(level, adapter, record);
+            case BUILDING -> buildLoadedSegments(level, data, adapter, record);
             case VERIFYING -> verifyAndActivate(level, data, commands, adapter, record);
             case ACTIVE -> refreshActiveRoute(level, data, commands, adapter, record);
             case SUSPENDED -> recoverSuspended(level, data, commands, adapter, record);
             case BLOCKED, LEGACY -> false;
         };
+        if (record.status() == VanillaMinecartRouteStatus.ACTIVE && job.state() != JobState.COMPLETED) {
+            MaterializationOperation operation = job.nextOperation();
+            if (operation != null) { operation.start(); operation.complete(); job.advanceOperation(); }
+            job.complete(); changed = true;
+        } else if (record.status() == VanillaMinecartRouteStatus.BLOCKED && job.state() != JobState.BLOCKED) {
+            job.block(record.diagnostic()); changed = true;
+        }
+        return changed;
     }
 
-    private static boolean buildLoadedSegments(ServerLevel level, VanillaMinecartRailAdapter adapter,
+    private static boolean buildLoadedSegments(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRailAdapter adapter,
                                                 VanillaMinecartRouteRecord record) {
         boolean changed = false;
         int budget = BUILD_SEGMENT_BUDGET;
@@ -110,16 +133,27 @@ public final class VanillaMinecartRouteRuntime {
             if (record.isComplete(index)) continue;
             BlockPos rail = record.railPosition(index);
             if (!level.hasChunkAt(rail)) continue;
-            VanillaMinecartSegmentPlan plan = adapter.planSegment(level, rail, record.direction(),
+            VanillaMinecartSegmentPlan plan = adapter.planSegment(level, rail,
+                    index == 0 ? record.direction(0) : record.direction(index - 1), record.direction(index),
                     record.nextRailY(index), record.previousRailY(index), index,
                     index == record.segmentCount() - 1);
-            PreflightResult preflight = preflight(level, adapter, record, plan);
+            PreflightResult preflight = preflight(level, data, adapter, record, plan, index);
             if (preflight == PreflightResult.BLOCKED) return true;
             if (preflight == PreflightResult.CAPTURED) {
-                changed = true;
-                continue;
+                // Persist one exact baseline before any neighbouring segment can
+                // alter an overlapping support/platform cell. The next tick can
+                // then apply this segment against that durable snapshot.
+                return true;
             }
-            plan.writes().forEach((position, state) -> level.setBlock(position, state, 3));
+            SemanticSlotKey slot = routeSlot(record, index);
+            MaterializationGateway gateway = new MaterializationGateway(level, data.semanticSlots(), data.parcels());
+            for (var write : plan.writes().entrySet()) {
+                var result = gateway.setBlock(slot, write.getKey(), write.getValue(), 3,
+                        observed -> adapter.matchesProvenance(observed, adapter.signature(write.getValue())));
+                if (result.status() == io.farfrontier.palemirror.api.GuardedWorldAccess.Status.BLOCKED) {
+                    record.block(result.diagnostic()); return true;
+                }
+            }
             if (!adapter.postcondition(level, plan)) {
                 record.block("Vanilla minecart postcondition failed at " + rail.toShortString() + ": "
                         + adapter.postconditionDiagnostic(level, plan));
@@ -138,8 +172,8 @@ public final class VanillaMinecartRouteRuntime {
         return changed;
     }
 
-    private static PreflightResult preflight(ServerLevel level, VanillaMinecartRailAdapter adapter,
-                                              VanillaMinecartRouteRecord record, VanillaMinecartSegmentPlan plan) {
+    private static PreflightResult preflight(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRailAdapter adapter,
+                                              VanillaMinecartRouteRecord record, VanillaMinecartSegmentPlan plan, int index) {
         boolean captured = false;
         for (Map.Entry<BlockPos, net.minecraft.world.level.block.state.BlockState> entry : plan.writes().entrySet()) {
             BlockPos position = entry.getKey();
@@ -157,7 +191,45 @@ public final class VanillaMinecartRouteRuntime {
                 return PreflightResult.BLOCKED;
             }
         }
+        SemanticSlotKey key = routeSlot(record, index);
+        if (data.semanticSlots().find(key).isEmpty()) {
+            BlockPos min = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.min(a.getX(), b.getX()),
+                    Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()))).orElseThrow();
+            BlockPos max = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.max(a.getX(), b.getX()),
+                    Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ()))).orElseThrow();
+            String parcelId = record.routeId() + ":parcel:segment_" + index;
+            if (data.parcels().find(parcelId).isEmpty()) {
+                data.parcels().register(new ParcelRecord(parcelId, record.regionId(),
+                        record.dimensionId(), min, max, "baseline_rail", ParcelKind.PUBLIC_INFRASTRUCTURE,
+                        null, 0, ""));
+            }
+            List<SemanticCellRecord> cells = plan.writes().keySet().stream().map(position -> {
+                var state = level.getBlockState(position); return new SemanticCellRecord(position, state, state);
+            }).toList();
+            data.semanticSlots().register(new SemanticSlotRecord(key, ParcelKind.PUBLIC_INFRASTRUCTURE,
+                    cells, false, "", ""));
+        }
         return captured ? PreflightResult.CAPTURED : PreflightResult.READY;
+    }
+
+    private static SemanticSlotKey routeSlot(VanillaMinecartRouteRecord record, int index) {
+        return new SemanticSlotKey(record.routeId(), "segment_" + index, "public_infrastructure");
+    }
+
+    private static MaterializationJob ensureJob(PaleMirrorSavedData data, VanillaMinecartRouteRecord record) {
+        MaterializationJob current = data.materializationJobs().activeFor(record.routeId(), "baseline_rail").orElse(null);
+        if (current != null) return current;
+        String id = "pm:job:baseline_rail:" + Integer.toUnsignedString(record.routeId().hashCode(), 36) + ":1";
+        MaterializationOperation operation = new MaterializationOperation(id + ":corridor", id + ":corridor",
+                MaterializationOperationType.ENSURE_ROUTE_SEGMENT, record.regionId(), OperationState.PENDING, 0, "");
+        boolean historical = record.status() == VanillaMinecartRouteStatus.ACTIVE
+                || record.status() == VanillaMinecartRouteStatus.SUSPENDED;
+        if (historical) operation.complete();
+        MaterializationJob job = new MaterializationJob(id, record.routeId(), "baseline_rail",
+                MaterializationJobClass.CAPABILITY, 1, "pale_mirror:baseline_freight_graph",
+                VanillaMinecartRouteRecord.POLICY_VERSION, historical ? JobState.COMPLETED : JobState.PLANNED,
+                List.of(operation), historical ? 1 : 0, 0, "");
+        data.materializationJobs().put(job); return job;
     }
 
     private static boolean verifyAndActivate(ServerLevel level, PaleMirrorSavedData data, DomainCommandProcessor commands,

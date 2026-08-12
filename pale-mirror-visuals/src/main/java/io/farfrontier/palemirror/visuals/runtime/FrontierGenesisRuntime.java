@@ -39,7 +39,8 @@ public final class FrontierGenesisRuntime {
         FrontierRegionPlanner planner = new FrontierRegionPlanner();
         List<AuthoredRegionSeed> plans = java.util.stream.IntStream.range(0, REGION_COUNT).mapToObj(ordinal -> {
             FrontierTerrainSurvey.Result site = survey.select(level, ordinal);
-            AuthoredRegionSeed seed = planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate());
+            AuthoredRegionSeed seed = planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(),
+                    (x, z) -> survey.surfaceHeight(level, x, z));
             return seed;
         }).toList();
         ledger.pinManifests(plans);

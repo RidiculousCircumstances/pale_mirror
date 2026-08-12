@@ -175,7 +175,6 @@ public final class PaleMirrorRuntime {
     public boolean beginSettlementEvacuation(String communityId, StoryAudienceId audience, String causationId) {
         return evacuation.begin(communityId, audience, causationId);
     }
-
     public boolean issueRefugeeAnchor(ServerPlayer player, String communityId) {
         return evacuation.issue(player, communityId);
     }
@@ -201,7 +200,7 @@ public final class PaleMirrorRuntime {
                 + ", communities=" + data.worldState().communities().size() + ", places=" + data.worldState().places().size()
                 + ", routeContracts=" + data.worldState().routeContracts().size()
                 + ", regions=" + data.worldState().livingRegions().size() + ", scenarios=" + data.worldState().scenarios().size()
-                + ", jobs=" + data.testMines().values().stream().filter(value -> value.job() != null).count()
+                + ", jobs=" + data.materializationJobs().jobs().size()
                 + ", effectLeases=" + data.effectLeases().leases().size() + ", combatActors=" + data.threatCombat().actors().size()
                 + ", projectiles=" + data.threatCombat().projectiles().size() + ", quarantine=" + data.quarantine().records().size()
                 + ", resourceTransfers=" + data.resourceTransfers().transfers().size()
@@ -218,6 +217,10 @@ public final class PaleMirrorRuntime {
     }
 
     public String logisticsStatus() { return RegionalLogisticsRuntime.describe(data); }
+
+    public io.farfrontier.palemirror.internal.materialization.MaterializationJob materializationJob(WorldObjectId id) {
+        return data.materializationJobs().activeFor(id.value(), "threat").orElse(null);
+    }
 
     public ManagedRailwayRuntime.CommissioningResult commissionRedValleyExercise(String regionId) {
         return ManagedRailwayRuntime.commissionRedValleyExercise(server, data, regionId);
@@ -269,16 +272,7 @@ public final class PaleMirrorRuntime {
     }
 
     public String inspectObject(String objectId) {
-        TestMineRecord mine = data.testMines().get(new WorldObjectId(objectId));
-        if (mine == null) return "Unknown PM world object " + objectId;
-        String job = mine.job() == null ? "none" : mine.job().jobId() + ":" + mine.job().state()
-                + ":op=" + mine.job().nextOperationIndex();
-        String source = data.worldState().facility(mine.id()).map(value -> value.infectionSource().value()).orElse("missing");
-        return "object=" + mine.id().value() + ", source=" + source + ", lifecycle=" + mine.object().lifecycle()
-                + ", anchor=" + (mine.anchorId() == null ? "none" : mine.anchorId())
-                + ", encounter=" + mine.encounter().state() + ":" + mine.encounter().profileId()
-                + (mine.encounter().diagnostic().isBlank() ? "" : " (" + mine.encounter().diagnostic() + ")")
-                + ", job=" + job;
+        return io.farfrontier.palemirror.internal.debug.ThreatSiteDiagnostics.inspect(data, objectId);
     }
 
     public void threatDestroyed(String objectId, String causationId) {
@@ -295,6 +289,12 @@ public final class PaleMirrorRuntime {
         } catch (IllegalArgumentException ignored) {
             return false;
         }
+    }
+
+    /** All product-controller damage is consumed into the persisted PM combat ledger. */
+    public ActorDamageResult receiveThreatControllerDamage(Entity entity, DamageSource source, float amount) {
+        return io.farfrontier.palemirror.internal.combat.ThreatControllerCombatRuntime.receive(
+                data, entity, source, amount, this::publish);
     }
 
     /** Reports an exact source-owned gate carrier death; stale identities are ignored. */

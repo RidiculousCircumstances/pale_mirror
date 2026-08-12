@@ -9,7 +9,8 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
                                  VisualBounds settlementBounds, VisualPoint freightGate, VisualPoint receivingDepot,
                                  VisualPoint primaryMine, VisualPoint alternateMine,
                                  List<VisualPoint> baselineRailNodes, List<VisualModulePlacement> modules,
-                                 List<ResidentSeed> residents, List<VisualBounds> expansionPlots) {
+                                 List<ResidentSeed> residents, List<VisualBounds> expansionPlots,
+                                 List<VisualPoint> shelterCandidates) {
     public AuthoredRegionSeed {
         require(planId, "planId");
         require(archetypeId, "archetypeId");
@@ -28,9 +29,11 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
         modules = List.copyOf(modules);
         residents = List.copyOf(residents);
         expansionPlots = List.copyOf(expansionPlots);
+        shelterCandidates = List.copyOf(shelterCandidates);
         if (residents.size() != 48) throw new IllegalArgumentException("Authored frontier requires exactly 48 residents");
         if (expansionPlots.size() < 6) throw new IllegalArgumentException("Authored frontier requires six expansion plots");
         if (baselineRailNodes.size() < 2) throw new IllegalArgumentException("Baseline railway requires a path");
+        if (shelterCandidates.size() < 2) throw new IllegalArgumentException("Authored frontier requires shelter candidates");
     }
 
     private static void require(String value, String field) {

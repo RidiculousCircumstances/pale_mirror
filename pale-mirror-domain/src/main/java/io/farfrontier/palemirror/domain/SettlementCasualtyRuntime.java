@@ -13,10 +13,12 @@ final class SettlementCasualtyRuntime {
         if (profile.authority(SettlementAuthorityField.MACRO_POPULATION) != FieldAuthority.PM_OWNED) return List.of();
         PopulationGroup group = state.populationGroup(command.populationGroupId())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown population group " + command.populationGroupId()));
-        if (!group.communityId().equals(command.communityId()) || group.disposition() != PopulationDisposition.RESIDENT
-                || !group.lose(command.cohort(), 1)) return List.of();
-        state.communityPlaceBinding(command.communityId()).flatMap(binding -> state.place(binding.placeId()))
-                .ifPresent(place -> place.setOccupancy(group.size() == 0 ? OccupancyState.EMPTY : OccupancyState.INHABITED));
+        if (!group.communityId().equals(command.communityId()) || !group.lose(command.cohort(), 1)) return List.of();
+        if (group.journeyId() != null) state.journey(group.journeyId()).ifPresent(journey -> journey.recordLosses(1));
+        if (group.disposition() == PopulationDisposition.RESIDENT) {
+            state.communityPlaceBinding(command.communityId()).flatMap(binding -> state.place(binding.placeId()))
+                    .ifPresent(place -> place.setOccupancy(group.size() == 0 ? OccupancyState.EMPTY : OccupancyState.INHABITED));
+        }
         DomainEvent event = events.create(state, DomainEventType.SETTLEMENT_RESIDENT_DEATH_CONFIRMED,
                 command.communityId(), command.observationId() + ":" + command.residentId());
         state.addEvent(event);

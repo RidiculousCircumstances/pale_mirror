@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.internal.settlement;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -19,10 +18,12 @@ import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
+import io.farfrontier.palemirror.domain.WorldPath;
+import io.farfrontier.palemirror.domain.WorldPathNode;
 import io.farfrontier.palemirror.domain.KnownRegionalFeature;
-import io.farfrontier.palemirror.internal.economy.SettlementDepotState;
 import io.farfrontier.palemirror.internal.presentation.RefugeeAnchorItem;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.RegionBindings;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -53,7 +54,7 @@ public final class PreparedEvacuationRuntime {
                     .filter(value -> data.worldState().siteAffiliations(value.siteId(), SiteAffiliationRole.RECIPIENT)
                             .stream().anyMatch(affiliation -> affiliation.objectId().equals(community)))
                     .anyMatch(value -> data.worldState().site(value.siteId()).map(site ->
-                            site.operationalState() == OperationalState.OPERATIONAL).orElse(false));
+                            site.operationalState() != OperationalState.OFFLINE).orElse(false));
             if (!prepared) return false;
             List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.BeginSettlementEvacuation(
                     community, audience, causationId));
@@ -123,17 +124,19 @@ public final class PreparedEvacuationRuntime {
         }
         WorldObjectId siteId = new WorldObjectId("pale_mirror:refugee_camp_"
                 + Integer.toUnsignedString(group.id().hashCode(), 36));
-        List<UUID> representatives = java.util.stream.IntStream.range(0, Math.max(2, Math.min(4, (group.size() + 19) / 20)))
-                .mapToObj(slot -> UUID.nameUUIDFromBytes((group.id() + ":representative:" + slot)
-                        .getBytes(StandardCharsets.UTF_8))).toList();
-        RefugeeCampRecord camp = new RefugeeCampRecord(group.id(), permit.communityId(), siteId,
-                player.serverLevel().dimension().location().toString(), anchor,
-                RefugeeCampRuntime.captureCells(player.serverLevel(), anchor), representatives,
-                SettlementDepotState.PLANNED, "");
+        RefugeeCampRecord camp = RefugeeCampRuntime.createRecord(data, group.id(), permit.communityId(), siteId,
+                player.serverLevel(), anchor);
+        RegionBindings bindings = RegionBindings.fromRegionId(region.id());
+        String pathId = region.id() + ":player_shelter_path:" + Integer.toUnsignedString(anchor.hashCode(), 36);
+        String dimension = player.serverLevel().dimension().location().toString();
+        net.minecraft.core.BlockPos start = physical.settlementAnchor();
+        WorldPath path = new WorldPath(pathId, "player-shelter-v1", bindings.receivingSiteId(), siteId, List.of(
+                new WorldPathNode("gate", dimension, start.getX(), start.getY(), start.getZ(), true),
+                new WorldPathNode("shelter", dimension, anchor.getX(), anchor.getY(), anchor.getZ(), true)));
         List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.RegisterEvacuationShelter(
                 permit.communityId(), audiences.apply(player), new WorldSite(siteId, WorldSiteType.SHELTER, OperationalState.DEGRADED),
                 new SiteCapability(siteId, SiteCapabilityType.SHELTER, null, data.worldState().population(permit.communityId())),
-                "player:" + player.getUUID() + ":refugee-anchor"));
+                path, "player:" + player.getUUID() + ":refugee-anchor"));
         if (events.isEmpty()) return false;
         events = new java.util.ArrayList<>(events);
         events.addAll(commands.execute(data.worldState(), new DomainCommand.DiscoverRegionalFeature(region.id(),

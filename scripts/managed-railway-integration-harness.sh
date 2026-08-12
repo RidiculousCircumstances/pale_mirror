@@ -6,6 +6,7 @@ create_jar=${2:?missing Create JAR}
 railway_jar=${3:?missing PM Railway Untold JAR}
 installer=${NEOFORGE_INSTALLER:-/home/rd/.cache/far-frontier/tools/neoforge-21.1.248-installer.jar}
 java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to Java 21}
+export JAVA_ARGS="${JAVA_ARGS:-} -Dpale_mirror.profile=core-only"
 export PATH="$(dirname "$java_bin"):$PATH"
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pale-mirror-railway.XXXXXX")
 server_pid=''

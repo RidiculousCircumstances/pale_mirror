@@ -1,4 +1,4 @@
-version: 1
+version: 2
 
 components:
   - name: domain
@@ -39,12 +39,15 @@ components:
       - core internal implementation
 
 invariants:
+  # Compatibility wording enforced by the repository architecture gate.
+  - statement: Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.
+  - statement: Unknown or player-owned block changes are conflicts and must not be overwritten by default.
   - id: canonical-state
     statement: Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations.
   - id: domain-purity
     statement: Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.
   - id: materialization-safety
-    statement: Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions. Canonical infection materializes its passive PM-owned overlay and controller whenever the site is nearby and loaded, independently of story acceptance; combat actors and source-native gate mechanics remain explicitly scenario-gated.
+    statement: Every long-lived physical transition is compiled from pinned semantic policy into a Core-owned persisted PRESENTATION or CAPABILITY job and executed only through the guarded NeoForge MaterializationGateway with loaded-chunk, parcel, semantic-slot, precondition and postcondition checks. Canonical infection materializes its passive PM-owned overlay and controller whenever the site is nearby and loaded, independently of story acceptance; combat actors and source-native gate mechanics remain explicitly scenario-gated.
   - id: fresh-world-genesis
     statement: Fresh-world visual genesis is distinct from reconciliation materialization; a deterministic immutable manifest may author ordinary terrain only while its target chunk is naturally loading, records bounded completion before becoming player space, never force-loads prospective chunks, and has no retrofit or schema-v32 compatibility path.
   - id: visual-projection-boundary
@@ -54,7 +57,15 @@ invariants:
   - id: observation-boundary
     statement: Observers publish typed facts; reconciliation alone converts them into domain commands and events.
   - id: conflict-safety
-    statement: Unknown or player-owned block changes are conflicts and must not be overwritten by default.
+    statement: Unknown or player-owned block changes conflict at semantic-slot granularity and must not be overwritten by default; a player may explicitly commission a community asset or authorize a previewed reset for one object, module and slot.
+  - id: authored-parcel-ownership
+    statement: Settlement influence never grants block ownership. Only PublicInfrastructure and CommunityParcel areas are PM-managed; PlayerLeaseParcel remains player-owned, and a soft ReservedPlot occupied before a project is reclassified or blocks development without overwrite.
+  - id: world-journey
+    statement: Population and actor travel is a persisted canonical WorldJourney over a shared WorldPath. Off-screen movement and risk advance deterministically without force-loading, while nearby stable identities materialize under exclusive leases and return typed progress, casualty and obstruction observations through reconciliation.
+  - id: authored-damage-and-development
+    statement: Off-screen damage, reconstruction and positive development compile deterministic staged projects against managed semantic slots. Capability is granted only after physical postconditions; community labour/resources and player receipts fund work without treating ordinary containers as canonical stock.
+  - id: product-profile-preflight
+    statement: A product-profile server validates Pale Mirror Visuals, pinned dependencies and the versioned asset catalog before opening a world and fails closed on mismatch. Core-only synthetic representations exist only in an explicitly selected dev/test profile.
   - id: adapter-fallback
     statement: Missing optional integrations degrade to explicit adapter health states and must not block the core slice.
   - id: source-identity
@@ -208,8 +219,8 @@ critical_flows:
     owner: domain economy plus NeoForge resource transfer ledger and depot executor
     verification: critical-code
   - id: settlement-displacement
-    path: objective critical state -> persisted grace window -> manual or automatic evacuation -> PopulationGroup disposition -> empty place -> PM-owned ruin/camp representation
-    owner: domain emergency policy plus NeoForge provenance-safe settlement presentation
+    path: objective critical state -> persisted grace window -> player shelter selection or degraded autonomous fallback -> WorldJourney -> leased resident projection and full-risk simulation -> destination camp -> PopulationGroup disposition and occupancy
+    owner: domain emergency and journey policy plus NeoForge identity leases and provenance-safe settlement presentation
     verification: critical-code
   - id: settlement-development
     path: stable surplus -> persisted intent -> player project receipts or delayed autonomous reservation -> fully funded escrow -> PM-owned storehouse postcondition -> capacity/prosperity/housing -> bounded population growth

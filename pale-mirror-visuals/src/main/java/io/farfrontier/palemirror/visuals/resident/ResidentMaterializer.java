@@ -25,18 +25,23 @@ public final class ResidentMaterializer {
                 ledger.commissionResident(seed.residentId());
                 continue;
             }
-            Villager villager = new Villager(EntityType.VILLAGER, level);
-            villager.setUUID(uuid);
+            Villager villager = create(level, region, seed, uuid);
             villager.setPos(seed.home().x() + 0.5, seed.home().y() + 2.0, seed.home().z() + 0.5);
-            villager.setPersistenceRequired();
-            villager.setCustomName(Component.literal(displayName(seed)));
-            villager.setCustomNameVisible(false);
-            villager.setVillagerData(villager.getVillagerData().setProfession(profession(seed)));
-            if (seed.cohort().equals("CHILDREN")) villager.setAge(-24_000);
-            ManagedResident.attach(villager, region.planId(), seed);
-            behavior.configure(villager, seed, region);
             if (level.addFreshEntity(villager)) ledger.commissionResident(seed.residentId());
         }
+    }
+
+    public Villager create(ServerLevel level, AuthoredRegionSeed region, ResidentSeed seed, UUID uuid) {
+        Villager villager = new Villager(EntityType.VILLAGER, level);
+        villager.setUUID(uuid);
+        villager.setPersistenceRequired();
+        villager.setCustomName(Component.literal(displayName(seed)));
+        villager.setCustomNameVisible(false);
+        villager.setVillagerData(villager.getVillagerData().setProfession(profession(seed)));
+        if (seed.cohort().equals("CHILDREN")) villager.setAge(-24_000);
+        ManagedResident.attach(villager, region.planId(), seed);
+        behavior.configure(villager, seed, region);
+        return villager;
     }
 
     private static VillagerProfession profession(ResidentSeed seed) {

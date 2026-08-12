@@ -7,6 +7,9 @@ import java.util.List;
 /** Persisted before physical work starts; its idempotency key survives a process crash. */
 public final class MaterializationJob {
     private final String jobId;
+    private final String targetId;
+    private final String channel;
+    private final MaterializationJobClass jobClass;
     private final long desiredRevision;
     private final String policyId;
     private final String policyVersion;
@@ -19,7 +22,18 @@ public final class MaterializationJob {
     public MaterializationJob(String jobId, long desiredRevision, String policyId, String policyVersion,
                               JobState state, List<MaterializationOperation> operations, int nextOperationIndex,
                               int attemptCount, String lastError) {
-        this.jobId = Objects.requireNonNull(jobId, "jobId");
+        this(jobId, legacyTarget(jobId), "legacy", MaterializationJobClass.CAPABILITY, desiredRevision, policyId,
+                policyVersion, state, operations, nextOperationIndex, attemptCount, lastError);
+    }
+
+    public MaterializationJob(String jobId, String targetId, String channel, MaterializationJobClass jobClass,
+                              long desiredRevision, String policyId, String policyVersion,
+                              JobState state, List<MaterializationOperation> operations, int nextOperationIndex,
+                              int attemptCount, String lastError) {
+        this.jobId = required(jobId, "jobId");
+        this.targetId = required(targetId, "targetId");
+        this.channel = required(channel, "channel");
+        this.jobClass = Objects.requireNonNull(jobClass, "jobClass");
         this.desiredRevision = desiredRevision;
         this.policyId = Objects.requireNonNull(policyId, "policyId");
         this.policyVersion = Objects.requireNonNull(policyVersion, "policyVersion");
@@ -31,6 +45,9 @@ public final class MaterializationJob {
     }
 
     public String jobId() { return jobId; }
+    public String targetId() { return targetId; }
+    public String channel() { return channel; }
+    public MaterializationJobClass jobClass() { return jobClass; }
     public long desiredRevision() { return desiredRevision; }
     public String policyId() { return policyId; }
     public String policyVersion() { return policyVersion; }
@@ -42,6 +59,7 @@ public final class MaterializationJob {
     public void start() { state = JobState.RUNNING; attemptCount++; }
     public void complete() { state = JobState.COMPLETED; lastError = ""; }
     public void block(String error) { state = JobState.BLOCKED; lastError = error; }
+    public void cancel(String reason) { state = JobState.CANCELLED; lastError = reason == null ? "" : reason; }
     public boolean isFor(long revision, String expectedPolicyId, String expectedPolicyVersion) {
         return desiredRevision == revision && state != JobState.CANCELLED
                 && policyId.equals(expectedPolicyId) && policyVersion.equals(expectedPolicyVersion);
@@ -60,4 +78,18 @@ public final class MaterializationJob {
         return nextOperationIndex < operations.size() ? operations.get(nextOperationIndex) : null;
     }
     public void advanceOperation() { nextOperationIndex++; }
+
+    private static String legacyTarget(String jobId) {
+        String prefix = "pm:job:";
+        if (jobId != null && jobId.startsWith(prefix)) {
+            int revision = jobId.lastIndexOf(':');
+            return revision > prefix.length() ? jobId.substring(prefix.length(), revision) : jobId;
+        }
+        return jobId == null ? "unknown" : jobId;
+    }
+
+    private static String required(String value, String name) {
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " is required");
+        return value;
+    }
 }

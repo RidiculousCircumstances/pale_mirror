@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.internal.presentation;
 
 import io.farfrontier.palemirror.domain.FacilityStatus;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRecord;
-import io.farfrontier.palemirror.internal.economy.SettlementDepotState;
 import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import net.minecraft.core.BlockPos;
@@ -40,7 +39,8 @@ public final class RegionalMarkerRuntime {
                     facility != null && facility.status() == FacilityStatus.INFECTED ? ParticleTypes.SOUL_FIRE_FLAME : ParticleTypes.END_ROD);
             SettlementDepotRecord depot = data.worldState().livingRegion(region.id())
                     .map(value -> data.settlementDepots().get(value.communityId())).orElse(null);
-            if (depot != null && depot.state() == SettlementDepotState.ACTIVE) {
+            if (depot != null && data.worldState().site(depot.siteId()).map(site ->
+                    site.operationalState() == io.farfrontier.palemirror.domain.OperationalState.OPERATIONAL).orElse(false)) {
                 boolean crisis = data.worldState().community(depot.communityId()).map(value -> !"NONE".equals(value.crisisState().name()))
                         .orElse(false);
                 signalNearby(level, depot.anchor().above(3), crisis ? ParticleTypes.SMOKE : ParticleTypes.HAPPY_VILLAGER);

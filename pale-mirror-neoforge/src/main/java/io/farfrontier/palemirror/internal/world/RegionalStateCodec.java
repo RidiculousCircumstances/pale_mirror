@@ -76,6 +76,7 @@ final class RegionalStateCodec {
         tag.put("developmentIntents", list(state.developmentIntents().stream().map(RegionalStateCodec::writeDevelopmentIntent).toList()));
         tag.put("settlementAuthorityProfiles", list(state.settlementAuthorityProfiles().stream()
                 .map(RegionalStateCodec::writeAuthorityProfile).toList()));
+        JourneyStateCodec.write(tag, state);
     }
 
     static void read(CompoundTag tag, WorldState state) {
@@ -100,6 +101,7 @@ final class RegionalStateCodec {
         for (Tag value : tag.getList("settlementAuthorityProfiles", Tag.TAG_COMPOUND)) {
             state.putSettlementAuthorityProfile(readAuthorityProfile((CompoundTag) value));
         }
+        JourneyStateCodec.read(tag, state);
     }
 
     private static CompoundTag writeCommunity(SettlementCommunity value) {
@@ -318,6 +320,7 @@ final class RegionalStateCodec {
         tag.putString("disposition", value.disposition().name());
         if (value.currentPlaceId() != null) tag.putString("currentPlace", value.currentPlaceId().value());
         if (value.hostSiteId() != null) tag.putString("hostSite", value.hostSiteId().value());
+        if (value.journeyId() != null) tag.putString("journey", value.journeyId());
         tag.putLong("transitionDueStep", value.transitionDueStep());
         tag.putLong("revision", value.revision());
         ListTag cohorts = new ListTag();
@@ -341,6 +344,7 @@ final class RegionalStateCodec {
                 PopulationDisposition.valueOf(tag.getString("disposition")),
                 tag.contains("currentPlace", Tag.TAG_STRING) ? id(tag, "currentPlace") : null,
                 tag.contains("hostSite", Tag.TAG_STRING) ? id(tag, "hostSite") : null,
+                tag.contains("journey", Tag.TAG_STRING) ? tag.getString("journey") : null,
                 tag.getLong("transitionDueStep"), tag.getLong("revision"));
     }
 

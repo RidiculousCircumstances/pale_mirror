@@ -60,6 +60,8 @@ public final class AdapterRegistry {
     }
     public static void registerConfigs(net.neoforged.fml.ModContainer container) {
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.SPEC, "pale-mirror-server.toml");
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
                 MillenaireIntegrationConfig.SPEC, "pale-mirror-millenaire.toml");
     }
     /** Optional generic player-facing action; no FTB type or progress crosses this boundary. */

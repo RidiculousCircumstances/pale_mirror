@@ -37,11 +37,13 @@ class FrontierRegionPlannerTest {
         int alternate = manhattan(seed.anchor(), seed.alternateMine());
         assertTrue(primary >= 384 && primary <= 512);
         assertTrue(alternate >= 512 && alternate <= 768);
-        assertEquals(seed.freightGate(), seed.baselineRailNodes().getFirst());
+        assertEquals(seed.receivingDepot().x(), seed.baselineRailNodes().getFirst().x());
+        assertEquals(seed.receivingDepot().z(), seed.baselineRailNodes().getFirst().z());
         assertEquals(seed.primaryMine().x(), seed.baselineRailNodes().getLast().x());
         assertEquals(seed.primaryMine().z(), seed.baselineRailNodes().getLast().z());
         for (int i = 1; i < seed.baselineRailNodes().size(); i++) {
             assertEquals(1, manhattan(seed.baselineRailNodes().get(i - 1), seed.baselineRailNodes().get(i)));
+            assertTrue(Math.abs(seed.baselineRailNodes().get(i - 1).y() - seed.baselineRailNodes().get(i).y()) <= 1);
         }
     }
 

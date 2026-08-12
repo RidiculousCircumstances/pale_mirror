@@ -51,9 +51,12 @@ underground controller chamber.
 
 The fresh Mine17–Ironhill baseline is a complete, low-capacity vanilla
 minecart corridor: regular rails, powered intervals, trestles and a receiving
-platform. It is planned before construction, grows only through chunks the
+platform. Its terrain-costed, grade-safe path may turn around expensive terrain;
+it is planned before construction and grows only through chunks the
 player has naturally loaded, and records per-cell provenance before every
-write. Its cart is only a readable representative; Pale Mirror still owns route
+write. Runtime health is the observed endpoint-connected rail graph, so a
+connected player reroute is valid without recreating the authored geometry.
+Its cart is only a readable representative; Pale Mirror still owns route
 capacity and `IRON`. A player-built Create route is certified separately by the
 read-only Create adapter. Railway Untold `1.2.1-pm.1` remains an isolated,
 explicit industrial-upgrade provider rather than the default for a small
@@ -64,7 +67,8 @@ The authored manifest is pinned before the first chunk-local write and reused
 after restart. Prospective terrain is sampled through generator APIs; only
 naturally loaded chunks are graded or built. See
 [pale-mirror-visuals.md](docs/pale-mirror-visuals.md) for module boundaries,
-resident ownership and visual state behavior.
+resident ownership, parcel commissioning, semantic reconstruction, canonical
+journeys and visual state behavior.
 
 Run the optional industrial railway profile and packaged two-start harness with:
 

@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.PaleMirrorVisuals;
+import io.farfrontier.palemirror.api.ParcelKind;
+import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.domain.CommunityPlaceBinding;
 import io.farfrontier.palemirror.domain.DomainCommand;
@@ -33,8 +35,11 @@ import io.farfrontier.palemirror.domain.SiteCapabilityType;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
+import io.farfrontier.palemirror.domain.WorldPath;
+import io.farfrontier.palemirror.domain.WorldPathNode;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinition;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinitions;
+import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -90,18 +95,37 @@ public final class AuthoredRegionRegistrar {
                 definition.requestReserveSteps(), definition.defenceLossPerUnavailableStep(),
                 definition.stableStepsToRecover(), definition.evacuationDefenceThreshold(),
                 definition.emergencyGraceSteps(), definition.evacuationDurationSteps());
-        List<WorldSite> sites = List.of(
+        List<WorldSite> sites = new java.util.ArrayList<>(List.of(
                 new WorldSite(ids.primaryDispatchSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
                 new WorldSite(ids.alternateDispatchSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
-                new WorldSite(ids.receivingSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL));
-        List<SiteAffiliation> affiliations = List.of(
+                new WorldSite(ids.receivingSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL)));
+        List<SiteAffiliation> affiliations = new java.util.ArrayList<>(List.of(
                 new SiteAffiliation(ids.primaryDispatchSiteId(), ids.primaryMineId(), SiteAffiliationRole.SUPPLIER),
                 new SiteAffiliation(ids.alternateDispatchSiteId(), ids.alternateMineId(), SiteAffiliationRole.SUPPLIER),
-                new SiteAffiliation(ids.receivingSiteId(), ids.communityId(), SiteAffiliationRole.RECIPIENT));
-        List<SiteCapability> capabilities = List.of(
+                new SiteAffiliation(ids.receivingSiteId(), ids.communityId(), SiteAffiliationRole.RECIPIENT)));
+        List<SiteCapability> capabilities = new java.util.ArrayList<>(List.of(
                 new SiteCapability(ids.primaryDispatchSiteId(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
                 new SiteCapability(ids.alternateDispatchSiteId(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()),
-                new SiteCapability(ids.receivingSiteId(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction()));
+                new SiteCapability(ids.receivingSiteId(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, definition.ironProduction())));
+        List<WorldPath> paths = new java.util.ArrayList<>();
+        for (int index = 0; index < seed.expansionPlots().size(); index++) {
+            WorldObjectId plotId = developmentPlotId(ids.regionId(), index);
+            sites.add(new WorldSite(plotId, WorldSiteType.DEVELOPMENT, OperationalState.DEGRADED));
+            affiliations.add(new SiteAffiliation(plotId, ids.communityId(), SiteAffiliationRole.RECIPIENT));
+        }
+        for (int index = 0; index < seed.shelterCandidates().size(); index++) {
+            WorldObjectId shelterId = new WorldObjectId(ids.regionId() + "_shelter_candidate_" + index);
+            VisualPoint shelter = seed.shelterCandidates().get(index);
+            sites.add(new WorldSite(shelterId, WorldSiteType.SHELTER, OperationalState.DEGRADED));
+            affiliations.add(new SiteAffiliation(shelterId, ids.communityId(), SiteAffiliationRole.RECIPIENT));
+            capabilities.add(new SiteCapability(shelterId, SiteCapabilityType.SHELTER, null, population));
+            paths.add(new WorldPath(ids.regionId() + ":evacuation_path_" + index, seed.contentHash(),
+                    ids.receivingSiteId(), shelterId, pathNodes(seed, shelter, index)));
+            List<WorldPathNode> returnNodes = new java.util.ArrayList<>(pathNodes(seed, shelter, index));
+            java.util.Collections.reverse(returnNodes);
+            paths.add(new WorldPath(ids.regionId() + ":return_path_" + index, seed.contentHash(),
+                    shelterId, ids.receivingSiteId(), returnNodes));
+        }
         List<RouteContract> routes = List.of(
                 new RouteContract(ids.primaryRouteId(), ids.primaryDispatchSiteId(), ids.receivingSiteId(),
                         RouteProvider.VANILLA_MINECART, ResourceKind.IRON, definition.ironProduction(),
@@ -113,14 +137,61 @@ public final class AuthoredRegionRegistrar {
                 cohortCounts(seed));
         commands.execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region, List.of(primary, alternate),
                 community, place, new CommunityPlaceBinding(ids.communityId(), placeId), economy, security, policy,
-                sites, affiliations, capabilities, routes, List.of(residents)));
+                sites, affiliations, capabilities, routes, List.of(residents), paths));
         commands.execute(data.worldState(), new DomainCommand.RegisterSettlementAuthorityProfile(
                 SettlementAuthorityProfile.pmManaged(ids.communityId())));
         data.worldState().putSettlementDevelopment(new SettlementDevelopment(ids.communityId(), 25, 0,
                 population, Math.max(population, 56), 0));
         data.worldState().putDevelopmentPolicy(SettlementDevelopmentPolicy.defaults(ids.communityId()));
         data.campaignRegions().put(ids.regionId(), record(seed, placeId, definition));
+        registerParcels(data, seed);
+        List<BlockPos> freightPath = seed.baselineRailNodes().stream().map(AuthoredRegionRegistrar::block)
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        java.util.Collections.reverse(freightPath);
+        data.vanillaMinecartRoutes().put(seed.planId(), VanillaMinecartRouteRecord.planned(seed.planId(),
+                seed.dimensionId(), ids.primaryRouteId().value(), freightPath));
         data.setDirty();
+    }
+
+    private static void registerParcels(PaleMirrorSavedData data, AuthoredRegionSeed seed) {
+        data.parcels().register(parcel(seed, "influence", seed.settlementBounds(), "settlement", ParcelKind.INFLUENCE));
+        for (int index = 0; index < seed.modules().size(); index++) {
+            var module = seed.modules().get(index);
+            data.parcels().register(parcel(seed, "module_" + index, module.footprint(), module.templateId(), ParcelKind.COMMUNITY));
+        }
+        for (int index = 0; index < seed.expansionPlots().size(); index++) {
+            data.parcels().register(parcel(seed, "expansion_" + index, seed.expansionPlots().get(index),
+                    developmentPlotId(seed.planId(), index).value(), ParcelKind.RESERVED));
+        }
+        for (int index = 0; index < seed.shelterCandidates().size(); index++) {
+            VisualPoint point = seed.shelterCandidates().get(index);
+            VisualBounds bounds = new VisualBounds(new VisualPoint(point.x() - 8, point.y() - 2, point.z() - 8),
+                    new VisualPoint(point.x() + 8, point.y() + 12, point.z() + 8));
+            data.parcels().register(parcel(seed, "shelter_" + index, bounds, "shelter_candidate_" + index,
+                    ParcelKind.RESERVED));
+        }
+        for (int from = 0; from < seed.baselineRailNodes().size(); from += 16) {
+            int to = Math.min(seed.baselineRailNodes().size(), from + 16);
+            List<VisualPoint> slice = seed.baselineRailNodes().subList(from, to);
+            int minX = slice.stream().mapToInt(VisualPoint::x).min().orElseThrow() - 2;
+            int maxX = slice.stream().mapToInt(VisualPoint::x).max().orElseThrow() + 2;
+            int minY = slice.stream().mapToInt(VisualPoint::y).min().orElseThrow() - 32;
+            int maxY = slice.stream().mapToInt(VisualPoint::y).max().orElseThrow() + 4;
+            int minZ = slice.stream().mapToInt(VisualPoint::z).min().orElseThrow() - 2;
+            int maxZ = slice.stream().mapToInt(VisualPoint::z).max().orElseThrow() + 2;
+            data.parcels().register(new ParcelRecord(seed.planId() + ":parcel:rail_" + from, seed.planId(),
+                    seed.dimensionId(), new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
+                    "baseline_rail", ParcelKind.PUBLIC_INFRASTRUCTURE, null, 0, ""));
+        }
+    }
+
+    private static ParcelRecord parcel(AuthoredRegionSeed seed, String suffix, VisualBounds bounds,
+                                       String binding, ParcelKind kind) {
+        return new ParcelRecord(seed.planId() + ":parcel:" + suffix, seed.planId(), seed.dimensionId(),
+                block(bounds.min()), block(bounds.max()), binding, kind, null, 0, "");
+    }
+    private static WorldObjectId developmentPlotId(String regionId, int index) {
+        return new WorldObjectId(regionId + "_development_plot_" + index);
     }
 
     private static CampaignRegionRecord record(AuthoredRegionSeed seed, WorldObjectId placeId,
@@ -135,6 +206,15 @@ public final class AuthoredRegionRegistrar {
         Map<SettlementCohort, Integer> result = new EnumMap<>(SettlementCohort.class);
         seed.residents().forEach(value -> result.merge(SettlementCohort.valueOf(value.cohort()), 1, Integer::sum));
         return result;
+    }
+
+    private static List<WorldPathNode> pathNodes(AuthoredRegionSeed seed, VisualPoint shelter, int index) {
+        VisualPoint start = seed.freightGate();
+        VisualPoint middle = new VisualPoint((start.x() + shelter.x()) / 2, (start.y() + shelter.y()) / 2,
+                (start.z() + shelter.z()) / 2);
+        return List.of(new WorldPathNode("gate", seed.dimensionId(), start.x(), start.y(), start.z(), true),
+                new WorldPathNode("staging_" + index, seed.dimensionId(), middle.x(), middle.y(), middle.z(), true),
+                new WorldPathNode("shelter_" + index, seed.dimensionId(), shelter.x(), shelter.y(), shelter.z(), true));
     }
 
     private static int scale(int value, int population, int baseline) {

@@ -26,6 +26,9 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationJob;
 import io.farfrontier.palemirror.internal.materialization.MaterializationOperation;
 import io.farfrontier.palemirror.internal.materialization.MaterializationOperationType;
 import io.farfrontier.palemirror.internal.materialization.OperationState;
+import io.farfrontier.palemirror.internal.materialization.MaterializationJobRegistry;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotLedger;
+import io.farfrontier.palemirror.internal.materialization.ParcelLedger;
 import io.farfrontier.palemirror.internal.observation.ReconciliationLedger;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
 import io.farfrontier.palemirror.internal.effect.EffectLeaseLedger;
@@ -49,7 +52,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
 public final class PaleMirrorSavedData extends SavedData {
     public static final String DATA_NAME = "pale_mirror";
-    static final int CURRENT_SCHEMA = 33;
+    static final int CURRENT_SCHEMA = 34;
     private final WorldState worldState;
     private final Map<WorldObjectId, TestMineRecord> testMines;
     private final Map<String, StoryAudienceId> audienceMappings;
@@ -66,11 +69,17 @@ public final class PaleMirrorSavedData extends SavedData {
     private final RefugeeAnchorPermitLedger refugeeAnchorPermits;
     private final Map<String, CampaignCommissioningRecord> campaignCommissioning;
     private final Map<String, VanillaMinecartRouteRecord> vanillaMinecartRoutes;
+    private final MaterializationJobRegistry materializationJobs;
+    private final SemanticSlotLedger semanticSlots;
+    private final ResidentJourneyLeaseLedger residentJourneyLeases;
+    private final ResidentIdentityLedger residentIdentities;
+    private final ParcelLedger parcels;
     public PaleMirrorSavedData() {
         this(new WorldState(), new LinkedHashMap<>(), new LinkedHashMap<>(), new ReconciliationLedger(), new WorldObjectRegistry(),
                 new EffectLeaseLedger(), new QuarantineLedger(), new ThreatCombatLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(),
                 new ResourceTransferLedger(), new LinkedHashMap<>(), new LinkedHashMap<>(), new RefugeeAnchorPermitLedger(),
-                new LinkedHashMap<>(), new LinkedHashMap<>());
+                new LinkedHashMap<>(), new LinkedHashMap<>(), new MaterializationJobRegistry(), new SemanticSlotLedger(),
+                new ResidentJourneyLeaseLedger(), new ResidentIdentityLedger(), new ParcelLedger());
     }
     private PaleMirrorSavedData(WorldState worldState, Map<WorldObjectId, TestMineRecord> testMines,
                                 Map<String, StoryAudienceId> audienceMappings, ReconciliationLedger reconciliationLedger,
@@ -81,7 +90,10 @@ public final class PaleMirrorSavedData extends SavedData {
                                 Map<WorldObjectId, SettlementDepotRecord> settlementDepots,
                                 Map<String, RefugeeCampRecord> refugeeCamps, RefugeeAnchorPermitLedger refugeeAnchorPermits,
                                 Map<String, CampaignCommissioningRecord> campaignCommissioning,
-                                Map<String, VanillaMinecartRouteRecord> vanillaMinecartRoutes) {
+                                Map<String, VanillaMinecartRouteRecord> vanillaMinecartRoutes,
+                                MaterializationJobRegistry materializationJobs, SemanticSlotLedger semanticSlots,
+                                ResidentJourneyLeaseLedger residentJourneyLeases,
+                                ResidentIdentityLedger residentIdentities, ParcelLedger parcels) {
         this.worldState = worldState;
         this.testMines = testMines;
         this.audienceMappings = audienceMappings;
@@ -98,6 +110,11 @@ public final class PaleMirrorSavedData extends SavedData {
         this.refugeeAnchorPermits = refugeeAnchorPermits;
         this.campaignCommissioning = campaignCommissioning;
         this.vanillaMinecartRoutes = vanillaMinecartRoutes;
+        this.materializationJobs = materializationJobs;
+        this.semanticSlots = semanticSlots;
+        this.residentJourneyLeases = residentJourneyLeases;
+        this.residentIdentities = residentIdentities;
+        this.parcels = parcels;
     }
     public static PaleMirrorSavedData get(ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(
@@ -129,6 +146,11 @@ public final class PaleMirrorSavedData extends SavedData {
     public Map<String, CampaignCommissioningRecord> campaignCommissioning() { return campaignCommissioning; }
     /** Physical vanilla route jobs; the domain RouteContract remains cargo authority. */
     public Map<String, VanillaMinecartRouteRecord> vanillaMinecartRoutes() { return vanillaMinecartRoutes; }
+    public MaterializationJobRegistry materializationJobs() { return materializationJobs; }
+    public SemanticSlotLedger semanticSlots() { return semanticSlots; }
+    public ResidentJourneyLeaseLedger residentJourneyLeases() { return residentJourneyLeases; }
+    public ResidentIdentityLedger residentIdentities() { return residentIdentities; }
+    public ParcelLedger parcels() { return parcels; }
     public boolean observeSettlement(io.farfrontier.palemirror.internal.adapter.SettlementObservation observation) {
         SettlementObservationRecord record = settlementObservations.get(observation.settlementId());
         if (record == null) {
@@ -184,7 +206,9 @@ public final class PaleMirrorSavedData extends SavedData {
         PaleMirrorSavedData loaded = new PaleMirrorSavedData(state, mines, audiences, new ReconciliationLedger(observations), registry,
                 new EffectLeaseLedger(leases), new QuarantineLedger(quarantine), ThreatCombatPresentationCodec.read(tag),
                 campaignRegions, SettlementObservationCodec.read(tag), EconomyPresentationCodec.readLedger(tag), EconomyPresentationCodec.readDepots(tag),
-                DisplacementPresentationCodec.read(tag), DisplacementPresentationCodec.readPermits(tag), commissioning, minecartRoutes);
+                DisplacementPresentationCodec.read(tag), DisplacementPresentationCodec.readPermits(tag), commissioning, minecartRoutes,
+                MaterializationJobCodec.read(tag), SemanticSlotCodec.read(tag, registries), ResidentJourneyLeaseCodec.read(tag),
+                ResidentIdentityCodec.read(tag), ParcelCodec.read(tag));
         if (version < CURRENT_SCHEMA) loaded.setDirty();
         return loaded;
     }
@@ -229,6 +253,11 @@ public final class PaleMirrorSavedData extends SavedData {
         DisplacementPresentationCodec.write(tag, refugeeCamps, refugeeAnchorPermits);
         CampaignCommissioningCodec.write(tag, campaignCommissioning);
         VanillaMinecartRouteCodec.write(tag, vanillaMinecartRoutes);
+        MaterializationJobCodec.write(tag, materializationJobs);
+        SemanticSlotCodec.write(tag, semanticSlots);
+        ResidentJourneyLeaseCodec.write(tag, residentJourneyLeases);
+        ResidentIdentityCodec.write(tag, residentIdentities);
+        ParcelCodec.write(tag, parcels);
         return tag;
     }
     private static CompoundTag writeState(WorldState state) {
@@ -426,32 +455,6 @@ public final class PaleMirrorSavedData extends SavedData {
             cells.add(value);
         });
         tag.put("cells", cells);
-        if (mine.job() != null) {
-            MaterializationJob job = mine.job();
-            CompoundTag value = new CompoundTag();
-            value.putString("id", job.jobId());
-            value.putLong("desiredRevision", job.desiredRevision());
-            value.putString("policy", job.policyId());
-            value.putString("policyVersion", job.policyVersion());
-            value.putString("state", job.state().name());
-            value.putInt("attempts", job.attemptCount());
-            value.putString("error", job.lastError());
-            value.putInt("nextOperationIndex", job.nextOperationIndex());
-            ListTag operations = new ListTag();
-            job.operations().forEach(operation -> {
-                CompoundTag serialized = new CompoundTag();
-                serialized.putString("id", operation.operationId());
-                serialized.putString("key", operation.idempotencyKey());
-                serialized.putString("type", operation.type().name());
-                serialized.putString("target", operation.target());
-                serialized.putString("state", operation.state().name());
-                serialized.putInt("attempts", operation.attemptCount());
-                serialized.putString("error", operation.lastError());
-                operations.add(serialized);
-            });
-            value.put("operations", operations);
-            tag.put("job", value);
-        }
         return tag;
     }
 
@@ -464,21 +467,6 @@ public final class PaleMirrorSavedData extends SavedData {
                     InfectionBiomeStage.valueOf(value.contains("infectionStage", Tag.TAG_STRING)
                             ? value.getString("infectionStage") : InfectionBiomeStage.NODE.name())));
         }
-        MaterializationJob job = null;
-        if (tag.contains("job", Tag.TAG_COMPOUND)) {
-            CompoundTag value = tag.getCompound("job");
-            List<MaterializationOperation> operations = new ArrayList<>();
-            for (Tag element : value.getList("operations", Tag.TAG_COMPOUND)) {
-                CompoundTag operation = (CompoundTag) element;
-                operations.add(new MaterializationOperation(operation.getString("id"), operation.getString("key"),
-                        MaterializationOperationType.valueOf(operation.getString("type")), operation.getString("target"),
-                        OperationState.valueOf(operation.getString("state")), operation.getInt("attempts"),
-                        operation.getString("error")));
-            }
-            job = new MaterializationJob(value.getString("id"), value.getLong("desiredRevision"), value.getString("policy"),
-                    value.getString("policyVersion"), JobState.valueOf(value.getString("state")), operations,
-                    value.getInt("nextOperationIndex"), value.getInt("attempts"), value.getString("error"));
-        }
         UUID anchor = tag.hasUUID("anchor") ? tag.getUUID("anchor") : null;
         EncounterRecord encounter = tag.contains("encounter", Tag.TAG_COMPOUND)
                 ? WorldPresentationCodec.readEncounter(tag.getCompound("encounter")) : EncounterRecord.none();
@@ -487,6 +475,6 @@ public final class PaleMirrorSavedData extends SavedData {
         StoryAudienceId audience = tag.contains("audience", Tag.TAG_STRING)
                 ? new StoryAudienceId(tag.getString("audience")) : StoryAudienceId.globalTestAudience();
         WorldObjectId id = new WorldObjectId(tag.getString("id"));
-        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, gate, job);
+        return new TestMineRecord(registry.require(id), audience, cells, anchor, encounter, gate, null);
     }
 }

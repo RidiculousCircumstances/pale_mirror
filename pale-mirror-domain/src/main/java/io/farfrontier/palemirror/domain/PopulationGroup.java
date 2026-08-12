@@ -13,12 +13,21 @@ public final class PopulationGroup {
     private PopulationDisposition disposition;
     private WorldObjectId currentPlaceId;
     private WorldObjectId hostSiteId;
+    private String journeyId;
     private long transitionDueStep;
     private long revision;
 
     public PopulationGroup(String id, WorldObjectId communityId, Map<SettlementCohort, Integer> cohorts,
                            WorldObjectId originPlaceId, PopulationDisposition disposition,
                            WorldObjectId currentPlaceId, WorldObjectId hostSiteId,
+                           long transitionDueStep, long revision) {
+        this(id, communityId, cohorts, originPlaceId, disposition, currentPlaceId, hostSiteId,
+                null, transitionDueStep, revision);
+    }
+
+    public PopulationGroup(String id, WorldObjectId communityId, Map<SettlementCohort, Integer> cohorts,
+                           WorldObjectId originPlaceId, PopulationDisposition disposition,
+                           WorldObjectId currentPlaceId, WorldObjectId hostSiteId, String journeyId,
                            long transitionDueStep, long revision) {
         this.id = requireText(id, "id");
         this.communityId = Objects.requireNonNull(communityId, "communityId");
@@ -31,6 +40,7 @@ public final class PopulationGroup {
         this.disposition = Objects.requireNonNull(disposition, "disposition");
         this.currentPlaceId = currentPlaceId;
         this.hostSiteId = hostSiteId;
+        this.journeyId = journeyId;
         if (transitionDueStep < -1 || revision < 0) throw new IllegalArgumentException("Invalid population group revision/timing");
         this.transitionDueStep = transitionDueStep;
         this.revision = revision;
@@ -50,6 +60,7 @@ public final class PopulationGroup {
     public PopulationDisposition disposition() { return disposition; }
     public WorldObjectId currentPlaceId() { return currentPlaceId; }
     public WorldObjectId hostSiteId() { return hostSiteId; }
+    public String journeyId() { return journeyId; }
     public long transitionDueStep() { return transitionDueStep; }
     public long revision() { return revision; }
     public boolean beginEvacuation(long dueStep) {
@@ -59,21 +70,33 @@ public final class PopulationGroup {
         revision++;
         return true;
     }
+    public boolean beginJourney(String value) {
+        if (disposition != PopulationDisposition.EVACUATING || value == null || value.isBlank()) return false;
+        disposition = PopulationDisposition.IN_TRANSIT;
+        journeyId = value;
+        currentPlaceId = null;
+        transitionDueStep = -1;
+        revision++;
+        return true;
+    }
     public boolean displace() {
         if (disposition != PopulationDisposition.EVACUATING && disposition != PopulationDisposition.IN_TRANSIT) return false;
         disposition = PopulationDisposition.DISPLACED;
         currentPlaceId = null;
         hostSiteId = null;
         transitionDueStep = -1;
+        journeyId = null;
         revision++;
         return true;
     }
     public boolean hostAt(WorldObjectId siteId) {
-        if (disposition != PopulationDisposition.EVACUATING && disposition != PopulationDisposition.DISPLACED) return false;
+        if (disposition != PopulationDisposition.EVACUATING && disposition != PopulationDisposition.IN_TRANSIT
+                && disposition != PopulationDisposition.DISPLACED) return false;
         disposition = PopulationDisposition.RESETTLED;
         currentPlaceId = null;
         hostSiteId = Objects.requireNonNull(siteId, "siteId");
         transitionDueStep = -1;
+        journeyId = null;
         revision++;
         return true;
     }
@@ -83,6 +106,26 @@ public final class PopulationGroup {
         currentPlaceId = originPlaceId;
         hostSiteId = null;
         transitionDueStep = -1;
+        journeyId = null;
+        revision++;
+        return true;
+    }
+    public boolean beginReturnJourney(String value) {
+        if (disposition != PopulationDisposition.RESETTLED || value == null || value.isBlank()) return false;
+        disposition = PopulationDisposition.IN_TRANSIT;
+        currentPlaceId = null;
+        hostSiteId = null;
+        journeyId = value;
+        revision++;
+        return true;
+    }
+    public boolean arriveHome(String completedJourneyId) {
+        if (disposition != PopulationDisposition.IN_TRANSIT || !Objects.equals(journeyId, completedJourneyId)) return false;
+        disposition = PopulationDisposition.RESIDENT;
+        currentPlaceId = originPlaceId;
+        hostSiteId = null;
+        transitionDueStep = -1;
+        journeyId = null;
         revision++;
         return true;
     }

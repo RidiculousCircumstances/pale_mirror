@@ -47,6 +47,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.common.util.TriState;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import io.farfrontier.palemirror.internal.settlement.RefugeeCampRuntime;
@@ -57,8 +58,13 @@ public final class PaleMirrorEvents {
     private PaleMirrorEvents() { }
 
     @SubscribeEvent
-    public static void onServerStarted(ServerStartedEvent event) {
+    public static void onServerAboutToStart(ServerAboutToStartEvent event) {
+        io.farfrontier.palemirror.internal.world.ProductProfilePreflight.verify();
         PaleMirrorSavedData.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
+    }
+
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
         PaleMirrorRuntime.forServer(event.getServer());
     }
 
@@ -102,6 +108,14 @@ public final class PaleMirrorEvents {
         if (event.getEntity().level().getServer() != null) {
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
                     .recordSettlementDeath(event.getEntity(), event.getSource());
+        }
+        var visualObjectId = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
+                .flatMap(provider -> provider.threatControllerObjectId(event.getEntity())).orElse(null);
+        if (visualObjectId != null && event.getEntity().level().getServer() != null) {
+            PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
+                    .receiveThreatControllerDamage(event.getEntity(), event.getSource(), Integer.MAX_VALUE);
+            event.setCanceled(true);
+            return;
         }
         String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
         if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null) {
@@ -147,6 +161,11 @@ public final class PaleMirrorEvents {
                 || denyExcludedItem(player, player.getOffhandItem(), "melee attack"))) {
             event.setCanceled(true);
             return;
+        }
+        if (event.getEntity().level().getServer() != null) {
+            ActorDamageResult controller = PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
+                    .receiveThreatControllerDamage(event.getEntity(), event.getSource(), event.getAmount());
+            if (controller.intercepts()) { event.setCanceled(true); return; }
         }
         String objectId = event.getEntity().getPersistentData().getString(VanillaAnchorAdapter.OBJECT_ID_KEY);
         if (!objectId.isBlank() && VanillaAnchorAdapter.isAnchor(event.getEntity()) && event.getEntity().level().getServer() != null

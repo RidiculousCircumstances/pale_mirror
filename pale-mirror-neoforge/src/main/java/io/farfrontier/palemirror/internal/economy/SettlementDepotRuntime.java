@@ -1,38 +1,43 @@
 package io.farfrontier.palemirror.internal.economy;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-
+import io.farfrontier.palemirror.api.ParcelKind;
+import io.farfrontier.palemirror.api.SemanticSlotKey;
+import io.farfrontier.palemirror.domain.DevelopmentIntentState;
+import io.farfrontier.palemirror.domain.DevelopmentIntentType;
 import io.farfrontier.palemirror.domain.OperationalState;
 import io.farfrontier.palemirror.domain.ResourceKind;
 import io.farfrontier.palemirror.domain.SiteAffiliation;
 import io.farfrontier.palemirror.domain.SiteAffiliationRole;
 import io.farfrontier.palemirror.domain.SiteCapability;
 import io.farfrontier.palemirror.domain.SiteCapabilityType;
+import io.farfrontier.palemirror.domain.StructuralIntegrity;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
 import io.farfrontier.palemirror.domain.WorldSiteType;
-import io.farfrontier.palemirror.domain.StructuralIntegrity;
-import io.farfrontier.palemirror.internal.world.MutableCell;
+import io.farfrontier.palemirror.internal.materialization.JobState;
+import io.farfrontier.palemirror.internal.materialization.MaterializationGateway;
+import io.farfrontier.palemirror.internal.materialization.MaterializationJob;
+import io.farfrontier.palemirror.internal.materialization.MaterializationJobClass;
+import io.farfrontier.palemirror.internal.materialization.MaterializationOperation;
+import io.farfrontier.palemirror.internal.materialization.MaterializationOperationType;
+import io.farfrontier.palemirror.internal.materialization.OperationState;
+import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
+import io.farfrontier.palemirror.internal.materialization.SemanticSlotRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.levelgen.Heightmap;
 
-/** Bounded, provenance-safe PM depot planner/executor. It never loads a chunk. */
+/** Shared-job depot executor. It never loads a chunk and never stores canonical stock in a container. */
 public final class SettlementDepotRuntime {
-    public static final String TEMPLATE_VERSION = "supply-depot-v1";
-    private static final List<BlockPos> OFFSETS = List.of(
-            new BlockPos(24, 0, 0), new BlockPos(-24, 0, 0), new BlockPos(0, 0, 24), new BlockPos(0, 0, -24),
-            new BlockPos(32, 0, 20), new BlockPos(-32, 0, 20), new BlockPos(32, 0, -20), new BlockPos(-32, 0, -20),
-            new BlockPos(20, 0, 32), new BlockPos(-20, 0, 32), new BlockPos(20, 0, -32), new BlockPos(-20, 0, -32),
-            new BlockPos(48, 0, 0), new BlockPos(-48, 0, 0), new BlockPos(0, 0, 48), new BlockPos(0, 0, -48));
-
+    public static final String TEMPLATE_VERSION = "supply-depot-v34";
+    public static final String CHANNEL = "settlement_depot";
     private SettlementDepotRuntime() { }
 
     public static boolean tick(MinecraftServer server, PaleMirrorSavedData data) {
@@ -41,157 +46,117 @@ public final class SettlementDepotRuntime {
             SettlementDepotRecord depot = data.settlementDepots().get(region.communityId());
             if (depot == null) {
                 var place = data.worldRegistry().find(region.placeId()).orElse(null);
-                if (place == null) continue;
-                ServerLevel level = level(server, place.dimensionId());
-                if (level == null) continue;
                 var presentation = data.campaignRegions().get(region.id());
-                BlockPos anchor = presentation != null && presentation.layoutVersion() >= 2
-                        ? presentation.depotAnchor()
-                        : findAnchor(level, place.anchor(), server.overworld().getSeed() ^ region.communityId().hashCode());
-                if (anchor == null) continue;
+                if (place == null || presentation == null || presentation.depotAnchor() == null) continue;
+                ServerLevel level = level(server, place.dimensionId()); BlockPos anchor = presentation.depotAnchor();
+                if (level == null || !level.hasChunkAt(anchor)) continue;
                 WorldObjectId siteId = new WorldObjectId(region.communityId().value() + "_supply_depot");
-                depot = new SettlementDepotRecord(siteId, region.communityId(), place.dimensionId(), anchor,
-                        captureCells(level, anchor), SettlementDepotState.PLANNED, "");
-                data.settlementDepots().put(region.communityId(), depot);
-                data.worldState().putSite(new WorldSite(siteId, WorldSiteType.STORAGE, OperationalState.DEGRADED));
-                data.worldState().putSiteAffiliation(new SiteAffiliation(siteId, region.communityId(), SiteAffiliationRole.RECIPIENT));
-                data.worldState().putSiteCapability(new SiteCapability(siteId, SiteCapabilityType.STORAGE,
-                        ResourceKind.IRON, data.worldState().economy(region.communityId()).orElseThrow()
-                        .require(ResourceKind.IRON).capacity()));
-                changed = true;
-                continue;
+                SemanticSlotKey key = new SemanticSlotKey(siteId.value(), "receiving_depot", "functional_core");
+                if (data.parcels().managedAt(place.dimensionId(), anchor).isEmpty()) data.parcels().register(
+                        new ParcelRecord(siteId.value() + ":parcel", region.id(), place.dimensionId(),
+                                anchor.offset(-3, -1, -3), anchor.offset(3, 3, 3), "supply_depot",
+                                ParcelKind.COMMUNITY, null, 0, ""));
+                if (data.semanticSlots().find(key).isEmpty()) data.semanticSlots().register(new SemanticSlotRecord(
+                        key, ParcelKind.COMMUNITY, capture(level, anchor), false, "", ""));
+                depot = new SettlementDepotRecord(siteId, region.communityId(), place.dimensionId(), anchor, key);
+                data.settlementDepots().put(region.communityId(), depot); registerSite(data, depot); changed = true; continue;
             }
             ServerLevel level = level(server, depot.dimensionId());
-            if (level == null || !level.hasChunkAt(depot.anchor()) || depot.state() == SettlementDepotState.BLOCKED) continue;
-            boolean ruined = data.worldState().communityPlaceBinding(depot.communityId())
-                    .flatMap(binding -> data.worldState().place(binding.placeId()))
-                    .map(place -> place.structuralIntegrity() == StructuralIntegrity.RUINED).orElse(false);
-            ruined &= data.worldState().settlementAuthorityProfile(depot.communityId())
-                    .map(io.farfrontier.palemirror.domain.SettlementAuthorityProfile::pmRuinAllowed).orElse(true);
-            if (depot.state() == SettlementDepotState.ACTIVE && ruined) {
-                String failure = materializeRuin(level, depot);
-                depot.block(failure == null ? "Settlement place is ruined" : failure);
-                data.worldState().site(depot.siteId()).orElseThrow().setOperationalState(OperationalState.OFFLINE);
-                changed = true;
-                continue;
-            }
-            if (depot.state() == SettlementDepotState.ACTIVE) continue;
-            if (depot.state() == SettlementDepotState.PLANNED) {
-                depot.start();
-                changed = true;
-                continue;
-            }
-            String failure = materialize(level, depot);
+            if (level == null || !level.hasChunkAt(depot.anchor())) continue;
+            Desired desired = desired(data, depot);
+            MaterializationJob job = ensureJob(data, depot, desired);
+            if (job.state() == JobState.PLANNED) { job.start(); changed = true; continue; }
+            if (job.state() != JobState.RUNNING && job.state() != JobState.BLOCKED) continue;
+            if (job.state() == JobState.BLOCKED) job.start();
+            String failure = execute(level, data, depot, desired, job);
             if (failure == null) {
-                depot.activate();
-                data.worldState().site(depot.siteId()).orElseThrow().setOperationalState(OperationalState.OPERATIONAL);
-            } else depot.block(failure);
+                job.complete(); data.worldState().site(depot.siteId()).orElseThrow().setOperationalState(
+                        desired == Desired.RUINED ? OperationalState.OFFLINE : OperationalState.OPERATIONAL);
+            } else job.block(failure);
             changed = true;
         }
         return changed;
     }
 
-    private static BlockPos findAnchor(ServerLevel level, BlockPos center, long seed) {
-        int rotation = Math.floorMod((int) (seed ^ (seed >>> 32)), OFFSETS.size());
-        for (int index = 0; index < OFFSETS.size(); index++) {
-            BlockPos offset = OFFSETS.get((index + rotation) % OFFSETS.size());
-            int x = center.getX() + offset.getX();
-            int z = center.getZ() + offset.getZ();
-            BlockPos candidate = new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
-            if (safe(level, candidate)) return candidate;
-        }
-        return null;
+    public static SettlementDepotState state(PaleMirrorSavedData data, SettlementDepotRecord depot) {
+        MaterializationJob job = data.materializationJobs().activeFor(depot.siteId().value(), CHANNEL).orElse(null);
+        if (job == null || job.state() == JobState.PLANNED) return SettlementDepotState.PLANNED;
+        if (job.state() == JobState.RUNNING) return SettlementDepotState.RUNNING;
+        if (job.state() == JobState.BLOCKED || job.state() == JobState.FAILED) return SettlementDepotState.BLOCKED;
+        return data.worldState().site(depot.siteId()).map(site -> site.operationalState() == OperationalState.OPERATIONAL
+                ? SettlementDepotState.ACTIVE : SettlementDepotState.BLOCKED).orElse(SettlementDepotState.BLOCKED);
     }
 
-    private static boolean safe(ServerLevel level, BlockPos anchor) {
-        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) {
-            BlockPos pad = anchor.offset(x, 0, z);
-            if (!level.hasChunkAt(pad) || !level.getBlockState(pad.below()).isSolid()
-                    || !level.isEmptyBlock(pad) || !level.isEmptyBlock(pad.above())
-                    || level.getBlockEntity(pad) != null || level.getBlockEntity(pad.above()) != null) return false;
-        }
-        return true;
+    public static String diagnostic(PaleMirrorSavedData data, SettlementDepotRecord depot) {
+        return data.materializationJobs().activeFor(depot.siteId().value(), CHANNEL)
+                .map(MaterializationJob::lastError).orElse("");
     }
 
-    private static List<MutableCell> captureCells(ServerLevel level, BlockPos anchor) {
-        List<MutableCell> cells = new ArrayList<>();
-        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) addCell(level, cells, anchor.offset(x, 0, z));
-        addCell(level, cells, anchor.above());
-        addCell(level, cells, anchor.offset(2, 1, 2));
-        return List.copyOf(cells);
+    private static Desired desired(PaleMirrorSavedData data, SettlementDepotRecord depot) {
+        boolean ruined = data.worldState().communityPlaceBinding(depot.communityId())
+                .flatMap(binding -> data.worldState().place(binding.placeId()))
+                .map(place -> place.structuralIntegrity() == StructuralIntegrity.RUINED).orElse(false);
+        if (ruined) return Desired.RUINED;
+        boolean upgrading = data.worldState().developmentIntents().stream().anyMatch(intent ->
+                intent.communityId().equals(depot.communityId()) && intent.type() == DevelopmentIntentType.UPGRADE_STOREHOUSE
+                        && depot.siteId().equals(intent.targetSiteId())
+                        && intent.state() == DevelopmentIntentState.MATERIALIZING);
+        return upgrading ? Desired.UPGRADED : Desired.BASELINE;
     }
 
-    private static void addCell(ServerLevel level, List<MutableCell> cells, BlockPos pos) {
-        String baseline = blockId(level, pos);
-        cells.add(new MutableCell(pos, baseline, baseline, false));
+    private static MaterializationJob ensureJob(PaleMirrorSavedData data, SettlementDepotRecord depot, Desired desired) {
+        String policy = "pale_mirror:depot_" + desired.name().toLowerCase(java.util.Locale.ROOT);
+        MaterializationJob current = data.materializationJobs().activeFor(depot.siteId().value(), CHANNEL).orElse(null);
+        if (current != null && current.policyId().equals(policy) && current.policyVersion().equals(TEMPLATE_VERSION)) return current;
+        if (current != null) current.cancel("Superseded by " + policy);
+        long revision = desired.ordinal() + 1L;
+        String id = "pm:job:depot:" + Integer.toUnsignedString(depot.siteId().hashCode(), 36) + ":" + revision;
+        MaterializationOperation operation = new MaterializationOperation(id + ":slot", id + ":slot",
+                MaterializationOperationType.APPLY_SEMANTIC_SLOT, depot.semanticSlot().value(), OperationState.PENDING, 0, "");
+        MaterializationJob job = new MaterializationJob(id, depot.siteId().value(), CHANNEL,
+                MaterializationJobClass.CAPABILITY, revision, policy, TEMPLATE_VERSION, JobState.PLANNED,
+                List.of(operation), 0, 0, ""); data.materializationJobs().put(job); return job;
     }
 
-    private static String materialize(ServerLevel level, SettlementDepotRecord depot) {
-        for (MutableCell cell : depot.cells()) {
-            String current = blockId(level, cell.position());
-            if (cell.conflicted() || !current.equals(cell.baselineBlock()) && !current.equals(cell.lastAppliedBlock())) {
-                cell.conflict();
-                return "Supply depot cell changed outside Pale Mirror at " + cell.position();
+    private static String execute(ServerLevel level, PaleMirrorSavedData data, SettlementDepotRecord depot,
+                                  Desired desired, MaterializationJob job) {
+        MaterializationOperation operation = job.nextOperation(); if (operation == null) return null;
+        operation.start(); MaterializationGateway gateway = new MaterializationGateway(level, data.semanticSlots(), data.parcels());
+        for (SemanticCellRecord cell : data.semanticSlots().find(depot.semanticSlot()).orElseThrow().cells()) {
+            var result = gateway.setBlock(depot.semanticSlot(), cell.position(), block(depot, cell.position(), desired).defaultBlockState(), 3);
+            if (result.status() == io.farfrontier.palemirror.api.GuardedWorldAccess.Status.BLOCKED) {
+                operation.block(result.diagnostic()); return result.diagnostic();
             }
-            Block desired = desiredBlock(depot, cell.position());
-            String desiredId = BuiltInRegistries.BLOCK.getKey(desired).toString();
-            if (!current.equals(desiredId)) level.setBlock(cell.position(), desired.defaultBlockState(), 3);
-            if (!blockId(level, cell.position()).equals(desiredId)) return "Supply depot postcondition failed at " + cell.position();
-            cell.markApplied(desiredId);
         }
-        return null;
+        gateway.completeReset(depot.semanticSlot()); operation.complete(); job.advanceOperation(); return null;
     }
 
-    private static String materializeRuin(ServerLevel level, SettlementDepotRecord depot) {
-        for (MutableCell cell : depot.cells()) {
-            String current = blockId(level, cell.position());
-            if (cell.conflicted() || !current.equals(cell.lastAppliedBlock())) {
-                cell.conflict();
-                return "Ruin overlay conflicts with an unknown depot change at " + cell.position();
-            }
-            Block desired = cell.position().equals(depot.interactionPosition()) ? Blocks.IRON_BARS
-                    : cell.position().equals(depot.anchor().offset(2, 1, 2)) ? Blocks.SOUL_LANTERN
-                    : Blocks.CRACKED_STONE_BRICKS;
-            String desiredId = BuiltInRegistries.BLOCK.getKey(desired).toString();
-            level.setBlock(cell.position(), desired.defaultBlockState(), 3);
-            if (!blockId(level, cell.position()).equals(desiredId)) return "Ruin overlay postcondition failed";
-            cell.markApplied(desiredId);
-        }
-        return null;
+    private static void registerSite(PaleMirrorSavedData data, SettlementDepotRecord depot) {
+        if (data.worldState().site(depot.siteId()).isPresent()) return;
+        int capacity = data.worldState().economy(depot.communityId()).orElseThrow().require(ResourceKind.IRON).capacity();
+        data.worldState().putSite(new WorldSite(depot.siteId(), WorldSiteType.STORAGE, OperationalState.DEGRADED));
+        data.worldState().putSiteAffiliation(new SiteAffiliation(depot.siteId(), depot.communityId(), SiteAffiliationRole.RECIPIENT));
+        data.worldState().putSiteCapability(new SiteCapability(depot.siteId(), SiteCapabilityType.STORAGE, ResourceKind.IRON, capacity));
     }
 
-    public static String upgradeStorehouse(ServerLevel level, SettlementDepotRecord depot) {
-        if (depot.state() != SettlementDepotState.ACTIVE) return "Supply depot is not operational";
-        for (MutableCell cell : depot.cells()) {
-            Block desired = cell.position().equals(depot.interactionPosition()) ? Blocks.BARREL
-                    : cell.position().equals(depot.anchor().offset(2, 1, 2)) ? Blocks.LANTERN : Blocks.STONE_BRICKS;
-            String desiredId = BuiltInRegistries.BLOCK.getKey(desired).toString();
-            String current = blockId(level, cell.position());
-            if (cell.conflicted() || !current.equals(cell.lastAppliedBlock()) && !current.equals(desiredId)) {
-                cell.conflict();
-                return "Storehouse upgrade conflicts with an unknown depot change at " + cell.position();
-            }
-            if (!current.equals(desiredId)) level.setBlock(cell.position(), desired.defaultBlockState(), 3);
-            if (!blockId(level, cell.position()).equals(desiredId)) return "Storehouse upgrade postcondition failed";
-            cell.markApplied(desiredId);
-        }
-        return null;
+    private static List<SemanticCellRecord> capture(ServerLevel level, BlockPos anchor) {
+        List<SemanticCellRecord> result = new ArrayList<>();
+        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) add(level, result, anchor.offset(x, 0, z));
+        add(level, result, anchor.above()); add(level, result, anchor.offset(2, 1, 2)); return List.copyOf(result);
     }
-
-    private static Block desiredBlock(SettlementDepotRecord depot, BlockPos pos) {
+    private static void add(ServerLevel level, List<SemanticCellRecord> cells, BlockPos pos) {
+        var value = level.getBlockState(pos); cells.add(new SemanticCellRecord(pos, value, value));
+    }
+    private static Block block(SettlementDepotRecord depot, BlockPos pos, Desired desired) {
+        if (desired == Desired.RUINED) return pos.equals(depot.interactionPosition()) ? Blocks.IRON_BARS
+                : pos.equals(depot.anchor().offset(2, 1, 2)) ? Blocks.SOUL_LANTERN : Blocks.CRACKED_STONE_BRICKS;
         if (pos.equals(depot.interactionPosition())) return Blocks.BARREL;
         if (pos.equals(depot.anchor().offset(2, 1, 2))) return Blocks.LANTERN;
-        return Blocks.POLISHED_ANDESITE;
+        return desired == Desired.UPGRADED ? Blocks.STONE_BRICKS : Blocks.POLISHED_ANDESITE;
     }
-
-    private static ServerLevel level(MinecraftServer server, String dimensionId) {
-        for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().location().toString().equals(dimensionId)) return level;
-        }
+    private static ServerLevel level(MinecraftServer server, String id) {
+        for (ServerLevel value : server.getAllLevels()) if (value.dimension().location().toString().equals(id)) return value;
         return null;
     }
-
-    private static String blockId(ServerLevel level, BlockPos pos) {
-        return BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock()).toString();
-    }
+    private enum Desired { BASELINE, RUINED, UPGRADED }
 }

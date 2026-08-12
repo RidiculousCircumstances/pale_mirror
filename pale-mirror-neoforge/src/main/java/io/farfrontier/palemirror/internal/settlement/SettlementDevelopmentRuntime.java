@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.domain.DomainCommandProcessor;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.internal.economy.SettlementDepotRuntime;
-import io.farfrontier.palemirror.internal.economy.SettlementDepotState;
+import io.farfrontier.palemirror.internal.materialization.JobState;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -19,7 +19,8 @@ public final class SettlementDevelopmentRuntime {
     public static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandProcessor commands) {
         boolean changed = false;
         for (var intent : data.worldState().developmentIntents().stream()
-                .filter(value -> value.type() == DevelopmentIntentType.UPGRADE_STOREHOUSE).toList()) {
+                .filter(value -> value.type() == DevelopmentIntentType.UPGRADE_STOREHOUSE
+                        || value.type() == DevelopmentIntentType.RECONSTRUCT_PLACE).toList()) {
             if (intent.state() == DevelopmentIntentState.PLANNED) {
                 // A presented development opportunity is a genuine player
                 // decision. A declined or unpresented intent remains
@@ -33,27 +34,23 @@ public final class SettlementDevelopmentRuntime {
                 continue;
             }
             if (intent.state() != DevelopmentIntentState.MATERIALIZING) continue;
+            if (intent.type() == DevelopmentIntentType.RECONSTRUCT_PLACE) continue;
             var depot = data.settlementDepots().get(intent.communityId());
-            if (depot == null || !depot.siteId().equals(intent.targetSiteId())) continue;
-            if (depot.state() == SettlementDepotState.BLOCKED) {
-                commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), depot.diagnostic()));
+            if (depot == null || !depot.siteId().equals(intent.targetSiteId())) continue; // core-only legacy target
+            var job = data.materializationJobs().activeFor(depot.siteId().value(), SettlementDepotRuntime.CHANNEL).orElse(null);
+            if (job != null && job.state() == JobState.BLOCKED) {
+                commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), job.lastError()));
                 changed = true;
                 continue;
             }
-            if (depot.state() != SettlementDepotState.ACTIVE) continue;
-            ServerLevel level = level(server, depot.dimensionId());
-            if (level == null || !level.hasChunkAt(depot.anchor())) continue;
-            String failure = SettlementDepotRuntime.upgradeStorehouse(level, depot);
-            if (failure == null) commands.execute(data.worldState(), new DomainCommand.CompleteDevelopmentIntent(intent.id()));
-            else commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), failure));
+            if (job == null || job.state() != JobState.COMPLETED
+                    || !job.policyId().equals("pale_mirror:depot_upgraded")) continue;
+            commands.execute(data.worldState(), new DomainCommand.CompleteDevelopmentIntent(intent.id()));
             changed = true;
         }
+        if (AuthoredSettlementProjectRuntime.tick(server, data, commands)) changed = true;
         if (RefugeeCampRuntime.cleanupReturnedGroups(server, data, commands)) changed = true;
         return changed;
     }
 
-    private static ServerLevel level(MinecraftServer server, String dimensionId) {
-        for (ServerLevel level : server.getAllLevels()) if (level.dimension().location().toString().equals(dimensionId)) return level;
-        return null;
-    }
 }

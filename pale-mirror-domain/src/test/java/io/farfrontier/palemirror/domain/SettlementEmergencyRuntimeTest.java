@@ -16,12 +16,11 @@ class SettlementEmergencyRuntimeTest {
         assertTrue(services.settlementEmergencies().reconcile(state).stream()
                 .anyMatch(value -> value.type() == DomainEventType.SETTLEMENT_EMERGENCY_WINDOW_OPENED));
         reconcileThrough(state, services, 8);
-        assertEquals(PopulationDisposition.EVACUATING, state.populationGroups(COMMUNITY).getFirst().disposition());
+        assertEquals(PopulationDisposition.IN_TRANSIT, state.populationGroups(COMMUNITY).getFirst().disposition());
         assertEquals(OccupancyState.EVACUATING, state.place(PLACE).orElseThrow().occupancy());
 
-        state.setSimulationStep(10);
-        services.settlementEmergencies().reconcile(state);
-        assertEquals(PopulationDisposition.DISPLACED, state.populationGroups(COMMUNITY).getFirst().disposition());
+        reconcileThrough(state, services, 10);
+        assertEquals(PopulationDisposition.RESETTLED, state.populationGroups(COMMUNITY).getFirst().disposition());
         assertEquals(OccupancyState.EMPTY, state.place(PLACE).orElseThrow().occupancy());
         assertEquals(StructuralIntegrity.RUINED, state.place(PLACE).orElseThrow().structuralIntegrity());
         assertEquals(80, state.population(COMMUNITY), "evacuation moves people without deleting the community");
@@ -33,8 +32,8 @@ class SettlementEmergencyRuntimeTest {
         DomainServices services = new DomainServices();
         services.settlementEmergencies().reconcile(state);
 
-        assertEquals(1, services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
-                StoryAudienceId.globalTestAudience(), "player:test")).size());
+        assertTrue(!services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
+                StoryAudienceId.globalTestAudience(), "player:test")).isEmpty());
         assertTrue(services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
                 new StoryAudienceId("pm:audience:other"), "player:other")).isEmpty());
     }
@@ -48,12 +47,14 @@ class SettlementEmergencyRuntimeTest {
 
         assertTrue(services.commands().execute(state, new DomainCommand.RegisterEvacuationShelter(COMMUNITY,
                 StoryAudienceId.globalTestAudience(), new WorldSite(shelter, WorldSiteType.SHELTER, OperationalState.OPERATIONAL),
-                new SiteCapability(shelter, SiteCapabilityType.SHELTER, null, 80), "player:anchor")).stream()
+                new SiteCapability(shelter, SiteCapabilityType.SHELTER, null, 80),
+                new WorldPath("pm:test:path", "1", new WorldObjectId("pale_mirror:origin"), shelter, java.util.List.of(
+                        new WorldPathNode("origin", "minecraft:overworld", 0, 64, 0, true),
+                        new WorldPathNode("shelter", "minecraft:overworld", 100, 64, 0, true))), "player:anchor")).stream()
                 .anyMatch(event -> event.type() == DomainEventType.REFUGEE_SHELTER_PREPARED));
         services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
                 StoryAudienceId.globalTestAudience(), "player:evacuate"));
-        state.setSimulationStep(10);
-        services.settlementEmergencies().reconcile(state);
+        reconcileThrough(state, services, 10);
 
         assertEquals(PopulationDisposition.RESETTLED, state.populationGroups(COMMUNITY).getFirst().disposition());
         assertEquals(80, state.population(COMMUNITY), "the prepared camp hosts the existing group; it does not clone it");
@@ -72,10 +73,9 @@ class SettlementEmergencyRuntimeTest {
 
         services.settlementEmergencies().reconcile(state);
         reconcileThrough(state, services, 8);
-        state.setSimulationStep(10);
-        services.settlementEmergencies().reconcile(state);
+        reconcileThrough(state, services, 10);
 
-        assertEquals(PopulationDisposition.DISPLACED, state.populationGroups(COMMUNITY).getFirst().disposition(),
+        assertEquals(new WorldObjectId("pale_mirror:zz_fallback"), state.populationGroups(COMMUNITY).getFirst().hostSiteId(),
                 "a shelter for another community must not silently redirect this population group");
     }
 
@@ -130,12 +130,21 @@ class SettlementEmergencyRuntimeTest {
                 RecognitionState.RECOGNIZED, 0));
         state.putRegionAccess(new AudienceRegionAccess(StoryAudienceId.globalTestAudience(), "test",
                 AudienceRegionReachability.LOCAL, true, 0, "initial"));
+        WorldObjectId fallback = new WorldObjectId("pale_mirror:zz_fallback");
+        WorldObjectId origin = new WorldObjectId("pale_mirror:origin");
+        state.putSite(new WorldSite(fallback, WorldSiteType.SHELTER, OperationalState.OPERATIONAL));
+        state.putSiteAffiliation(new SiteAffiliation(fallback, COMMUNITY, SiteAffiliationRole.RECIPIENT));
+        state.putSiteCapability(new SiteCapability(fallback, SiteCapabilityType.SHELTER, null, 80));
+        state.putWorldPath(new WorldPath("pm:test:fallback", "1", origin, fallback, java.util.List.of(
+                new WorldPathNode("origin", "minecraft:overworld", 0, 64, 0, true),
+                new WorldPathNode("fallback", "minecraft:overworld", 100, 64, 0, true))));
         return state;
     }
 
     private static void reconcileThrough(WorldState state, DomainServices services, long finalStep) {
         for (long step = state.simulationStep() + 1; step <= finalStep; step++) {
             state.setSimulationStep(step);
+            services.journeys().reconcile(state);
             services.settlementEmergencies().reconcile(state);
         }
     }

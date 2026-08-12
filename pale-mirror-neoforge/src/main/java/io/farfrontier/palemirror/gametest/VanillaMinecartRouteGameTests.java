@@ -190,7 +190,7 @@ public final class VanillaMinecartRouteGameTests {
             PaleMirrorSavedData.load(schema32, helper.getLevel().registryAccess());
             throw new AssertionError("schema v32 must fail closed instead of migrating an old physical graph");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("schema 33"),
+            helper.assertTrue(expected.getMessage().contains("schema 34"),
                     "fresh-world rail rejection must identify the schema boundary");
         }
         helper.succeed();
@@ -254,19 +254,26 @@ public final class VanillaMinecartRouteGameTests {
         record.activate();
         data.vanillaMinecartRoutes().put(record.regionId(), record);
 
-        rail(level, start, RailShape.SOUTH_EAST);
-        rail(level, start.south(), RailShape.NORTH_SOUTH);
-        rail(level, start.south(2), RailShape.NORTH_EAST);
-        for (int x = 1; x < 4; x++) rail(level, start.south(2).east(x), RailShape.EAST_WEST);
-        rail(level, target.south(2), RailShape.NORTH_WEST);
-        rail(level, target.south(), RailShape.NORTH_SOUTH);
-        rail(level, target, RailShape.SOUTH_WEST);
+        java.util.LinkedHashMap<BlockPos, RailShape> reroute = new java.util.LinkedHashMap<>();
+        reroute.put(start, RailShape.SOUTH_EAST);
+        reroute.put(start.south(), RailShape.NORTH_SOUTH);
+        reroute.put(start.south(2), RailShape.NORTH_EAST);
+        for (int x = 1; x < 4; x++) reroute.put(start.south(2).east(x), RailShape.EAST_WEST);
+        reroute.put(target.south(2), RailShape.NORTH_WEST);
+        reroute.put(target.south(), RailShape.NORTH_SOUTH);
+        reroute.put(target, RailShape.SOUTH_WEST);
+        railGraph(level, reroute);
         record.markTopologyChunkDirty(new net.minecraft.world.level.ChunkPos(start));
         record.markTopologyChunkDirty(new net.minecraft.world.level.ChunkPos(target.south(2)));
 
-        VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
+        // Topology reconciliation is intentionally chunk-budgeted. Give the
+        // runtime enough bounded passes to consume both dirty chunks rather
+        // than making this test depend on the GameTest's chunk alignment.
+        for (int pass = 0; pass < 4; pass++)
+            VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
         helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.ACTIVE,
-                "a connected player reroute must restore service without rebuilding the authored cells");
+                "a connected player reroute must restore service without rebuilding the authored cells; diagnostic="
+                        + record.diagnostic() + ", graph=" + record.observedRailShapes());
         helper.assertValueEqual(record.acceptedRailPath().size(), 9,
                 "the persisted route graph must adopt the complete detour");
         helper.assertTrue(record.acceptedRailPath().contains(start.south(2).east(2).asLong()),
@@ -274,13 +281,22 @@ public final class VanillaMinecartRouteGameTests {
         helper.succeed();
     }
 
-    private static void rail(ServerLevel level, BlockPos position, RailShape shape) {
-        level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(position, Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape), 3);
+    private static void railGraph(ServerLevel level, java.util.Map<BlockPos, RailShape> graph) {
+        // This is a synthetic already-finished player graph. Install its final
+        // states directly into the GameTest chunks so vanilla's incremental
+        // rail neighbour algorithm cannot normalize a half-built corner before
+        // the rest of the path exists.
+        graph.keySet().forEach(position -> level.getChunkAt(position.below()).setBlockState(
+                position.below(), Blocks.STONE.defaultBlockState(), false));
+        graph.forEach((position, shape) -> level.getChunkAt(position).setBlockState(position,
+                Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape), false));
     }
 
     private static void reset(PaleMirrorSavedData data) {
         data.vanillaMinecartRoutes().clear();
+        data.materializationJobs().clear();
+        data.semanticSlots().clear();
+        data.parcels().clear();
         data.worldState().clearRegionalState();
         data.worldState().setSimulationStep(0);
         data.worldState().setEventSequence(0);

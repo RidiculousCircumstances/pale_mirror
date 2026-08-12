@@ -28,7 +28,8 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.CancelDevelopmentIntent, DomainCommand.RegisterSettlementAuthorityProfile,
         DomainCommand.BlockDevelopmentIntent,
         DomainCommand.ReconcileSettlementPopulation,
-        DomainCommand.ConfirmSettlementResidentDeath {
+        DomainCommand.ConfirmSettlementResidentDeath,
+        DomainCommand.ObserveJourneyCheckpoint, DomainCommand.ObserveJourneyBlocked {
 
     record AdvanceSimulation(int steps) implements DomainCommand { }
 
@@ -143,7 +144,17 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
                                 CommunityPlaceBinding binding, SettlementEconomy economy,
                                 SettlementSecurity security, SettlementPolicy policy, List<WorldSite> sites,
                                 List<SiteAffiliation> affiliations, List<SiteCapability> capabilities,
-                                List<RouteContract> routeContracts, List<PopulationGroup> populationGroups) implements DomainCommand {
+                                List<RouteContract> routeContracts, List<PopulationGroup> populationGroups,
+                                List<WorldPath> worldPaths) implements DomainCommand {
+        public RegisterLivingRegion(LivingRegionState region, List<FacilityState> facilities,
+                                    SettlementCommunity community, SettlementPlace place,
+                                    CommunityPlaceBinding binding, SettlementEconomy economy,
+                                    SettlementSecurity security, SettlementPolicy policy, List<WorldSite> sites,
+                                    List<SiteAffiliation> affiliations, List<SiteCapability> capabilities,
+                                    List<RouteContract> routeContracts, List<PopulationGroup> populationGroups) {
+            this(region, facilities, community, place, binding, economy, security, policy, sites, affiliations,
+                    capabilities, routeContracts, populationGroups, List.of());
+        }
         public RegisterLivingRegion {
             Objects.requireNonNull(region, "region");
             facilities = List.copyOf(facilities);
@@ -158,6 +169,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             capabilities = List.copyOf(capabilities);
             routeContracts = List.copyOf(routeContracts);
             populationGroups = List.copyOf(populationGroups);
+            worldPaths = List.copyOf(worldPaths);
         }
     }
 
@@ -234,13 +246,14 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
 
     /** Registers a player-prepared physical shelter before any population moves. */
     record RegisterEvacuationShelter(WorldObjectId communityId, StoryAudienceId audience,
-                                     WorldSite shelter, SiteCapability capacity,
+                                     WorldSite shelter, SiteCapability capacity, WorldPath path,
                                      String causationId) implements DomainCommand {
         public RegisterEvacuationShelter {
             Objects.requireNonNull(communityId, "communityId");
             Objects.requireNonNull(audience, "audience");
             Objects.requireNonNull(shelter, "shelter");
             Objects.requireNonNull(capacity, "capacity");
+            Objects.requireNonNull(path, "path");
             Objects.requireNonNull(causationId, "causationId");
         }
     }
@@ -253,6 +266,20 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             Objects.requireNonNull(shelter, "shelter");
             Objects.requireNonNull(capacity, "capacity");
             Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    record ObserveJourneyCheckpoint(String journeyId, int checkpointIndex, String observationId) implements DomainCommand {
+        public ObserveJourneyCheckpoint {
+            Objects.requireNonNull(journeyId, "journeyId"); Objects.requireNonNull(observationId, "observationId");
+            if (checkpointIndex < 0) throw new IllegalArgumentException("Checkpoint index must not be negative");
+        }
+    }
+
+    record ObserveJourneyBlocked(String journeyId, String reason, String observationId) implements DomainCommand {
+        public ObserveJourneyBlocked {
+            Objects.requireNonNull(journeyId, "journeyId"); Objects.requireNonNull(reason, "reason");
+            Objects.requireNonNull(observationId, "observationId");
         }
     }
 

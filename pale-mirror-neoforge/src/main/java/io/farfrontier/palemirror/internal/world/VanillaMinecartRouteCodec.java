@@ -25,6 +25,7 @@ final class VanillaMinecartRouteCodec {
             value.putString("route", record.routeId());
             value.putLong("start", record.start().asLong());
             value.putLong("target", record.target().asLong());
+            value.putLongArray("plannedPath", record.plannedPath().stream().mapToLong(BlockPos::asLong).toArray());
             value.putString("status", record.status().name());
             value.putString("diagnostic", record.diagnostic());
             value.putInt("verificationCursor", record.verificationCursor());
@@ -85,9 +86,11 @@ final class VanillaMinecartRouteCodec {
             UUID cargo = value.hasUUID("cargoDisplay") ? value.getUUID("cargoDisplay") : null;
             Set<Long> damaged = new LinkedHashSet<>();
             for (long position : value.getLongArray("damagedCriticalCells")) damaged.add(position);
+            List<BlockPos> plannedPath = java.util.Arrays.stream(value.getLongArray("plannedPath"))
+                    .mapToObj(BlockPos::of).toList();
             VanillaMinecartRouteRecord record = new VanillaMinecartRouteRecord(value.getString("region"),
-                    value.getString("dimension"), value.getString("route"), BlockPos.of(value.getLong("start")),
-                    BlockPos.of(value.getLong("target")), VanillaMinecartRouteStatus.valueOf(value.getString("status")),
+                    value.getString("dimension"), value.getString("route"), plannedPath,
+                    VanillaMinecartRouteStatus.valueOf(value.getString("status")),
                     value.getString("diagnostic"), cells, completed, damaged, value.getInt("verificationCursor"),
                     value.getString("cartLease"), value.getBoolean("cartLeaseDispatched"), cart, cargo,
                     value.contains("cartProgress", Tag.TAG_DOUBLE) ? value.getDouble("cartProgress") : 0D,

@@ -6,6 +6,7 @@ set -euo pipefail
 mod_jar=${1:?usage: dedicated-restart-harness.sh /absolute/path/to/pale_mirror.jar}
 installer=${NEOFORGE_INSTALLER:-/home/rd/.cache/far-frontier/tools/neoforge-21.1.248-installer.jar}
 java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to the Java 21 executable}
+export JAVA_ARGS="${JAVA_ARGS:-} -Dpale_mirror.profile=core-only"
 export PATH="$(dirname "$java_bin"):$PATH"
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pale-mirror-dedicated.XXXXXX")
 log_one="$runtime_dir/first-start.log"

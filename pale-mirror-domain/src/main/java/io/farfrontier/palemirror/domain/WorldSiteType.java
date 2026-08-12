@@ -4,5 +4,6 @@ public enum WorldSiteType {
     LOGISTICS_ENDPOINT,
     STORAGE,
     SHELTER,
-    DEFENCE
+    DEFENCE,
+    DEVELOPMENT
 }

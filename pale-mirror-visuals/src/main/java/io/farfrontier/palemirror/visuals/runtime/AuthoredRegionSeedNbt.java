@@ -38,6 +38,7 @@ public final class AuthoredRegionSeedNbt {
             value.putString("role", module.role());
             value.put("origin", point(module.origin()));
             value.putInt("quarterTurns", module.quarterTurns());
+            value.put("footprint", bounds(module.footprint()));
             modules.add(value);
         });
         tag.put("modules", modules);
@@ -56,6 +57,7 @@ public final class AuthoredRegionSeedNbt {
         ListTag plots = new ListTag();
         seed.expansionPlots().forEach(value -> plots.add(bounds(value)));
         tag.put("expansionPlots", plots);
+        tag.put("shelterCandidates", points(seed.shelterCandidates()));
         return tag;
     }
 
@@ -64,7 +66,7 @@ public final class AuthoredRegionSeedNbt {
         for (Tag raw : tag.getList("modules", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) raw;
             modules.add(new VisualModulePlacement(value.getString("templateId"), value.getString("role"),
-                    point(value.getCompound("origin")), value.getInt("quarterTurns")));
+                    point(value.getCompound("origin")), value.getInt("quarterTurns"), bounds(value.getCompound("footprint"))));
         }
         List<ResidentSeed> residents = new ArrayList<>();
         for (Tag raw : tag.getList("residents", Tag.TAG_COMPOUND)) {
@@ -81,7 +83,7 @@ public final class AuthoredRegionSeedNbt {
                 bounds(tag.getCompound("settlementBounds")), point(tag.getCompound("freightGate")),
                 point(tag.getCompound("receivingDepot")), point(tag.getCompound("primaryMine")),
                 point(tag.getCompound("alternateMine")), points(tag.getList("baselineRailNodes", Tag.TAG_COMPOUND)),
-                modules, residents, plots);
+                modules, residents, plots, points(tag.getList("shelterCandidates", Tag.TAG_COMPOUND)));
     }
 
     private static CompoundTag point(VisualPoint point) {

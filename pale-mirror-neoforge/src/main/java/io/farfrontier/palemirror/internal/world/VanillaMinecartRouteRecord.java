@@ -27,6 +27,7 @@ public final class VanillaMinecartRouteRecord {
     private final String routeId;
     private final BlockPos start;
     private final BlockPos target;
+    private final List<BlockPos> plannedPath;
     private final Map<Long, VanillaMinecartMutableCell> cells;
     private final Set<Integer> completedSegments;
     private final Set<Long> damagedCriticalCells;
@@ -47,7 +48,7 @@ public final class VanillaMinecartRouteRecord {
     private long topologyRevision;
     private BlockPos topologyIssue;
 
-    public VanillaMinecartRouteRecord(String regionId, String dimensionId, String routeId, BlockPos start, BlockPos target,
+    public VanillaMinecartRouteRecord(String regionId, String dimensionId, String routeId, List<BlockPos> plannedPath,
                                       VanillaMinecartRouteStatus status, String diagnostic,
                                       Map<Long, VanillaMinecartMutableCell> cells, Set<Integer> completedSegments,
                                       Set<Long> damagedCriticalCells,
@@ -57,13 +58,15 @@ public final class VanillaMinecartRouteRecord {
         this.regionId = text(regionId, "regionId");
         this.dimensionId = text(dimensionId, "dimensionId");
         this.routeId = text(routeId, "routeId");
-        this.start = Objects.requireNonNull(start, "start").immutable();
-        this.target = Objects.requireNonNull(target, "target").immutable();
-        if (start.getX() != target.getX() && start.getZ() != target.getZ()) {
-            throw new IllegalArgumentException("Vanilla minecart route must be cardinal");
-        }
-        if (start.equals(target) || Math.abs(start.getY() - target.getY()) > horizontalLength()) {
-            throw new IllegalArgumentException("Vanilla minecart route grade is invalid");
+        this.plannedPath = plannedPath.stream().map(BlockPos::immutable).toList();
+        if (this.plannedPath.size() < 2) throw new IllegalArgumentException("Vanilla minecart path needs two nodes");
+        this.start = this.plannedPath.getFirst(); this.target = this.plannedPath.getLast();
+        for (int index = 1; index < this.plannedPath.size(); index++) {
+            BlockPos previous = this.plannedPath.get(index - 1); BlockPos current = this.plannedPath.get(index);
+            int horizontal = Math.abs(current.getX() - previous.getX()) + Math.abs(current.getZ() - previous.getZ());
+            if (horizontal != 1 || Math.abs(current.getY() - previous.getY()) > 1) {
+                throw new IllegalArgumentException("Vanilla minecart path is not adjacent and grade-safe at " + index);
+            }
         }
         this.status = Objects.requireNonNull(status, "status");
         this.diagnostic = diagnostic == null ? "" : diagnostic;
@@ -128,7 +131,11 @@ public final class VanillaMinecartRouteRecord {
 
     public static VanillaMinecartRouteRecord planned(String regionId, String dimensionId, String routeId,
                                                       BlockPos start, BlockPos target) {
-        return new VanillaMinecartRouteRecord(regionId, dimensionId, routeId, start, target,
+        return planned(regionId, dimensionId, routeId, straightPath(start, target));
+    }
+    public static VanillaMinecartRouteRecord planned(String regionId, String dimensionId, String routeId,
+                                                      List<BlockPos> path) {
+        return new VanillaMinecartRouteRecord(regionId, dimensionId, routeId, path,
                 VanillaMinecartRouteStatus.PLANNED, "", Map.of(), Set.of(), Set.of(), 0, "", false,
                 null, null, 0D, true);
     }
@@ -138,6 +145,7 @@ public final class VanillaMinecartRouteRecord {
     public String routeId() { return routeId; }
     public BlockPos start() { return start; }
     public BlockPos target() { return target; }
+    public List<BlockPos> plannedPath() { return plannedPath; }
     public VanillaMinecartRouteStatus status() { return status; }
     public String diagnostic() { return diagnostic; }
     public Map<Long, VanillaMinecartMutableCell> cells() { return Map.copyOf(cells); }
@@ -148,7 +156,7 @@ public final class VanillaMinecartRouteRecord {
         return damagedCriticalCells.isEmpty() ? null : BlockPos.of(damagedCriticalCells.iterator().next());
     }
     public int completedSegmentCount() { return completedSegments.size(); }
-    public int segmentCount() { return horizontalLength() + 1; }
+    public int segmentCount() { return plannedPath.size(); }
     public int verificationCursor() { return verificationCursor; }
     public String cartLeaseId() { return cartLeaseId; }
     public boolean cartLeaseDispatched() { return cartLeaseDispatched; }
@@ -165,18 +173,19 @@ public final class VanillaMinecartRouteRecord {
     public BlockPos topologyIssue() { return topologyIssue; }
     public int topologyIssueCount() { return status == VanillaMinecartRouteStatus.SUSPENDED && topologyIssue != null ? 1 : 0; }
     public Direction direction() {
-        if (target.getX() > start.getX()) return Direction.EAST;
-        if (target.getX() < start.getX()) return Direction.WEST;
-        return target.getZ() > start.getZ() ? Direction.SOUTH : Direction.NORTH;
+        return direction(0);
+    }
+    public Direction direction(int index) {
+        int from = index == segmentCount() - 1 ? index - 1 : index;
+        int to = index == segmentCount() - 1 ? index : index + 1;
+        BlockPos a = railPosition(from); BlockPos b = railPosition(to);
+        if (b.getX() > a.getX()) return Direction.EAST; if (b.getX() < a.getX()) return Direction.WEST;
+        return b.getZ() > a.getZ() ? Direction.SOUTH : Direction.NORTH;
     }
 
     public BlockPos railPosition(int index) {
         if (index < 0 || index >= segmentCount()) throw new IllegalArgumentException("Invalid rail segment index");
-        Direction direction = direction();
-        int horizontal = horizontalLength();
-        int y = start.getY() + Math.round((target.getY() - start.getY()) * (index / (float) horizontal));
-        BlockPos horizontalPosition = start.relative(direction, index);
-        return new BlockPos(horizontalPosition.getX(), y, horizontalPosition.getZ());
+        return plannedPath.get(index);
     }
 
     public int nextRailY(int index) { return railPosition(Math.min(segmentCount() - 1, index + 1)).getY(); }
@@ -245,21 +254,16 @@ public final class VanillaMinecartRouteRecord {
     public boolean containsTopologyPosition(BlockPos position) {
         int horizontalMargin = 48;
         int verticalMargin = 32;
-        return position.getX() >= Math.min(start.getX(), target.getX()) - horizontalMargin
-                && position.getX() <= Math.max(start.getX(), target.getX()) + horizontalMargin
-                && position.getZ() >= Math.min(start.getZ(), target.getZ()) - horizontalMargin
-                && position.getZ() <= Math.max(start.getZ(), target.getZ()) + horizontalMargin
-                && position.getY() >= Math.min(start.getY(), target.getY()) - verticalMargin
-                && position.getY() <= Math.max(start.getY(), target.getY()) + verticalMargin;
+        return position.getX() >= minX() - horizontalMargin && position.getX() <= maxX() + horizontalMargin
+                && position.getZ() >= minZ() - horizontalMargin && position.getZ() <= maxZ() + horizontalMargin
+                && position.getY() >= minY() - verticalMargin && position.getY() <= maxY() + verticalMargin;
     }
     public boolean markTopologyDirty(BlockPos position) {
         return containsTopologyPosition(position) && dirtyTopologyCells.add(position.asLong());
     }
     public boolean markTopologyChunkDirty(ChunkPos chunk) {
-        int minX = Math.min(start.getX(), target.getX()) - 48;
-        int maxX = Math.max(start.getX(), target.getX()) + 48;
-        int minZ = Math.min(start.getZ(), target.getZ()) - 48;
-        int maxZ = Math.max(start.getZ(), target.getZ()) + 48;
+        int minX = minX() - 48; int maxX = maxX() + 48;
+        int minZ = minZ() - 48; int maxZ = maxZ() + 48;
         if (chunk.getMaxBlockX() < minX || chunk.getMinBlockX() > maxX
                 || chunk.getMaxBlockZ() < minZ || chunk.getMinBlockZ() > maxZ) return false;
         return dirtyTopologyChunks.add(chunk.toLong());
@@ -323,10 +327,8 @@ public final class VanillaMinecartRouteRecord {
         return changed;
     }
     public void markAllTopologyChunksDirty() {
-        int minChunkX = (Math.min(start.getX(), target.getX()) - 48) >> 4;
-        int maxChunkX = (Math.max(start.getX(), target.getX()) + 48) >> 4;
-        int minChunkZ = (Math.min(start.getZ(), target.getZ()) - 48) >> 4;
-        int maxChunkZ = (Math.max(start.getZ(), target.getZ()) + 48) >> 4;
+        int minChunkX = (minX() - 48) >> 4; int maxChunkX = (maxX() + 48) >> 4;
+        int minChunkZ = (minZ() - 48) >> 4; int maxChunkZ = (maxZ() + 48) >> 4;
         for (int x = minChunkX; x <= maxChunkX; x++) for (int z = minChunkZ; z <= maxChunkZ; z++)
             dirtyTopologyChunks.add(ChunkPos.asLong(x, z));
     }
@@ -381,14 +383,15 @@ public final class VanillaMinecartRouteRecord {
         return List.copyOf(result);
     }
 
-    private int horizontalLength() {
-        return Math.abs(target.getX() - start.getX()) + Math.abs(target.getZ() - start.getZ());
-    }
     private RailShape authoredShape(int index) {
         int railY = railPosition(index).getY();
-        if (nextRailY(index) > railY) return ascending(direction());
-        if (previousRailY(index) > railY) return ascending(direction().getOpposite());
-        return direction().getAxis() == Direction.Axis.X ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+        Direction next = direction(index);
+        Direction previous = index == 0 ? next.getOpposite() : direction(index - 1).getOpposite();
+        if (nextRailY(index) > railY) return ascending(next);
+        if (previousRailY(index) > railY) return ascending(previous);
+        if (next.getAxis() == previous.getAxis()) return next.getAxis() == Direction.Axis.X
+                ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+        return curve(previous, next);
     }
     private static RailShape ascending(Direction direction) {
         return switch (direction) {
@@ -398,6 +401,34 @@ public final class VanillaMinecartRouteRecord {
             case WEST -> RailShape.ASCENDING_WEST;
             default -> throw new IllegalArgumentException("Rail direction must be horizontal");
         };
+    }
+    private static RailShape curve(Direction first, Direction second) {
+        boolean north = first == Direction.NORTH || second == Direction.NORTH;
+        boolean south = first == Direction.SOUTH || second == Direction.SOUTH;
+        boolean east = first == Direction.EAST || second == Direction.EAST;
+        if (south && east) return RailShape.SOUTH_EAST; if (south) return RailShape.SOUTH_WEST;
+        if (north && east) return RailShape.NORTH_EAST; return RailShape.NORTH_WEST;
+    }
+    private int minX() { return plannedPath.stream().mapToInt(BlockPos::getX).min().orElseThrow(); }
+    private int maxX() { return plannedPath.stream().mapToInt(BlockPos::getX).max().orElseThrow(); }
+    private int minY() { return plannedPath.stream().mapToInt(BlockPos::getY).min().orElseThrow(); }
+    private int maxY() { return plannedPath.stream().mapToInt(BlockPos::getY).max().orElseThrow(); }
+    private int minZ() { return plannedPath.stream().mapToInt(BlockPos::getZ).min().orElseThrow(); }
+    private int maxZ() { return plannedPath.stream().mapToInt(BlockPos::getZ).max().orElseThrow(); }
+    private static List<BlockPos> straightPath(BlockPos start, BlockPos target) {
+        if (start.getX() != target.getX() && start.getZ() != target.getZ()) {
+            throw new IllegalArgumentException("Legacy straight route must be cardinal");
+        }
+        int length = Math.abs(target.getX() - start.getX()) + Math.abs(target.getZ() - start.getZ());
+        if (length < 1 || Math.abs(start.getY() - target.getY()) > length) throw new IllegalArgumentException("Invalid route grade");
+        Direction direction = target.getX() > start.getX() ? Direction.EAST : target.getX() < start.getX()
+                ? Direction.WEST : target.getZ() > start.getZ() ? Direction.SOUTH : Direction.NORTH;
+        List<BlockPos> result = new ArrayList<>();
+        for (int index = 0; index <= length; index++) {
+            int y = start.getY() + Math.round((target.getY() - start.getY()) * (index / (float) length));
+            BlockPos horizontal = start.relative(direction, index); result.add(new BlockPos(horizontal.getX(), y, horizontal.getZ()));
+        }
+        return List.copyOf(result);
     }
     private VanillaMinecartMutableCell requireCell(BlockPos position) {
         VanillaMinecartMutableCell value = cell(position);

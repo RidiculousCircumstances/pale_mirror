@@ -8,7 +8,7 @@ curated structure assets, resident carriers, animation, particles and sound.
 
 ## Fresh-world contract
 
-There is intentionally no v32 retrofit path. A new v33 world pins three complete
+There is intentionally no retrofit path. A new v34 world pins three complete
 `AuthoredRegionSeed` manifests before any block is changed. The first region is
 1024–2048 blocks from spawn; two later regions are sparse at 6000–10000 blocks.
 The immutable manifest contains every object identity and coordinate needed by
@@ -61,6 +61,39 @@ event for a registered UUID becomes a typed observation. Core deduplicates it,
 checks the settlement field-authority profile, and only then reduces the
 canonical cohort.
 
+## Runtime materialization contract
+
+Genesis may author natural terrain only while a fresh chunk is being generated.
+After that moment every persistent change is a Core-owned job with pinned
+policy identity, desired revision and idempotent operations. Visuals supplies
+assets and physical executors; it cannot mutate canonical state.
+
+Authored space is divided into explicit parcels. Settlement influence is
+read-only. Community and public-infrastructure parcels are PM-managed; reserved
+plots and player leases are not. A player-authored asset becomes eligible for
+PM repair or development only after an explicit commissioning permit converts
+its parcel. Each mutable semantic slot stores exact baseline and last-applied
+block states. Unknown edits conflict only that slot and are never overwritten
+without a separate previewed reset permit.
+
+Damage, reconstruction and positive development use the same mechanism.
+Deterministic damage affects sparse authored shell slots; reconstruction restores
+their exact captured block states in stages; a storehouse project commissions an
+available reserved plot, then builds foundation, shell and roof under resource,
+labour, loaded-chunk and postcondition gates. Canonical integrity or capability
+changes only after the physical job completes.
+
+## Residents and journeys
+
+Evacuation and return are canonical `WorldJourney` records over persisted paths.
+They advance and take deterministic full-risk losses while chunks are unloaded.
+When a player is nearby, Visuals leases the same stable resident identities into
+a physical travelling group and reports typed checkpoint/death observations.
+The default private profile allows the physical limit to equal the whole group;
+`journeys.maxMaterializedResidents` and `journeys.spawnBudgetPerTick` can reduce
+load without changing canonical population or progress. Arrival releases leases;
+a later return is a new reverse journey, not an entity teleport.
+
 ## Dynamic expression
 
 Core publishes a small immutable projection of facility and settlement state.
@@ -73,10 +106,17 @@ It grants no domain mutation capability. Visuals currently expresses it as:
 - sparse depot smoke/angry cues during shortage or critical crisis;
 - recovery and prosperity particles when the region stabilizes.
 
-The Heart is an invulnerable visual carrier. The existing PM combat/controller
-contract remains the authoritative objective, so animation cannot create a
-second health pool or resolve a scenario by itself. Reconciliation is
-idempotent and operates only while the relevant chunk is loaded.
+The Heart is the only visible controller in the product profile. Minecraft's
+native health/death remains disabled: incoming attacks are attributed to PM's
+persisted combat ledger, and PM alone decides stage, defeat and cleanup. This
+avoids a second health pool while still making the Heart the object the player
+actually fights. The old zombie anchor is available only in explicit core-only
+development/GameTest profiles.
+
+Shelter candidates and development plots are pinned at genesis. Player shelter
+choice has priority; after the grace window settlement policy may choose a
+degraded fallback. Camps, damage, reconstruction and development all reconcile
+only loaded chunks and never force-load their physical destination.
 
 ## Verification
 

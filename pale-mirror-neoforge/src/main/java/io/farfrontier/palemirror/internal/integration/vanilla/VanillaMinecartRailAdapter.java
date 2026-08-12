@@ -47,10 +47,13 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
     }
 
     /** Plans one straight, grade-safe rail cell without touching unloaded chunks. */
-    public VanillaMinecartSegmentPlan planSegment(ServerLevel level, BlockPos rail, Direction direction,
+    public VanillaMinecartSegmentPlan planSegment(ServerLevel level, BlockPos rail, Direction previousDirection,
+                                                  Direction nextDirection,
                                                   int nextRailY, int previousRailY, int index,
                                                   boolean receivingTerminal) {
-        if (!direction.getAxis().isHorizontal()) throw new IllegalArgumentException("Minecart direction must be horizontal");
+        if (!previousDirection.getAxis().isHorizontal() || !nextDirection.getAxis().isHorizontal()) {
+            throw new IllegalArgumentException("Minecart directions must be horizontal");
+        }
         if (!level.hasChunkAt(rail)) throw new IllegalStateException("Minecart segment chunk is not loaded at " + rail.toShortString());
         boolean powered = index > 0 && index % POWERED_RAIL_INTERVAL == 0;
         Map<BlockPos, BlockState> writes = new LinkedHashMap<>();
@@ -61,8 +64,8 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
                 Blocks.OAK_FENCE.defaultBlockState());
         writes.put(support, powered ? Blocks.REDSTONE_BLOCK.defaultBlockState() : Blocks.GRAVEL.defaultBlockState());
         for (int y = 0; y < CLEARANCE_HEIGHT; y++) writes.put(rail.above(y), Blocks.AIR.defaultBlockState());
-        writes.put(rail, railState(direction, powered, rail.getY(), nextRailY, previousRailY));
-        if (receivingTerminal) appendReceivingPlatform(writes, rail, direction);
+        writes.put(rail, railState(previousDirection, nextDirection, powered, rail.getY(), nextRailY, previousRailY));
+        if (receivingTerminal) appendReceivingPlatform(writes, rail, nextDirection);
         return new VanillaMinecartSegmentPlan(rail, writes);
     }
 
@@ -231,18 +234,22 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
     public record VisualCart(java.util.UUID cartId, java.util.UUID cargoId) { }
     public record RepresentativeReconciliation(VisualCart keeper, int removedEntities) { }
 
-    private static BlockState railState(Direction direction, boolean powered, int railY, int nextRailY, int previousRailY) {
-        RailShape shape = shape(direction, railY, nextRailY, previousRailY);
+    private static BlockState railState(Direction previousDirection, Direction nextDirection, boolean powered,
+                                        int railY, int nextRailY, int previousRailY) {
+        RailShape shape = shape(previousDirection, nextDirection, railY, nextRailY, previousRailY);
         return powered ? Blocks.POWERED_RAIL.defaultBlockState().setValue(PoweredRailBlock.SHAPE, shape)
                 : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape);
     }
 
-    private static RailShape shape(Direction direction, int railY, int nextRailY, int previousRailY) {
+    private static RailShape shape(Direction previousDirection, Direction nextDirection, int railY,
+                                   int nextRailY, int previousRailY) {
         boolean nextHigher = nextRailY > railY;
         boolean previousHigher = previousRailY > railY;
-        if (nextHigher) return ascending(direction);
-        if (previousHigher) return ascending(direction.getOpposite());
-        return direction.getAxis() == Direction.Axis.X ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+        if (nextHigher) return ascending(nextDirection);
+        if (previousHigher) return ascending(previousDirection.getOpposite());
+        if (previousDirection.getAxis() == nextDirection.getAxis()) return nextDirection.getAxis() == Direction.Axis.X
+                ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+        return curve(previousDirection.getOpposite(), nextDirection);
     }
 
     private static RailShape ascending(Direction direction) {
@@ -253,6 +260,13 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
             case WEST -> RailShape.ASCENDING_WEST;
             default -> throw new IllegalArgumentException("Rail direction must be horizontal");
         };
+    }
+    private static RailShape curve(Direction first, Direction second) {
+        boolean north = first == Direction.NORTH || second == Direction.NORTH;
+        boolean south = first == Direction.SOUTH || second == Direction.SOUTH;
+        boolean east = first == Direction.EAST || second == Direction.EAST;
+        if (south && east) return RailShape.SOUTH_EAST; if (south) return RailShape.SOUTH_WEST;
+        if (north && east) return RailShape.NORTH_EAST; return RailShape.NORTH_WEST;
     }
 
     /**

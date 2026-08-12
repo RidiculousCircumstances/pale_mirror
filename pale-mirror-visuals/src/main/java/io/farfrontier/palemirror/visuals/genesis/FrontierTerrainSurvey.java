@@ -55,6 +55,11 @@ public final class FrontierTerrainSurvey {
         return TerrainCandidate.evaluate(centerX, centerZ, samples);
     }
 
+    public int surfaceHeight(ServerLevel level, int x, int z) {
+        return level.getChunkSource().getGenerator().getBaseHeight(x, z, Heightmap.Types.WORLD_SURFACE_WG,
+                level, level.getChunkSource().randomState());
+    }
+
     private static FrontierClimate climate(ServerLevel level, VisualPoint point) {
         var generator = level.getChunkSource().getGenerator();
         var holder = generator.getBiomeSource().getNoiseBiome(QuartPos.fromBlock(point.x()),

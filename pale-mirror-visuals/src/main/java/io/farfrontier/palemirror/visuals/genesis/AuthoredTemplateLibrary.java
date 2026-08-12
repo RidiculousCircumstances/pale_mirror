@@ -24,12 +24,10 @@ final class AuthoredTemplateLibrary {
         if (ledger.moduleCompleted(key)) return true;
         ResourceLocation id = ResourceLocation.parse(module.templateId());
         var optional = level.getStructureManager().get(id);
-        if (optional.isEmpty()) return false;
+        if (optional.isEmpty()) throw new IllegalStateException("Required authored module is missing: " + id);
         var template = optional.orElseThrow();
-        if (template.getSize().getX() > 32 || template.getSize().getY() > 32 || template.getSize().getZ() > 32) {
-            PaleMirrorVisualsMod.LOGGER.warn("Curated module {} is outside the 32-block contract; using grammar fallback", id);
-            ledger.completeModule(key);
-            return true;
+        if (template.getSize().getX() > 48 || template.getSize().getY() > 48 || template.getSize().getZ() > 48) {
+            throw new IllegalStateException("Required authored module is outside the 48-block contract: " + id);
         }
         Rotation rotation = switch (module.quarterTurns()) {
             case 1 -> Rotation.CLOCKWISE_90; case 2 -> Rotation.CLOCKWISE_180;
