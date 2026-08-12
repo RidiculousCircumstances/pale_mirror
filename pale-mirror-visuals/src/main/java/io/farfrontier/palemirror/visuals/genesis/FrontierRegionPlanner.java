@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies only the accepted surface anchor. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 2;
+    public static final int DEFINITION_VERSION = 3;
     public static final int SETTLEMENT_RADIUS = 88;
     private static final int PRIMARY_MIN = 384;
     private static final int PRIMARY_SPAN = 129;

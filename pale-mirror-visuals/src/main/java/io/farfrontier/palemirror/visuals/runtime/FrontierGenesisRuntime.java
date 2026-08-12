@@ -10,7 +10,6 @@ import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierTerrainSurvey;
 import io.farfrontier.palemirror.visuals.genesis.VisualGenesisAttachments;
 import io.farfrontier.palemirror.visuals.resident.ResidentMaterializer;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,8 +36,6 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 /** Plans once, publishes immutable slices, and observes completed worldgen without mutating loaded chunks. */
 @EventBusSubscriber(modid = PaleMirrorVisualsMod.MOD_ID)
 public final class FrontierGenesisRuntime {
-    private static final int REGION_COUNT = 3;
-    private static final int HEIGHT_SAMPLE_GRID = 16;
     private static final int OBSERVATION_BUDGET = 8;
     private static final Map<ServerLevel, List<AuthoredRegionSeed>> PLANS = new IdentityHashMap<>();
     private static final Map<ServerLevel, CompletableFuture<CompiledGenesisCatalog>> PLANNING =
@@ -50,6 +47,7 @@ public final class FrontierGenesisRuntime {
     private static final AtomicLong WORLDGEN_NANOS = new AtomicLong();
     private static final AtomicLong WORLDGEN_MAX_NANOS = new AtomicLong();
     private static final AtomicBoolean FIRST_STAMP_OBSERVED = new AtomicBoolean();
+    private static volatile PlanningMetrics planningMetrics = PlanningMetrics.empty();
     private static ExecutorService plannerExecutor;
     private static final ResidentMaterializer RESIDENTS = new ResidentMaterializer();
 
@@ -92,17 +90,22 @@ public final class FrontierGenesisRuntime {
     private static List<AuthoredRegionSeed> plan(ServerLevel level) {
         FrontierTerrainSurvey survey = new FrontierTerrainSurvey();
         FrontierRegionPlanner planner = new FrontierRegionPlanner();
-        Map<Long, Integer> surfaceHeights = new HashMap<>();
-        java.util.function.IntBinaryOperator surfaceHeight = (x, z) -> {
-            int sampleX = Math.floorDiv(x, HEIGHT_SAMPLE_GRID) * HEIGHT_SAMPLE_GRID + HEIGHT_SAMPLE_GRID / 2;
-            int sampleZ = Math.floorDiv(z, HEIGHT_SAMPLE_GRID) * HEIGHT_SAMPLE_GRID + HEIGHT_SAMPLE_GRID / 2;
-            return surfaceHeights.computeIfAbsent(ChunkPos.asLong(sampleX, sampleZ),
-                    ignored -> survey.surfaceHeight(level, sampleX, sampleZ));
-        };
-        return java.util.stream.IntStream.range(0, REGION_COUNT).mapToObj(ordinal -> {
-            FrontierTerrainSurvey.Result site = survey.select(level, ordinal);
-            return planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(), surfaceHeight);
+        long started = System.nanoTime();
+        FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, VisualServerConfig.GENESIS_REGION_COUNT.get(),
+                VisualServerConfig.GENESIS_MAP_RADIUS.get(), VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
+        List<AuthoredRegionSeed> manifests = java.util.stream.IntStream.range(0, batch.sites().size()).mapToObj(ordinal -> {
+            var site = batch.sites().get(ordinal);
+            return planner.plan(level.getSeed(), ordinal, site.terrain().anchor(), site.climate(), batch.surfaceHeight());
         }).toList();
+        var statistics = batch.statistics();
+        planningMetrics = new PlanningMetrics(manifests.size(), System.nanoTime() - started,
+                statistics.cachedHeights(), statistics.heightHits(), statistics.heightMisses(),
+                statistics.biomeSamples());
+        PaleMirrorVisualsMod.LOGGER.info("Batch-planned {} authored regions in {} ms using {} height probes "
+                        + "({} cache hits) and {} biome samples", manifests.size(),
+                planningMetrics.elapsedNanos() / 1_000_000L, statistics.heightMisses(), statistics.heightHits(),
+                statistics.biomeSamples());
+        return manifests;
     }
 
     private static void install(ServerLevel level, List<AuthoredRegionSeed> plans) {
@@ -178,7 +181,8 @@ public final class FrontierGenesisRuntime {
         return "worldgenSlices=" + slices + ", worldgenAverageMs="
                 + (slices == 0 ? 0D : WORLDGEN_NANOS.get() / 1_000_000D / slices)
                 + ", worldgenMaxMs=" + WORLDGEN_MAX_NANOS.get() / 1_000_000D
-                + ", pendingChunkObservations=" + PENDING_CHUNKS.size();
+                + ", pendingChunkObservations=" + PENDING_CHUNKS.size()
+                + ", " + planningMetrics.summary();
     }
 
     private static boolean intersects(AuthoredRegionSeed seed, ChunkPos chunk) {
@@ -195,6 +199,7 @@ public final class FrontierGenesisRuntime {
         READINESS.set(GenesisReadiness.planning());
         WORLDGEN_SLICES.set(0); WORLDGEN_NANOS.set(0); WORLDGEN_MAX_NANOS.set(0);
         FIRST_STAMP_OBSERVED.set(false);
+        planningMetrics = PlanningMetrics.empty();
         if (plannerExecutor != null) plannerExecutor.shutdownNow();
         plannerExecutor = null;
         AuthoredVisualProvider.INSTANCE.resetRuntime();
@@ -207,4 +212,14 @@ public final class FrontierGenesisRuntime {
     }
 
     private record PendingChunk(ServerLevel level, long chunk, String stamp) { }
+
+    private record PlanningMetrics(int regions, long elapsedNanos, int cachedHeights, long heightHits,
+                                   long heightMisses, long biomeSamples) {
+        private static PlanningMetrics empty() { return new PlanningMetrics(0, 0, 0, 0, 0, 0); }
+        private String summary() {
+            return "plannedRegions=" + regions + ", planningMs=" + elapsedNanos / 1_000_000D
+                    + ", terrainHeightMisses=" + heightMisses + ", terrainHeightHits=" + heightHits
+                    + ", terrainBiomeSamples=" + biomeSamples + ", cachedTerrainHeights=" + cachedHeights;
+        }
+    }
 }

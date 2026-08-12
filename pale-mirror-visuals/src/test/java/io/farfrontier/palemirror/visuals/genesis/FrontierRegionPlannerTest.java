@@ -29,6 +29,7 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertTrue(seed.modules().size() >= 16);
         assertEquals(6, seed.expansionPlots().size());
+        assertEquals(3, seed.definitionVersion());
     }
 
     @Test void mineDistancesAndRailConnectivityAreBounded() {

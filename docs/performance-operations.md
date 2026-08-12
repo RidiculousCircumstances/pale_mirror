@@ -20,6 +20,13 @@ Authored residents have a separate visual-only AI LOD in
 `pale-mirror-visuals-server.toml`. All 48 stable entities remain visible, but
 only 16 nearby residents run vanilla AI by default.
 
+Fresh-world planning is also bounded. Visuals selects every configured region
+as one batch, uses coarse probes before detailed 7×7 surveys, and shares exact
+height results across site, mine and railway planning. `performance` includes
+planning time, cache hits/misses and biome-probe counts. A pure budget test
+requires a 20-region/10,000-block survey to use fewer than 6,000 unique terrain
+samples, versus 15,680 detailed samples in the former independent algorithm.
+
 For an evidence-grade profile, run the server on JDK 21 and capture JFR:
 
 ```bash

@@ -8,16 +8,33 @@ curated structure assets, resident carriers, animation, particles and sound.
 
 ## Fresh-world contract
 
-There is intentionally no retrofit path. A new v36 world pins three complete
-`AuthoredRegionSeed` manifests and compiles them into an immutable chunk-addressed
-catalog before players are admitted. The first region is
-1024–2048 blocks from spawn; two later regions are sparse at 6000–10000 blocks.
+There is intentionally no retrofit path. A new v36 world pins the configured
+set of complete `AuthoredRegionSeed` manifests and compiles them into an
+immutable chunk-addressed catalog before players are admitted. The default is
+three regions. The first is 1024–2048 blocks from spawn; the remainder are
+distributed inside the configured map radius with a hard minimum spacing.
 The immutable manifest contains every object identity and coordinate needed by
 core: settlement bounds, freight gate, receiving depot, Mine17, Red Valley,
 baseline rail path, modules, expansion plots and 48 resident identities.
 
-Terrain survey calls generator-only height, column and biome APIs on a dedicated
-planning worker. It does not load prospective chunks. A registered NeoForge
+Terrain survey calls generator-only height and biome APIs on a dedicated
+planning worker. It does not load prospective chunks. The selector evaluates
+all regions in one bounded hierarchical pass: five-point coarse probes rank a
+deterministic global candidate set, a 7×7 detailed survey runs only for the
+best candidates, and every exact height is shared through one cache with mine
+and rail planning. Impossible count/radius/spacing combinations fail closed
+instead of overlapping sites. The relevant `pale-mirror-visuals-server.toml`
+settings are:
+
+```toml
+[genesis]
+regionCount = 3
+mapRadius = 10000
+minimumSpacing = 1400
+```
+
+`mapRadius` constrains PM-authored centers; a Minecraft world border remains a
+separate server policy. A registered NeoForge
 worldgen feature applies only the current chunk's precompiled slice during normal
 generation, then persists a chunk attachment stamp. `ChunkEvent.Load` performs
 read-only stamp observation and resident commissioning; it never edits terrain,

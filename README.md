@@ -42,7 +42,8 @@ procedure are documented in
 [living-frontier-0.3-completion.md](docs/living-frontier-0.3-completion.md).
 
 On a fresh product-profile world, Pale Mirror Visuals deterministically authors
-three independent frontier regions. Each begins as a PM-owned radial timber
+three independent frontier regions by default; the batch count, map radius and
+minimum spacing are configurable. Each begins as a PM-owned radial timber
 fort with a civic center, freight district, 48 stable residents and reserved
 development plots. Observed vanilla/Integrated Villages places no longer
 bootstrap the default campaign. The campaign materializes two provenance-preflighted MineSites,

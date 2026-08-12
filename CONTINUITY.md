@@ -2,8 +2,8 @@
 
 ## Goal (success criteria)
 
-- Complete the intentionally incompatible schema-v36 fresh-world and performance cutover.
-- Move static authored geometry into true chunk-local worldgen and keep post-gen reconciliation bounded, observable and free of whole-world/entity/chunk-volume scans.
+- Scale fresh-world genesis to a bounded-map batch of up to 64 authored regions without repeated independent terrain surveys.
+- Keep static geometry in true chunk-local worldgen and make impossible layouts fail closed before admission.
 
 ## Constraints/Assumptions
 
@@ -27,7 +27,7 @@
 - The settlement generator uses a bounded deterministic hybrid grammar: procedural radial plan and road graph plus curated authored NBT modules. It does not use an unconstrained jigsaw walk.
 - The fort has a civic core, two functional rings, wooden palisade, freight gate/depot and at least six reserved development plots. Nominal diameter is 176 blocks and maximum footprint 192.
 - Terrain placement selects the best moderate site, rejects water/extreme terrain and then applies bounded local leveling: normal cut/fill 4 blocks, foundations 6, guaranteed-region fallback 8.
-- The first region is placed 1024–2048 blocks from spawn; later regions are sparse at approximately 6000–10000 blocks.
+- A pure hierarchical selector chooses all configured sites together: five-point coarse ranking, detailed 7×7 checks only for shortlisted candidates, one exact height cache shared with mine/rail planning, hard map radius and minimum spacing. The first region remains 1024–2048 blocks from spawn.
 - Mine17 is 384–512 blocks from the freight gate; Red Valley is 512–768 blocks away. The complete primary route plan exists at region genesis and materializes as its chunks naturally generate/load.
 - Three initial climate families share one grammar and role catalog but use climate palettes and local variants: temperate, cold/taiga and dry/arid.
 - The starting population is 48: 20 civilians, 14 workers, 4 specialists, 6 guards and 4 children. Each has stable identity, name, home and workplace/patrol assignment.
@@ -57,6 +57,7 @@
 - Replaced full chunk-volume rail scans with event-driven bounded graph traversal, full loaded-entity ambient counts with Minecraft `SpawnState`, repetitive visual projections with revision suppression, and repeated Threat Heart scans with UUID indexing.
 - Kept all 48 authored residents visible while limiting expensive nearby vanilla AI to 16 role-prioritized carriers by default; the AI limit/radius are visual-only configuration.
 - Added persisted immutable manifests, generator-only terrain survey, deterministic three-region grammar, three climate palettes, radial forts, six expansion plots and curated private NBT modules with provenance.
+- Replaced per-region terrain searches with a configurable 1–64 region batch selector. The default remains three; a 20-region/10,000-block unit profile is deterministic, spacing-safe and capped below 6,000 unique survey samples.
 - Replaced automatic observed-village campaign binding when Visuals is installed; core registers authored communities, places, facilities, sites, route contracts and exact 48-person PM-owned cohort state.
 - Added stable resident UUID commissioning, canonical-growth-only breeding, confirmed-death reconciliation and the isolated exact Villager Overhaul guard/worker/recruitment bridge.
 - Added the GeckoLib Threat Heart, four projected threat stages, infection sound/particles and depot crisis/recovery/prosperity cues. Core remains authoritative.
@@ -82,6 +83,9 @@
 
 ### Now
 
+- Batch genesis implementation and deterministic/fail-closed/probe-budget tests pass. A clean packaged
+  Sable runtime planned three regions in 4.05 seconds, generated an exact stamped slice and reopened it
+  without mutation in the two-start harness.
 - Schema-v36 code, unit tests, 37 Core GameTests and 4 Visuals GameTests pass. Final packaged Core
   crash/restart and Core+Visuals+Sable natural-worldgen two-start harnesses pass.
 - Commit `7e378a0` is deployed to the private server and client artifact host. The disposable old world was
@@ -92,9 +96,8 @@
 
 ### Next
 
-- Re-run the client updater, travel naturally to the closest authored region and validate visual quality,
-  resident behavior and active-player tick cost. Use `/pale_mirror performance` during the session and take
-  a player-loaded JFR if any latency or disconnect recurs.
+- Publish the updated Visuals JAR, then benchmark a fresh high-count private world before changing the
+  production default from three regions.
 
 ## Open questions
 
