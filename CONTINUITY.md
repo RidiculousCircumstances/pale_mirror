@@ -86,6 +86,8 @@
 - Batch genesis implementation and deterministic/fail-closed/probe-budget tests pass. A clean packaged
   Sable runtime planned three regions in 4.05 seconds, generated an exact stamped slice and reopened it
   without mutation in the two-start harness.
+- Commit `437e481` is published to the private artifact host and deployed to the playtest server. The
+  existing pinned manifests reopened unchanged; a fresh world is required to exercise the new selector.
 - Schema-v36 code, unit tests, 37 Core GameTests and 4 Visuals GameTests pass. Final packaged Core
   crash/restart and Core+Visuals+Sable natural-worldgen two-start harnesses pass.
 - Commit `7e378a0` is deployed to the private server and client artifact host. The disposable old world was
@@ -96,8 +98,7 @@
 
 ### Next
 
-- Publish the updated Visuals JAR, then benchmark a fresh high-count private world before changing the
-  production default from three regions.
+- Benchmark a fresh high-count private world before changing the production default from three regions.
 
 ## Open questions
 
