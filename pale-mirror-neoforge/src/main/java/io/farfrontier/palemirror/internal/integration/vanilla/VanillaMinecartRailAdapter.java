@@ -55,7 +55,8 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
             throw new IllegalArgumentException("Minecart directions must be horizontal");
         }
         if (!level.hasChunkAt(rail)) throw new IllegalStateException("Minecart segment chunk is not loaded at " + rail.toShortString());
-        boolean powered = index > 0 && index % POWERED_RAIL_INTERVAL == 0;
+        RailShape shape = shape(previousDirection, nextDirection, rail.getY(), nextRailY, previousRailY);
+        boolean powered = index > 0 && index % POWERED_RAIL_INTERVAL == 0 && supportsPoweredRail(shape);
         Map<BlockPos, BlockState> writes = new LinkedHashMap<>();
         BlockPos support = rail.below();
         int surfaceY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
@@ -64,7 +65,7 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
                 Blocks.OAK_FENCE.defaultBlockState());
         writes.put(support, powered ? Blocks.REDSTONE_BLOCK.defaultBlockState() : Blocks.GRAVEL.defaultBlockState());
         for (int y = 0; y < CLEARANCE_HEIGHT; y++) writes.put(rail.above(y), Blocks.AIR.defaultBlockState());
-        writes.put(rail, railState(previousDirection, nextDirection, powered, rail.getY(), nextRailY, previousRailY));
+        writes.put(rail, railState(shape, powered));
         if (receivingTerminal) appendReceivingPlatform(writes, rail, nextDirection);
         return new VanillaMinecartSegmentPlan(rail, writes);
     }
@@ -234,11 +235,16 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
     public record VisualCart(java.util.UUID cartId, java.util.UUID cargoId) { }
     public record RepresentativeReconciliation(VisualCart keeper, int removedEntities) { }
 
-    private static BlockState railState(Direction previousDirection, Direction nextDirection, boolean powered,
-                                        int railY, int nextRailY, int previousRailY) {
-        RailShape shape = shape(previousDirection, nextDirection, railY, nextRailY, previousRailY);
+    private static BlockState railState(RailShape shape, boolean powered) {
         return powered ? Blocks.POWERED_RAIL.defaultBlockState().setValue(PoweredRailBlock.SHAPE, shape)
                 : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape);
+    }
+
+    private static boolean supportsPoweredRail(RailShape shape) {
+        return switch (shape) {
+            case NORTH_SOUTH, EAST_WEST, ASCENDING_EAST, ASCENDING_WEST, ASCENDING_NORTH, ASCENDING_SOUTH -> true;
+            case SOUTH_EAST, SOUTH_WEST, NORTH_WEST, NORTH_EAST -> false;
+        };
     }
 
     private static RailShape shape(Direction previousDirection, Direction nextDirection, int railY,

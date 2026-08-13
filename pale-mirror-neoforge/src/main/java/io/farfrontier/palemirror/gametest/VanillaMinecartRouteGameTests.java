@@ -5,11 +5,13 @@ import io.farfrontier.palemirror.domain.DomainServices;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartRailAdapter;
+import io.farfrontier.palemirror.internal.integration.vanilla.VanillaMinecartSegmentPlan;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRecord;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRuntime;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteStatus;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -127,6 +129,23 @@ public final class VanillaMinecartRouteGameTests {
                     "restart must retain vanilla-route progress and its provenance cells");
             helper.succeed();
         });
+    }
+
+    @GameTest(batch = "pm-vanilla-minecart-powered-corner", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void poweredIntervalCornerFallsBackToOrdinaryRail(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos corner = helper.absolutePos(new BlockPos(0, 6, 0));
+        VanillaMinecartSegmentPlan plan = AdapterRegistry.vanillaMinecartRail().planSegment(
+                level, corner, Direction.NORTH, Direction.WEST, corner.getY(), corner.getY(), 12, false);
+
+        helper.assertValueEqual(plan.writes().get(corner).getBlock(), Blocks.RAIL,
+                "a scheduled powered segment must use ordinary rail when the persisted path turns");
+        helper.assertValueEqual(plan.writes().get(corner).getValue(RailBlock.SHAPE), RailShape.SOUTH_WEST,
+                "falling back from powered rail must preserve the authored curve");
+        helper.assertValueEqual(plan.writes().get(corner.below()).getBlock(), Blocks.GRAVEL,
+                "an unpowered curve must not leave a misleading redstone support cell");
+        helper.succeed();
     }
 
     @GameTest(batch = "pm-vanilla-minecart-conflict", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)

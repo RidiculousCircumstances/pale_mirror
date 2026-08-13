@@ -1,6 +1,6 @@
 # Continuity Ledger
 ## Goal (success criteria)
-- Keep live unexplored-world flight responsive: C2ME owns bounded parallel chunk generation while server DH only caches/synchronises already created chunks and yields its presentation budget during fast travel.
+- Keep live unexplored-world flight responsive: C2ME owns bounded parallel chunk generation while DH remains a client-side LOD cache by default; the measured server cache is benchmark-only.
 - Keep authored settlement columns free of tree growth, background hostile spawning and grading debris; keep debug teleport non-blocking through one bounded asynchronous chunk ticket.
 - Keep full-modpack fresh-world genesis bounded and geography-led: require 3, target 5 and cap 6 strict mountain regions inside a 20,000-block radius without weakening site constraints.
 - Use biome-footprint horizontal selection, bounded five-point settlement surveys, dry-footprint mine resolution, and ready current-chunk heightmaps for local worldgen adaptation; railway planning performs zero terrain-height scans.
@@ -19,10 +19,7 @@
 - Core owns canonical state, revisions, persisted jobs, provenance and reconciliation. Visuals owns worldgen, templates, palettes, render assets and physical behavior providers, and owns no canonical SavedData.
 - Immutable genesis terrain is produced by a registered worldgen Feature from precompiled chunk-local slices. Login fails closed until the catalog is ready; loaded-chunk events observe stamps but never construct static geometry. Every post-gen canonical state transition uses persisted materialization jobs and never overwrites unknown player changes.
 - Non-critical runtime work shares a configurable 3 ms / 256 weighted-operation admission budget. Cadence is staggered, unchanged projections are suppressed, railway health is event-driven, and `/pale_mirror performance` exposes per-work timing and deferral metrics.
-- Exact Distant Horizons 3.2.0-b is an optional presentation cache. PM disables its background importer; normal chunk events build/synchronise ready LODs, client generation requests are disabled by the server profile,
-  and PRE_EXISTING_ONLY remains a dormant fail-safe. PM samples maximum horizontal player speed once per second,
-  reducing DH's public runtime ratio from 0.35 to 0.05 at 12 blocks/s or a teleport, then restoring it only after
-  every player stays at or below 6 blocks/s for 10 seconds. The override is cleared on shutdown and never affects canonical state.
+- Distant Horizons 3.2.0-b is client-side by default. Its exact optional server cache is a benchmark opt-in; when present PM disables the importer, keeps PRE_EXISTING_ONLY dormant and throttles its public runtime ratio during fast travel. DH never affects canonical state.
 - The settlement generator uses a bounded deterministic hybrid grammar: procedural radial plan and road graph plus curated authored NBT modules. It does not use an unconstrained jigsaw walk.
 - The fort has a civic core, two functional rings, wooden palisade, freight gate/depot and at least six reserved development plots. Nominal diameter is 176 blocks and maximum footprint 192.
 - Terrain placement prefers dry sites with sampled relief at most 8 blocks, rejects water/extreme terrain, and permits a bounded dry fallback up to 24 blocks only after the preferred candidate fails.
@@ -54,6 +51,7 @@
 - Added persisted chunk generation stamps, readiness/status SPI, player admission gating, authored MineSite adoption and worldgen-only baseline-rail provenance registration.
 - Added the shared runtime work coordinator with configurable 3 ms / 256-op defaults, staggered cadences and operator telemetry.
 - Added exact optional DH 3.2.0-b cache-only control with its background importer disabled, PRE_EXISTING_ONLY as a dormant fail-safe, one event-fed worker, speed/discontinuity-driven 0.35/0.05 runtime throttling with hysteresis, observable degraded status and cleared shutdown overrides.
+- Closed the live powered-rail corner crash: runtime segment compilation now shares the genesis invariant that curves use ordinary rail and non-powered support. A dedicated negative GameTest covers the exact twelfth-segment failure.
 - Replaced full chunk-volume rail scans with event-driven bounded graph traversal, full loaded-entity ambient counts with Minecraft `SpawnState`, repetitive visual projections with revision suppression, and repeated Threat Heart scans with UUID indexing.
 - Kept all 48 authored residents visible while limiting expensive nearby vanilla AI to 16 role-prioritized carriers by default; the AI limit/radius are visual-only configuration.
 - Added persisted immutable manifests, generator-only terrain survey, deterministic three-region grammar, three climate palettes, radial forts, six expansion plots and curated private NBT modules with provenance.
@@ -85,10 +83,7 @@
   scan deliberately ignores the post-grading surface heightmap, which may already have collapsed below leftover foliage.
 
 ### Now
-- Live-worldgen optimization uses Java 22 without pregeneration. The managed pack enables C2ME with eight workers,
-  six concurrent chunk loads, native acceleration and density compilation; DH is cache-only with a 24-chunk
-  realtime update radius. Quark's four noisy large-stone clusters are 8x rarer, ModernFix surface-rule optimization is an explicit A/B switch, and reachable third-party structure graphs are install-time validated/quarantined. The
-  deployed server accepted AVX2, all limits and the DH override; clean startup/catalog readiness passed.
+- Live-flight JFR captured the disconnect and generation profile. The crash was an invalid powered-rail curve, not an OOM; GC p99 was 40.1 ms. DH saturated its 2,000-chunk LOD queue, while ModernFix surface-rule optimization consumed 4.4% of CPU samples and dominated allocation pressure. The managed next profile therefore disables server DH by default, disables that ModernFix mixin and matches eight C2ME concurrent loads to eight workers; native acceleration and density compilation remain enabled.
 - The mountain-native mine cutover and reusable placement-profile boundary are implemented. Core schema v37, Visual definition v6, catalog v7 and
   genesis SavedData schema v6 intentionally reject every earlier world; the playtest world is disposable.
 - `AuthoredMineSitePlan` now pins each portal, loading endpoint, controller, bounds, orientation, initial/staged
@@ -108,8 +103,7 @@
   territory protection and genesis cleanup.
 
 ### Next
-- Run the optimized-versus-vanilla ModernFix flight A/B gate and the sequential bounded JFR analyzer, then run the fresh graphical seed matrix for foothills, mine/rail
-  composition, isolated Create kinetics, Red Valley construction and real-train proof.
+- Deploy the rail/runtime and measured flight-profile fixes to the existing disposable world, repeat the straight unknown-terrain flight, then run the graphical seed matrix for foothills, mine/rail composition, isolated Create kinetics, Red Valley construction and real-train proof.
 
 ## Open questions
 - UNCONFIRMED: final visual quality and playability until a real client visits naturally generated temperate/cold/dry mountain regions after the v37 cutover.
