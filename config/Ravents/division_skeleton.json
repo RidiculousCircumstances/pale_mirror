@@ -1,0 +1,22 @@
+{
+  "id": "division_skeleton",
+  "baseEntity": "minecraft:skeleton",
+  "displayName": "Risen Skeleton",
+  "health": 20.0,
+  "damage": 3.0,
+  "speed": 0.23,
+  "scale": 1.0,
+  "dropEquipment": false,
+  "armor": {},
+  "hands": {
+    "mainhand": {
+      "item": "minecraft:air",
+      "enchantments": {}
+    }
+  },
+  "effects": [],
+  "drops": [],
+  "clearVanillaDrops": false,
+  "spawnOnDeath": [],
+  "onHitEffects": []
+}

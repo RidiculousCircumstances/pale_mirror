@@ -1,0 +1,13 @@
+name = "Hostile Tactics"
+filename = "hostile_tactics-neoforge-1.21.1-0.10.1.jar"
+side = "server"
+
+[download]
+url = "https://cdn.modrinth.com/data/gvkYNFPn/versions/p6MKUmpy/hostile_tactics-neoforge-1.21.1-0.10.1.jar"
+hash-format = "sha512"
+hash = "3245a9a700615dfee4666b0b262ad2f38d65993484c42372802f5afa347843083381bc91e24e1b690321d30f9f116f854f3d347a5358fd5a67e91872c97be062"
+
+[update]
+[update.modrinth]
+mod-id = "gvkYNFPn"
+version = "p6MKUmpy"

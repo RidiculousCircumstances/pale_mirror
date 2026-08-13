@@ -1,0 +1,147 @@
+{
+  "villagerMaps": {
+    "minecraft:cartographer": [
+      {
+        "tradeLevel": 1,
+        "structure": "dungeons_arise:thornborn_towers",
+        "mapName": "Thornborn Towers Map",
+        "mapIcon": "minecraft:banner_red",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 2,
+        "structure": "dungeons_arise:bandit_towers",
+        "mapName": "Bandit Towers Map",
+        "mapIcon": "minecraft:banner_brown",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 1,
+        "structure": "dungeons_arise:illager_campsite",
+        "mapName": "Illager Campsite Map",
+        "mapIcon": "minecraft:banner_brown",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 1,
+        "structure": "dungeons_arise:merchant_campsite",
+        "mapName": "Merchant Campsite Map",
+        "mapIcon": "minecraft:banner_cyan",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 2,
+        "structure": "dungeons_arise:desert_hall",
+        "mapName": "Desert Hall Map",
+        "mapIcon": "minecraft:banner_yellow",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 1,
+        "structure": "dungeons_arise:mining_complex",
+        "mapName": "Mining Complex Map",
+        "mapIcon": "minecraft:banner_red",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 2,
+        "structure": "dungeons_arise:foundry",
+        "mapName": "Foundry Map",
+        "mapIcon": "minecraft:banner_red",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 2,
+        "structure": "dungeons_arise:mechanical_nest",
+        "mapName": "Mechanical Nest Map",
+        "mapIcon": "minecraft:banner_orange",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 2,
+        "structure": "dungeons_arise:infested_temple",
+        "mapName": "Infested Temple Map",
+        "mapIcon": "minecraft:banner_cyan",
+        "emeraldsRequired": 30,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "tradeLevel": 2,
+        "structure": "dungeons_arise:kisegi_sanctuary",
+        "mapName": "Kisegi Sanctuary Map",
+        "mapIcon": "minecraft:banner_red",
+        "emeraldsRequired": 20,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      }
+    ]
+  },
+  "wanderingTraderMap": {
+    "rare": [],
+    "common": [
+      {
+        "structure": "dungeons_arise:ceryneian_hind",
+        "mapName": "Ceryneian Hind Map",
+        "mapIcon": "minecraft:banner_yellow",
+        "emeraldsRequired": 15,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "structure": "dungeons_arise:typhon",
+        "mapName": "Typhon Map",
+        "mapIcon": "minecraft:banner_cyan",
+        "emeraldsRequired": 15,
+        "tradesAllowed": 2,
+        "xpReward": 10,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "structure": "dungeons_arise:thornborn_towers",
+        "mapName": "Thornborn Towers Map",
+        "mapIcon": "minecraft:banner_red",
+        "emeraldsRequired": 25,
+        "tradesAllowed": 2,
+        "xpReward": 100,
+        "spawnRegionSearchRadius": 100
+      },
+      {
+        "structure": "dungeons_arise:mining_complex",
+        "mapName": "Mining System Map",
+        "mapIcon": "minecraft:banner_red",
+        "emeraldsRequired": 25,
+        "tradesAllowed": 2,
+        "xpReward": 100,
+        "spawnRegionSearchRadius": 100
+      }
+    ]
+  }
+}

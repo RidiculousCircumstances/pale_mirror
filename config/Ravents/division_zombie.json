@@ -1,0 +1,27 @@
+{
+  "id": "division_zombie",
+  "baseEntity": "minecraft:zombie",
+  "displayName": "Cursed Zombie",
+  "health": 20.0,
+  "damage": 3.0,
+  "speed": 0.23,
+  "scale": 1.0,
+  "dropEquipment": false,
+  "armor": {
+    "head": {
+      "item": "minecraft:golden_helmet",
+      "enchantments": {}
+    }
+  },
+  "hands": {},
+  "effects": [],
+  "drops": [],
+  "clearVanillaDrops": false,
+  "spawnOnDeath": [
+    {
+      "mobId": "division_skeleton",
+      "count": 1
+    }
+  ],
+  "onHitEffects": []
+}

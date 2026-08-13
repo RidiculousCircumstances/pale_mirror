@@ -1,0 +1,21 @@
+{
+  "structures": [
+    {"structure":"idas:cottage","weight":3},
+    {"structure":"idas:animal_den/forest_den","weight":3},
+    {"structure":"idas:animal_den/polar_bear_den","weight":3},
+    {"structure":"idas:sunken_ship/sunken_ship_ruins","weight":3},
+    {"structure":"idas:ancient_statue/ancient_statue_plains","weight":3},
+    {"structure":"idas:ancient_statue/ancient_statue_jungle","weight":3},
+    {"structure":"idas:ancient_statue/ancient_statue_desert","weight":2},
+    {"structure":"idas:washing_camp","weight":3},
+    {"structure":"idas:snifferhenge","weight":1},
+    {"structure":"idas:frozen_crypt","weight":1}
+  ],
+  "placement": {
+    "salt":169480673,
+    "spacing":26,
+    "separation":20,
+    "type":"integrated_api:advanced_random_spread",
+    "super_exclusion_zone":{"chunk_count":2,"other_set":"#idas:small_avoid"}
+  }
+}

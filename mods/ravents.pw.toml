@@ -1,0 +1,13 @@
+name = "Ravents"
+filename = "Ravents-neoforge-3.0.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/im1idKiA/versions/nTTlZTlJ/Ravents-neoforge-3.0.jar"
+hash-format = "sha512"
+hash = "1599b5fb03ee64edfb1668056c8b478de601a3127e0b8515e3320f92a6048abbe49be3e448731b04ce84e4bfc9084507a6e7ffe48b8f2efb9bfe4db9d03827d6"
+
+[update]
+[update.modrinth]
+mod-id = "im1idKiA"
+version = "nTTlZTlJ"

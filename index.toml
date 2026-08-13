@@ -1,0 +1,819 @@
+hash-format = "sha256"
+
+[[files]]
+file = "README.md"
+hash = "1fe6879e5caabdf7856482cb2471c30e0800d0a5a6a710938e85c457606aa2f0"
+
+[[files]]
+file = "config/README.md"
+hash = "483e46a27405331e0b1d2c46cf69c524ae235ccc3f6490b10c079eb0a5371ed8"
+
+[[files]]
+file = "config/Ravents/division_skeleton.json"
+hash = "a0efd176a1c739ebcd242865e92aa8ffa7dd6ecf213bc3582a4205b8b7a37172"
+
+[[files]]
+file = "config/Ravents/division_zombie.json"
+hash = "c42b8a443935176143295e7c0a323968fc4f1b2f60fe14d86d1a7c0881e2957c"
+
+[[files]]
+file = "config/Ravents/frontier_raider.json"
+hash = "3317fca0e2e85076675fa3647fcb5f8956d15475bd3dc292f398bbfac51d3b1e"
+
+[[files]]
+file = "config/Ravents/frontier_scout.json"
+hash = "c2df7eabcb6fbf45c692cc92ab7d8cfecb6f3a1d2d2b7ace9d137748fdf235ef"
+
+[[files]]
+file = "config/Ravents/raids/frontier_first_contact.json"
+hash = "ce644abbe18eb8b30eba5ff8d7a8efdc39bf0c5fba3ec58778f33bae593d0d0a"
+
+[[files]]
+file = "config/Ravents_settings.json"
+hash = "88162b2d3f12a5d902b7dc588016b52e7d1a63071e8afc6f896318881e2f1c64"
+
+[[files]]
+file = "config/c2me.toml"
+hash = "0fa909a4d50f0f8aea658d3b731adc251bfee5e85c31a903249ebdd532db3624"
+
+[[files]]
+file = "config/hostiletactics-server.toml"
+hash = "e053687a6deab135adb59bf414542743cec56c7178cf4a399485701e9b7469cc"
+
+[[files]]
+file = "config/modernfix-mixins.properties"
+hash = "30cfdafdf062d354035aaf6397b118b87beebfcc8d636cfba4ad23e0433023de"
+
+[[files]]
+file = "config/pale-mirror-server.toml"
+hash = "91279ef7e6cece2fa17c1afb3bd084904460379741e50d4eca64bcd7c021a8f2"
+
+[[files]]
+file = "config/quark-common.toml"
+hash = "b0c9c0c98f0ca2d1cd4548601cc58265a26f1caab83ef85fcf6f2053d8c589fc"
+
+[[files]]
+file = "config/railways-untold/config.toml"
+hash = "29a077ae5d6da118c5f1bf0eeed74aad65514eaaf8f8edc0b0c1f7cb6ddaf4ad"
+
+[[files]]
+file = "config/spore-startup.toml"
+hash = "ade4eedca8258f7e563d92062c499fe58c6f75d6e6434bb3259dffce7d5dda18"
+
+[[files]]
+file = "config/structurify.json"
+hash = "96432136ee78d5ed53ee96e6a6ae742487f434f4593b4fc1f7a357fd0404e7ba"
+
+[[files]]
+file = "datapacks/README.md"
+hash = "f8be48f7ca9d009b6967f6abe51c1f203908a9ae4025a6babb6547a65115f64f"
+
+[[files]]
+file = "datapacks/crimson-curse-raids-disabled/README.md"
+hash = "bd9c1e2aef9ff00c9798f576f4408c4ad2c1ac58ad98c1223c5225b6286aaa5f"
+
+[[files]]
+file = "datapacks/crimson-curse-raids-disabled/data/far_frontier_crimson_curse/function/apply_raid_policy.mcfunction"
+hash = "2420b091a25354212e82a97b6cf28ec657e2dd8e8e290e8366d69d7b2330fefe"
+
+[[files]]
+file = "datapacks/crimson-curse-raids-disabled/data/far_frontier_crimson_curse/function/queue_raid_policy.mcfunction"
+hash = "392ac35fa6effd9cf2dfba64a860a336a74da49ac7b120810fa052ff51ddf26f"
+
+[[files]]
+file = "datapacks/crimson-curse-raids-disabled/data/minecraft/tags/function/load.json"
+hash = "a3ff6577afcdace01abeec05198a59e2fa7f4434b6541d18735b9619efa36682"
+
+[[files]]
+file = "datapacks/crimson-curse-raids-disabled/pack.mcmeta"
+hash = "74f11839869b2a114114e0d67ac11e9945d232be3ec11ea43958e67640674ee1"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/README.md"
+hash = "e9c86dec9123fb6e622e1818bb111d515ab4a3efdb813d372c1516acb70023e9"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/biomass_tower.json"
+hash = "d7747f509bacdcd93f9aff32ba5b0e82f4a0b56191f56e19288f387d73d3c860"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/cathedral.json"
+hash = "8b6355e454d453860c6d31ad7c8b019f671b09f172af87f97178a5b87bf9b390"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/cell.json"
+hash = "e52582896897bd96e5097b85fd4b425a7f5699c0e10a25fe6cef028fdf2a7d47"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/celltower.json"
+hash = "32e505f8f1f7e3da1db5087fc4fa32708ca62a918acd0fc4ada54c725563a0c8"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/church.json"
+hash = "ac225fa00751bee1d04d2a8961f0c0ba9ca1dbb3bbce9bb7a7d0d6f7cb34ba9a"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/hospital.json"
+hash = "aadef656423a0e977be1a035ab92518c7ccb111b17db48db0a29a59c1dd053da"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/iceberg_mines.json"
+hash = "6fb60b70c904660e762a1d71839929866f5d84f6e5d93ed8a8521d823dd9c727"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/lab.json"
+hash = "032923c16110c7a51c36c78421eb8c73d8206a76d437dc178fe26df73db75960"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/lodge.json"
+hash = "06101ba8aebf3fa64567a0543e006ceae25b01af93d7c0c90f1605bd36401a85"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/mass_grave.json"
+hash = "c8f93227ec2513d6a2f3ba3a07167b71af5472282ff452243996da1ebff3df85"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/military_camp.json"
+hash = "4f476948adcd7a8366d60b66382c840f15bdcfe954d67492a0b95c8ad0b2b988"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/mines.json"
+hash = "d9c136f374ae309583aae24e888ef72409d0884b686703cf869fd296f819d413"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/data/spore/worldgen/structure_set/prison.json"
+hash = "aab419b13daba8bb0d03db547600f0172778a112e7c090488ac85c9e9bfdcb16"
+
+[[files]]
+file = "datapacks/far-frontier-spore-zones/pack.mcmeta"
+hash = "4fa8ebaea961291cf563664f05d119d94c6dcdd93a8bd40ff1729e165d511051"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/README.md"
+hash = "c7c7547f14e92c3158cb717633b8450df656e0a0dbf2fddc546c7e52370b02a6"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/data/dungeons_arise/loot_table/chests/plague_asylum/plague_asylum_cells.json"
+hash = "bf23599cff134ce1c0997566738ed5dc9b8d8b957059459eaa3cf41569cbbecf"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/data/dungeons_arise/loot_table/chests/plague_asylum/plague_asylum_potions.json"
+hash = "d06eebbe4ce9d8f0e165422b9cc1b28ed88cacb319a53ae2fdacdb377ba01ff3"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/data/dungeons_arise/loot_table/chests/plague_asylum/plague_asylum_treasure.json"
+hash = "eb3ea6bcf1b122a7007a5295c7901e842ae053c5628b4a70f9a55189eda67814"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/data/dungeons_arise/loot_table/chests/thornborn_towers/thornborn_towers_top_rooms.json"
+hash = "2f3d8a317bf79a00e381aa5f4aabf07174b9a747a8afbd612762659cf2d5f58b"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/data/dungeons_arise/loot_table/chests/typhon/typhon_treasure.json"
+hash = "99aca066b581dc0cd41e2972bfa36ee7474a38adc7ea5c305e20193b4a796901"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/data/dungeons_arise/worldgen/structure_set/major_structures.json"
+hash = "8a87e00323863c732496dbd1c91f326f8df382ccf4be3854c58d525a407664a5"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/data/integrated_api/integrated_structure_map_trades/idas_maps.json"
+hash = "07e051739743a8102f2b7226961e48037bee52aa55d87f9439e1c937e8c8ff4e"
+
+[[files]]
+file = "datapacks/ida-legacy-loot-fix/pack.mcmeta"
+hash = "5f4e12c69d94957a17a6827f5468cc0850512f38e016587c625723cb398c381a"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/README.md"
+hash = "f4f822b7b3c334179a681c9f2ec8c0a3e932b6e58b33d08be91a723a79d247c7"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/integrated_structure_spawners/archmages_tower.json"
+hash = "e384cc7f6ec82500b3d2a09fe5120e542b0df83e1f02833743bbb0662f7bcfec"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/integrated_structure_spawners/dread_citadel.json"
+hash = "ce33a477c742c767bce2364b1a6ba42d2bb71adf779c767a9b6b957e5ac11b13"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/archmages_tower/archmages_tower.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/archmages_tower/archmages_tower_library.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/archmages_tower/archmages_tower_treasure.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/dread_citadel/dread_citadel.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/dread_citadel/dread_citadel_library.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/dread_citadel/dread_citadel_throne.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/enchantingtower/enchantingtower_basic_ars.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/enchantingtower/enchantingtower_top_ars.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/haunted_manor/if_haunted_manor.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/loot_table/chests/labyrinth/if_labyrinth_tomb.json"
+hash = "fab62d482f0f009c21599a01f03ed2fe600495a112759cbbba4783b8f75a0218"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/biome/has_structure/bopmahogany_biomes.json"
+hash = "32f175246810460bb1c06946e476209d4e90c7b25f3a7832a0e370324421e34b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/biome/has_structure/bopmohogany_biomes.json"
+hash = "32f175246810460bb1c06946e476209d4e90c7b25f3a7832a0e370324421e34b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/biome/has_structure/bopredwood_biomes.json"
+hash = "32f175246810460bb1c06946e476209d4e90c7b25f3a7832a0e370324421e34b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/biome/has_structure/byg_redwood_biomes.json"
+hash = "32f175246810460bb1c06946e476209d4e90c7b25f3a7832a0e370324421e34b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/biome/has_structure/bygmahogany_biomes.json"
+hash = "32f175246810460bb1c06946e476209d4e90c7b25f3a7832a0e370324421e34b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/biome/has_structure/bygmohogany_biomes.json"
+hash = "32f175246810460bb1c06946e476209d4e90c7b25f3a7832a0e370324421e34b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/biome/has_structure/bygredwood_biomes.json"
+hash = "32f175246810460bb1c06946e476209d4e90c7b25f3a7832a0e370324421e34b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/structure_set/common_avoid.json"
+hash = "09c9710203d5a0cbff47bffd28e37ef7d92341456ad0e2a83678ca0a8986984a"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/structure_set/rare_avoid.json"
+hash = "926967e3e23db9d359ea1455c3c705cecf270077f1978354f8e8815ac093b8c4"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/tags/worldgen/structure_set/underground_avoid.json"
+hash = "755f5e47f3f8b4724f9058cf6b95e65d3fbc90e4fd20c236f257519320f85225"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/worldgen/structure_set/idas_common.json"
+hash = "26888a1006218261beeabb60a72c67c5909e69247e3abc3d32e3532c879d3480"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/worldgen/structure_set/idas_nether.json"
+hash = "e95cf2d898010cd2bf38803e51d96f6953014c5c54cd651664c1e513aa119f7b"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/worldgen/structure_set/idas_ocean.json"
+hash = "7bb98bba21f0706f86c94d78b513e9cfbe9c5916ed26dc4e18043ea05d154877"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/worldgen/structure_set/idas_rare.json"
+hash = "efe8ab7f56208722aaf76c7ab9599a02ef2b3ee697e9dabe83227dd7c896ede7"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/data/idas/worldgen/structure_set/idas_small.json"
+hash = "c9ea28b21d393359fa6926b790231003ccc8b3d873386658ae87df7954e38c85"
+
+[[files]]
+file = "datapacks/idas-optional-integration-quarantine/pack.mcmeta"
+hash = "11610d41dd8b3183f2385c3c75fbc659b55cdef6dd99f63561556b10bfcacd57"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/README.md"
+hash = "06a4866c0ef5989ddde1f6978785922c243514886e44930f11069a35258286c3"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/airship_village/irons_priest.json"
+hash = "e47d171c39eb07c92702a2531ed510ebf842664215ca2e4b71c88153de9a49c2"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/airship_village/villager_guard.json"
+hash = "3f5589c76c810f250ee6005f1b41380776c875ceaec4cf84a17730043a7f94c9"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/cabin_village/mobs/villager_guard.json"
+hash = "eda6b5564ae8d590d35b4daf39174b7eaa9b8f4fa8eba6e5f3e5e5b13293d566"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/clockwork_village/villager_guard.json"
+hash = "5f7baae28b4f9e6ae41b165fb8bd60e898b80ecf81da22cafbfa26a17e7d8efd"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/integration/mobs/irons_priest.json"
+hash = "fc43e2e244d86b393dbcf5ceee99914dbc4b07e49c12ef7304e5fd3fbf1dc06d"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/kutcha_village/mobs/villager_guard.json"
+hash = "dee8b040d1959fa19a7aa95c0e0c6f083323b026ae364f548e0f234625aed7b7"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/marketstead_village/mobs/villager_guard.json"
+hash = "d347c490e01f176dd32ba973d80aa4cf1fea38191f47b4dbb981d879e22ff1a2"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/mediterranean_village/mobs/irons_priest.json"
+hash = "e071df5fb456d0d6e9dbdbd7dc6039343bf96c6bb7e2cd91e52e41642a3d8b86"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/mediterranean_village/mobs/villager_guard.json"
+hash = "3973b3a22c1e7922d0d8b28a29b02ab6bf345fb1548b9dde775a8e7f03e0cb52"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/minka_village/mobs/irons_priest.json"
+hash = "ec2511a4e9ccba1c6c0754d010779f3da30ad684494928551c00898a59f1716f"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/minka_village/mobs/villager_guard.json"
+hash = "9e970adee7701d7ed5dde5c729a3dcd8447258da3517c91d74000ed7c49ebb34"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/mossy_mounds/mobs/villager_guard.json"
+hash = "911703e00955136b9e5835debfa5e7aec9d848c3be0a2a500345b5aeafff0d05"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/oasis_village/mobs/villager_guard.json"
+hash = "67c57863a0ff7ab6ef5bd6cb280b4139491e4d511343c4ccbc2b6ef8677a25c2"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/pirate_village/villager_guard.json"
+hash = "637a94eaabf569d9ae15cbca442f697bb69bba8fc37929489dcaa92b6c55f880"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/swamp_village/mobs/irons_priest.json"
+hash = "b9ccb32881fa28b111793c8590bc47a691f968e4c4f3b63416329a6a5e237a29"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/swamp_village/mobs/villager_guard.json"
+hash = "d452df95c4dc47d0b5025513d59c6a8ebdd93cd54ae47b532c518134b5b07228"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/tavern_village/irons_priest.json"
+hash = "d180d34d76f3825517c22e48685c8004823562b7c731dac0e7f7701ac11d6901"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/data/integrated_villages/worldgen/template_pool/tavern_village/villager_guard.json"
+hash = "e1f3b75883161659d706bb3d4e04bdafa6e2f7da420209481f1e067a9373fe45"
+
+[[files]]
+file = "datapacks/integrated-villages-optional-integration-quarantine/pack.mcmeta"
+hash = "ff63d669db22f75f9c9e0471f80948563d441390c54fca0b7a2da57f462a8482"
+
+[[files]]
+file = "defaultconfigs/README.md"
+hash = "de6cd3f222868d242987bf827a9585f098b895a049b1b0952f1e688a78b80530"
+
+[[files]]
+file = "deploy/systemd/far-frontier-client-host.service"
+hash = "38382bb65990fd167f36587fdca37bb1ec2a1b38a31845aa947b14368961b77c"
+
+[[files]]
+file = "docs/architecture.md"
+hash = "72cbe0c4bdad3c63776b0859095e91c6c0c11e878153346f8ab1fd941bf25c7e"
+
+[[files]]
+file = "docs/balancing.md"
+hash = "18d4ca97e0220f406a87e94f807496859d01f9cb2a491a2da737ebc413837bf3"
+
+[[files]]
+file = "docs/create-caliber-evaluation.md"
+hash = "a2bf11f985e0a20acddf8d5cc33bcd6be9c1295712c882df0249926002f0cc60"
+
+[[files]]
+file = "docs/crimson-curse.md"
+hash = "d9aaaa03e246658d1efc110715838ff32f9c69acf8cf567f68a9e7504c0f5ac0"
+
+[[files]]
+file = "docs/expedition-system.md"
+hash = "463a83f786b5f652652b5b0b8503e64d312e3f108828d9527ea897a44a524cb7"
+
+[[files]]
+file = "docs/mod-compatibility.md"
+hash = "0287a370503dc49897aa4bd54d4de7644f3b66129c8267d65c2abf27c6d22cc3"
+
+[[files]]
+file = "docs/performance.md"
+hash = "807948d90a9e98faaf561508ea62e7fa8288c0bd0bf8235e0e2c8332d8028deb"
+
+[[files]]
+file = "docs/quest-system.md"
+hash = "a869fc41afcd21444f2703a70a5e2ba18a3ee211278308698dbc1065f7764b76"
+
+[[files]]
+file = "docs/ravents-progression.md"
+hash = "8450685a8fe5480b78cfd3c54d0b6270a219e364b4498ccdcc2e65a8b0e0d9f9"
+
+[[files]]
+file = "docs/spore-integration.md"
+hash = "315871cdc59b24e6d2149bbbea2dabc04d9786bba67a022bd80a57096f7e290a"
+
+[[files]]
+file = "docs/structures.md"
+hash = "913f9fa38fcb0e3db9a34e3e6ce3a58ff5e80655edae2c471ff9e35f20728163"
+
+[[files]]
+file = "docs/testing.md"
+hash = "afc920551b2b3e30e70825a3c39787ecf938181d7f8434990801ac2e2ebbe883"
+
+[[files]]
+file = "mods/alexs-caves-(unofficial-port).pw.toml"
+hash = "84446ad1b2cfbd2c538266472ad61a2b3f29ec8229de4850f4a673dea32af415"
+metafile = true
+
+[[files]]
+file = "mods/amendments.pw.toml"
+hash = "793e70a07961b1670ba13dcdfe2c1cfb1379df52485adc2d3ba5db128e9536a6"
+metafile = true
+
+[[files]]
+file = "mods/architectury-api.pw.toml"
+hash = "187eafde5974beee1263538b462b7b8fe2fc8948c5d413980d9796d55928580b"
+metafile = true
+
+[[files]]
+file = "mods/better-combat.pw.toml"
+hash = "438170e7e704a1b8ed67bf0521dc5d77cdeeaabf6f729dba9f8dfdad75330acf"
+metafile = true
+
+[[files]]
+file = "mods/borninchaos.pw.toml"
+hash = "a2c8cf1a4fc5faed55ca1f8d04f7abaa1c8282b9bcd70e1b3e607181923f48d9"
+metafile = true
+
+[[files]]
+file = "mods/c2me-neoforge.pw.toml"
+hash = "6c00de71391824ecf02e7bea4410964485afefd4dab029262d09f0e6af2d1b1d"
+metafile = true
+
+[[files]]
+file = "mods/citadel-(1.21.1-port).pw.toml"
+hash = "1e2d3f4c3e5a6274e13848cc68e676f0cb71ee52a527d9ed84b145ebfc81b5dd"
+metafile = true
+
+[[files]]
+file = "mods/cloth-config.pw.toml"
+hash = "75181b55e0407d1fca1e2f346c6501f919f5109545990ddfb66db9cd1b771f8a"
+metafile = true
+
+[[files]]
+file = "mods/corgilib.pw.toml"
+hash = "2b8c5286980b8d864085d02a6b2153cefa401a965833139ffac8e7661a322f7c"
+metafile = true
+
+[[files]]
+file = "mods/create-aeronautics.pw.toml"
+hash = "5fab8d2e412683dfd72f08cf6750e51b03cb43192e8eb783e962ba28d20978bc"
+metafile = true
+
+[[files]]
+file = "mods/create.pw.toml"
+hash = "dcaf5f2e28db0b9a127d0167456832341045ddc9aec058c3d9fcf53f618d2404"
+metafile = true
+
+[[files]]
+file = "mods/crimson_curse.pw.toml"
+hash = "aefdf1a7a17ad583a216f0e6cdbab36d3e0b711597a10d9feaa88be9b043377b"
+metafile = true
+
+[[files]]
+file = "mods/curios.pw.toml"
+hash = "36debf7653e95a855b4fedacc19027cf2e01960fc0b6d55ef2ffbffbcb455690"
+metafile = true
+
+[[files]]
+file = "mods/data-anchor.pw.toml"
+hash = "bdc409a5eb4e06535a0387250fc4002ea578213bc2a1c5fbcdd4a836f54281c0"
+metafile = true
+
+[[files]]
+file = "mods/distanthorizons.pw.toml"
+hash = "d5b9c23df79ef871a70032567db2512904251347bdf13da80fbb8b00a846a79a"
+metafile = true
+
+[[files]]
+file = "mods/enhanced-celestials-2-core.pw.toml"
+hash = "71d735b7b94982da22614cda2f4f6d5b8d4dead915c27ca1e5eda55190d7b2a4"
+metafile = true
+
+[[files]]
+file = "mods/enhanced-celestials-2-default-lunar-events.pw.toml"
+hash = "65011ca9cb33847f16cca3d01cb89bad0756249a6410f2fdcc4ec5774ac68f76"
+metafile = true
+
+[[files]]
+file = "mods/entity-model-features.pw.toml"
+hash = "4fa25309ea7f4f7770ce6588f39711e891d39f70ae0906b842647273a9ce0448"
+metafile = true
+
+[[files]]
+file = "mods/entitytexturefeatures.pw.toml"
+hash = "cf7390cf06a861f7661222773371b429fce4fdd359240ca3c0eff20835471c0c"
+metafile = true
+
+[[files]]
+file = "mods/ez-actions.pw.toml"
+hash = "0d02b8be119245b5a1fb0647e77af0b45c5d234666f7f15650302ee4ed2c4c28"
+metafile = true
+
+[[files]]
+file = "mods/ez-emerald-pouch.pw.toml"
+hash = "5b19d3885559f11994595a573920a89075e7b62a2f3d7b253d11d33fa35ddc9e"
+metafile = true
+
+[[files]]
+file = "mods/farmers-delight.pw.toml"
+hash = "9aab64fbec4cc794817026caf84e7d0dff14ba3892da94aa0e00d23c84560499"
+metafile = true
+
+[[files]]
+file = "mods/fast-noise.pw.toml"
+hash = "ef15c0a0a5afcf7b11376da33b893a87b8522bef65bdb36fa17d5d6eea810e9f"
+metafile = true
+
+[[files]]
+file = "mods/ferrite-core.pw.toml"
+hash = "d21b19799a379154bc4d5368a28217ec1e9985ae60c6fd642792f94e6ec2b111"
+metafile = true
+
+[[files]]
+file = "mods/fungal-infectionspore.pw.toml"
+hash = "bb744f621497a5483ac3df5678443ac8cf057aa14ba7e5fcc8fd277ec9e6cb5d"
+metafile = true
+
+[[files]]
+file = "mods/fzzy-config.pw.toml"
+hash = "f9c118b7a66238a7f9e052705e82402e57c7a5b753d62d679b94701ede479752"
+metafile = true
+
+[[files]]
+file = "mods/geckolib.pw.toml"
+hash = "5a26489b734991c0511abfe43bf9143c935b8483d854a78fecd2e84993fb09cc"
+metafile = true
+
+[[files]]
+file = "mods/hostile-tactics.pw.toml"
+hash = "df64d6957336539c2d9eabf021ef0cdee633cfa4a66510a4bd04a64e732afc17"
+metafile = true
+
+[[files]]
+file = "mods/idas.pw.toml"
+hash = "b13158a1f8daea08344c22f072a708fd658a958e06a24560e5a3016e69c16375"
+metafile = true
+
+[[files]]
+file = "mods/integrated-api.pw.toml"
+hash = "51efd91733a69b031ff8533683e5a94b9c25a8e270e40e6ce9f4b03121e03450"
+metafile = true
+
+[[files]]
+file = "mods/integrated-dungeons-arise.pw.toml"
+hash = "445692cfe487140ccb79ac128fb112dca9d87f1059533cd6a45e447329b07f66"
+metafile = true
+
+[[files]]
+file = "mods/integrated-villages.pw.toml"
+hash = "2c48072573a48e80a6f052a2bdc8922eaed2edefc59c712b48dfb6ab9e5f94c5"
+metafile = true
+
+[[files]]
+file = "mods/iris.pw.toml"
+hash = "db1c1e6382878b78e994dba1b9026935f8d1c5ca685c89d2437858e0a0dcab58"
+metafile = true
+
+[[files]]
+file = "mods/journeymap.pw.toml"
+hash = "36da1d948489d7ac11923e55b12ea092f05483c1dbd2a4b15cacfc4b3a975901"
+metafile = true
+
+[[files]]
+file = "mods/kotlin-for-forge.pw.toml"
+hash = "712a69b3569a8055979de6eea262068535fe182dffb3833e53e5833e9cbf9766"
+metafile = true
+
+[[files]]
+file = "mods/l_enders-cataclysm.pw.toml"
+hash = "1adf24c4207f2e7c99be3b5d4aaef206fbc3725441c14e1f7ea77d2648fc10ee"
+metafile = true
+
+[[files]]
+file = "mods/lionfish-api.pw.toml"
+hash = "64acab1580ca6edd8b1dd185e914aeee7aa551a88a7cd7f0f9370a82aaadfef6"
+metafile = true
+
+[[files]]
+file = "mods/lithium.pw.toml"
+hash = "8fcf9b022a79aeabcd6b22dce076f9523f5d030e425a085902482201de3d2f0e"
+metafile = true
+
+[[files]]
+file = "mods/lithostitched.pw.toml"
+hash = "e06a9a886181277591baeb9e82b484bd6204fe3aec0ffc8781bb05bb11b4d1a9"
+metafile = true
+
+[[files]]
+file = "mods/modernfix.pw.toml"
+hash = "e2914da730533e7ff85fe6e36a09c36bb489942a9286a25e3795e7b0666c8d1b"
+metafile = true
+
+[[files]]
+file = "mods/moonlight.pw.toml"
+hash = "1707b4f1e3df638815211af1336c4d565d7eeae0b629527f1f9cd14eae9c0335"
+metafile = true
+
+[[files]]
+file = "mods/mowzies-mobs.pw.toml"
+hash = "02aa4dcb8fa24cffcd2182c66683c2a476a95abf53002373f953a49737a587e3"
+metafile = true
+
+[[files]]
+file = "mods/naturalist.pw.toml"
+hash = "f1363fb2ffcc4f617935af07f94a611adaa5d1e40cffdf303e9a546740a7411d"
+metafile = true
+
+[[files]]
+file = "mods/playeranimator.pw.toml"
+hash = "93284ca7f2f23f0bb76d42b797cabf2aea1914ee9825bec82bf6ffe4c60dda0d"
+metafile = true
+
+[[files]]
+file = "mods/polytone.pw.toml"
+hash = "70aeba11f46b3e2928d1b70cee6bbb8586f64b0c11feb798ea88a5dad3ac36dd"
+metafile = true
+
+[[files]]
+file = "mods/quark.pw.toml"
+hash = "726970c838cd6d724366956c2469b5a36dbe574abbd087317513359dfd1dd89e"
+metafile = true
+
+[[files]]
+file = "mods/ravents.pw.toml"
+hash = "7c2907cf74a09fe7da88c452b6eb302262f6f69b28a70f47348e69ab6bcee027"
+metafile = true
+
+[[files]]
+file = "mods/rpg-timeline.pw.toml"
+hash = "bec15b9cb3f0a0b643c8899a6eee074647c25c82a77b6ffabb7fb4cab80ba383"
+metafile = true
+
+[[files]]
+file = "mods/sable.pw.toml"
+hash = "674aaf0dc67f808f0054cfc7bbe041d6725fcbbe97644a85ffbd946a22d35666"
+metafile = true
+
+[[files]]
+file = "mods/simply-swords.pw.toml"
+hash = "1d37ac39109aa15d03a3a7ddf6402d63f72277acafca53f61830046acfe6edb0"
+metafile = true
+
+[[files]]
+file = "mods/simply-tooltips.pw.toml"
+hash = "320d755339086e8fb35709328ad7b094ecbf7c500d61c08c535ec7d277fe1053"
+metafile = true
+
+[[files]]
+file = "mods/sodium.pw.toml"
+hash = "8b237735f64f339d35d40eaceb76cdf137fd05a49b452d2a8c3434cada762e11"
+metafile = true
+
+[[files]]
+file = "mods/structurify.pw.toml"
+hash = "86cc4ced1520d24ca8ede0a458de441f6331c646179d3795a530fb6d4559363b"
+metafile = true
+
+[[files]]
+file = "mods/supplementaries.pw.toml"
+hash = "416a2346e514f4481c138ae83eb9b12df6da53184f924b32239e8e0bc603f188"
+metafile = true
+
+[[files]]
+file = "mods/tectonic.pw.toml"
+hash = "fef2f8085bbdf6d398b02c87225ad9ccf9cc5d71edde13cd18e12a154764c84e"
+metafile = true
+
+[[files]]
+file = "mods/terralith.pw.toml"
+hash = "81c5c05f9ed4c07b9f027ff6c421939bb04e476075091f135d34aaa05af1f950"
+metafile = true
+
+[[files]]
+file = "mods/villager-overhaul.pw.toml"
+hash = "78ff6999b11004392875ff28657d8ab70c356756eb3a6a54b21551f3ba657502"
+metafile = true
+
+[[files]]
+file = "mods/yacl.pw.toml"
+hash = "539f362e9e192cf3b2813e0dfdfc51a5e6814129c6e82a9733842529beea6242"
+metafile = true
+
+[[files]]
+file = "mods/yungs-api.pw.toml"
+hash = "d9c0c9209bac0b693af2a7c1e47ffb28d366bad19c91df31dc6d345fa75250a1"
+metafile = true
+
+[[files]]
+file = "mods/yungs-better-dungeons.pw.toml"
+hash = "4c2830674a08ec9f10af13e4d259aa60158bd306a3996d935e678281ec0cb5fd"
+metafile = true
+
+[[files]]
+file = "mods/yungs-better-strongholds.pw.toml"
+hash = "1a33e6d64e88ad59b65d126c6457d582e62724167349ea184eb237435298985e"
+metafile = true
+
+[[files]]
+file = "mods/zeta.pw.toml"
+hash = "cb474b6c0dde741836ed4f796f3b6ab0b9d3cdc0453e651122cd002d5d1f8df8"
+metafile = true
+
+[[files]]
+file = "pale_mirror.txt"
+hash = "d9c83279013e26416d8bf724793d716c551c86302bf14be16eeb9cf69d04f1a0"
+
+[[files]]
+file = "scripts/analyze-worldgen-jfr.sh"
+hash = "b2d49cac428e19c19683704fb4aa69f71e8b90e0a944b28331d452b75ea6058a"
+
+[[files]]
+file = "scripts/benchmark-live-worldgen.sh"
+hash = "a98bad792dc1b95a156c16f276e1313792bb526658f7c442e6f476f694178d73"
+
+[[files]]
+file = "scripts/bootstrap-client.sh"
+hash = "a3e1047307480f7543a0770c8a1b541e731cccb017c7695fa5f3a0b60230f863"
+
+[[files]]
+file = "scripts/install-client.ps1"
+hash = "3e3d82578cc434d88cc52e2842b4f9c8a09162fa0672daf4ea3e0660894aadb2"
+
+[[files]]
+file = "scripts/install-client.sh"
+hash = "5d048fd974c03d0d0a89c38234666d516b542d22724f447a639886fe565d7444"
+
+[[files]]
+file = "scripts/install-server-java22.sh"
+hash = "ba731c2600b07e23bc22ecf4d54350f4f4ce407add4a0cef94209a7573b29f8c"
+
+[[files]]
+file = "scripts/install-server.sh"
+hash = "e0589544392a8bfc131d5bdd4e48ccb32c39032e900ea72b65096f3afe7f8eb5"
+
+[[files]]
+file = "scripts/lib/install-hosted-pale-mirror.sh"
+hash = "7d3b24cd2986f6eaa539a2b411bdf9162623d4d744e12e119208365d2955b83a"
+
+[[files]]
+file = "scripts/lib/install-hosted-railway-untold.sh"
+hash = "365e5724ce54bf3d4fd9ed0784363084e7bd3edde450db434ae38308b7f7813c"
+
+[[files]]
+file = "scripts/publish-client-artifacts.sh"
+hash = "ef35036b322f99c1c44de35909f8a29662df797639d80667fa80a6a52bf40af5"
+
+[[files]]
+file = "scripts/run-server-java22.sh"
+hash = "db79eecd0e6243230201566ecc677cc330b1976414a91aeb6fef5fd1cda04a0e"
+
+[[files]]
+file = "scripts/server-smoke-test.sh"
+hash = "1ba7237c674a925e707b8ad7032fe51ea14accedae568e39be083f4986a088a5"
+
+[[files]]
+file = "scripts/set-server-performance-profile.sh"
+hash = "a69d401db6eb2cfbb040dbbdf4de0e6f3f5230a5d98feaf3b81a60a5d279d288"
+
+[[files]]
+file = "scripts/update-client-macos.command"
+hash = "01f34d04540360ff394c8e458572291e568f9d2442b4680b838023d61bb892dd"
+
+[[files]]
+file = "scripts/update-client.cmd"
+hash = "611104db71317f9672b8188f0f2fcdae7ff96ca309664c0ac918f51b952ee00c"
+
+[[files]]
+file = "scripts/validate-structure-assets.py"
+hash = "908333795b49b558ba13b0022052fcd3dd130b99c081da0e54900d43155253ee"
+
+[[files]]
+file = "scripts/validate.sh"
+hash = "1ab8e28547365467b0c63c1c51e8e50706738e969b2fb5cf73ef3f9af4ac484a"

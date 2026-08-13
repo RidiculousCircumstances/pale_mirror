@@ -1,0 +1,13 @@
+# Managed Far Frontier worldgen budget. NeoForge/Quark fills all omitted keys from
+# the pinned Quark defaults on first load.
+[world.big_stone_clusters.calcite]
+	Rarity = 32
+
+[world.big_stone_clusters.limestone]
+	Rarity = 32
+
+[world.big_stone_clusters.jasper]
+	Rarity = 32
+
+[world.big_stone_clusters.shale]
+	Rarity = 32

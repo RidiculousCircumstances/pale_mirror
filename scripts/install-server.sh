@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# Build or update a dedicated Far Frontier server from this checkout.
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=scripts/lib/install-hosted-pale-mirror.sh
+source "$repo_root/scripts/lib/install-hosted-pale-mirror.sh"
+# shellcheck source=scripts/lib/install-hosted-railway-untold.sh
+source "$repo_root/scripts/lib/install-hosted-railway-untold.sh"
+neoforge_version=21.1.248
+neoforge_sha256=68eeab77059ba53df1812f1afa5bf530ab2566a3cdcd5f924aa6e71be42e410c
+bootstrap_version=0.0.3
+bootstrap_sha256=a8fbb24dc604278e97f4688e82d3d91a318b98efc08d5dbfcbcbcab6443d116c
+neoforge_url="https://maven.neoforged.net/releases/net/neoforged/neoforge/${neoforge_version}/neoforge-${neoforge_version}-installer.jar"
+bootstrap_url="https://github.com/packwiz/packwiz-installer-bootstrap/releases/download/v${bootstrap_version}/packwiz-installer-bootstrap.jar"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/install-server.sh --target <server directory> [options]
+
+Options:
+  --pack-url <URL>
+  --java <path>
+  --enable-c2me
+  --accept-eula
+  --pale-mirror-url <URL>
+  --pale-mirror-sha512 <128 hex characters>
+  --pale-mirror-visuals-url <URL>
+  --pale-mirror-visuals-sha512 <128 hex characters>
+  --railway-untold-url <URL>
+  --railway-untold-sha512 <128 hex characters>
+
+Without --pack-url, the script temporarily serves this checkout over loopback while
+packwiz materialises the server. For LAN clients, publish this checkout separately
+(for example: `packwiz serve --port 8091`) and give its reachable pack.toml URL to
+scripts/install-client.sh or scripts/install-client.ps1.
+
+The script never deletes an existing server/world. --accept-eula is required only
+to write eula=true; read Mojang's EULA before using it. Pale Mirror URL and SHA-512
+must be supplied together; PALE_MIRROR_URL and PALE_MIRROR_SHA512 are also accepted.
+The Railway Untold pair is likewise accepted through RAILWAY_UNTOLD_URL and
+RAILWAY_UNTOLD_SHA512. The dedicated server runtime must be Java 22; Pale Mirror
+and all client artifacts remain compiled for Java 21. C2ME is downloaded but kept
+disabled unless --enable-c2me is supplied.
+EOF
+}
+
+target=""
+pack_url=""
+java_bin="${JAVA_BIN:-java}"
+accept_eula=false
+enable_c2me=false
+pale_mirror_url="${PALE_MIRROR_URL:-}"
+pale_mirror_sha512="${PALE_MIRROR_SHA512:-}"
+pale_mirror_visuals_url="${PALE_MIRROR_VISUALS_URL:-}"
+pale_mirror_visuals_sha512="${PALE_MIRROR_VISUALS_SHA512:-}"
+railway_untold_url="${RAILWAY_UNTOLD_URL:-}"
+railway_untold_sha512="${RAILWAY_UNTOLD_SHA512:-}"
+while (($#)); do
+  case "$1" in
+    --target) target=${2:?--target requires a directory}; shift 2 ;;
+    --pack-url) pack_url=${2:?--pack-url requires a URL}; shift 2 ;;
+    --java) java_bin=${2:?--java requires a path}; shift 2 ;;
+    --accept-eula) accept_eula=true; shift ;;
+    --enable-c2me) enable_c2me=true; shift ;;
+    --pale-mirror-url) pale_mirror_url=${2:?--pale-mirror-url requires a URL}; shift 2 ;;
+    --pale-mirror-sha512) pale_mirror_sha512=${2:?--pale-mirror-sha512 requires a hash}; shift 2 ;;
+    --pale-mirror-visuals-url) pale_mirror_visuals_url=${2:?--pale-mirror-visuals-url requires a URL}; shift 2 ;;
+    --pale-mirror-visuals-sha512) pale_mirror_visuals_sha512=${2:?--pale-mirror-visuals-sha512 requires a hash}; shift 2 ;;
+    --railway-untold-url) railway_untold_url=${2:?--railway-untold-url requires a URL}; shift 2 ;;
+    --railway-untold-sha512) railway_untold_sha512=${2:?--railway-untold-sha512 requires a hash}; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+[[ -n "$target" ]] || { usage >&2; exit 2; }
+validate_hosted_pale_mirror_args "$pale_mirror_url" "$pale_mirror_sha512"
+validate_hosted_pale_mirror_visuals_args "$pale_mirror_visuals_url" "$pale_mirror_visuals_sha512"
+validate_hosted_railway_args "$railway_untold_url" "$railway_untold_sha512"
+command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
+command -v python3 >/dev/null || { echo "python3 is required for structure validation" >&2; exit 1; }
+command -v "$java_bin" >/dev/null || { echo "Java executable not found: $java_bin" >&2; exit 1; }
+"$java_bin" -version 2>&1 | grep -Eq '(version|openjdk) "22([."]|$)' || {
+  echo "Java 22 is required for the dedicated server runtime" >&2; exit 1;
+}
+
+if command -v sha256sum >/dev/null; then
+  checksum() { printf '%s  %s\n' "$1" "$2" | sha256sum -c -; }
+elif command -v shasum >/dev/null; then
+  checksum() { [[ "$(shasum -a 256 "$2" | awk '{print $1}')" == "$1" ]]; }
+else
+  echo "sha256sum or shasum is required" >&2; exit 1
+fi
+
+mkdir -p "$target"
+cache_dir="$target/.far-frontier-installer-cache"
+mkdir -p "$cache_dir"
+fetch_verified() {
+  local url=$1 path=$2 expected=$3
+  if [[ ! -f "$path" ]] || ! checksum "$expected" "$path" >/dev/null 2>&1; then
+    curl --fail --location --retry 3 --output "$path" "$url"
+  fi
+  checksum "$expected" "$path"
+}
+
+neoforge_installer="$cache_dir/neoforge-${neoforge_version}-installer.jar"
+bootstrap="$cache_dir/packwiz-installer-bootstrap-${bootstrap_version}.jar"
+fetch_verified "$neoforge_url" "$neoforge_installer" "$neoforge_sha256"
+fetch_verified "$bootstrap_url" "$bootstrap" "$bootstrap_sha256"
+
+if [[ ! -x "$target/run.sh" ]]; then
+  # NeoForge writes its installer log to the current directory. Keep that evidence
+  # inside the target's cache instead of polluting the source checkout.
+  (
+    cd "$cache_dir"
+    "$java_bin" -jar "$neoforge_installer" --installServer "$target"
+  )
+fi
+
+serve_pid=""
+cleanup() {
+  [[ -n "$serve_pid" ]] && kill "$serve_pid" 2>/dev/null || true
+}
+trap cleanup EXIT
+if [[ -z "$pack_url" ]]; then
+  command -v python3 >/dev/null || {
+    echo "python3 is required when --pack-url is omitted" >&2; exit 1;
+  }
+  # Loopback only: this temporary service is for this server installation, not LAN clients.
+  python3 -m http.server 18091 --bind 127.0.0.1 --directory "$repo_root" \
+    >"$cache_dir/local-pack-server.log" 2>&1 &
+  serve_pid=$!
+  pack_url=http://127.0.0.1:18091/pack.toml
+  for _ in $(seq 1 30); do
+    curl --fail --silent "$pack_url" >/dev/null && break
+    sleep 1
+  done
+  curl --fail --silent "$pack_url" >/dev/null || {
+    echo "Temporary local pack server did not start" >&2; exit 1;
+  }
+fi
+
+(
+  cd "$target"
+  "$java_bin" -jar "$bootstrap" -g -s server "$pack_url"
+)
+for managed_script in run-server-java22.sh set-server-performance-profile.sh benchmark-live-worldgen.sh analyze-worldgen-jfr.sh validate-structure-assets.py; do
+  [[ ! -f "$target/scripts/$managed_script" ]] || chmod +x "$target/scripts/$managed_script"
+done
+
+# See the matching client script: packwiz-installer CLI accepts optional mods.
+shopt -s nullglob
+for jar in "$target"/mods/createcaliber*.jar; do
+  disabled="$jar.disabled"
+  if [[ -e "$disabled" ]]; then
+    disabled_backup_root="$cache_dir/disabled-mod-backups"
+    mkdir -p "$disabled_backup_root"
+    disabled_backup="$disabled_backup_root/${disabled##*/}.$(date -u +%Y%m%dT%H%M%SZ)"
+    mv "$disabled" "$disabled_backup"
+    echo "Archived previous disabled Caliber JAR: $disabled_backup"
+  fi
+  mv "$jar" "$disabled"
+done
+
+c2me_jar="$target/mods/c2me-neoforge-mc1.21.1-0.3.0+alpha.0.93.jar"
+c2me_disabled="$c2me_jar.disabled"
+if [[ "$enable_c2me" == true ]]; then
+  [[ -f "$c2me_jar" || -f "$c2me_disabled" ]] || {
+    echo "Pinned C2ME artifact was not materialised by Packwiz" >&2; exit 1;
+  }
+  [[ -f "$c2me_jar" ]] || mv "$c2me_disabled" "$c2me_jar"
+else
+  [[ ! -f "$c2me_jar" ]] || mv "$c2me_jar" "$c2me_disabled"
+fi
+
+python3 "$target/scripts/validate-structure-assets.py" \
+  --mods-dir "$target/mods" \
+  --datapacks "$target/datapacks" \
+  --structurify "$target/config/structurify.json"
+
+install_hosted_pale_mirror \
+  "$target" "$pale_mirror_url" "$pale_mirror_sha512" "$cache_dir"
+install_hosted_pale_mirror_visuals \
+  "$target" "$pale_mirror_visuals_url" "$pale_mirror_visuals_sha512" "$cache_dir"
+install_hosted_railway_untold \
+  "$target" "$railway_untold_url" "$railway_untold_sha512" "$cache_dir"
+
+# Crimson Curse's former no-Spore quarantine replaces the exact resources that
+# enable its optional Spore integration. It is therefore incompatible with the
+# now-pinned Spore profile. Move, rather than delete, that known managed pack so
+# an existing world remains recoverable and administrators' unrelated datapacks
+# are never touched.
+legacy_spore_quarantine="$target/world/datapacks/crimson-curse-spore-compat-quarantine"
+if compgen -G "$target/mods/spore*.jar" >/dev/null && [[ -d "$legacy_spore_quarantine" ]]; then
+  backup_root="$cache_dir/datapack-backups"
+  mkdir -p "$backup_root"
+  backup_path="$backup_root/crimson-curse-spore-compat-quarantine.$(date -u +%Y%m%dT%H%M%SZ)"
+  mv "$legacy_spore_quarantine" "$backup_path"
+  echo "Archived incompatible Crimson/Spore quarantine: $backup_path"
+fi
+
+# Datapacks are versioned at the pack root but Minecraft loads them from a world.
+# Names present in this repository are managed pack assets and must follow pack
+# updates. Unrelated administrator datapacks remain untouched. If a managed name
+# already differs, archive it before installing the exact current version.
+mkdir -p "$target/world/datapacks"
+for datapack in "$repo_root"/datapacks/*; do
+  [[ -f "$datapack/pack.mcmeta" ]] || continue
+  destination="$target/world/datapacks/${datapack##*/}"
+  if [[ ! -e "$destination" ]]; then
+    cp -a "$datapack" "$destination"
+  elif diff -qr "$datapack" "$destination" >/dev/null; then
+    echo "Managed world datapack is current: $destination"
+  else
+    datapack_backup_root="$cache_dir/datapack-backups"
+    mkdir -p "$datapack_backup_root"
+    datapack_backup="$datapack_backup_root/${datapack##*/}.$(date -u +%Y%m%dT%H%M%SZ)"
+    mv "$destination" "$datapack_backup"
+    cp -a "$datapack" "$destination"
+    echo "Updated managed world datapack; archived previous copy: $datapack_backup"
+  fi
+done
+
+if [[ "$accept_eula" == true ]]; then
+  printf 'eula=true\n' >"$target/eula.txt"
+fi
+
+set_server_property() {
+  local key=$1 value=$2 properties="$target/server.properties" temporary
+  temporary=$(mktemp "$target/.server-properties.XXXXXX")
+  if [[ -f "$properties" ]]; then
+    awk -F= -v key="$key" '$1 != key { print }' "$properties" >"$temporary"
+  fi
+  printf '%s=%s\n' "$key" "$value" >>"$temporary"
+  mv "$temporary" "$properties"
+}
+set_server_property view-distance 8
+set_server_property simulation-distance 6
+set_server_property sync-chunk-writes true
+
+# DH remains an event-fed cache/synchronisation layer. PM disables its background
+# importer at runtime and keeps PRE_EXISTING_ONLY only as a fail-safe mode. These
+# persistent values also prevent clients from requesting server-side generation.
+dh_config="$target/config/DistantHorizons.toml"
+if [[ -f "$dh_config" ]]; then
+  sed -i 's/^[[:space:]]*realTimeUpdateDistanceRadiusInChunks = .*/\trealTimeUpdateDistanceRadiusInChunks = 24/' "$dh_config"
+  sed -i 's/^[[:space:]]*enableServerGeneration = .*/\tenableServerGeneration = false/' "$dh_config"
+  sed -i 's/^[[:space:]]*numberOfThreads = .*/\t\tnumberOfThreads = 1/' "$dh_config"
+  sed -i 's/^[[:space:]]*threadRunTimeRatio = .*/\t\tthreadRunTimeRatio = "0.35"/' "$dh_config"
+  sed -i 's/^[[:space:]]*enableDistantGeneration = .*/\t\tenableDistantGeneration = false/' "$dh_config"
+fi
+
+if [[ "$enable_c2me" == true ]]; then
+  "$target/scripts/set-server-performance-profile.sh" --target "$target" --profile c2me \
+    --worldgen combined --surface-rules optimized --java "$java_bin"
+else
+  "$target/scripts/set-server-performance-profile.sh" --target "$target" --profile stable \
+    --surface-rules optimized --java "$java_bin"
+fi
+
+jvm_args="$target/user_jvm_args.txt"
+jvm_temporary=$(mktemp "$target/.user-jvm-args.XXXXXX")
+if [[ -f "$jvm_args" ]]; then
+  awk '/^# BEGIN FAR FRONTIER MANAGED HEAP$/ { managed=1; next }
+       /^# END FAR FRONTIER MANAGED HEAP$/ { managed=0; next }
+       !managed { print }' "$jvm_args" >"$jvm_temporary"
+fi
+cat >>"$jvm_temporary" <<'EOF'
+# BEGIN FAR FRONTIER MANAGED HEAP
+-Xms4G
+-Xmx12G
+# END FAR FRONTIER MANAGED HEAP
+EOF
+mv "$jvm_temporary" "$jvm_args"
+
+echo "Server pack synchronised in: $target"
+echo "Runtime: Java 22; view-distance=8; simulation-distance=6; heap=4-12 GiB; C2ME=$enable_c2me"
+if [[ "$accept_eula" == false ]]; then
+  echo "Mojang EULA not accepted by this script. Review it, then set eula=true in $target/eula.txt." >&2
+fi
+echo "Start it with: '$target/scripts/run-server-java22.sh'"

@@ -1,0 +1,21 @@
+{
+  "id": "frontier_raider",
+  "baseEntity": "minecraft:zombie",
+  "displayName": "Frontier Raider",
+  "health": 20.0,
+  "damage": 3.0,
+  "speed": 0.23,
+  "scale": 1.0,
+  "dropEquipment": false,
+  "armor": {
+    "head": {"item": "minecraft:leather_helmet", "enchantments": {}}
+  },
+  "hands": {
+    "mainhand": {"item": "minecraft:stone_axe", "enchantments": {}}
+  },
+  "effects": [],
+  "drops": [],
+  "clearVanillaDrops": false,
+  "spawnOnDeath": [],
+  "onHitEffects": []
+}

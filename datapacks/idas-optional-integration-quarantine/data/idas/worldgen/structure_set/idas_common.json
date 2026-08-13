@@ -1,0 +1,21 @@
+{
+  "structures": [
+    {"structure":"idas:hermits_hollow","weight":4},
+    {"structure":"idas:brickhouse","weight":5},
+    {"structure":"idas:wizard_tower","weight":4},
+    {"structure":"idas:witches_treestump","weight":3},
+    {"structure":"idas:fishermans_lodge","weight":3},
+    {"structure":"idas:haunted_manor","weight":1},
+    {"structure":"idas:apothecary_abode","weight":1},
+    {"structure":"idas:ruined_church","weight":3},
+    {"structure":"idas:ruined_well","weight":3},
+    {"structure":"idas:pumpkin_cafe","weight":3}
+  ],
+  "placement": {
+    "salt":169480670,
+    "spacing":21,
+    "separation":12,
+    "type":"integrated_api:advanced_random_spread",
+    "super_exclusion_zone":{"chunk_count":2,"other_set":"#idas:common_avoid"}
+  }
+}

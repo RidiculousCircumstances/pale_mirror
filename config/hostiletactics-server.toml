@@ -1,0 +1,5 @@
+# Far Frontier policy: tactical mobs must not routinely alter player/Create blocks.
+# Verified against Hostile Tactics 0.10.1 generated NeoForge 1.21.1 schema.
+[worldInteraction]
+active = false
+mode = "OFF"

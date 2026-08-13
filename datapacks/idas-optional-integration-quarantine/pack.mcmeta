@@ -1,0 +1,14 @@
+{
+  "pack": {
+    "pack_format": 48,
+    "description": "Far Frontier: disable unavailable IDAS optional integrations"
+  },
+  "filter": {
+    "block": [
+      {
+        "namespace": "idas",
+        "path": "worldgen/structure_set/idas_underground"
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "config_version": "2.0.30",
+  "config_datetime": "2026-08-08_15-30-06",
+  "general": {"disable_all_structures": false, "prevent_structure_overlap": true, "enable_global_spacing_and_separation_modifier": false, "global_spacing_and_separation_modifier": 1.0},
+  "structure_namespaces": [],
+  "structures": [],
+  "structure_template_pools": [],
+  "structure_sets": [
+    {"name":"betterdungeons:skeleton_dungeons","spacing":160,"separation":80,"salt":732581671,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"betterdungeons:skeleton_dungeon":1}},
+    {"name":"betterdungeons:small_dungeons","spacing":96,"separation":48,"salt":34239823,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"betterdungeons:small_dungeon":1}},
+    {"name":"betterdungeons:small_nether_dungeons","spacing":112,"separation":56,"salt":998767517,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"betterdungeons:small_nether_dungeon":1}},
+    {"name":"betterdungeons:spider_dungeons","spacing":160,"separation":80,"salt":596523129,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"betterdungeons:spider_dungeon":1}},
+    {"name":"betterdungeons:zombie_dungeons","spacing":160,"separation":80,"salt":280667671,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"betterdungeons:zombie_dungeon":1}},
+    {"name":"betterstrongholds:stronghold","spacing":120,"separation":60,"salt":596441294,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"betterstrongholds:stronghold":1}},
+    {"name":"cataclysm:abandoned_structures","spacing":160,"separation":80,"salt":514659267,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:abandoned_spire":1,"cataclysm:abandoned_village":1,"cataclysm:abandoned_temple":1}},
+    {"name":"cataclysm:acropolis","spacing":480,"separation":240,"salt":913530101,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:acropolis":1}},
+    {"name":"cataclysm:amethyst_nest","spacing":160,"separation":80,"salt":14325760,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:amethyst_nest":1}},
+    {"name":"cataclysm:ancient_factory","spacing":640,"separation":320,"salt":319514301,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:ancient_factory":1}},
+    {"name":"cataclysm:burning_arena","spacing":480,"separation":240,"salt":533522197,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:burning_arena":1}},
+    {"name":"cataclysm:cursed_pyramid","spacing":480,"separation":240,"salt":577299997,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:cursed_pyramid":1}},
+    {"name":"cataclysm:desert_structures","spacing":160,"separation":80,"salt":31547671,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:desert_temple":1,"cataclysm:desert_occupied_village":1,"cataclysm:desert_site":1}},
+    {"name":"cataclysm:frosted_prison","spacing":480,"separation":240,"salt":1577172143,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:frosted_prison":1}},
+    {"name":"cataclysm:ruined_citadel","spacing":480,"separation":240,"salt":367895146,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:ruined_citadel":1}},
+    {"name":"cataclysm:soul_black_smith","spacing":480,"separation":240,"salt":1984567320,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:soul_black_smith":1}},
+    {"name":"cataclysm:sunken_city","spacing":640,"separation":320,"salt":1673928450,"frequency":1.0,"is_disabled":false,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"cataclysm:sunken_city":1}},
+    {"name":"integrated_villages:air_villages","spacing":240,"separation":120,"salt":1982700828,"frequency":1.0,"is_disabled":true,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"integrated_villages:airship_village":1}},
+    {"name":"integrated_villages:regular_villages","spacing":80,"separation":40,"salt":1982700828,"frequency":1.0,"is_disabled":true,"override_global_spacing_and_separation_modifier":false,"structure_weights":{"integrated_villages:clockwork_village":1,"integrated_villages:tavern_village":1,"integrated_villages:marketstead_village":1,"integrated_villages:quark/minka_village":1,"integrated_villages:mediterranean_village":1,"integrated_villages:pirate_village":1,"integrated_villages:kutcha_village":1,"integrated_villages:oasis_village":1,"integrated_villages:cabin_village":1,"integrated_villages:sunken_village":1,"integrated_villages:mossy_mounds":1}}
+  ]
+}

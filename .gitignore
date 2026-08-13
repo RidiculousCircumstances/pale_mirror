@@ -1,0 +1,9 @@
+.work/
+run/
+logs/
+crash-reports/
+/world*/
+build/
+hosted/
+*.zip
+neoforge-*-installer.jar.log

@@ -1,0 +1,12 @@
+[Unit]
+Description=Far Frontier private client bootstrap and artifact host
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m http.server 8092 --bind 0.0.0.0 --directory /home/rd/proj/minecraft
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,13 @@
+name = "Villager Overhaul"
+filename = "villageroverhaul-neoforge-1.21.1-3.10.17.16.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/cMhN11T6/versions/Z9nioxrI/villageroverhaul-neoforge-1.21.1-3.10.17.16.jar"
+hash-format = "sha512"
+hash = "982c04491ad9b716c61916238ce292d8ba9336fca1e9d2c7a0c462fcaa210a08f2b7cc480a01b568dce7dd5a318e8d7196edeb4f69c9959183bd0adc3fa7b94d"
+
+[update]
+[update.modrinth]
+mod-id = "cMhN11T6"
+version = "Z9nioxrI"

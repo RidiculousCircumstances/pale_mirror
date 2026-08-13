@@ -1,0 +1,312 @@
+Minecraft 1.21.1 NeoForge
+World Scenario & Integration Design
+Концепт-документ сборки: Pale Mirror, The Narrator, автономная world simulation, сценарии, наблюдение и материализация мира
+Статус документа: архитектура v3. Pale Mirror — каноническое ядро и source of truth. The Narrator — storyteller в духе RimWorld: он интерпретирует историю мира и выбирает драматургические вмешательства, но не владеет самой симуляцией.
+1. Цель сборки
+Сборка должна ощущаться не как набор независимых модов, а как единый системный мир, где поселения, угрозы, технологии, структуры и путешествия причинно связаны между собой.
+Основной акцент — на emergent gameplay: состояние мира создаёт задачи для игрока, а успех или провал меняет последующие события.
+Квесты рассматриваются не как главный объект, а как один из способов показать игроку цели, которые возникают из реального состояния мира.
+Ключевой принцип v3: мир должен продолжать причинно развиваться вне загруженных чанков. Игрок встречает не заранее расставленные квесты, а последствия истории, которая могла произойти без его участия.
+2. Уже зафиксированный технологический и контентный фундамент
+Слой	Решение
+Базовая версия	Minecraft 1.21.1 + NeoForge.
+Worldgen	Terralith + Tectonic + Distant Horizons.
+Структуры	Integrated Dungeons Arise + Structurify. Sparse Structures не использовать.
+Прогрессия	Ravents — основной runtime/integration layer для progression events и world-tier effects; канонический world tier, долговременное состояние и причинная progression принадлежат Pale Mirror.
+Пещеры	Alex's Caves через неофициальный порт для 1.21.1 NeoForge.
+Боевая система	Simply Swords + Better Combat.
+Враждебные ванильные мобы	Hostile Tactics как AI-overhaul.
+Фауна	Naturalist.
+Поселения / NPC	Villager Overhaul и отдельно Millénaire; их роли не должны дублироваться.
+Эволюционирующая мировая угроза	Crimson Curse: Infection — основной infection/world-threat мод.
+Поздняя технология оружия	Create: Caliber остаётся серьёзным кандидатом на позднюю ветку, но не считается окончательно включённым.
+3. Центральная архитектурная идея
+Над конкретными модами вводится Integration Layer, который предоставляет сценарному слою не внутренние сущности модов, а семантические capabilities — доступные действия, состояния и типы контента.
+Неудачная абстракция:
+«дай моба crimson_curse:...», «вызови конкретный внутренний метод Spore»
+Предпочтительная абстракция:
+«дай заражённую элитную сущность», «запусти outbreak», «увеличь угрозу», «верни заражённые регионы», «начни raid»
+4. Слои системы
+Слой	Ответственность
+1. Pale Mirror	Канонический world state, автономная simulation, domain rules и event history.
+2. The Narrator	Storyteller/curator: выбирает истории и pacing по состоянию мира, игроку и storyteller traits.
+3. Scenario Runtime	Ведёт активные scenario instances: stages, objectives, branches, outcomes.
+4. Observer	Minecraft/mod runtime → typed domain observations.
+5. Translator	Desired domain state → declarative MaterializationPlan.
+6. Executor Units	Низкоуровневые идемпотентные операции над физическим Minecraft runtime.
+7. World Registry	Устойчивая identity и domain↔physical mapping, revisions, anchors, provenance.
+8. Integration Adapters	Инкапсулируют API/state/events конкретных модов и предоставляют нормализованные capabilities.
+9. Minecraft Runtime	Физическая активная симуляция и слой представления; источник observations.
+4.1. Архитектура v3: Pale Mirror как ядро
+Система строится вокруг Pale Mirror — независимой доменной модели мира. Minecraft не является единственным source of truth: физические чанки, NPC, структуры и механизмы выступают материализованным runtime-представлением доменного состояния. The Narrator, Scenario Runtime, Observer и Translator работают вокруг Pale Mirror, но не заменяют его.
+Фундаментальный инвариант
+Если The Narrator временно выключить, мир продолжает жить. Если игрок находится далеко и чанки не загружены, мир продолжает жить. Если активных сценариев нет, мир продолжает жить. Потеря Pale Mirror, напротив, уничтожает причинную непрерывность новой системы.
+Высокоуровневая схема
+Pale Mirror хранит и эволюционирует доменное состояние. The Narrator читает это состояние и историю, выбирая истории и вмешательства. Scenario Runtime ведёт активные сценарии. Observer переводит факты Minecraft в доменные наблюдения. Translator планирует перевод desired domain state в физические изменения. Executor Units выполняют низкоуровневые операции.
+Принцип: ни Narrator, ни Scenario Runtime, ни Executor Unit не должны тайно становиться альтернативным source of truth. Все долговременные изменения мира должны в итоге быть отражены в Pale Mirror.
+4.2. Основные модули
+Архитектура состоит из шести основных runtime-модулей и двух обязательных инфраструктурных компонентов.
+Компонент	Владеет	Не должен делать
+Pale Mirror	World state, simulation, history	Не заниматься драматургией или блоковыми патчами
+The Narrator	Выбором историй, pacing, storyteller traits	Не быть source of truth и не выполнять сценарии
+Scenario Runtime	Состоянием активных сценариев	Не хранить каноническое состояние мира
+Observer	Minecraft → typed observations	Не интерпретировать драматургию и не материализовать
+Translator	Domain desired state → plan	Не менять Minecraft напрямую
+Executor Units	Физическими low-level operations	Не принимать high-level решения
+World Registry	Identity и domain↔physical mapping	Не симулировать мир
+Integration Adapters	Спецификой конкретных модов	Не протекать в доменную модель именами внутренних классов
+4.2.1. Pale Mirror
+Каноническая доменная модель мира и движок автономной фоновой симуляции. Pale Mirror отвечает на вопрос: «Что объективно происходит в мире, даже если игрок этого не видит?»
+Внутренние подсистемы Pale Mirror:
+World State Store — Settlement, Region, Facility, Faction, Threat, Route, ResourceFlow, PopulationGroup, WorldPerson и другие доменные объекты.
+Simulation Engine — эволюция мира во времени, в том числе off-screen.
+Domain Rules — причинные правила: потеря шахты меняет поток железа; дефицит снижает defence; давление Crimson увеличивает риск потери объекта и т. п.
+Event History — долговременная причинная память, а не только текущее состояние.
+Pale Mirror не обязан симулировать физические детали Minecraft. Он хранит бизнес-смысл: «шахта производит 80 iron/day», а не вращение каждого вала Create.
+4.2.2. The Narrator
+Storyteller в духе RimWorld. Narrator не симулирует хозяйство мира и не ведёт objectives. Его задача — интерпретировать состояние и историю Pale Mirror, оценивать интересность происходящего и выбирать, какие ситуации превратить в переживаемые игроком истории.
+Входы Narrator:
+текущее world state и tensions;
+event history и причинные цепочки;
+действия и стиль игрока;
+активные и недавно завершённые сценарии;
+собственные storyteller traits / biases: curiosity, cruelty, chaos, exploration bias, settlement bias, escalation и т. п.
+Черты Narrator влияют на выбор среди допустимых возможностей, но не должны произвольно переписывать причинность мира. Высокая cruelty — это склонность выбирать более тяжёлые допустимые сценарии, а не право без причины удалить поселение.
+NO_SCENARIO / оставить игрока в покое — полноценное решение Narrator. Это защищает систему от постоянного сценарного спама.
+4.2.3. Scenario Runtime
+Исполнительная память активных историй. Narrator выбирает или инициирует сценарий; Scenario Runtime ведёт его дальше без необходимости держать Narrator внутри каждого шага.
+Scenario Runtime владеет instance-state сценариев: stages, objectives, conditions, actors, locations, branches, deadlines, локальные переменные, success/failure и outcome.
+Пример: LostMine может пройти стадии INVESTIGATE → DISCOVER_INFECTION → CHOOSE_RESPONSE → CLEANSE / ABANDON / REROUTE_SUPPLY.
+Runtime не является canonical world state: итог сценария фиксируется через доменные команды/события в Pale Mirror.
+4.2.4. Observer
+Однонаправленный слой Minecraft → Domain. Observer слушает NeoForge events, состояния сущностей, чанков, структур и интеграционных адаптеров и превращает их в нормализованные наблюдения.
+Примеры: BloodlinkDestroyed → ThreatControllerDestroyed; villager death → PopulationObservedChange; восстановленная Create-линия → FacilityOperationalObserved.
+Observer не решает, что это означает для истории, и не должен непосредственно менять Pale Mirror произвольным способом. Он публикует типизированные observations, которые проходят domain validation/reconciliation.
+4.2.5. Translator
+Однонаправленный слой Domain → Physical plan. Translator получает desired domain change и строит MaterializationPlan: какие физические операции нужны, чтобы Minecraft-представление приблизилось к доменному состоянию.
+Пример: Mine17 = INFECTED(severity=0.7) превращается в план: InfectSurface, DisableFacility, EnsureThreatController, MaterializeRemnants, AdjustLocalLoot.
+Translator ничего не спавнит и не меняет блоки сам. Его результат — декларативный, детерминированный и по возможности идемпотентный план.
+4.2.6. Executor Units
+Низкоуровневые единицы материализации. Это единственный слой, который непосредственно совершает конкретные операции над Minecraft runtime или вызывает низкоуровневые функции адаптированного мода.
+Типичные executors: EnsureEntity, PlaceStructure, ApplyDamageProfile, InfectSurface, EnsureCrimsonController, DisableCreateFacility, MaterializeNPCGroup, UpdateLoot.
+Executor должен быть максимально «тупым»: validate → execute → report result. Он не выбирает сценарий и не определяет desired state.
+Предпочтительны ensure/idempotent-операции: EnsureThreatControllerExists безопаснее, чем безусловный SpawnThreatController, особенно при crash/retry.
+4.3. Инфраструктурные компоненты
+4.3.1. World Registry
+Система устойчивой идентичности и привязки доменных объектов к физическому миру. Она отвечает на вопрос: «Какой Minecraft-объект/регион представляет settlement:4, mine:17 или facility:91?»
+Registry хранит WorldObjectId, bounds/chunks, anchors, entity references, structure references, materialization revision и provenance/ownership metadata.
+Без World Registry Translator вынужден будет искать объекты по координатам и эвристикам при каждом reconciliation, что быстро станет ненадёжным.
+4.3.2. Integration Adapters
+Plugin/provider-слой для конкретных модов: CrimsonAdapter, CreateAdapter, MillenaireAdapter, VillagerAdapter, VanillaAdapter и др.
+Adapters инкапсулируют различия чужих API, registry IDs, commands/functions, SavedData, events и при крайней необходимости внутренних hooks. Они предоставляют нормализованные capabilities Observer, Translator и Executor Units.
+Приоритет интеграции: публичный API / registry / tags / commands / стандартные events → наблюдаемое состояние → internal hooks. Reflection/mixin не должны становиться базовой стратегией.
+4.4. Направления данных и запрет обходов
+Нормальный путь фоновой истории: Pale Mirror simulation → domain events/history. Narrator может заметить интересное состояние и создать ScenarioIntent; Scenario Runtime развивает его. Физическая материализация проходит Pale Mirror desired state → Translator → Executor Units → Minecraft.
+Обратный путь: Minecraft → Integration Adapter / Observer → typed observation → domain reconciliation → Pale Mirror. Активный Scenario Runtime может подписаться на подтверждённые domain events и завершить objective.
+Критический запрет: Narrator не должен напрямую вызывать Executor Unit. Scenario Runtime не должен напрямую менять блоки. Executor не должен напрямую редактировать долгосрочный Pale Mirror state. Такие короткие пути создадут несколько конкурирующих источников истины.
+4.5. Desired / Observed state и reconciliation
+Для материализуемых объектов следует различать desired domain state и observed physical state. Translator сравнивает их не на уровне каждого блока, а на уровне семантических признаков.
+Пример: desired Mine17 = {infected: 0.70, operational: false}; observed = {infected: 0.12, operational: true}. Translator строит patch-план, после исполнения Observer подтверждает новое физическое состояние.
+Pale Mirror не обязан требовать точного соответствия 0.70 = 70% заражённых блоков. Значение может маппиться на materialization policy SEVERE: controller present, 30–45% ключевых поверхностей заражены, facility disabled, elite threats present.
+4.6. Off-screen simulation и materialization lifecycle
+Дальний мир обновляется в Pale Mirror без force-loading чанков. При приближении игрока materialization выполняется лениво.
+ABSTRACT — только доменная симуляция; REPRESENTED — структура/регион готовится и частично материализуется; ACTIVE — рядом с игроком работает реальный AI, combat, Create и native mod simulation.
+Рекомендуемый lifecycle: prewarm materialization plan → chunk-load surface/structure patches → activation entities/encounters → Observer updates → dematerialization/snapshot при уходе игрока.
+4.7. Архитектурные инварианты
+1.Pale Mirror — единственный канонический долговременный world state.
+2.Narrator — storyteller/curator, а не симулятор хозяйства и не исполнитель.
+3.Scenario Runtime хранит состояние историй, но не подменяет world state.
+4.Observer только наблюдает и нормализует факты физического мира.
+5.Translator планирует, но не исполняет.
+6.Executor Units исполняют, но не принимают высокоуровневых решений.
+7.World Registry обеспечивает устойчивую identity/domain↔physical mapping.
+8.Integration Adapters локализуют знания о конкретных модах.
+9.Все модификации мира должны быть повторяемыми, ревизионными и по возможности идемпотентными.
+10.Player-owned/player-modified content защищается отдельной provenance policy.
+5. Capability-модель вместо жёсткой привязки к модам
+Сценарный движок не должен предполагать, что все infection-моды имеют одинаковую модель progression. Например, Crimson Curse имеет глобальные Phase / Points / Mass, тогда как другие системы могут строиться вокруг локальных Hivemind, отдельных сущностей или территорий.
+Пример набора capabilities:
+START / STOP
+GET_LEVEL / SET_LEVEL
+ADD_PROGRESS
+TRIGGER_EVENT
+FORCE_EVOLUTION
+SPAWN_ENTITY
+GET_REGIONS
+GET_CONTROLLERS
+PURIFY_REGION
+START_RAID
+Каждый adapter объявляет только те capabilities, которые реально доступны. Это лучше, чем заставлять разные моды изображать одну и ту же внутреннюю модель.
+6. Технические источники интеграции
+Уровень	Подход
+L1 — Public Surface	Registry IDs, tags, стандартные NeoForge events, команды/functions. Предпочтительный уровень.
+L2 — Observed State	NBT, SavedData, attachments, entity properties, scoreboards, наблюдаемое состояние.
+L3 — Internal Hook	Прямые внутренние классы, accessors, mixins, reflection. Использовать только если без этого нельзя.
+7. Crimson Curse как основной World Threat
+Crimson Curse фиксируется как основной слой развивающейся мировой угрозы.
+Его внутренняя progression не должна напрямую протекать в сценарный слой. Adapter переводит общие действия (activate, set threat level, escalate, trigger event) в штатные механики Crimson Curse.
+Сценарный слой должен по возможности просить мод выполнить действие его собственным механизмом, а не вручную эмулировать внутреннюю логику.
+Инфекция должна быть управляемой частью общей progression: каноническое состояние угрозы и world tier хранится в Pale Mirror, а Ravents используется как runtime/integration layer для материализации допустимых событий и эффектов progression, чтобы инфекция не съедала весь остальной контент слишком рано.
+8. Scenario Runtime: не «квестовый мод», а исполнитель активных историй
+The Narrator выбирает подходящий scenario archetype на основании фактического состояния и истории Pale Mirror; Scenario Runtime превращает ScenarioIntent в стадии, objectives, ветви и outcomes. Failure должен фиксироваться доменными последствиями в Pale Mirror и создавать дальнейшую причинность, а не только ставить FAILED.
+Базовые archetypes:
+Outbreak
+Siege
+Rescue
+Investigation
+Hunt
+Escort
+Expedition
+Recovery
+Construction
+Supply
+Production
+Purification
+Defense
+Boss emergence
+Settlement crisis
+Migration
+Trade disruption
+Resource shortage
+Territory reclamation
+Counterattack
+9. Пример системного сценария
+Crimson начинает outbreak рядом с поселением, а Pale Mirror фиксирует изменение угрозы и причинные события. The Narrator выбирает сценарий «Угроза поселению»; Scenario Runtime привязывает его к релевантному поселению и ведёт стадии, objectives и outcomes.
+Выбор	Последствие
+Оборона	Игрок строит укрепления, готовит производство и принимает большой бой.
+Эвакуация	Поселение может быть потеряно, но часть NPC переживает событие и формирует новую точку мира.
+Очистка	Игрок идёт к источнику угрозы, уничтожает outbreak/controller и сохраняет поселение.
+Игнорирование	Поселение погибает/ослабевает; заражённый регион становится основой для новых сценариев.
+10. Межмодовые причинные цепочки
+Главная ценность движка — возможность использовать контент одного мода как причину обратиться к другому.
+Crimson заражает регион → поселение теряет население → торговля ухудшается → возникает запрос на производство → Create становится частью решения.
+Поселение нуждается в защите → сценарий требует defensive capability → ранняя игра использует ваниль/Simply Swords, поздняя — Create: Caliber.
+Для очистки угрозы нужен редкий компонент → The Narrator выбирает подходящий Expedition/Recovery archetype, а Scenario Runtime разрешает подходящую структуру Integrated Dungeons Arise как место экспедиции.
+Игрок слишком долго сидит на производстве → The Narrator выбирает допустимый исследовательский сигнал/сценарий в удалённом регионе, возвращая игрока к путешествиям, не переписывая при этом причинность Pale Mirror.
+11. The Narrator: pacing и выбор историй
+The Narrator — storyteller/curator, который выбирает, когда и какую из допустимых историй превратить в сценарий для игрока. Он не должен спамить событиями, не владеет симуляцией и управляет pacing только в рамках причинности Pale Mirror.
+посещаемые регионы и дальность путешествий
+активные поселения
+активные угрозы и их интенсивность
+открытые технологии
+живые/убитые боссы
+обнаруженные структуры
+активность игрока за последние игровые часы
+проваленные и завершённые сценарии
+12. Exploration как источник новых capabilities
+Exploration-награды не должны сводиться к сундуку с ресурсами. Главная награда за путешествие — новый способ действовать в мире: транспорт, производство, инфраструктура, знания или уникальная позиция на карте.
+12.1. Заброшенные промышленные объекты
+Объект	Награда
+Заброшенная фабрика	Полуразрушенная, но восстановимая Create-линия.
+Шахта	Рабочий подъёмник, механическая добыча или транспортная линия.
+Гидроузел	Готовый источник механической энергии.
+Железнодорожное депо	Восстановимый поезд / инфраструктура.
+Военная база	Производство боеприпасов, оборонительные механизмы.
+Ангар	Рабочий или частично рабочий летательный аппарат.
+12.2. Состояния найденной техники
+полностью рабочая
+рабочая, но без топлива
+повреждённая и требующая ремонта
+без одного ключевого компонента
+частично работоспособная
+требующая технологии, ещё не открытой игроком
+пригодная только для разборки на редкие детали
+Особенно сильный паттерн: игрок находит объект раньше, чем способен его построить. Он может пользоваться найденной системой, но ещё не умеет воспроизводить её. Это создаёт память о местах и причину возвращаться позже.
+12.3. Два класса exploration-наград
+Класс	Эффект
+Infrastructure rewards	Фабрики, шахты, электростанции, мастерские, аэродромы, депо. Они привязывают игрока к географии и стимулируют логистику.
+Mobility rewards	Поезда, дирижабли, самолёты, другие транспортные средства. Они расширяют радиус дальнейшего исследования.
+13. Географически распределённая инфраструктура
+Ценные найденные механизмы должны создавать причину не переносить всё в одну мегабазу, а развивать сеть объектов: рудник → переработка → железная дорога → база → аэродром.
+Крупные механизмы выгодно оставлять на месте и связывать транспортом. Это автоматически создаёт дороги, железные дороги, форпосты, охраняемые маршруты и регулярное возвращение в старые регионы.
+14. Динамические objectives вместо чек-листов
+maintain — удерживать состояние
+protect — защищать сущность/регион/поселение
+reduce — снижать уровень угрозы
+increase — наращивать производство/репутацию/ресурс
+discover — находить объекты и регионы
+escort — сопровождать
+deliver — доставлять
+construct — строить функциональную систему
+produce — обеспечивать производство
+survive — переживать событие
+control — удерживать территорию/объект
+capture — захватывать
+purify — очищать
+prevent — не допускать порогового события
+Примеры: «удерживайте заражение ниже уровня 3 в течение 7 дней», «обеспечьте поселению требуемый defence score», «сохраните не менее 70% населения», «подготовьте производство перед наступлением».
+15. Принципы дизайна
+11.Мир, а не список квестов, является источником задач.
+12.Сценарный движок оперирует доменными capabilities, а не именами конкретных модов.
+13.У каждого мода собственный adapter; он объявляет только реально доступные возможности.
+14.Штатные API/registries/events/commands предпочтительнее reflection и mixin.
+15.Failure должен изменять мир и порождать продолжение, а не только завершать контент.
+16.Exploration награждает новыми возможностями, а не только ресурсами.
+17.Крупная инфраструктура должна иметь географическую ценность.
+18.The Narrator должен регулировать pacing и избегать сценарного спама, не становясь альтернативным source of truth.
+19.Crimson Curse — одна основная развивающаяся infection-угроза; не превращать сборку в несколько параллельных апокалипсисов без отдельного дизайна.
+20.Create должен быть частью инфраструктурной и технологической progression, а не просто дополнительным набором машин.
+16. Что стоит прототипировать первым
+Этап	Проверяемая гипотеза
+Vertical slice 1	Pale Mirror хранит Region, Facility, ThreatState, Event History и World Registry без зависимости от загруженных чанков.
+Vertical slice 2	Abstract simulation заражает тестовую Mine и формирует причинный MineInfected event.
+Vertical slice 3	The Narrator выбирает событие как историю; Scenario Runtime запускает Investigation/Recovery instance.
+Vertical slice 4	Translator строит MaterializationPlan; Executor Units через CrimsonAdapter материализуют заражённую шахту.
+Vertical slice 5	Observer возвращает физический outcome в Pale Mirror; reconciliation переводит Mine в RECOVERING и возобновляет production.
+17. Открытые вопросы
+Какой именно мод/движок будет отвечать за UI квестов и журнал целей.
+Какие Ravents capabilities использовать для материализации progression events/world-tier effects, не передавая Ravents владение каноническим world tier и долговременным state Pale Mirror.
+Каким способом лучше хранить нормализованное World Model и persistent scenario state.
+Какие API/состояния Millénaire и Villager Overhaul доступны для чтения и управления.
+Как технически внедрять prefab Create-механизмы и транспорт в существующие структуры без конфликтов worldgen.
+Каким образом оценивать functional objectives вроде defence score или production capacity.
+Нужно ли подключать Spore как вторичный локальный infection-layer или оставить только Crimson Curse.
+18. Итоговая формулировка проекта
+Проект строится вокруг Pale Mirror — канонической абстрактной модели и фоновой симуляции мира. The Narrator выступает storyteller-слоем в духе RimWorld и превращает возникающие tensions/opportunities в истории; Scenario Runtime ведёт их исполнение; Observer и Translator обеспечивают двунаправленную связь с Minecraft; Executor Units материализуют конкретные изменения; World Registry и Integration Adapters обеспечивают identity и совместимость с модами.
+19. Автономная фоновая история
+Мир должен продолжать развиваться даже без материализации чанков. Pale Mirror меняет агрегированные состояния объектов, прокручивает фоновую причинность и порождает domain events, не загружая Minecraft-геометрию.
+Пример: шахта теряет производство из-за Crimson pressure → поселение недополучает железо → падает defence → рейд становится успешнее → возникает группа displaced population. Ни один из этих шагов не обязан происходить рядом с игроком.
+Важно: причинные цепочки существуют до The Narrator. Narrator лишь выбирает интересные участки этой истории, определяет драматургическое вмешательство и инициирует Scenario Runtime.
+19.1. Event History как память мира
+Pale Mirror должен хранить не только current state, но и значимые события с временем, причиной и участниками. Это позволяет создавать контекстные истории и delayed consequences.
+Пример: Mine A была главным поставщиком железа, затем подверглась заражению и была потеряна. Через десятки игровых дней The Narrator может выбрать сценарий расследования исчезновения поставок, а не абстрактное «очистите шахту».
+История позволяет новым объектам иметь происхождение: поселение беженцев, возникшее через месяц после падения исходного города, действительно является последствием прежнего события.
+20. Desired state, observed state и reconciliation
+Pale Mirror хранит desired domain state. Minecraft через Observer и Integration Adapters даёт observed physical state. Translator сравнивает семантическое расхождение и строит безопасный MaterializationPlan, приближающий физический мир к доменному состоянию.
+Это reconciliation loop: desired != observed → Translator формирует MaterializationPlan → Executor Units применяют идемпотентные operations/patches → Observer подтверждает новое physical state → Pale Mirror обновляет observed revision. После действий игрока тот же обратный путь возвращает изменения в доменную модель.
+Абстрактные параметры не должны буквально соответствовать количеству блоков. Например infection=0.70 может означать класс SEVERE, для которого policy задаёт диапазон заражённых поверхностей, наличие controller, элитных мобов и отключённой инфраструктуры.
+20.1. Ленивое materialization
+Off-screen события меняют Pale Mirror немедленно, но физические чанки не force-load-ятся. Materialization происходит лениво при приближении/загрузке релевантной территории.
+При chunk load система проверяет revision объекта и revision физического представления. Если domain state новее, создаётся patch job. Блоковые изменения применяются порциями, а entities и encounters материализуются ближе к игроку.
+Рекомендуемые режимы: ABSTRACT (далеко: только state), REPRESENTED (рядом: структуры и важные признаки), ACTIVE (непосредственно у игрока: native AI, combat, Create physics и реальные mod events).
+20.2. Типы материализации
+Entity materialization: NPC, мобы, караваны, боссы и временные группы.
+Surface materialization: заражение, следы боя, растительность, debris и environmental overlays.
+Structure materialization: повреждения, лагеря, форпосты, руины и prefab overlays.
+Functional materialization: Create-механизмы, транспорт, production capability и состояние инфраструктуры.
+20.3. Безопасность изменений мира
+Главный риск — затереть строительство игрока. Поэтому domain simulation может свободно менять семантическое состояние, но геометрию — только через ограниченные materialization policies.
+Нужна provenance/ownership модель хотя бы на уровне scenario-owned объектов и player-modified masks: WORLD_GENERATED, MOD_GENERATED, SCENARIO_GENERATED, PLAYER_PLACED, UNKNOWN.
+По умолчанию destructive patches не должны менять PLAYER_PLACED. Для важных объектов полезно хранить structure anchors/bounds и sparse masks изменений игрока, а не пытаться вести ownership каждого блока всего мира.
+21. Двунаправленная синхронизация
+Minecraft — не пассивный frontend. После materialization нативные моды и игрок продолжают физическую историю. Observer через Integration Adapters преобразует значимые события в типизированные observations, которые reconciliate-ятся обратно в Pale Mirror.
+Пример: Pale Mirror материализовал заражённую шахту через Translator, Crimson adapter и Executor Units. Игрок уничтожил controller и очистил участок. Observer фиксирует native events; доменная reconciliation переводит Mine.status из INFECTED в RECOVERING и уменьшает abstract infection pressure.
+По возможности после начальной materialization управление следует возвращать нативному моду: не эмулировать Crimson полностью, а создать корректные seeds/controllers и позволить его собственной механике вести активную локальную симуляцию.
+22. Роли компонентов — окончательная фиксация v3
+Pale Mirror: единственный канонический долговременный world state; world model, autonomous simulation, domain rules и event history.
+The Narrator: storyteller/curator в духе RimWorld; выбирает интересные истории, pacing и допустимые вмешательства на основе Pale Mirror, действий игрока и собственных traits.
+Scenario Runtime: хранит и исполняет активные scenario instances, stages, objectives, branches и outcomes; не подменяет canonical world state.
+Observer: переводит Minecraft/mod runtime → нормализованные typed observations; не принимает драматургических решений и не материализует.
+Translator: переводит desired domain state → декларативные MaterializationPlan; не меняет Minecraft напрямую.
+Executor Units: низкоуровнево и по возможности идемпотентно выполняют materialization operations над blocks, entities, structures, Create-механизмами и mod APIs.
+World Registry: обеспечивает устойчивую identity и mapping domain objects ↔ chunks / structures / entities / anchors / revisions / provenance.
+Integration Adapters: изолируют специфику Crimson, Create, Millénaire, vanilla и других модов и предоставляют нормализованные capabilities Observer/Translator/Executors. Minecraft Runtime остаётся физическим слоем представления и источником observations.
+23. Обновлённый первый vertical slice
+1) Создать минимальный Pale Mirror с Region, Facility, ThreatState, World Registry и Event History.
+2) Реализовать abstract simulation tick без загрузки чанков: Crimson pressure абстрактно заражает тестовую Mine.
+3) Записать domain event MineInfected и причинную историю в Pale Mirror.
+4) The Narrator обнаруживает значимое событие и создаёт ScenarioIntent; Scenario Runtime запускает Investigation/Recovery instance.
+5) При приближении игрока Translator строит MaterializationPlan; Executor Units через Crimson adapter материализуют заражённую шахту безопасной policy и native controller.
+6) Игрок очищает шахту; Observer возвращает typed outcome; Pale Mirror переводит состояние в RECOVERING; последующая фоновая симуляция восстанавливает production.
+Этот slice проверяет всю основную петлю v3 end-to-end: abstract history → The Narrator → Scenario Runtime → materialization → physical gameplay → observation → abstract history.
+Краткая формула архитектуры v3: Pale Mirror автономно порождает причинную историю; The Narrator отбирает и драматургически оформляет допустимые истории; Scenario Runtime делает выбранную историю интерактивной; Materialization/Reconciliation превращает актуальный доменный state в физический Minecraft-мир и возвращает результаты игры обратно в Pale Mirror.

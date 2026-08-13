@@ -1,0 +1,12 @@
+version = 3
+globalExecutorParallelism = 8
+
+[vanillaWorldGenOptimizations]
+	useDensityFunctionCompiler = true
+
+	[vanillaWorldGenOptimizations.nativeAcceleration]
+		allowAVX512 = false
+		enabled = true
+
+[noTickViewDistance]
+	maxConcurrentChunkLoads = 6

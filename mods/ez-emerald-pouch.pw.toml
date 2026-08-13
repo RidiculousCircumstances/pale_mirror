@@ -1,0 +1,13 @@
+name = "EZ Emerald Pouch"
+filename = "ezemeraldpouch-neoforge-1.21.1-1.0.3.3.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/8hDz9Joi/versions/GZHnH0dz/ezemeraldpouch-neoforge-1.21.1-1.0.3.3.jar"
+hash-format = "sha512"
+hash = "ba375f3548f2eb5620626c6939e8198badcf5f16e86c8880bfc291e6aff54bf57dba68a805cba562fcbd648f1d04de31999eda0dad86fbfcff9743296327b0bf"
+
+[update]
+[update.modrinth]
+mod-id = "8hDz9Joi"
+version = "GZHnH0dz"

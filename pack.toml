@@ -1,0 +1,13 @@
+name = "Far Frontier"
+author = "Far Frontier Pack Team"
+version = "0.1.0"
+pack-format = "packwiz:1.1.0"
+
+[index]
+file = "index.toml"
+hash-format = "sha256"
+hash = "a9db271d95a44b5d0869246c4ec758087f4bace9ed57d23e8bc6d211c6fe480a"
+
+[versions]
+minecraft = "1.21.1"
+neoforge = "21.1.248"

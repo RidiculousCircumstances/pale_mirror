@@ -1,0 +1,13 @@
+name = "EZ Actions"
+filename = "ezactions-neoforge-1.21.1-2.0.3.5.jar"
+side = "client"
+
+[download]
+url = "https://cdn.modrinth.com/data/gJiy6dk4/versions/z7npcqAM/ezactions-neoforge-1.21.1-2.0.3.5.jar"
+hash-format = "sha512"
+hash = "669ba403fe827463b8507853acba2c2c17b044cde754a5565c03d088b561ed10ebc74b76a5987c6c1143d57c0a1b7d721e6b7394829cde18dcc5946fe425c6f3"
+
+[update]
+[update.modrinth]
+mod-id = "gJiy6dk4"
+version = "z7npcqAM"

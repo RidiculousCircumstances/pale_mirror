@@ -1,0 +1,13 @@
+name = "Crimson Curse: Infection"
+filename = "crimson_curse-1.4.3.1.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/hgYbf49J/versions/RZ4LrIs5/crimson_curse-1.4.3.1.jar"
+hash-format = "sha512"
+hash = "7dff835f17bca4cf2a4efbf237393ccde1c12e4c334f3b3789d36499e3653c756a0be57af18ddae6e36e40cfcf93b33c21d3f47ce02c2d0a659da39fdb7d424c"
+
+[update]
+[update.modrinth]
+mod-id = "hgYbf49J"
+version = "RZ4LrIs5"

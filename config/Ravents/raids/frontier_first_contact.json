@@ -1,0 +1,35 @@
+{
+  "id": "frontier_first_contact",
+  "displayName": "Frontier First Contact",
+  "singleUse": true,
+  "trigger": {
+    "requiredItems": [],
+    "mobKillsTotal": 2,
+    "mobKillsSpecific": [],
+    "blocksBrokenTotal": 0,
+    "blocksBrokenSpecific": [],
+    "blocksPlacedTotal": 0,
+    "blocksPlacedSpecific": [],
+    "blocksUsedTotal": 0,
+    "blocksUsedSpecific": [],
+    "itemsUsed": 0,
+    "itemsUsedSpecific": [],
+    "jumps": 0,
+    "sit": 0,
+    "distanceWalked": 100,
+    "daysPlayed": 0,
+    "experienceLevels": 0,
+    "coordinateReached": [],
+    "visitedDimension": [],
+    "visitedBiome": [],
+    "visitedStructure": [],
+    "visitedPOI": [],
+    "nearSpawnpoint": 0
+  },
+  "waves": [
+    {"mobs": [{"mobId": "frontier_raider", "count": 2, "noDrop": true}]},
+    {"mobs": [{"mobId": "frontier_scout", "count": 1, "noDrop": true}]}
+  ],
+  "rewards": {"items": {}, "experience": 0},
+  "spawnDistance": 24.0
+}
