@@ -119,6 +119,18 @@ public final class RegionalAtlasProjection {
                     value.putInt("developmentWait", intent.qualifyingWaitSteps());
                     value.putInt("developmentWaitRequired", intent.autonomousWaitRequired());
                 });
+        var dispatchIntent = data.worldState().developmentIntents().stream()
+                .filter(intent -> intent.communityId().equals(community.id())
+                        && intent.type() == io.farfrontier.palemirror.domain.DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH)
+                .findFirst().orElse(null);
+        if (dispatchIntent != null) value.putString("dispatchDevelopmentState", dispatchIntent.state().name());
+        boolean dispatchOffline = data.worldState().site(new io.farfrontier.palemirror.domain.WorldObjectId(
+                        io.farfrontier.palemirror.internal.world.RegionBindings.fromRegionId(regionId)
+                                .alternateDispatchSiteId().value()))
+                .map(site -> site.operationalState() != io.farfrontier.palemirror.domain.OperationalState.OPERATIONAL)
+                .orElse(false);
+        value.putBoolean("canCommissionAlternate", alternateKnown && community.supplyRequested()
+                && dispatchOffline && dispatchIntent == null && iron.stock() >= 12);
         boolean canPrepare = data.worldState().emergencyWindow(community.id())
                 .map(window -> window.state() == EmergencyWindowState.OPEN).orElse(false);
         value.putBoolean("canPrepareEvacuation", canPrepare);

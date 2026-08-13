@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-core_jar=${1:?usage: visuals-integration-harness.sh core.jar visuals.jar geckolib.jar villager-overhaul.jar supplementaries.jar moonlight.jar sable.jar}
+core_jar=${1:?usage: visuals-integration-harness.sh core.jar visuals.jar geckolib.jar villager-overhaul.jar supplementaries.jar moonlight.jar sable.jar create.jar}
 visuals_jar=${2:?missing Pale Mirror Visuals JAR}
 geckolib_jar=${3:?missing GeckoLib JAR}
 villager_jar=${4:?missing Villager Overhaul JAR}
 supplementaries_jar=${5:?missing Supplementaries JAR}
 moonlight_jar=${6:?missing Moonlight JAR}
 sable_jar=${7:?missing Sable JAR}
+create_jar=${8:?missing Create JAR}
 installer=${NEOFORGE_INSTALLER:-${XDG_CACHE_HOME:-${HOME}/.cache}/far-frontier/tools/neoforge-21.1.248-installer.jar}
 java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to the Java 21 executable}
 export PATH="$(dirname "$java_bin"):$PATH"
@@ -21,7 +22,7 @@ fail() {
 }
 
 for input in "$core_jar" "$visuals_jar" "$geckolib_jar" "$villager_jar" \
-  "$supplementaries_jar" "$moonlight_jar" "$sable_jar" "$installer"; do
+  "$supplementaries_jar" "$moonlight_jar" "$sable_jar" "$create_jar" "$installer"; do
   [[ -f "$input" ]] || { printf 'Missing required JAR: %s\n' "$input" >&2; fail; }
 done
 
@@ -33,7 +34,7 @@ printf 'eula=true\n' > "$runtime_dir/eula.txt"
 printf 'online-mode=false\nserver-port=0\nview-distance=3\nsimulation-distance=3\nlevel-seed=3374619285067712046\n' > "$runtime_dir/server.properties"
 mkdir "$runtime_dir/mods"
 cp "$core_jar" "$visuals_jar" "$geckolib_jar" "$villager_jar" \
-  "$supplementaries_jar" "$moonlight_jar" "$sable_jar" "$runtime_dir/mods/"
+  "$supplementaries_jar" "$moonlight_jar" "$sable_jar" "$create_jar" "$runtime_dir/mods/"
 mkfifo "$command_fifo"
 exec 9<>"$command_fifo"
 

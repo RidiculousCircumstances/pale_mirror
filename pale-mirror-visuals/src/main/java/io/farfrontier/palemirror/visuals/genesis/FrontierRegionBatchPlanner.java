@@ -6,27 +6,27 @@ import java.util.List;
 
 /** Converts a bounded reserve of surveyed centers into the requested count of complete regions. */
 public final class FrontierRegionBatchPlanner {
-    public static final int RESERVE_CANDIDATES = 8;
-
-    public Result plan(long worldSeed, int requested, List<FrontierSiteSelector.SelectedSite> candidates,
-                       FrontierRegionPlanner planner, MineAnchorResolver mineAnchors) {
+    public Result plan(long worldSeed, int requested, RegionPlacementProfile profile,
+                       List<FrontierSiteSelector.SelectedSite> candidates,
+                       FrontierRegionPlanner planner, MineAnchorResolver mineAnchors, RailPathResolver railPaths) {
         List<AuthoredRegionSeed> manifests = new ArrayList<>(requested);
         int rejected = 0;
-        boolean nearAccepted = false;
+        int nearAccepted = 0;
         for (FrontierSiteSelector.SelectedSite site : candidates) {
             if (manifests.size() == requested) break;
-            if (site.nearCandidate() && nearAccepted) continue;
+            if (site.nearCandidate() && nearAccepted >= profile.search().maximumNearAcceptedRegions()) continue;
             try {
                 manifests.add(planner.plan(worldSeed, manifests.size(), site.terrain().anchor(), site.climate(),
-                        mineAnchors));
-                if (site.nearCandidate()) nearAccepted = true;
+                        mineAnchors, railPaths));
+                if (site.nearCandidate()) nearAccepted++;
             } catch (DryMineSiteUnavailableException unavailable) {
                 rejected++;
             }
         }
         if (manifests.size() != requested) throw new IllegalStateException("Cannot plan " + requested
                 + " complete authored regions from " + candidates.size() + " surveyed centers; "
-                + rejected + " lacked bounded dry MineSites");
+                + rejected + " lacked bounded dry MineSites; accepted centers="
+                + manifests.stream().map(seed -> seed.anchor().x() + "," + seed.anchor().z()).toList());
         return new Result(manifests, rejected);
     }
 

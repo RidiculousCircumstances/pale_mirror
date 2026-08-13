@@ -18,12 +18,8 @@ public record TerrainCandidate(VisualPoint anchor, int relief, int cutFillCost, 
         return new TerrainCandidate(new VisualPoint(centerX, median, centerZ), max - min, cost, water, score);
     }
 
-    public boolean preferred() { return waterSamples == 0 && relief <= 8; }
-
-    public boolean acceptable() { return waterSamples == 0 && relief <= 24; }
-
-    public static Comparator<TerrainCandidate> ordering() {
-        return Comparator.comparing(TerrainCandidate::preferred).reversed()
+    public static Comparator<TerrainCandidate> ordering(SettlementTerrainPolicy policy) {
+        return Comparator.comparing((TerrainCandidate value) -> policy.preferred(value)).reversed()
                 .thenComparingInt(TerrainCandidate::score)
                 .thenComparingInt(value -> value.anchor().x())
                 .thenComparingInt(value -> value.anchor().z());

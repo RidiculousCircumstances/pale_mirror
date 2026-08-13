@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.api.JourneyProjection;
 import io.farfrontier.palemirror.visuals.resident.JourneyProjectionRuntime;
 import io.farfrontier.palemirror.visuals.threat.ThreatHeartRuntime;
 import io.farfrontier.palemirror.visuals.genesis.AuthoredAssetCatalog;
+import io.farfrontier.palemirror.visuals.genesis.AuthoredModuleCompiler;
 import java.util.Collection;
 import java.util.Set;
 import net.minecraft.server.level.ServerLevel;
@@ -46,6 +47,15 @@ public final class AuthoredVisualProvider implements VisualProvider {
         return markers.discovered(level.dimension().location().toString());
     }
 
+    @Override public java.util.Optional<io.farfrontier.palemirror.api.VisualModuleSnapshot> compileAuthoredModule(
+            io.farfrontier.palemirror.api.StagedVisualModule module) {
+        try {
+            return java.util.Optional.of(AuthoredModuleCompiler.compile(module.module()));
+        } catch (RuntimeException invalid) {
+            return java.util.Optional.empty();
+        }
+    }
+
     @Override public boolean authoredModuleReady(ServerLevel level, AuthoredRegionSeed region,
                                                   io.farfrontier.palemirror.api.VisualModulePlacement module) {
         int minX = module.footprint().min().x() >> 4; int maxX = module.footprint().max().x() >> 4;
@@ -57,6 +67,29 @@ public final class AuthoredVisualProvider implements VisualProvider {
                     net.minecraft.world.level.ChunkPos.asLong(x, z)))) return false;
         }
         return true;
+    }
+
+    @Override public boolean authoredMineSiteReady(ServerLevel level, AuthoredRegionSeed region,
+                                                    io.farfrontier.palemirror.api.AuthoredMineSitePlan mine) {
+        java.util.Set<Long> chunks = new java.util.LinkedHashSet<>();
+        mine.initialModules().forEach(module -> addChunks(chunks, module.footprint()));
+        mine.stagedModules().forEach(stage -> addChunks(chunks, stage.module().footprint()));
+        mine.semanticVolumes().forEach(volume -> addChunks(chunks, volume.bounds()));
+        for (long chunk : chunks) {
+            var expected = FrontierGenesisRuntime.compiledChunk(chunk);
+            if (expected == null || !expected.stamp().equals(VisualGenesisSavedData.get(level).observedStamp(chunk))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void addChunks(java.util.Set<Long> chunks, io.farfrontier.palemirror.api.VisualBounds bounds) {
+        int minX = bounds.min().x() >> 4; int maxX = bounds.max().x() >> 4;
+        int minZ = bounds.min().z() >> 4; int maxZ = bounds.max().z() >> 4;
+        for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
+            chunks.add(net.minecraft.world.level.ChunkPos.asLong(x, z));
+        }
     }
 
     @Override public void applyProjection(ServerLevel level, VisualStateProjection projection) {

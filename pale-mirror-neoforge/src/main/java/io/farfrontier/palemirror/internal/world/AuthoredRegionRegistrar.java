@@ -71,21 +71,25 @@ public final class AuthoredRegionRegistrar {
         boolean changed = false;
         for (AuthoredRegionSeed seed : provider.discoverAuthoredRegions(server.overworld())) {
             CampaignRegionRecord record = data.campaignRegions().get(seed.planId());
-            if (record == null || record.status() == CampaignRegionPresentationStatus.MATERIALIZED) continue;
+            if (record == null) continue;
+            if (provider.authoredMineSiteReady(server.overworld(), seed, seed.alternateMineSite())
+                    && io.farfrontier.palemirror.internal.settlement.AuthoredBlueprintSlots.captureAvailable(
+                    server.overworld(), data, provider, seed)) changed = true;
+            if (record.status() == CampaignRegionPresentationStatus.MATERIALIZED) continue;
             RegionBindings ids = RegionBindings.forAuthored(seed.planId());
-            BlockPos primary = block(seed.primaryMine());
-            BlockPos alternate = block(seed.alternateMine());
-            if (CampaignMineSiteTemplate.isAreaLoaded(server.overworld(), primary)
-                    && CampaignMineSiteTemplate.isMaterialized(server.overworld(), primary)
+            BlockPos primary = block(seed.primaryMineSite().portal());
+            BlockPos alternate = block(seed.alternateMineSite().portal());
+            if (provider.authoredMineSiteReady(server.overworld(), seed, seed.primaryMineSite())
+                    && AuthoredMineSiteObserver.isAreaLoaded(server.overworld(), seed.primaryMineSite())
                     && !data.testMines().containsKey(ids.primaryMineId())) {
-                data.registerTestMine(CampaignMineSiteTemplate.observeExisting(server.overworld(), primary,
+                data.registerTestMine(AuthoredMineSiteObserver.observe(server.overworld(), seed.primaryMineSite(),
                         ids.primaryMineId(), io.farfrontier.palemirror.domain.StoryAudienceId.globalTestAudience()));
                 changed = true;
             }
-            if (CampaignMineSiteTemplate.isAreaLoaded(server.overworld(), alternate)
-                    && CampaignMineSiteTemplate.isMaterialized(server.overworld(), alternate)
+            if (provider.authoredMineSiteReady(server.overworld(), seed, seed.alternateMineSite())
+                    && AuthoredMineSiteObserver.isAreaLoaded(server.overworld(), seed.alternateMineSite())
                     && !data.testMines().containsKey(ids.alternateMineId())) {
-                data.registerTestMine(CampaignMineSiteTemplate.observeExisting(server.overworld(), alternate,
+                data.registerTestMine(AuthoredMineSiteObserver.observe(server.overworld(), seed.alternateMineSite(),
                         ids.alternateMineId(), io.farfrontier.palemirror.domain.StoryAudienceId.globalTestAudience()));
                 changed = true;
             }
@@ -131,7 +135,7 @@ public final class AuthoredRegionRegistrar {
                 definition.emergencyGraceSteps(), definition.evacuationDurationSteps());
         List<WorldSite> sites = new java.util.ArrayList<>(List.of(
                 new WorldSite(ids.primaryDispatchSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
-                new WorldSite(ids.alternateDispatchSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL),
+                new WorldSite(ids.alternateDispatchSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.DEGRADED),
                 new WorldSite(ids.receivingSiteId(), WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL)));
         List<SiteAffiliation> affiliations = new java.util.ArrayList<>(List.of(
                 new SiteAffiliation(ids.primaryDispatchSiteId(), ids.primaryMineId(), SiteAffiliationRole.SUPPLIER),
@@ -191,6 +195,8 @@ public final class AuthoredRegionRegistrar {
             var module = seed.modules().get(index);
             data.parcels().register(parcel(seed, "module_" + index, module.footprint(), module.templateId(), ParcelKind.COMMUNITY));
         }
+        registerMineParcels(data, seed, seed.primaryMineSite(), "primary_mine", false);
+        registerMineParcels(data, seed, seed.alternateMineSite(), "alternate_mine", true);
         for (int index = 0; index < seed.expansionPlots().size(); index++) {
             data.parcels().register(parcel(seed, "expansion_" + index, seed.expansionPlots().get(index),
                     developmentPlotId(seed.planId(), index).value(), ParcelKind.RESERVED));
@@ -214,6 +220,23 @@ public final class AuthoredRegionRegistrar {
             data.parcels().register(new ParcelRecord(seed.planId() + ":parcel:rail_" + from, seed.planId(),
                     seed.dimensionId(), new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
                     "baseline_rail", ParcelKind.PUBLIC_INFRASTRUCTURE, null, 0, ""));
+        }
+    }
+
+    private static void registerMineParcels(PaleMirrorSavedData data, AuthoredRegionSeed seed,
+                                            io.farfrontier.palemirror.api.AuthoredMineSitePlan mine,
+                                            String prefix, boolean stagedReserved) {
+        data.parcels().register(parcel(seed, prefix + "_influence", mine.bounds(), mine.siteId(), ParcelKind.INFLUENCE));
+        for (int index = 0; index < mine.initialModules().size(); index++) {
+            var module = mine.initialModules().get(index);
+            data.parcels().register(parcel(seed, prefix + "_module_" + index, module.footprint(),
+                    mine.siteId() + ":" + module.role().toLowerCase(java.util.Locale.ROOT), ParcelKind.COMMUNITY));
+        }
+        if (!stagedReserved) return;
+        for (int index = 0; index < mine.stagedModules().size(); index++) {
+            var stage = mine.stagedModules().get(index);
+            data.parcels().register(parcel(seed, prefix + "_stage_" + index, stage.module().footprint(),
+                    mine.siteId() + ":stage:" + stage.stage(), ParcelKind.RESERVED));
         }
     }
 

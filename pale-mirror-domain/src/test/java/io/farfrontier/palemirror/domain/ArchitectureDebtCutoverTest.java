@@ -12,7 +12,7 @@ final class ArchitectureDebtCutoverTest {
     @Test
     void detailedHistoryCompactsIntoPerSubjectTypeSummary() {
         WorldObjectId subject = new WorldObjectId("pale_mirror:test_subject");
-        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(36)
+        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(37)
                 .eventSequence(WorldState.MAX_DETAILED_HISTORY + 7L);
         for (int index = 1; index <= WorldState.MAX_DETAILED_HISTORY + 7; index++) {
             builder.event(new DomainEvent("pm:event:" + index, DomainEventType.MINE_INFECTED,
@@ -28,17 +28,17 @@ final class ArchitectureDebtCutoverTest {
     void validatorRejectsOrphanedAggregateReference() {
         WorldObjectId missingSite = new WorldObjectId("pale_mirror:missing_site");
         WorldObjectId missingObject = new WorldObjectId("pale_mirror:missing_object");
-        WorldState state = WorldStateHydration.builder().schemaVersion(36)
+        WorldState state = WorldStateHydration.builder().schemaVersion(37)
                 .affiliation(new SiteAffiliation(missingSite, missingObject, SiteAffiliationRole.SUPPLIER))
                 .build();
 
-        assertThrows(DomainStateValidationException.class, () -> DomainStateValidator.validate(state, 36));
+        assertThrows(DomainStateValidationException.class, () -> DomainStateValidator.validate(state, 37));
     }
 
     @Test
     void hydrationRejectsDuplicateIdentityBeforeMapNormalization() {
         WorldObjectId facilityId = id("duplicate_facility");
-        var builder = WorldStateHydration.builder().schemaVersion(36)
+        var builder = WorldStateHydration.builder().schemaVersion(37)
                 .facility(new FacilityState(facilityId, new InfectionSourceId("test:threat"), 4, 10, 0))
                 .facility(new FacilityState(facilityId, new InfectionSourceId("test:threat"), 8, 10, 0));
 
@@ -53,7 +53,7 @@ final class ArchitectureDebtCutoverTest {
         WorldObjectId destinationB = id("destination_b");
         WorldObjectId communityA = id("community_a");
         WorldObjectId communityB = id("community_b");
-        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(36)
+        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(37)
                 .facility(new FacilityState(mine, new InfectionSourceId("test:threat"), 8, 100, 0))
                 .site(new WorldSite(origin, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
                 .site(new WorldSite(destinationA, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
@@ -83,7 +83,7 @@ final class ArchitectureDebtCutoverTest {
         WorldObjectId destinationB = id("large_destination_b");
         WorldObjectId communityA = id("large_community_a");
         WorldObjectId communityB = id("large_community_b");
-        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(36)
+        WorldStateHydration.Builder builder = WorldStateHydration.builder().schemaVersion(37)
                 .facility(new FacilityState(mine, new InfectionSourceId("test:threat"), 1_000_000_000, 100, 0))
                 .site(new WorldSite(origin, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
                 .site(new WorldSite(destinationA, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL))
@@ -131,7 +131,7 @@ final class ArchitectureDebtCutoverTest {
         DevelopmentIntent intent = new DevelopmentIntent("pm:development:test", community,
                 DevelopmentIntentType.UPGRADE_STOREHOUSE, missingSite, ResourceKind.IRON,
                 10, 0, 10, 0, 1, java.util.Set.of(), "test", DevelopmentIntentState.PLANNED, "");
-        WorldState state = WorldStateHydration.builder().schemaVersion(36)
+        WorldState state = WorldStateHydration.builder().schemaVersion(37)
                 .community(new SettlementCommunity(community)).place(new SettlementPlace(place))
                 .binding(new CommunityPlaceBinding(community, place))
                 .economy(new SettlementEconomy(community, Map.of(ResourceKind.IRON, account)))

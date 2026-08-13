@@ -93,6 +93,43 @@ class SettlementDevelopmentEngineTest {
         assertEquals(0, state.settlementDevelopment(COMMUNITY).orElseThrow().stableGrowthSteps());
     }
 
+    @Test
+    void playerApprovedAlternateDispatchUsesCanonicalEscrowBeforeCommissioning() {
+        WorldState state = developmentState();
+        WorldObjectId dispatch = new WorldObjectId("pale_mirror:alternate_dispatch");
+        WorldObjectId receiving = new WorldObjectId("pale_mirror:alternate_receiving");
+        WorldObjectId alternateRoute = new WorldObjectId("pale_mirror:alternate_route");
+        state.putSite(new WorldSite(dispatch, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.DEGRADED));
+        state.putSite(new WorldSite(receiving, WorldSiteType.LOGISTICS_ENDPOINT, OperationalState.OPERATIONAL));
+        state.putSiteAffiliation(new SiteAffiliation(dispatch, COMMUNITY, SiteAffiliationRole.RECIPIENT));
+        state.putSiteCapability(new SiteCapability(dispatch, SiteCapabilityType.LOGISTICS, ResourceKind.IRON, 18));
+        state.putRouteContract(new RouteContract(alternateRoute, dispatch, receiving, RouteProvider.CREATE,
+                ResourceKind.IRON, 18, 8, 24, RouteContractStatus.PLANNED));
+        state.putLivingRegion(new LivingRegionState("pale_mirror:development_region", COMMUNITY, PLACE,
+                new WorldObjectId("pale_mirror:primary_mine"), new WorldObjectId("pale_mirror:alternate_mine"),
+                new WorldObjectId("pale_mirror:primary_route"), alternateRoute, 0, null,
+                RecognitionState.DISCOVERED, -1));
+        DomainServices services = new DomainServices();
+
+        assertTrue(services.commands().execute(state, new DomainCommand.ValidateRouteContract(alternateRoute,
+                18, 0, "train:before-factory", "test:before-factory")).isEmpty());
+        assertEquals(2, services.commands().execute(state, new DomainCommand.PlanAlternateDispatch(
+                COMMUNITY, dispatch, 12, "atlas:test")).size());
+        DevelopmentIntent intent = state.developmentIntents().stream()
+                .filter(value -> value.type() == DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH)
+                .findFirst().orElseThrow();
+        assertEquals(12, state.economy(COMMUNITY).orElseThrow().require(ResourceKind.IRON).reserved());
+        assertTrue(services.commands().execute(state, new DomainCommand.PlanAlternateDispatch(
+                COMMUNITY, dispatch, 12, "atlas:duplicate")).isEmpty());
+        services.commands().execute(state, new DomainCommand.StartDevelopmentIntent(intent.id()));
+        services.commands().execute(state, new DomainCommand.CompleteDevelopmentIntent(intent.id()));
+        assertEquals(OperationalState.OPERATIONAL, state.site(dispatch).orElseThrow().operationalState());
+        assertEquals(1, services.commands().execute(state, new DomainCommand.ValidateRouteContract(alternateRoute,
+                18, 0, "train:after-factory", "test:after-factory")).size());
+        assertEquals(78, state.economy(COMMUNITY).orElseThrow().require(ResourceKind.IRON).stock());
+        assertEquals(0, state.economy(COMMUNITY).orElseThrow().require(ResourceKind.IRON).reserved());
+    }
+
     private static final WorldObjectId COMMUNITY = new WorldObjectId("pale_mirror:community");
     private static final WorldObjectId PLACE = new WorldObjectId("pale_mirror:place");
     private static final WorldObjectId STORAGE = new WorldObjectId("pale_mirror:depot");

@@ -7,13 +7,12 @@ import java.util.List;
 /** Pure deterministic selector with cheap horizontal ranking and a hard exact-height budget. */
 public final class FrontierSiteSelector {
     static final int EXACT_SAMPLES_PER_CANDIDATE = 5;
-    static final int MAX_EXACT_CANDIDATES_PER_REGION = 6;
-    private static final int SURVEY_RADIUS = 72;
-    private static final int NEAR_CANDIDATES = 24;
-    private static final int CANDIDATES_PER_REMOTE_REGION = 32;
-    private static final int REMOTE_CANDIDATE_FLOOR = 128;
-    private static final int REGION_ENVELOPE = 900;
     private static final double GOLDEN_ANGLE = Math.PI * (3D - Math.sqrt(5D));
+    private final RegionPlacementProfile profile;
+
+    public FrontierSiteSelector(RegionPlacementProfile profile) {
+        this.profile = java.util.Objects.requireNonNull(profile, "profile");
+    }
 
     public List<SelectedSite> select(long worldSeed, VisualPoint spawn, int count, int mapRadius,
                                      int minimumSpacing, TerrainAccess terrain) {
@@ -23,26 +22,39 @@ public final class FrontierSiteSelector {
     public List<SelectedSite> selectWithReserve(long worldSeed, VisualPoint spawn, int count, int reserve,
                                                 int mapRadius, int minimumSpacing, TerrainAccess terrain) {
         validate(count, mapRadius, minimumSpacing);
-        if (reserve < 0 || count + reserve > 64) {
-            throw new IllegalArgumentException("region count plus reserve must be between 1 and 64");
+        if (reserve < 0 || count + reserve > profile.search().maximumRegions()) {
+            throw new IllegalArgumentException("region count plus reserve must be between 1 and "
+                    + profile.search().maximumRegions());
         }
         int targetCandidates = count + reserve;
+        boolean largeBatch = targetCandidates >= profile.search().largeBatchThreshold();
+        int exactCandidatesPerRegion = profile.search().exactSettlementCandidatesPerRegion(targetCandidates);
         List<SelectedSite> selected = new ArrayList<>(targetCandidates);
-        List<Center> near = candidateCenters(worldSeed, spawn, NEAR_CANDIDATES, 1_024, 2_048, 0);
-        int nearTarget = 1 + Math.min(3, reserve);
+        RegionPlacementProfile.SearchBand nearBand = profile.search().near();
+        int maximumCenterRadius = mapRadius - profile.search().regionEnvelope();
+        int nearMaximumDistance = Math.min(nearBand.spawnDistance().maximum(), maximumCenterRadius);
+        List<Center> near = landscapeCenters(worldSeed, spawn, nearBand.candidateCount(),
+                nearBand.spawnDistance().minimum(), nearMaximumDistance, 0, terrain);
+        int nearTarget = profile.search().maximumNearAcceptedRegions()
+                + Math.min(profile.search().nearReserveCandidates(), reserve);
         selectFrom(near, nearTarget, minimumSpacing, terrain, selected,
-                nearTarget * MAX_EXACT_CANDIDATES_PER_REGION, true);
+                nearTarget * exactCandidatesPerRegion, exactCandidatesPerRegion, true, largeBatch,
+                spawn, maximumCenterRadius);
         if (selected.isEmpty()) throw impossible(count, mapRadius, minimumSpacing, 0);
         if (targetCandidates > selected.size()) {
             int remaining = targetCandidates - selected.size();
-            int maximumDistance = mapRadius - REGION_ENVELOPE;
-            int minimumDistance = Math.min(maximumDistance - 1, Math.max(2_600, minimumSpacing + 1_000));
+            DistanceBand remoteBand = profile.search().remote().spawnDistance();
+            int maximumDistance = Math.min(remoteBand.maximum(), mapRadius - profile.search().regionEnvelope());
+            int minimumDistance = Math.min(maximumDistance - 1,
+                    Math.max(remoteBand.minimum(), minimumSpacing + profile.search().remoteSpacingMargin()));
             if (maximumDistance <= minimumDistance) throw impossible(count, mapRadius, minimumSpacing, 1);
-            int remoteCount = Math.max(REMOTE_CANDIDATE_FLOOR, remaining * CANDIDATES_PER_REMOTE_REGION);
-            List<Center> remote = candidateCenters(worldSeed ^ 0x6a09e667f3bcc909L, spawn, remoteCount,
-                    minimumDistance, maximumDistance, NEAR_CANDIDATES);
+            int remoteCount = Math.max(profile.search().remote().candidateCount(),
+                    remaining * profile.search().remoteCandidatesPerRegion(targetCandidates));
+            List<Center> remote = landscapeCenters(worldSeed ^ 0x6a09e667f3bcc909L, spawn, remoteCount,
+                    minimumDistance, maximumDistance, nearBand.candidateCount(), terrain);
             selectFrom(remote, targetCandidates, minimumSpacing, terrain, selected,
-                    remaining * MAX_EXACT_CANDIDATES_PER_REGION, false);
+                    remaining * exactCandidatesPerRegion, exactCandidatesPerRegion, false, largeBatch,
+                    spawn, maximumCenterRadius);
         }
         // Reserve centers are opportunistic. The hard contract is the requested
         // region count; rejecting an otherwise usable world because one optional
@@ -53,34 +65,56 @@ public final class FrontierSiteSelector {
         return List.copyOf(selected);
     }
 
-    private static void selectFrom(List<Center> candidates, int targetCount, int minimumSpacing,
-                                   TerrainAccess terrain, List<SelectedSite> selected, int exactBudget,
-                                   boolean nearCandidate) {
+    private void selectFrom(List<Center> candidates, int targetCount, int minimumSpacing,
+                            TerrainAccess terrain, List<SelectedSite> selected, int exactBudget,
+                            int exactCandidatesPerRegion,
+                            boolean nearCandidate, boolean largeBatch, VisualPoint spawn, int maximumCenterRadius) {
+        java.util.Comparator<RankedCenter> landscapeFirst = java.util.Comparator
+                .comparingInt(RankedCenter::landscapeScore).reversed()
+                .thenComparingInt(value -> value.biome().terrainPreference())
+                .thenComparingInt(RankedCenter::originalIndex);
+        java.util.Comparator<RankedCenter> terrainFirst = java.util.Comparator
+                .comparingInt((RankedCenter value) -> value.biome().terrainPreference())
+                .thenComparing(java.util.Comparator.comparingInt(RankedCenter::landscapeScore).reversed())
+                .thenComparingInt(RankedCenter::originalIndex);
         List<RankedCenter> ranked = java.util.stream.IntStream.range(0, candidates.size()).mapToObj(index -> {
             Center center = candidates.get(index);
-            return new RankedCenter(center, footprintBiome(center, terrain), index);
-        }).filter(value -> value.biome().suitable()).sorted(java.util.Comparator
-                .comparingInt((RankedCenter value) -> value.biome().terrainPreference())
-                .thenComparingInt(RankedCenter::originalIndex)).toList();
+            return new RankedCenter(center, footprintBiome(center, terrain), landscapeScore(center, terrain), index);
+        }).filter(value -> profile.settlementTerrain().acceptsBiome(value.biome())
+                && value.landscapeScore() >= profile.settlementTerrain().minimumLandscapeScore())
+                .sorted(largeBatch ? terrainFirst : landscapeFirst).toList();
         int exactAttempts = 0;
         int cursor = 0;
-        while (selected.size() < targetCount && exactAttempts < exactBudget && cursor < ranked.size()) {
-            List<SelectedSite> fallbacks = new ArrayList<>(MAX_EXACT_CANDIDATES_PER_REGION);
+        List<HorizontalOffset> refinements = profile.search().settlementRefinementOffsets();
+        int refinedCandidateCount = Math.multiplyExact(ranked.size(), refinements.size());
+        java.util.Set<Long> visitedRefinements = new java.util.HashSet<>();
+        while (selected.size() < targetCount && exactAttempts < exactBudget && cursor < refinedCandidateCount) {
+            List<SelectedSite> fallbacks = new ArrayList<>(exactCandidatesPerRegion);
             int slotAttempts = 0;
-            while (cursor < ranked.size() && slotAttempts < MAX_EXACT_CANDIDATES_PER_REGION) {
-                RankedCenter rankedCenter = ranked.get(cursor++);
-                Center center = rankedCenter.center();
+            while (cursor < refinedCandidateCount && slotAttempts < exactCandidatesPerRegion) {
+                int refinedIndex = cursor++;
+                RankedCenter rankedCenter = ranked.get(refinedIndex / refinements.size());
+                HorizontalOffset refinement = refinements.get(refinedIndex % refinements.size());
+                Center center = new Center(align(rankedCenter.center().x() + refinement.x()),
+                        align(rankedCenter.center().z() + refinement.z()));
+                if (!withinRadius(center, spawn, maximumCenterRadius)
+                        || !visitedRefinements.add(pack(center.x(), center.z()))) continue;
                 if (!separated(center, selected, minimumSpacing)) continue;
-                BiomeSample biome = rankedCenter.biome();
+                BiomeSample biome = refinement.equals(HorizontalOffset.ORIGIN)
+                        ? rankedCenter.biome() : footprintBiome(center, terrain);
+                int candidateLandscapeScore = refinement.equals(HorizontalOffset.ORIGIN)
+                        ? rankedCenter.landscapeScore() : landscapeScore(center, terrain);
+                if (!profile.settlementTerrain().acceptsBiome(biome)
+                        || candidateLandscapeScore < profile.settlementTerrain().minimumLandscapeScore()) continue;
                 exactAttempts++;
                 slotAttempts++;
                 TerrainCandidate candidate = detailed(center, terrain);
-                if (!candidate.acceptable()) {
+                if (!profile.settlementTerrain().acceptable(candidate)) {
                     terrain.recordDiscardedCandidate(candidate);
                     continue;
                 }
                 SelectedSite site = new SelectedSite(candidate, biome.climate(), nearCandidate);
-                if (candidate.preferred()) {
+                if (profile.settlementTerrain().preferred(candidate)) {
                     fallbacks.forEach(value -> terrain.recordDiscardedCandidate(value.terrain()));
                     selected.add(site);
                     fallbacks.clear();
@@ -90,7 +124,8 @@ public final class FrontierSiteSelector {
             }
             if (!fallbacks.isEmpty()) {
                 SelectedSite chosen = fallbacks.stream()
-                        .min(java.util.Comparator.comparing(SelectedSite::terrain, TerrainCandidate.ordering()))
+                        .min(java.util.Comparator.comparing(SelectedSite::terrain,
+                                TerrainCandidate.ordering(profile.settlementTerrain())))
                         .orElseThrow();
                 for (SelectedSite candidate : fallbacks) if (candidate != chosen) {
                     terrain.recordDiscardedCandidate(candidate.terrain());
@@ -100,24 +135,71 @@ public final class FrontierSiteSelector {
         }
     }
 
-    private static BiomeSample footprintBiome(Center center, TerrainAccess terrain) {
+    private BiomeSample footprintBiome(Center center, TerrainAccess terrain) {
+        int radius = profile.settlementTerrain().surveyRadius();
         BiomeSample centerBiome = terrain.biome(center.x(), center.z());
         boolean water = centerBiome.water()
-                || terrain.biome(center.x() - SURVEY_RADIUS, center.z()).water()
-                || terrain.biome(center.x() + SURVEY_RADIUS, center.z()).water()
-                || terrain.biome(center.x(), center.z() - SURVEY_RADIUS).water()
-                || terrain.biome(center.x(), center.z() + SURVEY_RADIUS).water();
+                || terrain.biome(center.x() - radius, center.z()).water()
+                || terrain.biome(center.x() + radius, center.z()).water()
+                || terrain.biome(center.x(), center.z() - radius).water()
+                || terrain.biome(center.x(), center.z() + radius).water();
         return new BiomeSample(centerBiome.climate(), centerBiome.suitable() && !water,
                 water, centerBiome.terrainPreference());
     }
 
-    private static TerrainCandidate detailed(Center center, TerrainAccess terrain) {
+    /** Cheap biome-only evidence that the shelf has both a nearby primary mass and a separate remote mass. */
+    private int landscapeScore(Center center, TerrainAccess terrain) {
+        if (profile.settlementTerrain().landscapeAffinity()
+                != SettlementTerrainPolicy.LandscapeAffinity.MOUNTAIN_FOOTHILL) {
+            throw new IllegalStateException("Unsupported landscape affinity "
+                    + profile.settlementTerrain().landscapeAffinity());
+        }
+        java.util.Map<String, Integer> directionMasks = new java.util.LinkedHashMap<>();
+        int score = 0;
+        int weight = profile.requiredSites().size() * 2;
+        for (SitePlacementRequirement site : profile.requiredSites()) {
+            int mask = 0;
+            for (int direction = 0; direction < 4; direction++) {
+                if (mountainOnRay(center, direction, site.landscapeEvidenceDistances(), terrain)) mask |= 1 << direction;
+            }
+            directionMasks.put(site.role(), mask);
+            score += Integer.bitCount(mask) * weight;
+            weight = Math.max(2, weight - 2);
+        }
+        for (SitePlacementRequirement site : profile.requiredSites()) {
+            if (site.separateCardinalSectorFromRole().isBlank()) continue;
+            int current = directionMasks.getOrDefault(site.role(), 0);
+            int reference = directionMasks.getOrDefault(site.separateCardinalSectorFromRole(), 0);
+            if (hasSeparateDirections(reference, current)) score += 8;
+        }
+        return score;
+    }
+
+    private static boolean hasSeparateDirections(int first, int second) {
+        for (int a = 0; a < 4; a++) for (int b = 0; b < 4; b++) {
+            if ((first & 1 << a) != 0 && (second & 1 << b) != 0 && a != b) return true;
+        }
+        return false;
+    }
+
+    private static boolean mountainOnRay(Center center, int direction, List<Integer> distances,
+                                         TerrainAccess terrain) {
+        for (int distance : distances) {
+            int x = center.x() + (direction == 0 ? distance : direction == 2 ? -distance : 0);
+            int z = center.z() + (direction == 1 ? distance : direction == 3 ? -distance : 0);
+            if (terrain.biome(x, z).mountainEvidence()) return true;
+        }
+        return false;
+    }
+
+    private TerrainCandidate detailed(Center center, TerrainAccess terrain) {
         List<TerrainSample> samples = new ArrayList<>(EXACT_SAMPLES_PER_CANDIDATE);
         samples.add(terrain.exactSample(center.x(), center.z()));
-        samples.add(terrain.exactSample(center.x() - SURVEY_RADIUS, center.z()));
-        samples.add(terrain.exactSample(center.x() + SURVEY_RADIUS, center.z()));
-        samples.add(terrain.exactSample(center.x(), center.z() - SURVEY_RADIUS));
-        samples.add(terrain.exactSample(center.x(), center.z() + SURVEY_RADIUS));
+        int radius = profile.settlementTerrain().surveyRadius();
+        samples.add(terrain.exactSample(center.x() - radius, center.z()));
+        samples.add(terrain.exactSample(center.x() + radius, center.z()));
+        samples.add(terrain.exactSample(center.x(), center.z() - radius));
+        samples.add(terrain.exactSample(center.x(), center.z() + radius));
         return TerrainCandidate.evaluate(center.x(), center.z(), samples);
     }
 
@@ -140,6 +222,36 @@ public final class FrontierSiteSelector {
         return List.copyOf(result);
     }
 
+    /**
+     * Converts cheap mountain-biome samples into nearby shelf candidates before any noise height is requested.
+     * Random shelf samples remain as deterministic fallback candidates for broad modded mountain biomes.
+     */
+    private List<Center> landscapeCenters(long seed, VisualPoint spawn, int count, int minimumDistance,
+                                          int maximumDistance, int addressOffset, TerrainAccess terrain) {
+        if (profile.settlementTerrain().landscapeAffinity()
+                != SettlementTerrainPolicy.LandscapeAffinity.MOUNTAIN_FOOTHILL) {
+            throw new IllegalStateException("Unsupported landscape affinity "
+                    + profile.settlementTerrain().landscapeAffinity());
+        }
+        List<Center> samples = candidateCenters(seed, spawn, count, minimumDistance, maximumDistance, addressOffset);
+        java.util.LinkedHashSet<Center> candidates = new java.util.LinkedHashSet<>();
+        for (Center sample : samples) {
+            if (terrain.biome(sample.x(), sample.z()).mountainEvidence()) {
+                for (int distance : profile.search().landscapeProjectionDistances()) for (int direction = 0; direction < 4; direction++) {
+                    int x = align(sample.x() + (direction == 0 ? distance : direction == 2 ? -distance : 0));
+                    int z = align(sample.z() + (direction == 1 ? distance : direction == 3 ? -distance : 0));
+                    long dx = (long) x - spawn.x();
+                    long dz = (long) z - spawn.z();
+                    long radialSquared = dx * dx + dz * dz;
+                    if (radialSquared >= (long) minimumDistance * minimumDistance
+                            && radialSquared <= (long) maximumDistance * maximumDistance) candidates.add(new Center(x, z));
+                }
+            }
+            candidates.add(sample);
+        }
+        return List.copyOf(candidates);
+    }
+
     private static boolean separated(Center candidate, List<SelectedSite> selected, int spacing) {
         long required = (long) spacing * spacing;
         for (SelectedSite existing : selected) {
@@ -150,10 +262,19 @@ public final class FrontierSiteSelector {
         return true;
     }
 
-    private static void validate(int count, int mapRadius, int minimumSpacing) {
-        if (count < 1 || count > 64) throw new IllegalArgumentException("region count must be between 1 and 64");
-        if (mapRadius < 3_000) throw new IllegalArgumentException("map radius must be at least 3000 blocks");
-        if (minimumSpacing < 1_024) throw new IllegalArgumentException("region spacing must be at least 1024 blocks");
+    private static boolean withinRadius(Center candidate, VisualPoint spawn, int radius) {
+        long dx = (long) candidate.x() - spawn.x();
+        long dz = (long) candidate.z() - spawn.z();
+        return dx * dx + dz * dz <= (long) radius * radius;
+    }
+
+    private void validate(int count, int mapRadius, int minimumSpacing) {
+        if (count < 1 || count > profile.search().maximumRegions()) throw new IllegalArgumentException(
+                "region count must be between 1 and " + profile.search().maximumRegions());
+        if (mapRadius < profile.search().minimumMapRadius()) throw new IllegalArgumentException(
+                "map radius must be at least " + profile.search().minimumMapRadius() + " blocks");
+        if (minimumSpacing < profile.search().minimumRegionSpacing()) throw new IllegalArgumentException(
+                "region spacing must be at least " + profile.search().minimumRegionSpacing() + " blocks");
     }
 
     private static IllegalStateException impossible(int count, int radius, int spacing, int selected) {
@@ -177,7 +298,11 @@ public final class FrontierSiteSelector {
         default void recordDiscardedCandidate(TerrainCandidate candidate) { }
     }
 
-    public record BiomeSample(FrontierClimate climate, boolean suitable, boolean water, int terrainPreference) {
+    public record BiomeSample(FrontierClimate climate, boolean suitable, boolean water, int terrainPreference,
+                              boolean mountainEvidence) {
+        public BiomeSample(FrontierClimate climate, boolean suitable, boolean water, int terrainPreference) {
+            this(climate, suitable, water, terrainPreference, false);
+        }
         public BiomeSample {
             if (terrainPreference < 0) throw new IllegalArgumentException("terrainPreference must be non-negative");
         }
@@ -188,5 +313,5 @@ public final class FrontierSiteSelector {
         }
     }
     private record Center(int x, int z) { }
-    private record RankedCenter(Center center, BiomeSample biome, int originalIndex) { }
+    private record RankedCenter(Center center, BiomeSample biome, int landscapeScore, int originalIndex) { }
 }

@@ -1,0 +1,33 @@
+Pale Mirror private mountain-mine blueprint provenance
+
+Runtime structures live in the pale_mirror_visuals namespace and are compiled through the PM sanitizing
+loader. The loader ignores structure entities and block-entity NBT, removes jigsaws, spawners, traps and
+loot containers, and replaces freely mineable ore/raw-material states with inert rock.
+
+portal_hoist
+  source: idas-1.13.7+1.21.1-neoforge.jar
+  asset: idas:ancient_mines/ancient_mines_entrance
+processing_hall, dispatch_shell
+  source: IDA v2.1.1-1.21.1.jar
+  asset: dungeons_arise:mining_complex/mining_complex_facility_2
+power_house
+  source: IDA v2.1.1-1.21.1.jar
+  asset: dungeons_arise:mining_complex/mining_complex_facility_5
+loading_yard, dispatch_commissioning
+  source: IDA v2.1.1-1.21.1.jar
+  asset: dungeons_arise:mining_complex/mining_complex_facility_6
+controller_chamber
+  source: IDA v2.1.1-1.21.1.jar
+  asset: dungeons_arise:mining_complex/mining_complex_facility_9
+dispatch_foundation
+  source: IDA v2.1.1-1.21.1.jar
+  asset: dungeons_arise:mining_complex/mining_complex_facility_connector_1
+entrance_adit, crew_outpost
+  source: Terralith_1.21.1_v2.6.2_Neoforge.jar
+  assets: terralith:underground/smallminingoutpost, terralith:underground/largeminingoutpost
+iron_gallery
+  source: idas-1.13.7+1.21.1-neoforge.jar
+  asset: idas:ancient_mines/ancient_mines_room2
+dispatch_machinery
+  source: idas-1.13.7+1.21.1-neoforge.jar
+  asset: idas:ancient_mines/ancient_mines_room5

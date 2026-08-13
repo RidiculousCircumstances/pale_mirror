@@ -17,21 +17,16 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Generator-only access that keeps cheap biome ranking separate from explicitly budgeted exact heights. */
 public final class FrontierTerrainSurvey {
-    static final int MINE_MIN_X = -8;
-    static final int MINE_MAX_X = 8;
-    static final int MINE_MIN_Z = -8;
-    static final int MINE_MAX_Z = 8;
-    static final int MINE_BIOME_STEP = 4;
-    static final int MAX_EXACT_MINE_ATTEMPTS = 12;
-
-    public Batch selectBatch(ServerLevel level, int count, int mapRadius, int minimumSpacing) {
-        return selectBatch(level, count, 0, mapRadius, minimumSpacing);
+    public Batch selectBatch(ServerLevel level, RegionPlacementProfile profile, int count, int mapRadius,
+                             int minimumSpacing) {
+        return selectBatch(level, profile, count, 0, mapRadius, minimumSpacing);
     }
 
-    public Batch selectBatch(ServerLevel level, int count, int reserve, int mapRadius, int minimumSpacing) {
+    public Batch selectBatch(ServerLevel level, RegionPlacementProfile profile, int count, int reserve,
+                             int mapRadius, int minimumSpacing) {
         CachedLevelTerrain terrain = new CachedLevelTerrain(level);
         BlockPos spawn = level.getSharedSpawnPos();
-        List<FrontierSiteSelector.SelectedSite> selected = new FrontierSiteSelector().selectWithReserve(level.getSeed(),
+        List<FrontierSiteSelector.SelectedSite> selected = new FrontierSiteSelector(profile).selectWithReserve(level.getSeed(),
                 new VisualPoint(spawn.getX(), spawn.getY(), spawn.getZ()), count, reserve, mapRadius,
                 minimumSpacing, terrain);
         return new Batch(selected, terrain);
@@ -48,11 +43,13 @@ public final class FrontierTerrainSurvey {
 
         public List<FrontierSiteSelector.SelectedSite> sites() { return sites; }
         public MineAnchorResolver mineAnchors() { return terrain::resolveMine; }
+        public RailPathResolver railPaths() { return terrain::resolveRail; }
         public Statistics statistics() { return terrain.statistics(); }
     }
 
     public record Statistics(int cachedHeights, long heightHits, long heightMisses, long siteHeightProbes,
-                             long mineHeightProbes, long biomeSamples, long discardedSiteCandidates) { }
+                             long mineHeightProbes, long railHeightProbes, long biomeSamples,
+                             long discardedSiteCandidates) { }
 
     private static final class CachedLevelTerrain implements FrontierSiteSelector.TerrainAccess {
         private final ServerLevel level;
@@ -63,6 +60,7 @@ public final class FrontierTerrainSurvey {
         private long heightMisses;
         private long siteHeightProbes;
         private long mineHeightProbes;
+        private long railHeightProbes;
         private long biomeSamples;
         private long discardedSiteCandidates;
 
@@ -70,9 +68,9 @@ public final class FrontierTerrainSurvey {
 
         @Override public TerrainSample exactSample(int x, int z) {
             siteHeightProbes++;
-            int height = height(x, z);
             boolean water = biome(x, z).water();
-            return new TerrainSample(x, z, height, water);
+            int terrainSurface = water ? height(x, z) : oceanFloor(x, z);
+            return new TerrainSample(x, z, terrainSurface, water);
         }
 
         @Override public FrontierSiteSelector.BiomeSample biome(int x, int z) {
@@ -88,30 +86,106 @@ public final class FrontierTerrainSurvey {
                     candidate.cutFillCost());
         }
 
-        private VisualPoint resolveMine(List<VisualPoint> candidates) {
+        private MountainMineAnchor resolveMine(SitePlacementRequirement requirement, List<VisualPoint> candidates) {
             int exactAttempts = 0;
-            List<String> rejectedSurfaces = new java.util.ArrayList<>();
             for (VisualPoint candidate : candidates) {
-                if (!dryMineFootprint(candidate)) continue;
-                if (exactAttempts++ >= MAX_EXACT_MINE_ATTEMPTS) break;
+                if (!FrontierTerrainSurvey.siteFootprint(candidate, requirement.terrain(), this)) continue;
+                if (exactAttempts++ >= requirement.exactValidationBudget()) break;
+                int terrainSurface = oceanFloor(candidate.x(), candidate.z());
                 mineHeightProbes++;
-                int surface = height(candidate.x(), candidate.z());
-                int oceanFloor = oceanFloor(candidate.x(), candidate.z());
-                if (isDrySurface(surface, oceanFloor)) {
-                    return new VisualPoint(candidate.x(), surface, candidate.z());
-                }
-                PaleMirrorVisualsMod.LOGGER.debug(
-                        "Discarded wet MineSite anchor at {} {}: worldSurface={}, oceanFloor={}",
-                        candidate.x(), candidate.z(), surface, oceanFloor);
-                rejectedSurfaces.add(candidate.x() + "," + candidate.z() + "=" + surface + "/" + oceanFloor);
+                MountainMineAnchor mountain = mountainFace(candidate, terrainSurface, requirement.terrain());
+                if (mountain != null) return mountain;
             }
-            throw new DryMineSiteUnavailableException("Cannot resolve a dry MineSite within "
-                    + MAX_EXACT_MINE_ATTEMPTS + " exact validation attempts; rejected surfaces "
-                    + rejectedSurfaces);
+            throw new DryMineSiteUnavailableException("Cannot resolve a dry mountain MineSite within "
+                    + requirement.exactValidationBudget() + " exact validation attempts for role "
+                    + requirement.role());
         }
 
-        private boolean dryMineFootprint(VisualPoint candidate) {
-            return FrontierTerrainSurvey.dryMineFootprint(candidate, this);
+        private MountainMineAnchor mountainFace(VisualPoint candidate, int surface, SiteTerrainPolicy policy) {
+            if (policy.feature() != SiteTerrainPolicy.Feature.MOUNTAIN_FACE) {
+                throw new IllegalStateException("Unsupported site terrain feature " + policy.feature());
+            }
+            MountainMineAnchor best = null;
+            int bestRise = Integer.MIN_VALUE;
+            for (int direction = 0; direction < 4; direction++) {
+                int dx = direction == 0 ? 1 : direction == 2 ? -1 : 0;
+                int dz = direction == 1 ? 1 : direction == 3 ? -1 : 0;
+                int deepestDistance = policy.riseSamples().getLast().distance();
+                FrontierSiteSelector.BiomeSample mountainBiome = biome(candidate.x() + dx * deepestDistance,
+                        candidate.z() + dz * deepestDistance);
+                if (!mountainBiome.mountainEvidence()) continue;
+                int apron = oceanFloor(candidate.x() - dx * policy.apronDistance(),
+                        candidate.z() - dz * policy.apronDistance());
+                mineHeightProbes++;
+                boolean continuous = true;
+                int rise = Integer.MIN_VALUE;
+                for (SiteTerrainPolicy.RiseSample sample : policy.riseSamples()) {
+                    int sampledHeight = oceanFloor(candidate.x() + dx * sample.distance(),
+                            candidate.z() + dz * sample.distance());
+                    mineHeightProbes++;
+                    rise = sampledHeight - surface;
+                    continuous &= rise >= sample.minimumRise();
+                }
+                boolean terrace = Math.abs(apron - surface) <= policy.apronMaximumRelief();
+                if (terrace && continuous && rise > bestRise) {
+                    bestRise = rise;
+                    best = new MountainMineAnchor(new VisualPoint(candidate.x(), surface, candidate.z()), direction);
+                }
+            }
+            return best;
+        }
+
+        private List<VisualPoint> resolveRail(RoutePlacementRequirement requirement, VisualPoint from, VisualPoint to) {
+            int dx = to.x() - from.x();
+            int dz = to.z() - from.z();
+            boolean alongX = Math.abs(dx) >= Math.abs(dz);
+            List<VisualPoint> controls = new java.util.ArrayList<>();
+            controls.add(from);
+            int denominator = requirement.intermediateControlCount() + 1;
+            for (int part = 1; part <= requirement.intermediateControlCount(); part++) {
+                double fraction = part / (double) denominator;
+                int baseX = (int) Math.round(from.x() + dx * fraction);
+                int baseZ = (int) Math.round(from.z() + dz * fraction);
+                VisualPoint best = null;
+                long bestCost = Long.MAX_VALUE;
+                for (int offset : requirement.lateralControlOffsets()) {
+                    int x = baseX + (alongX ? 0 : offset);
+                    int z = baseZ + (alongX ? offset : 0);
+                    FrontierSiteSelector.BiomeSample biome = biome(x, z);
+                    if (requirement.rejectWater() && biome.water()) continue;
+                    int surface = oceanFloor(x, z);
+                    railHeightProbes++;
+                    int expected = (int) Math.round(from.y() + (to.y() - from.y()) * fraction);
+                    long cost = Math.abs(surface - expected) * 16L + Math.abs(offset);
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        best = new VisualPoint(x, expected, z);
+                    }
+                }
+                if (best == null) throw new DryMineSiteUnavailableException("Rail corridor crosses water at "
+                        + baseX + "," + baseZ);
+                controls.add(best);
+            }
+            controls.add(to);
+            List<VisualPoint> horizontal = new java.util.ArrayList<>();
+            for (int index = 1; index < controls.size(); index++) {
+                List<VisualPoint> leg = FrontierRegionPlanner.cardinalRail(controls.get(index - 1), controls.get(index), 0);
+                if (!horizontal.isEmpty()) leg = leg.subList(1, leg.size());
+                horizontal.addAll(leg);
+            }
+            int segments = horizontal.size() - 1;
+            int elevation = to.y() - from.y();
+            if (Math.abs(elevation) * requirement.horizontalBlocksPerVerticalBlock() > Math.max(1, segments)) {
+                throw new DryMineSiteUnavailableException("Route grade exceeds one-in-"
+                        + requirement.horizontalBlocksPerVerticalBlock());
+            }
+            List<VisualPoint> result = new java.util.ArrayList<>(horizontal.size());
+            for (int index = 0; index < horizontal.size(); index++) {
+                VisualPoint point = horizontal.get(index);
+                int progressed = segments == 0 ? 0 : (Math.abs(elevation) * index + segments / 2) / segments;
+                result.add(new VisualPoint(point.x(), from.y() + Integer.signum(elevation) * progressed, point.z()));
+            }
+            return List.copyOf(result);
         }
 
         private int height(int x, int z) {
@@ -167,27 +241,35 @@ public final class FrontierTerrainSurvey {
             }
             int preference = path.contains("plains") || path.contains("savanna") || path.contains("desert")
                     || path.contains("badlands") ? 0 : path.contains("forest") || path.contains("taiga") ? 1 : 2;
-            return new FrontierSiteSelector.BiomeSample(climate, suitable, water, preference);
+            return new FrontierSiteSelector.BiomeSample(climate, suitable, water, preference, hostileTerrain);
         }
 
         private Statistics statistics() {
             return new Statistics(heights.size() + oceanFloors.size(), heightHits, heightMisses, siteHeightProbes,
-                    mineHeightProbes, biomeSamples, discardedSiteCandidates);
+                    mineHeightProbes, railHeightProbes, biomeSamples, discardedSiteCandidates);
         }
     }
 
-    static boolean dryMineFootprint(VisualPoint candidate, FrontierSiteSelector.TerrainAccess terrain) {
+    static boolean siteFootprint(VisualPoint candidate, SiteTerrainPolicy policy,
+                                 FrontierSiteSelector.TerrainAccess terrain) {
         FrontierSiteSelector.BiomeSample center = terrain.biome(candidate.x(), candidate.z());
-        if (!center.suitable() || center.water()) return false;
-        for (int x = MINE_MIN_X; x <= MINE_MAX_X; x += MINE_BIOME_STEP) {
-            for (int z = MINE_MIN_Z; z <= MINE_MAX_Z; z += MINE_BIOME_STEP) {
-                if (terrain.biome(candidate.x() + x, candidate.z() + z).water()) return false;
+        if (policy.requireDryFootprint() && center.water()) return false;
+        boolean mountain = center.mountainEvidence();
+        int extent = policy.footprintHalfExtent();
+        for (int x = -extent; x <= extent; x += policy.biomeSampleStep()) {
+            for (int z = -extent; z <= extent; z += policy.biomeSampleStep()) {
+                FrontierSiteSelector.BiomeSample sample = terrain.biome(candidate.x() + x, candidate.z() + z);
+                if (policy.requireDryFootprint() && sample.water()) return false;
+                mountain |= sample.mountainEvidence();
             }
         }
-        return true;
+        if (mountain) return true;
+        for (int distance : policy.nearbyEvidenceDistances()) for (int direction = 0; direction < 4; direction++) {
+            int dx = direction == 0 ? distance : direction == 2 ? -distance : 0;
+            int dz = direction == 1 ? distance : direction == 3 ? -distance : 0;
+            if (terrain.biome(candidate.x() + dx, candidate.z() + dz).mountainEvidence()) return true;
+        }
+        return false;
     }
 
-    static boolean isDrySurface(int worldSurface, int oceanFloor) {
-        return worldSurface == oceanFloor;
-    }
 }

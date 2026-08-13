@@ -78,6 +78,7 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
             case DomainCommand.RegisterAutonomousRefugeeShelter shelter -> registerAutonomousRefugeeShelter(state, shelter);
             case DomainCommand.SetWorldSiteOperational site -> setWorldSiteOperational(state, site);
             case DomainCommand.StartDevelopmentIntent intent -> developmentCommands.start(state, intent.intentId());
+            case DomainCommand.PlanAlternateDispatch intent -> developmentCommands.planAlternateDispatch(state, intent);
             case DomainCommand.ContributeDevelopmentIntent contribution -> developmentCommands.contribute(state, contribution);
             case DomainCommand.CompleteDevelopmentIntent intent -> developmentCommands.complete(state, intent.intentId());
             case DomainCommand.CancelDevelopmentIntent intent -> developmentCommands.cancel(state, intent.intentId(), intent.reason());
@@ -290,6 +291,14 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown route contract " + command.contractId()));
         if (command.observedStep() > state.simulationStep()) {
             throw new IllegalArgumentException("Route observation cannot come from a future simulation step");
+        }
+        if (command.capacity() > 0) {
+            WorldSite origin = state.site(contract.originEndpoint()).orElseThrow(() ->
+                    new IllegalArgumentException("Unknown route origin " + contract.originEndpoint()));
+            WorldSite destination = state.site(contract.destinationEndpoint()).orElseThrow(() ->
+                    new IllegalArgumentException("Unknown route destination " + contract.destinationEndpoint()));
+            if (origin.operationalState() != OperationalState.OPERATIONAL
+                    || destination.operationalState() != OperationalState.OPERATIONAL) return List.of();
         }
         if (!contract.validate(command.capacity(), command.observedStep(), command.observationId())) return List.of();
         return record(state, command.capacity() > 0 ? DomainEventType.ROUTE_CONTRACT_VALIDATED

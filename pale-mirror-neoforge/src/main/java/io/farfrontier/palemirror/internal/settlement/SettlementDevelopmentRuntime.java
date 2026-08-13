@@ -20,7 +20,8 @@ public final class SettlementDevelopmentRuntime {
         boolean changed = false;
         for (var intent : data.worldState().developmentIntents().stream()
                 .filter(value -> value.type() == DevelopmentIntentType.UPGRADE_STOREHOUSE
-                        || value.type() == DevelopmentIntentType.RECONSTRUCT_PLACE).toList()) {
+                        || value.type() == DevelopmentIntentType.RECONSTRUCT_PLACE
+                        || value.type() == DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH).toList()) {
             if (intent.state() == DevelopmentIntentState.PLANNED) {
                 // A presented development opportunity is a genuine player
                 // decision. A declined or unpresented intent remains
@@ -35,6 +36,7 @@ public final class SettlementDevelopmentRuntime {
             }
             if (intent.state() != DevelopmentIntentState.MATERIALIZING) continue;
             if (intent.type() == DevelopmentIntentType.RECONSTRUCT_PLACE) continue;
+            if (intent.type() == DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH) continue;
             var depot = data.settlementDepots().get(intent.communityId());
             if (depot == null || !depot.siteId().equals(intent.targetSiteId())) continue; // core-only legacy target
             var job = data.materializationJobs().activeFor(depot.siteId().value(), SettlementDepotRuntime.CHANNEL).orElse(null);

@@ -13,6 +13,34 @@ final class DevelopmentCommandRuntime {
         DevelopmentIntent intent = require(state, id);
         return intent.start() ? record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_STARTED, intent, intent.id()) : List.of();
     }
+    List<DomainEvent> planAlternateDispatch(WorldState state, DomainCommand.PlanAlternateDispatch command) {
+        LivingRegionState region = state.livingRegions().stream()
+                .filter(value -> value.communityId().equals(command.communityId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown settlement region " + command.communityId()));
+        RouteContract route = state.routeContract(region.alternateRouteId()).orElseThrow(() ->
+                new IllegalArgumentException("Unknown alternate route " + region.alternateRouteId()));
+        if (!route.originEndpoint().equals(command.dispatchSiteId())) return List.of();
+        if (state.developmentIntents().stream().anyMatch(value -> value.communityId().equals(command.communityId())
+                && value.type() == DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH
+                && value.state() != DevelopmentIntentState.CANCELLED)) return List.of();
+        WorldSite site = state.site(command.dispatchSiteId()).orElseThrow(() ->
+                new IllegalArgumentException("Unknown alternate dispatch site " + command.dispatchSiteId()));
+        if (site.type() != WorldSiteType.LOGISTICS_ENDPOINT || site.operationalState() == OperationalState.OPERATIONAL
+                || state.siteCapability(site.id(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON).isEmpty()) return List.of();
+        ResourceAccount iron = state.economy(command.communityId()).orElseThrow(() ->
+                new IllegalArgumentException("Unknown development economy " + command.communityId())).require(ResourceKind.IRON);
+        if (!iron.reserve(command.requiredIron())) return List.of();
+        String id = "pm:development:" + command.communityId().value() + ":alternate_dispatch";
+        DevelopmentIntent intent = new DevelopmentIntent(id, command.communityId(),
+                DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH, command.dispatchSiteId(), ResourceKind.IRON,
+                command.requiredIron(), 0, command.requiredIron(), 0, 1, java.util.Set.of(),
+                "alternate-dispatch-v1", DevelopmentIntentState.PLANNED, "");
+        state.putDevelopmentIntent(intent);
+        List<DomainEvent> produced = new ArrayList<>(record(state, DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED,
+                intent, command.causationId()));
+        produced.add(event(state, DomainEventType.SETTLEMENT_DEVELOPMENT_FUNDED, intent, command.causationId()));
+        return List.copyOf(produced);
+    }
     List<DomainEvent> contribute(WorldState state, DomainCommand.ContributeDevelopmentIntent command) {
         DevelopmentIntent intent = require(state, command.intentId());
         if (!intent.contribute(command.amount(), command.transferId())) return List.of();
@@ -32,6 +60,10 @@ final class DevelopmentCommandRuntime {
         if (intent.type() == DevelopmentIntentType.RECONSTRUCT_PLACE) {
             preflight.place().setStructuralIntegrity(StructuralIntegrity.INTACT);
             return record(state, DomainEventType.SETTLEMENT_RECONSTRUCTED, intent, intent.id());
+        }
+        if (intent.type() == DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH) {
+            preflight.site().setOperationalState(OperationalState.OPERATIONAL);
+            return record(state, DomainEventType.ALTERNATE_DISPATCH_COMMISSIONED, intent, intent.id());
         }
         preflight.account().expandCapacity(preflight.newAccountCapacity());
         state.putSiteCapability(new SiteCapability(intent.targetSiteId(), SiteCapabilityType.STORAGE, intent.requiredResource(),
@@ -73,6 +105,9 @@ final class DevelopmentCommandRuntime {
         }
         WorldSite site = state.site(intent.targetSiteId()).orElseThrow(() ->
                 new IllegalArgumentException("Unknown development site " + intent.targetSiteId()));
+        if (intent.type() == DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH) {
+            return new CompletionPreflight(account, null, site, null, 0, 0);
+        }
         SettlementDevelopment development = state.settlementDevelopment(intent.communityId()).orElseThrow(() ->
                 new IllegalArgumentException("Unknown settlement development " + intent.communityId()));
         int newAccountCapacity = Math.multiplyExact(account.capacity(), 2);

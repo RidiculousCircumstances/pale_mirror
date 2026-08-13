@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod;
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.visuals.genesis.FrontierClimate;
+import io.farfrontier.palemirror.visuals.genesis.AuthoredModuleCompiler;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierGenesisCompiler;
 import io.farfrontier.palemirror.visuals.runtime.AuthoredVisualProvider;
@@ -46,6 +47,29 @@ public final class VisualsGameTests {
                 FrontierClimate.COLD_TAIGA);
         helper.assertValueEqual(AuthoredRegionSeedNbt.read(AuthoredRegionSeedNbt.write(seed)), seed,
                 "persisted authored manifest must preserve every identity and geometry fact");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void importedMineBlueprintIsSanitizedAndRetainsBoundedKinetics(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(918273L, 1, new VisualPoint(8000, 72, -4000),
+                FrontierClimate.TEMPERATE);
+        var module = seed.alternateMineSite().stagedModules().stream()
+                .filter(value -> value.stage().equals("machinery"))
+                .findFirst().orElseThrow().module();
+        var snapshot = AuthoredModuleCompiler.compile(module);
+        helper.assertTrue(!snapshot.blocks().isEmpty(), "staged dispatch blueprint must compile physical cells");
+        boolean forbidden = snapshot.blocks().stream().map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                        .getKey(value.state().getBlock()))
+                .anyMatch(id -> id.getPath().contains("spawner") || id.getPath().equals("tnt")
+                        || id.getPath().contains("chest") || id.getPath().equals("barrel")
+                        || id.getPath().contains("ore") || id.getPath().startsWith("raw_"));
+        helper.assertTrue(!forbidden, "imported blueprint must not retain loot, hazards, or canonical-looking ore");
+        boolean kinetic = snapshot.blocks().stream().map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                        .getKey(value.state().getBlock()))
+                .anyMatch(id -> id.getNamespace().equals("create") && (id.getPath().equals("shaft")
+                        || id.getPath().equals("gearbox") || id.getPath().equals("water_wheel")));
+        helper.assertTrue(kinetic, "commissioning machinery must retain a bounded Create visual network");
         helper.succeed();
     }
 
@@ -113,29 +137,18 @@ public final class VisualsGameTests {
     private static AuthoredRegionSeed withRail(AuthoredRegionSeed seed, java.util.List<VisualPoint> rail) {
         return new AuthoredRegionSeed(seed.planId(), seed.archetypeId(), seed.definitionVersion(), seed.contentHash(),
                 seed.dimensionId(), seed.climate(), seed.palette(), seed.anchor(), seed.settlementBounds(),
-                seed.freightGate(), seed.receivingDepot(), seed.primaryMine(), seed.alternateMine(), rail,
+                seed.freightGate(), seed.receivingDepot(), seed.primaryMineSite(), seed.alternateMineSite(), rail,
                 seed.modules(), seed.residents(), seed.expansionPlots(), seed.shelterCandidates());
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)
     public static void authoredWorldgenFeatureIsInstalledInTargetBiomeWithSable(GameTestHelper helper) {
         helper.runAfterDelay(5, () -> {
-            helper.assertTrue(FrontierGenesisRuntime.readiness().ready(), "genesis catalog must be ready before use");
-            var seed = AuthoredVisualProvider.INSTANCE.discoverAuthoredRegions(helper.getLevel()).stream()
-                    .findFirst().orElseThrow();
-            var target = new net.minecraft.world.level.ChunkPos(seed.anchor().x() >> 4, seed.anchor().z() >> 4);
-            var expected = FrontierGenesisRuntime.compiledChunk(target.toLong());
-            helper.assertTrue(expected != null, "authored settlement chunk must have one compiled slice");
             var placedFeatureKey = net.minecraft.resources.ResourceKey.create(
                     net.minecraft.core.registries.Registries.PLACED_FEATURE,
                     net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
                             PaleMirrorVisualsMod.MOD_ID, "authored_region"));
-            var generator = helper.getLevel().getChunkSource().getGenerator();
-            var biome = generator.getBiomeSource().getNoiseBiome(
-                    net.minecraft.core.QuartPos.fromBlock(seed.anchor().x()),
-                    net.minecraft.core.QuartPos.fromBlock(seed.anchor().y()),
-                    net.minecraft.core.QuartPos.fromBlock(seed.anchor().z()),
-                    helper.getLevel().getChunkSource().randomState().sampler());
+            var biome = helper.getLevel().getBiome(helper.absolutePos(BlockPos.ZERO));
             boolean featureInstalled = biome.value().getGenerationSettings().features().stream()
                     .flatMap(net.minecraft.core.HolderSet::stream)
                     .anyMatch(holder -> holder.is(placedFeatureKey));

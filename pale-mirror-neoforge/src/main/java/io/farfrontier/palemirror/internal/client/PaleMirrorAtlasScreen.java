@@ -67,6 +67,12 @@ public final class PaleMirrorAtlasScreen extends Screen {
                         PaleMirrorNetwork.sendAction(AtlasActionPayload.Action.BEGIN_EVACUATION, region.communityId()))
                         .bounds(actionLeft, viewport.top() + row + 27, 130, 18).build(), row + 27);
             }
+            if (region.canCommissionAlternate()) {
+                addScrollingButton(Button.builder(Component.translatable("screen.pale_mirror.atlas.commission_dispatch"), ignored ->
+                        PaleMirrorNetwork.sendAction(AtlasActionPayload.Action.COMMISSION_ALTERNATE_DISPATCH,
+                                region.communityId()))
+                        .bounds(actionLeft, viewport.top() + row + 50, 130, 18).build(), row + 50);
+            }
         }
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), ignored -> onClose())
                 .bounds(layout.right() - 60, layout.top() + 10, 52, 18).build());
@@ -153,6 +159,11 @@ public final class PaleMirrorAtlasScreen extends Screen {
         } else if ("ACTIVE".equals(region.developmentState())) {
             graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.development_complete"),
                     secondaryX, y + 45, 0x8FE1A2, false);
+        } else if (!region.dispatchDevelopmentState().isBlank()) {
+            graphics.drawString(font, Component.translatable("screen.pale_mirror.atlas.dispatch_project",
+                    Component.translatable("screen.pale_mirror.atlas.project."
+                            + region.dispatchDevelopmentState().toLowerCase(java.util.Locale.ROOT))),
+                    secondaryX, y + 45, 0xD7B46A, false);
         }
     }
 

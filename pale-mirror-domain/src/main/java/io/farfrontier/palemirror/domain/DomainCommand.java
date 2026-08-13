@@ -24,6 +24,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.RegisterEvacuationShelter,
         DomainCommand.RegisterAutonomousRefugeeShelter, DomainCommand.SetWorldSiteOperational,
         DomainCommand.StartDevelopmentIntent, DomainCommand.CompleteDevelopmentIntent,
+        DomainCommand.PlanAlternateDispatch,
         DomainCommand.ContributeDevelopmentIntent,
         DomainCommand.CancelDevelopmentIntent, DomainCommand.RegisterSettlementAuthorityProfile,
         DomainCommand.BlockDevelopmentIntent,
@@ -214,6 +215,17 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         public RegisterDevelopmentIntent {
             Objects.requireNonNull(intent, "intent");
             Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    /** Player-approved use of canonical settlement reserves for an alternate freight works. */
+    record PlanAlternateDispatch(WorldObjectId communityId, WorldObjectId dispatchSiteId,
+                                 int requiredIron, String causationId) implements DomainCommand {
+        public PlanAlternateDispatch {
+            Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(dispatchSiteId, "dispatchSiteId");
+            Objects.requireNonNull(causationId, "causationId");
+            if (requiredIron <= 0) throw new IllegalArgumentException("requiredIron must be positive");
         }
     }
 

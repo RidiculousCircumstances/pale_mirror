@@ -13,6 +13,11 @@ public interface VisualProvider extends IntegrationAdapter {
     /** True only after genesis has durably completed this exact authored module. */
     default boolean authoredModuleReady(ServerLevel level, AuthoredRegionSeed region,
                                         VisualModulePlacement module) { return false; }
+    /** True only after every initial blueprint slice and semantic volume for this MineSite was observed. */
+    default boolean authoredMineSiteReady(ServerLevel level, AuthoredRegionSeed region,
+                                          AuthoredMineSitePlan mine) { return false; }
+    /** Compiles an inert blueprint. Core remains the sole owner of later world mutation. */
+    default Optional<VisualModuleSnapshot> compileAuthoredModule(StagedVisualModule module) { return Optional.empty(); }
     Collection<ResidentDeathObservation> drainResidentDeaths(ServerLevel level);
     void applyProjection(ServerLevel level, VisualStateProjection projection);
     default void applyJourneyProjection(ServerLevel level, JourneyProjection projection) { }

@@ -16,6 +16,8 @@ dependencies {
             ?: new File(runtimeModDirectory, 'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar'))
     compileOnly files(rootProject.findProperty('geckolib_integration_jar')
             ?: new File(runtimeModDirectory, 'geckolib-neoforge-1.21.1-4.9.2.jar'))
+    compileOnly files(rootProject.findProperty('create_integration_jar')
+            ?: new File(runtimeModDirectory, 'create-1.21.1-6.0.10.jar'))
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -56,7 +58,9 @@ def visualsRuntimeJars = [
         file(rootProject.findProperty('moonlight_integration_jar')
                 ?: new File(runtimeModDirectory, 'moonlight-1.21.1-3.3.2-neoforge.jar')),
         file(rootProject.findProperty('sable_integration_jar')
-                ?: new File(runtimeModDirectory, 'sable-neoforge-1.21.1-2.0.3.jar'))
+                ?: new File(runtimeModDirectory, 'sable-neoforge-1.21.1-2.0.3.jar')),
+        file(rootProject.findProperty('create_integration_jar')
+                ?: new File(runtimeModDirectory, 'create-1.21.1-6.0.10.jar'))
 ]
 
 def prepareVisualsGameTestMods = tasks.register('prepareVisualsGameTestMods', Sync) {
@@ -105,7 +109,11 @@ tasks.register('verifyVisualsJar') {
                     'pale_mirror_visuals.mixins.json',
                     'assets/pale_mirror_visuals/textures/entity/threat_heart.png',
                     'assets/pale_mirror_visuals/geo/threat_heart.geo.json',
-                    'data/pale_mirror_visuals/structure/temperate/residence_1.nbt'
+                    'data/pale_mirror_visuals/structure/temperate/residence_1.nbt',
+                    'data/pale_mirror_visuals/structure/temperate/mine/portal_hoist.nbt',
+                    'data/pale_mirror_visuals/structure/temperate/mine/dispatch_commissioning.nbt',
+                    'data/pale_mirror_visuals/structure/cold_taiga/mine/portal_hoist.nbt',
+                    'data/pale_mirror_visuals/structure/cold_taiga/mine/dispatch_commissioning.nbt'
             ].each { entry ->
                 if (jar.getEntry(entry) == null) throw new GradleException("Visuals JAR is missing ${entry}")
             }
@@ -129,5 +137,5 @@ tasks.register('visualsIntegrationHarness', Exec) {
             tasks.named('jar', Jar).flatMap { it.archiveFile }.get().asFile.absolutePath,
             visualsRuntimeJars[0].absolutePath, visualsRuntimeJars[1].absolutePath,
             visualsRuntimeJars[2].absolutePath, visualsRuntimeJars[3].absolutePath,
-            visualsRuntimeJars[4].absolutePath
+            visualsRuntimeJars[4].absolutePath, visualsRuntimeJars[5].absolutePath
 }

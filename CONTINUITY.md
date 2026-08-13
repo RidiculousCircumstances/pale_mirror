@@ -4,14 +4,14 @@
   hostile spawning, and remove natural vegetation left above its freshly graded terrain.
 - Keep operator navigation non-blocking: a teleport into a prospective authored chunk must use one bounded
   asynchronous ticket and may query its safe surface only after the chunk is ready.
-- Reduce full-modpack fresh-world genesis for 20 authored regions from ~174 seconds to at most 30 seconds.
+- Keep full-modpack fresh-world genesis bounded and fail closed; one strict mountain region must plan within 30 seconds. A separate density redesign is required before restoring the 20-region/10,000-block target.
 - Use biome-footprint horizontal selection, bounded five-point settlement surveys, dry-footprint mine resolution, and ready current-chunk heightmaps for local worldgen adaptation; railway planning performs zero terrain-height scans.
 
 ## Constraints/Assumptions
 - Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
 - `pale-mirror-domain` remains free of Minecraft, NeoForge, persistence and adapters.
-- Existing schema-v35 and older worlds are intentionally unsupported; the development server world will be replaced.
-- The new product profile requires Pale Mirror Core, Pale Mirror Visuals, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16. Create remains an industrial-upgrade integration.
+- Every pre-v37 world is intentionally unsupported; the development server world will be replaced.
+- The product profile requires Pale Mirror Core, Pale Mirror Visuals, Create 6.0.10, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16.
 - Millénaire is absent from the active private-pack profile after an observed 32-second village-chunk stall;
   its read-only adapter remains an optional compatibility surface and reports `ABSENT` by design.
 - Ordinary loaded ecology is intentionally sparse: ambient hostile attempts use a 0.20 acceptance chance and
@@ -27,9 +27,9 @@
 - The settlement generator uses a bounded deterministic hybrid grammar: procedural radial plan and road graph plus curated authored NBT modules. It does not use an unconstrained jigsaw walk.
 - The fort has a civic core, two functional rings, wooden palisade, freight gate/depot and at least six reserved development plots. Nominal diameter is 176 blocks and maximum footprint 192.
 - Terrain placement prefers dry sites with sampled relief at most 8 blocks, rejects water/extreme terrain, and permits a bounded dry fallback up to 24 blocks only after the preferred candidate fails.
-- A pure hierarchical selector chooses all configured sites together. Cheap biome-footprint ranking precedes at most six exact center/cardinal settlement surveys per selected or reserve center, with at most eight deterministic reserve centers. Each mine searches deterministic cardinal candidates, rejects water across its complete surface entrance/loading-yard footprint, permits at most twelve exact surface/ocean-floor validations, and has no wet fallback; an island center is skipped and underground workings may pass below waterways. Genesis fails if the reserve cannot produce the requested count. The railway never scans terrain height. Hard map radius and minimum spacing remain enforced. The first accepted region remains 1024–2048 blocks from spawn.
-- Canonical railway elevation is a deterministic grade-safe interpolation between depot and mine anchors. Current-chunk `WORLD_SURFACE_WG` data controls only local cut/fill/support representation and never changes route identity or requests another chunk.
-- Mine17 is 384–512 blocks from the freight gate; Red Valley is 512–768 blocks away. The complete primary route plan exists at region genesis and materializes as its chunks naturally generate/load.
+- One immutable `RegionPlacementProfile` owns search bands/budgets, settlement terrain, typed site constraints/relations and route policy; layout grammars consume it explicitly. The iron profile preserves bounded foothill ranking, six exact settlement surveys, sixteen reserve centers, two dry mountain sites with 32-block rise/24 exact validations, nine rail alternatives, one-in-four grade, map spacing and a first region 1024–4096 blocks from spawn.
+- Canonical railway geometry uses three bounded dry control-point surveys and a grade-safe path between depot and loading endpoint. Current-chunk `WORLD_SURFACE_WG` data controls local cut/fill/support representation and never changes route identity or requests another chunk.
+- A region is accepted only when its shelf has two dry mountain-native MineSites. Mine17 is 160–320 blocks from the settlement; Red Valley is 320–560 blocks away. Both require nearby mountain-biome evidence and a continuous sampled 32-block rise. The complete primary route plan exists at region genesis and materializes as its chunks naturally generate/load.
 - Three initial climate families share one grammar and role catalog but use climate palettes and local variants: temperate, cold/taiga and dry/arid.
 - The starting population is 48: 20 civilians, 14 workers, 4 specialists, 6 guards and 4 children. Each has stable identity, name, home and workplace/patrol assignment.
 - Vanilla villagers are physical carriers. Exact Villager Overhaul supplies loaded guard/farmer behavior through one isolated fail-closed adapter; PM owns roles, population, defence, deaths and off-screen outcomes.
@@ -49,30 +49,27 @@
 
 ## State
 ### Done
-- Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; schema v36 intentionally rejects all older worlds.
+- Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; schema v37 intentionally rejects all older worlds.
 - Replaced the crash-prone loaded-chunk genesis materializer with an asynchronous immutable catalog and a chunk-local worldgen Feature. Static settlement, MineSite and baseline-rail geometry is no longer written from `ChunkEvent.Load` or the normal server tick.
 - Added persisted chunk generation stamps, readiness/status SPI, player admission gating, authored MineSite adoption and worldgen-only baseline-rail provenance registration.
 - Added the shared runtime work coordinator with configurable 3 ms / 256-op defaults, staggered cadences and operator telemetry.
 - Replaced full chunk-volume rail scans with event-driven bounded graph traversal, full loaded-entity ambient counts with Minecraft `SpawnState`, repetitive visual projections with revision suppression, and repeated Threat Heart scans with UUID indexing.
 - Kept all 48 authored residents visible while limiting expensive nearby vanilla AI to 16 role-prioritized carriers by default; the AI limit/radius are visual-only configuration.
 - Added persisted immutable manifests, generator-only terrain survey, deterministic three-region grammar, three climate palettes, radial forts, six expansion plots and curated private NBT modules with provenance.
-- Replaced per-region terrain searches with a configurable 1–64 region batch selector. The default remains three; a 20-region/10,000-block unit profile is deterministic, spacing-safe and capped below 6,000 unique survey samples.
-- Replaced pointwise site/rail height scanning with cheap biome-footprint ranking, bounded exact settlement and mine validation, and zero rail probes. MineSite placement now rejects ocean/river/coast coverage across the complete authored surface yard and confirms its entrance has no water column before selection. Rail elevation is interpolated between exact endpoints; naturally generating chunks use only their ready local heightmap for cut/fill/support representation.
+- Replaced per-region terrain searches with a configurable 1–64 region batch selector. The default remains three; a 20-region/10,000-block unit profile is deterministic and spacing-safe while exact height work remains bounded separately from cheap biome sampling.
+- Replaced pointwise site/rail height scanning with profile-driven cheap biome ranking, bounded exact settlement/site validation and bounded route controls. Iron MineSites reject wet yards and flat terrain; naturally generating chunks use only their ready local heightmap for local representation.
 - Replaced automatic observed-village campaign binding when Visuals is installed; core registers authored communities, places, facilities, sites, route contracts and exact 48-person PM-owned cohort state.
 - Added stable resident UUID commissioning, canonical-growth-only breeding, confirmed-death reconciliation and the isolated exact Villager Overhaul guard/worker/recruitment bridge.
 - Added the GeckoLib Threat Heart, four projected threat stages, infection sound/particles and depot crisis/recovery/prosperity cues. Core remains authoritative.
 - Removed first-generation mine force-loading; authored settlement work, MineSites and baseline rail work advance from naturally loaded chunks only.
-- Cut every long-lived representation over to the shared schema-v36 materialization registry, guarded gateway, exact semantic cells and parcel ledger.
+- Cut every long-lived representation over to the shared schema-v37 materialization registry, guarded gateway, exact semantic cells and parcel ledger.
 - Added explicit influence/community/public-infrastructure/reserved/player-lease parcels; player work becomes PM-managed only through an explicit commissioning permit.
 - Added canonical `WorldJourney`, deterministic off-screen travel/risk, exclusive stable-resident identity leases, bounded nearby physical groups and canonical return journeys.
-- Made the GeckoLib Threat Heart the sole product controller backed by PM combat state; the zombie anchor remains core-only test infrastructure.
 - Added reserved shelter candidates, selected/fallback refugee camps, staged authored damage, exact reconstruction and plot-based positive-development projects.
 - Added terrain-costed, grade-safe persisted baseline rail paths with arbitrary turns, loaded-chunk construction and topology-based player reroute adoption.
-- Added Visuals planner tests, 6 Visuals GameTests including deterministic chunk-local catalog compilation, powered-rail corner regression, vegetation cleanup and biome-feature registration under exact Sable 2.0.3, JAR verification, and a clean packaged Core+Visuals two-start harness that exercises natural generation plus persisted stamps. All 39 Core GameTests and all 6 Visuals GameTests pass.
-- Fixed the previously flaky multi-chunk player-reroute GameTest by observing both dirty chunks.
-- Extracted the experimental SPI into `pale-mirror-api`; Visuals can no longer compile against domain or Core internals, while the final Core JAR explicitly embeds the API and domain outputs.
+- Added Visuals planner tests, 7 Visuals GameTests including deterministic chunk-local compilation, blueprint sanitizing, powered-rail corners, vegetation cleanup and biome-feature registration under exact Sable 2.0.3, plus JAR and packaged two-start verification. All 39 Core and 7 Visuals GameTests pass.
 - Made `WorldState` collection views immutable and mutations package-private; production mutations cross `DomainCommandExecutor`/`DomainTransaction`, while a codec-only hydration builder rejects duplicate persisted identities.
-- Added schema-v36 canonical and physical integrity validation on load and save, typed command failures, atomic aggregate registration and command-owned Narrator evaluation/reset/registration paths.
+- Added schema-v37 canonical and physical integrity validation on load and save, typed command failures, atomic aggregate registration and command-owned Narrator evaluation/reset/registration paths.
 - Added a configurable ephemeral NeoForge ambient-spawn budget that strongly reduces natural hostiles and
   moderately reduces natural fauna without deleting existing entities or suppressing authored content.
 - Added indexed settlement-influence ecology protection: natural/chunk-generation/patrol monsters and
@@ -80,44 +77,44 @@
   suppressing explicit PM encounters/spawners. Fresh genesis removes bounded natural vegetation before modules.
 - Bound every semantic slot to one explicit parcel, added postcondition rollback, rejected duplicate current materialization jobs and compacted terminal jobs into bounded receipts.
 - Bounded detailed causal history and terminal journeys with persisted summaries; shared output now uses deterministic demand/weight allocation rather than route-ID priority.
-- Split command registration, runtime combat and test-mine persistence out of oversized coordinators; added Java style, portable-path and 500-line debt gates.
 - Replaced blocking debug teleport height queries with a single bounded asynchronous FULL-chunk ticket; requests
   report progress, cancel on disconnect/replacement/timeout/shutdown, and teleport only after readiness.
-- Extended fresh settlement cleanup with a six-block cleanup-only halo and 32-block vertical scan for tree crowns,
-  logs, vines, cocoa, moss, cave plants and tagged beehives without grading or claiming neighbouring ground.
-- Verification: domain/unit and `check` pass; 39 Core and 6 Visuals GameTests pass; distribution JAR checks, clean packaged Core crash/restart and packaged Core+Visuals two-start harnesses pass.
-- The previous schema-v35 playtest world is intentionally obsolete and must not be reused.
+- Extended fresh settlement cleanup with a six-block cleanup-only halo and fixed 64-block vertical scan for tree crowns,
+  logs, vines, cocoa, moss, cave plants and tagged beehives without grading or claiming neighbouring ground. The
+  scan deliberately ignores the post-grading surface heightmap, which may already have collapsed below leftover foliage.
 
 ### Now
-- The bounded dry-mine optimization is implemented. Visual definition v5, catalog v5 and genesis SavedData
-  schema v5 intentionally reject/rebuild every earlier Visuals world; the playtest world is disposable.
-- A clean packaged Sable 20-region run on seed `3374619285067712046` planned all regions in 1.758 seconds:
-  310 exact site probes, 40 mine probes, zero rail probes, 350 unique heights, 1,833 biome samples and
-  2,900 compiled chunk slices. The former private-modpack run took 174.346 seconds and 4,868 heights.
-- The current clean full-modpack playtest world uses seed `821493607251840173`; it planned 20 dry-mine
-  regions in 13.558 seconds using 435 exact site probes, 52 mine probes, zero rail probes, 539 unique
-  heights, 59 discarded sites and three rejected region centers. Cleanup-halo catalog `06f6be1bb1d004d2`
-  has 3,421 chunk slices.
-- The closest authored settlement in this world is `952 78 1096`.
-- Deterministic selection, spacing, fail-closed terrain handling, bounded dry MineSite resolution, grade-safe rail interpolation and current-column earthwork have
-  focused regression coverage. Core and Visuals GameTests plus packaged restart harnesses pass.
-- The 30-second full-modpack planning gate is closed with 21x observed speedup over the former 174-second run.
-- Core SHA-512 `c7dcaa98...d7befc1` and Visuals SHA-512 `5598c504...cf2296cd` are deployed to the server
-  and private client host; the replacement world reached `Done (21.154s)` and the service is running.
+- The mountain-native mine cutover and reusable placement-profile boundary are implemented. Core schema v37, Visual definition v6, catalog v7 and
+  genesis SavedData schema v6 intentionally reject every earlier world; the playtest world is disposable.
+- `AuthoredMineSitePlan` now pins each portal, loading endpoint, controller, bounds, orientation, initial/staged
+  modules and semantic volumes. Mine17 composes a large industrial mountain complex from pinned private
+  Dungeons Arise/IDAS/Terralith assets; imported entities, block-entity data, loot, explosives, spawners and ore are inert.
+- Red Valley starts as a small adit with a degraded dispatch endpoint. A discovered supply crisis exposes an
+  Atlas decision that reserves 12 canonical IRON and builds foundation, shell, Create machinery and commissioning
+  stages through Core semantic jobs. Overlapping stages pass forward only their exact PM-owned postconditions;
+  player changes remain guarded. Route proof and resource flow remain blocked until the site is operational.
+- The full private modpack seed `3374619285067712046` planned one strict mountain-native region in
+  18.230 seconds: 465 exact site probes, 370 mine probes, 9 rail probes, 660 unique heights and 78,031
+  cheap biome samples. Its authored settlement is `2408 75 3320`; catalog readiness is confirmed.
+- The same strict profile fails closed at 3/10,000 and 20/10,000 on this seed because too few surveyed
+  centers have two valid dry mountain sectors. Scaling density now requires a planner/profile redesign,
+  not more height probes or silently weaker terrain constraints.
+- Deterministic selection, spacing, fail-closed mountain terrain, dry MineSites, grade-safe rail interpolation,
+  blueprint sanitizing and current-column earthwork have focused regression coverage.
 - Atlas cards render known settlement coordinates from the server-owned projection. Unit/check/guardrail/JAR
-  gates, 39 Core plus 6 Visuals GameTests, and the packaged Visuals two-start harness pass for settlement
+  gates, 39 Core plus 7 Visuals GameTests, and the packaged Visuals two-start harness pass for settlement
   territory protection and genesis cleanup.
 
 ### Next
-- Inspect graded settlement vegetation and nighttime ambient spawning in a fresh graphical-client world.
+- Run a fresh graphical-client seed matrix for foothill selection, mine/rail composition, isolated Create kinetics,
+  Red Valley staged construction and real-train proof.
 
 ## Open questions
-- UNCONFIRMED: final visual quality and playability until a real client visits naturally generated temperate/cold/dry regions after the v36 cutover.
+- UNCONFIRMED: final visual quality and playability until a real client visits naturally generated temperate/cold/dry mountain regions after the v37 cutover.
 - The exact VO public surface plus one fail-closed recruitment mixin loads in GameTest and packaged server; live patrol/combat quality still needs client playtesting.
 - Public redistribution remains out of scope; re-audit all imported asset and dependency licences before changing that assumption.
 
 ## Working set
-- `AGENTS.md`, `architecture.yml`, `settings.gradle`, `build.gradle`
-- `pale-mirror-api`, domain `WorldState`/commands/history, `PaleMirrorSavedData`, materialization ledgers/gateway/jobs
-- `PaleMirrorRuntime`, `PaleMirrorEvents`, resource flow and projection publishers
+- `AGENTS.md`, `architecture.yml`, Gradle build
+- `pale-mirror-api`, domain state/commands/history, SavedData/materialization, runtime/events and projections
 - `pale-mirror-visuals`, authored-region manifest/genesis, residents, VO bridge and Threat Heart

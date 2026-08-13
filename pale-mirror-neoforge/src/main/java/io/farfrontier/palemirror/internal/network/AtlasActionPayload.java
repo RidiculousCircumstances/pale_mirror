@@ -28,7 +28,8 @@ public record AtlasActionPayload(Action action, String targetId) implements Cust
     public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
     public enum Action {
-        ACCEPT_SCENARIO, DECLINE_SCENARIO, PREPARE_EVACUATION, BEGIN_EVACUATION;
+        ACCEPT_SCENARIO, DECLINE_SCENARIO, PREPARE_EVACUATION, BEGIN_EVACUATION,
+        COMMISSION_ALTERNATE_DISPATCH;
 
         static Action fromOrdinal(int ordinal) {
             if (ordinal < 0 || ordinal >= values().length) throw new IllegalArgumentException("Unknown Atlas action");

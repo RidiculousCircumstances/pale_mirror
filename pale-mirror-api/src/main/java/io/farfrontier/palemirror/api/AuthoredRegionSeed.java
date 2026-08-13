@@ -7,7 +7,7 @@ import java.util.Objects;
 public record AuthoredRegionSeed(String planId, String archetypeId, int definitionVersion, String contentHash,
                                  String dimensionId, String climate, String palette, VisualPoint anchor,
                                  VisualBounds settlementBounds, VisualPoint freightGate, VisualPoint receivingDepot,
-                                 VisualPoint primaryMine, VisualPoint alternateMine,
+                                 AuthoredMineSitePlan primaryMineSite, AuthoredMineSitePlan alternateMineSite,
                                  List<VisualPoint> baselineRailNodes, List<VisualModulePlacement> modules,
                                  List<ResidentSeed> residents, List<VisualBounds> expansionPlots,
                                  List<VisualPoint> shelterCandidates) {
@@ -23,8 +23,12 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
         Objects.requireNonNull(settlementBounds, "settlementBounds");
         Objects.requireNonNull(freightGate, "freightGate");
         Objects.requireNonNull(receivingDepot, "receivingDepot");
-        Objects.requireNonNull(primaryMine, "primaryMine");
-        Objects.requireNonNull(alternateMine, "alternateMine");
+        Objects.requireNonNull(primaryMineSite, "primaryMineSite");
+        Objects.requireNonNull(alternateMineSite, "alternateMineSite");
+        if (primaryMineSite.role() != AuthoredMineRole.PRIMARY
+                || alternateMineSite.role() != AuthoredMineRole.ALTERNATE) {
+            throw new IllegalArgumentException("Authored region requires primary and alternate MineSite roles");
+        }
         baselineRailNodes = List.copyOf(baselineRailNodes);
         modules = List.copyOf(modules);
         residents = List.copyOf(residents);
@@ -35,6 +39,9 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
         if (baselineRailNodes.size() < 2) throw new IllegalArgumentException("Baseline railway requires a path");
         if (shelterCandidates.size() < 2) throw new IllegalArgumentException("Authored frontier requires shelter candidates");
     }
+
+    public VisualPoint primaryMine() { return primaryMineSite.portal(); }
+    public VisualPoint alternateMine() { return alternateMineSite.portal(); }
 
     private static void require(String value, String field) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(field + " is required");

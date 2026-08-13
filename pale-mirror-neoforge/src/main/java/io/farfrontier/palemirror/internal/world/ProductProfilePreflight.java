@@ -22,6 +22,7 @@ public final class ProductProfilePreflight {
         requireMod("geckolib", "4.9.2");
         requireMod("villageroverhaul", "3.10.17.16");
         requireMod("supplementaries", null);
+        requireMod("create", "6.0.10");
         var provider = PaleMirrorVisuals.provider().orElseThrow(() ->
                 new IllegalStateException("Product profile requires a registered Pale Mirror Visuals provider"));
         AdapterHealth health = provider.health();

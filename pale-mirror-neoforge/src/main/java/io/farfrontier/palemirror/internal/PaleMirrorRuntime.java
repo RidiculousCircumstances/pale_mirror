@@ -25,6 +25,7 @@ import io.farfrontier.palemirror.internal.content.ThreatTierDefinitions;
 import io.farfrontier.palemirror.internal.debug.RuntimeDebugController;
 import io.farfrontier.palemirror.internal.world.CampaignRegionBootstrapper;
 import io.farfrontier.palemirror.internal.world.RegionalLogisticsRuntime;
+import io.farfrontier.palemirror.internal.world.RegionBindings;
 import io.farfrontier.palemirror.internal.world.SettlementObservationRuntime;
 import io.farfrontier.palemirror.internal.presentation.CampaignPresentationRuntime;
 import io.farfrontier.palemirror.internal.presentation.RegionalJournal;
@@ -223,6 +224,25 @@ public final class PaleMirrorRuntime {
     }
     public boolean issueRefugeeAnchor(ServerPlayer player, String communityId) {
         return evacuation.issue(player, communityId);
+    }
+
+    public boolean commissionAlternateDispatch(String communityId, StoryAudienceId audience, String causationId) {
+        try {
+            WorldObjectId community = new WorldObjectId(communityId);
+            var region = data.worldState().livingRegions().stream()
+                    .filter(value -> value.communityId().equals(community))
+                    .filter(value -> value.primaryAudience() == null || value.primaryAudience().equals(audience))
+                    .findFirst().orElse(null);
+            if (region == null) return false;
+            RegionBindings bindings = RegionBindings.fromRegionId(region.id());
+            List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.PlanAlternateDispatch(
+                    community, bindings.alternateDispatchSiteId(), 12, causationId));
+            handleDomainEvents(events);
+            if (!events.isEmpty()) data.setDirty();
+            return !events.isEmpty();
+        } catch (IllegalArgumentException | IllegalStateException rejected) {
+            return false;
+        }
     }
 
     public boolean placeRefugeeAnchor(ServerPlayer player, net.minecraft.core.BlockPos anchor, ItemStack stack) {

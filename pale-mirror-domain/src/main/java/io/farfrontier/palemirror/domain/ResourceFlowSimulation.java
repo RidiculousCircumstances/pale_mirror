@@ -45,11 +45,16 @@ public final class ResourceFlowSimulation {
         state.routeContracts().stream().sorted(Comparator.comparing(RouteContract::id)).forEach(contract -> {
             SiteAffiliation origin = state.siteAffiliation(contract.originEndpoint(), SiteAffiliationRole.SUPPLIER).orElse(null);
             SiteAffiliation destination = state.siteAffiliation(contract.destinationEndpoint(), SiteAffiliationRole.RECIPIENT).orElse(null);
+            WorldSite originSite = state.site(contract.originEndpoint()).orElse(null);
+            WorldSite destinationSite = state.site(contract.destinationEndpoint()).orElse(null);
             SettlementEconomy economy = destination == null ? null : state.economy(destination.objectId()).orElse(null);
             ResourceAccount account = economy == null ? null : economy.accounts().get(contract.resource());
             SettlementCommunity community = destination == null ? null : state.community(destination.objectId()).orElse(null);
             int capacity = contract.transferableCapacity(state.simulationStep());
-            if (origin == null || destination == null || account == null || community == null || capacity <= 0) return;
+            if (origin == null || destination == null || originSite == null || destinationSite == null
+                    || originSite.operationalState() != OperationalState.OPERATIONAL
+                    || destinationSite.operationalState() != OperationalState.OPERATIONAL
+                    || account == null || community == null || capacity <= 0) return;
             int consumption = community.rationing() ? account.rationedConsumption() : account.baseConsumption();
             int demand = Math.max(0, account.capacity() - account.stock() + consumption - account.production());
             if (demand <= 0) return;

@@ -26,18 +26,22 @@ public final class VisualProjectionPublisher {
             var place = data.worldState().place(region.placeId()).orElse(null);
             var economy = data.worldState().economy(region.communityId()).orElse(null);
             var development = data.worldState().settlementDevelopment(region.communityId()).orElse(null);
+            var alternateDispatch = data.worldState().site(RegionBindings.fromRegionId(region.id())
+                    .alternateDispatchSiteId()).orElse(null);
             if (facility == null || community == null || place == null || economy == null) continue;
             var iron = economy.require(ResourceKind.IRON);
             long revision = revision(facility.desiredRevision(), facility.status().name(),
                     place.structuralIntegrity().name(), iron.availability().name(), community.crisisState().name(),
                     development == null ? "NONE" : Integer.toString(development.prosperity()),
-                    facility.threatTier().name());
+                    facility.threatTier().name(), alternateDispatch == null ? "UNKNOWN"
+                            : alternateDispatch.operationalState().name());
             String projectionKey = "visual:" + facility.id().value();
             if (changed(server, projectionKey, revision)) provider.applyProjection(server.overworld(),
                     new VisualStateProjection(facility.id().value(), facility.desiredRevision(), revision,
                             facility.status().name(), place.structuralIntegrity().name(), iron.availability().name(),
                             community.crisisState().name(), development == null ? "NONE"
-                            : Integer.toString(development.prosperity()), facility.threatTier().name()));
+                            : Integer.toString(development.prosperity()), facility.threatTier().name(),
+                            alternateDispatch == null ? "UNKNOWN" : alternateDispatch.operationalState().name()));
         }
         publishJourneys(server, data, provider);
     }

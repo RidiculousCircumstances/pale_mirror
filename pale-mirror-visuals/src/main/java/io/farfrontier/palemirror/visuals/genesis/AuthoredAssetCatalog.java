@@ -10,7 +10,7 @@ import java.util.Map;
 
 /** Fail-closed versioned catalog for mandatory private structure assets. */
 public final class AuthoredAssetCatalog {
-    public static final String VERSION = "pale-mirror-authored-v36-1";
+    public static final String VERSION = "pale-mirror-authored-v37-mountain-1";
     private static final Map<String, String> HASHES = hashes();
     private static volatile String cachedFailure;
     private static volatile boolean verified;
@@ -54,5 +54,17 @@ public final class AuthoredAssetCatalog {
         values.put(family + "/stable", "3fcd1b31686f4844158a593271aaa1b2f0e2c18d15227d941ffc72565b1f457f");
         values.put(family + "/workshop_1", "a329234accba56c3a3cc9eb195a074f156d5152851f4d2be7899e27d1d986bfe");
         values.put(family + "/workshop_2", "fc54cac05ead56363da4a8c25f8beb5420ec306f6b54505980d95ddc6283d9d1");
+        values.put(family + "/mine/portal_hoist", "55eb5727cb8ee50190aa939d355be0fa2418f3db94bd0f2fd23aed7ecfb87b67");
+        values.put(family + "/mine/processing_hall", "1f2643aaca7b9942d111e9897d6196a6ec546500a3d03e24b91a0c6dcc8087d1");
+        values.put(family + "/mine/power_house", "bd30bfd71797536524d47aadf88637ef435476b2a30e6aaf83222a21491038db");
+        values.put(family + "/mine/loading_yard", "39101966fac98385536e8623cc8c621269282da3b30aa9083f7b76f2e21bda4c");
+        values.put(family + "/mine/entrance_adit", "9f4d2d29abe643289f5ce6dec593e783e713721c6f3eef71ff2219e5e1a426ab");
+        values.put(family + "/mine/crew_outpost", "06d5d4e5c0fdb789af54ae3225b9122e4aed69013c74f7208376880ea739e2e8");
+        values.put(family + "/mine/iron_gallery", "814e2337188b08f46d65a4c72300ce3f6a1efcaae47e98128716f79940ac856d");
+        values.put(family + "/mine/controller_chamber", "3d9ea21e44d55f11821df2221981d28b742719e2fa172deac10b30d516fb153c");
+        values.put(family + "/mine/dispatch_foundation", "2cc13887b3a5342d425303d65e5070a6a76aaef6554dba24f28a7389685c359a");
+        values.put(family + "/mine/dispatch_shell", "1f2643aaca7b9942d111e9897d6196a6ec546500a3d03e24b91a0c6dcc8087d1");
+        values.put(family + "/mine/dispatch_machinery", "c2316b2311e7d67988ae65d04c1c8289989a05b58dce29ac805ad2ab630223c8");
+        values.put(family + "/mine/dispatch_commissioning", "39101966fac98385536e8623cc8c621269282da3b30aa9083f7b76f2e21bda4c");
     }
 }

@@ -55,3 +55,10 @@ type="required"
 versionRange="[1.21-3.5.18,)"
 ordering="AFTER"
 side="BOTH"
+
+[[dependencies.pale_mirror_visuals]]
+modId="create"
+type="required"
+versionRange="[6.0.10]"
+ordering="AFTER"
+side="BOTH"

@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.internal.settlement;
 
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
+import io.farfrontier.palemirror.api.StagedVisualModule;
+import io.farfrontier.palemirror.api.VisualBlockPlacement;
 import io.farfrontier.palemirror.api.PaleMirrorVisuals;
 import io.farfrontier.palemirror.api.ParcelKind;
 import io.farfrontier.palemirror.api.SemanticSlotKey;
@@ -38,7 +40,7 @@ import net.minecraft.world.level.block.state.BlockState;
 final class AuthoredSettlementProjectRuntime {
     private static final String STRUCTURAL_CHANNEL = "settlement_structure";
     private static final String DEVELOPMENT_CHANNEL = "settlement_development";
-    private static final String VERSION = "authored-project-v35-1";
+    private static final String VERSION = "authored-project-v37-mountain-1";
     private AuthoredSettlementProjectRuntime() { }
 
     static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
@@ -69,8 +71,84 @@ final class AuthoredSettlementProjectRuntime {
             if (expansion != null && expansion.state() == DevelopmentIntentState.MATERIALIZING) {
                 changed |= expansion(level, data, commands, expansion);
             }
+            DevelopmentIntent dispatch = intent(data, region.communityId(),
+                    DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH);
+            if (dispatch != null && dispatch.state() == DevelopmentIntentState.MATERIALIZING) {
+                changed |= alternateDispatch(level, data, commands, provider, seed, dispatch);
+            }
         }
         return changed;
+    }
+
+    private static boolean alternateDispatch(ServerLevel level, PaleMirrorSavedData data,
+                                               DomainCommandExecutor commands,
+                                               io.farfrontier.palemirror.api.VisualProvider provider,
+                                               AuthoredRegionSeed seed, DevelopmentIntent intent) {
+        var stages = seed.alternateMineSite().stagedModules();
+        if (stages.isEmpty()) {
+            commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(),
+                    "Alternate MineSite has no staged dispatch blueprint"));
+            return true;
+        }
+        for (int index = 0; index < stages.size(); index++) {
+            StagedVisualModule stage = stages.get(index);
+            String channel = "alternate_dispatch_stage_" + index;
+            String binding = AuthoredBlueprintSlots.binding(seed, stage);
+            ParcelRecord parcel = data.parcels().parcels().stream()
+                    .filter(value -> value.bindingId().equals(binding)).findFirst().orElse(null);
+            if (parcel == null) {
+                commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(),
+                        "Missing reserved parcel for " + stage.stage()));
+                return true;
+            }
+            if (!allChunksLoaded(level, parcel.min(), parcel.max())) return false;
+            var snapshot = provider.compileAuthoredModule(stage).orElse(null);
+            if (snapshot == null) {
+                commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(),
+                        "Cannot compile authored stage " + stage.stage()));
+                return true;
+            }
+            List<SemanticSlotKey> slots = AuthoredBlueprintSlots.keys(data, seed, stage);
+            int expectedParts = (snapshot.blocks().size() + 1_023) / 1_024;
+            if (slots.size() != expectedParts) return false;
+            if (parcel.kind() == ParcelKind.RESERVED) {
+                parcel.commissionCommunity("development-intent:" + intent.id());
+                slots.forEach(key -> data.semanticSlots().find(key).orElseThrow().commissionCommunity());
+            }
+            MaterializationJob job = ensureJob(data, intent.targetSiteId().value(), channel,
+                    MaterializationJobClass.CAPABILITY, index + 1L,
+                    "pale_mirror:alternate_dispatch_" + stage.stage(), slots);
+            Map<Long, BlockState> desired = snapshot.blocks().stream().collect(Collectors.toMap(
+                    value -> block(value.position()).asLong(), VisualBlockPlacement::state, (left, right) -> right));
+            boolean changed = runOne(level, data, job, cell -> desired.getOrDefault(
+                    cell.position().asLong(), cell.lastAppliedState()));
+            if (job.state() == JobState.BLOCKED) {
+                commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), job.lastError()));
+                return true;
+            }
+            if (job.state() != JobState.COMPLETED) return changed;
+            advanceFutureStagePreconditions(data, seed, stages, index, desired);
+        }
+        commands.execute(data.worldState(), new DomainCommand.CompleteDevelopmentIntent(intent.id()));
+        return true;
+    }
+
+    /**
+     * A later blueprint may deliberately replace cells written by an earlier stage. Transfer only the exact
+     * PM-authored postcondition; never bless the currently observed world state, which may contain a player edit.
+     */
+    private static void advanceFutureStagePreconditions(PaleMirrorSavedData data, AuthoredRegionSeed seed,
+                                                         List<StagedVisualModule> stages, int completedIndex,
+                                                         Map<Long, BlockState> completedDesired) {
+        for (int index = completedIndex + 1; index < stages.size(); index++) {
+            for (SemanticSlotKey key : AuthoredBlueprintSlots.keys(data, seed, stages.get(index))) {
+                SemanticSlotRecord slot = data.semanticSlots().find(key).orElseThrow();
+                for (SemanticCellRecord cell : slot.cells()) {
+                    BlockState expected = completedDesired.get(cell.position().asLong());
+                    if (expected != null) cell.applied(expected);
+                }
+            }
+        }
     }
 
     private static boolean structural(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,

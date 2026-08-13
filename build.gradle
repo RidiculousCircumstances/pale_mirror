@@ -77,7 +77,7 @@ def trackedFiles = providers.exec {
 def requiredArchitectureStatements = [
         'Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations.',
         'Production code mutates canonical WorldState only through a DomainCommandExecutor transaction; collection views are immutable, package-private mutation is reserved for the command processor, and persistence hydration is isolated to codecs.',
-        'Schema-v36 snapshots are accepted only after canonical aggregate and physical-projection validation; orphan references, duplicate active jobs and mismatched exact parcel bindings fail closed before save or after hydration.',
+        'Schema-v37 snapshots are accepted only after canonical aggregate and physical-projection validation; orphan references, duplicate active jobs and mismatched exact parcel bindings fail closed before save or after hydration.',
         'Detailed domain history, terminal journeys and terminal materialization jobs have fixed upper bounds; deterministic summaries and receipts preserve aggregate causality without allowing server-lifetime growth.',
         'Shared facility output is allocated deterministically across active routes by destination demand and explicit route weight; route identity is used only for stable remainder ordering and never as economic priority.',
         'Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.',
@@ -86,7 +86,7 @@ def requiredArchitectureStatements = [
         'Unknown or player-owned block changes are conflicts and must not be overwritten by default.',
         'Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.',
         'The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence.'
-        ,'Fresh-world visual genesis is distinct from reconciliation materialization; a dedicated worker compiles deterministic immutable manifests into chunk-addressed slices before players are admitted, and a registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v36 compatibility path.'
+        ,'Fresh-world visual genesis is distinct from reconciliation materialization; a dedicated worker compiles deterministic immutable manifests into chunk-addressed slices before players are admitted, and a registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v37 compatibility path.'
         ,'The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions.'
 ]
 

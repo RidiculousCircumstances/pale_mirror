@@ -57,6 +57,8 @@ public final class PaleMirrorNetwork {
             case PREPARE_EVACUATION -> runtime.issueRefugeeAnchor(player, payload.targetId());
             case BEGIN_EVACUATION -> runtime.beginSettlementEvacuation(payload.targetId(), runtime.audienceFor(player),
                     "atlas:" + player.getUUID());
+            case COMMISSION_ALTERNATE_DISPATCH -> runtime.commissionAlternateDispatch(payload.targetId(),
+                    runtime.audienceFor(player), "atlas:" + player.getUUID());
         };
         reply(player, accepted ? "Decision recorded by Pale Mirror." : "That action is no longer available.", true);
     }

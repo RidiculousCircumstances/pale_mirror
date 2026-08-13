@@ -14,7 +14,7 @@ class FrontierTerrainSurveyTest {
     @Test void batchSelectionIsDeterministicBoundedAndSeparated() {
         FakeTerrain firstTerrain = new FakeTerrain();
         FakeTerrain secondTerrain = new FakeTerrain();
-        FrontierSiteSelector selector = new FrontierSiteSelector();
+        FrontierSiteSelector selector = new FrontierSiteSelector(RegionPlacementProfiles.IRON_FRONTIER);
         List<FrontierSiteSelector.SelectedSite> first = selector.select(
                 991_771L, new VisualPoint(120, 70, -80), 20, 10_000, 1_400, firstTerrain);
         List<FrontierSiteSelector.SelectedSite> second = selector.select(
@@ -32,7 +32,7 @@ class FrontierTerrainSurveyTest {
 
     @Test void twentyRegionSurveyHasHardExactHeightBudget() {
         FakeTerrain terrain = new FakeTerrain();
-        List<FrontierSiteSelector.SelectedSite> sites = new FrontierSiteSelector().select(
+        List<FrontierSiteSelector.SelectedSite> sites = new FrontierSiteSelector(RegionPlacementProfiles.IRON_FRONTIER).select(
                 42L, new VisualPoint(0, 0, 0), 20, 10_000, 1_400, terrain);
         java.util.concurrent.atomic.AtomicInteger mineSamples = new java.util.concurrent.atomic.AtomicInteger();
         FrontierRegionPlanner planner = new FrontierRegionPlanner();
@@ -43,7 +43,9 @@ class FrontierTerrainSurveyTest {
                 return terrain.height(x, z);
             });
         }
-        int hardBudget = 20 * (FrontierSiteSelector.MAX_EXACT_CANDIDATES_PER_REGION
+        int exactCandidateBudget = RegionPlacementProfiles.IRON_FRONTIER.search()
+                .exactSettlementCandidatesPerRegion(20);
+        int hardBudget = 20 * (exactCandidateBudget
                 * FrontierSiteSelector.EXACT_SAMPLES_PER_CANDIDATE + 2);
         assertTrue(terrain.exactSamples + mineSamples.get() <= hardBudget);
         assertEquals(20 * FrontierSiteSelector.EXACT_SAMPLES_PER_CANDIDATE, terrain.exactSamples,
@@ -55,29 +57,34 @@ class FrontierTerrainSurveyTest {
         FakeTerrain terrain = new FakeTerrain();
         terrain.water = true;
         IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
-                new FrontierSiteSelector().select(7L, new VisualPoint(0, 0, 0), 1, 10_000, 1_400, terrain));
+                new FrontierSiteSelector(RegionPlacementProfiles.IRON_FRONTIER).select(
+                        7L, new VisualPoint(0, 0, 0), 1, 10_000, 1_400, terrain));
         assertTrue(failure.getMessage().contains("exact survey budget"));
-        assertEquals(FrontierSiteSelector.MAX_EXACT_CANDIDATES_PER_REGION
+        int exactCandidateBudget = RegionPlacementProfiles.IRON_FRONTIER.search()
+                .exactSettlementCandidatesPerRegion(1);
+        assertEquals(exactCandidateBudget
                 * FrontierSiteSelector.EXACT_SAMPLES_PER_CANDIDATE, terrain.exactSamples);
     }
 
     @Test void unsuitableBiomesNeverSpendExactHeightBudget() {
         FakeTerrain terrain = new FakeTerrain();
         terrain.suitable = false;
-        assertThrows(IllegalStateException.class, () -> new FrontierSiteSelector().select(
+        assertThrows(IllegalStateException.class, () -> new FrontierSiteSelector(RegionPlacementProfiles.IRON_FRONTIER).select(
                 9L, new VisualPoint(0, 0, 0), 1, 10_000, 1_400, terrain));
         assertEquals(0, terrain.exactSamples);
     }
 
     @Test void impossibleMapFailsClosedInsteadOfOverlappingRegions() {
         IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
-                new FrontierSiteSelector().select(7L, new VisualPoint(0, 0, 0), 20, 3_000, 10_000,
+                new FrontierSiteSelector(RegionPlacementProfiles.IRON_FRONTIER).select(
+                        7L, new VisualPoint(0, 0, 0), 20, 3_000, 10_000,
                         new FakeTerrain()));
         assertTrue(failure.getMessage().contains("Cannot place 20 authored regions"));
     }
 
     @Test void missingOptionalReserveDoesNotRejectRequestedSites() {
-        List<FrontierSiteSelector.SelectedSite> sites = new FrontierSiteSelector().selectWithReserve(
+        List<FrontierSiteSelector.SelectedSite> sites = new FrontierSiteSelector(
+                RegionPlacementProfiles.IRON_FRONTIER).selectWithReserve(
                 7L, new VisualPoint(0, 0, 0), 1, 1, 3_000, 10_000, new FakeTerrain());
 
         assertEquals(1, sites.size());
@@ -86,13 +93,21 @@ class FrontierTerrainSurveyTest {
     @Test void mineFootprintRejectsWaterAtTheLoadingYardEdge() {
         VisualPoint mine = new VisualPoint(100, 70, 200);
         FakeTerrain terrain = new FakeTerrain();
-        terrain.waterAt = new VisualPoint(mine.x(), 0, mine.z() + FrontierTerrainSurvey.MINE_MAX_Z);
-        assertTrue(!FrontierTerrainSurvey.dryMineFootprint(mine, terrain));
+        SiteTerrainPolicy minePolicy = RegionPlacementProfiles.IRON_FRONTIER
+                .requireSite(RegionPlacementProfiles.PRIMARY_MINE).terrain();
+        terrain.waterAt = new VisualPoint(mine.x(), 0, mine.z() + minePolicy.footprintHalfExtent());
+        assertTrue(!FrontierTerrainSurvey.siteFootprint(mine, minePolicy, terrain));
     }
 
-    @Test void exactMineSurfaceRejectsWaterColumnAndAcceptsDryGround() {
-        assertTrue(FrontierTerrainSurvey.isDrySurface(72, 72));
-        assertTrue(!FrontierTerrainSurvey.isDrySurface(63, 41));
+    @Test void mineFootprintRequiresNearbyMountainEvidence() {
+        VisualPoint mine = new VisualPoint(100, 70, 200);
+        FakeTerrain terrain = new FakeTerrain();
+        terrain.mountainNetwork = false;
+        SiteTerrainPolicy minePolicy = RegionPlacementProfiles.IRON_FRONTIER
+                .requireSite(RegionPlacementProfiles.PRIMARY_MINE).terrain();
+        assertTrue(!FrontierTerrainSurvey.siteFootprint(mine, minePolicy, terrain));
+        terrain.mountainAt = new VisualPoint(mine.x() + 32, 0, mine.z());
+        assertTrue(FrontierTerrainSurvey.siteFootprint(mine, minePolicy, terrain));
     }
 
     private static long distanceSquared(VisualPoint first, VisualPoint second) {
@@ -106,7 +121,9 @@ class FrontierTerrainSurveyTest {
         private int exactSamples;
         private boolean suitable = true;
         private boolean water;
+        private boolean mountainNetwork = true;
         private VisualPoint waterAt;
+        private VisualPoint mountainAt;
 
         @Override public TerrainSample exactSample(int x, int z) {
             exactSamples++;
@@ -118,7 +135,9 @@ class FrontierTerrainSurveyTest {
             FrontierClimate climate = FrontierClimate.values()[Math.floorMod(
                     (x >> 8) + (z >> 8), FrontierClimate.values().length)];
             boolean localWater = waterAt != null && waterAt.x() == x && waterAt.z() == z;
-            return new FrontierSiteSelector.BiomeSample(climate, suitable && !localWater, localWater || !suitable, 0);
+            boolean mountain = mountainNetwork || mountainAt != null && mountainAt.x() == x && mountainAt.z() == z;
+            return new FrontierSiteSelector.BiomeSample(climate, suitable && !localWater, localWater || !suitable,
+                    0, mountain);
         }
 
         private int height(int x, int z) {

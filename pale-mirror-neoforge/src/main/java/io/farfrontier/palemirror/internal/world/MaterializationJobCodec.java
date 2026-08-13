@@ -16,7 +16,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
-/** Schema-v36 codec for the one global physical-work registry. */
+/** Schema-v37 codec for the one global physical-work registry. */
 final class MaterializationJobCodec {
     private MaterializationJobCodec() { }
 

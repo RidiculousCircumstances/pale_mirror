@@ -1,6 +1,6 @@
 # Pale Mirror runtime performance
 
-Schema v36 has one server-thread admission controller. Non-critical regional,
+Schema v37 has one server-thread admission controller. Non-critical regional,
 railway, settlement and projection work shares a default soft budget of 3 ms
 and 256 weighted operations per tick. Safety-critical combat attribution,
 reconciliation and an already-started idempotent operation are not abandoned
@@ -20,18 +20,19 @@ Authored residents have a separate visual-only AI LOD in
 `pale-mirror-visuals-server.toml`. All 48 stable entities remain visible, but
 only 16 nearby residents run vanilla AI by default.
 
-Fresh-world planning is also bounded. Visuals ranks deterministic horizontal
-candidates through five biome-footprint points without constructing NoiseChunks. An
-accepted region normally spends one exact five-point settlement survey and two exact mine
-anchors; rejected terrain may consume at most six such surveys per requested
-region. Railway elevation is interpolated between those anchors and performs
-zero terrain-height probes. For 20 regions this makes 140 exact probes normal
-and 640 the hard upper bound, versus 4,868 probes and 174 seconds observed in
-the previous full-modpack benchmark. `performance` reports the site, mine and
-rail probe classes separately, along with planning and catalog compile time.
-The packaged Sable profile selected 20 regions from the accepted benchmark
-seed in 1.758 seconds with 310 site probes, 40 mine probes and zero rail probes;
-the larger private-modpack gate remains the release-grade timing measurement.
+Fresh-world planning is also bounded. Visuals samples mountain biomes cheaply,
+derives nearby foothill candidates and ranks their footprint without constructing
+NoiseChunks. An accepted region normally spends one exact five-point settlement
+survey, two bounded mountain-face searches and nine bounded rail-control alternatives.
+Rejected terrain may consume at most six settlement surveys and 24 exact
+candidates per MineSite. The planner never sweeps every route column; local
+cut/fill remains current-chunk worldgen work. `performance` reports site, mine
+and rail probe classes separately, along with planning and catalog compile
+time. The full private modpack selected one strict mountain-native region on seed
+`3374619285067712046` in 18.230 seconds with 465 site probes, 370 mine probes,
+9 rail probes, 660 unique heights and 78,031 cheap biome samples. The same seed
+does not contain enough fully valid dual-mountain centers for 3 or 20 regions
+inside 10,000 blocks; those configurations fail closed and need a density redesign.
 
 For an evidence-grade profile, run the server on JDK 21 and capture JFR:
 

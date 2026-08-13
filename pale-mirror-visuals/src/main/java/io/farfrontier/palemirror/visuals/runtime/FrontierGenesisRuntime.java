@@ -9,6 +9,8 @@ import io.farfrontier.palemirror.visuals.genesis.FrontierGenesisCompiler;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionBatchPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierTerrainSurvey;
+import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfile;
+import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfiles;
 import io.farfrontier.palemirror.visuals.genesis.VisualGenesisAttachments;
 import io.farfrontier.palemirror.visuals.resident.ResidentMaterializer;
 import java.util.IdentityHashMap;
@@ -23,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.network.chat.Component;
+import net.minecraft.gametest.framework.GameTestServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
@@ -56,6 +59,10 @@ public final class FrontierGenesisRuntime {
 
     @SubscribeEvent
     public static void serverStarted(ServerStartedEvent event) {
+        if (event.getServer() instanceof GameTestServer) {
+            PaleMirrorVisualsMod.LOGGER.info("Skipping terrain genesis planning on the synthetic GameTest world");
+            return;
+        }
         ServerLevel level = event.getServer().overworld();
         VisualGenesisSavedData ledger = VisualGenesisSavedData.get(level);
         READINESS.set(new GenesisReadiness(GenesisReadiness.State.PLANNING, 0, "", "Planning authored regions"));
@@ -93,25 +100,27 @@ public final class FrontierGenesisRuntime {
 
     private static List<AuthoredRegionSeed> plan(ServerLevel level) {
         FrontierTerrainSurvey survey = new FrontierTerrainSurvey();
-        FrontierRegionPlanner planner = new FrontierRegionPlanner();
+        RegionPlacementProfile profile = RegionPlacementProfiles.IRON_FRONTIER;
+        FrontierRegionPlanner planner = new FrontierRegionPlanner(profile);
         long started = System.nanoTime();
         int requested = VisualServerConfig.GENESIS_REGION_COUNT.get();
-        int reserve = Math.min(FrontierRegionBatchPlanner.RESERVE_CANDIDATES, 64 - requested);
-        FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, requested, reserve,
+        int reserve = Math.min(profile.search().reserveCandidateCount(),
+                profile.search().maximumRegions() - requested);
+        FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, profile, requested, reserve,
                 VisualServerConfig.GENESIS_MAP_RADIUS.get(), VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
         FrontierRegionBatchPlanner.Result planned = new FrontierRegionBatchPlanner().plan(level.getSeed(), requested,
-                batch.sites(), planner, batch.mineAnchors());
+                profile, batch.sites(), planner, batch.mineAnchors(), batch.railPaths());
         List<AuthoredRegionSeed> manifests = planned.manifests();
         var statistics = batch.statistics();
         planningMetrics = new PlanningMetrics(manifests.size(), System.nanoTime() - started,
                 0L, statistics.cachedHeights(), statistics.heightHits(), statistics.heightMisses(),
-                statistics.siteHeightProbes(), statistics.mineHeightProbes(), statistics.biomeSamples(),
+                statistics.siteHeightProbes(), statistics.mineHeightProbes(), statistics.railHeightProbes(), statistics.biomeSamples(),
                 statistics.discardedSiteCandidates());
         PaleMirrorVisualsMod.LOGGER.info("Batch-planned {} authored regions in {} ms using {} exact site probes, "
-                        + "{} mine probes, 0 rail probes, {} unique heights, {} discarded sites, "
+                        + "{} mine probes, {} rail probes, {} unique heights, {} discarded sites, "
                         + "{} rejected region candidates and {} biome samples",
                 manifests.size(), planningMetrics.elapsedNanos() / 1_000_000L, statistics.siteHeightProbes(),
-                statistics.mineHeightProbes(), statistics.heightMisses(), statistics.discardedSiteCandidates(),
+                statistics.mineHeightProbes(), statistics.railHeightProbes(), statistics.heightMisses(), statistics.discardedSiteCandidates(),
                 planned.rejectedRegionCandidates(), statistics.biomeSamples());
         return manifests;
     }
@@ -223,18 +232,19 @@ public final class FrontierGenesisRuntime {
 
     private record PlanningMetrics(int regions, long elapsedNanos, long compileNanos, int cachedHeights,
                                    long heightHits, long heightMisses, long siteHeightProbes,
-                                   long mineHeightProbes, long biomeSamples, long discardedSiteCandidates) {
-        private static PlanningMetrics empty() { return new PlanningMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0); }
+                                   long mineHeightProbes, long railHeightProbes,
+                                   long biomeSamples, long discardedSiteCandidates) {
+        private static PlanningMetrics empty() { return new PlanningMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); }
         private PlanningMetrics withCompileNanos(long value) {
             return new PlanningMetrics(regions, elapsedNanos, value, cachedHeights, heightHits, heightMisses,
-                    siteHeightProbes, mineHeightProbes, biomeSamples, discardedSiteCandidates);
+                    siteHeightProbes, mineHeightProbes, railHeightProbes, biomeSamples, discardedSiteCandidates);
         }
         private String summary() {
             return "plannedRegions=" + regions + ", planningMs=" + elapsedNanos / 1_000_000D
                     + ", compileMs=" + compileNanos / 1_000_000D
                     + ", terrainHeightMisses=" + heightMisses + ", terrainHeightHits=" + heightHits
                     + ", exactSiteHeightProbes=" + siteHeightProbes + ", exactMineHeightProbes=" + mineHeightProbes
-                    + ", railHeightProbes=0, discardedSiteCandidates=" + discardedSiteCandidates
+                    + ", railHeightProbes=" + railHeightProbes + ", discardedSiteCandidates=" + discardedSiteCandidates
                     + ", terrainBiomeSamples=" + biomeSamples + ", cachedTerrainHeights=" + cachedHeights;
         }
     }

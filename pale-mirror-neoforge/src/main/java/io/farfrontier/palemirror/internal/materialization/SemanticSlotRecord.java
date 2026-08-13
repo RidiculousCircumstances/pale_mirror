@@ -45,6 +45,11 @@ public final class SemanticSlotRecord {
         if (permit == null || permit.isBlank()) throw new IllegalArgumentException("Reset permit is required");
         resetPermit = permit;
     }
+    public void commissionCommunity() {
+        if (parcelKind != ParcelKind.RESERVED && parcelKind != ParcelKind.PLAYER_LEASE) {
+            throw new IllegalStateException("Only a reserved semantic slot can be commissioned");
+        }
+        parcelKind = ParcelKind.COMMUNITY;
+    }
     public void completeReset() { conflicted = false; diagnostic = ""; resetPermit = ""; }
-    public void commissionCommunity() { parcelKind = ParcelKind.COMMUNITY; }
 }

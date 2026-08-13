@@ -15,7 +15,7 @@ public record WorldPath(String id, String policyVersion, WorldObjectId originSit
         if (nodes.size() < 2) throw new IllegalArgumentException("World path needs at least two nodes");
         String dimension = nodes.getFirst().dimensionId();
         if (nodes.stream().anyMatch(node -> !Objects.equals(dimension, node.dimensionId()))) {
-            throw new IllegalArgumentException("A v36 WorldPath cannot cross dimensions");
+            throw new IllegalArgumentException("A v37 WorldPath cannot cross dimensions");
         }
     }
 }

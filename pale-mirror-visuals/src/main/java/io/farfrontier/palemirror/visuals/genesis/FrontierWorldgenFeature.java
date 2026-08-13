@@ -16,7 +16,7 @@ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConf
 
 /** Writes only the current WorldGenLevel chunk; ServerLevel and neighbour requests are forbidden. */
 public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfiguration> {
-    static final int VEGETATION_CLEANUP_HEIGHT = 32;
+    static final int VEGETATION_CLEANUP_HEIGHT = 64;
 
     public FrontierWorldgenFeature(Codec<NoneFeatureConfiguration> codec) { super(codec); }
 
@@ -39,9 +39,11 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
 
     /** Runs before authored modules, so their intentional gardens and timber remain untouched. */
     static void clearNaturalVegetation(LevelAccessor level, CompiledChunkSlice.VegetationColumn column) {
-        int top = Math.min(level.getMaxBuildHeight() - 1,
-                level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, column.x(), column.z()) - 1);
-        int last = Math.min(top, column.baseY() + VEGETATION_CLEANUP_HEIGHT);
+        // Do not clamp this pass to WORLD_SURFACE_WG. Grading runs first and may
+        // already have moved that heightmap down to the authored surface while
+        // feature blocks from the former tree crown still exist above it.
+        int last = Math.min(level.getMaxBuildHeight() - 1,
+                column.baseY() + VEGETATION_CLEANUP_HEIGHT);
         for (int y = column.baseY() + 1; y <= last; y++) {
             BlockPos position = new BlockPos(column.x(), y, column.z());
             var state = level.getBlockState(position);

@@ -64,7 +64,8 @@ public final class PaleMirrorAtlasClient {
                          String developmentState, int developmentRequired, int developmentContributed,
                          int developmentRemaining, int developmentWait, int developmentWaitRequired,
                          long remainingGrace, String reachability, int primaryRepairCount,
-                         Position primaryRepair) {
+                         Position primaryRepair, boolean canCommissionAlternate,
+                         String dispatchDevelopmentState) {
         private static Region read(CompoundTag value) {
             return new Region(bounded(value.getString("name"), 64), bounded(value.getString("dimension"), 96),
                     bounded(value.getString("community"), 160), bounded(value.getString("crisis"), 32), value.getInt("iron"),
@@ -85,7 +86,9 @@ public final class PaleMirrorAtlasClient {
                     Math.max(0, value.getInt("developmentContributed")), Math.max(0, value.getInt("developmentRemaining")),
                     Math.max(0, value.getInt("developmentWait")), Math.max(0, value.getInt("developmentWaitRequired")),
                     Math.max(0L, value.getLong("remainingGrace")), bounded(value.getString("reachability"), 32),
-                    Math.max(0, value.getInt("primaryRepairCount")), Position.read(value, "primaryRepair"));
+                    Math.max(0, value.getInt("primaryRepairCount")), Position.read(value, "primaryRepair"),
+                    value.getBoolean("canCommissionAlternate"),
+                    bounded(value.getString("dispatchDevelopmentState"), 32));
         }
     }
 
