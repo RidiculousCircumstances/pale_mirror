@@ -30,6 +30,7 @@ public final class FrontierRegionBatchPlanner {
         int rejected = 0;
         int spacingRejected = 0;
         int nearAccepted = 0;
+        java.util.Map<String, Integer> rejectionReasons = new java.util.LinkedHashMap<>();
         for (FrontierSiteSelector.SelectedSite site : candidates) {
             if (manifests.size() == counts.maximum()) break;
             if (site.nearCandidate() && nearAccepted >= profile.search().maximumNearAcceptedRegions()) continue;
@@ -38,18 +39,22 @@ public final class FrontierRegionBatchPlanner {
                 continue;
             }
             try {
-                manifests.add(planner.plan(worldSeed, manifests.size(), site.terrain().anchor(), site.climate(),
+                manifests.add(planner.plan(worldSeed, manifests.size(), site.terrain(), site.climate(),
                         mineAnchors, railPaths));
                 if (site.nearCandidate()) nearAccepted++;
             } catch (DryMineSiteUnavailableException unavailable) {
                 rejected++;
+                rejectionReasons.merge(unavailable.getMessage(), 1, Integer::sum);
             }
         }
         if (manifests.size() < counts.minimum()) throw new IllegalStateException("Cannot plan minimum "
                 + counts.minimum() + " complete authored regions from " + candidates.size() + " surveyed centers; "
                 + rejected + " lacked bounded dry MineSites and " + spacingRejected
                 + " overlapped accepted-region spacing; accepted centers="
-                + manifests.stream().map(seed -> seed.anchor().x() + "," + seed.anchor().z()).toList());
+                + manifests.stream().map(seed -> seed.anchor().x() + "," + seed.anchor().z()).toList()
+                + "; rejection reasons=" + rejectionReasons.entrySet().stream()
+                        .sorted(java.util.Map.Entry.<String, Integer>comparingByValue().reversed())
+                        .limit(8).toList());
         return new Result(manifests, rejected, spacingRejected, manifests.size() >= counts.target());
     }
 

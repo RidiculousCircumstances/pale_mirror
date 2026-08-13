@@ -24,6 +24,26 @@ public final class ThreatHeartRuntime {
             case "FOOTHOLD" -> 1; case "INFESTED" -> 2; case "SIEGE" -> 3; case "APEX" -> 4; default -> 1;
         };
         if (existing != null) existing.setStage(stage);
+        if (level.getGameTime() % 20L == 0L) {
+            BlockPos portal = new BlockPos(region.primaryMineSite().portal().x(),
+                    region.primaryMineSite().portal().y() + 2, region.primaryMineSite().portal().z());
+            BlockPos loading = new BlockPos(region.primaryMineSite().loadingEndpoint().x(),
+                    region.primaryMineSite().loadingEndpoint().y() + 2,
+                    region.primaryMineSite().loadingEndpoint().z());
+            if (level.hasChunkAt(portal)) {
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL, portal.getX() + 0.5,
+                        portal.getY(), portal.getZ() + 0.5, stage * 3, 2.2, 1.2, 2.2, 0.015);
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.CAMPFIRE_SIGNAL_SMOKE,
+                        portal.getX() + 0.5, portal.getY() - 1, portal.getZ() + 0.5,
+                        Math.max(1, stage - 1), 1.4, 0.3, 1.4, 0.01);
+            }
+            if (stage >= 2 && level.hasChunkAt(loading)) level.sendParticles(
+                    net.minecraft.core.particles.ParticleTypes.ASH, loading.getX() + 0.5, loading.getY(),
+                    loading.getZ() + 0.5, stage * 4, 2.5, 0.8, 2.5, 0.02);
+            if (level.getGameTime() % 100L == 0L && level.hasChunkAt(portal)) level.playSound(null, portal,
+                    net.minecraft.sounds.SoundEvents.AMBIENT_CAVE.value(), net.minecraft.sounds.SoundSource.AMBIENT,
+                    0.8F, 0.65F + stage * 0.05F);
+        }
     }
 
     public ThreatControllerResult ensure(ServerLevel level, ThreatControllerProjection projection) {

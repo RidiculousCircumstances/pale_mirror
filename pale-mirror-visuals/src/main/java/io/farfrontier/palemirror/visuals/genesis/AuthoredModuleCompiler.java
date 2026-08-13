@@ -48,6 +48,7 @@ public final class AuthoredModuleCompiler {
                 int[] rotated = rotate(pos.getInt(0), pos.getInt(2), sx, sz, turns);
                 BlockState state = rotate(states.get(block.getInt("state")), turns);
                 if (state.is(Blocks.STRUCTURE_BLOCK) || state.is(Blocks.JIGSAW)) continue;
+                if (surfaceMachinery(id) && naturalEnclosure(state)) continue;
                 BlockPos world = origin.offset(rotated[0], pos.getInt(1), rotated[1]);
                 VisualPoint position = new VisualPoint(world.getX(), world.getY(), world.getZ());
                 if (!module.footprint().contains(position)) {
@@ -60,6 +61,63 @@ public final class AuthoredModuleCompiler {
         } catch (IOException failure) {
             throw new IllegalStateException("Cannot read authored module " + id, failure);
         }
+    }
+
+    /** Authored, bounded overlay selection shared by damage and pristine reconstruction. */
+    public static VisualModuleSnapshot compileState(VisualModulePlacement module, String state) {
+        VisualModuleSnapshot baseline = compile(module);
+        if (state.equals("INTACT")) return baseline;
+        if (!state.equals("DAMAGED") && !state.equals("RUINED")) {
+            throw new IllegalArgumentException("Unsupported authored module state " + state);
+        }
+        int budget = state.equals("RUINED") ? 48 : 24;
+        List<VisualBlockPlacement> candidates = baseline.blocks().stream()
+                .filter(value -> stateCell(module, value))
+                .sorted(java.util.Comparator.comparingInt((VisualBlockPlacement value) -> -value.position().y())
+                        .thenComparingInt(value -> value.position().x())
+                        .thenComparingInt(value -> value.position().z()))
+                .limit(budget).map(value -> new VisualBlockPlacement(value.position(),
+                        damagedState(value.state(), value.position(), state))).toList();
+        if (candidates.isEmpty()) throw new IllegalStateException("Authored state has no semantic cells: "
+                + module.instanceId());
+        return new VisualModuleSnapshot(module.templateId() + "#" + state.toLowerCase(java.util.Locale.ROOT),
+                module.footprint(), candidates);
+    }
+
+    private static boolean stateCell(VisualModulePlacement module, VisualBlockPlacement value) {
+        VisualPoint position = value.position();
+        VisualPoint min = module.footprint().min(); VisualPoint max = module.footprint().max();
+        boolean perimeter = position.x() <= min.x() + 1 || position.x() >= max.x() - 1
+                || position.z() <= min.z() + 1 || position.z() >= max.z() - 1;
+        boolean upper = position.y() >= min.y() + Math.max(2, (max.y() - min.y()) * 2 / 3);
+        int cadence = module.visualStateProfile().equals("frontier_defence") ? 3
+                : module.visualStateProfile().equals("frontier_freight") ? 4 : 5;
+        return (perimeter || upper) && Math.floorMod(module.instanceId().hashCode()
+                + position.x() * 31 + position.y() * 17 + position.z(), cadence) == 0;
+    }
+
+    private static BlockState damagedState(BlockState baseline, VisualPoint position, String state) {
+        int roll = Math.floorMod(position.x() * 31 + position.y() * 17 + position.z(), 11);
+        if (state.equals("RUINED") && roll <= 3) return Blocks.AIR.defaultBlockState();
+        if (roll == 4) return Blocks.COBWEB.defaultBlockState();
+        if (baseline.is(Blocks.STONE_BRICKS)) return Blocks.CRACKED_STONE_BRICKS.defaultBlockState();
+        if (baseline.is(Blocks.COBBLESTONE)) return Blocks.MOSSY_COBBLESTONE.defaultBlockState();
+        if (baseline.is(net.minecraft.tags.BlockTags.PLANKS) && state.equals("RUINED")) {
+            return Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
+        }
+        return baseline;
+    }
+
+    private static boolean surfaceMachinery(ResourceLocation id) {
+        return id.getNamespace().equals(PaleMirrorVisualsMod.MOD_ID)
+                && id.getPath().endsWith("/mine/dispatch_machinery");
+    }
+
+    private static boolean naturalEnclosure(BlockState state) {
+        return state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE) || state.is(Blocks.COBBLED_DEEPSLATE)
+                || state.is(Blocks.TUFF) || state.is(Blocks.CALCITE) || state.is(Blocks.DRIPSTONE_BLOCK)
+                || state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.GRAVEL)
+                || state.is(Blocks.ANDESITE) || state.is(Blocks.DIORITE) || state.is(Blocks.GRANITE);
     }
 
     static BlockState readState(CompoundTag value) {

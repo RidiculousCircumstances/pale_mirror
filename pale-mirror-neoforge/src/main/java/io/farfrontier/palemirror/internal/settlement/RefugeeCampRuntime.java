@@ -18,18 +18,20 @@ import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticSlotRegistration;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 
 /** Capability materialization for the selected shelter. Residents are projected by WorldJourney, never invented here. */
 public final class RefugeeCampRuntime {
     private static final String CHANNEL = "shelter";
     private static final String POLICY = "pale_mirror:shelter_camp";
-    private static final String VERSION = "v35-1";
+    private static final String VERSION = "v39-frontier-camp-1";
 
     private RefugeeCampRuntime() { }
 
@@ -116,8 +118,11 @@ public final class RefugeeCampRuntime {
         if (operation == null) return null;
         operation.start();
         MaterializationGateway gateway = new MaterializationGateway(level, data.semanticSlots(), data.parcels());
+        Map<BlockPos, BlockState> blueprint = campBlueprint(camp.anchor());
         for (SemanticCellRecord cell : data.semanticSlots().find(camp.semanticSlot()).orElseThrow().cells()) {
-            var result = gateway.setBlock(camp.semanticSlot(), cell.position(), desired(camp.anchor(), cell.position()).defaultBlockState(), 3);
+            BlockState desired = blueprint.get(cell.position());
+            if (desired == null) return "Camp blueprint lost semantic cell " + cell.position();
+            var result = gateway.setBlock(camp.semanticSlot(), cell.position(), desired, 3);
             if (result.status() == io.farfrontier.palemirror.api.GuardedWorldAccess.Status.BLOCKED) {
                 operation.block(result.diagnostic()); return result.diagnostic();
             }
@@ -143,7 +148,7 @@ public final class RefugeeCampRuntime {
     }
 
     public static boolean safeAnchor(ServerLevel level, BlockPos anchor) {
-        for (int x = -3; x <= 3; x++) for (int z = -3; z <= 3; z++) {
+        for (int x = -8; x <= 8; x++) for (int z = -8; z <= 8; z++) {
             BlockPos pos = anchor.offset(x, 0, z);
             if (!level.hasChunkAt(pos) || !level.getBlockState(pos.below()).isSolid()
                     || !level.isEmptyBlock(pos) || !level.isEmptyBlock(pos.above())
@@ -154,10 +159,7 @@ public final class RefugeeCampRuntime {
 
     private static List<SemanticCellRecord> captureCells(ServerLevel level, BlockPos anchor) {
         List<SemanticCellRecord> cells = new ArrayList<>();
-        for (int x = -3; x <= 3; x++) for (int z = -3; z <= 3; z++) {
-            if (Math.abs(x) == 3 || Math.abs(z) == 3 || x == 0 || z == 0) add(level, cells, anchor.offset(x, 0, z));
-        }
-        for (BlockPos pos : List.of(anchor.above(), anchor.offset(-2, 1, -2), anchor.offset(2, 1, 2))) add(level, cells, pos);
+        campBlueprint(anchor).keySet().forEach(pos -> add(level, cells, pos));
         return List.copyOf(cells);
     }
 
@@ -166,10 +168,46 @@ public final class RefugeeCampRuntime {
         cells.add(new SemanticCellRecord(pos, baseline, baseline));
     }
 
-    private static Block desired(BlockPos anchor, BlockPos pos) {
-        if (pos.equals(anchor.above())) return Blocks.CAMPFIRE;
-        if (pos.getY() > anchor.getY()) return Blocks.WHITE_WOOL;
-        return Blocks.COARSE_DIRT;
+    private static Map<BlockPos, BlockState> campBlueprint(BlockPos anchor) {
+        Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
+        for (int offset = -8; offset <= 8; offset++) {
+            blocks.put(anchor.offset(offset, 0, 0), Blocks.COARSE_DIRT.defaultBlockState());
+            blocks.put(anchor.offset(0, 0, offset), Blocks.COARSE_DIRT.defaultBlockState());
+        }
+        tent(blocks, anchor.offset(-5, 0, -5), Blocks.WHITE_WOOL.defaultBlockState());
+        tent(blocks, anchor.offset(5, 0, -5), Blocks.LIGHT_GRAY_WOOL.defaultBlockState());
+        tent(blocks, anchor.offset(-5, 0, 5), Blocks.BROWN_WOOL.defaultBlockState());
+        tent(blocks, anchor.offset(5, 0, 5), Blocks.WHITE_WOOL.defaultBlockState());
+        blocks.put(anchor.above(), Blocks.CAMPFIRE.defaultBlockState());
+        blocks.put(anchor.offset(2, 1, 0), Blocks.CAULDRON.defaultBlockState());
+        blocks.put(anchor.offset(-2, 1, 0), Blocks.HAY_BLOCK.defaultBlockState());
+        for (int x = -3; x <= 3; x++) {
+            blocks.put(anchor.offset(x, 1, -8), Blocks.SPRUCE_FENCE.defaultBlockState());
+            blocks.put(anchor.offset(x, 3, -8), Blocks.SPRUCE_SLAB.defaultBlockState());
+        }
+        for (int x : new int[]{-3, 3}) for (int y = 1; y <= 3; y++) {
+            blocks.put(anchor.offset(x, y, -8), Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
+        }
+        for (int x : new int[]{-8, 8}) for (int z : new int[]{-8, 8}) {
+            blocks.put(anchor.offset(x, 1, z), Blocks.SPRUCE_FENCE.defaultBlockState());
+            blocks.put(anchor.offset(x, 2, z), Blocks.SPRUCE_FENCE.defaultBlockState());
+            blocks.put(anchor.offset(x, 3, z), Blocks.LANTERN.defaultBlockState());
+        }
+        return Map.copyOf(blocks);
+    }
+
+    private static void tent(Map<BlockPos, BlockState> blocks, BlockPos center, BlockState cloth) {
+        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) {
+            blocks.put(center.offset(x, 0, z), Blocks.COARSE_DIRT.defaultBlockState());
+            boolean edge = Math.abs(x) == 2 || Math.abs(z) == 2;
+            if (edge && !(z == -2 && x == 0)) blocks.put(center.offset(x, 1, z), cloth);
+            if (Math.abs(x) <= 1) blocks.put(center.offset(x, 3, z), cloth);
+            else blocks.put(center.offset(x, 2, z), cloth);
+        }
+        blocks.put(center.offset(-1, 1, 0), Blocks.RED_CARPET.defaultBlockState());
+        blocks.put(center.offset(-1, 1, 1), Blocks.RED_CARPET.defaultBlockState());
+        blocks.put(center.offset(1, 1, 0), Blocks.BLUE_CARPET.defaultBlockState());
+        blocks.put(center.offset(1, 1, 1), Blocks.BLUE_CARPET.defaultBlockState());
     }
 
     private static ServerLevel level(MinecraftServer server, String dimensionId) {

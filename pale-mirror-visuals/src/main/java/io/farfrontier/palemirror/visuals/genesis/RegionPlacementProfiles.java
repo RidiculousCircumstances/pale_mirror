@@ -24,16 +24,16 @@ public final class RegionPlacementProfiles {
                     new SitePlacementRequirement(ALTERNATE_MINE, new DistanceBand(320, 560), PRIMARY_MINE,
                             List.of(384, 480, 560),
                             List.of(0, -64, 64, -128, 128), 12, 24, mountainMine())),
-            new RoutePlacementRequirement("settlement", PRIMARY_MINE, 3, List.of(-32, 0, 32),
-                    true, 4));
+            new RoutePlacementRequirement("settlement", PRIMARY_MINE, true,
+                    4, 96, 12_000, 24, 2, 250));
 
     private RegionPlacementProfiles() { }
 
     private static SiteTerrainPolicy mountainMine() {
         return new SiteTerrainPolicy(SiteTerrainPolicy.Feature.MOUNTAIN_FACE, true, 8, 4,
                 List.of(16, 32, 48), 16, 8,
-                List.of(new SiteTerrainPolicy.RiseSample(16, 8),
-                        new SiteTerrainPolicy.RiseSample(32, 20),
-                        new SiteTerrainPolicy.RiseSample(48, 32)));
+                List.of(new SiteTerrainPolicy.RiseSample(16, 0),
+                        new SiteTerrainPolicy.RiseSample(32, 3),
+                        new SiteTerrainPolicy.RiseSample(48, 10)));
     }
 }

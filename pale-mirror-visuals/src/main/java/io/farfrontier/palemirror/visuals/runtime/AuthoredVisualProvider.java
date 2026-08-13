@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.api.VisualStateProjection;
 import io.farfrontier.palemirror.api.ResidentDeathObservation;
 import io.farfrontier.palemirror.api.JourneyObservation;
 import io.farfrontier.palemirror.api.JourneyProjection;
+import io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod;
 import io.farfrontier.palemirror.visuals.resident.JourneyProjectionRuntime;
 import io.farfrontier.palemirror.visuals.threat.ThreatHeartRuntime;
 import io.farfrontier.palemirror.visuals.genesis.AuthoredAssetCatalog;
@@ -56,6 +57,16 @@ public final class AuthoredVisualProvider implements VisualProvider {
         }
     }
 
+    @Override public java.util.Optional<io.farfrontier.palemirror.api.VisualModuleSnapshot> compileAuthoredModuleState(
+            io.farfrontier.palemirror.api.VisualModulePlacement module, String state) {
+        try {
+            return java.util.Optional.of(AuthoredModuleCompiler.compileState(module, state));
+        } catch (RuntimeException invalid) {
+            PaleMirrorVisualsMod.LOGGER.error("Cannot compile authored state {} for {}", state, module.instanceId(), invalid);
+            return java.util.Optional.empty();
+        }
+    }
+
     @Override public boolean authoredModuleReady(ServerLevel level, AuthoredRegionSeed region,
                                                   io.farfrontier.palemirror.api.VisualModulePlacement module) {
         int minX = module.footprint().min().x() >> 4; int maxX = module.footprint().max().x() >> 4;
@@ -74,6 +85,7 @@ public final class AuthoredVisualProvider implements VisualProvider {
         java.util.Set<Long> chunks = new java.util.LinkedHashSet<>();
         mine.initialModules().forEach(module -> addChunks(chunks, module.footprint()));
         mine.stagedModules().forEach(stage -> addChunks(chunks, stage.module().footprint()));
+        mine.foundations().forEach(foundation -> addChunks(chunks, foundation.footprint()));
         mine.semanticVolumes().forEach(volume -> addChunks(chunks, volume.bounds()));
         for (long chunk : chunks) {
             var expected = FrontierGenesisRuntime.compiledChunk(chunk);

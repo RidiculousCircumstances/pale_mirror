@@ -29,14 +29,22 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertTrue(seed.modules().size() >= 16);
         assertEquals(6, seed.expansionPlots().size());
-        assertEquals(6, seed.definitionVersion());
+        assertEquals(9, seed.definitionVersion());
         assertEquals(8, seed.primaryMineSite().initialModules().size());
         assertEquals(4, seed.alternateMineSite().initialModules().size());
+        assertEquals(5, seed.primaryMineSite().foundations().size());
+        assertEquals(6, seed.alternateMineSite().foundations().size());
         assertEquals(java.util.List.of("foundation", "shell", "machinery", "commissioning"),
                 seed.alternateMineSite().stagedModules().stream().map(value -> value.stage()).toList());
         assertTrue(seed.primaryMineSite().semanticVolumes().stream()
                 .anyMatch(value -> value.purpose().equals("INFECTION")));
         assertTrue(seed.primaryMineSite().bounds().contains(seed.primaryMineSite().controllerAnchor()));
+        assertTrue(seed.primaryMineSite().initialModules().stream()
+                .allMatch(value -> value.templateId().contains("/mine/")));
+        assertTrue(seed.primaryMineSite().initialModules().stream()
+                .anyMatch(value -> value.templateId().endsWith("/mine/portal_hoist")));
+        assertTrue(seed.primaryMineSite().initialModules().stream()
+                .anyMatch(value -> value.templateId().endsWith("/mine/loading_yard")));
     }
 
     @Test void railwayConsumesOnlyTheTwoExplicitMineAnchorQueries() {
@@ -88,7 +96,91 @@ class FrontierRegionPlannerTest {
         assertEquals(seed.primaryMineSite().loadingEndpoint().z(), seed.baselineRailNodes().getLast().z());
     }
 
+    @Test void surfaceBuildingsConsumeTheirOwnVerifiedFoundationLevels() {
+        AuthoredRegionSeed seed = planner.plan(1123L, 0, new VisualPoint(0, 70, 0),
+                FrontierClimate.TEMPERATE, (requirement, candidates) -> {
+                    var role = requirement.role().equals(RegionPlacementProfiles.PRIMARY_MINE)
+                            ? io.farfrontier.palemirror.api.AuthoredMineRole.PRIMARY
+                            : io.farfrontier.palemirror.api.AuthoredMineRole.ALTERNATE;
+                    java.util.Map<String, VisualPoint> centers = new java.util.LinkedHashMap<>();
+                    int index = 0;
+                    VisualPoint candidate = candidates.getFirst();
+                    VisualPoint portal = new VisualPoint(candidate.x(), 72, candidate.z());
+                    for (var pad : MineSurfaceLayout.pads(role)) {
+                        centers.put(pad.id(), pad.center(portal, 0, 72 + index++ % 3));
+                    }
+                    return new MountainMineAnchor(portal, 0, centers);
+                }, FrontierRegionPlanner::gradedManhattanRail);
+
+        assertTrue(seed.primaryMineSite().foundations().stream().map(value -> value.targetY()).distinct().count() > 1);
+        for (var foundation : seed.primaryMineSite().foundations()) {
+            assertEquals(foundation.targetY(), foundation.footprint().min().y());
+            assertEquals(foundation.targetY(), foundation.footprint().max().y());
+        }
+    }
+
+    @Test void mineYardAndUndergroundWorkingsStayCompact() {
+        AuthoredRegionSeed seed = planner.plan(621L, 0, new VisualPoint(0, 72, 0), FrontierClimate.TEMPERATE);
+        var mine = seed.primaryMineSite();
+
+        assertTrue(manhattan(mine.portal(), mine.loadingEndpoint()) <= 52);
+        assertTrue(manhattan(mine.portal(), mine.controllerAnchor()) <= 60);
+        for (var foundation : mine.foundations()) {
+            VisualPoint center = new VisualPoint(
+                    (foundation.footprint().min().x() + foundation.footprint().max().x()) / 2,
+                    foundation.targetY(),
+                    (foundation.footprint().min().z() + foundation.footprint().max().z()) / 2);
+            assertTrue(horizontalDistanceSquared(mine.portal(), center) <= 60 * 60,
+                    () -> foundation.id() + " escaped compact MineSite yard at " + center);
+        }
+    }
+
+    @Test void exactMineBudgetSamplesLateralMountainFrontBeforeMoreRadialDistances() {
+        VisualPoint settlement = new VisualPoint(0, 72, 0);
+        SitePlacementRequirement primary = RegionPlacementProfiles.IRON_FRONTIER
+                .requireSite(RegionPlacementProfiles.PRIMARY_MINE);
+        var firstBudget = FrontierRegionPlanner.siteCandidates(settlement, 0, 240, primary, -1)
+                .stream().limit(primary.exactValidationBudget()).toList();
+
+        assertTrue(firstBudget.stream().anyMatch(point -> point.x() != 0 && point.z() != 0),
+                "the exact budget must reach lateral offsets instead of spending every probe on cardinal axes");
+        assertTrue(firstBudget.stream().map(point -> Math.abs(point.x()) + Math.abs(point.z()))
+                .distinct().count() >= 3);
+    }
+
+    @Test void mineSurfacePadsDoNotOverlapInAnyOrientation() {
+        VisualPoint portal = new VisualPoint(0, 72, 0);
+        for (var role : io.farfrontier.palemirror.api.AuthoredMineRole.values()) {
+            for (int direction = 0; direction < 4; direction++) {
+                var pads = MineSurfaceLayout.pads(role);
+                for (int first = 0; first < pads.size(); first++) for (int second = first + 1;
+                        second < pads.size(); second++) {
+                    var firstBounds = pads.get(first).bounds(
+                            MineSurfaceLayout.center(pads.get(first), portal, direction,
+                                    new MineSurfaceLayout.YardOffset(0, 0)), direction);
+                    var secondBounds = pads.get(second).bounds(
+                            MineSurfaceLayout.center(pads.get(second), portal, direction,
+                                    new MineSurfaceLayout.YardOffset(0, 0)), direction);
+                    assertTrue(!overlaps(firstBounds, secondBounds), role + " direction " + direction
+                            + " overlaps " + pads.get(first).id() + " and " + pads.get(second).id());
+                }
+            }
+        }
+    }
+
     private static int manhattan(VisualPoint a, VisualPoint b) {
         return Math.abs(a.x() - b.x()) + Math.abs(a.z() - b.z());
+    }
+
+    private static int horizontalDistanceSquared(VisualPoint a, VisualPoint b) {
+        int dx = a.x() - b.x();
+        int dz = a.z() - b.z();
+        return dx * dx + dz * dz;
+    }
+
+    private static boolean overlaps(io.farfrontier.palemirror.api.VisualBounds first,
+                                    io.farfrontier.palemirror.api.VisualBounds second) {
+        return first.min().x() <= second.max().x() && first.max().x() >= second.min().x()
+                && first.min().z() <= second.max().z() && first.max().z() >= second.min().z();
     }
 }

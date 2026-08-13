@@ -8,7 +8,7 @@ curated structure assets, resident carriers, animation, particles and sound.
 
 ## Fresh-world contract
 
-There is intentionally no retrofit path. A new v37 world pins the configured
+There is intentionally no retrofit path. A new v39 world pins the configured
 set of complete `AuthoredRegionSeed` manifests and compiles them into an
 immutable chunk-addressed catalog before players are admitted. The default is
 three regions. The first is 1024–4096 blocks from spawn; the remainder are
@@ -17,20 +17,25 @@ The immutable manifest contains every object identity and coordinate needed by
 core: settlement bounds, freight gate, receiving depot, typed Mine17 and Red
 Valley blueprints, baseline rail path, modules, expansion plots and 48 resident
 identities. Each MineSite pins a portal, loading endpoint, controller anchor,
-orientation, complete bounds, initial/staged modules and semantic volumes.
+orientation, complete bounds, independently surveyed local foundations,
+initial/staged modules and semantic volumes.
 
 Terrain survey calls generator-only biome and bounded height APIs on a dedicated
 planning worker. It does not load prospective chunks. Cheap biome-footprint checks
 rank deterministic horizontal candidates. Each accepted region then receives
 one exact center/cardinal settlement survey and two bounded mountain-face
 searches; at most six site surveys and 24 exact candidates per MineSite may be
-attempted. A mine is accepted only on a dry apron with mountain-biome evidence
-and a sampled continuous rise of at least 32 blocks. Mine17 is 160–320 blocks
+attempted. A mine is accepted only when every surface-module pad is dry, has at
+most ten blocks of relief and fits within the four-block cut/six-block fill
+limits, while its portal retains mountain-biome evidence and a sampled
+continuous rise of at least 32 blocks. Mine17 is 160–320 blocks
 from the fort; Red Valley is 320–560 blocks away in another cardinal mountain
-search. Railway planning samples three bounded control cross-sections, rejects
-water and grades steeper than one-in-four, then pins one immutable path. During
-natural generation each chunk uses only its own ready heightmap
-to choose local cut, fill and supports. Impossible count/radius/spacing or
+search. Railway planning runs a bounded deterministic corridor search which
+strongly prefers dry land, verifies every final rail column and permits only
+water spans of at most 24 blocks with two blocks of bridge clearance. Grades
+steeper than one-in-four are rejected. During natural generation each chunk
+uses only its own ready heightmaps and fluid state to choose local cut, fill and bridge
+supports. Impossible count/radius/spacing or
 terrain combinations fail closed instead of overlapping sites. The relevant `pale-mirror-visuals-server.toml`
 settings are:
 
@@ -74,23 +79,41 @@ read-only stamp observation and resident commissioning; it never edits terrain,
 structures, MineSites or rails. The manifest and observed-stamp ledger survive
 restart, with no tickets, retrofit pass or loaded-chunk bulk construction.
 
-Settlement grading also compiles a six-block cleanup-only halo. The halo does
+Settlement preparation also compiles a six-block cleanup-only halo. The halo does
 not flatten or claim neighbouring ground; during fresh chunk generation it only
 removes natural tree crowns and attachments up to 64 blocks above the settlement
 base without trusting the post-grading surface heightmap. Logs, leaves, saplings, flowers, vines, cocoa, moss, cave vegetation and
 tagged beehives are included. This prevents a trunk cut by the fort footprint
-from leaving floating foliage or bee nests just outside the grading circle.
+from leaving floating foliage or bee nests just outside the authored site.
 
 ## Settlement grammar
 
-The current `iron_frontier` grammar produces a 176-block-diameter timber fort:
+The current `iron_frontier` grammar produces a compact, terrain-led industrial
+frontier address of roughly 90×130 blocks and 16 primary buildings. It has no
+radial-fort fallback and does not flatten one global platform. The bounded
+terrain survey chooses one of three reusable layout archetypes:
 
-- civic hall and market in the center;
-- housing, clinic, inn and workshops in functional rings;
-- barracks, smithy, stable, freight depot and one outward freight gate;
-- radial paths, a ring road and wooden palisade;
-- six reserved development plots;
-- temperate, cold-taiga and dry-arid palette families.
+- `FOOTHILL_RIBBON`: a freight spine follows the buildable shelf and buildings
+  form an asymmetric linear town;
+- `TERRACED_BASIN`: local foundations occupy two or three shallow tiers joined
+  by stairs and retaining walls;
+- `FREIGHT_CROSSROADS`: civic and industrial streets meet the baseline freight
+  route on a broad low-relief site.
+
+Each curated module has a stable instance ID, one independently bounded local
+foundation, a state profile and typed public/service/freight/rail ports. The
+planner proves non-overlap, connects every public entrance to the circulation
+graph, reserves six actually free 11×11 development parcels, and emits typed
+streets, paths, stairs, freight roads, ditches, retaining walls and segmented
+palisades. Defences protect exposed approaches and terminate in walkable watch
+posts instead of drawing an impermeable geometric circle around the community.
+
+Temperate, cold-taiga and dry-arid settlements share functional roles but not
+only a block substitution. Their freight threshold gains climate-specific
+planting, snow/windbreak or shaded water-stop forms. Copper and soul-lantern
+freight marks provide a restrained common Pale Mirror identity kit. Depot and
+MineSite power buildings may contain one small isolated Create kinetic display;
+it is presentation only and never a second economy or route simulation.
 
 Temperate and cold variants use normalized private Integrated Villages-derived
 NBT modules. Required modules are fail-closed and SHA-pinned; there is no silent
@@ -99,14 +122,20 @@ in [`VISUAL_ASSET_PROVENANCE.md`](VISUAL_ASSET_PROVENANCE.md).
 
 ## Mountain MineSites
 
-Mine17 is an approximately 80×100 industrial mountain complex rather than a
-surface cube. Its composed grammar includes a portal/hoist, processing hall,
-power house, loading yard, supported descending adit, iron gallery and a deep
-controller chamber. The terrain compiler grades only its outside work apron;
-the drift and chambers continue into the selected mountain face.
+Mine17 is a compact frontier-industrial mountain complex rather
+than a surface cube. Its composed grammar includes a timber portal headframe,
+headframe, processing hall, power house and chimney, crew office, loading shed,
+freight building, supported descending adit, iron gallery and a deep controller
+chamber. Every surface building has its own bounded foundation and two-block
+apron. Three-wide gravel paths, steps and short supports connect those levels;
+the natural terrain between modules remains untouched. The drift and chambers
+continue into the selected mountain face inside a continuous dry masonry shell.
 
-The visual modules are privately imported from pinned Dungeons Arise, IDAS and
-Terralith structures and then compiled through one sanitizer. Entities and
+The visible campus remixes the pinned standalone Integrated Villages workshop,
+residence, stable and depot assets into a common frontier-industrial language;
+PM adds the headframe, chimney, loading platform, foundations and paths.
+Dungeons Arise, IDAS and Terralith assets are restricted to underground adit,
+gallery and controller spaces and compiled through one sanitizer. Entities and
 block-entity payloads are ignored. Spawners, TNT and structure machinery become
 air; inventories become inert timber; ore/raw-resource cells become ordinary
 deepslate. Consequently visible ore never mints canonical IRON and ordinary
@@ -169,11 +198,12 @@ block states. Unknown edits conflict only that slot and are never overwritten
 without a separate previewed reset permit.
 
 Damage, reconstruction, Red Valley commissioning and positive development use the same mechanism.
-Deterministic damage affects sparse authored shell slots; reconstruction restores
-their exact captured block states in stages; a storehouse project commissions an
-available reserved plot, then builds foundation, shell and roof under resource,
-labour, loaded-chunk and postcondition gates. Canonical integrity or capability
-changes only after the physical job completes.
+Deterministic damage uses bounded module-specific shell overlays rather than a
+random settlement-wide sample; ruined landmarks have a larger authored mask than
+damaged ones. Reconstruction restores the exact captured baseline. A storehouse
+project commissions an available reserved plot and compiles a real climate-family
+workshop module under resource, labour, loaded-chunk and postcondition gates.
+Canonical integrity or capability changes only after the physical job completes.
 
 Overlapping construction stages do not weaken player-edit protection. Every future
 stage captures its fresh-world baseline before work starts; after a stage completes,
@@ -202,6 +232,8 @@ It grants no domain mutation capability. Visuals currently expresses it as:
 - heartbeat-like sculk audio and infection particles;
 - sparse depot smoke/angry cues during shortage or critical crisis;
 - recovery and prosperity particles when the region stabilizes.
+- a rebuilt climate-family annex on positive development and a 17×17 physical
+  refugee camp with tents, bedrolls, fire, water point and administration awning;
 - a one-shot raw-iron cargo cue at Red Valley and the receiving depot when the
   alternate dispatch works becomes operational; any persistent Create kinetics
   are physical presentation, never a second resource simulation.

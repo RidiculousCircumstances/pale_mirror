@@ -1,8 +1,16 @@
-Pale Mirror private mountain-mine blueprint provenance
+Pale Mirror private mountain-mine blueprint provenance (schema v39)
 
 Runtime structures live in the pale_mirror_visuals namespace and are compiled through the PM sanitizing
 loader. The loader ignores structure entities and block-entity NBT, removes jigsaws, spawners, traps and
 loot containers, and replaces freely mineable ore/raw-material states with inert rock.
+
+Active above-ground frontier-industrial composition
+  source: integrated_villages-1.3.3+1.21.1-neoforge.jar
+  assets: remapped workshop_1, workshop_2, residence_1, receiving_depot and stable modules
+  PM additions: bounded local foundations, gravel paths, portal headframe, power-house chimney and loading platform
+
+Only entrance_adit, iron_gallery and controller_chamber from the legacy list below remain active underground.
+The other copied files are retained as private source references but are not addressable by the v39 MineSite grammar.
 
 portal_hoist
   source: idas-1.13.7+1.21.1-neoforge.jar

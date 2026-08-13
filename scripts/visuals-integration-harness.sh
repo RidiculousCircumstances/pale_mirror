@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-core_jar=${1:?usage: visuals-integration-harness.sh core.jar visuals.jar geckolib.jar villager-overhaul.jar supplementaries.jar moonlight.jar sable.jar create.jar}
+core_jar=${1:?usage: visuals-integration-harness.sh core.jar visuals.jar runtime-mod-directory}
 visuals_jar=${2:?missing Pale Mirror Visuals JAR}
-geckolib_jar=${3:?missing GeckoLib JAR}
-villager_jar=${4:?missing Villager Overhaul JAR}
-supplementaries_jar=${5:?missing Supplementaries JAR}
-moonlight_jar=${6:?missing Moonlight JAR}
-sable_jar=${7:?missing Sable JAR}
-create_jar=${8:?missing Create JAR}
+runtime_mod_dir=${3:?missing private runtime mod directory}
 installer=${NEOFORGE_INSTALLER:-${XDG_CACHE_HOME:-${HOME}/.cache}/far-frontier/tools/neoforge-21.1.248-installer.jar}
-java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to the Java 21 executable}
+java_bin=${PALE_MIRROR_JAVA:?PALE_MIRROR_JAVA must point to a Java 21-compatible executable}
 export PATH="$(dirname "$java_bin"):$PATH"
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pale-mirror-visuals.XXXXXX")
 server_pid=''
@@ -21,20 +16,28 @@ fail() {
   exit 1
 }
 
-for input in "$core_jar" "$visuals_jar" "$geckolib_jar" "$villager_jar" \
-  "$supplementaries_jar" "$moonlight_jar" "$sable_jar" "$create_jar" "$installer"; do
+for input in "$core_jar" "$visuals_jar" "$installer"; do
   [[ -f "$input" ]] || { printf 'Missing required JAR: %s\n' "$input" >&2; fail; }
 done
+[[ -d "$runtime_mod_dir" ]] || { printf 'Missing runtime mod directory: %s\n' "$runtime_mod_dir" >&2; fail; }
 
 (
   cd "$runtime_dir"
   "$java_bin" -jar "$installer" --installServer . >/dev/null
 )
 printf 'eula=true\n' > "$runtime_dir/eula.txt"
-printf 'online-mode=false\nserver-port=0\nview-distance=3\nsimulation-distance=3\nlevel-seed=3374619285067712046\n' > "$runtime_dir/server.properties"
+printf 'online-mode=false\nserver-port=0\nview-distance=3\nsimulation-distance=3\nlevel-seed=781345920664213799\n' > "$runtime_dir/server.properties"
+mkdir -p "$runtime_dir/world/serverconfig"
+cp scripts/harness/pale-mirror-visuals-server.toml \
+  "$runtime_dir/world/serverconfig/pale-mirror-visuals-server.toml"
+mkdir -p "$runtime_dir/config"
+cp scripts/harness/c2me.toml "$runtime_dir/config/c2me.toml"
+cp scripts/harness/modernfix-mixins.properties "$runtime_dir/config/modernfix-mixins.properties"
 mkdir "$runtime_dir/mods"
-cp "$core_jar" "$visuals_jar" "$geckolib_jar" "$villager_jar" \
-  "$supplementaries_jar" "$moonlight_jar" "$sable_jar" "$create_jar" "$runtime_dir/mods/"
+find "$runtime_mod_dir" -maxdepth 1 -type f -name '*.jar' \
+  ! -name 'pale_mirror-hosted.jar' ! -name 'pale_mirror_visuals-hosted.jar' \
+  -exec cp -t "$runtime_dir/mods" -- {} +
+cp "$core_jar" "$visuals_jar" "$runtime_dir/mods/"
 mkfifo "$command_fifo"
 exec 9<>"$command_fifo"
 
@@ -51,7 +54,10 @@ start_server() {
   setsid bash -c 'cd "$1" && exec ./run.sh nogui' harness "$runtime_dir" \
     <"$command_fifo" >"$log_file" 2>&1 &
   server_pid=$!
-  for attempt in $(seq 1 120); do
+  # The harness uses the production geography profile but needs one complete
+  # region. Batch cardinality and the 3/5/6 production defaults have dedicated
+  # tests; this gate proves packaged worldgen, stamping and restart recovery.
+  for attempt in $(seq 1 600); do
     if rg -q 'Done \([^)]*\)!' "$log_file" && rg -q 'Installed authored manifest' "$log_file"; then
       rg -q 'Pale Mirror bootstrapped' "$log_file" || return 1
       rg -q 'Pale Mirror Visuals registered the fresh-world authored-region provider' "$log_file" || return 1

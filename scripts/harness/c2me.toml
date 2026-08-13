@@ -1,0 +1,14 @@
+version = 3
+globalExecutorParallelism = 8
+defaultGlobalExecutorParallelismExpression = "default"
+threadPoolPriority = "default"
+
+[vanillaWorldGenOptimizations]
+	useDensityFunctionCompiler = true
+	optimizeAquifer = "default"
+	useEndBiomeCache = "default"
+	optimizeStructureWeightSampler = "default"
+
+	[vanillaWorldGenOptimizations.nativeAcceleration]
+		allowAVX512 = false
+		enabled = true

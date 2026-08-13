@@ -5,9 +5,9 @@ They are not a dependency or a claim of ownership, and they must be removed or r
 
 | Embedded family | Source | Exact source version | Original namespace | Use |
 |---|---|---|---|---|
-| Cabin/clockwork structures | Integrated Villages | `1.3.3+1.21.1-neoforge` | `integrated_villages` | Remapped private NBT modules for civic, housing and workshop slots |
+| Cabin/clockwork structures | Integrated Villages | `1.3.3+1.21.1-neoforge` | `integrated_villages` | Remapped private NBT modules for civic, housing, workshop and above-ground frontier-industrial MineSite slots |
 | Ancient mine structures | Integrated Dungeons and Structures | `1.13.7+1.21.1-neoforge` | `idas` | Portal/hoist, gallery and staged machinery modules |
-| Mining complex structures | When Dungeons Arise | `2.1.1-1.21.1` | `dungeons_arise` | Processing, power, loading, controller and dispatch works modules |
+| Mining complex structures | When Dungeons Arise | `2.1.1-1.21.1` | `dungeons_arise` | Retained private underground reference modules; no dungeon shell is used as an above-ground building |
 | Underground mining outposts | Terralith | `2.6.2-1.21.1-neoforge` | `terralith` | Entrance adit and crew support modules |
 | Threat Heart texture | OpenAI image generation, project-directed | generated 2026-08-12 | n/a | GeckoLib entity texture |
 
@@ -26,6 +26,12 @@ ignores entities and block-entity NBT, removes spawners/explosives/structure
 machinery and replaces inventories and ore/raw-resource cells with inert
 materials. Per-module embedded SHA-256 values are enforced by
 `AuthoredAssetCatalog`.
+
+Schema v39 composes the visible mining campus from the already pinned
+Integrated Villages workshop, residence, stable and depot modules, then adds
+PM-authored headframe, chimney, loading-platform, local-foundation and path
+geometry. Dungeons Arise, IDAS and Terralith modules are restricted to the
+sealed underground adit, gallery and controller spaces.
 
 The generated Threat Heart prompt requested a square Minecraft-style infected organic texture with a burgundy/crimson,
 purple and sparse ember-orange palette, no text, logo, watermark or scene.

@@ -300,6 +300,7 @@ public final class FrontierSiteSelector {
     public interface TerrainAccess {
         BiomeSample biome(int x, int z);
         TerrainSample exactSample(int x, int z);
+        default boolean exactWater(int x, int z) { return exactSample(x, z).water(); }
         default void recordDiscardedCandidate(TerrainCandidate candidate) { }
     }
 

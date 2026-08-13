@@ -21,6 +21,11 @@ class RegionPlacementProfileTest {
         assertEquals(72, profile.settlementTerrain().surveyRadius());
         assertEquals(0, profile.settlementTerrain().minimumLandscapeScore());
         assertEquals(4, profile.route().horizontalBlocksPerVerticalBlock());
+        assertEquals(true, profile.route().preferDryLand());
+        assertEquals(96, profile.route().searchCorridorHalfWidth());
+        assertEquals(12_000, profile.route().searchBudget());
+        assertEquals(24, profile.route().maximumWaterSpan());
+        assertEquals(2, profile.route().bridgeClearance());
         assertEquals(160, profile.search().maximumSurveyCandidates());
         assertEquals(154, profile.search().reserveCandidateCount());
         assertEquals(48, profile.search().remoteCandidatesPerRegion(11));
@@ -48,7 +53,8 @@ class RegionPlacementProfileTest {
         SitePlacementRequirement primary = site("primary", new DistanceBand(100, 200), "missing");
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () ->
                 new RegionPlacementProfile("test:invalid", "invalid", search(), settlement(), List.of(primary),
-                        new RoutePlacementRequirement("settlement", "primary", 0, List.of(0), true, 4)));
+                        new RoutePlacementRequirement("settlement", "primary", true,
+                                4, 96, 12_000, 24, 2, 250)));
         assertEquals("unknown cardinal-sector reference missing", failure.getMessage());
     }
 
@@ -58,7 +64,7 @@ class RegionPlacementProfileTest {
         RegionPlacementProfile invalid = new RegionPlacementProfile(base.id(), base.addressSalt(), base.search(),
                 base.settlementTerrain(), base.requiredSites(),
                 new RoutePlacementRequirement("settlement", RegionPlacementProfiles.ALTERNATE_MINE,
-                        3, List.of(-32, 0, 32), true, 4));
+                        true, 4, 96, 12_000, 24, 2, 250));
 
         assertThrows(IllegalArgumentException.class, () -> new FrontierRegionPlanner(invalid));
     }
@@ -68,7 +74,7 @@ class RegionPlacementProfileTest {
                 site(RegionPlacementProfiles.PRIMARY_MINE, primary, ""),
                 site(RegionPlacementProfiles.ALTERNATE_MINE, alternate, RegionPlacementProfiles.PRIMARY_MINE)),
                 new RoutePlacementRequirement("settlement", RegionPlacementProfiles.PRIMARY_MINE,
-                        3, List.of(-32, 0, 32), true, 4));
+                        true, 4, 96, 12_000, 24, 2, 250));
     }
 
     private static SitePlacementRequirement site(String role, DistanceBand distance, String separateFrom) {

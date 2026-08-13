@@ -10,7 +10,7 @@ import java.util.Map;
 
 /** Fail-closed versioned catalog for mandatory private structure assets. */
 public final class AuthoredAssetCatalog {
-    public static final String VERSION = "pale-mirror-authored-v37-mountain-1";
+    public static final String VERSION = "pale-mirror-authored-v39-frontier-art-1";
     private static final Map<String, String> HASHES = hashes();
     private static volatile String cachedFailure;
     private static volatile boolean verified;

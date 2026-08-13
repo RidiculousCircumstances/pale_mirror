@@ -131,11 +131,14 @@ tasks.register('visualsIntegrationHarness', Exec) {
     dependsOn tasks.named('jar'), project(':pale-mirror-neoforge').tasks.named('jar')
     workingDir rootProject.projectDir
     def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
-    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    def privateRuntimeJava = file(System.getenv('PALE_MIRROR_RUNTIME_JAVA')
+            ?: new File(System.getProperty('user.home'),
+                    '.local/share/far-frontier/java/temurin-22.0.2+9/bin/java'))
+    environment 'PALE_MIRROR_JAVA', privateRuntimeJava.exists()
+            ? privateRuntimeJava.absolutePath
+            : harnessLauncher.get().executablePath.asFile.absolutePath
     def coreJar = project(':pale-mirror-neoforge').tasks.named('jar', Jar).flatMap { it.archiveFile }
     commandLine 'bash', 'scripts/visuals-integration-harness.sh', coreJar.get().asFile.absolutePath,
             tasks.named('jar', Jar).flatMap { it.archiveFile }.get().asFile.absolutePath,
-            visualsRuntimeJars[0].absolutePath, visualsRuntimeJars[1].absolutePath,
-            visualsRuntimeJars[2].absolutePath, visualsRuntimeJars[3].absolutePath,
-            visualsRuntimeJars[4].absolutePath, visualsRuntimeJars[5].absolutePath
+            runtimeModDirectory.absolutePath
 }

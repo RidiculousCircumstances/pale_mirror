@@ -33,14 +33,13 @@ import java.util.stream.Collectors;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /** Staged damage, pristine reconstruction and reserved-plot development through the shared gateway. */
 final class AuthoredSettlementProjectRuntime {
     private static final String STRUCTURAL_CHANNEL = "settlement_structure";
     private static final String DEVELOPMENT_CHANNEL = "settlement_development";
-    private static final String VERSION = "authored-project-v37-mountain-1";
+    private static final String VERSION = "authored-project-v39-frontier-art-1";
     private AuthoredSettlementProjectRuntime() { }
 
     static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
@@ -64,12 +63,13 @@ final class AuthoredSettlementProjectRuntime {
             changed |= data.semanticSlots().slots().size() != slotCount;
             if (desired != StructuralIntegrity.INTACT || reconstruction != null
                     && reconstruction.state() == DevelopmentIntentState.MATERIALIZING) {
+                Map<Long, BlockState> authoredState = authoredState(provider, seed, desired);
                 changed |= structural(level, data, commands, region.placeId().value(), desired, reconstruction,
-                        structuralSlots);
+                        structuralSlots, authoredState);
             }
             DevelopmentIntent expansion = intent(data, region.communityId(), DevelopmentIntentType.UPGRADE_STOREHOUSE);
             if (expansion != null && expansion.state() == DevelopmentIntentState.MATERIALIZING) {
-                changed |= expansion(level, data, commands, expansion);
+                changed |= expansion(level, data, commands, provider, seed, expansion);
             }
             DevelopmentIntent dispatch = intent(data, region.communityId(),
                     DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH);
@@ -153,14 +153,16 @@ final class AuthoredSettlementProjectRuntime {
 
     private static boolean structural(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
                                       String placeId, StructuralIntegrity desired,
-                                      DevelopmentIntent reconstruction, StructuralSlots structuralSlots) {
+                                      DevelopmentIntent reconstruction, StructuralSlots structuralSlots,
+                                      Map<Long, BlockState> authoredState) {
         if (!structuralSlots.complete()) return false;
         List<SemanticSlotKey> slots = structuralSlots.keys();
         String policy = "pale_mirror:settlement_" + desired.name().toLowerCase(java.util.Locale.ROOT);
         MaterializationJob job = ensureJob(data, placeId, STRUCTURAL_CHANNEL, MaterializationJobClass.PRESENTATION,
                 desired.ordinal() + (reconstruction == null ? 0 : 10), policy, slots);
         boolean changed = runOne(level, data, job, desired == StructuralIntegrity.INTACT
-                ? SemanticCellRecord::baselineState : cell -> damaged(cell, desired));
+                ? SemanticCellRecord::baselineState
+                : cell -> authoredState.getOrDefault(cell.position().asLong(), cell.baselineState()));
         if (job.state() == JobState.BLOCKED && reconstruction != null) {
             commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(reconstruction.id(), job.lastError()));
         } else if (job.state() == JobState.COMPLETED && reconstruction != null
@@ -179,7 +181,7 @@ final class AuthoredSettlementProjectRuntime {
             var module = seed.modules().get(index);
             if (!(module.role().equals("CIVIC") || module.role().equals("DEFENCE")
                     || module.role().equals("LOGISTICS") || module.role().equals("ECONOMY"))) continue;
-            SemanticSlotKey key = new SemanticSlotKey(placeId, "authored_module_" + index, "damage_shell");
+            SemanticSlotKey key = new SemanticSlotKey(placeId, module.instanceId(), "authored_state_overlay");
             keys.add(key);
             if (data.semanticSlots().find(key).isPresent()) continue;
             if (!provider.authoredModuleReady(level, seed, module)
@@ -187,7 +189,9 @@ final class AuthoredSettlementProjectRuntime {
                 complete = false;
                 continue;
             }
-            List<SemanticCellRecord> cells = sampleShell(level, block(module.footprint().min()), block(module.footprint().max()), key.value());
+            var state = provider.compileAuthoredModuleState(module, "RUINED").orElse(null);
+            if (state == null) { complete = false; continue; }
+            List<SemanticCellRecord> cells = stateCells(level, state);
             if (cells.isEmpty()) { complete = false; continue; }
             SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key,
                     seed.planId() + ":parcel:module_" + index, seed.dimensionId(),
@@ -197,47 +201,63 @@ final class AuthoredSettlementProjectRuntime {
                 && keys.stream().allMatch(key -> data.semanticSlots().find(key).isPresent()));
     }
 
-    private static List<SemanticCellRecord> sampleShell(ServerLevel level, BlockPos min, BlockPos max, String seed) {
+    private static List<SemanticCellRecord> stateCells(ServerLevel level,
+                                                        io.farfrontier.palemirror.api.VisualModuleSnapshot state) {
         List<SemanticCellRecord> cells = new ArrayList<>();
-        for (int x = min.getX(); x <= max.getX() && cells.size() < 12; x++) for (int z = min.getZ(); z <= max.getZ() && cells.size() < 12; z++) {
-            if (Math.floorMod((seed + ":" + x + ":" + z).hashCode(), 11) != 0) continue;
-            for (int y = max.getY(); y >= min.getY(); y--) {
-                BlockPos position = new BlockPos(x, y, z); BlockState state = level.getBlockState(position);
-                if (!state.isAir() && level.getBlockEntity(position) == null && state.getDestroySpeed(level, position) >= 0) {
-                    cells.add(new SemanticCellRecord(position, state, state)); break;
-                }
+        for (VisualBlockPlacement placement : state.blocks()) {
+            BlockPos position = block(placement.position());
+            BlockState baseline = level.getBlockState(position);
+            if (level.getBlockEntity(position) == null && baseline.getDestroySpeed(level, position) >= 0) {
+                cells.add(new SemanticCellRecord(position, baseline, baseline));
             }
         }
         return List.copyOf(cells);
     }
 
-    private static BlockState damaged(SemanticCellRecord cell, StructuralIntegrity integrity) {
-        int roll = Math.floorMod(Long.hashCode(cell.position().asLong()), 7);
-        if (integrity == StructuralIntegrity.RUINED && roll <= 2) return Blocks.AIR.defaultBlockState();
-        if (roll == 3) return Blocks.COBWEB.defaultBlockState();
-        if (cell.baselineState().is(Blocks.STONE_BRICKS)) return Blocks.CRACKED_STONE_BRICKS.defaultBlockState();
-        return integrity == StructuralIntegrity.RUINED ? Blocks.COBBLESTONE.defaultBlockState() : cell.baselineState();
+    private static Map<Long, BlockState> authoredState(io.farfrontier.palemirror.api.VisualProvider provider,
+                                                        AuthoredRegionSeed seed, StructuralIntegrity state) {
+        if (state == StructuralIntegrity.INTACT) return Map.of();
+        String name = state == StructuralIntegrity.RUINED ? "RUINED" : "DAMAGED";
+        Map<Long, BlockState> result = new java.util.LinkedHashMap<>();
+        for (var module : seed.modules()) {
+            if (!(module.role().equals("CIVIC") || module.role().equals("DEFENCE")
+                    || module.role().equals("LOGISTICS") || module.role().equals("ECONOMY"))) continue;
+            provider.compileAuthoredModuleState(module, name).ifPresent(snapshot -> snapshot.blocks().forEach(
+                    placement -> result.put(block(placement.position()).asLong(), placement.state())));
+        }
+        return java.util.Map.copyOf(result);
     }
 
     private static boolean expansion(ServerLevel level, PaleMirrorSavedData data, DomainCommandExecutor commands,
-                                     DevelopmentIntent intent) {
+                                     io.farfrontier.palemirror.api.VisualProvider provider,
+                                     AuthoredRegionSeed seed, DevelopmentIntent intent) {
         ParcelRecord parcel = data.parcels().parcels().stream().filter(value -> value.bindingId().equals(intent.targetSiteId().value()))
                 .findFirst().orElse(null);
         if (parcel == null) { commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(
                 intent.id(), "Development plot has no parcel")); return true; }
+        var module = developmentModule(seed, parcel);
+        var snapshot = provider.compileAuthoredModule(new StagedVisualModule("development", module)).orElse(null);
+        if (snapshot == null) {
+            commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(),
+                    "Development module could not be compiled"));
+            return true;
+        }
         if (parcel.kind() == ParcelKind.RESERVED) {
             if (!allChunksLoaded(level, parcel.min(), parcel.max())) return false;
-            if (!plotAvailable(level, parcel)) {
+            if (!plotAvailable(level, module.footprint())) {
                 commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), "Reserved plot is occupied"));
                 return true;
             }
             parcel.commissionCommunity("development-intent:" + intent.id());
         }
-        List<SemanticSlotKey> slots = ensureExpansionSlots(level, data, intent, parcel);
+        List<SemanticSlotKey> slots = ensureExpansionSlots(level, data, intent, parcel, snapshot);
         if (slots.isEmpty()) return false;
         MaterializationJob job = ensureJob(data, intent.targetSiteId().value(), DEVELOPMENT_CHANNEL,
                 MaterializationJobClass.CAPABILITY, 1, "pale_mirror:storehouse_annex", slots);
-        boolean changed = runOne(level, data, job, cell -> expansionBlock(cell.position(), parcel));
+        Map<Long, BlockState> desired = snapshot.blocks().stream().collect(Collectors.toMap(
+                value -> block(value.position()).asLong(), VisualBlockPlacement::state, (left, right) -> right));
+        boolean changed = runOne(level, data, job,
+                cell -> desired.getOrDefault(cell.position().asLong(), cell.baselineState()));
         if (job.state() == JobState.BLOCKED) commands.execute(data.worldState(),
                 new DomainCommand.BlockDevelopmentIntent(intent.id(), job.lastError()));
         else if (job.state() == JobState.COMPLETED) commands.execute(data.worldState(),
@@ -246,38 +266,38 @@ final class AuthoredSettlementProjectRuntime {
     }
 
     private static List<SemanticSlotKey> ensureExpansionSlots(ServerLevel level, PaleMirrorSavedData data,
-                                                               DevelopmentIntent intent, ParcelRecord parcel) {
-        int centerX = (parcel.min().getX() + parcel.max().getX()) / 2;
-        int centerZ = (parcel.min().getZ() + parcel.max().getZ()) / 2;
-        int baseY = parcel.min().getY() + 2;
-        List<SemanticSlotKey> keys = new ArrayList<>();
-        for (String layer : List.of("foundation", "shell", "roof")) {
-            SemanticSlotKey key = new SemanticSlotKey(intent.targetSiteId().value(), "storehouse_annex", layer); keys.add(key);
-            if (data.semanticSlots().find(key).isPresent()) continue;
-            List<SemanticCellRecord> cells = new ArrayList<>();
-            for (int x = centerX - 3; x <= centerX + 3; x++) for (int z = centerZ - 3; z <= centerZ + 3; z++) {
-                if (layer.equals("foundation")) add(level, cells, new BlockPos(x, baseY, z));
-                else if (layer.equals("roof")) add(level, cells, new BlockPos(x, baseY + 4, z));
-                else if (x == centerX - 3 || x == centerX + 3 || z == centerZ - 3 || z == centerZ + 3) {
-                    for (int y = baseY + 1; y <= baseY + 3; y++) add(level, cells, new BlockPos(x, y, z));
-                }
-            }
-            SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcel.id(), parcel.dimensionId(),
-                    ParcelKind.COMMUNITY, cells);
+                                                               DevelopmentIntent intent, ParcelRecord parcel,
+                                                               io.farfrontier.palemirror.api.VisualModuleSnapshot snapshot) {
+        SemanticSlotKey key = new SemanticSlotKey(intent.targetSiteId().value(),
+                "frontier_storehouse_annex", "authored_building");
+        if (data.semanticSlots().find(key).isEmpty()) {
+            List<SemanticCellRecord> cells = snapshot.blocks().stream().map(value -> {
+                BlockPos position = block(value.position());
+                BlockState baseline = level.getBlockState(position);
+                return new SemanticCellRecord(position, baseline, baseline);
+            }).toList();
+            SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcel.id(),
+                    parcel.dimensionId(), ParcelKind.COMMUNITY, cells);
         }
-        return List.copyOf(keys);
+        return List.of(key);
     }
 
-    private static BlockState expansionBlock(BlockPos position, ParcelRecord parcel) {
-        int base = parcel.min().getY() + 2;
-        if (position.getY() == base) return Blocks.STONE_BRICKS.defaultBlockState();
-        if (position.getY() == base + 4) return Blocks.SPRUCE_SLAB.defaultBlockState();
+    private static io.farfrontier.palemirror.api.VisualModulePlacement developmentModule(
+            AuthoredRegionSeed seed, ParcelRecord parcel) {
         int centerX = (parcel.min().getX() + parcel.max().getX()) / 2;
         int centerZ = (parcel.min().getZ() + parcel.max().getZ()) / 2;
-        if (position.getZ() == centerZ - 3 && position.getX() == centerX && position.getY() <= base + 2) {
-            return Blocks.AIR.defaultBlockState();
-        }
-        return Blocks.SPRUCE_PLANKS.defaultBlockState();
+        int groundY = parcel.min().getY() + 2;
+        var origin = new io.farfrontier.palemirror.api.VisualPoint(centerX, groundY, centerZ);
+        var footprint = new io.farfrontier.palemirror.api.VisualBounds(
+                new io.farfrontier.palemirror.api.VisualPoint(centerX - 5, groundY + 1, centerZ - 4),
+                new io.farfrontier.palemirror.api.VisualPoint(centerX + 4, groundY + 7, centerZ + 3));
+        String family = seed.climate().equals("dry_arid") ? "temperate" : seed.climate();
+        var entrance = new io.farfrontier.palemirror.api.VisualPoint(centerX, groundY + 1, centerZ - 4);
+        return new io.farfrontier.palemirror.api.VisualModulePlacement("development_storehouse",
+                "pale_mirror_visuals:" + family + "/workshop_1", seed.climate(), "LOGISTICS", origin, 0,
+                footprint, "development_foundation", "frontier_freight",
+                List.of(new io.farfrontier.palemirror.api.VisualPort("public",
+                        io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE, entrance, 3)));
     }
 
     private static MaterializationJob ensureJob(PaleMirrorSavedData data, String target, String channel,
@@ -314,17 +334,15 @@ final class AuthoredSettlementProjectRuntime {
         if (job.nextOperation() == null) job.complete(); return true;
     }
 
-    private static boolean plotAvailable(ServerLevel level, ParcelRecord parcel) {
-        int baseY = parcel.min().getY() + 2;
-        int centerX = (parcel.min().getX() + parcel.max().getX()) / 2;
-        int centerZ = (parcel.min().getZ() + parcel.max().getZ()) / 2;
-        for (int x = centerX - 3; x <= centerX + 3; x++) for (int z = centerZ - 3; z <= centerZ + 3; z++) {
-            for (int y = baseY + 1; y <= baseY + 4; y++) if (!level.getBlockState(new BlockPos(x, y, z)).isAir()) return false;
+    private static boolean plotAvailable(ServerLevel level, io.farfrontier.palemirror.api.VisualBounds footprint) {
+        for (int x = footprint.min().x(); x <= footprint.max().x(); x++) {
+            for (int z = footprint.min().z(); z <= footprint.max().z(); z++) {
+                for (int y = footprint.min().y(); y <= footprint.max().y(); y++) {
+                    if (!level.getBlockState(new BlockPos(x, y, z)).isAir()) return false;
+                }
+            }
         }
         return true;
-    }
-    private static void add(ServerLevel level, List<SemanticCellRecord> cells, BlockPos pos) {
-        BlockState state = level.getBlockState(pos); cells.add(new SemanticCellRecord(pos, state, state));
     }
     private static boolean allChunksLoaded(ServerLevel level, BlockPos min, BlockPos max) {
         for (int x = min.getX() >> 4; x <= max.getX() >> 4; x++) for (int z = min.getZ() >> 4; z <= max.getZ() >> 4; z++) {

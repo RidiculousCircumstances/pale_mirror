@@ -111,6 +111,19 @@ class FrontierTerrainSurveyTest {
         assertTrue(!FrontierTerrainSurvey.siteFootprint(mine, minePolicy, terrain));
     }
 
+    @Test void exactMineFootprintRejectsInlandWaterInsideDryBiome() {
+        VisualPoint mine = new VisualPoint(100, 70, 200);
+        FakeTerrain terrain = new FakeTerrain();
+        SiteTerrainPolicy minePolicy = RegionPlacementProfiles.IRON_FRONTIER
+                .requireSite(RegionPlacementProfiles.ALTERNATE_MINE).terrain();
+        terrain.actualWaterAt = new VisualPoint(mine.x() + minePolicy.footprintHalfExtent(), 0, mine.z());
+
+        assertTrue(FrontierTerrainSurvey.siteFootprint(mine, minePolicy, terrain),
+                "a biome-only prefilter cannot identify an inland lake");
+        assertTrue(!FrontierTerrainSurvey.exactDryFootprint(mine, minePolicy, terrain),
+                "the exact hydrology pass must reject inland water for alternate mines too");
+    }
+
     @Test void mineFootprintRequiresNearbyMountainEvidence() {
         VisualPoint mine = new VisualPoint(100, 70, 200);
         FakeTerrain terrain = new FakeTerrain();
@@ -136,6 +149,7 @@ class FrontierTerrainSurveyTest {
         private boolean water;
         private boolean mountainNetwork = true;
         private VisualPoint waterAt;
+        private VisualPoint actualWaterAt;
         private VisualPoint mountainAt;
 
         @Override public TerrainSample exactSample(int x, int z) {
@@ -152,6 +166,10 @@ class FrontierTerrainSurveyTest {
             boolean mountain = mountainNetwork || mountainAt != null && mountainAt.x() == x && mountainAt.z() == z;
             return new FrontierSiteSelector.BiomeSample(climate, suitable && !localWater, localWater || !suitable,
                     0, mountain);
+        }
+
+        @Override public boolean exactWater(int x, int z) {
+            return water || actualWaterAt != null && actualWaterAt.x() == x && actualWaterAt.z() == z;
         }
 
         private int height(int x, int z) {

@@ -18,6 +18,10 @@ public interface VisualProvider extends IntegrationAdapter {
                                           AuthoredMineSitePlan mine) { return false; }
     /** Compiles an inert blueprint. Core remains the sole owner of later world mutation. */
     default Optional<VisualModuleSnapshot> compileAuthoredModule(StagedVisualModule module) { return Optional.empty(); }
+    /** Compiles a bounded state overlay; returned cells are mutations, not a second source of truth. */
+    default Optional<VisualModuleSnapshot> compileAuthoredModuleState(VisualModulePlacement module, String state) {
+        return Optional.empty();
+    }
     Collection<ResidentDeathObservation> drainResidentDeaths(ServerLevel level);
     void applyProjection(ServerLevel level, VisualStateProjection projection);
     default void applyJourneyProjection(ServerLevel level, JourneyProjection projection) { }

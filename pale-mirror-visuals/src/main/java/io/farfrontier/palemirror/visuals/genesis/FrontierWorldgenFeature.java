@@ -87,16 +87,27 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
 
     private static void placeRail(WorldGenLevel level, CompiledChunkSlice.RailColumn rail) {
         int surface = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, rail.rail().getX(), rail.rail().getZ());
-        RailEarthwork earthwork = RailEarthwork.resolve(surface, rail.rail().getY());
+        int floor = level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, rail.rail().getX(), rail.rail().getZ());
+        placeRailColumn(level, rail, surface, floor);
+    }
+
+    static void placeRailColumn(LevelAccessor level, CompiledChunkSlice.RailColumn rail,
+                                int surface, int floor) {
+        boolean water = surface > floor + 1
+                || !level.getFluidState(new BlockPos(rail.rail().getX(), surface - 1, rail.rail().getZ())).isEmpty();
+        RailEarthwork earthwork = water ? RailEarthwork.BRIDGE : RailEarthwork.resolve(surface, rail.rail().getY());
         if (earthwork == RailEarthwork.GROUND) {
             for (int y = surface; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
                     new BlockPos(rail.rail().getX(), y, rail.rail().getZ()), Blocks.COBBLESTONE.defaultBlockState());
         } else if (earthwork == RailEarthwork.BRIDGE
                 && Math.floorMod(rail.rail().getX() + rail.rail().getZ(), 4) == 0) {
-            for (int y = surface; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
-                    new BlockPos(rail.rail().getX(), y, rail.rail().getZ()), Blocks.OAK_FENCE.defaultBlockState());
+            int base = water ? floor : surface;
+            for (int y = base; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
+                    new BlockPos(rail.rail().getX(), y, rail.rail().getZ()),
+                    water ? Blocks.STONE_BRICKS.defaultBlockState() : Blocks.STRIPPED_OAK_LOG.defaultBlockState());
         }
-        setIfDifferent(level, rail.rail().below(), rail.support());
+        setIfDifferent(level, rail.rail().below(), water
+                ? Blocks.OAK_PLANKS.defaultBlockState() : rail.support());
         for (int y = 0; y < 3; y++) setIfDifferent(level, rail.rail().above(y), Blocks.AIR.defaultBlockState());
         setIfDifferent(level, rail.rail(), rail.railState());
     }

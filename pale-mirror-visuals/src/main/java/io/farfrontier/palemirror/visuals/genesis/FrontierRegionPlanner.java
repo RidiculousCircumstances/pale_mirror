@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.visuals.genesis;
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.AuthoredMineRole;
 import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
+import io.farfrontier.palemirror.api.MineFoundationPlan;
 import io.farfrontier.palemirror.api.ResidentSeed;
 import io.farfrontier.palemirror.api.SemanticVisualVolume;
 import io.farfrontier.palemirror.api.StagedVisualModule;
@@ -21,8 +22,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 6;
-    public static final int SETTLEMENT_RADIUS = 88;
+    public static final int DEFINITION_VERSION = 9;
     private final RegionPlacementProfile placementProfile;
 
     public FrontierRegionPlanner() {
@@ -43,7 +43,7 @@ public final class FrontierRegionPlanner {
     }
 
     public AuthoredRegionSeed plan(long worldSeed, int ordinal, VisualPoint anchor, FrontierClimate climate) {
-        return plan(worldSeed, ordinal, anchor, climate,
+        return plan(worldSeed, ordinal, syntheticTerrain(anchor), climate,
                 (requirement, candidates) -> new MountainMineAnchor(candidates.getFirst(),
                         cardinalDirection(anchor, candidates.getFirst())),
                 FrontierRegionPlanner::gradedManhattanRail);
@@ -51,7 +51,7 @@ public final class FrontierRegionPlanner {
 
     public AuthoredRegionSeed plan(long worldSeed, int ordinal, VisualPoint anchor, FrontierClimate climate,
                                    java.util.function.IntBinaryOperator mineHeight) {
-        return plan(worldSeed, ordinal, anchor, climate, (requirement, candidates) -> {
+        return plan(worldSeed, ordinal, syntheticTerrain(anchor), climate, (requirement, candidates) -> {
             VisualPoint candidate = candidates.getFirst();
             VisualPoint portal = new VisualPoint(candidate.x(), mineHeight.applyAsInt(candidate.x(), candidate.z()), candidate.z());
             return new MountainMineAnchor(portal, cardinalDirection(anchor, candidate));
@@ -60,6 +60,12 @@ public final class FrontierRegionPlanner {
 
     public AuthoredRegionSeed plan(long worldSeed, int ordinal, VisualPoint anchor, FrontierClimate climate,
                                    MineAnchorResolver mineAnchors, RailPathResolver railPaths) {
+        return plan(worldSeed, ordinal, syntheticTerrain(anchor), climate, mineAnchors, railPaths);
+    }
+
+    public AuthoredRegionSeed plan(long worldSeed, int ordinal, TerrainCandidate terrain, FrontierClimate climate,
+                                   MineAnchorResolver mineAnchors, RailPathResolver railPaths) {
+        VisualPoint anchor = terrain.anchor();
         if (ordinal < 0) throw new IllegalArgumentException("ordinal must be non-negative");
         String source = worldSeed + ":" + placementProfile.addressSalt() + ":" + ordinal + ":"
                 + anchor.x() + ":" + anchor.z();
@@ -75,22 +81,24 @@ public final class FrontierRegionPlanner {
         int direction = cardinalDirection(anchor, primaryAnchor.portal());
         MountainMineAnchor alternateAnchor = mineAnchors.resolve(alternateRequirement,
                 siteCandidates(anchor, direction + 1, alternateDistance, alternateRequirement, direction));
-        VisualPoint gate = offset(anchor, direction, 78);
-        VisualPoint depot = offset(anchor, direction, 58);
-        List<VisualModulePlacement> modules = modules(anchor, climate, direction);
-        List<VisualBounds> plots = expansionPlots(anchor);
+        var settlement = new SettlementLayoutPlanner().plan(source, anchor, climate, direction, terrain);
+        VisualPoint gate = settlement.freightGate();
+        VisualPoint depot = settlement.receivingDepot();
+        List<VisualModulePlacement> modules = settlement.modules();
         List<ResidentSeed> residents = residents(source, modules);
         AuthoredMineSitePlan primary = minePlan(planId, AuthoredMineRole.PRIMARY, primaryAnchor, climate, source);
         AuthoredMineSitePlan alternate = minePlan(planId, AuthoredMineRole.ALTERNATE, alternateAnchor, climate, source);
         VisualPoint railStart = new VisualPoint(depot.x(), depot.y() + 1, depot.z());
         List<VisualPoint> rail = railPaths.resolve(placementProfile.route(), railStart, primary.loadingEndpoint());
-        List<VisualPoint> shelters = shelterCandidates(anchor, direction);
-        String contentHash = sha256(planId + ":" + climate + ":" + direction + ":" + modules + ":"
+        String contentHash = sha256(planId + ":" + climate + ":" + direction + ":" + settlement + ":"
                 + primary + ":" + alternate + ":" + rail);
         return new AuthoredRegionSeed(planId, placementProfile.id(), DEFINITION_VERSION,
                 contentHash, "minecraft:overworld", climate.name().toLowerCase(Locale.ROOT), climate.palette(), anchor,
-                bounds(anchor, SETTLEMENT_RADIUS, -8, 40), gate, depot, primary, alternate,
-                rail, modules, residents, plots, shelters);
+                settlement, primary, alternate, rail, residents);
+    }
+
+    private static TerrainCandidate syntheticTerrain(VisualPoint anchor) {
+        return new TerrainCandidate(anchor, 6, 0, 0, 0, 1, 0);
     }
 
     private static AuthoredMineSitePlan minePlan(String planId, AuthoredMineRole role, MountainMineAnchor anchor,
@@ -100,60 +108,99 @@ public final class FrontierRegionPlanner {
         String family = climate == FrontierClimate.DRY_ARID ? "temperate" : climate.name().toLowerCase(Locale.ROOT);
         List<VisualModulePlacement> initial = new ArrayList<>();
         List<StagedVisualModule> staged = new ArrayList<>();
-        addMine(initial, family, "portal_hoist", "MINE_PORTAL", portal, 0, 0, direction, 45, 19, 37);
-        addMine(initial, family, "entrance_adit", "MINE_ADIT", portal, 0, 28, direction, 7, 6, 7);
-        addMine(initial, family, "crew_outpost", "MINE_SUPPORT", portal, -18, 18, direction, 12, 6, 9);
-        addMine(initial, family, "controller_chamber", "MINE_CONTROLLER", portal, 0, 76, direction, 17, 13, 13);
+        addSurfaceMine(initial, family, "mine/portal_hoist", "portal", "MINE_PORTAL",
+                role, anchor, 45, 19, 37);
+        addSurfaceMine(initial, family, "mine/crew_outpost", "crew", "MINE_SUPPORT",
+                role, anchor, 12, 6, 9);
+        addUndergroundMine(initial, family, "entrance_adit", "MINE_ADIT", portal,
+                MineUndergroundLayout.ADIT, direction, 7, 6, 7);
+        addUndergroundMine(initial, family, "controller_chamber", "MINE_CONTROLLER", portal,
+                MineUndergroundLayout.CONTROLLER, direction, 17, 13, 13);
         if (role == AuthoredMineRole.PRIMARY) {
-            addMine(initial, family, "processing_hall", "MINE_PROCESSING", portal, 25, -10, direction, 31, 10, 17);
-            addMine(initial, family, "power_house", "MINE_POWER", portal, -27, -8, direction, 13, 15, 15);
-            addMine(initial, family, "loading_yard", "MINE_LOGISTICS", portal, 0, -30, direction, 14, 10, 9);
-            addMine(initial, family, "iron_gallery", "MINE_GALLERY", portal, 0, 50, direction, 40, 9, 17);
+            addSurfaceMine(initial, family, "mine/processing_hall", "processing", "MINE_PROCESSING",
+                    role, anchor, 31, 10, 17);
+            addSurfaceMine(initial, family, "mine/power_house", "power", "MINE_POWER",
+                    role, anchor, 13, 15, 15);
+            addSurfaceMine(initial, family, "mine/loading_yard", "loading", "MINE_LOGISTICS",
+                    role, anchor, 14, 10, 9);
+            addUndergroundMine(initial, family, "iron_gallery", "MINE_GALLERY", portal,
+                    MineUndergroundLayout.GALLERY, direction, 40, 9, 17);
         } else {
-            staged.add(stageMine("foundation", family, "dispatch_foundation", "MINE_LOGISTICS", portal,
-                    0, -28, direction, 13, 7, 13));
-            staged.add(stageMine("shell", family, "dispatch_shell", "MINE_PROCESSING", portal,
-                    20, -8, direction, 31, 10, 17));
-            staged.add(stageMine("machinery", family, "dispatch_machinery", "MINE_POWER", portal,
-                    -22, -8, direction, 19, 9, 22));
-            staged.add(stageMine("commissioning", family, "dispatch_commissioning", "MINE_LOGISTICS", portal,
-                    0, -28, direction, 14, 10, 9));
+            staged.add(stageSurfaceMine("foundation", family, "mine/dispatch_foundation", "dispatch",
+                    "MINE_LOGISTICS", role, anchor, 13, 7, 13));
+            staged.add(stageSurfaceMine("shell", family, "mine/dispatch_shell", "processing",
+                    "MINE_PROCESSING", role, anchor, 31, 10, 17));
+            staged.add(stageSurfaceMine("machinery", family, "mine/dispatch_machinery", "power",
+                    "MINE_POWER", role, anchor, 19, 9, 22));
+            staged.add(stageSurfaceMine("commissioning", family, "mine/dispatch_commissioning", "freight",
+                    "MINE_LOGISTICS", role, anchor, 14, 10, 9));
         }
-        VisualPoint controller = local(portal, 0, 76, -18, direction);
-        VisualPoint loading = local(portal, 0, -42, 1, direction);
-        VisualBounds siteBounds = orientedBounds(portal, 50, 90, -26, 28, direction);
+        VisualPoint controller = local(portal, MineUndergroundLayout.CONTROLLER, direction);
+        String loadingPad = role == AuthoredMineRole.PRIMARY ? "loading" : "dispatch";
+        VisualPoint loadingCenter = anchor.surfaceCenter(role, loadingPad);
+        VisualPoint loading = new VisualPoint(loadingCenter.x(), loadingCenter.y() + 1, loadingCenter.z());
+        VisualBounds siteBounds = orientedBounds(portal, 72, 52, -22, 28, direction);
+        VisualPoint machinery = anchor.surfaceCenter(role, "power");
         List<SemanticVisualVolume> volumes = List.of(
-                new SemanticVisualVolume("infection_gallery", "INFECTION", around(local(portal, 0, 50, -12, direction), 10, 8)),
+                new SemanticVisualVolume("infection_gallery", "INFECTION",
+                        around(local(portal, MineUndergroundLayout.GALLERY, direction), 10, 8)),
                 new SemanticVisualVolume("infection_controller", "INFECTION", around(controller, 8, 7)),
-                new SemanticVisualVolume("machinery", "MACHINERY", around(local(portal, -22, -8, 5, direction), 12, 12)),
+                new SemanticVisualVolume("machinery", "MACHINERY", around(machinery, 12, 12)),
                 new SemanticVisualVolume("loading", "LOGISTICS", around(loading, 20, 7)));
         String id = planId + (role == AuthoredMineRole.PRIMARY ? ":mine17" : ":red_valley");
         return new AuthoredMineSitePlan(id, role, portal, loading, controller, siteBounds, direction,
-                initial, staged, volumes);
+                initial, staged, foundations(role, anchor), volumes);
     }
 
-    private static void addMine(List<VisualModulePlacement> target, String family, String name, String role,
-                                VisualPoint portal, int right, int inward, int direction, int sx, int sy, int sz) {
-        target.add(mineModule(family, name, role, portal, right, inward, direction, sx, sy, sz));
+    private static List<MineFoundationPlan> foundations(AuthoredMineRole role, MountainMineAnchor anchor) {
+        return MineSurfaceLayout.pads(role).stream().map(pad -> {
+            VisualPoint center = anchor.surfaceCenter(role, pad.id());
+            return new MineFoundationPlan(pad.id(), pad.bounds(center, anchor.inwardQuarterTurns()),
+                    center.y(), MineSurfaceLayout.APRON, MineSurfaceLayout.MAXIMUM_CUT,
+                    MineSurfaceLayout.MAXIMUM_FILL);
+        }).toList();
     }
 
-    private static StagedVisualModule stageMine(String stage, String family, String name, String role,
-                                                 VisualPoint portal, int right, int inward, int direction,
-                                                 int sx, int sy, int sz) {
-        return new StagedVisualModule(stage, mineModule(family, name, role, portal, right, inward, direction, sx, sy, sz));
+    private static void addSurfaceMine(List<VisualModulePlacement> target, String family, String template,
+                                       String padId, String moduleRole, AuthoredMineRole mineRole,
+                                       MountainMineAnchor anchor, int sx, int sy, int sz) {
+        target.add(surfaceMineModule(family, template, padId, moduleRole, mineRole, anchor, sx, sy, sz));
     }
 
-    private static VisualModulePlacement mineModule(String family, String name, String role, VisualPoint portal,
-                                                     int right, int inward, int direction, int sx, int sy, int sz) {
-        VisualPoint origin = local(portal, right, inward, name.contains("adit") || name.contains("gallery")
-                || name.contains("controller") ? -18 : 0, direction);
+    private static StagedVisualModule stageSurfaceMine(String stage, String family, String template,
+                                                        String padId, String moduleRole, AuthoredMineRole mineRole,
+                                                        MountainMineAnchor anchor, int sx, int sy, int sz) {
+        return new StagedVisualModule(stage, surfaceMineModule(family, template, padId, moduleRole,
+                mineRole, anchor, sx, sy, sz));
+    }
+
+    private static VisualModulePlacement surfaceMineModule(String family, String template, String padId,
+                                                            String moduleRole, AuthoredMineRole mineRole,
+                                                            MountainMineAnchor anchor, int sx, int sy, int sz) {
+        VisualPoint origin = anchor.surfaceCenter(mineRole, padId);
+        return module(family + "/" + template, moduleRole, origin, anchor.inwardQuarterTurns(), sx, sy, sz);
+    }
+
+    private static void addUndergroundMine(List<VisualModulePlacement> target, String family, String name,
+                                           String role, VisualPoint portal, MineUndergroundLayout.Node node, int direction,
+                                           int sx, int sy, int sz) {
+        VisualPoint origin = local(portal, node, direction);
+        target.add(module(family + "/mine/" + name, role, origin, direction, sx, sy, sz));
+    }
+
+    private static VisualPoint local(VisualPoint portal, MineUndergroundLayout.Node node, int direction) {
+        return local(portal, node.right(), node.inward(), node.up(), direction);
+    }
+
+    private static VisualModulePlacement module(String template, String role, VisualPoint origin,
+                                                 int direction, int sx, int sy, int sz) {
         boolean swap = Math.floorMod(direction, 2) == 1;
         int width = swap ? sz : sx;
         int depth = swap ? sx : sz;
         VisualBounds footprint = new VisualBounds(new VisualPoint(origin.x() - width / 2, origin.y() + 1,
                 origin.z() - depth / 2), new VisualPoint(origin.x() + (width - 1) / 2, origin.y() + sy,
                 origin.z() + (depth - 1) / 2));
-        return new VisualModulePlacement("pale_mirror_visuals:" + family + "/mine/" + name,
+        return new VisualModulePlacement("pale_mirror_visuals:" + template,
                 role, origin, direction, footprint);
     }
 
@@ -184,31 +231,46 @@ public final class FrontierRegionPlanner {
         return band.minimum() + keyedInt(source, key, band.span());
     }
 
-    private static List<VisualPoint> siteCandidates(VisualPoint anchor, int firstDirection, int preferredDistance,
-                                                     SitePlacementRequirement requirement, int excludedDirection) {
+    static List<VisualPoint> siteCandidates(VisualPoint anchor, int firstDirection, int preferredDistance,
+                                            SitePlacementRequirement requirement, int excludedDirection) {
         int minimumDistance = requirement.distanceFromSettlement().minimum();
         int maximumDistance = requirement.distanceFromSettlement().maximum();
-        List<Integer> distances = new ArrayList<>();
-        distances.add(preferredDistance);
-        for (int delta = 16; distances.size() < requirement.preferredDistanceCandidateLimit()
+        java.util.LinkedHashSet<Integer> distanceSet = new java.util.LinkedHashSet<>();
+        distanceSet.add(preferredDistance);
+        requirement.landscapeEvidenceDistances().stream()
+                .filter(value -> value >= minimumDistance && value <= maximumDistance)
+                .sorted(java.util.Comparator.comparingInt((Integer value) -> Math.abs(value - preferredDistance)))
+                .forEach(distanceSet::add);
+        for (int delta = 16; distanceSet.size() < requirement.preferredDistanceCandidateLimit()
                 && delta <= maximumDistance - minimumDistance; delta += 16) {
             int farther = preferredDistance + delta;
             int nearer = preferredDistance - delta;
-            if (farther <= maximumDistance) distances.add(farther);
-            if (nearer >= minimumDistance) distances.add(nearer);
+            if (farther <= maximumDistance) distanceSet.add(farther);
+            if (nearer >= minimumDistance) distanceSet.add(nearer);
         }
-        if (!distances.contains(minimumDistance)) distances.add(minimumDistance);
-        if (!distances.contains(maximumDistance)) distances.add(maximumDistance);
+        distanceSet.add(minimumDistance);
+        distanceSet.add(maximumDistance);
+        List<Integer> distances = List.copyOf(distanceSet);
         java.util.LinkedHashSet<VisualPoint> result = new java.util.LinkedHashSet<>();
-        for (int turn = 0; turn < 4; turn++) {
-            int direction = Math.floorMod(firstDirection + turn, 4);
-            if (excludedDirection >= 0 && direction == Math.floorMod(excludedDirection, 4)) continue;
-            for (int distance : distances) for (int lateral : requirement.lateralOffsets()) {
-                VisualPoint candidate = offset(offset(anchor, direction, distance), direction + 1, lateral);
-                long dx = (long) candidate.x() - anchor.x();
-                long dz = (long) candidate.z() - anchor.z();
-                long radialSquared = dx * dx + dz * dz;
-                if (requirement.distanceFromSettlement().containsSquared(radialSquared)) result.add(candidate);
+        // Exact validation is deliberately bounded. Interleave cardinal sectors and
+        // radial distances and lateral refinements diagonally. A small budget must
+        // reach the biome-evidenced radii as well as the width of a broken mountain front.
+        int maximumDiagonal = distances.size() + requirement.lateralOffsets().size() - 2;
+        for (int diagonal = 0; diagonal <= maximumDiagonal; diagonal++) {
+            for (int distanceIndex = 0; distanceIndex < distances.size(); distanceIndex++) {
+                int lateralIndex = diagonal - distanceIndex;
+                if (lateralIndex < 0 || lateralIndex >= requirement.lateralOffsets().size()) continue;
+                int distance = distances.get(distanceIndex);
+                int lateral = requirement.lateralOffsets().get(lateralIndex);
+                for (int turn = 0; turn < 4; turn++) {
+                    int direction = Math.floorMod(firstDirection + turn, 4);
+                    if (excludedDirection >= 0 && direction == Math.floorMod(excludedDirection, 4)) continue;
+                    VisualPoint candidate = offset(offset(anchor, direction, distance), direction + 1, lateral);
+                    long dx = (long) candidate.x() - anchor.x();
+                    long dz = (long) candidate.z() - anchor.z();
+                    long radialSquared = dx * dx + dz * dz;
+                    if (requirement.distanceFromSettlement().containsSquared(radialSquared)) result.add(candidate);
+                }
             }
         }
         return List.copyOf(result);
@@ -219,60 +281,6 @@ public final class FrontierRegionPlanner {
         int dz = to.z() - from.z();
         if (dx == 0 && dz == 0) throw new IllegalStateException("Resolved MineSite overlaps its settlement");
         return Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? 0 : 2) : (dz > 0 ? 1 : 3);
-    }
-
-    private static List<VisualModulePlacement> modules(VisualPoint a, FrontierClimate climate, int gateDirection) {
-        List<VisualModulePlacement> out = new ArrayList<>();
-        add(out, climate, "civic_hall", "CIVIC", a, 0, 0, gateDirection);
-        add(out, climate, "receiving_depot", "LOGISTICS", a, gateDirection, 54, gateDirection + 2);
-        add(out, climate, "barracks", "DEFENCE", a, gateDirection + 1, 47, gateDirection + 3);
-        add(out, climate, "smithy", "INDUSTRY", a, gateDirection + 3, 44, gateDirection + 1);
-        add(out, climate, "clinic", "CIVIC", a, gateDirection + 2, 34, gateDirection);
-        add(out, climate, "inn", "CIVIC", a, gateDirection + 1, 25, gateDirection + 3);
-        add(out, climate, "stable", "LOGISTICS", a, gateDirection + 3, 62, gateDirection + 1);
-        add(out, climate, "market", "ECONOMY", a, gateDirection + 2, 18, gateDirection);
-        for (int i = 0; i < 6; i++) add(out, climate, "residence_" + (i % 3 + 1), "HOUSING", a, i, 42 + (i % 2) * 17, i + 2);
-        add(out, climate, "workshop_1", "INDUSTRY", a, gateDirection, 31, gateDirection + 2);
-        add(out, climate, "workshop_2", "INDUSTRY", a, gateDirection + 2, 57, gateDirection);
-        return List.copyOf(out);
-    }
-
-    private static void add(List<VisualModulePlacement> out, FrontierClimate climate, String name, String role,
-                            VisualPoint anchor, int direction, int radius, int rotation) {
-        String assetClimate = climate == FrontierClimate.DRY_ARID ? "temperate" : climate.name().toLowerCase(Locale.ROOT);
-        VisualPoint origin = offset(anchor, direction, radius);
-        out.add(new VisualModulePlacement("pale_mirror_visuals:" + assetClimate
-                + "/" + name, role, origin, rotation, moduleFootprint(name, origin, rotation)));
-    }
-
-    private static VisualBounds moduleFootprint(String name, VisualPoint origin, int rotation) {
-        int[] size = switch (name) {
-            case "barracks" -> new int[]{9, 8, 18}; case "civic_hall" -> new int[]{29, 37, 22};
-            case "clinic" -> new int[]{13, 18, 14}; case "inn" -> new int[]{17, 13, 26};
-            case "market", "stable" -> new int[]{19, 8, 16}; case "receiving_depot" -> new int[]{10, 6, 6};
-            case "residence_1", "residence_3" -> new int[]{10, 7, 9}; case "residence_2" -> new int[]{11, 11, 14};
-            case "smithy" -> new int[]{5, 7, 7}; case "workshop_1" -> new int[]{10, 7, 8};
-            case "workshop_2" -> new int[]{16, 6, 20};
-            default -> throw new IllegalArgumentException("Unknown authored module " + name);
-        };
-        boolean swap = Math.floorMod(rotation, 2) == 1;
-        int xSize = swap ? size[2] : size[0]; int zSize = swap ? size[0] : size[2];
-        VisualPoint min = new VisualPoint(origin.x() - xSize / 2, origin.y() + 1, origin.z() - zSize / 2);
-        return new VisualBounds(min, new VisualPoint(min.x() + xSize - 1, min.y() + size[1] - 1, min.z() + zSize - 1));
-    }
-
-    private static List<VisualBounds> expansionPlots(VisualPoint anchor) {
-        List<VisualBounds> plots = new ArrayList<>();
-        for (int i = 0; i < 6; i++) {
-            VisualPoint p = offset(anchor, i, 72 + (i % 2) * 8);
-            plots.add(bounds(p, 8, -2, 12));
-        }
-        return List.copyOf(plots);
-    }
-
-    private static List<VisualPoint> shelterCandidates(VisualPoint anchor, int freightDirection) {
-        return List.of(offset(anchor, freightDirection + 1, 128), offset(anchor, freightDirection + 2, 144),
-                offset(anchor, freightDirection + 3, 120));
     }
 
     private static List<ResidentSeed> residents(String source, List<VisualModulePlacement> modules) {
@@ -348,11 +356,6 @@ public final class FrontierRegionPlanner {
             result.add(new VisualPoint(point.x(), from.y() + Integer.signum(elevation) * progressed, point.z()));
         }
         return List.copyOf(result);
-    }
-
-    private static VisualBounds bounds(VisualPoint center, int radius, int down, int up) {
-        return new VisualBounds(new VisualPoint(center.x() - radius, center.y() + down, center.z() - radius),
-                new VisualPoint(center.x() + radius, center.y() + up, center.z() + radius));
     }
 
     private static VisualPoint offset(VisualPoint p, int direction, int distance) {

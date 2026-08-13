@@ -9,6 +9,7 @@ public record AuthoredMineSitePlan(String siteId, AuthoredMineRole role, VisualP
                                    VisualBounds bounds, int inwardQuarterTurns,
                                    List<VisualModulePlacement> initialModules,
                                    List<StagedVisualModule> stagedModules,
+                                   List<MineFoundationPlan> foundations,
                                    List<SemanticVisualVolume> semanticVolumes) {
     public AuthoredMineSitePlan {
         if (siteId == null || siteId.isBlank()) throw new IllegalArgumentException("siteId is required");
@@ -20,8 +21,13 @@ public record AuthoredMineSitePlan(String siteId, AuthoredMineRole role, VisualP
         inwardQuarterTurns = Math.floorMod(inwardQuarterTurns, 4);
         initialModules = List.copyOf(initialModules);
         stagedModules = List.copyOf(stagedModules);
+        foundations = List.copyOf(foundations);
         semanticVolumes = List.copyOf(semanticVolumes);
         if (initialModules.isEmpty()) throw new IllegalArgumentException("MineSite requires initial modules");
+        if (foundations.isEmpty()) throw new IllegalArgumentException("MineSite requires surface foundations");
+        if (foundations.stream().map(MineFoundationPlan::id).distinct().count() != foundations.size()) {
+            throw new IllegalArgumentException("MineSite foundation ids must be unique");
+        }
         if (semanticVolumes.stream().noneMatch(value -> value.purpose().equals("INFECTION"))) {
             throw new IllegalArgumentException("MineSite requires an INFECTION semantic volume");
         }

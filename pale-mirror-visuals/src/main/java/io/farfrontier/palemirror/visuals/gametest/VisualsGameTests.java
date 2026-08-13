@@ -94,10 +94,8 @@ public final class VisualsGameTests {
             for (var column : slice.vegetation()) {
                 helper.assertValueEqual(net.minecraft.world.level.ChunkPos.asLong(column.x() >> 4, column.z() >> 4),
                         entry.getKey(), "vegetation cleanup escaped its chunk-local slice");
-                int dx = column.x() - seed.anchor().x();
-                int dz = column.z() - seed.anchor().z();
-                if (dx * dx + dz * dz > FrontierRegionPlanner.SETTLEMENT_RADIUS
-                        * FrontierRegionPlanner.SETTLEMENT_RADIUS) cleanupOnlyColumns++;
+                VisualPoint surface = new VisualPoint(column.x(), seed.anchor().y(), column.z());
+                if (!seed.settlementBounds().contains(surface)) cleanupOnlyColumns++;
             }
             for (var rail : slice.rails()) {
                 helper.assertValueEqual(new net.minecraft.world.level.ChunkPos(rail.rail()).toLong(), entry.getKey(),
@@ -134,11 +132,39 @@ public final class VisualsGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void authoredStateMasksAreBoundedAndReversible(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(7719L, 0, new VisualPoint(900, 72, 900),
+                FrontierClimate.TEMPERATE, (x, z) -> 72);
+        var module = seed.modules().stream().filter(value -> value.templateId().endsWith("/civic_hall"))
+                .findFirst().orElseThrow();
+        var intact = AuthoredModuleCompiler.compile(module);
+        var damaged = AuthoredModuleCompiler.compileState(module, "DAMAGED");
+        var ruined = AuthoredModuleCompiler.compileState(module, "RUINED");
+        helper.assertTrue(!damaged.blocks().isEmpty() && damaged.blocks().size() <= 24,
+                "damaged overlay must be authored and bounded");
+        helper.assertTrue(ruined.blocks().size() >= damaged.blocks().size() && ruined.blocks().size() <= 48,
+                "ruined overlay must include the damaged semantic mask within its larger budget");
+        helper.assertTrue(intact.blocks().size() > ruined.blocks().size(),
+                "state overlay must not duplicate the full authored building");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)
+    public static void goldMasterMatrixCompilesEveryClimateRotationAndState(GameTestHelper helper) {
+        var matrix = io.farfrontier.palemirror.visuals.genesis.VisualShowcasePlan.matrix(
+                new VisualPoint(20_000, 80, 20_000));
+        for (var entry : matrix) {
+            var snapshot = AuthoredModuleCompiler.compileState(entry.module(), entry.state());
+            helper.assertTrue(!snapshot.blocks().isEmpty(), "gold master cell is empty: " + entry.key());
+        }
+        helper.succeed();
+    }
+
     private static AuthoredRegionSeed withRail(AuthoredRegionSeed seed, java.util.List<VisualPoint> rail) {
         return new AuthoredRegionSeed(seed.planId(), seed.archetypeId(), seed.definitionVersion(), seed.contentHash(),
-                seed.dimensionId(), seed.climate(), seed.palette(), seed.anchor(), seed.settlementBounds(),
-                seed.freightGate(), seed.receivingDepot(), seed.primaryMineSite(), seed.alternateMineSite(), rail,
-                seed.modules(), seed.residents(), seed.expansionPlots(), seed.shelterCandidates());
+                seed.dimensionId(), seed.climate(), seed.palette(), seed.anchor(), seed.settlementSite(),
+                seed.primaryMineSite(), seed.alternateMineSite(), rail, seed.residents());
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)

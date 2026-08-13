@@ -1,6 +1,6 @@
 # Pale Mirror runtime performance
 
-Schema v37 has one server-thread admission controller. Non-critical regional,
+Schema v39 has one server-thread admission controller. Non-critical regional,
 railway, settlement and projection work shares a default soft budget of 3 ms
 and 256 weighted operations per tick. Safety-critical combat attribution,
 reconciliation and an already-started idempotent operation are not abandoned
@@ -23,19 +23,21 @@ only 16 nearby residents run vanilla AI by default.
 Fresh-world planning is also bounded. Visuals samples mountain biomes cheaply,
 derives nearby foothill candidates and ranks their footprint without constructing
 NoiseChunks. An accepted region normally spends one exact five-point settlement
-survey, two bounded mountain-face searches and nine bounded rail-control alternatives.
+survey, two bounded mountain-face and local-pad searches and one bounded railway-corridor search.
 Rejected terrain may consume at most six settlement surveys and 24 exact
-candidates per MineSite. The planner never sweeps every route column; local
-cut/fill remains current-chunk worldgen work. `performance` reports site, mine
+candidates per MineSite. Only the selected rail corridor is verified column by
+column; local cut/fill remains current-chunk worldgen work. `performance` reports site, mine
 and rail probe classes separately, along with planning and catalog compile
-time. With the output range set to 3/5/6, a 160-center survey cap, 20,000-block
-radius and 2,500-block final spacing, the full private modpack selected four
-strict mountain-native regions on seed `3374619285067712046` in 222.059 seconds.
-It used 3,030 site probes, 10,561 mine probes, 43 rail probes, 8,329 unique
-heights and 769,400 cheap biome samples. Eight otherwise valid centers were
-discarded by final spacing. The target of five was not forced by weakening terrain.
+time. The production output range remains 3/5/6 with a 160-center survey cap,
+20,000-block radius and 2,500-block final spacing. The packaged two-start gate
+uses the same full private modpack, geography policy and seed
+`781345920664213799`, but requests one complete region because batch cardinality
+has separate tests. It selected that region in 26.856 seconds using 3,480 site
+probes, 12,088 mine probes, 269 rail probes, 10,688 unique heights and 221,946
+cheap biome samples, then compiled 128 chunk slices and observed an exact genesis
+stamp before a successful restart. Production never weakens terrain to force its target.
 
-For an evidence-grade profile, run the server on JDK 21 and capture JFR:
+For an evidence-grade profile, run the private server on its JDK 22 runtime and capture JFR:
 
 ```bash
 scripts/capture-runtime-jfr.sh <server-pid> 120s build/profiles/pale-mirror-runtime.jfr

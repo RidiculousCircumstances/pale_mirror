@@ -5,6 +5,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RailBlock;
+import net.minecraft.world.level.block.state.properties.RailShape;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -39,5 +41,38 @@ public final class FrontierWorldgenCleanupGameTests {
         helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 42, 2));
         helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 43, 2));
         helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 40)
+    public static void plannedBridgeKeepsRailAboveWaterAndPreservesTheRiver(GameTestHelper helper) {
+        BlockPos rail = helper.absolutePos(new BlockPos(4, 9, 4));
+        for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) for (int y = 3; y <= 6; y++) {
+            helper.getLevel().setBlock(helper.absolutePos(new BlockPos(4 + x, y, 4 + z)),
+                    Blocks.WATER.defaultBlockState(), 2);
+        }
+        var column = new CompiledChunkSlice.RailColumn(rail,
+                Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, RailShape.NORTH_SOUTH),
+                Blocks.GRAVEL.defaultBlockState());
+        FrontierWorldgenFeature.placeRailColumn(helper.getLevel(), column, rail.getY() - 2, rail.getY() - 6);
+
+        BlockPos shallowRail = helper.absolutePos(new BlockPos(8, 6, 4));
+        for (int x = 7; x <= 9; x++) for (int z = 3; z <= 5; z++) {
+            helper.getLevel().setBlock(helper.absolutePos(new BlockPos(x, 3, z)),
+                    Blocks.WATER.defaultBlockState(), 2);
+        }
+        var shallowColumn = new CompiledChunkSlice.RailColumn(shallowRail,
+                Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, RailShape.NORTH_SOUTH),
+                Blocks.GRAVEL.defaultBlockState());
+        FrontierWorldgenFeature.placeRailColumn(helper.getLevel(), shallowColumn,
+                shallowRail.getY() - 2, shallowRail.getY() - 3);
+
+        helper.runAfterDelay(5, () -> {
+            helper.assertBlockPresent(Blocks.RAIL, new BlockPos(4, 9, 4));
+            helper.assertBlockPresent(Blocks.OAK_PLANKS, new BlockPos(4, 8, 4));
+            helper.assertBlockPresent(Blocks.WATER, new BlockPos(3, 6, 4));
+            helper.assertBlockPresent(Blocks.OAK_PLANKS, new BlockPos(8, 5, 4));
+            helper.assertBlockPresent(Blocks.WATER, new BlockPos(7, 3, 4));
+            helper.succeed();
+        });
     }
 }
