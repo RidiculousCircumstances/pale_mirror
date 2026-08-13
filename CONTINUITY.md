@@ -83,7 +83,7 @@
   scan deliberately ignores the post-grading surface heightmap, which may already have collapsed below leftover foliage.
 
 ### Now
-- Live-flight JFR captured the disconnect and generation profile. The crash was an invalid powered-rail curve, not an OOM; GC p99 was 40.1 ms. DH saturated its 2,000-chunk LOD queue, while ModernFix surface-rule optimization consumed 4.4% of CPU samples and dominated allocation pressure. The managed next profile therefore disables server DH by default, disables that ModernFix mixin and matches eight C2ME concurrent loads to eight workers; native acceleration and density compilation remain enabled.
+- Two live-flight JFRs captured the failing and corrected profiles. The first crash was an invalid powered-rail curve, not an OOM; DH saturated its 2,000-chunk LOD queue and ModernFix surface-rule optimization consumed 4.4% of CPU samples while dominating allocation pressure. With server DH and that mixin disabled and C2ME matched at eight workers/eight concurrent loads, JVM average CPU fell from 18.37% to 11.57%, machine average from 26.14% to 16.30% and total GC pause time from 4.14 s to 1.96 s. The repeat flight had no DH overflow, `Can't keep up`, disconnect, rail exception or server crash.
 - The mountain-native mine cutover and reusable placement-profile boundary are implemented. Core schema v37, Visual definition v6, catalog v7 and
   genesis SavedData schema v6 intentionally reject every earlier world; the playtest world is disposable.
 - `AuthoredMineSitePlan` now pins each portal, loading endpoint, controller, bounds, orientation, initial/staged
@@ -103,7 +103,7 @@
   territory protection and genesis cleanup.
 
 ### Next
-- Deploy the rail/runtime and measured flight-profile fixes to the existing disposable world, repeat the straight unknown-terrain flight, then run the graphical seed matrix for foothills, mine/rail composition, isolated Create kinetics, Red Valley construction and real-train proof.
+- Run the graphical seed matrix for foothills, mine/rail composition, isolated Create kinetics, Red Valley construction and real-train proof; retain server DH only as an explicit benchmark A/B option.
 
 ## Open questions
 - UNCONFIRMED: final visual quality and playability until a real client visits naturally generated temperate/cold/dry mountain regions after the v37 cutover.
