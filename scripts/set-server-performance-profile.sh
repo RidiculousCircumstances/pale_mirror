@@ -9,7 +9,7 @@ target=""
 profile=""
 java_bin=${JAVA_BIN:-java}
 worldgen=combined
-surface_rules=optimized
+surface_rules=vanilla
 while (($#)); do
   case "$1" in
     --target) target=${2:?--target requires a directory}; shift 2 ;;
@@ -78,7 +78,7 @@ if [[ "$profile" == c2me ]]; then
     [[ "$worldgen" != density && "$worldgen" != combined ]] || density=true
     [[ "$worldgen" != native && "$worldgen" != combined ]] || native=true
     set_toml_key "$c2me_config" "" globalExecutorParallelism 8
-    set_toml_key "$c2me_config" noTickViewDistance maxConcurrentChunkLoads 6
+    set_toml_key "$c2me_config" noTickViewDistance maxConcurrentChunkLoads 8
     set_toml_key "$c2me_config" vanillaWorldGenOptimizations useDensityFunctionCompiler "$density"
     set_toml_key "$c2me_config" vanillaWorldGenOptimizations.nativeAcceleration enabled "$native"
     set_toml_key "$c2me_config" vanillaWorldGenOptimizations.nativeAcceleration allowAVX512 false
@@ -94,5 +94,5 @@ else
   set_property_key "$modernfix_config" mixin.perf.optimize_surface_rules false
 fi
 echo "Far Frontier server performance profile: $profile"
-[[ "$profile" != c2me || ! -f "${c2me_config:-}" ]] || echo "C2ME workers=8 concurrent-loads=6 worldgen=$worldgen AVX512=false"
+[[ "$profile" != c2me || ! -f "${c2me_config:-}" ]] || echo "C2ME workers=8 concurrent-loads=8 worldgen=$worldgen AVX512=false"
 echo "ModernFix surface-rules=$surface_rules"

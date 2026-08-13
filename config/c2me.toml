@@ -9,4 +9,4 @@ globalExecutorParallelism = 8
 		enabled = true
 
 [noTickViewDistance]
-	maxConcurrentChunkLoads = 6
+	maxConcurrentChunkLoads = 8

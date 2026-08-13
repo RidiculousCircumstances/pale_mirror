@@ -22,6 +22,7 @@ Options:
   --pack-url <URL>
   --java <path>
   --enable-c2me
+  --enable-server-dh-cache
   --accept-eula
   --pale-mirror-url <URL>
   --pale-mirror-sha512 <128 hex characters>
@@ -41,7 +42,9 @@ must be supplied together; PALE_MIRROR_URL and PALE_MIRROR_SHA512 are also accep
 The Railway Untold pair is likewise accepted through RAILWAY_UNTOLD_URL and
 RAILWAY_UNTOLD_SHA512. The dedicated server runtime must be Java 22; Pale Mirror
 and all client artifacts remain compiled for Java 21. C2ME is downloaded but kept
-disabled unless --enable-c2me is supplied.
+disabled unless --enable-c2me is supplied. Distant Horizons remains client-side by
+default; --enable-server-dh-cache enables its measured-cost cache/synchronisation
+service without enabling unknown-world generation.
 EOF
 }
 
@@ -50,6 +53,7 @@ pack_url=""
 java_bin="${JAVA_BIN:-java}"
 accept_eula=false
 enable_c2me=false
+enable_server_dh_cache=false
 pale_mirror_url="${PALE_MIRROR_URL:-}"
 pale_mirror_sha512="${PALE_MIRROR_SHA512:-}"
 pale_mirror_visuals_url="${PALE_MIRROR_VISUALS_URL:-}"
@@ -63,6 +67,7 @@ while (($#)); do
     --java) java_bin=${2:?--java requires a path}; shift 2 ;;
     --accept-eula) accept_eula=true; shift ;;
     --enable-c2me) enable_c2me=true; shift ;;
+    --enable-server-dh-cache) enable_server_dh_cache=true; shift ;;
     --pale-mirror-url) pale_mirror_url=${2:?--pale-mirror-url requires a URL}; shift 2 ;;
     --pale-mirror-sha512) pale_mirror_sha512=${2:?--pale-mirror-sha512 requires a hash}; shift 2 ;;
     --pale-mirror-visuals-url) pale_mirror_visuals_url=${2:?--pale-mirror-visuals-url requires a URL}; shift 2 ;;
@@ -174,6 +179,26 @@ else
   [[ ! -f "$c2me_jar" ]] || mv "$c2me_jar" "$c2me_disabled"
 fi
 
+# Client DH still builds and renders LODs from ordinary chunks received from the
+# server. The dedicated cache is opt-in because its event-fed builder saturated a
+# 2,000-chunk queue and competed with live unexplored-world generation in JFR.
+if [[ "$enable_server_dh_cache" == true ]]; then
+  for dh_disabled in "$target"/mods/DistantHorizons-*.jar.server-disabled; do
+    dh_jar=${dh_disabled%.server-disabled}
+    [[ -e "$dh_jar" ]] || mv "$dh_disabled" "$dh_jar"
+  done
+else
+  for dh_jar in "$target"/mods/DistantHorizons-*.jar; do
+    dh_disabled="$dh_jar.server-disabled"
+    if [[ -e "$dh_disabled" ]]; then
+      disabled_backup_root="$cache_dir/disabled-mod-backups"
+      mkdir -p "$disabled_backup_root"
+      mv "$dh_disabled" "$disabled_backup_root/${dh_disabled##*/}.$(date -u +%Y%m%dT%H%M%SZ)"
+    fi
+    mv "$dh_jar" "$dh_disabled"
+  done
+fi
+
 python3 "$target/scripts/validate-structure-assets.py" \
   --mods-dir "$target/mods" \
   --datapacks "$target/datapacks" \
@@ -239,9 +264,9 @@ set_server_property view-distance 8
 set_server_property simulation-distance 6
 set_server_property sync-chunk-writes true
 
-# DH remains an event-fed cache/synchronisation layer. PM disables its background
-# importer at runtime and keeps PRE_EXISTING_ONLY only as a fail-safe mode. These
-# persistent values also prevent clients from requesting server-side generation.
+# When explicitly enabled, DH remains an event-fed cache/synchronisation layer.
+# PM disables its background importer at runtime and keeps PRE_EXISTING_ONLY only
+# as a fail-safe. These values prevent clients from requesting server generation.
 dh_config="$target/config/DistantHorizons.toml"
 if [[ -f "$dh_config" ]]; then
   sed -i 's/^[[:space:]]*realTimeUpdateDistanceRadiusInChunks = .*/\trealTimeUpdateDistanceRadiusInChunks = 24/' "$dh_config"
@@ -253,10 +278,10 @@ fi
 
 if [[ "$enable_c2me" == true ]]; then
   "$target/scripts/set-server-performance-profile.sh" --target "$target" --profile c2me \
-    --worldgen combined --surface-rules optimized --java "$java_bin"
+    --worldgen combined --surface-rules vanilla --java "$java_bin"
 else
   "$target/scripts/set-server-performance-profile.sh" --target "$target" --profile stable \
-    --surface-rules optimized --java "$java_bin"
+    --surface-rules vanilla --java "$java_bin"
 fi
 
 jvm_args="$target/user_jvm_args.txt"
@@ -275,7 +300,7 @@ EOF
 mv "$jvm_temporary" "$jvm_args"
 
 echo "Server pack synchronised in: $target"
-echo "Runtime: Java 22; view-distance=8; simulation-distance=6; heap=4-12 GiB; C2ME=$enable_c2me"
+echo "Runtime: Java 22; view-distance=8; simulation-distance=6; heap=4-12 GiB; C2ME=$enable_c2me; server-DH-cache=$enable_server_dh_cache"
 if [[ "$accept_eula" == false ]]; then
   echo "Mojang EULA not accepted by this script. Review it, then set eula=true in $target/eula.txt." >&2
 fi

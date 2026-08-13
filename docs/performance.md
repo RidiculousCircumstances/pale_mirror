@@ -8,8 +8,8 @@ acceptance target is 40–50 blocks/s through generated terrain and at least 20 
 ## Profiles
 
 The stable dedicated-server profile is Java 22 plus Lithium `0.15.4`, ModernFix
-`5.27.2`, Fast Noise `1.0.13`, FerriteCore `7.0.3` and Distant Horizons `3.2.0-b`.
-Sodium remains client-only. Synchronous chunk writes remain enabled.
+`5.27.2`, Fast Noise `1.0.13` and FerriteCore `7.0.3`. Sodium and Distant Horizons
+remain client-side by default. Synchronous chunk writes remain enabled.
 
 ScalableLux `0.1.0.1` is rejected: Sable `2.0.3` declares it incompatible and
 NeoForge correctly stops before world access. Pale Mirror does not bypass mod
@@ -26,9 +26,13 @@ fallback to the system Java while leaving client Java 21 untouched.
 
 ## Distant Horizons
 
-The server and clients use the identical DH build. Pale Mirror permanently disables
-DH's background importer through the public exact-version API and pins its dormant
-fallback to `PRE_EXISTING_ONLY`:
+Clients build their own LOD cache from ordinary chunks received from the server.
+This preserves the long horizon and revisited-terrain cache without adding a second
+server-side consumer to live worldgen.
+
+The exact server DH build is available only through `--enable-server-dh-cache` for
+controlled A/B tests. Pale Mirror then disables its background importer through the
+public exact-version API and pins its dormant fallback to `PRE_EXISTING_ONLY`:
 
 - normal chunk events build the server cache and synchronise ready LODs;
 - DH neither scans/imports chunks in the background nor generates unknown terrain;
@@ -38,9 +42,9 @@ fallback to `PRE_EXISTING_ONLY`:
 - live LOD update broadcasts are bounded to 24 chunks around each player;
 - `SURFACE`, `FEATURES`, `INTERNAL_SERVER` and experimental N-sized generation are not used.
 
-`/pale_mirror performance` reports whether the cache-only override is active. PM
-clears every API override on server shutdown. Missing or incompatible DH fails visibly
-without blocking canonical simulation.
+`/pale_mirror performance` reports whether the optional cache-only override is active.
+PM clears every API override on server shutdown. Missing or incompatible server DH
+is an expected presentation state and never blocks canonical simulation.
 
 The C2ME profile pins its global executor to eight workers. This deliberately leaves
 CPU headroom for the main server thread, Create/Sable and DH cache construction.
@@ -57,7 +61,8 @@ scripts/set-server-performance-profile.sh --target /srv/far-frontier --profile c
 C2ME module is created after Java's boot layer, so Java 22's suggested module-scoped
 native-access flag cannot target it; the verified Java 22 warning mode remains in use.
 Test the density compiler separately on identical fresh copies before accepting `combined`.
-The C2ME profile also fixes no-tick chunk-load concurrency at six. ModernFix's
+The C2ME profile fixes no-tick chunk-load concurrency at eight, matching its bounded
+worker count. ModernFix's
 surface-rule optimizer can be isolated without changing the remaining stack:
 
 ```bash
@@ -65,9 +70,10 @@ scripts/set-server-performance-profile.sh --target /srv/far-frontier --profile c
 scripts/set-server-performance-profile.sh --target /srv/far-frontier --profile c2me --surface-rules vanilla
 ```
 
-Run three alternating fresh-world samples per setting. Promote `vanilla` only if
-allocation per generated chunk improves by at least 10%, throughput loses no more
-than 5%, and p95/p99 MSPT regress by no more than 10%.
+The first live-flight JFR promoted `vanilla`: the optimizer itself consumed 4.4% of
+CPU samples and its temporary maps dominated allocation pressure on the current
+Terralith/Tectonic/Biolith graph. Re-run three alternating fresh-world samples before
+ever promoting `optimized` again.
 
 ## Reproducible measurement
 

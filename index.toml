@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "1fe6879e5caabdf7856482cb2471c30e0800d0a5a6a710938e85c457606aa2f0"
+hash = "095e5b3658e1a318e03fbbfc3c42c38bcf704fa1c7cc0f0960ab80871c0bcb15"
 
 [[files]]
 file = "config/README.md"
@@ -34,7 +34,7 @@ hash = "88162b2d3f12a5d902b7dc588016b52e7d1a63071e8afc6f896318881e2f1c64"
 
 [[files]]
 file = "config/c2me.toml"
-hash = "0fa909a4d50f0f8aea658d3b731adc251bfee5e85c31a903249ebdd532db3624"
+hash = "ac45f77a947efa3fec81b4f9aa3620dea0c21d3b20a319f029336d572e9d67ab"
 
 [[files]]
 file = "config/hostiletactics-server.toml"
@@ -42,7 +42,7 @@ hash = "e053687a6deab135adb59bf414542743cec56c7178cf4a399485701e9b7469cc"
 
 [[files]]
 file = "config/modernfix-mixins.properties"
-hash = "30cfdafdf062d354035aaf6397b118b87beebfcc8d636cfba4ad23e0433023de"
+hash = "a9a9984d2e7f20b91181130d2b96c123a2a813e1dd23f6a60b3ce6e8734cf872"
 
 [[files]]
 file = "config/pale-mirror-server.toml"
@@ -58,7 +58,7 @@ hash = "29a077ae5d6da118c5f1bf0eeed74aad65514eaaf8f8edc0b0c1f7cb6ddaf4ad"
 
 [[files]]
 file = "config/spore-startup.toml"
-hash = "ade4eedca8258f7e563d92062c499fe58c6f75d6e6434bb3259dffce7d5dda18"
+hash = "41b834c88355f6c36c5e585b419537c094a33b5715c3e89adb9955a4efc5875f"
 
 [[files]]
 file = "config/structurify.json"
@@ -414,7 +414,7 @@ hash = "0287a370503dc49897aa4bd54d4de7644f3b66129c8267d65c2abf27c6d22cc3"
 
 [[files]]
 file = "docs/performance.md"
-hash = "807948d90a9e98faaf561508ea62e7fa8288c0bd0bf8235e0e2c8332d8028deb"
+hash = "d2f7c425e74a634079d3b4d2a697be8ece6d204fd36098ab8639565b7682e044"
 
 [[files]]
 file = "docs/quest-system.md"
@@ -776,7 +776,7 @@ hash = "ba731c2600b07e23bc22ecf4d54350f4f4ce407add4a0cef94209a7573b29f8c"
 
 [[files]]
 file = "scripts/install-server.sh"
-hash = "e0589544392a8bfc131d5bdd4e48ccb32c39032e900ea72b65096f3afe7f8eb5"
+hash = "1945ccbd7d7918f5dd36453cf3ea85dedd694084928a508a04cf0dd471182943"
 
 [[files]]
 file = "scripts/lib/install-hosted-pale-mirror.sh"
@@ -800,7 +800,7 @@ hash = "1ba7237c674a925e707b8ad7032fe51ea14accedae568e39be083f4986a088a5"
 
 [[files]]
 file = "scripts/set-server-performance-profile.sh"
-hash = "a69d401db6eb2cfbb040dbbdf4de0e6f3f5230a5d98feaf3b81a60a5d279d288"
+hash = "75939fe1d7abb7d487e03b16f3c9b7a29c3e6b1400fe4a7229a2d7826e7614ba"
 
 [[files]]
 file = "scripts/update-client-macos.command"

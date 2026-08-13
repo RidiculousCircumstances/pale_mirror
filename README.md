@@ -33,8 +33,8 @@ layer; it is not an additional global progression system.
 
 The default dedicated-server profile pins Lithium, ModernFix and Fast Noise.
 ScalableLux is excluded because Sable 2.0.3 declares it incompatible. Distant
-Horizons is installed on both sides and Pale Mirror keeps its
-unknown distant generation idle during fast travel or high MSPT. C2ME is an explicit
+Horizons is client-side by default; its measured-cost server cache is an explicit
+installer opt-in and never generates unknown terrain. C2ME is an explicit
 experimental Java 22 profile, not a default. Millénaire is
 disabled in the current profile after repeatable server-thread stalls during village
 chunk loading; Pale Mirror's adapter remains optional.
