@@ -75,6 +75,15 @@ CPU samples and its temporary maps dominated allocation pressure on the current
 Terralith/Tectonic/Biolith graph. Re-run three alternating fresh-world samples before
 ever promoting `optimized` again.
 
+The first corrected live-flight comparison also removed the server DH cache and
+matched eight C2ME concurrent loads to eight workers. Against the immediately prior
+recording, average JVM CPU fell from 18.37% to 11.57%, average machine load from
+26.14% to 16.30%, and total GC pause time from 4.14 seconds to 1.96 seconds. The
+corrected run produced no DH queue overflow, `Can't keep up`, disconnect or PM rail
+exception while traversing substantially more region files. Treat this as strong
+profile evidence, not a normalized chunks-per-second benchmark; the route and newly
+generated terrain were not identical.
+
 ## Reproducible measurement
 
 Before every comparison, stop every other NeoForge test server and Gradle workload.
