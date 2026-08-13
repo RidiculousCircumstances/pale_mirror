@@ -57,7 +57,11 @@ public final class AuthoredRegionRegistrar {
         for (AuthoredRegionSeed seed : provider.discoverAuthoredRegions(server.overworld()).stream()
                 .sorted(java.util.Comparator.comparing(AuthoredRegionSeed::planId)).toList()) {
             if (!seed.dimensionId().equals(server.overworld().dimension().location().toString())) continue;
-            if (data.worldState().livingRegion(seed.planId()).isPresent()) continue;
+            var existing = data.worldState().livingRegion(seed.planId()).orElse(null);
+            if (existing != null) {
+                if (ensureAuthoredPlace(data, existing.placeId(), seed)) changed = true;
+                continue;
+            }
             register(data, commands, seed);
             changed = true;
         }
@@ -179,6 +183,7 @@ public final class AuthoredRegionRegistrar {
                 new SettlementDevelopment(ids.communityId(), 25, 0, population, Math.max(population, 56), 0),
                 SettlementDevelopmentPolicy.defaults(ids.communityId()),
                 SettlementAuthorityProfile.pmManaged(ids.communityId())));
+        ensureAuthoredPlace(data, placeId, seed);
         data.campaignRegions().put(ids.regionId(), record(seed, placeId, definition));
         registerParcels(data, seed);
         List<BlockPos> freightPath = seed.baselineRailNodes().stream().map(AuthoredRegionRegistrar::block)
@@ -187,6 +192,35 @@ public final class AuthoredRegionRegistrar {
         data.vanillaMinecartRoutes().put(seed.planId(), VanillaMinecartRouteRecord.authored(seed.planId(),
                 seed.dimensionId(), ids.primaryRouteId().value(), freightPath));
         data.setDirty();
+    }
+
+    /**
+     * The immutable genesis manifest is already sufficient physical identity for an authored place. Chunks may be
+     * generated later, but discovery, Atlas coordinates, and bounded navigation must not wait for a second village
+     * observation that can never exist for a PM-authored settlement.
+     */
+    private static boolean ensureAuthoredPlace(PaleMirrorSavedData data, WorldObjectId placeId,
+                                               AuthoredRegionSeed seed) {
+        var bounds = seed.settlementBounds();
+        return ensureAuthoredPlace(data.worldRegistry(), placeId, seed.dimensionId(), block(seed.anchor()),
+                block(bounds.min()), block(bounds.max()), seed.definitionVersion() + ":" + seed.contentHash());
+    }
+
+    static boolean ensureAuthoredPlace(WorldObjectRegistry registry, WorldObjectId placeId, String dimensionId,
+                                       BlockPos anchor, BlockPos minimum, BlockPos maximum, String version) {
+        var existing = registry.find(placeId).orElse(null);
+        String template = "pale_mirror:authored_settlement";
+        if (existing == null) {
+            registry.register(new WorldObjectRegistryEntry(placeId, dimensionId, anchor,
+                    minimum, maximum, template, version, WorldObjectLifecycle.REPRESENTED));
+            return true;
+        }
+        if (!existing.dimensionId().equals(dimensionId) || !existing.anchor().equals(anchor)
+                || !existing.minBounds().equals(minimum) || !existing.maxBounds().equals(maximum)
+                || !existing.templateId().equals(template) || !existing.templateVersion().equals(version)) {
+            throw new IllegalStateException("Authored place registry conflicts with genesis manifest " + placeId);
+        }
+        return false;
     }
 
     private static void registerParcels(PaleMirrorSavedData data, AuthoredRegionSeed seed) {

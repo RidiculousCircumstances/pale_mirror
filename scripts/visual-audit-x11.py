@@ -134,7 +134,11 @@ def send_command(value: str) -> None:
     display = open_display()
     focus(display, minecraft_window())
     press(display, "slash")
-    time.sleep(0.1)
+    # A freshly connected, software-rendered audit client can drop the first
+    # characters while the chat screen is still being constructed.  Waiting
+    # for the screen here is cheaper and more reliable than compensating for a
+    # truncated command later in the capture workflow.
+    time.sleep(0.4)
     for character in value:
         type_character(display, character)
     press(display, "Return")

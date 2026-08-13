@@ -10,6 +10,9 @@ output_root="$repo_dir/build/visual-audits"
 frame_wait=10
 width=1920
 height=1080
+radius=110
+view_height=72
+top_height=150
 
 usage() {
   cat <<'EOF'
@@ -23,6 +26,9 @@ Options:
   --output DIRECTORY       Output root (default build/visual-audits)
   --frame-wait SECONDS     Chunk/render settling time per view (default 10)
   --size WIDTHxHEIGHT      Capture size (default 1920x1080)
+  --radius BLOCKS          Horizontal diagonal radius (default 110)
+  --view-height BLOCKS     Diagonal camera height over anchor (default 72)
+  --top-height BLOCKS      Top camera height over anchor (default 150)
 
 The client pack must already exist in pale-mirror-neoforge/build/runs/railway-client.
 Set PALE_MIRROR_XVFB when Xvfb is not on PATH. The audit player must be an op.
@@ -37,6 +43,9 @@ while (($#)); do
     --username) username=${2:?missing username}; shift 2 ;;
     --output) output_root=${2:?missing output directory}; shift 2 ;;
     --frame-wait) frame_wait=${2:?missing frame wait}; shift 2 ;;
+    --radius) radius=${2:?missing radius}; shift 2 ;;
+    --view-height) view_height=${2:?missing view height}; shift 2 ;;
+    --top-height) top_height=${2:?missing top height}; shift 2 ;;
     --size)
       [[ ${2:-} =~ ^([0-9]+)x([0-9]+)$ ]] || { printf 'Invalid --size: %s\n' "${2:-}" >&2; exit 2; }
       width=${BASH_REMATCH[1]}; height=${BASH_REMATCH[2]}; shift 2 ;;
@@ -52,6 +61,9 @@ fi
 [[ "$username" =~ ^[A-Za-z0-9_]{1,16}$ ]] || { printf 'Invalid Minecraft username: %s\n' "$username" >&2; exit 2; }
 [[ "$server" =~ ^[^[:space:]:]+:[0-9]+$ ]] || { printf 'Invalid server address: %s\n' "$server" >&2; exit 2; }
 [[ "$frame_wait" =~ ^[0-9]+$ && "$frame_wait" -ge 1 ]] || { printf 'Invalid frame wait: %s\n' "$frame_wait" >&2; exit 2; }
+[[ "$radius" =~ ^[0-9]+$ && "$radius" -ge 8 ]] || { printf 'Invalid radius: %s\n' "$radius" >&2; exit 2; }
+[[ "$view_height" =~ ^[0-9]+$ && "$view_height" -ge 8 ]] || { printf 'Invalid view height: %s\n' "$view_height" >&2; exit 2; }
+[[ "$top_height" =~ ^[0-9]+$ && "$top_height" -ge 16 ]] || { printf 'Invalid top height: %s\n' "$top_height" >&2; exit 2; }
 if [[ -n "$anchor" ]]; then
   [[ "$anchor" =~ ^(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)$ ]] || { printf 'Invalid anchor: %s\n' "$anchor" >&2; exit 2; }
 fi
@@ -151,7 +163,7 @@ if ! "$connected"; then
   tail -100 "$launcher_log" >&2
   exit 1
 fi
-sleep 3
+sleep 8
 
 export DISPLAY="$display"
 python3 "$x11" resize "$width" "$height"
@@ -234,11 +246,11 @@ capture_view() {
   python3 "$x11" capture "$output_dir/$name.png"
 }
 
-capture_view top "$anchor_x" "$((anchor_y + 150))" "$anchor_z" 0 90
-capture_view south_east "$((anchor_x + 110))" "$((anchor_y + 72))" "$((anchor_z + 110))" 135 28
-capture_view south_west "$((anchor_x - 110))" "$((anchor_y + 72))" "$((anchor_z + 110))" -135 28
-capture_view north_east "$((anchor_x + 110))" "$((anchor_y + 72))" "$((anchor_z - 110))" 45 28
-capture_view north_west "$((anchor_x - 110))" "$((anchor_y + 72))" "$((anchor_z - 110))" -45 28
+capture_view top "$anchor_x" "$((anchor_y + top_height))" "$anchor_z" 0 90
+capture_view south_east "$((anchor_x + radius))" "$((anchor_y + view_height))" "$((anchor_z + radius))" 135 28
+capture_view south_west "$((anchor_x - radius))" "$((anchor_y + view_height))" "$((anchor_z + radius))" -135 28
+capture_view north_east "$((anchor_x + radius))" "$((anchor_y + view_height))" "$((anchor_z - radius))" 45 28
+capture_view north_west "$((anchor_x - radius))" "$((anchor_y + view_height))" "$((anchor_z - radius))" -45 28
 
 python3 "$x11" key F1
 hud_hidden=false
