@@ -28,11 +28,12 @@ Rejected terrain may consume at most six settlement surveys and 24 exact
 candidates per MineSite. The planner never sweeps every route column; local
 cut/fill remains current-chunk worldgen work. `performance` reports site, mine
 and rail probe classes separately, along with planning and catalog compile
-time. The full private modpack selected one strict mountain-native region on seed
-`3374619285067712046` in 18.230 seconds with 465 site probes, 370 mine probes,
-9 rail probes, 660 unique heights and 78,031 cheap biome samples. The same seed
-does not contain enough fully valid dual-mountain centers for 3 or 20 regions
-inside 10,000 blocks; those configurations fail closed and need a density redesign.
+time. With the output range set to 3/5/6, a 160-center survey cap, 20,000-block
+radius and 2,500-block final spacing, the full private modpack selected four
+strict mountain-native regions on seed `3374619285067712046` in 222.059 seconds.
+It used 3,030 site probes, 10,561 mine probes, 43 rail probes, 8,329 unique
+heights and 769,400 cheap biome samples. Eight otherwise valid centers were
+discarded by final spacing. The target of five was not forced by weakening terrain.
 
 For an evidence-grade profile, run the server on JDK 21 and capture JFR:
 

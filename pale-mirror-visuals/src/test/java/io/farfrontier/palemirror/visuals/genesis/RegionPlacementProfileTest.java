@@ -21,7 +21,8 @@ class RegionPlacementProfileTest {
         assertEquals(72, profile.settlementTerrain().surveyRadius());
         assertEquals(0, profile.settlementTerrain().minimumLandscapeScore());
         assertEquals(4, profile.route().horizontalBlocksPerVerticalBlock());
-        assertEquals(16, profile.search().reserveCandidateCount());
+        assertEquals(160, profile.search().maximumSurveyCandidates());
+        assertEquals(154, profile.search().reserveCandidateCount());
         assertEquals(48, profile.search().remoteCandidatesPerRegion(11));
         assertEquals(512, profile.search().remoteCandidatesPerRegion(24));
         assertEquals(6, profile.search().exactSettlementCandidatesPerRegion(11));

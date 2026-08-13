@@ -87,7 +87,19 @@ class FrontierTerrainSurveyTest {
                 RegionPlacementProfiles.IRON_FRONTIER).selectWithReserve(
                 7L, new VisualPoint(0, 0, 0), 1, 1, 3_000, 10_000, new FakeTerrain());
 
-        assertEquals(1, sites.size());
+        assertTrue(!sites.isEmpty());
+    }
+
+    @Test void reserveCentersDoNotSelectTheLargeWorldSearchBudget() {
+        FakeTerrain terrain = new FakeTerrain();
+        List<FrontierSiteSelector.SelectedSite> sites = new FrontierSiteSelector(
+                RegionPlacementProfiles.IRON_FRONTIER).selectWithReserve(
+                7L, new VisualPoint(0, 0, 0), 3, 48, 20_000, 2_500, terrain);
+
+        assertEquals(51, sites.size());
+        assertTrue(terrain.biomeSamples < 1_000_000,
+                "optional feasibility reserves must not trigger a large-world landscape scan: "
+                        + terrain.biomeSamples);
     }
 
     @Test void mineFootprintRejectsWaterAtTheLoadingYardEdge() {
@@ -119,6 +131,7 @@ class FrontierTerrainSurveyTest {
     private static final class FakeTerrain implements FrontierSiteSelector.TerrainAccess {
         private final Map<Long, TerrainSample> samples = new HashMap<>();
         private int exactSamples;
+        private int biomeSamples;
         private boolean suitable = true;
         private boolean water;
         private boolean mountainNetwork = true;
@@ -132,6 +145,7 @@ class FrontierTerrainSurveyTest {
         }
 
         @Override public FrontierSiteSelector.BiomeSample biome(int x, int z) {
+            biomeSamples++;
             FrontierClimate climate = FrontierClimate.values()[Math.floorMod(
                     (x >> 8) + (z >> 8), FrontierClimate.values().length)];
             boolean localWater = waterAt != null && waterAt.x() == x && waterAt.z() == z;

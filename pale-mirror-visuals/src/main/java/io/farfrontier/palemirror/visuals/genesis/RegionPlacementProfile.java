@@ -46,6 +46,7 @@ public record RegionPlacementProfile(
 
     public record SearchPolicy(
             int maximumRegions,
+            int maximumSurveyCandidates,
             int reserveCandidateCount,
             int regionEnvelope,
             int minimumMapRadius,
@@ -66,6 +67,10 @@ public record RegionPlacementProfile(
             if (maximumRegions < 1 || maximumRegions > 64) {
                 throw new IllegalArgumentException("maximumRegions must be between 1 and 64");
             }
+            if (maximumSurveyCandidates < maximumRegions || maximumSurveyCandidates > 256) {
+                throw new IllegalArgumentException(
+                        "maximumSurveyCandidates must be between maximumRegions and 256");
+            }
             if (reserveCandidateCount < 0 || regionEnvelope < 1 || minimumMapRadius < 1 || minimumRegionSpacing < 1
                     || remoteSpacingMargin < 0 || maximumNearAcceptedRegions < 1 || nearReserveCandidates < 0
                     || near == null || remote == null) {
@@ -74,8 +79,8 @@ public record RegionPlacementProfile(
             if (maximumNearAcceptedRegions > maximumRegions) {
                 throw new IllegalArgumentException("near-region limit exceeds maximum region count");
             }
-            if (reserveCandidateCount >= maximumRegions) {
-                throw new IllegalArgumentException("reserve candidate count must be below maximum region count");
+            if (reserveCandidateCount >= maximumSurveyCandidates) {
+                throw new IllegalArgumentException("reserve candidate count must be below survey capacity");
             }
             if (candidatesPerRemoteRegion < 1 || largeBatchThreshold < 1
                     || largeBatchCandidatesPerRemoteRegion < candidatesPerRemoteRegion
@@ -96,13 +101,13 @@ public record RegionPlacementProfile(
             }
         }
 
-        public int remoteCandidatesPerRegion(int requestedAndReserve) {
-            return requestedAndReserve >= largeBatchThreshold
+        public int remoteCandidatesPerRegion(int requestedRegions) {
+            return requestedRegions >= largeBatchThreshold
                     ? largeBatchCandidatesPerRemoteRegion : candidatesPerRemoteRegion;
         }
 
-        public int exactSettlementCandidatesPerRegion(int requestedAndReserve) {
-            return requestedAndReserve >= largeBatchThreshold
+        public int exactSettlementCandidatesPerRegion(int requestedRegions) {
+            return requestedRegions >= largeBatchThreshold
                     ? largeBatchExactSettlementCandidatesPerRegion : exactSettlementCandidatesPerRegion;
         }
     }

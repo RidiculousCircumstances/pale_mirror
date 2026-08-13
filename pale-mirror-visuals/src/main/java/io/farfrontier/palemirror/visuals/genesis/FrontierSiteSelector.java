@@ -22,22 +22,27 @@ public final class FrontierSiteSelector {
     public List<SelectedSite> selectWithReserve(long worldSeed, VisualPoint spawn, int count, int reserve,
                                                 int mapRadius, int minimumSpacing, TerrainAccess terrain) {
         validate(count, mapRadius, minimumSpacing);
-        if (reserve < 0 || count + reserve > profile.search().maximumRegions()) {
+        if (reserve < 0 || count + reserve > profile.search().maximumSurveyCandidates()) {
             throw new IllegalArgumentException("region count plus reserve must be between 1 and "
-                    + profile.search().maximumRegions());
+                    + profile.search().maximumSurveyCandidates());
         }
         int targetCandidates = count + reserve;
-        boolean largeBatch = targetCandidates >= profile.search().largeBatchThreshold();
-        int exactCandidatesPerRegion = profile.search().exactSettlementCandidatesPerRegion(targetCandidates);
+        // Reserve centers improve downstream site feasibility; they are not regions to be
+        // materialized. Letting a large reserve select the large-world search policy turns
+        // a small geography-led world into a tens-of-thousands-center scan.
+        boolean largeBatch = count >= profile.search().largeBatchThreshold();
+        int exactCandidatesPerRegion = profile.search().exactSettlementCandidatesPerRegion(count);
+        int surveySpacing = reserve == 0 ? minimumSpacing
+                : Math.min(minimumSpacing, profile.search().regionEnvelope());
         List<SelectedSite> selected = new ArrayList<>(targetCandidates);
         RegionPlacementProfile.SearchBand nearBand = profile.search().near();
         int maximumCenterRadius = mapRadius - profile.search().regionEnvelope();
         int nearMaximumDistance = Math.min(nearBand.spawnDistance().maximum(), maximumCenterRadius);
         List<Center> near = landscapeCenters(worldSeed, spawn, nearBand.candidateCount(),
                 nearBand.spawnDistance().minimum(), nearMaximumDistance, 0, terrain);
-        int nearTarget = profile.search().maximumNearAcceptedRegions()
-                + Math.min(profile.search().nearReserveCandidates(), reserve);
-        selectFrom(near, nearTarget, minimumSpacing, terrain, selected,
+        int nearTarget = Math.min(targetCandidates, profile.search().maximumNearAcceptedRegions()
+                + Math.min(profile.search().nearReserveCandidates(), reserve));
+        selectFrom(near, nearTarget, surveySpacing, terrain, selected,
                 nearTarget * exactCandidatesPerRegion, exactCandidatesPerRegion, true, largeBatch,
                 spawn, maximumCenterRadius);
         if (selected.isEmpty()) throw impossible(count, mapRadius, minimumSpacing, 0);
@@ -49,10 +54,10 @@ public final class FrontierSiteSelector {
                     Math.max(remoteBand.minimum(), minimumSpacing + profile.search().remoteSpacingMargin()));
             if (maximumDistance <= minimumDistance) throw impossible(count, mapRadius, minimumSpacing, 1);
             int remoteCount = Math.max(profile.search().remote().candidateCount(),
-                    remaining * profile.search().remoteCandidatesPerRegion(targetCandidates));
+                    remaining * profile.search().remoteCandidatesPerRegion(count));
             List<Center> remote = landscapeCenters(worldSeed ^ 0x6a09e667f3bcc909L, spawn, remoteCount,
                     minimumDistance, maximumDistance, nearBand.candidateCount(), terrain);
-            selectFrom(remote, targetCandidates, minimumSpacing, terrain, selected,
+            selectFrom(remote, targetCandidates, surveySpacing, terrain, selected,
                     remaining * exactCandidatesPerRegion, exactCandidatesPerRegion, false, largeBatch,
                     spawn, maximumCenterRadius);
         }

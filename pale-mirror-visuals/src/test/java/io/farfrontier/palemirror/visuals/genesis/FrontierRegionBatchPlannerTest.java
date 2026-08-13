@@ -54,6 +54,43 @@ class FrontierRegionBatchPlannerTest {
         assertEquals(1800, result.manifests().getFirst().anchor().x());
     }
 
+    @Test void rangeAcceptsMinimumWhenTargetCannotBeMet() {
+        List<FrontierSiteSelector.SelectedSite> sites = List.of(site(1000), site(3000), site(5000));
+        AtomicInteger resolutions = new AtomicInteger();
+        MineAnchorResolver resolver = (requirement, candidates) -> {
+            if (resolutions.incrementAndGet() > 4) throw new DryMineSiteUnavailableException("mountain unavailable");
+            return new MountainMineAnchor(candidates.getFirst(), 0);
+        };
+
+        FrontierRegionBatchPlanner.Result result = new FrontierRegionBatchPlanner().plan(42L,
+                new RegionCountRange(2, 3, 4), RegionPlacementProfiles.IRON_FRONTIER, sites,
+                new FrontierRegionPlanner(), resolver, FrontierRegionPlanner::gradedManhattanRail);
+
+        assertEquals(2, result.manifests().size());
+        assertEquals(false, result.targetMet());
+    }
+
+    @Test void rangeFailsBelowMinimum() {
+        MineAnchorResolver resolver = (requirement, candidates) -> {
+            throw new DryMineSiteUnavailableException("mountain unavailable");
+        };
+        assertThrows(IllegalStateException.class, () -> new FrontierRegionBatchPlanner().plan(42L,
+                new RegionCountRange(2, 3, 4), RegionPlacementProfiles.IRON_FRONTIER,
+                List.of(site(1000), site(3000)), new FrontierRegionPlanner(), resolver,
+                FrontierRegionPlanner::gradedManhattanRail));
+    }
+
+    @Test void finalSpacingAppliesOnlyBetweenAcceptedRegions() {
+        MineAnchorResolver resolver = (requirement, candidates) -> new MountainMineAnchor(candidates.getFirst(), 0);
+        FrontierRegionBatchPlanner.Result result = new FrontierRegionBatchPlanner().plan(42L,
+                new RegionCountRange(2, 2, 2), RegionPlacementProfiles.IRON_FRONTIER,
+                List.of(site(1000), site(1500), site(3000)), new FrontierRegionPlanner(), resolver,
+                FrontierRegionPlanner::gradedManhattanRail, 1000);
+
+        assertEquals(List.of(1000, 3000), result.manifests().stream().map(seed -> seed.anchor().x()).toList());
+        assertEquals(1, result.spacingRejectedCandidates());
+    }
+
     private static FrontierSiteSelector.SelectedSite site(int x) {
         return site(x, false);
     }

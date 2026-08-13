@@ -52,13 +52,22 @@ deliberately not a duplicate proof of those physical requirements.
 
 ```toml
 [genesis]
-regionCount = 3
-mapRadius = 10000
-minimumSpacing = 1400
+minimumRegions = 3
+targetRegions = 5
+maximumRegions = 6
+mapRadius = 20000
+minimumSpacing = 2500
 ```
 
-`mapRadius` constrains PM-authored centers; a Minecraft world border remains a
-separate server policy. A registered NeoForge
+Genesis fails only below `minimumRegions`, reports whether `targetRegions` was
+met and may accept up to `maximumRegions` when equally valid sites exist. This
+keeps geography authoritative instead of weakening terrain constraints to fill
+an exact quota. The iron profile separates this six-region output cap from a
+bounded 160-center feasibility survey because a complete dry dual-mountain
+region is intentionally rare. Reserve centers use only the profile envelope for
+survey distribution; `minimumSpacing` is enforced between accepted regions, so
+discarded candidates cannot exclude unexplored geography. `mapRadius` constrains PM-authored centers; a Minecraft world
+border remains a separate server policy. A registered NeoForge
 worldgen feature applies only the current chunk's precompiled slice during normal
 generation, then persists a chunk attachment stamp. `ChunkEvent.Load` performs
 read-only stamp observation and resident commissioning; it never edits terrain,

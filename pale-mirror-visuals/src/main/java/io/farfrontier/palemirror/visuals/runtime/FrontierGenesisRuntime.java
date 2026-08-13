@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.visuals.genesis.FrontierGenesisCompiler;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionBatchPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierTerrainSurvey;
+import io.farfrontier.palemirror.visuals.genesis.RegionCountRange;
 import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfile;
 import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfiles;
 import io.farfrontier.palemirror.visuals.genesis.VisualGenesisAttachments;
@@ -21,8 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.network.chat.Component;
 import net.minecraft.gametest.framework.GameTestServer;
@@ -103,25 +104,30 @@ public final class FrontierGenesisRuntime {
         RegionPlacementProfile profile = RegionPlacementProfiles.IRON_FRONTIER;
         FrontierRegionPlanner planner = new FrontierRegionPlanner(profile);
         long started = System.nanoTime();
-        int requested = VisualServerConfig.GENESIS_REGION_COUNT.get();
-        int reserve = Math.min(profile.search().reserveCandidateCount(),
-                profile.search().maximumRegions() - requested);
-        FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, profile, requested, reserve,
+        RegionCountRange counts = new RegionCountRange(VisualServerConfig.GENESIS_MINIMUM_REGIONS.get(),
+                VisualServerConfig.GENESIS_TARGET_REGIONS.get(), VisualServerConfig.GENESIS_MAXIMUM_REGIONS.get());
+        int optionalSlots = counts.maximum() - counts.minimum();
+        int reserve = Math.min(profile.search().reserveCandidateCount() + optionalSlots,
+                profile.search().maximumSurveyCandidates() - counts.minimum());
+        FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, profile, counts.minimum(), reserve,
                 VisualServerConfig.GENESIS_MAP_RADIUS.get(), VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
-        FrontierRegionBatchPlanner.Result planned = new FrontierRegionBatchPlanner().plan(level.getSeed(), requested,
-                profile, batch.sites(), planner, batch.mineAnchors(), batch.railPaths());
+        FrontierRegionBatchPlanner.Result planned = new FrontierRegionBatchPlanner().plan(level.getSeed(), counts,
+                profile, batch.sites(), planner, batch.mineAnchors(), batch.railPaths(),
+                VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
         List<AuthoredRegionSeed> manifests = planned.manifests();
         var statistics = batch.statistics();
         planningMetrics = new PlanningMetrics(manifests.size(), System.nanoTime() - started,
                 0L, statistics.cachedHeights(), statistics.heightHits(), statistics.heightMisses(),
                 statistics.siteHeightProbes(), statistics.mineHeightProbes(), statistics.railHeightProbes(), statistics.biomeSamples(),
                 statistics.discardedSiteCandidates());
-        PaleMirrorVisualsMod.LOGGER.info("Batch-planned {} authored regions in {} ms using {} exact site probes, "
+        PaleMirrorVisualsMod.LOGGER.info("Batch-planned {} authored regions (minimum {}, target {}, maximum {}, targetMet={}) "
+                        + "in {} ms using {} exact site probes, "
                         + "{} mine probes, {} rail probes, {} unique heights, {} discarded sites, "
-                        + "{} rejected region candidates and {} biome samples",
-                manifests.size(), planningMetrics.elapsedNanos() / 1_000_000L, statistics.siteHeightProbes(),
+                        + "{} rejected region candidates, {} spacing rejects and {} biome samples",
+                manifests.size(), counts.minimum(), counts.target(), counts.maximum(), planned.targetMet(),
+                planningMetrics.elapsedNanos() / 1_000_000L, statistics.siteHeightProbes(),
                 statistics.mineHeightProbes(), statistics.railHeightProbes(), statistics.heightMisses(), statistics.discardedSiteCandidates(),
-                planned.rejectedRegionCandidates(), statistics.biomeSamples());
+                planned.rejectedRegionCandidates(), planned.spacingRejectedCandidates(), statistics.biomeSamples());
         return manifests;
     }
 

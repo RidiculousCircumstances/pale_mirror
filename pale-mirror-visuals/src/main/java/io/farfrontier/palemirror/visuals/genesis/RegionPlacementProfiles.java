@@ -10,7 +10,7 @@ public final class RegionPlacementProfiles {
     public static final RegionPlacementProfile IRON_FRONTIER = new RegionPlacementProfile(
             "pale_mirror:iron_frontier",
             "iron_frontier",
-            new RegionPlacementProfile.SearchPolicy(64, 16, 900, 3_000, 1_024, 1_000, 1, 3,
+            new RegionPlacementProfile.SearchPolicy(64, 160, 154, 900, 3_000, 1_024, 1_000, 2, 3,
                     new RegionPlacementProfile.SearchBand(512, new DistanceBand(1_024, 4_096)),
                     new RegionPlacementProfile.SearchBand(2_048, new DistanceBand(2_600, Integer.MAX_VALUE)),
                     48, 24, 512, 6, 12, List.of(192, 256, 320),
