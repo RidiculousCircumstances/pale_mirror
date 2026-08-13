@@ -57,6 +57,8 @@ dependencies {
     // API classes are referenced only by the isolated client plugin. JourneyMap
     // itself stays optional and is never packaged into Pale Mirror.
     compileOnly 'info.journeymap:journeymap-api-neoforge:2.0.0-1.21.1'
+    // Exact optional server API. DH itself is supplied by the private pack and is never shaded into PM.
+    compileOnly 'maven.modrinth:uCdwusMi:3.2.0-b-1.21.1'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

@@ -78,6 +78,7 @@ public final class PaleMirrorRuntime {
     private final PlaytestMetrics playtestMetrics;
     private final RuntimeCombatFacade combat;
     private final RuntimeWorkCoordinator work = new RuntimeWorkCoordinator();
+    private final io.farfrontier.palemirror.internal.integration.distanthorizons.DistantHorizonsRuntime distantHorizons;
     private PaleMirrorRuntime(MinecraftServer server) {
         this.server = server;
         this.data = PaleMirrorSavedData.get(server.overworld());
@@ -88,6 +89,7 @@ public final class PaleMirrorRuntime {
         this.debug = new RuntimeDebugController(server, data, commands, this::handleDomainEvents);
         this.playtestMetrics = new PlaytestMetrics(server);
         this.combat = new RuntimeCombatFacade(data, observation -> publish(observation));
+        this.distantHorizons = io.farfrontier.palemirror.internal.integration.distanthorizons.DistantHorizonsRuntime.create();
         if (data.effectLeases().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         if (data.threatCombat().recoverAfterRestart(server.overworld().getGameTime())) data.setDirty();
         PmProjectileRuntime.discardUnknownAfterRestart(server, data);
@@ -102,10 +104,9 @@ public final class PaleMirrorRuntime {
         ManagedRailwayRuntime.stop(server);
         io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.clear(server);
         PaleMirrorRuntime runtime = INSTANCES.remove(server);
-        if (runtime != null) runtime.debug.close();
+        if (runtime != null) { runtime.distantHorizons.close(); runtime.debug.close(); }
     }
-    public void tick() {
-        debug.tick();
+    public void tick() { distantHorizons.tick(server); debug.tick();
         work.beginTick();
         long gameTick = server.overworld().getGameTime();
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
@@ -280,7 +281,8 @@ public final class PaleMirrorRuntime {
     public String performanceStatus() {
         return work.detailedSummary() + "\nvisuals="
                 + io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().map(provider ->
-                provider.genesisReadiness() + ", " + provider.performanceSummary()).orElse("ABSENT");
+                provider.genesisReadiness() + ", " + provider.performanceSummary()).orElse("ABSENT")
+                + "\n" + distantHorizons.status();
     }
 
     /** Admin-facing causal state, deliberately derived from canonical state rather than the physical presentation. */

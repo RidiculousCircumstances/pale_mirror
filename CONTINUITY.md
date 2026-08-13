@@ -1,29 +1,28 @@
 # Continuity Ledger
 ## Goal (success criteria)
-- Keep every PM-authored settlement influence column free of new tree-like feature growth and background
-  hostile spawning, and remove natural vegetation left above its freshly graded terrain.
-- Keep operator navigation non-blocking: a teleport into a prospective authored chunk must use one bounded
-  asynchronous ticket and may query its safe surface only after the chunk is ready.
+- Keep live unexplored-world flight responsive: C2ME owns bounded parallel chunk generation while server DH only caches/synchronises already created chunks and yields its presentation budget during fast travel.
+- Keep authored settlement columns free of tree growth, background hostile spawning and grading debris; keep debug teleport non-blocking through one bounded asynchronous chunk ticket.
 - Keep full-modpack fresh-world genesis bounded and geography-led: require 3, target 5 and cap 6 strict mountain regions inside a 20,000-block radius without weakening site constraints.
 - Use biome-footprint horizontal selection, bounded five-point settlement surveys, dry-footprint mine resolution, and ready current-chunk heightmaps for local worldgen adaptation; railway planning performs zero terrain-height scans.
-
 ## Constraints/Assumptions
-- Java 21; Minecraft 1.21.1; NeoForge 21.1.248.
+- Java 21 bytecode/toolchain; Minecraft 1.21.1; NeoForge 21.1.248. The private dedicated server runs Java 22; clients and PM artifacts remain Java 21 compatible.
 - `pale-mirror-domain` remains free of Minecraft, NeoForge, persistence and adapters.
 - Every pre-v37 world is intentionally unsupported; the development server world will be replaced.
 - The product profile requires Pale Mirror Core, Pale Mirror Visuals, Create 6.0.10, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16.
-- Millénaire is absent from the active private-pack profile after an observed 32-second village-chunk stall;
-  its read-only adapter remains an optional compatibility surface and reports `ABSENT` by design.
+- Millénaire is absent from the active private-pack profile after an observed 32-second village-chunk stall; its read-only adapter remains an optional compatibility surface and reports `ABSENT` by design.
 - Ordinary loaded ecology is intentionally sparse: ambient hostile attempts use a 0.20 acceptance chance and
   cap 24 per active player/dimension, while passive/ambient/water attempts use 0.55 and cap 32. Explicit PM,
   resident, breeding, structure, spawner, event and command spawns are outside this policy.
 - Integrated Villages ARR structures may be copied and remixed for this private non-distributed mod; every imported template retains an origin/version/hash manifest.
 - Crimson 1.4.3.1 is the default infection source; Spore remains optional/test-only.
-
 ## Key decisions
 - Core owns canonical state, revisions, persisted jobs, provenance and reconciliation. Visuals owns worldgen, templates, palettes, render assets and physical behavior providers, and owns no canonical SavedData.
 - Immutable genesis terrain is produced by a registered worldgen Feature from precompiled chunk-local slices. Login fails closed until the catalog is ready; loaded-chunk events observe stamps but never construct static geometry. Every post-gen canonical state transition uses persisted materialization jobs and never overwrites unknown player changes.
 - Non-critical runtime work shares a configurable 3 ms / 256 weighted-operation admission budget. Cadence is staggered, unchanged projections are suppressed, railway health is event-driven, and `/pale_mirror performance` exposes per-work timing and deferral metrics.
+- Exact Distant Horizons 3.2.0-b is an optional presentation cache. PM disables its background importer; normal chunk events build/synchronise ready LODs, client generation requests are disabled by the server profile,
+  and PRE_EXISTING_ONLY remains a dormant fail-safe. PM samples maximum horizontal player speed once per second,
+  reducing DH's public runtime ratio from 0.35 to 0.05 at 12 blocks/s or a teleport, then restoring it only after
+  every player stays at or below 6 blocks/s for 10 seconds. The override is cleared on shutdown and never affects canonical state.
 - The settlement generator uses a bounded deterministic hybrid grammar: procedural radial plan and road graph plus curated authored NBT modules. It does not use an unconstrained jigsaw walk.
 - The fort has a civic core, two functional rings, wooden palisade, freight gate/depot and at least six reserved development plots. Nominal diameter is 176 blocks and maximum footprint 192.
 - Terrain placement prefers dry sites with sampled relief at most 8 blocks, rejects water/extreme terrain, and permits a bounded dry fallback up to 24 blocks only after the preferred candidate fails.
@@ -54,6 +53,7 @@
 - Replaced the crash-prone loaded-chunk genesis materializer with an asynchronous immutable catalog and a chunk-local worldgen Feature. Static settlement, MineSite and baseline-rail geometry is no longer written from `ChunkEvent.Load` or the normal server tick.
 - Added persisted chunk generation stamps, readiness/status SPI, player admission gating, authored MineSite adoption and worldgen-only baseline-rail provenance registration.
 - Added the shared runtime work coordinator with configurable 3 ms / 256-op defaults, staggered cadences and operator telemetry.
+- Added exact optional DH 3.2.0-b cache-only control with its background importer disabled, PRE_EXISTING_ONLY as a dormant fail-safe, one event-fed worker, speed/discontinuity-driven 0.35/0.05 runtime throttling with hysteresis, observable degraded status and cleared shutdown overrides.
 - Replaced full chunk-volume rail scans with event-driven bounded graph traversal, full loaded-entity ambient counts with Minecraft `SpawnState`, repetitive visual projections with revision suppression, and repeated Threat Heart scans with UUID indexing.
 - Kept all 48 authored residents visible while limiting expensive nearby vanilla AI to 16 role-prioritized carriers by default; the AI limit/radius are visual-only configuration.
 - Added persisted immutable manifests, generator-only terrain survey, deterministic three-region grammar, three climate palettes, radial forts, six expansion plots and curated private NBT modules with provenance.
@@ -85,6 +85,10 @@
   scan deliberately ignores the post-grading surface heightmap, which may already have collapsed below leftover foliage.
 
 ### Now
+- Live-worldgen optimization uses Java 22 without pregeneration. The managed pack enables C2ME with eight workers,
+  six concurrent chunk loads, native acceleration and density compilation; DH is cache-only with a 24-chunk
+  realtime update radius. Quark's four noisy large-stone clusters are 8x rarer, ModernFix surface-rule optimization is an explicit A/B switch, and reachable third-party structure graphs are install-time validated/quarantined. The
+  deployed server accepted AVX2, all limits and the DH override; clean startup/catalog readiness passed.
 - The mountain-native mine cutover and reusable placement-profile boundary are implemented. Core schema v37, Visual definition v6, catalog v7 and
   genesis SavedData schema v6 intentionally reject every earlier world; the playtest world is disposable.
 - `AuthoredMineSitePlan` now pins each portal, loading endpoint, controller, bounds, orientation, initial/staged
@@ -104,14 +108,12 @@
   territory protection and genesis cleanup.
 
 ### Next
-- Run a fresh graphical-client seed matrix for foothill selection, mine/rail composition, isolated Create kinetics,
-  Red Valley staged construction and real-train proof.
+- Run the optimized-versus-vanilla ModernFix flight A/B gate and the sequential bounded JFR analyzer, then run the fresh graphical seed matrix for foothills, mine/rail
+  composition, isolated Create kinetics, Red Valley construction and real-train proof.
 
 ## Open questions
 - UNCONFIRMED: final visual quality and playability until a real client visits naturally generated temperate/cold/dry mountain regions after the v37 cutover.
 - The exact VO public surface plus one fail-closed recruitment mixin loads in GameTest and packaged server; live patrol/combat quality still needs client playtesting.
 - Public redistribution remains out of scope; re-audit all imported asset and dependency licences before changing that assumption.
-
 ## Working set
-- `AGENTS.md`, `architecture.yml`, Gradle build
-- `pale-mirror-api`, Core/domain state and `pale-mirror-visuals` authored genesis/residents/Threat Heart
+- `AGENTS.md`, `architecture.yml`, Gradle build; `pale-mirror-api`, Core/domain state and Visuals genesis
