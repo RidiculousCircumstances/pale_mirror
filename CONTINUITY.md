@@ -21,7 +21,7 @@
 - Non-critical runtime work shares a configurable 3 ms / 256 weighted-operation admission budget. Cadence is staggered, unchanged projections are suppressed, railway health is event-driven, and `/pale_mirror performance` exposes per-work timing and deferral metrics.
 - Distant Horizons 3.2.0-b is client-side by default. Its exact optional server cache is a benchmark opt-in; when present PM disables the importer, keeps PRE_EXISTING_ONLY dormant and throttles its public runtime ratio during fast travel. DH never affects canonical state.
 - The settlement generator uses a bounded deterministic curated-hybrid grammar: a surveyed site selects foothill-ribbon, terraced-basin or freight-crossroads form, then curated NBT modules bind to typed foundations and semantic ports. It does not use radial or unconstrained jigsaw fallback.
-- The authored address is approximately 90x130 blocks with 16 buildings, connected freight/civic circulation, segmented functional defences, walkable watch posts and six verified-free development plots.
+- The authored address is approximately 90x130 blocks with 16 buildings, connected paved freight/civic circulation, terrain-following low defences, lamps and six verified-free development plots.
 - Terrain placement prefers dry sites with sampled relief at most 8 blocks, rejects water/extreme terrain, and permits a bounded dry fallback up to 24 blocks only after the preferred candidate fails.
 - One immutable `RegionPlacementProfile` owns search bands/budgets, settlement terrain, typed site constraints/relations and route policy; layout grammars consume it explicitly. The iron profile separates a six-region output cap from a 160-center survey cap and preserves bounded foothill ranking, six exact settlement surveys per center, two dry mountain sites with a median cross-section rising at least 10 blocks over 48 blocks and 24 validations, bounded rail graph search, one-in-four grade and a first region 1024–4096 blocks from spawn.
 - Region cardinality is a range rather than a quota: 3 is the fail-closed minimum, 5 the desired population and 6 the opportunistic cap. The default search radius is 20,000 blocks with 2,500-block center spacing, anticipating Create travel.
@@ -66,7 +66,7 @@
 - Added canonical `WorldJourney`, deterministic off-screen travel/risk, exclusive stable-resident identity leases, bounded nearby physical groups and canonical return journeys.
 - Added reserved shelter candidates, selected/fallback refugee camps, staged authored damage, exact reconstruction and plot-based positive-development projects.
 - Added terrain-costed, grade-safe persisted baseline rail paths with arbitrary turns, loaded-chunk construction and topology-based player reroute adoption.
-- Added Visuals planner tests, 10 Visuals GameTests including deterministic chunk-local compilation, the 468-case climate/rotation/state showcase matrix, blueprint sanitizing, powered-rail corners, bridge water preservation, vegetation cleanup and biome-feature registration under exact Sable 2.0.3, plus JAR and packaged two-start verification. All 40 Core and 10 Visuals GameTests pass.
+- Added Visuals planner tests, 12 Visuals GameTests including deterministic chunk-local compilation, the 468-case climate/rotation/state showcase matrix, blueprint sanitizing, powered-rail corners, bridge water preservation, full-height vegetation cleanup, terrain blending, safe resident spawn and biome-feature registration under exact Sable 2.0.3, plus JAR and packaged two-start verification. All 40 Core and 12 Visuals GameTests pass.
 - Made `WorldState` collection views immutable and mutations package-private; production mutations cross `DomainCommandExecutor`/`DomainTransaction`, while a codec-only hydration builder rejects duplicate persisted identities.
 - Added schema-v39 canonical and physical integrity validation on load and save, typed command failures, atomic aggregate registration and command-owned Narrator evaluation/reset/registration paths.
 - Added a configurable ephemeral NeoForge ambient-spawn budget that strongly reduces natural hostiles and
@@ -78,18 +78,20 @@
 - Bounded detailed causal history and terminal journeys with persisted summaries; shared output now uses deterministic demand/weight allocation rather than route-ID priority.
 - Replaced blocking debug teleport height queries with a single bounded asynchronous FULL-chunk ticket; requests
   report progress, cancel on disconnect/replacement/timeout/shutdown, and teleport only after readiness.
-- Extended fresh settlement cleanup with a six-block cleanup-only halo and fixed 64-block vertical scan for tree crowns,
-  logs, vines, cocoa, moss, cave plants and tagged beehives without grading or claiming neighbouring ground. The
-  scan deliberately ignores the post-grading surface heightmap, which may already have collapsed below leftover foliage.
+- Extended fresh settlement cleanup with a six-block cleanup-only halo and an original-surface scan for arbitrarily
+  high tree crowns, logs, vines, cocoa, moss, cave plants and tagged beehives without claiming neighbouring ground.
+  A 28-column one-block gradient blends local pads into nature; resident commissioning rejects occupied spawn cells.
 
 ### Now
-- Schema v39, Visual definition v9, catalog v10 and genesis SavedData schema v8 intentionally reject every earlier world; the playtest world is disposable.
-- Mine17 and Red Valley use independently surveyed compact foothill foundations and remixed Integrated Villages residence/workshop/depot shells above ground. PM adds a headframe, chimney, loading platform and graded paths; the shorter branched underground grammar has arched support sets, a junction and a dry masonry shell.
+- A repeatable X11 settlement visual-audit harness can resolve a persisted PM settlement, wait for its asynchronous debug teleport, capture a top plan plus four diagonal daylight views, and retain PNG/log/manifest evidence without mutating canonical state.
+- Schema v39, Visual definition v10, catalog v11 and genesis SavedData schema v9 intentionally reject every earlier world; the playtest world is disposable.
+- Mine17 and Red Valley use independently surveyed compact foothill foundations and remixed Integrated Villages residence/workshop/depot/stable shells above ground. PM adds an open headframe, chimney, loading crane/platform, bounded Create display, lamps, low safety fencing and paved industrial paths; legacy surface mining-complex boxes are no longer addressable. The shorter branched underground grammar retains arched supports, a junction and a dry masonry shell.
+- Settlement pads now merge into broad one-block-per-column landscape transitions; streets and freight roads use stone/andesite paving, lamps follow final terrain, and segmented low fence/wall defences replace the former opaque log barrier.
 - Settlement manifests now carry stable module identity, local foundations, semantic ports, typed circulation/defence features and bounded visual-state profiles. Runtime damage/reconstruction, positive development and refugee camps use those authored contracts through Core jobs.
 - The baseline railway uses bounded dry-preferring A*, rejects water runs over 24 blocks or insufficient clearance, and materializes short bridges with decks/piers while preserving surrounding water. It never drains chunks.
 - Surface pads use a deterministic nearby search, keep structural footprints disjoint while allowing grading aprons to merge, and cap local grading at 14 relief/7 cut/8 fill. The real-seed packaged two-start harness passes with the stricter complete-region gate.
 - Red Valley staged commissioning and canonical route proof remain unchanged: resource flow is blocked until the site and transport capability are operational.
-- `guardrails check`, packaged-JAR verification, 40 Core GameTests, 10 Visuals GameTests and the Visuals packaged two-start integration harness pass.
+- `guardrails check`, packaged-JAR verification, 40 Core GameTests, 12 Visuals GameTests and the Visuals packaged two-start integration harness pass.
 
 ### Next
 - Run the graphical seed matrix for foothills, mine/rail composition, isolated Create kinetics, Red Valley construction and real-train proof; retain server DH only as an explicit benchmark A/B option.

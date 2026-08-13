@@ -11,6 +11,8 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 /** Stable UUID commissioning. Missing/unloaded entities are never interpreted as deaths. */
 public final class ResidentMaterializer {
@@ -26,9 +28,41 @@ public final class ResidentMaterializer {
                 continue;
             }
             Villager villager = create(level, region, seed, uuid);
-            villager.setPos(seed.home().x() + 0.5, seed.home().y() + 2.0, seed.home().z() + 0.5);
+            Vec3 spawn = safeSpawn(level, new BlockPos(seed.home().x(), seed.home().y(), seed.home().z()));
+            if (spawn == null) continue;
+            villager.setPos(spawn.x, spawn.y, spawn.z);
             if (level.addFreshEntity(villager)) ledger.commissionResident(seed.residentId());
         }
+    }
+
+    /**
+     * Finds a deterministic two-block clearance near the authored public
+     * entrance. No safe cell means no entity: canonical population remains
+     * abstract and commissioning retries after neighbouring geometry arrives.
+     */
+    public static Vec3 safeSpawn(ServerLevel level, BlockPos intended) {
+        for (int radius = 0; radius <= 8; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+                if (radius > 0 && Math.max(Math.abs(dx), Math.abs(dz)) != radius) continue;
+                int x = intended.getX() + dx;
+                int z = intended.getZ() + dz;
+                BlockPos column = new BlockPos(x, intended.getY(), z);
+                if (!level.hasChunkAt(column)) continue;
+                for (int dy : new int[]{0, 1, -1, 2, -2, 3}) {
+                    BlockPos feet = column.offset(0, dy, 0);
+                    if (safe(level, feet)) return Vec3.atBottomCenterOf(feet);
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean safe(ServerLevel level, BlockPos feet) {
+        if (!level.getFluidState(feet).isEmpty() || !level.getFluidState(feet.above()).isEmpty()) return false;
+        if (!level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()
+                || !level.getBlockState(feet.above()).getCollisionShape(level, feet.above()).isEmpty()) return false;
+        BlockPos floor = feet.below();
+        return level.getBlockState(floor).isFaceSturdy(level, floor, net.minecraft.core.Direction.UP);
     }
 
     public Villager create(ServerLevel level, AuthoredRegionSeed region, ResidentSeed seed, UUID uuid) {

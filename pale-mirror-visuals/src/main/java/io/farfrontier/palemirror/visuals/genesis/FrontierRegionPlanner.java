@@ -22,7 +22,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 9;
+    public static final int DEFINITION_VERSION = 10;
     private final RegionPlacementProfile placementProfile;
 
     public FrontierRegionPlanner() {
@@ -108,37 +108,40 @@ public final class FrontierRegionPlanner {
         String family = climate == FrontierClimate.DRY_ARID ? "temperate" : climate.name().toLowerCase(Locale.ROOT);
         List<VisualModulePlacement> initial = new ArrayList<>();
         List<StagedVisualModule> staged = new ArrayList<>();
-        addSurfaceMine(initial, family, "mine/portal_hoist", "portal", "MINE_PORTAL",
-                role, anchor, 45, 19, 37);
-        addSurfaceMine(initial, family, "mine/crew_outpost", "crew", "MINE_SUPPORT",
-                role, anchor, 12, 6, 9);
+        addSurfaceMine(initial, family, "stable", "portal", "MINE_PORTAL",
+                role, anchor, 19, 8, 16);
+        addSurfaceMine(initial, family, "residence_1", "crew", "MINE_SUPPORT",
+                role, anchor, 10, 7, 9);
         addUndergroundMine(initial, family, "entrance_adit", "MINE_ADIT", portal,
                 MineUndergroundLayout.ADIT, direction, 7, 6, 7);
         addUndergroundMine(initial, family, "controller_chamber", "MINE_CONTROLLER", portal,
                 MineUndergroundLayout.CONTROLLER, direction, 17, 13, 13);
         if (role == AuthoredMineRole.PRIMARY) {
-            addSurfaceMine(initial, family, "mine/processing_hall", "processing", "MINE_PROCESSING",
-                    role, anchor, 31, 10, 17);
-            addSurfaceMine(initial, family, "mine/power_house", "power", "MINE_POWER",
-                    role, anchor, 13, 15, 15);
-            addSurfaceMine(initial, family, "mine/loading_yard", "loading", "MINE_LOGISTICS",
-                    role, anchor, 14, 10, 9);
+            addSurfaceMine(initial, family, "workshop_2", "processing", "MINE_PROCESSING",
+                    role, anchor, 16, 6, 20);
+            addSurfaceMine(initial, family, "workshop_1", "power", "MINE_POWER",
+                    role, anchor, 10, 7, 8);
+            addSurfaceMine(initial, family, "receiving_depot", "loading", "MINE_LOGISTICS",
+                    role, anchor, 10, 6, 6);
             addUndergroundMine(initial, family, "iron_gallery", "MINE_GALLERY", portal,
                     MineUndergroundLayout.GALLERY, direction, 40, 9, 17);
         } else {
-            staged.add(stageSurfaceMine("foundation", family, "mine/dispatch_foundation", "dispatch",
-                    "MINE_LOGISTICS", role, anchor, 13, 7, 13));
-            staged.add(stageSurfaceMine("shell", family, "mine/dispatch_shell", "processing",
-                    "MINE_PROCESSING", role, anchor, 31, 10, 17));
-            staged.add(stageSurfaceMine("machinery", family, "mine/dispatch_machinery", "power",
-                    "MINE_POWER", role, anchor, 19, 9, 22));
-            staged.add(stageSurfaceMine("commissioning", family, "mine/dispatch_commissioning", "freight",
-                    "MINE_LOGISTICS", role, anchor, 14, 10, 9));
+            staged.add(stageSurfaceMine("foundation", family, "receiving_depot", "dispatch",
+                    "MINE_LOGISTICS", role, anchor, 10, 6, 6));
+            staged.add(stageSurfaceMine("shell", family, "workshop_2", "processing",
+                    "MINE_PROCESSING", role, anchor, 16, 6, 20));
+            staged.add(stageSurfaceMine("machinery", family, "workshop_1", "power",
+                    "MINE_POWER", role, anchor, 10, 7, 8));
+            staged.add(stageSurfaceMine("commissioning", family, "receiving_depot", "freight",
+                    "MINE_LOGISTICS", role, anchor, 10, 6, 6));
         }
         VisualPoint controller = local(portal, MineUndergroundLayout.CONTROLLER, direction);
         String loadingPad = role == AuthoredMineRole.PRIMARY ? "loading" : "dispatch";
         VisualPoint loadingCenter = anchor.surfaceCenter(role, loadingPad);
-        VisualPoint loading = new VisualPoint(loadingCenter.x(), loadingCenter.y() + 1, loadingCenter.z());
+        // The route terminates at the outward apron, not in the middle of the
+        // freight building. This keeps rails, minecarts and the loading canopy
+        // readable as one physical transfer point.
+        VisualPoint loading = local(loadingCenter, 0, -5, 1, direction);
         VisualBounds siteBounds = orientedBounds(portal, 72, 52, -22, 28, direction);
         VisualPoint machinery = anchor.surfaceCenter(role, "power");
         List<SemanticVisualVolume> volumes = List.of(
@@ -297,7 +300,11 @@ public final class FrontierRegionPlanner {
                                      String cohort, String role, int count, int homeStart, int workStart) {
         for (int i = 0; i < count; i++) {
             int serial = out.size();
-            VisualPoint home = modules.get(homeStart + i % Math.min(6, modules.size() - homeStart)).origin();
+            VisualModulePlacement homeModule = modules.get(
+                    homeStart + i % Math.min(6, modules.size() - homeStart));
+            VisualPoint home = homeModule.ports().stream()
+                    .filter(port -> port.kind() == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE)
+                    .findFirst().orElseThrow().position();
             VisualPoint work = modules.get(workStart + i % Math.max(1, Math.min(6, modules.size() - workStart))).origin();
             String id = UUID.nameUUIDFromBytes((source + ":resident:" + serial).getBytes(StandardCharsets.UTF_8)).toString();
             out.add(new ResidentSeed(id, "pale_mirror_visuals.resident." + keyedInt(source, "name:" + serial, 64),

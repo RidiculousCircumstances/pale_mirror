@@ -16,7 +16,7 @@ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConf
 
 /** Writes only the current WorldGenLevel chunk; ServerLevel and neighbour requests are forbidden. */
 public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfiguration> {
-    static final int VEGETATION_CLEANUP_HEIGHT = 64;
+    static final int VEGETATION_BASE_MARGIN = 32;
 
     public FrontierWorldgenFeature(Codec<NoneFeatureConfiguration> codec) { super(codec); }
 
@@ -26,8 +26,9 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         ChunkPos chunk = new ChunkPos(context.origin());
         CompiledChunkSlice slice = FrontierGenesisRuntime.compiledChunk(chunk.toLong());
         if (slice == null) return false;
-        for (CompiledChunkSlice.TerrainColumn column : slice.terrain()) grade(level, column);
         for (CompiledChunkSlice.VegetationColumn column : slice.vegetation()) clearNaturalVegetation(level, column);
+        for (CompiledChunkSlice.TerrainColumn column : slice.terrain()) grade(level, column);
+        placeSurfaceDecorations(level, slice.surfaceDecorations());
         slice.blocks().forEach((position, state) -> setIfDifferent(level, position, state));
         for (CompiledChunkSlice.RailColumn rail : slice.rails()) placeRail(level, rail);
         var current = level.getChunk(chunk.x, chunk.z);
@@ -39,12 +40,15 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
 
     /** Runs before authored modules, so their intentional gardens and timber remain untouched. */
     static void clearNaturalVegetation(LevelAccessor level, CompiledChunkSlice.VegetationColumn column) {
-        // Do not clamp this pass to WORLD_SURFACE_WG. Grading runs first and may
-        // already have moved that heightmap down to the authored surface while
-        // feature blocks from the former tree crown still exist above it.
+        // This pass deliberately runs before grading. Capture the original top
+        // so arbitrarily tall modded crowns, hanging vines and bee nests cannot
+        // survive above a lowered authored surface. Start below every accepted
+        // settlement relief band so trunks rooted below the planned datum are
+        // removed as well.
         int last = Math.min(level.getMaxBuildHeight() - 1,
-                column.baseY() + VEGETATION_CLEANUP_HEIGHT);
-        for (int y = column.baseY() + 1; y <= last; y++) {
+                level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, column.x(), column.z()) - 1);
+        int first = Math.max(level.getMinBuildHeight(), column.baseY() - VEGETATION_BASE_MARGIN);
+        for (int y = first; y <= last; y++) {
             BlockPos position = new BlockPos(column.x(), y, column.z());
             var state = level.getBlockState(position);
             if (naturalVegetation(state)) setIfDifferent(level, position, Blocks.AIR.defaultBlockState());
@@ -73,7 +77,8 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
 
     private static void grade(WorldGenLevel level, CompiledChunkSlice.TerrainColumn column) {
         int top = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, column.x(), column.z()) - 1;
-        int target = column.targetY();
+        int target = resolvedTarget(top, column.targetY(), column.blendDistance());
+        if (column.blendDistance() > 0 && target == top) return;
         if (top > target) {
             for (int y = target + 1; y <= top; y++) setIfDifferent(level, new BlockPos(column.x(), y, column.z()),
                     Blocks.AIR.defaultBlockState());
@@ -83,6 +88,24 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         }
         setIfDifferent(level, new BlockPos(column.x(), target - 1, column.z()), column.foundation());
         setIfDifferent(level, new BlockPos(column.x(), target, column.z()), column.surface());
+    }
+
+    static int resolvedTarget(int naturalTop, int authoredTarget, int blendDistance) {
+        if (blendDistance == 0) return authoredTarget;
+        return Math.max(authoredTarget - blendDistance,
+                Math.min(authoredTarget + blendDistance, naturalTop));
+    }
+
+    private static void placeSurfaceDecorations(LevelAccessor level,
+                                                 java.util.List<CompiledChunkSlice.SurfaceDecoration> decorations) {
+        java.util.Map<Long, Integer> bases = new java.util.HashMap<>();
+        for (CompiledChunkSlice.SurfaceDecoration decoration : decorations) {
+            long key = ChunkPos.asLong(decoration.x(), decoration.z());
+            int base = bases.computeIfAbsent(key, ignored -> level.getHeight(
+                    Heightmap.Types.WORLD_SURFACE_WG, decoration.x(), decoration.z()));
+            setIfDifferent(level, new BlockPos(decoration.x(), base + decoration.offsetY(), decoration.z()),
+                    decoration.state());
+        }
     }
 
     private static void placeRail(WorldGenLevel level, CompiledChunkSlice.RailColumn rail) {

@@ -25,8 +25,8 @@ public final class FrontierWorldgenCleanupGameTests {
         helper.getLevel().setBlock(surface.above(11), Blocks.BEE_NEST.defaultBlockState(), 2);
         helper.getLevel().setBlock(surface.above(12), Blocks.VINE.defaultBlockState(), 2);
         helper.getLevel().setBlock(surface.above(13), Blocks.STONE.defaultBlockState(), 2);
-        helper.getLevel().setBlock(surface.above(40), Blocks.SPRUCE_LEAVES.defaultBlockState(), 2);
-        helper.getLevel().setBlock(surface.above(41), Blocks.BEE_NEST.defaultBlockState(), 2);
+        helper.getLevel().setBlock(surface.above(90), Blocks.SPRUCE_LEAVES.defaultBlockState(), 2);
+        helper.getLevel().setBlock(surface.above(91), Blocks.BEE_NEST.defaultBlockState(), 2);
 
         FrontierWorldgenFeature.clearNaturalVegetation(helper.getLevel(),
                 new CompiledChunkSlice.VegetationColumn(surface.getX(), surface.getZ(), surface.getY()));
@@ -38,8 +38,22 @@ public final class FrontierWorldgenCleanupGameTests {
         helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 13, 2));
         helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 14, 2));
         helper.assertBlockPresent(Blocks.STONE, new BlockPos(2, 15, 2));
-        helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 42, 2));
-        helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 43, 2));
+        helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 92, 2));
+        helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 93, 2));
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void settlementBlendNeverCreatesAHighCutFace(GameTestHelper helper) {
+        var exact = new CompiledChunkSlice.TerrainColumn(0, 0, 70,
+                Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState());
+        helper.assertValueEqual(70, FrontierWorldgenFeature.resolvedTarget(92,
+                exact.targetY(), exact.blendDistance()), "hard building pads must retain their datum");
+        for (int distance = 1; distance <= 28; distance++) {
+            int resolved = FrontierWorldgenFeature.resolvedTarget(92, 70, distance);
+            helper.assertValueEqual(Math.min(92, 70 + distance), resolved,
+                    "blend must rise by at most one block per horizontal column");
+        }
         helper.succeed();
     }
 

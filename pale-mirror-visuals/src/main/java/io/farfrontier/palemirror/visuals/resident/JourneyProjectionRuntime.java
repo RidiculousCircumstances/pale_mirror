@@ -82,8 +82,10 @@ public final class JourneyProjectionRuntime {
                 <= square(OBSERVATION_RADIUS));
         UUID residentId = UUID.fromString(seed.residentId());
         if (!observed || !level.hasChunkAt(home) || level.getEntity(residentId) != null) return false;
+        Vec3 spawn = ResidentMaterializer.safeSpawn(level, home);
+        if (spawn == null) return false;
         Villager resident = residents.create(level, region, seed, residentId);
-        resident.setPos(seed.home().x() + 0.5D, seed.home().y() + 2.0D, seed.home().z() + 0.5D);
+        resident.setPos(spawn.x, spawn.y, spawn.z);
         return level.addFreshEntity(resident);
     }
 

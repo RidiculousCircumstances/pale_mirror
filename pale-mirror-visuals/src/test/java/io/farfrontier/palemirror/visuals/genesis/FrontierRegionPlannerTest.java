@@ -29,7 +29,7 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertTrue(seed.modules().size() >= 16);
         assertEquals(6, seed.expansionPlots().size());
-        assertEquals(9, seed.definitionVersion());
+        assertEquals(10, seed.definitionVersion());
         assertEquals(8, seed.primaryMineSite().initialModules().size());
         assertEquals(4, seed.alternateMineSite().initialModules().size());
         assertEquals(5, seed.primaryMineSite().foundations().size());
@@ -39,12 +39,18 @@ class FrontierRegionPlannerTest {
         assertTrue(seed.primaryMineSite().semanticVolumes().stream()
                 .anyMatch(value -> value.purpose().equals("INFECTION")));
         assertTrue(seed.primaryMineSite().bounds().contains(seed.primaryMineSite().controllerAnchor()));
-        assertTrue(seed.primaryMineSite().initialModules().stream()
-                .allMatch(value -> value.templateId().contains("/mine/")));
-        assertTrue(seed.primaryMineSite().initialModules().stream()
-                .anyMatch(value -> value.templateId().endsWith("/mine/portal_hoist")));
-        assertTrue(seed.primaryMineSite().initialModules().stream()
-                .anyMatch(value -> value.templateId().endsWith("/mine/loading_yard")));
+        var surfaceRoles = java.util.Set.of("MINE_PORTAL", "MINE_SUPPORT", "MINE_PROCESSING",
+                "MINE_POWER", "MINE_LOGISTICS");
+        var surface = seed.primaryMineSite().initialModules().stream()
+                .filter(value -> surfaceRoles.contains(value.role())).toList();
+        assertEquals(5, surface.size());
+        assertTrue(surface.stream().noneMatch(value -> value.templateId().contains("/mine/")),
+                "surface industry must use building modules rather than enclosed underground rooms");
+        assertTrue(surface.stream().anyMatch(value -> value.templateId().endsWith("/stable")));
+        assertTrue(surface.stream().anyMatch(value -> value.templateId().endsWith("/receiving_depot")));
+        assertTrue(seed.alternateMineSite().stagedModules().stream()
+                        .noneMatch(value -> value.module().templateId().contains("/mine/")),
+                "staged surface industry must never reintroduce legacy mining-complex boxes");
     }
 
     @Test void railwayConsumesOnlyTheTwoExplicitMineAnchorQueries() {

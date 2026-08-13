@@ -26,7 +26,7 @@ import net.minecraft.world.level.block.state.properties.RailShape;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 10;
+    public static final int CATALOG_VERSION = 11;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableSlice> slices = new LinkedHashMap<>();
@@ -45,11 +45,21 @@ public final class FrontierGenesisCompiler {
         SettlementGenesisCompiler.compile(seed, palette, new SettlementGenesisCompiler.Sink() {
             @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
                 MutableSlice slice = slice(slices, x, z);
-                slice.terrain.add(new CompiledChunkSlice.TerrainColumn(x, z, targetY, surface, foundation));
+                slice.terrain(new CompiledChunkSlice.TerrainColumn(x, z, targetY, surface, foundation));
+            }
+            @Override public void blend(int x, int z, int targetY, BlockState surface, BlockState foundation,
+                                        int blendDistance) {
+                MutableSlice slice = slice(slices, x, z);
+                slice.terrain(new CompiledChunkSlice.TerrainColumn(
+                        x, z, targetY, surface, foundation, blendDistance));
             }
             @Override public void cleanup(int x, int z, int baseY) {
                 slice(slices, x, z).vegetation.putIfAbsent(ChunkPos.asLong(x, z),
                         new CompiledChunkSlice.VegetationColumn(x, z, baseY));
+            }
+            @Override public void surfaceBlock(int x, int z, int offsetY, BlockState state) {
+                slice(slices, x, z).surfaceDecorations.add(
+                        new CompiledChunkSlice.SurfaceDecoration(x, z, offsetY, state));
             }
             @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
         });
@@ -110,35 +120,7 @@ public final class FrontierGenesisCompiler {
     }
 
     private static void compileMineIndustrialDetails(AuthoredMineSitePlan mine, Map<Long, MutableSlice> slices) {
-        for (int side : new int[]{-3, 3}) for (int up = 1; up <= 8; up++) {
-            put(slices, local(mine.portal(), side, 0, up, mine.inwardQuarterTurns()),
-                    Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-        }
-        for (int right = -3; right <= 3; right++) {
-            put(slices, local(mine.portal(), right, 0, 8, mine.inwardQuarterTurns()),
-                    Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-        }
-        for (int up = 3; up <= 7; up++) {
-            put(slices, local(mine.portal(), 2, 0, up, mine.inwardQuarterTurns()),
-                    Blocks.CHAIN.defaultBlockState());
-        }
-        MineFoundationPlan power = mine.foundations().stream().filter(value -> value.id().equals("power"))
-                .findFirst().orElse(null);
-        if (power != null) {
-            int x = power.footprint().max().x() + 1;
-            int z = power.footprint().max().z() + 1;
-            for (int dx = 0; dx <= 1; dx++) for (int dz = 0; dz <= 1; dz++) {
-                for (int up = 1; up <= 12; up++) put(slices,
-                        new BlockPos(x + dx, power.targetY() + up, z + dz),
-                        up > 9 ? Blocks.BRICKS.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState());
-            }
-        }
-        VisualPoint loading = mine.loadingEndpoint();
-        for (int right = -4; right <= 4; right++) for (int inward = -2; inward <= 2; inward++) {
-            if (right == 0) continue;
-            put(slices, local(loading, right, inward, -1, mine.inwardQuarterTurns()),
-                    Blocks.OAK_PLANKS.defaultBlockState());
-        }
+        MineSurfaceGenesisCompiler.compile(mine, (position, state) -> put(slices, position, state));
     }
 
     private static void compileReservationFootprint(VisualModulePlacement module, Map<Long, MutableSlice> slices) {
@@ -153,23 +135,33 @@ public final class FrontierGenesisCompiler {
 
     private static void compileMineFoundations(AuthoredMineSitePlan mine, Map<Long, MutableSlice> slices) {
         for (MineFoundationPlan foundation : mine.foundations()) {
-            for (int x = foundation.footprint().min().x() - foundation.apron();
-                 x <= foundation.footprint().max().x() + foundation.apron(); x++) {
-                for (int z = foundation.footprint().min().z() - foundation.apron();
-                     z <= foundation.footprint().max().z() + foundation.apron(); z++) {
+            int transition = Math.max(foundation.maximumCut(), foundation.maximumFill()) + 4;
+            int influence = foundation.apron() + transition;
+            for (int x = foundation.footprint().min().x() - influence;
+                 x <= foundation.footprint().max().x() + influence; x++) {
+                for (int z = foundation.footprint().min().z() - influence;
+                     z <= foundation.footprint().max().z() + influence; z++) {
                     MutableSlice slice = slice(slices, x, z);
-                    boolean building = x >= foundation.footprint().min().x()
-                            && x <= foundation.footprint().max().x()
-                            && z >= foundation.footprint().min().z()
-                            && z <= foundation.footprint().max().z();
-                    slice.terrain.add(new CompiledChunkSlice.TerrainColumn(x, z, foundation.targetY(),
-                            (building ? Blocks.COBBLESTONE : Blocks.COARSE_DIRT).defaultBlockState(),
-                            Blocks.COBBLESTONE.defaultBlockState()));
+                    int distance = distanceFrom(foundation, x, z);
+                    boolean building = distance == 0;
+                    BlockState surface = (building ? Blocks.COBBLESTONE
+                            : distance <= foundation.apron() ? Blocks.COARSE_DIRT : Blocks.GRASS_BLOCK)
+                            .defaultBlockState();
+                    int blendDistance = Math.max(0, distance - foundation.apron());
+                    slice.terrain(new CompiledChunkSlice.TerrainColumn(x, z, foundation.targetY(), surface,
+                            blendDistance == 0 ? Blocks.COBBLESTONE.defaultBlockState()
+                                    : Blocks.DIRT.defaultBlockState(), blendDistance));
                     slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
                             new CompiledChunkSlice.VegetationColumn(x, z, foundation.targetY()));
                 }
             }
         }
+    }
+
+    private static int distanceFrom(MineFoundationPlan foundation, int x, int z) {
+        int dx = Math.max(foundation.footprint().min().x() - x, x - foundation.footprint().max().x());
+        int dz = Math.max(foundation.footprint().min().z() - z, z - foundation.footprint().max().z());
+        return Math.max(0, Math.max(dx, dz));
     }
 
     private static void compileMinePaths(AuthoredMineSitePlan mine, Map<Long, MutableSlice> slices) {
@@ -196,7 +188,7 @@ public final class FrontierGenesisCompiler {
                 if (index + 1 < path.size() && path.get(index + 1).x() != point.x()) z += offset;
                 else x += offset;
                 MutableSlice slice = slice(slices, x, z);
-                slice.terrain.add(new CompiledChunkSlice.TerrainColumn(x, z, y,
+                slice.terrain(new CompiledChunkSlice.TerrainColumn(x, z, y,
                         Blocks.GRAVEL.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState()));
                 slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
                         new CompiledChunkSlice.VegetationColumn(x, z, y));
@@ -407,15 +399,23 @@ public final class FrontierGenesisCompiler {
 
     private static final class MutableSlice {
         private final long key;
-        private final List<CompiledChunkSlice.TerrainColumn> terrain = new ArrayList<>();
+        private final Map<Long, CompiledChunkSlice.TerrainColumn> terrain = new LinkedHashMap<>();
         private final Map<Long, CompiledChunkSlice.VegetationColumn> vegetation = new LinkedHashMap<>();
+        private final List<CompiledChunkSlice.SurfaceDecoration> surfaceDecorations = new ArrayList<>();
         private final List<CompiledChunkSlice.RailColumn> rails = new ArrayList<>();
         private final Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
         private MutableSlice(long key) { this.key = key; }
+        private void terrain(CompiledChunkSlice.TerrainColumn column) {
+            long columnKey = ChunkPos.asLong(column.x(), column.z());
+            terrain.merge(columnKey, column, (previous, replacement) ->
+                    replacement.blendDistance() <= previous.blendDistance() ? replacement : previous);
+        }
         private CompiledChunkSlice freeze(String catalogHash) {
             String stamp = catalogHash.substring(0, 16) + ":" + Long.toUnsignedString(key, 16) + ":"
-                    + terrain.size() + ":" + vegetation.size() + ":" + rails.size() + ":" + blocks.size();
-            return new CompiledChunkSlice(key, stamp, terrain, vegetation.values().stream().toList(), rails, blocks);
+                    + terrain.size() + ":" + vegetation.size() + ":" + surfaceDecorations.size()
+                    + ":" + rails.size() + ":" + blocks.size();
+            return new CompiledChunkSlice(key, stamp, terrain.values().stream().toList(),
+                    vegetation.values().stream().toList(), surfaceDecorations, rails, blocks);
         }
     }
 }

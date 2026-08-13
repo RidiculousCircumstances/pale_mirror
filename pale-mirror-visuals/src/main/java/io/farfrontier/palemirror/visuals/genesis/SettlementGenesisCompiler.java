@@ -21,6 +21,7 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 /** Compiles a reusable authored settlement plan into a chunk-owning sink. */
 final class SettlementGenesisCompiler {
     static final int VEGETATION_HALO = 6;
+    static final int LANDSCAPE_BLEND_RADIUS = 28;
 
     private SettlementGenesisCompiler() { }
 
@@ -41,19 +42,32 @@ final class SettlementGenesisCompiler {
     }
 
     private static void foundation(SettlementFoundationPlan foundation, FrontierPalette palette, Sink sink) {
-        for (int x = foundation.footprint().min().x() - foundation.apron();
-             x <= foundation.footprint().max().x() + foundation.apron(); x++) {
-            for (int z = foundation.footprint().min().z() - foundation.apron();
-                 z <= foundation.footprint().max().z() + foundation.apron(); z++) {
-                boolean building = x >= foundation.footprint().min().x() && x <= foundation.footprint().max().x()
-                        && z >= foundation.footprint().min().z() && z <= foundation.footprint().max().z();
+        int influence = foundation.apron() + LANDSCAPE_BLEND_RADIUS;
+        for (int x = foundation.footprint().min().x() - influence;
+             x <= foundation.footprint().max().x() + influence; x++) {
+            for (int z = foundation.footprint().min().z() - influence;
+                 z <= foundation.footprint().max().z() + influence; z++) {
+                int distance = distanceFrom(foundation, x, z);
+                boolean building = distance == 0;
                 BlockState surface = building ? palette.foundation()
                         : foundation.surface().equals("FREIGHT") ? Blocks.GRAVEL.defaultBlockState()
-                        : Blocks.COARSE_DIRT.defaultBlockState();
-                sink.terrain(x, z, foundation.targetY(), surface, palette.foundation());
+                        : distance <= foundation.apron() ? Blocks.COBBLESTONE.defaultBlockState()
+                        : Blocks.GRASS_BLOCK.defaultBlockState();
+                if (distance <= foundation.apron()) {
+                    sink.terrain(x, z, foundation.targetY(), surface, palette.foundation());
+                } else {
+                    sink.blend(x, z, foundation.targetY(), surface, Blocks.DIRT.defaultBlockState(),
+                            distance - foundation.apron());
+                }
                 sink.cleanup(x, z, foundation.targetY());
             }
         }
+    }
+
+    private static int distanceFrom(SettlementFoundationPlan foundation, int x, int z) {
+        int dx = Math.max(foundation.footprint().min().x() - x, x - foundation.footprint().max().x());
+        int dz = Math.max(foundation.footprint().min().z() - z, z - foundation.footprint().max().z());
+        return Math.max(0, Math.max(dx, dz));
     }
 
     private static void linear(LinearFeaturePlan feature, FrontierPalette palette, Sink sink) {
@@ -65,17 +79,40 @@ final class SettlementGenesisCompiler {
             for (VisualPoint point : points) for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
                 BlockState surface = switch (feature.kind()) {
                     case FREIGHT_ROAD -> Math.floorMod(point.x() + point.z() + dx + dz, 5) == 0
-                            ? Blocks.COBBLESTONE.defaultBlockState() : Blocks.GRAVEL.defaultBlockState();
+                            ? Blocks.POLISHED_ANDESITE.defaultBlockState() : Blocks.COBBLESTONE.defaultBlockState();
                     case STREET -> Math.floorMod(point.x() + point.z(), 7) == 0
-                            ? Blocks.COARSE_DIRT.defaultBlockState() : Blocks.DIRT_PATH.defaultBlockState();
-                    case STAIRS -> Blocks.COBBLESTONE.defaultBlockState();
+                            ? Blocks.COBBLESTONE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
+                    case FOOTPATH -> Math.floorMod(point.x() * 3 + point.z(), 9) == 0
+                            ? Blocks.ANDESITE.defaultBlockState() : Blocks.COBBLESTONE.defaultBlockState();
+                    case STAIRS -> Blocks.STONE_BRICKS.defaultBlockState();
                     case DITCH -> Blocks.COARSE_DIRT.defaultBlockState();
-                    default -> Blocks.DIRT_PATH.defaultBlockState();
+                    default -> Blocks.COBBLESTONE.defaultBlockState();
                 };
                 int target = feature.kind() == LinearFeatureKind.DITCH ? point.y() - 1 : point.y();
                 sink.terrain(point.x() + dx, point.z() + dz, target, surface, palette.foundation());
                 sink.cleanup(point.x() + dx, point.z() + dz, target);
             }
+            if (feature.kind() == LinearFeatureKind.FREIGHT_ROAD
+                    || feature.kind() == LinearFeatureKind.STREET) {
+                streetFurniture(points, feature.width(), sink);
+            }
+        }
+    }
+
+    private static void streetFurniture(List<VisualPoint> points, int width, Sink sink) {
+        for (int index = 7; index < points.size(); index += 14) {
+            VisualPoint previous = points.get(Math.max(0, index - 1));
+            VisualPoint next = points.get(Math.min(points.size() - 1, index + 1));
+            int dx = Integer.signum(next.x() - previous.x());
+            int dz = Integer.signum(next.z() - previous.z());
+            int side = index % 28 == 7 ? 1 : -1;
+            int setback = width / 2 + 2;
+            int x = points.get(index).x() - dz * setback * side;
+            int z = points.get(index).z() + dx * setback * side;
+            sink.surfaceBlock(x, z, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+            sink.surfaceBlock(x, z, 1, Blocks.SPRUCE_FENCE.defaultBlockState());
+            sink.surfaceBlock(x, z, 2, Blocks.SPRUCE_FENCE.defaultBlockState());
+            sink.surfaceBlock(x, z, 3, Blocks.LANTERN.defaultBlockState());
         }
     }
 
@@ -90,23 +127,17 @@ final class SettlementGenesisCompiler {
 
     private static void palisade(List<VisualPoint> points, FrontierPalette palette, Sink sink) {
         for (int index = 0; index < points.size(); index++) {
-            VisualPoint point = points.get(index); int height = index % 4 == 0 ? 6 : 4;
-            for (int up = 1; up <= height; up++) sink.block(new BlockPos(point.x(), point.y() + up, point.z()), palette.log());
-            if (index % 4 != 0) sink.block(new BlockPos(point.x(), point.y() + 4, point.z()), palette.planks());
+            VisualPoint point = points.get(index);
+            if (index % 6 == 0) {
+                sink.surfaceBlock(point.x(), point.z(), 0, palette.foundation());
+                sink.surfaceBlock(point.x(), point.z(), 1, palette.log());
+                if (index % 18 == 0) sink.surfaceBlock(point.x(), point.z(), 2,
+                        Blocks.LANTERN.defaultBlockState());
+            } else {
+                sink.surfaceBlock(point.x(), point.z(), 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+                sink.surfaceBlock(point.x(), point.z(), 1, Blocks.SPRUCE_FENCE.defaultBlockState());
+            }
         }
-        watchPost(points.getFirst(), palette, sink); watchPost(points.getLast(), palette, sink);
-    }
-
-    private static void watchPost(VisualPoint point, FrontierPalette palette, Sink sink) {
-        for (int dx : new int[]{-2, 2}) for (int dz : new int[]{-2, 2}) for (int up = 1; up <= 6; up++) {
-            sink.block(new BlockPos(point.x() + dx, point.y() + up, point.z() + dz), palette.log());
-        }
-        for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
-            sink.block(new BlockPos(point.x() + dx, point.y() + 4, point.z() + dz), palette.planks());
-        }
-        for (int up = 1; up <= 4; up++) sink.block(new BlockPos(point.x() + 1, point.y() + up, point.z() + 1),
-                Blocks.SCAFFOLDING.defaultBlockState());
-        sink.block(new BlockPos(point.x(), point.y() + 6, point.z()), Blocks.LANTERN.defaultBlockState());
     }
 
     private static void retainingWall(List<VisualPoint> points, FrontierPalette palette, Sink sink) {
@@ -136,12 +167,6 @@ final class SettlementGenesisCompiler {
         List<VisualPoint> spine = new ArrayList<>();
         for (int index = 1; index < freight.nodes().size(); index++) {
             spine.addAll(raster(freight.nodes().get(index - 1), freight.nodes().get(index)));
-        }
-        for (int index = 10; index < spine.size(); index += 18) {
-            VisualPoint point = spine.get(index);
-            for (int up = 1; up <= 3; up++) sink.block(new BlockPos(point.x() + 4, point.y() + up, point.z()),
-                    Blocks.SPRUCE_FENCE.defaultBlockState());
-            sink.block(new BlockPos(point.x() + 4, point.y() + 4, point.z()), Blocks.LANTERN.defaultBlockState());
         }
         for (VisualModulePlacement module : settlement.modules()) module.ports().stream()
                 .filter(port -> port.kind() == VisualPortKind.SERVICE).findFirst().ifPresent(port -> {
@@ -190,7 +215,7 @@ final class SettlementGenesisCompiler {
                     .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
             sink.block(base, lower); sink.block(base.above(), lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
             sink.block(base.above(2), palette.planks()); BlockPos outside = base.relative(facing);
-            sink.block(outside.below(), Blocks.DIRT_PATH.defaultBlockState());
+            sink.block(outside.below(), Blocks.COBBLESTONE.defaultBlockState());
             sink.block(outside, Blocks.AIR.defaultBlockState()); sink.block(outside.above(), Blocks.AIR.defaultBlockState());
         }
     }
@@ -233,6 +258,11 @@ final class SettlementGenesisCompiler {
 
     interface Sink {
         void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation);
+        default void blend(int x, int z, int targetY, BlockState surface, BlockState foundation,
+                           int blendDistance) {
+            terrain(x, z, targetY, surface, foundation);
+        }
+        void surfaceBlock(int x, int z, int offsetY, BlockState state);
         void cleanup(int x, int z, int baseY);
         void block(BlockPos position, BlockState state);
     }

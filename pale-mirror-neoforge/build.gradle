@@ -148,6 +148,14 @@ neoForge {
             client()
             gameDirectory = layout.buildDirectory.dir('runs/railway-client')
         }
+        visualAuditClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/railway-client')
+            programArgument '--username'
+            programArgument providers.gradleProperty('visualAuditUsername').orElse('PMAudit').get()
+            programArgument '--quickPlayMultiplayer'
+            programArgument providers.gradleProperty('visualAuditServer').orElse('127.0.0.1:25565').get()
+        }
         ftbClient {
             client()
             gameDirectory = layout.buildDirectory.dir('runs/ftb-client')

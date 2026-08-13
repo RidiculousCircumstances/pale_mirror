@@ -55,4 +55,34 @@ public final class RuntimeDebugNavigatorGameTests {
         data.worldRegistry().clear();
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-runtime-debug-teleport", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 40)
+    @SuppressWarnings("removal")
+    public static void authoredSettlementUsesCanonicalPlaceAnchorWithoutObservation(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        LivingRegionGameTests.reset(data);
+        WorldObjectId communityId = new WorldObjectId("pale_mirror:audit_authored_community");
+        GameTestStateReset.registerMinimalCommunity(data, communityId);
+        var region = data.worldState().livingRegions().stream().findFirst().orElseThrow();
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 2, 0));
+        data.worldRegistry().register(new WorldObjectRegistryEntry(region.placeId(),
+                level.dimension().location().toString(), anchor, anchor, anchor,
+                "pale_mirror:authored_settlement", "1", WorldObjectLifecycle.REPRESENTED));
+        helper.assertTrue(data.settlementObservations().isEmpty(),
+                "authored-place navigation must not depend on a synthetic observed-village record");
+
+        var player = helper.makeMockServerPlayerInLevel();
+        var navigator = new RuntimeDebugNavigator(level.getServer(), data);
+        helper.assertTrue(navigator.teleportSettlement(player, region.placeId()).success(),
+                "a canonical authored settlement must resolve through its persisted physical place anchor");
+        helper.assertTrue(navigator.settlements(player).stream().anyMatch(line ->
+                        line.getString().contains(region.placeId().value()) && line.getString().contains("AUTHORED")),
+                "the settlement listing must expose authored places as first-class navigation targets");
+        data.worldRegistry().clear();
+        GameTestStateReset.resetCanonical(data);
+        helper.succeed();
+    }
 }

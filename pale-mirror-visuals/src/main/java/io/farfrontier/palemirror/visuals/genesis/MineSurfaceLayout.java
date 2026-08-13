@@ -16,12 +16,9 @@ final class MineSurfaceLayout {
 
     static List<Pad> pads(AuthoredMineRole role) {
         if (role == AuthoredMineRole.PRIMARY) return List.of(
-                // The hoist template includes a mountain envelope. Only its load-
-                // bearing core is terraced; flattening the full 45x37 envelope
-                // would cut an artificial rectangular shelf into the slope.
                 new Pad("portal", 0, -8, 21, 17),
                 new Pad("crew", -20, -12, 12, 9),
-                new Pad("processing", 0, -34, 31, 17),
+                new Pad("processing", 0, -34, 21, 21),
                 new Pad("power", -26, -32, 13, 15),
                 new Pad("loading", 22, -12, 14, 9));
         return List.of(

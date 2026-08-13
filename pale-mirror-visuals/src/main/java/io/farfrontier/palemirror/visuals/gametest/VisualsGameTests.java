@@ -51,25 +51,26 @@ public final class VisualsGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
-    public static void importedMineBlueprintIsSanitizedAndRetainsBoundedKinetics(GameTestHelper helper) {
+    public static void authoredMineBlueprintIsSanitizedAndReceivesBoundedKinetics(GameTestHelper helper) {
         var seed = new FrontierRegionPlanner().plan(918273L, 1, new VisualPoint(8000, 72, -4000),
                 FrontierClimate.TEMPERATE);
         var module = seed.alternateMineSite().stagedModules().stream()
                 .filter(value -> value.stage().equals("machinery"))
                 .findFirst().orElseThrow().module();
         var snapshot = AuthoredModuleCompiler.compile(module);
-        helper.assertTrue(!snapshot.blocks().isEmpty(), "staged dispatch blueprint must compile physical cells");
+        helper.assertTrue(!snapshot.blocks().isEmpty(), "staged industrial building must compile physical cells");
         boolean forbidden = snapshot.blocks().stream().map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK
                         .getKey(value.state().getBlock()))
                 .anyMatch(id -> id.getPath().contains("spawner") || id.getPath().equals("tnt")
                         || id.getPath().contains("chest") || id.getPath().equals("barrel")
                         || id.getPath().contains("ore") || id.getPath().startsWith("raw_"));
         helper.assertTrue(!forbidden, "imported blueprint must not retain loot, hazards, or canonical-looking ore");
-        boolean kinetic = snapshot.blocks().stream().map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                        .getKey(value.state().getBlock()))
+        var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
+        boolean kinetic = catalog.chunks().values().stream().flatMap(value -> value.blocks().values().stream())
+                .map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(value.getBlock()))
                 .anyMatch(id -> id.getNamespace().equals("create") && (id.getPath().equals("shaft")
-                        || id.getPath().equals("gearbox") || id.getPath().equals("water_wheel")));
-        helper.assertTrue(kinetic, "commissioning machinery must retain a bounded Create visual network");
+                        || id.getPath().equals("creative_motor") || id.getPath().equals("encased_fan")));
+        helper.assertTrue(kinetic, "mine grammar must add a bounded Create visual network");
         helper.succeed();
     }
 
@@ -85,6 +86,7 @@ public final class VisualsGameTests {
                 "compiled chunk address space must be deterministic");
         int rails = 0;
         int cleanupOnlyColumns = 0;
+        int surfaceDecorations = 0;
         for (var entry : first.chunks().entrySet()) {
             var slice = entry.getValue();
             helper.assertValueEqual(slice.chunkKey(), entry.getKey(), "slice must retain its owning chunk");
@@ -102,6 +104,12 @@ public final class VisualsGameTests {
                         "rail write escaped its chunk-local slice");
                 rails++;
             }
+            for (var decoration : slice.surfaceDecorations()) {
+                helper.assertValueEqual(net.minecraft.world.level.ChunkPos.asLong(
+                                decoration.x() >> 4, decoration.z() >> 4), entry.getKey(),
+                        "surface decoration escaped its chunk-local slice");
+                surfaceDecorations++;
+            }
             for (var position : slice.blocks().keySet()) helper.assertValueEqual(
                     new net.minecraft.world.level.ChunkPos(position).toLong(), entry.getKey(),
                     "template write escaped its chunk-local slice");
@@ -109,6 +117,11 @@ public final class VisualsGameTests {
         helper.assertValueEqual(rails, seed.baselineRailNodes().size(), "every authored rail node must compile once");
         helper.assertTrue(cleanupOnlyColumns > 0,
                 "settlement compilation must include a cleanup-only halo for overhanging tree crowns");
+        helper.assertTrue(surfaceDecorations > 0,
+                "settlement compilation must provide terrain-following fences and lamps");
+        helper.assertTrue(first.chunks().values().stream().flatMap(value -> value.terrain().stream())
+                        .noneMatch(value -> value.surface().is(net.minecraft.world.level.block.Blocks.DIRT_PATH)),
+                "authored circulation must be paved rather than emitted as dirt paths");
         helper.succeed();
     }
 
@@ -147,6 +160,23 @@ public final class VisualsGameTests {
                 "ruined overlay must include the damaged semantic mask within its larger budget");
         helper.assertTrue(intact.blocks().size() > ruined.blocks().size(),
                 "state overlay must not duplicate the full authored building");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void residentCommissioningRejectsAnOccupiedHomeCell(GameTestHelper helper) {
+        net.minecraft.core.BlockPos intended = helper.absolutePos(new net.minecraft.core.BlockPos(5, 2, 5));
+        for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+            helper.getLevel().setBlock(intended.offset(dx, -1, dz),
+                    net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 2);
+        }
+        helper.getLevel().setBlock(intended, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 2);
+        helper.getLevel().setBlock(intended.above(), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 2);
+        var spawn = io.farfrontier.palemirror.visuals.resident.ResidentMaterializer.safeSpawn(
+                helper.getLevel(), intended);
+        helper.assertTrue(spawn != null, "a nearby safe commissioned-resident cell must be found");
+        helper.assertTrue(!net.minecraft.core.BlockPos.containing(spawn).equals(intended),
+                "commissioned resident must not be placed inside the authored wall");
         helper.succeed();
     }
 

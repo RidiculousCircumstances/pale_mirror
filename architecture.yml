@@ -251,6 +251,6 @@ critical_flows:
     owner: domain development policy plus NeoForge storehouse executor
     verification: critical-code
   - id: operator-runtime-debug
-    path: typed projections -> operator diagnostics/particle markers/location links -> explicit navigation or canonical command or two-phase safe maintenance
+    path: typed projections -> observed or canonical authored-place anchors -> operator diagnostics/particle markers/location links -> explicit navigation or canonical command or two-phase safe maintenance
     owner: NeoForge runtime debug service/controller/navigator; domain and physical adapters remain authoritative for changes
     verification: critical-code

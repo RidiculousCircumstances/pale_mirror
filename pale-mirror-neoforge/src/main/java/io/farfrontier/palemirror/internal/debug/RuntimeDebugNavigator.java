@@ -52,7 +52,7 @@ public final class RuntimeDebugNavigator {
 
     public List<Component> settlements(ServerPlayer player) {
         List<Component> output = new ArrayList<>();
-        output.add(Component.literal("Observed settlements:").withStyle(ChatFormatting.GOLD));
+        output.add(Component.literal("Known settlements:").withStyle(ChatFormatting.GOLD));
         data.settlementObservations().values().stream().sorted(Comparator.comparing(value -> value.id().value()))
                 .forEach(record -> {
                     var freshness = record.freshness(server.overworld().getGameTime());
@@ -64,7 +64,13 @@ public final class RuntimeDebugNavigator {
                                     + " guards=" + record.registeredGuards() + " eligible=" + eligible,
                             "settlement", player));
                 });
-        if (output.size() == 1) output.add(Component.literal("No observed settlements."));
+        data.worldState().livingRegions().stream().sorted(Comparator.comparing(value -> value.placeId().value()))
+                .filter(region -> !data.settlementObservations().containsKey(region.placeId()))
+                .forEach(region -> data.worldRegistry().find(region.placeId()).ifPresent(entry -> output.add(locationLine(
+                        region.placeId(), entry.dimensionId(), entry.anchor(),
+                        "AUTHORED region=" + region.id() + " recognition=" + region.recognition(),
+                        "settlement", player))));
+        if (output.size() == 1) output.add(Component.literal("No observed or authored settlements."));
         return List.copyOf(output);
     }
 
@@ -103,8 +109,9 @@ public final class RuntimeDebugNavigator {
     }
 
     public RuntimeDebugService.ActionResult teleportSettlement(ServerPlayer player, WorldObjectId id) {
-        if (!data.settlementObservations().containsKey(id)) {
-            return new RuntimeDebugService.ActionResult(false, "Unknown observed settlement " + id.value());
+        boolean canonicalPlace = data.worldState().livingRegions().stream().anyMatch(region -> region.placeId().equals(id));
+        if (!data.settlementObservations().containsKey(id) && !canonicalPlace) {
+            return new RuntimeDebugService.ActionResult(false, "Unknown observed or authored settlement " + id.value());
         }
         return teleport(player, data.worldRegistry().find(id).orElse(null), "settlement");
     }
