@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.LinearFeaturePlan;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
+import io.farfrontier.palemirror.api.VisualPortKind;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -17,17 +18,20 @@ final class SettlementFixtureOccupancy {
         seed.settlementSite().modules().forEach(module -> result.block(module.footprint(), 1));
         seed.settlementSite().circulation().forEach(feature -> result.block(feature, feature.width() / 2));
         seed.baselineRailNodes().forEach(point -> result.block(point.x(), point.z(), 1));
+        seed.settlementSite().modules().forEach(module -> module.ports().stream()
+                .filter(port -> port.kind() == VisualPortKind.PUBLIC_ENTRANCE)
+                .forEach(port -> result.blockEntranceApron(port.position(), port.outwardQuarterTurns())));
         return result;
     }
 
     boolean reserve(int x, int z, int clearance) {
-        if (blocked.contains(key(x, z)) || !freeOfFixtures(x, z, clearance)) return false;
+        if (!freeOfBlocked(x, z, 0) || !freeOfFixtures(x, z, clearance)) return false;
         reserveArea(x, z, clearance);
         return true;
     }
 
     boolean reserveWithCompanion(int x, int z, int companionX, int companionZ, int clearance) {
-        if (blocked.contains(key(x, z)) || blocked.contains(key(companionX, companionZ))
+        if (!freeOfBlocked(x, z, 0) || !freeOfBlocked(companionX, companionZ, 0)
                 || !freeOfFixtures(x, z, clearance)) return false;
         reserveArea(x, z, clearance);
         fixtures.add(key(companionX, companionZ));
@@ -39,6 +43,25 @@ final class SettlementFixtureOccupancy {
             if (fixtures.contains(key(x + dx, z + dz))) return false;
         }
         return true;
+    }
+
+    private boolean freeOfBlocked(int x, int z, int clearance) {
+        for (int dx = -clearance; dx <= clearance; dx++) for (int dz = -clearance; dz <= clearance; dz++) {
+            if (blocked.contains(key(x + dx, z + dz))) return false;
+        }
+        return true;
+    }
+
+    private void blockEntranceApron(VisualPoint entrance, int outwardQuarterTurns) {
+        var outward = SettlementPublicRealm.direction(outwardQuarterTurns);
+        var tangent = outward.getClockWise();
+        for (int depth = 1; depth <= 3; depth++) {
+            int halfWidth = depth <= 2 ? 2 : 1;
+            for (int across = -halfWidth; across <= halfWidth; across++) {
+                block(entrance.x() + outward.getStepX() * depth + tangent.getStepX() * across,
+                        entrance.z() + outward.getStepZ() * depth + tangent.getStepZ() * across, 0);
+            }
+        }
     }
 
     private void block(VisualBounds bounds, int margin) {

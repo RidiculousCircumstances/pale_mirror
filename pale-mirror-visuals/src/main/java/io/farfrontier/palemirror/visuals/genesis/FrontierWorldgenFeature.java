@@ -82,6 +82,10 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         }
         placeSurfaceDecorations(level, slice.surfaceDecorations());
         slice.blocks().forEach((position, state) -> setIfDifferent(level, position, state));
+        // Modules and late public-realm furniture can overlap the corridor's
+        // footprint. The railway is the last writer so the immutable route
+        // graph and its physical proof cannot be replaced by a yard surface.
+        for (CompiledChunkSlice.RailColumn rail : slice.rails()) placeRail(level, rail);
         chunk.setData(VisualGenesisAttachments.FINALIZATION_STAMP, slice.stamp());
         chunk.setUnsaved(true);
     }
@@ -116,6 +120,7 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
                 || state.is(Blocks.GLOW_LICHEN)
                 || state.is(Blocks.HANGING_ROOTS)
                 || state.is(Blocks.MOSS_CARPET)
+                || state.is(Blocks.COBWEB)
                 || state.is(Blocks.CACTUS)
                 || state.is(Blocks.SUGAR_CANE)
                 || state.is(Blocks.BAMBOO)
@@ -155,7 +160,7 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         }
     }
 
-    private static void placeRail(WorldGenLevel level, CompiledChunkSlice.RailColumn rail) {
+    private static void placeRail(LevelAccessor level, CompiledChunkSlice.RailColumn rail) {
         int surface = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, rail.rail().getX(), rail.rail().getZ());
         int floor = level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, rail.rail().getX(), rail.rail().getZ());
         placeRailColumn(level, rail, surface, floor);

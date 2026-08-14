@@ -56,7 +56,8 @@ public final class VisualAuditPlanner {
         openSpace(region, OpenSpaceKind.INDUSTRIAL_YARD, "settlement/industrial_yard", result);
         building(region, SettlementBuildingCategory.HOUSING, "settlement/residential_lane", result);
 
-        region.settlementSite().defences().stream().filter(value -> value.kind() == LinearFeatureKind.PALISADE)
+        region.settlementSite().defences().stream().filter(value -> value.kind() == LinearFeatureKind.PALISADE
+                        || value.kind() == LinearFeatureKind.PALISADE_GATE)
                 .flatMap(feature -> segments(feature).stream()).max(Comparator.comparingLong(Segment::lengthSquared))
                 .ifPresent(segment -> {
                     VisualPoint wall = midpoint(segment.from(), segment.to());

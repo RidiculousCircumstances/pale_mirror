@@ -119,12 +119,55 @@ public final class VisualsGameTests {
                 * (loadingModule.footprint().max().z() - loadingModule.footprint().min().z() + 1);
         helper.assertTrue(loadingSnapshot.blocks().size() < loadingVolume / 2,
                 "loading facility must remain an open freight canopy rather than a solid shell");
+        var generatedSurface = seed.primaryMineSite().surfaceBuildings().stream()
+                .filter(value -> value.modules().getFirst().templateId().contains("/mine/"))
+                .map(value -> AuthoredModuleCompiler.compile(value.modules().getFirst())).toList();
+        helper.assertTrue(generatedSurface.stream().flatMap(value -> value.blocks().stream())
+                        .filter(value -> value.state().getBlock() instanceof net.minecraft.world.level.block.SlabBlock)
+                        .noneMatch(value -> value.state().getValue(
+                                net.minecraft.world.level.block.SlabBlock.TYPE)
+                                == net.minecraft.world.level.block.state.properties.SlabType.TOP),
+                "authored mine roofs must not stack unsupported top-slab courses");
+        for (var snapshotWithChains : generatedSurface) {
+            var byPosition = snapshotWithChains.blocks().stream().collect(java.util.stream.Collectors.toMap(
+                    value -> new BlockPos(value.position().x(), value.position().y(), value.position().z()),
+                    value -> value.state(), (first, second) -> second));
+            for (var block : snapshotWithChains.blocks()) {
+                BlockPos position = new BlockPos(block.position().x(), block.position().y(), block.position().z());
+                if (!block.state().is(net.minecraft.world.level.block.Blocks.CHAIN)
+                        || byPosition.getOrDefault(position.above(), net.minecraft.world.level.block.Blocks.AIR
+                                .defaultBlockState()).is(net.minecraft.world.level.block.Blocks.CHAIN)) continue;
+                helper.assertTrue(!byPosition.getOrDefault(position.above(),
+                                net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()).isAir(),
+                        "mine canopy chain must terminate against a real roof cell at " + position);
+            }
+        }
         var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
         boolean kinetic = catalog.chunks().values().stream().flatMap(value -> value.blocks().values().stream())
                 .map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(value.getBlock()))
                 .anyMatch(id -> id.getNamespace().equals("create") && (id.getPath().equals("shaft")
                         || id.getPath().equals("creative_motor") || id.getPath().equals("encased_fan")));
         helper.assertTrue(kinetic, "mine grammar must add a bounded Create visual network");
+        java.util.Map<BlockPos, net.minecraft.world.level.block.state.BlockState> compiledBlocks = catalog.chunks()
+                .values().stream().flatMap(value -> value.blocks().entrySet().stream()).collect(
+                        java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
+                                java.util.Map.Entry::getValue));
+        for (var underground : seed.primaryMineSite().undergroundModules()) {
+            BlockPos position = new BlockPos(underground.origin().x(), underground.origin().y(),
+                    underground.origin().z());
+            boolean connected = false;
+            for (int dx = -3; dx <= 3 && !connected; dx++) for (int dz = -3; dz <= 3 && !connected; dz++) {
+                for (int dy = -1; dy <= 2 && !connected; dy++) {
+                    BlockPos candidate = position.offset(dx, dy, dz);
+                    connected = compiledBlocks.getOrDefault(candidate,
+                                    net.minecraft.world.level.block.Blocks.STONE.defaultBlockState()).isAir()
+                            && compiledBlocks.getOrDefault(candidate.above(),
+                                    net.minecraft.world.level.block.Blocks.STONE.defaultBlockState()).isAir();
+                }
+            }
+            helper.assertTrue(connected,
+                    "final tunnel carve must connect the authored underground room at " + position);
+        }
         helper.succeed();
     }
 
@@ -169,6 +212,19 @@ public final class VisualsGameTests {
                     "template write escaped its chunk-local slice");
         }
         helper.assertValueEqual(rails, seed.baselineRailNodes().size(), "every authored rail node must compile once");
+        var railColumns = first.chunks().values().stream().flatMap(value -> value.rails().stream()).toList();
+        helper.assertTrue(railColumns.stream().allMatch(value -> value.railState().is(
+                        net.minecraft.world.level.block.Blocks.RAIL)
+                        || value.railState().is(net.minecraft.world.level.block.Blocks.POWERED_RAIL)),
+                "baseline freight must never compile activator or detector rails");
+        helper.assertTrue(railColumns.stream().allMatch(value -> value.support().is(
+                        net.minecraft.world.level.block.Blocks.REDSTONE_BLOCK)
+                        || value.support().is(net.minecraft.world.level.block.Blocks.STONE_BRICKS)),
+                "baseline freight supports must be powered or non-falling masonry");
+        helper.assertTrue(railColumns.stream().filter(value -> value.railState().is(
+                        net.minecraft.world.level.block.Blocks.POWERED_RAIL))
+                        .allMatch(value -> value.support().is(net.minecraft.world.level.block.Blocks.REDSTONE_BLOCK)),
+                "every powered rail must receive an actual redstone power source");
         helper.assertTrue(cleanupOnlyColumns > 0,
                 "settlement compilation must include a cleanup-only halo for overhanging tree crowns");
         helper.assertTrue(surfaceDecorations > 0,
@@ -212,6 +268,9 @@ public final class VisualsGameTests {
                 && value.rail().getZ() == -4000).findFirst().orElseThrow();
         helper.assertTrue(corner.railState().is(net.minecraft.world.level.block.Blocks.RAIL),
                 "a scheduled powered segment must fall back to ordinary rail at a corner");
+        helper.assertValueEqual(corner.railState().getValue(net.minecraft.world.level.block.RailBlock.SHAPE),
+                net.minecraft.world.level.block.state.properties.RailShape.SOUTH_WEST,
+                "east-to-south travel must connect the west and south neighbouring rails");
         helper.succeed();
     }
 

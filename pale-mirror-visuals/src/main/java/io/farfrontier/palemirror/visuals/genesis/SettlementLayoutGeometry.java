@@ -57,6 +57,18 @@ final class SettlementLayoutGeometry {
         return result;
     }
 
+    static boolean elevationTransition(List<VisualPoint> points, int index) {
+        int y = points.get(index).y();
+        return points.get(Math.max(0, index - 1)).y() != y
+                || points.get(Math.min(points.size() - 1, index + 1)).y() != y;
+    }
+
+    static boolean lowerTransition(List<VisualPoint> points, int index) {
+        int y = points.get(index).y();
+        return points.get(Math.max(0, index - 1)).y() > y
+                || points.get(Math.min(points.size() - 1, index + 1)).y() > y;
+    }
+
     static AuthoredOpenSpacePlan followTerrain(AuthoredOpenSpacePlan space,
                                                 SettlementTerrainSnapshot snapshot) {
         int centerX = (space.bounds().min().x() + space.bounds().max().x()) / 2;
@@ -112,7 +124,8 @@ final class SettlementLayoutGeometry {
     static LinearFeaturePlan line(String id, LinearFeatureKind kind, VisualPoint anchor, int direction,
                                   int rightA, int inwardA, int rightB, int inwardB, int width) {
         return new LinearFeaturePlan(id, kind, List.of(local(anchor, rightA, inwardA, 0, direction),
-                local(anchor, rightB, inwardB, 0, direction)), width, kind == LinearFeatureKind.PALISADE);
+                local(anchor, rightB, inwardB, 0, direction)), width,
+                kind == LinearFeatureKind.PALISADE || kind == LinearFeatureKind.PALISADE_GATE);
     }
 
     static AuthoredBuildingPlan building(List<AuthoredBuildingPlan> buildings, String id) {

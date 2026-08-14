@@ -39,7 +39,16 @@ class SettlementLayoutPlannerTest {
             });
             assertFalse(plan.defences().isEmpty());
             assertTrue(plan.defences().stream().allMatch(feature -> feature.kind() == LinearFeatureKind.PALISADE
+                    || feature.kind() == LinearFeatureKind.PALISADE_GATE
                     || feature.kind() == LinearFeatureKind.DITCH || feature.kind() == LinearFeatureKind.RETAINING_WALL));
+            assertEquals(4, plan.defences().stream()
+                    .filter(feature -> feature.kind() == LinearFeatureKind.PALISADE_GATE).count(),
+                    "the enclosure must expose four deliberate traversable gates");
+            assertTrue(plan.defences().stream()
+                            .filter(feature -> feature.kind() == LinearFeatureKind.PALISADE
+                                    || feature.kind() == LinearFeatureKind.PALISADE_GATE)
+                            .mapToInt(SettlementLayoutPlannerTest::horizontalLength).sum() >= 500,
+                    "the authored enclosure must visibly protect the whole occupied district");
             assertTrue(plan.defences().stream().noneMatch(feature -> feature.nodes().contains(plan.freightGate())));
             assertEquals(5, plan.expansionPlots().size());
             assertEquals(7, plan.developmentReservations().size());
@@ -80,6 +89,29 @@ class SettlementLayoutPlannerTest {
                                 annex.id() + " overlaps an authored open space");
                     });
         }
+    }
+
+    @Test void aFlatFeatureClassifiedAsStairsStillCompilesAsLevelPaving() {
+        var points = java.util.List.of(new VisualPoint(0, 70, 0), new VisualPoint(1, 70, 0),
+                new VisualPoint(2, 70, 0));
+        for (int index = 0; index < points.size(); index++) {
+            assertFalse(SettlementLayoutGeometry.elevationTransition(points, index),
+                    "flat access must not become an alternating stair trench");
+        }
+        var rising = java.util.List.of(new VisualPoint(0, 70, 0), new VisualPoint(1, 70, 0),
+                new VisualPoint(2, 71, 0));
+        assertTrue(SettlementLayoutGeometry.elevationTransition(rising, 1));
+        assertTrue(SettlementLayoutGeometry.elevationTransition(rising, 2));
+    }
+
+    private static int horizontalLength(io.farfrontier.palemirror.api.LinearFeaturePlan feature) {
+        int length = 0;
+        for (int index = 1; index < feature.nodes().size(); index++) {
+            var first = feature.nodes().get(index - 1);
+            var second = feature.nodes().get(index);
+            length += Math.max(Math.abs(second.x() - first.x()), Math.abs(second.z() - first.z()));
+        }
+        return length;
     }
 
     @Test void twentyAddressesRetainStableIndependentModuleIdentity() {

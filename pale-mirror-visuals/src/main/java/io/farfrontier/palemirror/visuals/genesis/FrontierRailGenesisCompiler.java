@@ -29,7 +29,7 @@ final class FrontierRailGenesisCompiler {
                     .setValue(PoweredRailBlock.SHAPE, shape)
                     : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape);
             sink.rail(rail, state, powered ? Blocks.REDSTONE_BLOCK.defaultBlockState()
-                    : Blocks.GRAVEL.defaultBlockState());
+                    : Blocks.STONE_BRICKS.defaultBlockState());
             if (index % 3 == 0) {
                 boolean xAxis = next.getAxis() == Direction.Axis.X;
                 for (int side : new int[]{-1, 1}) sink.block(rail.below().offset(
@@ -50,7 +50,7 @@ final class FrontierRailGenesisCompiler {
         if (nextY > y) return ascending(next);
         if (previousY > y) return ascending(previous.getOpposite());
         return previous.getAxis() == next.getAxis() ? (next.getAxis() == Direction.Axis.X
-                ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH) : corner(previous, next);
+                ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH) : corner(previous.getOpposite(), next);
     }
 
     private static RailShape ascending(Direction direction) {

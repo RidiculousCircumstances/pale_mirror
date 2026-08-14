@@ -72,6 +72,7 @@ public record AuthoredSettlementSitePlan(String layoutId, SettlementDevelopmentS
             throw new IllegalArgumentException("settlement requires a freight road");
         }
         if (defences.stream().anyMatch(value -> value.kind() != LinearFeatureKind.PALISADE
+                && value.kind() != LinearFeatureKind.PALISADE_GATE
                 && value.kind() != LinearFeatureKind.DITCH && value.kind() != LinearFeatureKind.RETAINING_WALL)) {
             throw new IllegalArgumentException("unsupported defence feature");
         }

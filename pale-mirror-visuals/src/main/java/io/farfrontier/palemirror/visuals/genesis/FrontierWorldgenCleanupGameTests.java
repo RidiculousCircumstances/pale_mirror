@@ -108,4 +108,29 @@ public final class FrontierWorldgenCleanupGameTests {
             helper.succeed();
         });
     }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void lateFinalizationRestoresRailAfterOverlappingDecoration(GameTestHelper helper) {
+        int x = helper.absolutePos(new BlockPos(7, 2, 7)).getX();
+        int z = helper.absolutePos(new BlockPos(7, 2, 7)).getZ();
+        int y = helper.getLevel().getHeight(
+                net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG, x, z);
+        BlockPos rail = new BlockPos(x, y, z);
+        var column = new CompiledChunkSlice.RailColumn(rail,
+                Blocks.POWERED_RAIL.defaultBlockState().setValue(
+                        net.minecraft.world.level.block.PoweredRailBlock.SHAPE, RailShape.NORTH_SOUTH),
+                Blocks.REDSTONE_BLOCK.defaultBlockState());
+        var slice = new CompiledChunkSlice(new net.minecraft.world.level.ChunkPos(rail).toLong(),
+                "late-rail-regression", java.util.List.of(), java.util.List.of(), java.util.List.of(),
+                java.util.List.of(column), java.util.Map.of(rail, Blocks.BRICKS.defaultBlockState()));
+
+        FrontierWorldgenFeature.finishAfterDecoration(helper.getLevel(),
+                helper.getLevel().getChunkAt(rail), slice);
+
+        helper.assertValueEqual(helper.getLevel().getBlockState(rail).getBlock(), Blocks.POWERED_RAIL,
+                "late module decoration must not replace the immutable railway graph");
+        helper.assertValueEqual(helper.getLevel().getBlockState(rail.below()).getBlock(), Blocks.REDSTONE_BLOCK,
+                "powered rail must retain a stable powered support after finalization");
+        helper.succeed();
+    }
 }

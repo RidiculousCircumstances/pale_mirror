@@ -51,10 +51,7 @@ public final class MaterializationMatrixGameTests {
                     helper.assertTrue(decorations.stream()
                                     .anyMatch(value -> value.state().getBlock() instanceof SlabBlock),
                             "public realm has no slab articulation in combination " + combination);
-                    if (relief == 14) helper.assertTrue(catalog.chunks().values().stream()
-                                    .flatMap(slice -> slice.terrain().stream())
-                                    .anyMatch(value -> value.surface().getBlock() instanceof StairBlock),
-                            "terraced settlement has no functional stairs in combination " + combination);
+                    assertFlatAccessUsesLevelPaving(helper, seed, catalog, combination);
                     assertSupportedFixtures(helper, states, combination);
                     combinations++;
                 }
@@ -63,6 +60,23 @@ public final class MaterializationMatrixGameTests {
         helper.assertValueEqual(combinations, 216,
                 "matrix must cover 3 climates x 3 archetypes x 24 layout variants");
         helper.succeed();
+    }
+
+    private static void assertFlatAccessUsesLevelPaving(
+            GameTestHelper helper, io.farfrontier.palemirror.api.AuthoredRegionSeed seed,
+            CompiledGenesisCatalog catalog, int combination) {
+        Map<Long, BlockState> terrain = new HashMap<>();
+        catalog.chunks().values().stream().flatMap(slice -> slice.terrain().stream()).forEach(column ->
+                terrain.put(net.minecraft.world.level.ChunkPos.asLong(column.x(), column.z()), column.surface()));
+        seed.settlementSite().circulation().stream()
+                .filter(feature -> feature.kind() == io.farfrontier.palemirror.api.LinearFeatureKind.STAIRS)
+                .filter(feature -> feature.nodes().stream().map(io.farfrontier.palemirror.api.VisualPoint::y)
+                        .distinct().count() == 1)
+                .forEach(feature -> feature.nodes().forEach(point -> {
+                    BlockState state = terrain.get(net.minecraft.world.level.ChunkPos.asLong(point.x(), point.z()));
+                    helper.assertTrue(state == null || !(state.getBlock() instanceof StairBlock),
+                            "flat access became a stair trench in combination " + combination + " at " + point);
+                }));
     }
 
     private static void assertSupportedFixtures(GameTestHelper helper, Map<SurfaceSlot, BlockState> states,

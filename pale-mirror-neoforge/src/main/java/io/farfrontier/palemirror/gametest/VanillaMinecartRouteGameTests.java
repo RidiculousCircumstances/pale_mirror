@@ -143,8 +143,8 @@ public final class VanillaMinecartRouteGameTests {
                 "a scheduled powered segment must use ordinary rail when the persisted path turns");
         helper.assertValueEqual(plan.writes().get(corner).getValue(RailBlock.SHAPE), RailShape.SOUTH_WEST,
                 "falling back from powered rail must preserve the authored curve");
-        helper.assertValueEqual(plan.writes().get(corner.below()).getBlock(), Blocks.GRAVEL,
-                "an unpowered curve must not leave a misleading redstone support cell");
+        helper.assertValueEqual(plan.writes().get(corner.below()).getBlock(), Blocks.STONE_BRICKS,
+                "an unpowered curve must use non-falling masonry rather than a misleading redstone cell");
         helper.succeed();
     }
 
@@ -234,8 +234,8 @@ public final class VanillaMinecartRouteGameTests {
         record.approve(second, rail);
         record.initializeAuthoredTopology();
         record.disconnectTopology(first);
-        level.setBlock(first.below(), Blocks.GRAVEL.defaultBlockState(), 3);
-        level.setBlock(second.below(), Blocks.GRAVEL.defaultBlockState(), 3);
+        level.setBlock(first.below(), Blocks.STONE_BRICKS.defaultBlockState(), 3);
+        level.setBlock(second.below(), Blocks.STONE_BRICKS.defaultBlockState(), 3);
         level.setBlock(first, Blocks.RAIL.defaultBlockState(), 3);
         level.setBlock(second, Blocks.AIR.defaultBlockState(), 3);
         registerCanonicalRoute(data, record);

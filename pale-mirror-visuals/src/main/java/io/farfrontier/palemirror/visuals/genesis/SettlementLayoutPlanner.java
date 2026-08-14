@@ -169,7 +169,7 @@ final class SettlementLayoutPlanner {
                 transform)
                 .stream().map(value -> followTerrain(value, snapshot)).toList();
         requireDryCirculation(circulation, snapshot, anchor);
-        List<LinearFeaturePlan> defences = defences(archetype, anchor, freightDirection).stream()
+        List<LinearFeaturePlan> defences = SettlementDefencePlanner.plan(archetype, anchor, freightDirection).stream()
                 .map(value -> followTerrain(value, snapshot)).toList();
         List<AuthoredOpenSpacePlan> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
                 .map(value -> followTerrain(value, snapshot)).toList();
@@ -305,19 +305,6 @@ final class SettlementLayoutPlanner {
                     List.of(local(anchor, -52, -29, 1, direction), local(anchor, 52, -29, 1, direction)), 1, false));
             result.add(new LinearFeaturePlan("upper_steps", LinearFeatureKind.STAIRS,
                     List.of(local(anchor, 0, -24, 0, direction), local(anchor, 0, -39, 2, direction)), 3, true));
-        }
-        return List.copyOf(result);
-    }
-
-    private static List<LinearFeaturePlan> defences(SettlementLayoutArchetype archetype, VisualPoint anchor,
-                                                     int direction) {
-        List<LinearFeaturePlan> result = new ArrayList<>();
-        result.add(line("rear_west", LinearFeatureKind.PALISADE, anchor, direction, -59, -87, -12, -87, 2));
-        result.add(line("rear_east", LinearFeatureKind.PALISADE, anchor, direction, 12, -87, 59, -87, 2));
-        result.add(line("west_rear", LinearFeatureKind.PALISADE, anchor, direction, -59, -87, -59, -35, 2));
-        result.add(line("east_rear", LinearFeatureKind.PALISADE, anchor, direction, 59, -87, 59, -40, 2));
-        if (archetype != SettlementLayoutArchetype.FOOTHILL_RIBBON) {
-            result.add(line("west_approach", LinearFeatureKind.DITCH, anchor, direction, -59, 26, -59, 65, 2));
         }
         return List.copyOf(result);
     }

@@ -63,7 +63,8 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
                 rail.getX(), rail.getZ());
         for (int y = surfaceY; y < support.getY(); y++) writes.put(new BlockPos(rail.getX(), y, rail.getZ()),
                 Blocks.OAK_FENCE.defaultBlockState());
-        writes.put(support, powered ? Blocks.REDSTONE_BLOCK.defaultBlockState() : Blocks.GRAVEL.defaultBlockState());
+        writes.put(support, powered ? Blocks.REDSTONE_BLOCK.defaultBlockState()
+                : Blocks.STONE_BRICKS.defaultBlockState());
         for (int y = 0; y < CLEARANCE_HEIGHT; y++) writes.put(rail.above(y), Blocks.AIR.defaultBlockState());
         writes.put(rail, railState(shape, powered));
         if (receivingTerminal) appendReceivingPlatform(writes, rail, nextDirection);
@@ -106,7 +107,8 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
 
     public boolean criticalInfrastructure(String appliedState) {
         return appliedState.contains("minecraft:rail") || appliedState.contains("minecraft:powered_rail")
-                || appliedState.contains("minecraft:redstone_block") || appliedState.contains("minecraft:gravel")
+                || appliedState.contains("minecraft:redstone_block")
+                || appliedState.contains("minecraft:stone_bricks")
                 || appliedState.contains("minecraft:oak_fence");
     }
 

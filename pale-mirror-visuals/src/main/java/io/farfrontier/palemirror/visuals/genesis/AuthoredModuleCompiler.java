@@ -48,7 +48,6 @@ public final class AuthoredModuleCompiler {
                 int[] rotated = rotate(pos.getInt(0), pos.getInt(2), sx, sz, turns);
                 BlockState state = rotate(climateState(states.get(block.getInt("state")), id), turns);
                 if (state.is(Blocks.STRUCTURE_BLOCK) || state.is(Blocks.JIGSAW)) continue;
-                if (surfaceMineAsset(module) && naturalEnclosure(state)) continue;
                 BlockPos world = origin.offset(rotated[0], pos.getInt(1), rotated[1]);
                 VisualPoint position = new VisualPoint(world.getX(), world.getY(), world.getZ());
                 if (!module.footprint().contains(position)) {
@@ -106,21 +105,6 @@ public final class AuthoredModuleCompiler {
             return Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
         }
         return baseline;
-    }
-
-    private static boolean surfaceMineAsset(VisualModulePlacement module) {
-        return module.templateId().startsWith(PaleMirrorVisualsMod.MOD_ID + ":")
-                && module.role().startsWith("MINE_")
-                && !module.role().equals("MINE_ADIT")
-                && !module.role().equals("MINE_GALLERY")
-                && !module.role().equals("MINE_CONTROLLER");
-    }
-
-    private static boolean naturalEnclosure(BlockState state) {
-        return state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE) || state.is(Blocks.COBBLED_DEEPSLATE)
-                || state.is(Blocks.TUFF) || state.is(Blocks.CALCITE) || state.is(Blocks.DRIPSTONE_BLOCK)
-                || state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.GRAVEL)
-                || state.is(Blocks.ANDESITE) || state.is(Blocks.DIORITE) || state.is(Blocks.GRANITE);
     }
 
     private static BlockState climateState(BlockState source, ResourceLocation moduleId) {

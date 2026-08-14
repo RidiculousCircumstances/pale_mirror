@@ -24,7 +24,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 18;
+    public static final int CATALOG_VERSION = 19;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -116,12 +116,24 @@ public final class FrontierGenesisCompiler {
                                     Map<Long, MutableGenesisSlice> slices) {
         compileMineVegetationEnvelope(mine, slices);
         compileMineFoundations(mine, slices);
-        compileMineWorkingYard(mine, slices);
-        compileMinePaths(mine, palette, slices);
-        compileMineDrift(mine, slices);
+        List<MineAccessGenesisCompiler.AccessRoute> accessRoutes = MineAccessGenesisCompiler.routes(mine);
+        java.util.Set<Long> access = MineAccessGenesisCompiler.occupied(accessRoutes);
+        compileMineWorkingYard(mine, access, slices);
+        MineAccessGenesisCompiler.compile(accessRoutes, palette, new MineAccessGenesisCompiler.Sink() {
+            @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
+                slice(slices, x, z).terrain(new CompiledChunkSlice.TerrainColumn(
+                        x, z, targetY, surface, foundation));
+            }
+            @Override public void cleanup(int x, int z, int baseY) {
+                slice(slices, x, z).vegetation.putIfAbsent(ChunkPos.asLong(x, z),
+                        new CompiledChunkSlice.VegetationColumn(x, z, baseY));
+            }
+            @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
+        });
         mine.initialModules().forEach(module -> compileModule(module, slices));
+        MineUndergroundGenesisCompiler.compile(mine, (position, state) -> put(slices, position, state));
         mine.stagedModules().forEach(stage -> compileReservationFootprint(stage.module(), slices));
-        compileMineIndustrialDetails(mine, palette, slices);
+        compileMineIndustrialDetails(mine, palette, access, slices);
         compileMineKinetics(mine, slices);
         put(slices, block(mine.controllerAnchor()).above(), Blocks.SOUL_LANTERN.defaultBlockState());
     }
@@ -159,8 +171,17 @@ public final class FrontierGenesisCompiler {
     }
 
     private static void compileMineIndustrialDetails(AuthoredMineSitePlan mine, FrontierPalette palette,
+                                                     java.util.Set<Long> access,
                                                      Map<Long, MutableGenesisSlice> slices) {
-        MineSurfaceGenesisCompiler.compile(mine, palette, (position, state) -> put(slices, position, state));
+        MineSurfaceGenesisCompiler.compile(mine, palette, access, new MineSurfaceGenesisCompiler.Sink() {
+            @Override public void put(BlockPos position, BlockState state) {
+                FrontierGenesisCompiler.put(slices, position, state);
+            }
+            @Override public void surface(int x, int z, int offsetY, BlockState state) {
+                slice(slices, x, z).surfaceDecoration(
+                        new CompiledChunkSlice.SurfaceDecoration(x, z, offsetY, state));
+            }
+        });
     }
 
     /**
@@ -169,7 +190,7 @@ public final class FrontierGenesisCompiler {
      * natural relief remains intact; this layer only makes the separate pads
      * read as one industrial campus.
      */
-    private static void compileMineWorkingYard(AuthoredMineSitePlan mine,
+    private static void compileMineWorkingYard(AuthoredMineSitePlan mine, java.util.Set<Long> access,
                                                Map<Long, MutableGenesisSlice> slices) {
         if (mine.role() != AuthoredMineRole.PRIMARY) return;
         for (int inward = -64; inward <= -18; inward++) {
@@ -179,6 +200,8 @@ public final class FrontierGenesisCompiler {
                 if (radial + edgeNoise > 34 * 34 * 9) continue;
                 VisualPoint point = MineSurfaceLayout.local(
                         mine.portal(), right, inward, 0, mine.inwardQuarterTurns());
+                if (insideFoundationApron(mine, point.x(), point.z())
+                        || access.contains(ChunkPos.asLong(point.x(), point.z()))) continue;
                 int pattern = Math.floorMod(point.x() * 17 + point.z() * 29, 23);
                 BlockState surface = switch (pattern) {
                     case 0, 1, 2, 3 -> Blocks.COARSE_DIRT.defaultBlockState();
@@ -194,18 +217,23 @@ public final class FrontierGenesisCompiler {
         for (int inward = -58; inward <= -25; inward++) {
             for (int right : new int[]{-10, 10}) {
                 if (Math.floorMod(inward, 5) == 0) continue;
-                mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, inward, 0,
-                        mine.inwardQuarterTurns()), -1, Blocks.POLISHED_ANDESITE_SLAB.defaultBlockState());
+                VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, inward, 0,
+                        mine.inwardQuarterTurns());
+                if (!insideFoundationApron(mine, point.x(), point.z())
+                        && !access.contains(ChunkPos.asLong(point.x(), point.z()))) {
+                    mineSurface(slices, point, -1, Blocks.POLISHED_ANDESITE.defaultBlockState());
+                }
             }
         }
-        compileMineYardFurniture(mine, slices);
+        compileMineYardFurniture(mine, access, slices);
     }
 
-    private static void compileMineYardFurniture(AuthoredMineSitePlan mine,
+    private static void compileMineYardFurniture(AuthoredMineSitePlan mine, java.util.Set<Long> access,
                                                   Map<Long, MutableGenesisSlice> slices) {
         for (int[] local : new int[][]{{-28, -29}, {28, -29}, {-30, -55}, {30, -55}}) {
             VisualPoint point = MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
                     mine.inwardQuarterTurns());
+            if (access.contains(ChunkPos.asLong(point.x(), point.z()))) continue;
             mineSurface(slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
             mineSurface(slices, point, 1, Blocks.IRON_BARS.defaultBlockState());
             mineSurface(slices, point, 2, Blocks.LANTERN.defaultBlockState());
@@ -215,32 +243,43 @@ public final class FrontierGenesisCompiler {
         for (int bin = 0; bin < 3; bin++) {
             int centerRight = -25 + bin * 5;
             for (int right = centerRight - 2; right <= centerRight + 2; right++) {
-                mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, -46, 0,
-                        mine.inwardQuarterTurns()), 0, Blocks.COBBLED_DEEPSLATE.defaultBlockState());
+                VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, -46, 0,
+                        mine.inwardQuarterTurns());
+                if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
+                    mineSurface(slices, point, 0, Blocks.COBBLED_DEEPSLATE.defaultBlockState());
+                }
             }
             for (int inward = -45; inward <= -42; inward++) {
                 for (int right : new int[]{centerRight - 2, centerRight + 2}) {
-                    mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, inward, 0,
-                            mine.inwardQuarterTurns()), 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+                    VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, inward, 0,
+                            mine.inwardQuarterTurns());
+                    if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
+                        mineSurface(slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+                    }
                 }
             }
             for (int right = centerRight - 1; right <= centerRight + 1; right++) {
-                mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, -43, 0,
-                        mine.inwardQuarterTurns()), 0,
-                        Math.floorMod(right + bin, 2) == 0
-                                ? Blocks.TUFF.defaultBlockState()
-                                : Blocks.ANDESITE.defaultBlockState());
+                VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, -43, 0,
+                        mine.inwardQuarterTurns());
+                if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
+                    mineSurface(slices, point, 0, Math.floorMod(right + bin, 2) == 0
+                            ? Blocks.TUFF.defaultBlockState() : Blocks.ANDESITE.defaultBlockState());
+                }
             }
         }
         for (int offset = 0; offset < 6; offset++) {
             VisualPoint timber = MineSurfaceLayout.local(mine.portal(), 23 + offset, -49, 0,
                     mine.inwardQuarterTurns());
+            if (access.contains(ChunkPos.asLong(timber.x(), timber.z()))) continue;
             mineSurface(slices, timber, 0, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
             if (offset < 3) mineSurface(slices, timber, 1, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
         }
         for (int[] local : new int[][]{{22, -42}, {25, -42}, {22, -39}}) {
-            mineSurface(slices, MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
-                    mine.inwardQuarterTurns()), 0, Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
+            VisualPoint point = MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
+                    mine.inwardQuarterTurns());
+            if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
+                mineSurface(slices, point, 0, Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
+            }
         }
     }
 
@@ -297,171 +336,11 @@ public final class FrontierGenesisCompiler {
         return Math.max(0, Math.max(dx, dz));
     }
 
-    private static void compileMinePaths(AuthoredMineSitePlan mine, FrontierPalette palette,
-                                         Map<Long, MutableGenesisSlice> slices) {
-        MineFoundationPlan hub = mine.foundations().stream().filter(value -> value.id().equals("crew"))
-                .findFirst().orElseThrow();
-        VisualPoint start = center(hub);
-        compileMinePath(start, mine.portal(), palette, slices);
-        for (MineFoundationPlan destination : mine.foundations()) {
-            if (destination == hub) continue;
-            compileMinePath(start, center(destination), palette, slices);
-        }
-    }
-
-    private static void compileMinePath(VisualPoint start, VisualPoint destination,
-                                        FrontierPalette palette, Map<Long, MutableGenesisSlice> slices) {
-        List<VisualPoint> path = FrontierRegionPlanner.cardinalRail(start, destination, 0);
-        int segments = Math.max(1, path.size() - 1);
-        for (int index = 0; index < path.size(); index++) {
-            VisualPoint point = path.get(index);
-            int y = start.y() + (destination.y() - start.y()) * index / segments;
-            // Five-block service lanes visually bind the pads into one mine
-            // campus and still leave a one-block shoulder for lamps, drains
-            // and terrain transitions.
-            for (int offset = -2; offset <= 2; offset++) {
-                int x = point.x();
-                int z = point.z();
-                if (index + 1 < path.size() && path.get(index + 1).x() != point.x()) z += offset;
-                else x += offset;
-                MutableGenesisSlice slice = slice(slices, x, z);
-                BlockState surface = Math.floorMod(index + offset, 7) == 0
-                        ? Blocks.POLISHED_ANDESITE.defaultBlockState()
-                        : Blocks.GRAVEL.defaultBlockState();
-                slice.terrain(new CompiledChunkSlice.TerrainColumn(x, z, y,
-                        surface, Blocks.COBBLESTONE.defaultBlockState()));
-                if (Math.abs(offset) == 2) {
-                    put(slices, new BlockPos(x, y + 1, z), palette.pavingSlab());
-                }
-                slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
-                        new CompiledChunkSlice.VegetationColumn(x, z, y));
-            }
-        }
-    }
-
-    private static VisualPoint center(MineFoundationPlan foundation) {
-        return new VisualPoint((foundation.footprint().min().x() + foundation.footprint().max().x()) / 2,
-                foundation.targetY(),
-                (foundation.footprint().min().z() + foundation.footprint().max().z()) / 2);
-    }
-
-    private static void compileMineDrift(AuthoredMineSitePlan mine, Map<Long, MutableGenesisSlice> slices) {
-        int section = 0;
-        for (List<MineUndergroundLayout.Node> corridor : MineUndergroundLayout.corridors()) {
-            for (int segment = 1; segment < corridor.size(); segment++) {
-                MineUndergroundLayout.Node from = corridor.get(segment - 1);
-                MineUndergroundLayout.Node to = corridor.get(segment);
-                int rightDelta = to.right() - from.right();
-                int inwardDelta = to.inward() - from.inward();
-                int upDelta = to.up() - from.up();
-                int steps = Math.max(1, Math.max(Math.abs(rightDelta), Math.max(Math.abs(inwardDelta), Math.abs(upDelta))));
-                boolean transverseAlongRight = Math.abs(inwardDelta) >= Math.abs(rightDelta);
-                for (int step = segment == 1 ? 0 : 1; step <= steps; step++) {
-                    MineUndergroundLayout.Node node = new MineUndergroundLayout.Node(
-                            from.right() + rightDelta * step / steps,
-                            from.inward() + inwardDelta * step / steps,
-                            from.up() + upDelta * step / steps);
-                    compileDriftSection(mine, node, transverseAlongRight, section++, slices);
-                }
-            }
-        }
-        compileMineJunction(mine, slices);
-    }
-
-    private static void compileDriftSection(AuthoredMineSitePlan mine, MineUndergroundLayout.Node node,
-                                            boolean transverseAlongRight, int section,
-                                            Map<Long, MutableGenesisSlice> slices) {
-        for (int offset = -2; offset <= 2; offset++) {
-            putMineLocal(slices, mine, transverse(node, offset, -1, transverseAlongRight),
-                    Math.floorMod(section + offset, 5) == 0
-                            ? Blocks.COBBLED_DEEPSLATE.defaultBlockState()
-                            : Blocks.DEEPSLATE_BRICKS.defaultBlockState());
-        }
-        for (int up = 0; up <= 2; up++) for (int offset = -2; offset <= 2; offset++) {
-            putMineLocal(slices, mine, transverse(node, offset, up, transverseAlongRight),
-                    Blocks.AIR.defaultBlockState());
-        }
-        for (int offset = -1; offset <= 1; offset++) {
-            putMineLocal(slices, mine, transverse(node, offset, 3, transverseAlongRight),
-                    Blocks.AIR.defaultBlockState());
-        }
-        putMineLocal(slices, mine, transverse(node, -2, 3, transverseAlongRight),
-                Blocks.COBBLED_DEEPSLATE.defaultBlockState());
-        putMineLocal(slices, mine, transverse(node, 2, 3, transverseAlongRight),
-                Blocks.COBBLED_DEEPSLATE.defaultBlockState());
-        for (int offset = -1; offset <= 1; offset++) {
-            putMineLocal(slices, mine, transverse(node, offset, 4, transverseAlongRight),
-                    section % 4 == 0 ? Blocks.DEEPSLATE_TILES.defaultBlockState()
-                            : Blocks.DEEPSLATE_BRICKS.defaultBlockState());
-        }
-        if (section % 7 == 0) {
-            for (int up = 0; up <= 2; up++) {
-                putMineLocal(slices, mine, transverse(node, -2, up, transverseAlongRight),
-                        Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-                putMineLocal(slices, mine, transverse(node, 2, up, transverseAlongRight),
-                        Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-            }
-            for (int offset = -2; offset <= 2; offset++) {
-                putMineLocal(slices, mine, transverse(node, offset, 3, transverseAlongRight),
-                        Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-            }
-            if (section % 14 == 0) {
-                putMineLocal(slices, mine, transverse(node, 0, 2, transverseAlongRight),
-                        Blocks.SOUL_LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true));
-            }
-        }
-    }
-
-    private static MineUndergroundLayout.Node transverse(MineUndergroundLayout.Node node, int offset, int up,
-                                                          boolean alongRight) {
-        return new MineUndergroundLayout.Node(node.right() + (alongRight ? offset : 0),
-                node.inward() + (alongRight ? 0 : offset), node.up() + up);
-    }
-
-    private static void compileMineJunction(AuthoredMineSitePlan mine, Map<Long, MutableGenesisSlice> slices) {
-        MineUndergroundLayout.Node junction = MineUndergroundLayout.JUNCTION;
-        for (int right = -4; right <= 4; right++) for (int inward = -4; inward <= 4; inward++) {
-            int radius = right * right + inward * inward;
-            if (radius > 20) continue;
-            MineUndergroundLayout.Node floor = new MineUndergroundLayout.Node(
-                    junction.right() + right, junction.inward() + inward, junction.up() - 1);
-            putMineLocal(slices, mine, floor, radius % 5 == 0
-                    ? Blocks.POLISHED_ANDESITE.defaultBlockState() : Blocks.DEEPSLATE_BRICKS.defaultBlockState());
-            int height = radius <= 10 ? 4 : 3;
-            for (int up = 0; up < height; up++) {
-                putMineLocal(slices, mine, new MineUndergroundLayout.Node(
-                        floor.right(), floor.inward(), junction.up() + up), Blocks.AIR.defaultBlockState());
-            }
-        }
-        for (int right : new int[]{-3, 3}) for (int inward : new int[]{-2, 2}) {
-            for (int up = 0; up <= 3; up++) {
-                putMineLocal(slices, mine, new MineUndergroundLayout.Node(
-                        junction.right() + right, junction.inward() + inward, junction.up() + up),
-                        Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-            }
-        }
-        putMineLocal(slices, mine, new MineUndergroundLayout.Node(
-                junction.right(), junction.inward(), junction.up() + 3),
-                Blocks.SOUL_LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true));
-    }
-
-    private static void putMineLocal(Map<Long, MutableGenesisSlice> slices, AuthoredMineSitePlan mine,
-                                     MineUndergroundLayout.Node node, BlockState state) {
-        put(slices, local(mine.portal(), node.right(), node.inward(), node.up(),
-                mine.inwardQuarterTurns()), state);
+    private static boolean insideFoundationApron(AuthoredMineSitePlan mine, int x, int z) {
+        return mine.foundations().stream().anyMatch(value -> distanceFrom(value, x, z) <= value.apron());
     }
 
     private static BlockPos block(VisualPoint point) { return new BlockPos(point.x(), point.y(), point.z()); }
-
-    private static BlockPos local(VisualPoint origin, int right, int inward, int up, int direction) {
-        return localBlock(block(origin), right, inward, up, direction);
-    }
-
-    private static BlockPos localBlock(BlockPos origin, int right, int inward, int up, int direction) {
-        int dx = switch (Math.floorMod(direction, 4)) { case 0 -> inward; case 1 -> -right; case 2 -> -inward; default -> right; };
-        int dz = switch (Math.floorMod(direction, 4)) { case 0 -> right; case 1 -> inward; case 2 -> -right; default -> -inward; };
-        return origin.offset(dx, up, dz);
-    }
 
     private static void put(Map<Long, MutableGenesisSlice> slices, BlockPos position, BlockState state) {
         slice(slices, position.getX(), position.getZ()).blocks.put(position.immutable(), state);

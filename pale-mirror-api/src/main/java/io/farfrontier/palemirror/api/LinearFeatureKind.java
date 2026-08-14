@@ -10,6 +10,7 @@ public enum LinearFeatureKind {
     BRIDGE,
     RETAINING_WALL,
     PALISADE,
+    PALISADE_GATE,
     DITCH,
     RAIL_SUPPORT
 }

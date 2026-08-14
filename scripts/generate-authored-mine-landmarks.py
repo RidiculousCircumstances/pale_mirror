@@ -106,6 +106,25 @@ class Structure:
         return named(10, "", root)
 
 
+def stepped_roof(out: Structure,
+                 courses: list[tuple[tuple[int, int, int], tuple[int, int, int], str, str]]) -> None:
+    """Build supported slab eaves with solid overlap beneath every raised course.
+
+    A top slab one block above another top slab leaves a visible half-block air
+    seam. Each course therefore uses bottom slabs only on its exposed edge and
+    a full matching block wherever the next course bears on it.
+    """
+    for index, (first, last, slab, solid) in enumerate(courses):
+        next_bounds = courses[index + 1][:2] if index + 1 < len(courses) else None
+        for x in range(first[0], last[0] + 1):
+            for z in range(first[2], last[2] + 1):
+                supports_next = next_bounds is not None \
+                    and next_bounds[0][0] <= x <= next_bounds[1][0] \
+                    and next_bounds[0][2] <= z <= next_bounds[1][2]
+                out.put(x, first[1], z, solid if supports_next else slab,
+                        **({} if supports_next else {"type": "bottom"}))
+
+
 def portal_hoist() -> Structure:
     # Local X is the broad facade; local Z runs from the freight yard (0)
     # toward the mountain/adit (18).  The building combines a winding house,
@@ -135,8 +154,12 @@ def portal_hoist() -> Structure:
     for z in (5, 8):
         out.cuboid((2, 3, z), (2, 5, z), "minecraft:iron_bars")
     out.cuboid((5, 2, 3), (6, 4, 3), "minecraft:air")
-    for layer in range(4):
-        out.cuboid((1 + layer, 7 + layer, 2), (10 - layer, 7 + layer, 12), roof, type="top")
+    stepped_roof(out, [
+        ((1, 7, 2), (10, 7, 12), roof, "minecraft:deepslate_tiles"),
+        ((2, 8, 2), (9, 8, 12), roof, "minecraft:deepslate_tiles"),
+        ((3, 9, 2), (8, 9, 12), roof, "minecraft:deepslate_tiles"),
+        ((4, 10, 2), (7, 10, 12), roof, "minecraft:deepslate_tiles"),
+    ])
 
     # Masonry adit facade against the mountain side.
     out.cuboid((10, 1, 13), (18, 1, 18), stone)
@@ -202,9 +225,10 @@ def crew_outpost() -> Structure:
         out.put(x, 2, 7, "minecraft:glass_pane")
     out.cuboid((4, 0, 0), (7, 0, 1), "minecraft:stone_bricks")
     out.cuboid((4, 1, 1), (7, 1, 1), "minecraft:spruce_slab", type="bottom")
-    # Three stepped slab courses suggest a gable without fragile stair states.
-    out.cuboid((1, 4, 1), (10, 4, 8), roof, type="top")
-    out.cuboid((2, 5, 2), (9, 5, 7), roof, type="top")
+    stepped_roof(out, [
+        ((1, 4, 1), (10, 4, 8), roof, "minecraft:deepslate_tiles"),
+        ((2, 5, 2), (9, 5, 7), roof, "minecraft:deepslate_tiles"),
+    ])
     for x in (1, 10):
         out.put(x, 2, 1, timber, axis="y")
         out.put(x, 3, 1, "minecraft:lantern")
@@ -244,11 +268,13 @@ def processing_hall() -> Structure:
     # the air while retaining a restrained frontier palette.
     for bay, first in enumerate((1, 8, 15, 22)):
         last = min(29, first + 7)
-        out.cuboid((first, 6, 1), (last, 6, 15), roof, type="top")
-        out.cuboid((first + 1, 7, 3), (last - 1, 7, 13),
-                   copper if bay % 2 else roof, type="top")
-        if first + 2 <= last - 2:
-            out.cuboid((first + 2, 8, 5), (last - 2, 8, 11), roof, type="top")
+        raised_slab = copper if bay % 2 else roof
+        raised_solid = "minecraft:waxed_cut_copper" if bay % 2 else "minecraft:deepslate_tiles"
+        stepped_roof(out, [
+            ((first, 6, 1), (last, 6, 15), roof, "minecraft:deepslate_tiles"),
+            ((first + 1, 7, 3), (last - 1, 7, 13), raised_slab, raised_solid),
+            ((first + 2, 8, 5), (last - 2, 8, 11), roof, "minecraft:deepslate_tiles"),
+        ])
     # Exterior ore bins are open and visibly connected to the yard.
     for first in (4, 12, 20):
         out.cuboid((first, 1, 0), (first + 4, 1, 0), "minecraft:cobblestone_wall")
@@ -280,8 +306,10 @@ def power_house() -> Structure:
     for z in (5, 9):
         out.cuboid((2, 3, z), (2, 5, z + 1), "minecraft:iron_bars")
         out.cuboid((10, 3, z), (10, 5, z + 1), "minecraft:iron_bars")
-    out.cuboid((1, 7, 1), (11, 7, 13), "minecraft:deepslate_tile_slab", type="top")
-    out.cuboid((3, 8, 3), (9, 8, 11), "minecraft:waxed_cut_copper_slab", type="top")
+    stepped_roof(out, [
+        ((1, 7, 1), (11, 7, 13), "minecraft:deepslate_tile_slab", "minecraft:deepslate_tiles"),
+        ((3, 8, 3), (9, 8, 11), "minecraft:waxed_cut_copper_slab", "minecraft:waxed_cut_copper"),
+    ])
     # One narrow stack, visually tied into the boiler room rather than a
     # freestanding solid tower.
     for y in range(5, 15):
@@ -304,13 +332,15 @@ def loading_yard() -> Structure:
     for x in (1, 5, 8, 12):
         for z in (1, 7):
             out.cuboid((x, 1, z), (x, 6, z), timber, axis="y")
-    out.cuboid((0, 6, 0), (13, 6, 8), roof, type="top")
-    out.cuboid((2, 7, 1), (11, 7, 7), "minecraft:waxed_cut_copper_slab", type="top")
+    stepped_roof(out, [
+        ((0, 6, 0), (13, 6, 8), roof, "minecraft:deepslate_tiles"),
+        ((2, 7, 1), (11, 7, 7), "minecraft:waxed_cut_copper_slab", "minecraft:waxed_cut_copper"),
+    ])
     for x in (1, 12):
         out.put(x, 5, 1, "minecraft:lantern")
         out.put(x, 5, 7, "minecraft:lantern")
     for x in (3, 10):
-        out.cuboid((x, 1, 6), (x, 4, 6), "minecraft:chain", axis="y")
+        out.cuboid((x, 1, 6), (x, 5, 6), "minecraft:chain", axis="y")
         out.put(x, 1, 5, "minecraft:iron_trapdoor", facing="north", half="bottom", open="false", powered="false", waterlogged="false")
     out.cuboid((0, 1, 0), (3, 1, 0), "minecraft:cobblestone_wall")
     out.cuboid((10, 1, 0), (13, 1, 0), "minecraft:cobblestone_wall")
@@ -334,8 +364,10 @@ def dispatch_machinery() -> Structure:
     for x in (2, 9, 16):
         for z in (2, 19):
             out.cuboid((x, 1, z), (x, 6, z), "minecraft:stripped_spruce_log", axis="y")
-    out.cuboid((1, 6, 1), (17, 6, 20), "minecraft:deepslate_tile_slab", type="top")
-    out.cuboid((4, 7, 4), (14, 7, 17), "minecraft:waxed_cut_copper_slab", type="top")
+    stepped_roof(out, [
+        ((1, 6, 1), (17, 6, 20), "minecraft:deepslate_tile_slab", "minecraft:deepslate_tiles"),
+        ((4, 7, 4), (14, 7, 17), "minecraft:waxed_cut_copper_slab", "minecraft:waxed_cut_copper"),
+    ])
     for z in (5, 11, 17):
         out.cuboid((5, 1, z), (13, 1, z), "minecraft:iron_bars")
     return out
