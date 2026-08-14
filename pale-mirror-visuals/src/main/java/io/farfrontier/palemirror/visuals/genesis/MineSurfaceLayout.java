@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.api.AuthoredMineRole;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
 import java.util.List;
+import java.util.Set;
 
 /** Shared geometry for terrain surveying and the authored MineSite grammar. */
 final class MineSurfaceLayout {
@@ -34,6 +35,20 @@ final class MineSurfaceLayout {
     static Pad require(AuthoredMineRole role, String id) {
         return pads(role).stream().filter(value -> value.id().equals(id)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown MineSite surface pad " + role + ":" + id));
+    }
+
+    /** Pads that must read as complete in the pristine genesis snapshot. */
+    static Set<String> materializedFoundationIds(
+            io.farfrontier.palemirror.api.AuthoredMineSitePlan mine) {
+        java.util.LinkedHashSet<String> result = mine.initialModules().stream()
+                .map(value -> value.foundationId())
+                .filter(value -> !value.equals("underground"))
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        // Red Valley starts as a coherent prospecting post with a modest
+        // dispatch apron. The larger processing/power pads remain untouched
+        // terrain until their staged projects actually begin.
+        if (mine.role() == AuthoredMineRole.ALTERNATE) result.add("dispatch");
+        return Set.copyOf(result);
     }
 
     /** Whole-yard translations preserve the authored relationship between every building. */

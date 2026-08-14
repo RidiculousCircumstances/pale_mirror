@@ -107,6 +107,12 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
     }
 
     static boolean naturalVegetation(net.minecraft.world.level.block.state.BlockState state) {
+        String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
+        boolean semanticPlant = path.endsWith("_leaves") || path.endsWith("_leaf")
+                || path.endsWith("_sapling") || path.endsWith("_flower")
+                || path.endsWith("_flowers") || path.endsWith("_vine")
+                || path.endsWith("_mushroom_block") || path.equals("mushroom_stem")
+                || path.contains("foliage") || path.contains("bee_nest") || path.contains("beehive");
         return state.getBlock() instanceof BushBlock
                 || state.is(BlockTags.LOGS)
                 || state.is(BlockTags.LEAVES)
@@ -124,7 +130,8 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
                 || state.is(Blocks.CACTUS)
                 || state.is(Blocks.SUGAR_CANE)
                 || state.is(Blocks.BAMBOO)
-                || state.is(Blocks.BAMBOO_SAPLING);
+                || state.is(Blocks.BAMBOO_SAPLING)
+                || semanticPlant;
     }
 
     private static void grade(WorldGenLevel level, CompiledChunkSlice.TerrainColumn column) {
@@ -174,8 +181,7 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         if (earthwork == RailEarthwork.GROUND) {
             for (int y = surface; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
                     new BlockPos(rail.rail().getX(), y, rail.rail().getZ()), Blocks.COBBLESTONE.defaultBlockState());
-        } else if (earthwork == RailEarthwork.BRIDGE
-                && Math.floorMod(rail.rail().getX() + rail.rail().getZ(), 4) == 0) {
+        } else if (earthwork == RailEarthwork.BRIDGE && rail.supportPier()) {
             int base = water ? floor : surface;
             for (int y = base; y < rail.rail().getY() - 1; y++) setIfDifferent(level,
                     new BlockPos(rail.rail().getX(), y, rail.rail().getZ()),

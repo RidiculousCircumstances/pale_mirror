@@ -17,11 +17,40 @@ import java.util.Set;
 
 /** Shared coordinate and footprint operations for authored settlement grammars. */
 final class SettlementLayoutGeometry {
+    private static final int CORRIDOR_VALIDATION_STEP = 4;
+    private static final int MAXIMUM_CORRIDOR_CUT_FILL = 4;
     private SettlementLayoutGeometry() { }
 
     static LinearFeaturePlan followTerrain(LinearFeaturePlan feature, SettlementTerrainSnapshot snapshot) {
         return new LinearFeaturePlan(feature.id(), feature.kind(), feature.nodes().stream()
-                .map(value -> terrainPoint(value, snapshot)).toList(), feature.width(), feature.walkable());
+                .map(value -> surfacePoint(value, snapshot)).toList(), feature.width(), feature.walkable());
+    }
+
+    /**
+     * Building access starts on the authored foundation surface. Every later
+     * node follows the natural solid surface, not Minecraft's first-air
+     * height. Keeping the first node exact prevents a road from silently
+     * moving away from its declared door after terrain adaptation.
+     */
+    static LinearFeaturePlan followAccessTerrain(LinearFeaturePlan feature,
+                                                  SettlementTerrainSnapshot snapshot) {
+        java.util.List<VisualPoint> nodes = new java.util.ArrayList<>(feature.nodes().size());
+        for (int index = 0; index < feature.nodes().size(); index++) {
+            VisualPoint point = feature.nodes().get(index);
+            nodes.add(index == 0 ? point : surfacePoint(point, snapshot));
+        }
+        return new LinearFeaturePlan(feature.id(), feature.kind(), nodes, feature.width(), feature.walkable());
+    }
+
+    /** The depot node is a raised authored pad; the rest of the spine is native ground. */
+    static LinearFeaturePlan followFreightTerrain(LinearFeaturePlan feature,
+                                                   SettlementTerrainSnapshot snapshot) {
+        java.util.List<VisualPoint> nodes = new java.util.ArrayList<>(feature.nodes().size());
+        for (int index = 0; index < feature.nodes().size(); index++) {
+            VisualPoint point = feature.nodes().get(index);
+            nodes.add(index == 1 ? point : surfacePoint(point, snapshot));
+        }
+        return new LinearFeaturePlan(feature.id(), feature.kind(), nodes, feature.width(), feature.walkable());
     }
 
     static void requireDryCirculation(List<LinearFeaturePlan> features,
@@ -33,10 +62,15 @@ final class SettlementLayoutGeometry {
                     && feature.kind() != LinearFeatureKind.PLAZA) continue;
             for (int segment = 1; segment < feature.nodes().size(); segment++) {
                 List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
-                for (int index = 0; index < points.size(); index += SettlementTerrainSnapshot.GRID_STEP) {
+                for (int index = 0; index < points.size(); index += CORRIDOR_VALIDATION_STEP) {
                     VisualPoint point = points.get(index);
                     if (snapshot.waterAt(point.x(), point.z())) {
                         throw new DryMineSiteUnavailableException("Township circulation crosses water at "
+                                + point.x() + "," + point.z() + " near " + anchor.x() + "," + anchor.z());
+                    }
+                    int actual = snapshot.exactSurfaceHeight(point.x(), point.z());
+                    if (Math.abs(actual - point.y()) > MAXIMUM_CORRIDOR_CUT_FILL) {
+                        throw new DryMineSiteUnavailableException("Township circulation exceeds bounded cut/fill at "
                                 + point.x() + "," + point.z() + " near " + anchor.x() + "," + anchor.z());
                     }
                 }
@@ -69,11 +103,12 @@ final class SettlementLayoutGeometry {
                 || points.get(Math.min(points.size() - 1, index + 1)).y() > y;
     }
 
-    static AuthoredOpenSpacePlan followTerrain(AuthoredOpenSpacePlan space,
-                                                SettlementTerrainSnapshot snapshot) {
-        int centerX = (space.bounds().min().x() + space.bounds().max().x()) / 2;
-        int centerZ = (space.bounds().min().z() + space.bounds().max().z()) / 2;
-        int target = snapshot.approximateHeight(centerX, centerZ);
+    static AuthoredOpenSpacePlan resolveOpenSpace(AuthoredOpenSpacePlan space,
+                                                   SettlementTerrainSnapshot snapshot) {
+        SettlementTerrainSnapshot.PadResolution pad = snapshot.resolvePad(space.bounds());
+        if (!pad.accepted()) throw new DryMineSiteUnavailableException("Township open space " + space.id()
+                + " failed exact " + pad.failure() + " validation");
+        int target = pad.targetY() - 1;
         int delta = target - space.bounds().min().y();
         VisualBounds shifted = new VisualBounds(withY(space.bounds().min(), space.bounds().min().y() + delta),
                 withY(space.bounds().max(), space.bounds().max().y() + delta));
@@ -84,6 +119,10 @@ final class SettlementLayoutGeometry {
 
     static VisualPoint terrainPoint(VisualPoint point, SettlementTerrainSnapshot snapshot) {
         return withY(point, snapshot.approximateHeight(point.x(), point.z()));
+    }
+
+    static VisualPoint surfacePoint(VisualPoint point, SettlementTerrainSnapshot snapshot) {
+        return withY(point, snapshot.surfaceHeight(point.x(), point.z()));
     }
 
     static VisualPoint withY(VisualPoint point, int y) {
@@ -133,8 +172,12 @@ final class SettlementLayoutGeometry {
     }
 
     static VisualPoint publicEntrance(AuthoredBuildingPlan building) {
+        return publicPort(building).position();
+    }
+
+    static VisualPort publicPort(AuthoredBuildingPlan building) {
         return building.modules().stream().flatMap(module -> module.ports().stream())
-                .filter(port -> port.kind() == VisualPortKind.PUBLIC_ENTRANCE).findFirst().orElseThrow().position();
+                .filter(port -> port.kind() == VisualPortKind.PUBLIC_ENTRANCE).findFirst().orElseThrow();
     }
 
     static VisualPoint below(VisualPoint value) {

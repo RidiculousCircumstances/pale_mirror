@@ -6,7 +6,6 @@ import java.util.List;
 
 /** Pure deterministic selector with cheap horizontal ranking and a hard exact-height budget. */
 public final class FrontierSiteSelector {
-    static final int EXACT_SAMPLES_PER_CANDIDATE = 5;
     private static final double GOLDEN_ANGLE = Math.PI * (3D - Math.sqrt(5D));
     private final RegionPlacementProfile profile;
     private final DeterministicGenesisWorkers workers;
@@ -150,13 +149,18 @@ public final class FrontierSiteSelector {
     private BiomeSample footprintBiome(Center center, TerrainAccess terrain) {
         int radius = profile.settlementTerrain().surveyRadius();
         BiomeSample centerBiome = terrain.biome(center.x(), center.z());
-        boolean water = centerBiome.water()
-                || terrain.biome(center.x() - radius, center.z()).water()
-                || terrain.biome(center.x() + radius, center.z()).water()
-                || terrain.biome(center.x(), center.z() - radius).water()
-                || terrain.biome(center.x(), center.z() + radius).water();
+        List<BiomeSample> footprint = List.of(centerBiome,
+                terrain.biome(center.x() - radius, center.z()),
+                terrain.biome(center.x() + radius, center.z()),
+                terrain.biome(center.x(), center.z() - radius),
+                terrain.biome(center.x(), center.z() + radius));
+        boolean water = footprint.stream().anyMatch(BiomeSample::water);
+        int vegetationBurden = footprint.stream().mapToInt(BiomeSample::vegetationBurden).max().orElse(3);
+        boolean vegetationAccepted = vegetationBurden <= profile.settlementTerrain().surfaceSuitability()
+                .maximumVegetationBurden();
         return new BiomeSample(centerBiome.climate(), centerBiome.suitable() && !water,
-                water, centerBiome.terrainPreference());
+                water, centerBiome.terrainPreference(), centerBiome.mountainEvidence(), vegetationBurden,
+                vegetationAccepted);
     }
 
     /** Cheap biome-only evidence that the shelf has both a nearby primary mass and a separate remote mass. */
@@ -205,14 +209,29 @@ public final class FrontierSiteSelector {
     }
 
     private TerrainCandidate detailed(Center center, TerrainAccess terrain) {
-        List<TerrainSample> samples = new ArrayList<>(EXACT_SAMPLES_PER_CANDIDATE);
-        samples.add(terrain.exactSample(center.x(), center.z()));
         int radius = profile.settlementTerrain().surveyRadius();
-        samples.add(terrain.exactSample(center.x() - radius, center.z()));
-        samples.add(terrain.exactSample(center.x() + radius, center.z()));
-        samples.add(terrain.exactSample(center.x(), center.z() - radius));
-        samples.add(terrain.exactSample(center.x(), center.z() + radius));
-        return TerrainCandidate.evaluate(center.x(), center.z(), samples);
+        int step = profile.settlementTerrain().surfaceSuitability().sampleStep();
+        List<Integer> offsets = surveyOffsets(radius, step);
+        List<TerrainSample> samples = new ArrayList<>(offsets.size() * offsets.size());
+        for (int x : offsets) for (int z : offsets) {
+            samples.add(terrain.exactSample(center.x() + x, center.z() + z));
+        }
+        return TerrainCandidate.evaluate(center.x(), center.z(), samples,
+                profile.settlementTerrain().surfaceSuitability().buildableHeightTolerance());
+    }
+
+    static int exactSamplesPerCandidate(SettlementTerrainPolicy policy) {
+        int count = surveyOffsets(policy.surveyRadius(), policy.surfaceSuitability().sampleStep()).size();
+        return Math.multiplyExact(count, count);
+    }
+
+    private static List<Integer> surveyOffsets(int radius, int step) {
+        java.util.TreeSet<Integer> offsets = new java.util.TreeSet<>();
+        offsets.add(-radius);
+        offsets.add(0);
+        offsets.add(radius);
+        for (int value = -radius + step; value < radius; value += step) offsets.add(value);
+        return List.copyOf(offsets);
     }
 
     private static List<Center> candidateCenters(long seed, VisualPoint spawn, int count, int minimumDistance,
@@ -319,12 +338,20 @@ public final class FrontierSiteSelector {
     }
 
     public record BiomeSample(FrontierClimate climate, boolean suitable, boolean water, int terrainPreference,
-                              boolean mountainEvidence) {
+                              boolean mountainEvidence, int vegetationBurden, boolean vegetationAccepted) {
         public BiomeSample(FrontierClimate climate, boolean suitable, boolean water, int terrainPreference) {
-            this(climate, suitable, water, terrainPreference, false);
+            this(climate, suitable, water, terrainPreference, false, terrainPreference, true);
+        }
+        public BiomeSample(FrontierClimate climate, boolean suitable, boolean water, int terrainPreference,
+                           boolean mountainEvidence) {
+            this(climate, suitable, water, terrainPreference, mountainEvidence, terrainPreference, true);
         }
         public BiomeSample {
             if (terrainPreference < 0) throw new IllegalArgumentException("terrainPreference must be non-negative");
+            if (vegetationBurden < 0 || vegetationBurden > 3) {
+                throw new IllegalArgumentException("vegetation burden must be between 0 and 3");
+            }
+            suitable &= vegetationAccepted;
         }
     }
     public record SelectedSite(TerrainCandidate terrain, FrontierClimate climate, boolean nearCandidate) {

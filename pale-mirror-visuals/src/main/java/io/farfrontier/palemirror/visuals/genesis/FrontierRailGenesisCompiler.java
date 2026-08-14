@@ -29,7 +29,7 @@ final class FrontierRailGenesisCompiler {
                     .setValue(PoweredRailBlock.SHAPE, shape)
                     : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape);
             sink.rail(rail, state, powered ? Blocks.REDSTONE_BLOCK.defaultBlockState()
-                    : Blocks.STONE_BRICKS.defaultBlockState());
+                    : Blocks.STONE_BRICKS.defaultBlockState(), index % 4 == 0);
             if (index % 3 == 0) {
                 boolean xAxis = next.getAxis() == Direction.Axis.X;
                 for (int side : new int[]{-1, 1}) sink.block(rail.below().offset(
@@ -80,7 +80,7 @@ final class FrontierRailGenesisCompiler {
     }
 
     interface Sink {
-        void rail(BlockPos rail, BlockState state, BlockState support);
+        void rail(BlockPos rail, BlockState state, BlockState support, boolean supportPier);
         void block(BlockPos position, BlockState state);
     }
 }

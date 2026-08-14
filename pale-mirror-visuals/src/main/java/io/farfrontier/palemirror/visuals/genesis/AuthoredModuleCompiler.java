@@ -56,7 +56,8 @@ public final class AuthoredModuleCompiler {
                 }
                 blocks.add(new VisualBlockPlacement(position, state));
             }
-            return new VisualModuleSnapshot(module.templateId(), module.footprint(), blocks);
+            return new VisualModuleSnapshot(module.templateId(), module.footprint(),
+                    normalizeStructuralDetails(module, blocks));
         } catch (IOException failure) {
             throw new IllegalStateException("Cannot read authored module " + id, failure);
         }
@@ -117,6 +118,72 @@ public final class AuthoredModuleCompiler {
             replacement = dryReplacement(source.getBlock());
         }
         return replacement == null ? source : copySharedProperties(source, replacement.defaultBlockState());
+    }
+
+    /**
+     * Private source structures are curated raw material, not an exemption
+     * from the authored-module contract. Mine roofs use stepped slab courses;
+     * a lower bottom slab beneath the next course leaves a visible half-block
+     * daylight seam, so that overlap becomes a double slab. Likewise a full
+     * structural log may not balance on a fence-sized decorative post.
+     */
+    private static List<VisualBlockPlacement> normalizeStructuralDetails(
+            VisualModulePlacement module, List<VisualBlockPlacement> source) {
+        if (!module.visualStateProfile().equals("frontier_mine")) return List.copyOf(source);
+        java.util.LinkedHashMap<BlockPos, VisualBlockPlacement> blocks = new java.util.LinkedHashMap<>();
+        for (VisualBlockPlacement value : source) blocks.put(block(value.position()), value);
+        int roofBand = module.footprint().min().y()
+                + Math.max(2, (module.footprint().max().y() - module.footprint().min().y()) / 2);
+        for (VisualBlockPlacement value : List.copyOf(blocks.values())) {
+            BlockPos position = block(value.position());
+            BlockState state = value.state();
+            if (position.getY() >= roofBand && state.hasProperty(
+                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                    && state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                    == net.minecraft.world.level.block.state.properties.SlabType.BOTTOM
+                    && steppedSlabAbove(blocks, position)) {
+                BlockState sealed = state.setValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE);
+                blocks.put(position, new VisualBlockPlacement(value.position(), sealed));
+            }
+            if ((state.is(Blocks.CHAIN) || state.getBlock() instanceof net.minecraft.world.level.block.LanternBlock)
+                    && slabLeavesHangingGap(blocks.get(position.above()))) {
+                VisualBlockPlacement support = blocks.get(position.above());
+                BlockState sealed = support.state().setValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE);
+                blocks.put(position.above(), new VisualBlockPlacement(support.position(), sealed));
+            }
+            VisualBlockPlacement below = blocks.get(position.below());
+            if (state.is(net.minecraft.tags.BlockTags.LOGS) && below != null
+                    && below.state().getBlock() instanceof net.minecraft.world.level.block.FenceBlock) {
+                blocks.put(position.below(), new VisualBlockPlacement(below.position(), state));
+            }
+        }
+        return List.copyOf(blocks.values());
+    }
+
+    private static boolean slabLeavesHangingGap(VisualBlockPlacement support) {
+        return support != null && support.state().hasProperty(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                && support.state().getValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                == net.minecraft.world.level.block.state.properties.SlabType.TOP;
+    }
+
+    private static boolean steppedSlabAbove(java.util.Map<BlockPos, VisualBlockPlacement> blocks,
+                                            BlockPos position) {
+        for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            VisualBlockPlacement neighbour = blocks.get(position.above().relative(direction));
+            if (neighbour != null && neighbour.state().hasProperty(
+                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)) return true;
+        }
+        return false;
+    }
+
+    private static BlockPos block(VisualPoint point) {
+        return new BlockPos(point.x(), point.y(), point.z());
     }
 
     private static Block coldReplacement(Block source) {

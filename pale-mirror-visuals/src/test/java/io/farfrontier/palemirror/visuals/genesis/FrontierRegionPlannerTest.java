@@ -29,11 +29,13 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertEquals(20, seed.modules().size());
         assertEquals(5, seed.expansionPlots().size());
-        assertEquals(12, seed.definitionVersion());
+        assertEquals(13, seed.definitionVersion());
         assertEquals(9, seed.primaryMineSite().initialModules().size());
         assertEquals(4, seed.alternateMineSite().initialModules().size());
         assertEquals(6, seed.primaryMineSite().foundations().size());
         assertEquals(6, seed.alternateMineSite().foundations().size());
+        assertEquals(java.util.Set.of("portal", "crew", "dispatch"),
+                MineSurfaceLayout.materializedFoundationIds(seed.alternateMineSite()));
         assertEquals(java.util.List.of("foundation", "shell", "machinery", "commissioning"),
                 seed.alternateMineSite().stagedModules().stream().map(value -> value.stage()).toList());
         assertTrue(seed.primaryMineSite().semanticVolumes().stream()
@@ -66,7 +68,8 @@ class FrontierRegionPlannerTest {
                     return x == 1500 && z == 0 ? 70 : 82;
                 });
         assertEquals(2, queries.get());
-        assertEquals(seed.primaryMine().y() + 1, seed.baselineRailNodes().getLast().y());
+        assertEquals(seed.primaryMine().y(), seed.baselineRailNodes().getLast().y(),
+                "grounded loading rail must sit at the portal's first-air level");
     }
 
     @Test void mineDistancesAndRailConnectivityAreBounded() {

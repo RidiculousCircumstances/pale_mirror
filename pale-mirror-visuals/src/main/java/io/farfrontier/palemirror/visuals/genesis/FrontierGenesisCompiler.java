@@ -24,7 +24,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 19;
+    public static final int CATALOG_VERSION = 21;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -40,6 +40,10 @@ public final class FrontierGenesisCompiler {
     private static void compileRegion(AuthoredRegionSeed seed, Map<Long, MutableGenesisSlice> slices) {
         FrontierPalette palette = FrontierPalette.forClimate(
                 FrontierClimate.valueOf(seed.climate().toUpperCase(Locale.ROOT)));
+        // Module shells are written first. Public entrances and their clear
+        // throats are the final settlement writer, so a source NBT wall can
+        // never overwrite the declared road/door contract.
+        for (VisualModulePlacement module : seed.modules()) compileModule(module, slices);
         SettlementGenesisCompiler.compile(seed, palette, new SettlementGenesisCompiler.Sink() {
             @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
                 MutableGenesisSlice slice = slice(slices, x, z);
@@ -61,19 +65,34 @@ public final class FrontierGenesisCompiler {
             }
             @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
         });
-        for (VisualModulePlacement module : seed.modules()) compileModule(module, slices);
         compileMine(seed.primaryMineSite(), palette, slices);
         compileMine(seed.alternateMineSite(), palette, slices);
         FrontierRailGenesisCompiler.compile(seed.baselineRailNodes(), new FrontierRailGenesisCompiler.Sink() {
-            @Override public void rail(BlockPos rail, BlockState state, BlockState support) {
+            @Override public void rail(BlockPos rail, BlockState state, BlockState support, boolean supportPier) {
                 slice(slices, rail.getX(), rail.getZ()).rails.add(
-                        new CompiledChunkSlice.RailColumn(rail, state, support));
+                        new CompiledChunkSlice.RailColumn(rail, state, support, supportPier));
+                compileRailVegetationEnvelope(slices, rail);
             }
             @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
         });
     }
 
+    /** Keeps a cart-width safety corridor free of late trees without grading the route. */
+    private static void compileRailVegetationEnvelope(Map<Long, MutableGenesisSlice> slices, BlockPos rail) {
+        final int radius = 3;
+        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            if (dx * dx + dz * dz > radius * radius + 1) continue;
+            int x = rail.getX() + dx;
+            int z = rail.getZ() + dz;
+            slice(slices, x, z).vegetation.putIfAbsent(ChunkPos.asLong(x, z),
+                    new CompiledChunkSlice.VegetationColumn(x, z, rail.getY()));
+        }
+    }
+
     private static void compileMineKinetics(AuthoredMineSitePlan mine, Map<Long, MutableGenesisSlice> slices) {
+        boolean powerBuilt = mine.initialModules().stream()
+                .anyMatch(value -> value.foundationId().equals("power"));
+        if (!powerBuilt) return;
         MineFoundationPlan power = mine.foundations().stream().filter(value -> value.id().equals("power"))
                 .findFirst().orElse(null);
         if (power == null) return;
@@ -132,7 +151,7 @@ public final class FrontierGenesisCompiler {
         });
         mine.initialModules().forEach(module -> compileModule(module, slices));
         MineUndergroundGenesisCompiler.compile(mine, (position, state) -> put(slices, position, state));
-        mine.stagedModules().forEach(stage -> compileReservationFootprint(stage.module(), slices));
+        compileMineEntrances(mine, accessRoutes, slices);
         compileMineIndustrialDetails(mine, palette, access, slices);
         compileMineKinetics(mine, slices);
         put(slices, block(mine.controllerAnchor()).above(), Blocks.SOUL_LANTERN.defaultBlockState());
@@ -141,15 +160,18 @@ public final class FrontierGenesisCompiler {
     /** Clears the connected working yard while leaving its terrain untouched. */
     private static void compileMineVegetationEnvelope(AuthoredMineSitePlan mine,
                                                        Map<Long, MutableGenesisSlice> slices) {
-        int minimumX = mine.foundations().stream().mapToInt(value -> value.footprint().min().x())
+        java.util.Set<String> materialized = MineSurfaceLayout.materializedFoundationIds(mine);
+        List<MineFoundationPlan> foundations = mine.foundations().stream()
+                .filter(value -> materialized.contains(value.id())).toList();
+        int minimumX = foundations.stream().mapToInt(value -> value.footprint().min().x())
                 .min().orElseThrow();
-        int maximumX = mine.foundations().stream().mapToInt(value -> value.footprint().max().x())
+        int maximumX = foundations.stream().mapToInt(value -> value.footprint().max().x())
                 .max().orElseThrow();
-        int minimumZ = mine.foundations().stream().mapToInt(value -> value.footprint().min().z())
+        int minimumZ = foundations.stream().mapToInt(value -> value.footprint().min().z())
                 .min().orElseThrow();
-        int maximumZ = mine.foundations().stream().mapToInt(value -> value.footprint().max().z())
+        int maximumZ = foundations.stream().mapToInt(value -> value.footprint().max().z())
                 .max().orElseThrow();
-        int baseY = mine.foundations().stream().mapToInt(MineFoundationPlan::targetY).min().orElseThrow();
+        int baseY = foundations.stream().mapToInt(MineFoundationPlan::targetY).min().orElseThrow();
         // Large modded trees routinely carry crowns 10-14 blocks away from
         // their trunks. Use an organic union around the actual pads instead
         // of a rectangular clear-cut, but keep enough clearance for the
@@ -159,7 +181,7 @@ public final class FrontierGenesisCompiler {
             for (int x = minimumX - halo; x <= maximumX + halo; x++) {
                 final int columnX = x;
                 final int columnZ = z;
-                int nearestPad = mine.foundations().stream()
+                int nearestPad = foundations.stream()
                         .mapToInt(value -> distanceFrom(value, columnX, columnZ)).min().orElseThrow();
                 int edgeVariation = Math.floorMod(x * 31 + z * 19 + mine.portal().x() * 13, 4);
                 if (nearestPad > halo + edgeVariation) continue;
@@ -182,6 +204,27 @@ public final class FrontierGenesisCompiler {
                         new CompiledChunkSlice.SurfaceDecoration(x, z, offsetY, state));
             }
         });
+    }
+
+    /** The physical route, not a guessed NBT doorway, owns the final walkable threshold. */
+    private static void compileMineEntrances(AuthoredMineSitePlan mine,
+                                             List<MineAccessGenesisCompiler.AccessRoute> routes,
+                                             Map<Long, MutableGenesisSlice> slices) {
+        java.util.Set<String> built = mine.initialModules().stream()
+                .map(VisualModulePlacement::foundationId).collect(java.util.stream.Collectors.toSet());
+        for (MineAccessGenesisCompiler.AccessRoute route : routes) {
+            if (!built.contains(route.foundationId())) continue;
+            MineFoundationPlan foundation = mine.foundations().stream()
+                    .filter(value -> value.id().equals(route.foundationId())).findFirst().orElseThrow();
+            VisualPoint outside = route.points().getLast();
+            BlockPos threshold = new BlockPos(outside.x() + route.entryStepX(),
+                    foundation.targetY() + 1, outside.z() + route.entryStepZ());
+            for (int depth = 0; depth <= 2; depth++) for (int up = 0; up <= 2; up++) {
+                put(slices, threshold.offset(route.entryStepX() * depth, up,
+                        route.entryStepZ() * depth), Blocks.AIR.defaultBlockState());
+            }
+            put(slices, threshold.below(), Blocks.COBBLESTONE.defaultBlockState());
+        }
     }
 
     /**
@@ -289,25 +332,15 @@ public final class FrontierGenesisCompiler {
                 new CompiledChunkSlice.SurfaceDecoration(point.x(), point.z(), offsetY, state));
     }
 
-    private static void compileReservationFootprint(VisualModulePlacement module,
-                                                    Map<Long, MutableGenesisSlice> slices) {
-        for (int x = module.footprint().min().x(); x <= module.footprint().max().x(); x++) {
-            for (int z = module.footprint().min().z(); z <= module.footprint().max().z(); z++) {
-                MutableGenesisSlice slice = slice(slices, x, z);
-                slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z), new CompiledChunkSlice.VegetationColumn(
-                        x, z, module.footprint().min().y() - 1));
-            }
-        }
-    }
-
     private static void compileMineFoundations(AuthoredMineSitePlan mine,
                                                Map<Long, MutableGenesisSlice> slices) {
-        for (MineFoundationPlan foundation : mine.foundations()) {
-            // A mine is a connected industrial campus, not six buildings lost
-            // independently in forest. The wider transition joins nearby pads
-            // while resolvedTarget keeps the natural slope whenever it already
-            // sits inside the allowed band.
-            int transition = Math.max(foundation.maximumCut(), foundation.maximumFill()) + 10;
+        java.util.Set<String> activeIds = MineSurfaceLayout.materializedFoundationIds(mine);
+        for (MineFoundationPlan foundation : mine.foundations().stream()
+                .filter(value -> activeIds.contains(value.id())).toList()) {
+            // Pads remain locally buildable, while roads make the campus read
+            // as one place. A wider halo used to pre-grade Red Valley's future
+            // processing and power parcels into large empty rectangles.
+            int transition = Math.max(foundation.maximumCut(), foundation.maximumFill()) + 4;
             int influence = foundation.apron() + transition;
             for (int x = foundation.footprint().min().x() - influence;
                  x <= foundation.footprint().max().x() + influence; x++) {

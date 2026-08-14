@@ -24,7 +24,7 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 /** Compiles a reusable authored settlement plan into a chunk-owning sink. */
 final class SettlementGenesisCompiler {
     static final int VEGETATION_HALO = 6;
-    static final int LANDSCAPE_BLEND_RADIUS = 16;
+    static final int LANDSCAPE_BLEND_RADIUS = 8;
 
     private SettlementGenesisCompiler() { }
 
@@ -32,7 +32,6 @@ final class SettlementGenesisCompiler {
         AuthoredSettlementSitePlan settlement = seed.settlementSite();
         SettlementFixtureOccupancy fixtures = SettlementFixtureOccupancy.forSettlement(seed);
         cleanupVegetationEnvelope(seed, settlement, sink);
-        SettlementTerrainCompiler.compile(settlement, sink);
         settlement.foundations().forEach(value -> foundation(value, palette, sink));
         settlement.openSpaces().forEach(value -> openSpace(value, palette, fixtures, sink));
         settlement.circulation().forEach(value -> linear(value, palette, fixtures, sink));
@@ -261,10 +260,10 @@ final class SettlementGenesisCompiler {
                         sink.block(new BlockPos(point.x() + dx, target + 1, point.z() + dz),
                                 palette.pavingSlab());
                     }
-                    if (feature.kind() == LinearFeatureKind.SIDEWALK
+                    if ((feature.kind() == LinearFeatureKind.SIDEWALK
                             || feature.kind() == LinearFeatureKind.FOOTPATH
-                            || feature.kind() == LinearFeatureKind.PLAZA
-                            && (Math.abs(dx) == radius || Math.abs(dz) == radius)) {
+                            || feature.kind() == LinearFeatureKind.PLAZA)
+                            && lowerTransition) {
                         sink.block(new BlockPos(point.x() + dx, target + 1, point.z() + dz),
                                 palette.pavingSlab());
                     }
@@ -301,8 +300,7 @@ final class SettlementGenesisCompiler {
                         : Math.floorMod(index, 5) == 0
                         ? Blocks.MOSSY_COBBLESTONE.defaultBlockState()
                         : Blocks.COBBLESTONE.defaultBlockState();
-                sink.surfaceBlock(x, z, -1, shoulder);
-                sink.surfaceBlock(x, z, 0, palette.pavingSlab());
+                sink.terrain(x, z, points.get(index).y(), shoulder, palette.foundation());
                 sink.cleanup(x, z, points.get(index).y());
             }
         }

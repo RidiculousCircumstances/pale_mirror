@@ -7,7 +7,8 @@ public record SettlementTerrainPolicy(
         boolean requireDryFootprint,
         int preferredMaximumRelief,
         int acceptableMaximumRelief,
-        int minimumLandscapeScore) {
+        int minimumLandscapeScore,
+        LandscapeSuitabilityProfile surfaceSuitability) {
     public SettlementTerrainPolicy {
         if (landscapeAffinity == null) throw new IllegalArgumentException("landscapeAffinity is required");
         if (surveyRadius < 1) throw new IllegalArgumentException("surveyRadius must be positive");
@@ -16,6 +17,7 @@ public record SettlementTerrainPolicy(
             throw new IllegalArgumentException("acceptable relief must include preferred relief");
         }
         if (minimumLandscapeScore < 0) throw new IllegalArgumentException("landscape score must be non-negative");
+        if (surfaceSuitability == null) throw new IllegalArgumentException("surface suitability is required");
     }
 
     public boolean acceptsBiome(FrontierSiteSelector.BiomeSample biome) {
@@ -24,12 +26,14 @@ public record SettlementTerrainPolicy(
 
     public boolean preferred(TerrainCandidate candidate) {
         return (!requireDryFootprint || candidate.waterSamples() == 0)
-                && candidate.relief() <= preferredMaximumRelief;
+                && candidate.relief() <= preferredMaximumRelief
+                && surfaceSuitability.preferred(candidate.surfaceQuality());
     }
 
     public boolean acceptable(TerrainCandidate candidate) {
         return (!requireDryFootprint || candidate.waterSamples() == 0)
-                && candidate.relief() <= acceptableMaximumRelief;
+                && candidate.relief() <= acceptableMaximumRelief
+                && surfaceSuitability.acceptable(candidate.surfaceQuality());
     }
 
     public enum LandscapeAffinity {

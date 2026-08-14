@@ -10,9 +10,7 @@ import java.util.concurrent.atomic.LongAdder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -32,7 +30,7 @@ public final class FrontierTerrainSurvey {
 
     public Batch selectBatch(ServerLevel level, RegionPlacementProfile profile, int count, int reserve,
                              int mapRadius, int minimumSpacing, DeterministicGenesisWorkers workers) {
-        CachedLevelTerrain terrain = new CachedLevelTerrain(level);
+        CachedLevelTerrain terrain = new CachedLevelTerrain(level, profile);
         BlockPos spawn = level.getSharedSpawnPos();
         List<FrontierSiteSelector.SelectedSite> selected = new FrontierSiteSelector(profile, workers).selectWithReserve(level.getSeed(),
                 new VisualPoint(spawn.getX(), spawn.getY(), spawn.getZ()), count, reserve, mapRadius,
@@ -62,6 +60,7 @@ public final class FrontierTerrainSurvey {
 
     private static final class CachedLevelTerrain implements FrontierSiteSelector.TerrainAccess {
         private final ServerLevel level;
+        private final RegionPlacementProfile profile;
         private final Map<Long, Integer> oceanFloors = new ConcurrentHashMap<>();
         private final Map<Long, Boolean> submergedColumns = new ConcurrentHashMap<>();
         private final Map<Long, FrontierSiteSelector.BiomeSample> biomes = new ConcurrentHashMap<>();
@@ -73,8 +72,9 @@ public final class FrontierTerrainSurvey {
         private final LongAdder biomeSamples = new LongAdder();
         private final LongAdder discardedSiteCandidates = new LongAdder();
 
-        private CachedLevelTerrain(ServerLevel level) {
+        private CachedLevelTerrain(ServerLevel level, RegionPlacementProfile profile) {
             this.level = level;
+            this.profile = profile;
         }
 
         @Override public TerrainSample exactSample(int x, int z) {
@@ -98,15 +98,18 @@ public final class FrontierTerrainSurvey {
 
         @Override public FrontierSiteSelector.BiomeSample biome(int x, int z) {
             long key = ChunkPos.asLong(x, z);
-            return biomes.computeIfAbsent(key, ignored -> classify(rawBiome(x, z)));
+            return biomes.computeIfAbsent(key, ignored -> FrontierBiomeClassifier.classify(rawBiome(x, z)));
         }
 
         @Override public void recordDiscardedCandidate(TerrainCandidate candidate) {
             discardedSiteCandidates.increment();
             io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod.LOGGER.debug(
-                    "Discarded exact genesis site at {} {}: relief={}, waterSamples={}, cutFillCost={}",
+                    "Discarded exact genesis site at {} {}: relief={}, waterSamples={}, cutFillCost={}, "
+                            + "localGrade={}, roughness={}, depression={}, buildable={}%",
                     candidate.anchor().x(), candidate.anchor().z(), candidate.relief(), candidate.waterSamples(),
-                    candidate.cutFillCost());
+                    candidate.cutFillCost(), candidate.surfaceQuality().maximumLocalGrade(),
+                    candidate.surfaceQuality().maximumRoughness(), candidate.surfaceQuality().depressionDepth(),
+                    candidate.surfaceQuality().buildablePercent());
         }
 
         private MountainMineAnchor resolveMine(SitePlacementRequirement requirement, List<VisualPoint> candidates) {
@@ -124,7 +127,7 @@ public final class FrontierTerrainSurvey {
             int prefilterBudget = Math.min(biomeRanked.size(), requirement.exactValidationBudget()
                     * MINE_RISE_PREFILTER_MULTIPLIER);
             List<RankedMineCandidate> exactRanked = biomeRanked.stream()
-                    .filter(value -> FrontierTerrainSurvey.siteFootprint(
+                    .filter(value -> FrontierTerrainSurvey.coarseDryFootprint(
                             value.point(), requirement.terrain(), this))
                     .limit(prefilterBudget)
                     .map(value -> value.withRise(quickMountainRise(value.point(), requirement.terrain(),
@@ -223,6 +226,7 @@ public final class FrontierTerrainSurvey {
                 siteHeightProbes.increment();
                 return oceanFloor(x, z);
             }, this::exactWater);
+            snapshot.requireSuitable(profile.settlementTerrain());
             return new SettlementLayoutPlanner().plan(source, anchor, climate, freightDirection, candidate, snapshot);
         }
 
@@ -361,7 +365,9 @@ public final class FrontierTerrainSurvey {
                         return new SurfacePadResolution(null, null, "water");
                     }
                 }
-                VisualPoint center = new VisualPoint(candidate.x(), target, candidate.z());
+                // getBaseHeight returns first air. Surface modules and their
+                // exact pads are anchored to the solid block below it.
+                VisualPoint center = new VisualPoint(candidate.x(), target - 1, candidate.z());
                 return new SurfacePadResolution(center, pad.bounds(center, direction), "");
         }
 
@@ -436,26 +442,6 @@ public final class FrontierTerrainSurvey {
                     QuartPos.fromBlock(z), level.getChunkSource().randomState().sampler());
         }
 
-        private static FrontierSiteSelector.BiomeSample classify(Holder<Biome> holder) {
-            ResourceKey<Biome> key = holder.unwrapKey().orElse(null);
-            String path = key == null ? "" : key.location().getPath();
-            boolean water = holder.is(BiomeTags.IS_OCEAN) || holder.is(BiomeTags.IS_RIVER)
-                    || path.contains("swamp");
-            boolean hostileTerrain = path.contains("peak") || path.contains("slope") || path.contains("windswept")
-                    || path.contains("mountain") || path.contains("jagged");
-            boolean suitable = !water && !hostileTerrain;
-            FrontierClimate climate;
-            if (holder.is(BiomeTags.IS_TAIGA) || holder.value().getBaseTemperature() < 0.3F) {
-                climate = FrontierClimate.COLD_TAIGA;
-            } else {
-                climate = path.contains("desert") || path.contains("badlands") || path.contains("savanna")
-                        ? FrontierClimate.DRY_ARID : FrontierClimate.TEMPERATE;
-            }
-            int preference = path.contains("plains") || path.contains("savanna") || path.contains("desert")
-                    || path.contains("badlands") ? 0 : path.contains("forest") || path.contains("taiga") ? 1 : 2;
-            return new FrontierSiteSelector.BiomeSample(climate, suitable, water, preference, hostileTerrain);
-        }
-
         private Statistics statistics() {
             long misses = heightMisses.sum();
             return new Statistics(oceanFloors.size(), heightRequests.sum() - misses, misses,
@@ -464,26 +450,25 @@ public final class FrontierTerrainSurvey {
         }
     }
 
-    static boolean siteFootprint(VisualPoint candidate, SiteTerrainPolicy policy,
-                                 FrontierSiteSelector.TerrainAccess terrain) {
+    /**
+     * Cheap hydrology prefilter only. Biome names are useful for ranking, but
+     * they are not authoritative mountain evidence in a modded world: Tectonic
+     * and Terralith can produce a perfectly usable rock face inside a biome
+     * whose registry path contains no "mountain" token. The bounded exact
+     * mountain-face height profile remains the correctness gate.
+     */
+    static boolean coarseDryFootprint(VisualPoint candidate, SiteTerrainPolicy policy,
+                                      FrontierSiteSelector.TerrainAccess terrain) {
         FrontierSiteSelector.BiomeSample center = terrain.biome(candidate.x(), candidate.z());
         if (policy.requireDryFootprint() && center.water()) return false;
-        boolean mountain = center.mountainEvidence();
         int extent = policy.footprintHalfExtent();
         for (int x = -extent; x <= extent; x += policy.biomeSampleStep()) {
             for (int z = -extent; z <= extent; z += policy.biomeSampleStep()) {
                 FrontierSiteSelector.BiomeSample sample = terrain.biome(candidate.x() + x, candidate.z() + z);
                 if (policy.requireDryFootprint() && sample.water()) return false;
-                mountain |= sample.mountainEvidence();
             }
         }
-        if (mountain) return true;
-        for (int distance : policy.nearbyEvidenceDistances()) for (int direction = 0; direction < 4; direction++) {
-            int dx = direction == 0 ? distance : direction == 2 ? -distance : 0;
-            int dz = direction == 1 ? distance : direction == 3 ? -distance : 0;
-            if (terrain.biome(candidate.x() + dx, candidate.z() + dz).mountainEvidence()) return true;
-        }
-        return false;
+        return true;
     }
 
     static boolean exactDryFootprint(VisualPoint candidate, SiteTerrainPolicy policy,

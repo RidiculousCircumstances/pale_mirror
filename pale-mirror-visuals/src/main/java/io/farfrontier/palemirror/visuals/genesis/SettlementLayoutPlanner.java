@@ -132,7 +132,9 @@ final class SettlementLayoutPlanner {
             if (!pad.accepted()) throw new DryMineSiteUnavailableException("Township building "
                     + placement.spec().id() + " failed exact " + pad.failure() + " validation at "
                     + anchor.x() + "," + anchor.z());
-            VisualPoint origin = new VisualPoint(roughOrigin.x(), pad.targetY(), roughOrigin.z());
+            // Exact terrain probes return first air. Module origins and
+            // foundations use the solid surface immediately below it.
+            VisualPoint origin = new VisualPoint(roughOrigin.x(), pad.targetY() - 1, roughOrigin.z());
             VisualBounds footprint = moduleFootprint(moduleDefinition, origin, rotation);
             String foundationId = "foundation_" + placement.spec().id();
             VisualPoint entrance = entrance(footprint, rotation);
@@ -163,16 +165,21 @@ final class SettlementLayoutPlanner {
         }
         validateNoOverlap(buildings);
         VisualPoint roughGate = local(anchor, 0, 78, 0, freightDirection);
+        // The exported gate point is the first-air block occupied by its arch.
+        // The freight road below it uses the solid surface explicitly.
         VisualPoint gate = withY(roughGate, snapshot.approximateHeight(roughGate.x(), roughGate.z()));
         AuthoredBuildingPlan depot = building(buildings, "receiving_depot");
         List<LinearFeaturePlan> circulation = circulation(archetype, anchor, freightDirection, gate, depot, buildings,
-                transform)
-                .stream().map(value -> followTerrain(value, snapshot)).toList();
+                transform).stream().map(value -> value.id().startsWith("access_")
+                        ? followAccessTerrain(value, snapshot)
+                        : value.id().equals("freight_spine")
+                        ? followFreightTerrain(value, snapshot)
+                        : followTerrain(value, snapshot)).toList();
         requireDryCirculation(circulation, snapshot, anchor);
         List<LinearFeaturePlan> defences = SettlementDefencePlanner.plan(archetype, anchor, freightDirection).stream()
                 .map(value -> followTerrain(value, snapshot)).toList();
         List<AuthoredOpenSpacePlan> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
-                .map(value -> followTerrain(value, snapshot)).toList();
+                .map(value -> resolveOpenSpace(value, snapshot)).toList();
         List<DevelopmentReservation> reservations = reservations(anchor, freightDirection, buildings, openSpaces,
                 transform);
         ManagedAreaPlan managedArea = managedArea(buildings, circulation, defences, openSpaces, reservations);
@@ -263,7 +270,7 @@ final class SettlementLayoutPlanner {
         VisualPoint depotEntrance = publicEntrance(depot);
         VisualPoint depotAccess = below(depotEntrance);
         result.add(new LinearFeaturePlan("freight_spine", LinearFeatureKind.FREIGHT_ROAD,
-                List.of(gate, depotAccess, local(anchor, transform.right(0), transform.inward(28), 0, direction),
+                List.of(below(gate), depotAccess, local(anchor, transform.right(0), transform.inward(28), 0, direction),
                         local(anchor, transform.right(0), transform.inward(-28), 0, direction)), 7, true));
         int cross = transform.inward(archetype == SettlementLayoutArchetype.FREIGHT_CROSSROADS ? 15 : 8);
         result.add(new LinearFeaturePlan("civic_street", LinearFeatureKind.STREET,
@@ -286,19 +293,11 @@ final class SettlementLayoutPlanner {
         result.add(new LinearFeaturePlan("market_square", LinearFeatureKind.PLAZA,
                 List.of(local(anchor, transform.right(5), transform.inward(10), 0, direction),
                         local(anchor, transform.right(13), transform.inward(18), 0, direction)), 9, true));
+        List<LinearFeaturePlan> publicGraph = List.copyOf(result);
         int index = 0;
         for (AuthoredBuildingPlan building : buildings) {
-            VisualPoint access = below(publicEntrance(building));
-            Local coordinates = relative(anchor, access, direction);
-            VisualPoint spine = local(anchor, 0, coordinates.inward(), 0, direction);
-            if (Math.abs(coordinates.inward() - cross) <= 12) {
-                spine = local(anchor, coordinates.right(), cross, 0, direction);
-            }
-            if (access.x() == spine.x() && access.z() == spine.z()) {
-                spine = local(anchor, coordinates.right(), coordinates.inward() - 1, 0, direction);
-            }
-            LinearFeatureKind kind = access.y() == spine.y() ? LinearFeatureKind.FOOTPATH : LinearFeatureKind.STAIRS;
-            result.add(new LinearFeaturePlan("access_" + index++, kind, List.of(access, spine), 3, true));
+            result.add(new LinearFeaturePlan("access_" + index++, LinearFeatureKind.FOOTPATH,
+                    SettlementAccessRouter.route(building, buildings, publicGraph), 3, true));
         }
         if (archetype == SettlementLayoutArchetype.TERRACED_BASIN) {
             result.add(new LinearFeaturePlan("upper_retaining", LinearFeatureKind.RETAINING_WALL,

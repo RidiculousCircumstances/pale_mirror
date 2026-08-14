@@ -49,7 +49,10 @@ class SettlementLayoutPlannerTest {
                                     || feature.kind() == LinearFeatureKind.PALISADE_GATE)
                             .mapToInt(SettlementLayoutPlannerTest::horizontalLength).sum() >= 500,
                     "the authored enclosure must visibly protect the whole occupied district");
-            assertTrue(plan.defences().stream().noneMatch(feature -> feature.nodes().contains(plan.freightGate())));
+            assertTrue(plan.defences().stream()
+                    .filter(feature -> feature.kind() == LinearFeatureKind.PALISADE_GATE)
+                    .anyMatch(feature -> crosses(feature, plan.freightGate())),
+                    "the public freight arch and defensive opening must be one gateway");
             assertEquals(5, plan.expansionPlots().size());
             assertEquals(7, plan.developmentReservations().size());
             assertEquals(7, plan.developmentReservations().stream().map(value -> value.id()).distinct().count());
@@ -104,6 +107,24 @@ class SettlementLayoutPlannerTest {
         assertTrue(SettlementLayoutGeometry.elevationTransition(rising, 2));
     }
 
+    @Test void everyFacadeGetsAGroundedObstacleFreeRouteToThePublicGraph() {
+        var plan = plan(7);
+        for (int index = 0; index < plan.buildings().size(); index++) {
+            var owner = plan.buildings().get(index);
+            String accessId = "access_" + index;
+            var access = plan.circulation().stream().filter(value -> value.id().equals(accessId))
+                    .findFirst().orElseThrow();
+            VisualPoint entrance = SettlementLayoutGeometry.publicEntrance(owner);
+            assertEquals(new VisualPoint(entrance.x(), entrance.y() - 1, entrance.z()),
+                    access.nodes().getFirst(), "access must start on the exact authored threshold");
+            for (VisualPoint point : raster(access)) {
+                plan.buildings().stream().filter(value -> value != owner).forEach(other -> assertFalse(
+                        containsHorizontal(other.modules().getFirst().footprint(), point),
+                        owner.buildingId() + " access crossed " + other.buildingId() + " at " + point));
+            }
+        }
+    }
+
     private static int horizontalLength(io.farfrontier.palemirror.api.LinearFeaturePlan feature) {
         int length = 0;
         for (int index = 1; index < feature.nodes().size(); index++) {
@@ -112,6 +133,39 @@ class SettlementLayoutPlannerTest {
             length += Math.max(Math.abs(second.x() - first.x()), Math.abs(second.z() - first.z()));
         }
         return length;
+    }
+
+    private static boolean crosses(io.farfrontier.palemirror.api.LinearFeaturePlan feature,
+                                   VisualPoint point) {
+        for (int index = 1; index < feature.nodes().size(); index++) {
+            VisualPoint first = feature.nodes().get(index - 1);
+            VisualPoint second = feature.nodes().get(index);
+            if (point.x() >= Math.min(first.x(), second.x()) && point.x() <= Math.max(first.x(), second.x())
+                    && point.z() >= Math.min(first.z(), second.z())
+                    && point.z() <= Math.max(first.z(), second.z())) return true;
+        }
+        return false;
+    }
+
+    private static java.util.List<VisualPoint> raster(
+            io.farfrontier.palemirror.api.LinearFeaturePlan feature) {
+        java.util.List<VisualPoint> result = new java.util.ArrayList<>();
+        for (int segment = 1; segment < feature.nodes().size(); segment++) {
+            VisualPoint from = feature.nodes().get(segment - 1);
+            VisualPoint to = feature.nodes().get(segment);
+            int steps = Math.max(1, Math.max(Math.abs(to.x() - from.x()), Math.abs(to.z() - from.z())));
+            for (int step = segment == 1 ? 0 : 1; step <= steps; step++) result.add(new VisualPoint(
+                    from.x() + (to.x() - from.x()) * step / steps,
+                    from.y() + (to.y() - from.y()) * step / steps,
+                    from.z() + (to.z() - from.z()) * step / steps));
+        }
+        return result;
+    }
+
+    private static boolean containsHorizontal(io.farfrontier.palemirror.api.VisualBounds bounds,
+                                              VisualPoint point) {
+        return point.x() >= bounds.min().x() && point.x() <= bounds.max().x()
+                && point.z() >= bounds.min().z() && point.z() <= bounds.max().z();
     }
 
     @Test void twentyAddressesRetainStableIndependentModuleIdentity() {

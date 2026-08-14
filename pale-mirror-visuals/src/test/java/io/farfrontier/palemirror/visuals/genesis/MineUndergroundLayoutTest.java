@@ -32,9 +32,13 @@ class MineUndergroundLayoutTest {
 
         assertEquals(mine.foundations().size(), routes.size());
         for (var route : routes) {
+            var ownerModules = mine.surfaceBuildings().stream().flatMap(value -> value.modules().stream())
+                    .filter(value -> value.foundationId().equals(route.foundationId())).toList();
             for (VisualPoint point : route.points()) {
-                assertTrue(mine.foundations().stream().noneMatch(value -> contains(value.footprint(), point)),
-                        route.foundationId() + " entered a building at " + point);
+                assertTrue(mine.surfaceBuildings().stream().flatMap(value -> value.modules().stream())
+                                .filter(value -> !ownerModules.contains(value))
+                                .noneMatch(value -> contains(value.footprint(), point)),
+                        route.foundationId() + " entered another building at " + point);
             }
             for (int index = 1; index < route.points().size(); index++) {
                 VisualPoint previous = route.points().get(index - 1);
@@ -43,9 +47,9 @@ class MineUndergroundLayoutTest {
                 assertTrue(Math.abs(previous.y() - current.y()) <= 1,
                         route.foundationId() + " emitted an unwalkable road step");
             }
-            var foundation = mine.foundations().stream()
-                    .filter(value -> value.id().equals(route.foundationId())).findFirst().orElseThrow();
-            assertEquals(1, horizontalDistance(foundation.footprint(), route.points().getLast()));
+            assertTrue(ownerModules.isEmpty() || ownerModules.stream().anyMatch(value ->
+                            horizontalDistance(value.footprint(), route.points().getLast()) == 1),
+                    route.foundationId() + " did not terminate at its authored facade");
         }
     }
 

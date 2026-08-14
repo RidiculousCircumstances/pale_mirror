@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.visuals.genesis;
 
 import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
+import io.farfrontier.palemirror.api.VisualPortKind;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
 import java.util.ArrayDeque;
@@ -54,7 +55,10 @@ final class MineAccessGenesisCompiler {
     }
 
     static List<AccessRoute> routes(AuthoredMineSitePlan mine) {
-        List<MineFoundationPlan> foundations = mine.foundations();
+        java.util.Set<String> activeIds = MineSurfaceLayout.materializedFoundationIds(mine);
+        List<MineFoundationPlan> foundations = mine.foundations().stream()
+                .filter(value -> activeIds.contains(value.id())).toList();
+        if (foundations.isEmpty()) throw new IllegalStateException("MineSite has no active surface foundations");
         int hubY = foundations.stream().mapToInt(MineFoundationPlan::targetY).sorted()
                 .skip(foundations.size() / 2).findFirst().orElseThrow();
         VisualPoint desiredHub = MineSurfaceLayout.local(
@@ -65,9 +69,10 @@ final class MineAccessGenesisCompiler {
         SearchTree tree = search(hub, blocked, search);
         List<AccessRoute> result = new ArrayList<>();
         for (MineFoundationPlan foundation : foundations) {
-            Approach approach = approaches(foundation).stream()
+            Approach approach = approaches(mine, foundation).stream()
                     .filter(value -> tree.distance().containsKey(value.outer()))
-                    .min(Comparator.comparingInt(value -> tree.distance().get(value.outer())))
+                    .min(Comparator.comparingInt((Approach value) -> value.preferred() ? 0 : 1)
+                            .thenComparingInt(value -> tree.distance().get(value.outer())))
                     .orElseThrow(() -> new IllegalStateException(
                             "MineSite access could not reach " + foundation.id()));
             List<Cell> horizontal = tree.path(approach.outer());
@@ -82,7 +87,8 @@ final class MineAccessGenesisCompiler {
                 int y = hubY + (foundation.targetY() - hubY) * index / segments;
                 graded.add(new VisualPoint(cell.x(), y, cell.z()));
             }
-            result.add(new AccessRoute(foundation.id(), List.copyOf(graded)));
+            result.add(new AccessRoute(foundation.id(), List.copyOf(graded),
+                    approach.stepX(), approach.stepZ()));
         }
         return List.copyOf(result);
     }
@@ -127,15 +133,50 @@ final class MineAccessGenesisCompiler {
         return result;
     }
 
-    private static List<Approach> approaches(MineFoundationPlan foundation) {
+    private static List<Approach> approaches(AuthoredMineSitePlan mine, MineFoundationPlan foundation) {
         VisualBounds bounds = foundation.footprint();
         int centerX = (bounds.min().x() + bounds.max().x()) / 2;
         int centerZ = (bounds.min().z() + bounds.max().z()) / 2;
-        return List.of(
-                new Approach(new Cell(bounds.min().x() - ACCESS_CLEARANCE, centerZ), 1, 0),
-                new Approach(new Cell(bounds.max().x() + ACCESS_CLEARANCE, centerZ), -1, 0),
-                new Approach(new Cell(centerX, bounds.min().z() - ACCESS_CLEARANCE), 0, 1),
-                new Approach(new Cell(centerX, bounds.max().z() + ACCESS_CLEARANCE), 0, -1));
+        List<Approach> result = new ArrayList<>();
+        mine.surfaceBuildings().stream().flatMap(value -> value.modules().stream())
+                .filter(value -> value.foundationId().equals(foundation.id()))
+                .flatMap(value -> value.ports().stream())
+                .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
+                .findFirst().ifPresent(port -> {
+                    int outwardX = directionX(port.outwardQuarterTurns());
+                    int outwardZ = directionZ(port.outwardQuarterTurns());
+                    result.add(new Approach(new Cell(
+                            port.position().x() + outwardX * ACCESS_CLEARANCE,
+                            port.position().z() + outwardZ * ACCESS_CLEARANCE),
+                            -outwardX, -outwardZ, true));
+                });
+        addDistinct(result, new Approach(new Cell(bounds.min().x() - ACCESS_CLEARANCE, centerZ), 1, 0, false));
+        addDistinct(result, new Approach(new Cell(bounds.max().x() + ACCESS_CLEARANCE, centerZ), -1, 0, false));
+        addDistinct(result, new Approach(new Cell(centerX, bounds.min().z() - ACCESS_CLEARANCE), 0, 1, false));
+        addDistinct(result, new Approach(new Cell(centerX, bounds.max().z() + ACCESS_CLEARANCE), 0, -1, false));
+        return List.copyOf(result);
+    }
+
+    private static void addDistinct(List<Approach> approaches, Approach candidate) {
+        if (approaches.stream().noneMatch(value -> value.outer().equals(candidate.outer()))) {
+            approaches.add(candidate);
+        }
+    }
+
+    private static int directionX(int quarterTurns) {
+        return switch (Math.floorMod(quarterTurns, 4)) {
+            case 0 -> 1;
+            case 2 -> -1;
+            default -> 0;
+        };
+    }
+
+    private static int directionZ(int quarterTurns) {
+        return switch (Math.floorMod(quarterTurns, 4)) {
+            case 1 -> 1;
+            case 3 -> -1;
+            default -> 0;
+        };
     }
 
     private static Set<Cell> blocked(List<MineFoundationPlan> foundations, int expansion) {
@@ -181,8 +222,8 @@ final class MineAccessGenesisCompiler {
         return new SearchTree(start, previous, distance);
     }
 
-    record AccessRoute(String foundationId, List<VisualPoint> points) { }
-    private record Approach(Cell outer, int stepX, int stepZ) { }
+    record AccessRoute(String foundationId, List<VisualPoint> points, int entryStepX, int entryStepZ) { }
+    private record Approach(Cell outer, int stepX, int stepZ, boolean preferred) { }
     private record Cell(int x, int z) { }
 
     private record SearchTree(Cell start, Map<Cell, Cell> previous, Map<Cell, Integer> distance) {

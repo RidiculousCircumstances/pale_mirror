@@ -15,6 +15,7 @@ final class MineSurfaceGenesisCompiler {
                         java.util.Set<Long> access, Sink sink) {
         headframe(mine, palette, sink);
         loadingApron(mine, palette, sink);
+        if (mine.role() == io.farfrontier.palemirror.api.AuthoredMineRole.ALTERNATE) return;
         safetyFurniture(mine, palette, access, sink);
         industrialThreshold(mine, palette, access, sink);
         spoilHeaps(mine, access, sink);
@@ -23,11 +24,11 @@ final class MineSurfaceGenesisCompiler {
     private static void headframe(AuthoredMineSitePlan mine, FrontierPalette palette, Sink sink) {
         // Open timber headframe embedded into the mountain portal. The
         // winding/support house remains a separate building on the outer pad.
-        for (int side : new int[]{-3, 3}) for (int up = 1; up <= 8; up++) {
+        for (int side : new int[]{-3, 3}) for (int up = 0; up <= 8; up++) {
             sink.put(local(mine.portal(), side, 0, up, mine.inwardQuarterTurns()),
                     palette.log());
         }
-        for (int side : new int[]{-4, 4}) for (int inward : new int[]{-1, 1}) for (int up = 1; up <= 4; up++) {
+        for (int side : new int[]{-4, 4}) for (int inward : new int[]{-1, 1}) for (int up = 0; up <= 4; up++) {
             if (up <= 2 || inward == 1) sink.put(local(mine.portal(), side, inward, up,
                     mine.inwardQuarterTurns()), palette.foundation());
         }

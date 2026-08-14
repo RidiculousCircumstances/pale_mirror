@@ -31,11 +31,11 @@ public final class VisualAuditPlanner {
     private static void settlement(AuthoredRegionSeed region, List<VisualAuditView> result) {
         VisualBounds bounds = region.settlementSite().bounds();
         VisualPoint center = center(bounds);
-        int radius = Math.max(90, Math.max(bounds.max().x() - bounds.min().x(),
-                bounds.max().z() - bounds.min().z()) / 2 + 18);
-        int diagonalY = bounds.max().y() + 54;
+        int radius = Math.min(72, Math.max(52, Math.max(bounds.max().x() - bounds.min().x(),
+                bounds.max().z() - bounds.min().z()) / 3));
+        int diagonalY = bounds.max().y() + 42;
         add(result, region, "settlement/aerial_top", "settlement", region.planId(),
-                new VisualPoint(center.x(), bounds.max().y() + 140, center.z()), center);
+                new VisualPoint(center.x() + 2, bounds.max().y() + 72, center.z() + 2), center);
         add(result, region, "settlement/aerial_south_east", "settlement", region.planId(),
                 new VisualPoint(center.x() + radius, diagonalY, center.z() + radius), center);
         add(result, region, "settlement/aerial_south_west", "settlement", region.planId(),
@@ -48,9 +48,10 @@ public final class VisualAuditPlanner {
         VisualPoint gate = region.freightGate();
         VisualPoint depot = region.receivingDepot();
         add(result, region, "settlement/freight_gate", "settlement", region.planId(),
-                away(gate, depot, 12), raised(depot, 3));
-        add(result, region, "settlement/receiving_depot", "settlement", region.planId(),
-                away(depot, gate, 11), raised(depot, 3));
+                raised(away(gate, depot, 12), 3), raised(gate, 3));
+        region.settlementSite().buildings().stream()
+                .filter(value -> value.buildingId().equals("receiving_depot")).findFirst()
+                .ifPresent(building -> buildingView(region, "settlement/receiving_depot", building, result));
         openSpace(region, OpenSpaceKind.CIVIC_GREEN, "settlement/civic_green", result);
         openSpace(region, OpenSpaceKind.MARKET_SQUARE, "settlement/market_square", result);
         openSpace(region, OpenSpaceKind.INDUSTRIAL_YARD, "settlement/industrial_yard", result);
@@ -62,7 +63,7 @@ public final class VisualAuditPlanner {
                 .ifPresent(segment -> {
                     VisualPoint wall = midpoint(segment.from(), segment.to());
                     add(result, region, "settlement/perimeter", "settlement", region.planId(),
-                            toward(wall, center, 9), raised(wall, 2));
+                            raised(away(wall, center, 10), 5), raised(wall, 3));
                 });
     }
 
@@ -71,9 +72,7 @@ public final class VisualAuditPlanner {
         region.settlementSite().openSpaces().stream().filter(value -> value.kind() == kind).findFirst()
                 .ifPresent(space -> {
                     VisualPoint focus = center(space.bounds());
-                    VisualPoint camera = new VisualPoint(focus.x() + Math.min(10,
-                            Math.max(6, (space.bounds().max().x() - space.bounds().min().x()) / 2)),
-                            focus.y(), focus.z());
+                    VisualPoint camera = openSpaceCamera(region, space.bounds());
                     add(result, region, id, "settlement", region.planId(), camera, raised(focus, 2));
                 });
     }
@@ -86,7 +85,7 @@ public final class VisualAuditPlanner {
                         .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE).findFirst())
                 .ifPresent(port -> {
                     VisualPoint entrance = port.position();
-                    VisualPoint camera = local(entrance, 0, -9, 0, port.outwardQuarterTurns());
+                    VisualPoint camera = local(entrance, 0, 12, 3, port.outwardQuarterTurns());
                     add(result, region, id, "settlement", region.planId(), camera, raised(entrance, 3));
                 });
     }
@@ -97,16 +96,19 @@ public final class VisualAuditPlanner {
         add(result, region, prefix + "/aerial", "mine", mine.siteId(),
                 new VisualPoint(center.x(), mine.bounds().max().y() + 78, center.z()), center);
         add(result, region, prefix + "/arrival", "mine", mine.siteId(),
-                local(mine.loadingEndpoint(), 0, -12, 2, mine.inwardQuarterTurns()),
-                raised(mine.loadingEndpoint(), 3));
+                local(mine.loadingEndpoint(), 0, -18, 5, mine.inwardQuarterTurns()),
+                raised(mine.loadingEndpoint(), 4));
         add(result, region, prefix + "/portal", "mine", mine.siteId(),
-                local(mine.portal(), 0, -11, 1, mine.inwardQuarterTurns()), raised(mine.portal(), 3));
+                local(mine.portal(), 0, -24, 5, mine.inwardQuarterTurns()), raised(mine.portal(), 4));
         mine.surfaceBuildings().stream().filter(value -> value.category() == SettlementBuildingCategory.INDUSTRY)
                 .findFirst().or(() -> mine.surfaceBuildings().stream().findFirst()).ifPresent(building ->
                         buildingView(region, mine, prefix + "/industrial_campus", building, result));
         VisualPoint controller = mine.controllerAnchor();
         add(result, region, prefix + "/controller_chamber", "mine", mine.siteId(),
-                local(controller, 0, -7, 0, mine.inwardQuarterTurns()), raised(controller, 1));
+                // Module origins sit one block below their walkable floor. Keeping
+                // spectator feet at origin Y puts the audit camera inside stone and
+                // produces a misleading x-ray frame instead of the chamber.
+                local(controller, 0, -7, 2, mine.inwardQuarterTurns()), raised(controller, 3));
     }
 
     private static void buildingView(AuthoredRegionSeed region, AuthoredMineSitePlan mine, String id,
@@ -115,21 +117,60 @@ public final class VisualAuditPlanner {
                 .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE).findFirst().orElse(null);
         if (port == null) return;
         add(result, region, id, "mine", mine.siteId(),
-                local(port.position(), 0, -10, 0, port.outwardQuarterTurns()), raised(port.position(), 3));
+                local(port.position(), 0, 12, 3, port.outwardQuarterTurns()), raised(port.position(), 3));
+    }
+
+    private static void buildingView(AuthoredRegionSeed region, String id, AuthoredBuildingPlan building,
+                                     List<VisualAuditView> result) {
+        var port = building.modules().stream().flatMap(module -> module.ports().stream())
+                .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE
+                        || value.kind() == VisualPortKind.FREIGHT)
+                .findFirst().orElse(null);
+        if (port == null) return;
+        add(result, region, id, "settlement", region.planId(),
+                local(port.position(), 0, 12, 3, port.outwardQuarterTurns()), raised(port.position(), 3));
     }
 
     private static void railway(AuthoredRegionSeed region, List<VisualAuditView> result) {
         List<VisualPoint> nodes = region.baselineRailNodes();
         int middle = nodes.size() / 2;
-        routeView(region, result, "railway/departure", nodes.getFirst(), nodes.get(Math.min(4, nodes.size() - 1)));
-        routeView(region, result, "railway/corridor", nodes.get(middle), nodes.get(Math.min(middle + 3, nodes.size() - 1)));
-        routeView(region, result, "railway/arrival", nodes.getLast(), nodes.get(Math.max(0, nodes.size() - 5)));
+        int sightline = Math.min(12, nodes.size() - 1);
+        routeView(region, result, "railway/departure", nodes.getFirst(), nodes.get(sightline));
+        routeView(region, result, "railway/corridor", nodes.get(middle),
+                nodes.get(Math.min(middle + sightline, nodes.size() - 1)));
+        routeView(region, result, "railway/arrival", nodes.getLast(),
+                nodes.get(Math.max(0, nodes.size() - 1 - sightline)));
     }
 
     private static void routeView(AuthoredRegionSeed region, List<VisualAuditView> result, String id,
                                   VisualPoint position, VisualPoint focus) {
+        int dx = Integer.signum(focus.x() - position.x());
+        int dz = Integer.signum(focus.z() - position.z());
+        int sideX = dz == 0 ? 0 : -dz;
+        int sideZ = dx == 0 ? 0 : dx;
+        if (sideX == 0 && sideZ == 0) sideX = 1;
+        VisualPoint camera = new VisualPoint(position.x() + sideX * 9,
+                position.y() + 5, position.z() + sideZ * 9);
         add(result, region, id, "railway", region.planId() + ":baseline_railway",
-                raised(position, 3), raised(focus, 1));
+                camera, raised(focus, 2));
+    }
+
+    private static VisualPoint openSpaceCamera(AuthoredRegionSeed region, VisualBounds bounds) {
+        VisualPoint focus = center(bounds);
+        int y = bounds.max().y() + 4;
+        List<VisualPoint> candidates = List.of(
+                new VisualPoint(bounds.max().x() + 10, y, focus.z()),
+                new VisualPoint(bounds.min().x() - 10, y, focus.z()),
+                new VisualPoint(focus.x(), y, bounds.max().z() + 10),
+                new VisualPoint(focus.x(), y, bounds.min().z() - 10));
+        return candidates.stream().filter(candidate -> region.settlementSite().buildings().stream()
+                        .noneMatch(building -> containsHorizontal(building.parcel(), candidate)))
+                .findFirst().orElse(candidates.getFirst());
+    }
+
+    private static boolean containsHorizontal(VisualBounds bounds, VisualPoint point) {
+        return point.x() >= bounds.min().x() && point.x() <= bounds.max().x()
+                && point.z() >= bounds.min().z() && point.z() <= bounds.max().z();
     }
 
     private static void add(List<VisualAuditView> target, AuthoredRegionSeed region, String id,

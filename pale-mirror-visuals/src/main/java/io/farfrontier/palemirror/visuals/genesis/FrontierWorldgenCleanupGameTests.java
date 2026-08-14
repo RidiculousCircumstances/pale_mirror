@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.visuals.genesis;
 
+import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -7,6 +8,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.state.properties.RailShape;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -27,6 +29,8 @@ public final class FrontierWorldgenCleanupGameTests {
         helper.getLevel().setBlock(surface.above(13), Blocks.STONE.defaultBlockState(), 2);
         helper.getLevel().setBlock(surface.above(90), Blocks.SPRUCE_LEAVES.defaultBlockState(), 2);
         helper.getLevel().setBlock(surface.above(91), Blocks.BEE_NEST.defaultBlockState(), 2);
+        helper.getLevel().setBlock(surface.above(92), Blocks.MUSHROOM_STEM.defaultBlockState(), 2);
+        helper.getLevel().setBlock(surface.above(93), Blocks.RED_MUSHROOM_BLOCK.defaultBlockState(), 2);
 
         FrontierWorldgenFeature.clearNaturalVegetation(helper.getLevel(),
                 new CompiledChunkSlice.VegetationColumn(surface.getX(), surface.getZ(), surface.getY()));
@@ -40,6 +44,8 @@ public final class FrontierWorldgenCleanupGameTests {
         helper.assertBlockPresent(Blocks.STONE, new BlockPos(2, 15, 2));
         helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 92, 2));
         helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 93, 2));
+        helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 94, 2));
+        helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 95, 2));
         helper.succeed();
     }
 
@@ -85,7 +91,7 @@ public final class FrontierWorldgenCleanupGameTests {
         }
         var column = new CompiledChunkSlice.RailColumn(rail,
                 Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, RailShape.NORTH_SOUTH),
-                Blocks.GRAVEL.defaultBlockState());
+                Blocks.GRAVEL.defaultBlockState(), true);
         FrontierWorldgenFeature.placeRailColumn(helper.getLevel(), column, rail.getY() - 2, rail.getY() - 6);
 
         BlockPos shallowRail = helper.absolutePos(new BlockPos(8, 6, 4));
@@ -95,7 +101,7 @@ public final class FrontierWorldgenCleanupGameTests {
         }
         var shallowColumn = new CompiledChunkSlice.RailColumn(shallowRail,
                 Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, RailShape.NORTH_SOUTH),
-                Blocks.GRAVEL.defaultBlockState());
+                Blocks.GRAVEL.defaultBlockState(), true);
         FrontierWorldgenFeature.placeRailColumn(helper.getLevel(), shallowColumn,
                 shallowRail.getY() - 2, shallowRail.getY() - 3);
 
@@ -119,7 +125,7 @@ public final class FrontierWorldgenCleanupGameTests {
         var column = new CompiledChunkSlice.RailColumn(rail,
                 Blocks.POWERED_RAIL.defaultBlockState().setValue(
                         net.minecraft.world.level.block.PoweredRailBlock.SHAPE, RailShape.NORTH_SOUTH),
-                Blocks.REDSTONE_BLOCK.defaultBlockState());
+                Blocks.REDSTONE_BLOCK.defaultBlockState(), true);
         var slice = new CompiledChunkSlice(new net.minecraft.world.level.ChunkPos(rail).toLong(),
                 "late-rail-regression", java.util.List.of(), java.util.List.of(), java.util.List.of(),
                 java.util.List.of(column), java.util.Map.of(rail, Blocks.BRICKS.defaultBlockState()));
@@ -131,6 +137,108 @@ public final class FrontierWorldgenCleanupGameTests {
                 "late module decoration must not replace the immutable railway graph");
         helper.assertValueEqual(helper.getLevel().getBlockState(rail.below()).getBlock(), Blocks.REDSTONE_BLOCK,
                 "powered rail must retain a stable powered support after finalization");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 120)
+    public static void alternateMineLeavesFutureIndustrialPadsNatural(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(8_741L, 0,
+                new VisualPoint(4_000, 72, -4_000), FrontierClimate.TEMPERATE);
+        var alternate = seed.alternateMineSite();
+        var future = alternate.foundations().stream().filter(value -> value.id().equals("power"))
+                .findFirst().orElseThrow();
+        int x = (future.footprint().min().x() + future.footprint().max().x()) / 2;
+        int z = (future.footprint().min().z() + future.footprint().max().z()) / 2;
+        var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
+        var slice = catalog.chunk(net.minecraft.world.level.ChunkPos.asLong(x >> 4, z >> 4));
+
+        helper.assertTrue(slice == null || slice.terrain().stream()
+                        .noneMatch(value -> value.x() == x && value.z() == z),
+                "an unbuilt Red Valley power project must not pre-grade a floating industrial pad");
+        helper.assertTrue(slice == null || slice.blocks().entrySet().stream()
+                        .filter(value -> Math.abs(value.getKey().getX() - x) <= 2
+                                && Math.abs(value.getKey().getZ() - z) <= 2)
+                        .noneMatch(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                                .getKey(value.getValue().getBlock()).getNamespace().equals("create")),
+                "an unbuilt Red Valley power project must not materialize Create machinery");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void railwayPierCadenceDependsOnRouteProgressNotWorldCoordinates(GameTestHelper helper) {
+        java.util.List<VisualPoint> path = java.util.stream.IntStream.range(0, 9)
+                .mapToObj(index -> new VisualPoint(101 + index, 70, 202 - index)).toList();
+        java.util.List<Boolean> piers = new java.util.ArrayList<>();
+        FrontierRailGenesisCompiler.compile(path, new FrontierRailGenesisCompiler.Sink() {
+            @Override public void rail(BlockPos rail, net.minecraft.world.level.block.state.BlockState state,
+                                       net.minecraft.world.level.block.state.BlockState support,
+                                       boolean supportPier) {
+                piers.add(supportPier);
+            }
+            @Override public void block(BlockPos position,
+                                        net.minecraft.world.level.block.state.BlockState state) { }
+        });
+
+        helper.assertValueEqual(piers, java.util.List.of(true, false, false, false, true,
+                        false, false, false, true),
+                "rail supports must follow deterministic four-block route cadence");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 120)
+    public static void railwayCompilationOwnsAContinuousVegetationSafetyEnvelope(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(61_337L, 0,
+                new VisualPoint(8_000, 72, -4_000), FrontierClimate.TEMPERATE);
+        var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
+        VisualPoint rail = seed.baselineRailNodes().get(seed.baselineRailNodes().size() / 2);
+        for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
+            if (dx * dx + dz * dz > 10) continue;
+            int x = rail.x() + dx;
+            int z = rail.z() + dz;
+            var slice = catalog.chunk(net.minecraft.world.level.ChunkPos.asLong(x >> 4, z >> 4));
+            helper.assertTrue(slice != null && slice.vegetation().stream()
+                            .anyMatch(value -> value.x() == x && value.z() == z),
+                    "rail vegetation envelope has a hole at " + x + "," + z);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 120)
+    public static void curatedMineModulesSealRoofsAndUseFullStructuralPosts(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(91_003L, 0,
+                new VisualPoint(8_000, 76, 8_000), FrontierClimate.TEMPERATE);
+        var blocks = new java.util.LinkedHashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
+        seed.primaryMineSite().surfaceBuildings().stream().flatMap(value -> value.modules().stream())
+                .map(AuthoredModuleCompiler::compile).flatMap(value -> value.blocks().stream())
+                .forEach(value -> blocks.put(new BlockPos(value.position().x(), value.position().y(),
+                        value.position().z()), value.state()));
+        blocks.forEach((position, state) -> {
+            if (state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                    && state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                    == SlabType.BOTTOM) {
+                for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+                    var upperNeighbour = blocks.get(position.above().relative(direction));
+                    helper.assertTrue(upperNeighbour == null || !upperNeighbour.hasProperty(
+                                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE),
+                            "stepped mine roof retained a half-block daylight seam at " + position);
+                }
+            }
+            if (state.is(net.minecraft.tags.BlockTags.LOGS)) {
+                var below = blocks.get(position.below());
+                helper.assertTrue(below == null
+                                || !(below.getBlock() instanceof net.minecraft.world.level.block.FenceBlock),
+                        "full mine roof post is balanced on a fence at " + position);
+            }
+            if (state.is(Blocks.CHAIN)
+                    || state.getBlock() instanceof net.minecraft.world.level.block.LanternBlock) {
+                var support = blocks.get(position.above());
+                helper.assertTrue(support == null || !support.hasProperty(
+                                net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                                || support.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                                != SlabType.TOP,
+                        "hanging mine fixture is attached to the air half of a top slab at " + position);
+            }
+        });
         helper.succeed();
     }
 }

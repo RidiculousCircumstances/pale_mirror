@@ -45,6 +45,11 @@ final class SettlementTerrainSnapshot {
                 .map(Map.Entry::getValue).orElse(anchor.y());
     }
 
+    /** Minecraft base height is first air; authored paving owns the solid block below it. */
+    int surfaceHeight(int x, int z) {
+        return approximateHeight(x, z) - 1;
+    }
+
     PadResolution resolvePad(VisualBounds horizontal) {
         PadKey key = new PadKey(horizontal.min().x(), horizontal.max().x(),
                 horizontal.min().z(), horizontal.max().z());
@@ -94,6 +99,35 @@ final class SettlementTerrainSnapshot {
 
     boolean waterAt(int x, int z) {
         return exactWaterAt(x, z);
+    }
+
+    int exactSurfaceHeight(int x, int z) {
+        return exactHeightAt(x, z) - 1;
+    }
+
+    /**
+     * Authoritative full-masterplan check. The earlier selector uses a bounded
+     * 24-block grid for ranking; this denser immutable snapshot prevents a
+     * narrow canyon or broken shelf between those samples from reaching the
+     * layout grammar.
+     */
+    TerrainCandidate requireSuitable(SettlementTerrainPolicy policy) {
+        List<TerrainSample> samples = coarseHeights.entrySet().stream()
+                .map(entry -> new TerrainSample((int) (entry.getKey() >> 32), (int) (long) entry.getKey(),
+                        entry.getValue(), false))
+                .toList();
+        TerrainCandidate candidate = TerrainCandidate.evaluate(anchor.x(), anchor.z(), samples,
+                policy.surfaceSuitability().buildableHeightTolerance());
+        if (!policy.acceptable(candidate)) {
+            LandscapeSurfaceQuality quality = candidate.surfaceQuality();
+            throw new DryMineSiteUnavailableException("Township surface rejected at "
+                    + anchor.x() + "," + anchor.z() + ": relief=" + candidate.relief()
+                    + ", localGrade=" + quality.maximumLocalGrade()
+                    + ", roughness=" + quality.maximumRoughness()
+                    + ", depression=" + quality.depressionDepth()
+                    + ", buildable=" + quality.buildablePercent() + "%");
+        }
+        return candidate;
     }
 
     private int exactHeightAt(int x, int z) {

@@ -6,6 +6,7 @@ server=127.0.0.1:25565
 username=pmaudit
 settlement_id=
 anchor=
+first_authored=false
 output_root="$repo_dir/build/visual-audits"
 frame_wait=10
 width=1920
@@ -20,10 +21,12 @@ usage() {
 Usage:
   scripts/capture-settlement-visuals.sh --settlement-id NAMESPACE:ID [options]
   scripts/capture-settlement-visuals.sh --anchor X,Y,Z [options]
+  scripts/capture-settlement-visuals.sh --first-authored [options]
 
 Options:
   --server HOST:PORT       Multiplayer server (default 127.0.0.1:25565)
   --username NAME          Dedicated permission-level-4 audit player (default pmaudit)
+  --first-authored         Resolve the first authored settlement from the live server
   --output DIRECTORY       Output root (default build/visual-audits)
   --frame-wait SECONDS     Chunk/render settling time per view (default 10)
   --size WIDTHxHEIGHT      Capture size (default 1920x1080)
@@ -42,6 +45,7 @@ while (($#)); do
   case "$1" in
     --settlement-id) settlement_id=${2:?missing settlement id}; shift 2 ;;
     --anchor) anchor=${2:?missing anchor}; shift 2 ;;
+    --first-authored) first_authored=true; shift ;;
     --server) server=${2:?missing server}; shift 2 ;;
     --username) username=${2:?missing username}; shift 2 ;;
     --output) output_root=${2:?missing output directory}; shift 2 ;;
@@ -58,8 +62,12 @@ while (($#)); do
   esac
 done
 
-if [[ -n "$settlement_id" && -n "$anchor" ]] || [[ -z "$settlement_id" && -z "$anchor" ]]; then
-  printf 'Specify exactly one of --settlement-id or --anchor.\n' >&2
+mode_count=0
+[[ -n "$settlement_id" ]] && mode_count=$((mode_count + 1))
+[[ -n "$anchor" ]] && mode_count=$((mode_count + 1))
+"$first_authored" && mode_count=$((mode_count + 1))
+if [[ "$mode_count" -ne 1 ]]; then
+  printf 'Specify exactly one of --settlement-id, --anchor or --first-authored.\n' >&2
   exit 2
 fi
 [[ "$username" =~ ^[A-Za-z0-9_]{1,16}$ ]] || { printf 'Invalid Minecraft username: %s\n' "$username" >&2; exit 2; }
@@ -93,6 +101,7 @@ game_dir="$repo_dir/pale-mirror-neoforge/build/runs/railway-client"
   exit 2
 }
 [[ -f "$game_dir/options.txt" ]] || touch "$game_dir/options.txt"
+mkdir -p "$game_dir/logs" "$game_dir/screenshots"
 upsert_option() {
   local key=$1 value=$2 file="$game_dir/options.txt"
   if rg -q "^${key}:" "$file"; then sed -i "s/^${key}:.*/${key}:${value}/" "$file"
@@ -102,7 +111,7 @@ upsert_option() {
 upsert_option onboardAccessibility false
 upsert_option tutorialStep none
 
-safe_target=${settlement_id:-$anchor}
+safe_target=${settlement_id:-${anchor:-first-authored}}
 safe_target=${safe_target//[^A-Za-z0-9_.-]/_}
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 output_dir="$output_root/${stamp}-${safe_target}"
@@ -211,6 +220,24 @@ query_command() {
   return 1
 }
 
+if "$first_authored"; then
+  before_settlements=$(wc -l <"$client_log")
+  send_command 'pale_mirror debug settlements list'
+  settlement_id=
+  for _ in $(seq 1 20); do
+    settlement_id=$(tail -n "+$((before_settlements + 1))" "$client_log" \
+      | rg -o 'pale_mirror:iron_frontier_[a-f0-9]+_place' | head -1 || true)
+    [[ -n "$settlement_id" ]] && break
+    sleep 1
+  done
+  [[ -n "$settlement_id" ]] || {
+    printf 'PM returned no authored settlement from the live server.\n' >&2
+    cp "$client_log" "$output_dir/client-latest.log"
+    exit 1
+  }
+  printf 'Resolved first authored settlement: %s\n' "$settlement_id"
+fi
+
 original_time_line=$(query_command 'time query daytime' 'The time is [0-9]+' || true)
 original_time=$(sed -E 's/.*The time is ([0-9]+).*/\1/' <<<"$original_time_line")
 original_position_line=$(query_command 'data get entity @s Pos' 'following entity data: \[' || true)
@@ -244,7 +271,7 @@ if [[ -n "$settlement_id" ]]; then
   teleported=false
   for _ in $(seq 1 180); do
     if rg -Fq "Teleported to $settlement_id " "$client_log"; then teleported=true; break; fi
-    if rg -q 'Unknown observed settlement|Unknown physical settlement|requires an in-game operator' "$client_log"; then break; fi
+    if rg -q 'Unknown observed or authored settlement|Unknown observed settlement|Unknown physical settlement|requires an in-game operator' "$client_log"; then break; fi
     kill -0 "$client_pid" 2>/dev/null || break
     sleep 1
   done
@@ -331,20 +358,13 @@ if [[ -n "$settlement_id" ]]; then
     [[ -z "$only_prefix" || "$view_id" == "$only_prefix"* ]] || continue
     name=${view_id//\//__}
     printf 'Capturing %-28s at %s,%s,%s...\n' "$view_id" "$x" "$y" "$z"
-    before_tp=$(wc -l <"$client_log")
-    send_command "pale_mirror debug visual-audit tp $settlement_id $view_id"
-    teleported=false
-    for _ in $(seq 1 180); do
-      if tail -n "+$((before_tp + 1))" "$client_log" \
-          | rg -Fq "Teleported to pale_mirror:visual_audit/$view_id "; then
-        teleported=true
-        break
-      fi
-      if tail -n "+$((before_tp + 1))" "$client_log" | rg -q 'Unknown visual-audit view|timed out'; then break; fi
-      kill -0 "$client_pid" 2>/dev/null || break
-      sleep 1
-    done
-    "$teleported" || { printf 'Could not prepare semantic view %s.\n' "$view_id" >&2; exit 1; }
+    # The list response is the canonical semantic camera plan. Teleport from
+    # its resolved coordinates instead of feeding the slash-delimited view ID
+    # back through Brigadier's single-word argument parser.
+    send_command "execute in $dimension run tp $username $x $y $z $yaw $pitch"
+    sleep 2
+    kill -0 "$client_pid" 2>/dev/null \
+      || { printf 'Client exited while preparing semantic view %s.\n' "$view_id" >&2; exit 1; }
     sleep "$frame_wait"
     capture_frame "$name" "$view_id" "$kind" "$target_id" "$dimension" "$x" "$y" "$z" "$yaw" "$pitch"
   done <<<"$audit_lines"

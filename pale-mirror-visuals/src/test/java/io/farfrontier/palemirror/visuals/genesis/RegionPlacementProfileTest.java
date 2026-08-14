@@ -23,6 +23,9 @@ class RegionPlacementProfileTest {
                 .requireSeparateCardinalSector());
         assertEquals(24, profile.requireSite(RegionPlacementProfiles.PRIMARY_MINE).exactValidationBudget());
         assertEquals(72, profile.settlementTerrain().surveyRadius());
+        assertEquals(48, profile.settlementTerrain().surfaceSuitability().sampleStep());
+        assertEquals(16, profile.settlementTerrain().acceptableMaximumRelief());
+        assertEquals(2, profile.settlementTerrain().surfaceSuitability().maximumVegetationBurden());
         assertEquals(0, profile.settlementTerrain().minimumLandscapeScore());
         assertEquals(4, profile.route().horizontalBlocksPerVerticalBlock());
         assertEquals(true, profile.route().preferDryLand());
@@ -34,11 +37,12 @@ class RegionPlacementProfileTest {
         assertEquals(154, profile.search().reserveCandidateCount());
         assertEquals(48, profile.search().remoteCandidatesPerRegion(11));
         assertEquals(512, profile.search().remoteCandidatesPerRegion(24));
-        assertEquals(6, profile.search().exactSettlementCandidatesPerRegion(11));
-        assertEquals(12, profile.search().exactSettlementCandidatesPerRegion(24));
+        assertEquals(12, profile.search().exactSettlementCandidatesPerRegion(11));
+        assertEquals(16, profile.search().exactSettlementCandidatesPerRegion(24));
         assertEquals(List.of(192, 256, 320),
                 profile.search().landscapeProjectionDistances());
         assertEquals(HorizontalOffset.ORIGIN, profile.search().settlementRefinementOffsets().getFirst());
+        assertEquals(13, profile.search().settlementRefinementOffsets().size());
         assertThrows(UnsupportedOperationException.class, () -> profile.requiredSites().clear());
     }
 

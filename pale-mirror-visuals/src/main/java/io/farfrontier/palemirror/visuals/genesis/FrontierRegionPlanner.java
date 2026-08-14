@@ -32,7 +32,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 12;
+    public static final int DEFINITION_VERSION = 13;
     private final RegionPlacementProfile placementProfile;
 
     public FrontierRegionPlanner() {
@@ -206,7 +206,7 @@ public final class FrontierRegionPlanner {
                                            List<String> functions, int housing, int work,
                                            AuthoredMineRole mineRole, MountainMineAnchor anchor,
                                            int sx, int sy, int sz) {
-        VisualModulePlacement module = surfaceMineModule(family, template, padId, moduleRole,
+        VisualModulePlacement module = MineSurfaceModuleFactory.place(family, template, padId, moduleRole,
                 mineRole, anchor, sx, sy, sz);
         List<BuildingSlot> slots = new ArrayList<>();
         for (int index = 0; index < housing; index++) {
@@ -247,10 +247,8 @@ public final class FrontierRegionPlanner {
     private static VisualModulePlacement surfaceMineModule(String family, String template, String padId,
                                                             String moduleRole, AuthoredMineRole mineRole,
                                                             MountainMineAnchor anchor, int sx, int sy, int sz) {
-        VisualPoint origin = anchor.surfaceCenter(mineRole, padId);
-        String path = template.startsWith("../") ? family + "/" + template.substring(3)
-                : family + "/mine/" + template;
-        return module(path, moduleRole, origin, anchor.inwardQuarterTurns(), sx, sy, sz, padId);
+        return MineSurfaceModuleFactory.place(family, template, padId, moduleRole,
+                mineRole, anchor, sx, sy, sz);
     }
 
     private static void addUndergroundMine(List<VisualModulePlacement> target, String family, String name,

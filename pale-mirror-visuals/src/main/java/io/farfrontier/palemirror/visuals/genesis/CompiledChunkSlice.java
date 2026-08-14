@@ -41,5 +41,6 @@ public record CompiledChunkSlice(long chunkKey, String stamp, List<TerrainColumn
     /** Decoration whose vertical datum is the final locally graded surface. */
     public record SurfaceDecoration(int x, int z, int offsetY, BlockState state) { }
 
-    public record RailColumn(BlockPos rail, BlockState railState, BlockState support) { }
+    public record RailColumn(BlockPos rail, BlockState railState, BlockState support,
+                             boolean supportPier) { }
 }

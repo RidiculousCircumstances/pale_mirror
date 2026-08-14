@@ -35,18 +35,24 @@ final class SettlementPerimeterCompiler {
         Direction facing = Math.abs(last.x() - first.x()) >= Math.abs(last.z() - first.z())
                 ? Direction.NORTH : Direction.EAST;
         BlockState gate = fenceGate(palette).setValue(FenceGateBlock.FACING, facing);
+        int centerIndex = points.size() / 2;
+        int openingRadius = points.size() >= 7 ? 1 : 0;
         for (int index = 0; index < points.size(); index++) {
             VisualPoint point = points.get(index);
             sink.surfaceBlock(point.x(), point.z(), -1, palette.foundation());
-            boolean post = index < 2 || index >= points.size() - 2;
-            if (post) {
+            boolean opening = Math.abs(index - centerIndex) <= openingRadius;
+            boolean jamb = Math.abs(index - centerIndex) == openingRadius + 1;
+            if (jamb) {
                 for (int up = 0; up <= 3; up++) sink.surfaceBlock(point.x(), point.z(), up, palette.log());
-            } else {
+            } else if (opening) {
                 sink.surfaceBlock(point.x(), point.z(), 0, gate);
+            } else {
+                sink.surfaceBlock(point.x(), point.z(), 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+                sink.surfaceBlock(point.x(), point.z(), 1, SettlementGenesisCompiler.fence(palette));
             }
             sink.surfaceBlock(point.x(), point.z(), 4, palette.log());
         }
-        VisualPoint center = points.get(points.size() / 2);
+        VisualPoint center = points.get(centerIndex);
         sink.surfaceBlock(center.x(), center.z(), 3, Blocks.LANTERN.defaultBlockState().setValue(
                 net.minecraft.world.level.block.LanternBlock.HANGING, true));
     }

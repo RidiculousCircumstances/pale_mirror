@@ -19,7 +19,7 @@ public record MountainMineAnchor(VisualPoint portal, int inwardQuarterTurns, Map
 
     VisualPoint surfaceCenter(AuthoredMineRole role, String padId) {
         if (surfaceCenters.isEmpty()) {
-            return MineSurfaceLayout.require(role, padId).center(portal, inwardQuarterTurns, portal.y());
+            return MineSurfaceLayout.require(role, padId).center(portal, inwardQuarterTurns, portal.y() - 1);
         }
         VisualPoint value = surfaceCenters.get(padId);
         if (value == null) throw new IllegalStateException("Verified MineSite is missing surface pad " + padId);
