@@ -12,6 +12,7 @@ public final class VisualServerConfig {
     public static final ModConfigSpec.IntValue GENESIS_MAXIMUM_REGIONS;
     public static final ModConfigSpec.IntValue GENESIS_MAP_RADIUS;
     public static final ModConfigSpec.IntValue GENESIS_MINIMUM_SPACING;
+    public static final ModConfigSpec.IntValue GENESIS_PLANNER_WORKERS;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -34,6 +35,9 @@ public final class VisualServerConfig {
                 .defineInRange("genesis.mapRadius", 20_000, 3_000, 100_000);
         GENESIS_MINIMUM_SPACING = builder.comment("Minimum center-to-center spacing between authored regions.")
                 .defineInRange("genesis.minimumSpacing", 2_500, 1_024, 10_000);
+        GENESIS_PLANNER_WORKERS = builder.comment(
+                        "Bounded terrain-survey worker count. Final authored-region acceptance remains deterministic.")
+                .defineInRange("genesis.plannerWorkers", 6, 1, 16);
         SPEC = builder.build();
     }
 

@@ -9,9 +9,15 @@ public final class FrontierSiteSelector {
     static final int EXACT_SAMPLES_PER_CANDIDATE = 5;
     private static final double GOLDEN_ANGLE = Math.PI * (3D - Math.sqrt(5D));
     private final RegionPlacementProfile profile;
+    private final DeterministicGenesisWorkers workers;
 
     public FrontierSiteSelector(RegionPlacementProfile profile) {
+        this(profile, null);
+    }
+
+    public FrontierSiteSelector(RegionPlacementProfile profile, DeterministicGenesisWorkers workers) {
         this.profile = java.util.Objects.requireNonNull(profile, "profile");
+        this.workers = workers;
     }
 
     public List<SelectedSite> select(long worldSeed, VisualPoint spawn, int count, int mapRadius,
@@ -82,10 +88,11 @@ public final class FrontierSiteSelector {
                 .comparingInt((RankedCenter value) -> value.biome().terrainPreference())
                 .thenComparing(java.util.Comparator.comparingInt(RankedCenter::landscapeScore).reversed())
                 .thenComparingInt(RankedCenter::originalIndex);
-        List<RankedCenter> ranked = java.util.stream.IntStream.range(0, candidates.size()).mapToObj(index -> {
+        List<RankedCenter> unsorted = mapIndexed(candidates.size(), index -> {
             Center center = candidates.get(index);
             return new RankedCenter(center, footprintBiome(center, terrain), landscapeScore(center, terrain), index);
-        }).filter(value -> profile.settlementTerrain().acceptsBiome(value.biome())
+        });
+        List<RankedCenter> ranked = unsorted.stream().filter(value -> profile.settlementTerrain().acceptsBiome(value.biome())
                 && value.landscapeScore() >= profile.settlementTerrain().minimumLandscapeScore())
                 .sorted(largeBatch ? terrainFirst : landscapeFirst).toList();
         int exactAttempts = 0;
@@ -295,6 +302,13 @@ public final class FrontierSiteSelector {
         value ^= value >>> 30; value *= 0xbf58476d1ce4e5b9L;
         value ^= value >>> 27; value *= 0x94d049bb133111ebL;
         return value ^ value >>> 31;
+    }
+
+    private <T> List<T> mapIndexed(int size, java.util.function.IntFunction<? extends T> mapper) {
+        if (workers != null) return workers.mapIndexed(size, mapper);
+        List<T> result = new ArrayList<>(size);
+        for (int index = 0; index < size; index++) result.add(mapper.apply(index));
+        return List.copyOf(result);
     }
 
     public interface TerrainAccess {

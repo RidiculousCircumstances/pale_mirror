@@ -22,7 +22,12 @@ only 16 nearby residents run vanilla AI by default.
 
 Fresh-world planning is also bounded. Visuals samples mountain biomes cheaply,
 derives nearby foothill candidates and ranks their footprint without constructing
-NoiseChunks. An accepted region normally spends one exact five-point settlement
+NoiseChunks. The default six-worker genesis pool evaluates indexed terrain-ranking
+work and region-feasibility waves concurrently. A bounded two-waves-ahead window
+lets a free worker take another candidate instead of waiting for the slowest probe. Nested work runs inline to avoid
+pool starvation; final acceptance remains sequential and deterministic. Set
+`genesis.plannerWorkers` between 1 and 16 in `pale-mirror-visuals-server.toml`;
+`1` retains the serial recovery profile. An accepted region normally spends one exact five-point settlement
 survey, two bounded mountain-face and local-pad searches and one bounded railway-corridor search.
 For a production-sized batch, each surveyed center may try up to 24 exact
 settlement candidates and each MineSite may try at most 24 exact candidates.
@@ -31,7 +36,7 @@ snapshot and may evaluate 24 deterministic layout transforms inside one shared
 768-probe ceiling. Only the selected rail corridor is verified column by
 column; local cut/fill remains current-chunk worldgen work. `performance` reports site, mine
 and rail probe classes separately, along with planning and catalog compile
-time. The production output range remains 3/5/6 with a 160-center survey cap,
+time, worker count, evaluated candidates and discarded speculative attempts. The production output range remains 3/5/6 with a 160-center survey cap,
 20,000-block radius and 2,500-block final spacing. Packaged two-start and visual
 audit gates may explicitly request one complete region because cardinality and
 multi-region spacing have separate tests. The latest full-modpack natural visual
@@ -39,6 +44,13 @@ audit on seed `7391842605318702447` planned one strict dual-mountain region in
 86.932 seconds and compiled 263 chunk slices before observing exact genesis
 stamps. This is an integration/aesthetic fixture, not a production five-region
 throughput claim. Production never weakens terrain to force its target.
+
+On the full private-pack seed `7391842605318702447`, the production 3/5/6 survey
+fell from 172.745 seconds in the sequential profile to 51.245 and 51.330 seconds
+with six workers (3.37x). Both clean starts produced the same probe counts, catalog
+hash `f9abf85a50a91e27` and byte-identical genesis SavedData. Equal-distance coarse
+height samples use a coordinate-key tie-break so immutable-map order cannot alter
+roads or managed-area heights between JVM processes.
 
 For an evidence-grade profile, run the private server on its JDK 22 runtime and capture JFR:
 

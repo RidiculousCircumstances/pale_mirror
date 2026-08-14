@@ -5,6 +5,7 @@
 - Keep live unexplored-world flight responsive: C2ME owns bounded parallel chunk generation while DH remains a client-side LOD cache by default; the measured server cache is benchmark-only.
 - Keep authored settlement columns free of tree growth, background hostile spawning and grading debris; keep debug teleport non-blocking through one bounded asynchronous chunk ticket.
 - Keep full-modpack fresh-world genesis bounded and geography-led: require 3, target 5 and cap 6 strict mountain regions inside a 20,000-block radius without weakening site constraints.
+- Keep that production genesis deterministic while using bounded multithreaded terrain ranking and feasibility waves; repeat clean starts must produce byte-identical manifests.
 - Use biome-footprint horizontal selection, bounded settlement/mine surveys, dry-preferring rail graph search, and ready current-chunk height/fluid data for local worldgen adaptation.
 ## Constraints/Assumptions
 - Java 21 bytecode/toolchain; Minecraft 1.21.1; NeoForge 21.1.248. The private dedicated server runs Java 22; clients and PM artifacts remain Java 21 compatible.
@@ -32,6 +33,7 @@
 - Terrain placement prefers dry sites with sampled relief at most 8 blocks, rejects water/extreme terrain, and permits a bounded dry fallback up to 24 blocks only after the preferred candidate fails.
 - One immutable `RegionPlacementProfile` owns search bands/budgets, settlement terrain, typed site constraints/relations and route policy; layout grammars consume it explicitly. The iron profile separates a six-region output cap from a 160-center survey cap and preserves bounded foothill ranking, six exact settlement surveys per center, two dry mountain sites with a median cross-section rising at least 10 blocks over 48 blocks and 24 validations, bounded rail graph search, one-in-four grade and a first region 1024–4096 blocks from spawn.
 - Region cardinality is a range rather than a quota: 3 is the fail-closed minimum, 5 the desired population and 6 the opportunistic cap. The default search radius is 20,000 blocks with 2,500-block center spacing, anticipating Create travel.
+- Fresh genesis uses one coordinator plus a configurable 1-16-worker pool (six by default). Indexed work may complete in any order, but only the sequential reducer accepts candidates and assigns ordinals; equal-distance coarse heights are resolved by coordinate key rather than map iteration.
 - Canonical railway geometry uses a bounded deterministic A* corridor between depot and loading endpoint, strongly prefers dry land, permits at most 24-block bridge spans and verifies the final one-in-four grade path. Current-chunk height/fluid data controls local cut/fill/bridge representation and never changes route identity or requests another chunk.
 - A region is accepted only when it has two dry mountain-native MineSites. Mine17 is 160–320 blocks from the settlement; Red Valley is 320–560 blocks away. Both require nearby mountain evidence, a rising median cross-section and independent dry surface pads with at most 8 relief/4 cut/4 fill. Pads may move within a bounded foothill search instead of forcing one terrace. The complete primary route plan exists at genesis and materializes as its chunks naturally generate/load.
 - Three initial climate families share one role catalog but vary palette and threshold form: temperate planting, cold windbreak/snow and dry shade/water stop.
@@ -63,6 +65,7 @@
 - Kept all 48 authored residents visible while limiting expensive nearby vanilla AI to 16 role-prioritized carriers by default; the AI limit/radius are visual-only configuration.
 - Added persisted immutable v40 manifests, generator-only terrain survey, three terrain-led settlement archetypes, three real climate families, typed buildings/open spaces, five parcels plus two annex easements and curated private NBT modules with provenance.
 - Replaced per-region terrain searches with a deterministic spacing-safe batch selector whose output and survey-candidate caps are independent; exact height work remains bounded separately from cheap biome sampling.
+- Parallelized center ranking and complete region feasibility through a bounded work-stealing pool with inline nested work, concurrent terrain caches, indexed result reduction and visible candidate/worker telemetry. The production seed improved from 172.745s serial to 51.245/51.330s on six workers (3.37x); two clean starts produced byte-identical genesis SavedData and catalog `f9abf85a50a91e27`.
 - Replaced pointwise site/rail height scanning with profile-driven cheap biome ranking, bounded exact settlement/site validation and bounded route controls. Iron MineSites reject wet yards and flat terrain; naturally generating chunks use only their ready local heightmap for local representation.
 - Replaced automatic observed-village campaign binding when Visuals is installed; core registers authored communities, places, facilities, sites, route contracts and exact 48-person PM-owned cohort state.
 - Added stable resident UUID commissioning, canonical-growth-only breeding, confirmed-death reconciliation and the isolated exact Villager Overhaul guard/worker/recruitment bridge.
@@ -101,12 +104,12 @@
 - The baseline railway uses bounded dry-preferring A*, rejects water runs over 24 blocks or insufficient clearance, and materializes short bridges with decks/piers while preserving surrounding water. It never drains chunks.
 - Surface mine pads use a deterministic nearby search, keep structural footprints disjoint while allowing grading aprons to merge, and cap local grading at 8 relief/4 cut/4 fill.
 - Red Valley staged commissioning and canonical route proof remain unchanged: resource flow is blocked until the site and transport capability are operational.
-- Natural placement again finds at least three strict complete regions in the bounded production policy. A deterministic one-region full-modpack visual fixture on seed `7391842605318702447` planned in 86.932s and compiled 263 slices at settlement 15976,67,-2552 and Mine17 15776,68,-2680.
+- Natural placement finds three strict complete regions on seed `7391842605318702447` in 51.2-51.3s with the production 3/5/6 policy and six workers. The immutable result has 758 slices at settlements 2376,67,11400; -3416,66,19064; and -13240,65,-3976.
 - Mine surface NBT is now a reproducible PM-authored block-entity-free industrial kit. The natural client audit shows a compact portal/hoist campus, articulated halls and an irregular equipped yard integrated into a mountain saddle; no DUMMY/air records or overhanging forest remain.
 - The latest natural client audit shows intact settlement modules after late biome decoration cleanup, legible mixed paving and intentionally marked development parcels. Empty reserved parcels remain because runtime growth is explicitly outside this cut.
 
 ### Next
-- The complete sequential Core/Visuals verification matrix is green; continue product playtesting of street navigation, building interiors and the Mine17 encounter without adding settlement growth stages in v40.
+- The multithreaded planner, deterministic manifest check and complete Core/Visuals verification matrix are green; continue product playtesting of street navigation, building interiors and the Mine17 encounter without adding settlement growth stages in v40.
 
 ## Open questions
 - Temperate natural placement and finalization are visually confirmed; cold-taiga and dry-arid art-family quality still needs equivalent natural client audits.

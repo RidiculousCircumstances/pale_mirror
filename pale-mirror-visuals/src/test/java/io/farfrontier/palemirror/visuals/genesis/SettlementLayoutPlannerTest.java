@@ -143,6 +143,25 @@ class SettlementLayoutPlannerTest {
         assertEquals(9, waters.get());
     }
 
+    @Test void equidistantCoarseHeightsUseAStableCoordinateTieBreak() {
+        long west = SettlementTerrainSnapshot.key(0, 0);
+        long east = SettlementTerrainSnapshot.key(16, 0);
+        var westFirst = new java.util.LinkedHashMap<Long, Integer>();
+        westFirst.put(west, 64);
+        westFirst.put(east, 80);
+        var eastFirst = new java.util.LinkedHashMap<Long, Integer>();
+        eastFirst.put(east, 80);
+        eastFirst.put(west, 64);
+
+        SettlementTerrainSnapshot first = new SettlementTerrainSnapshot(new VisualPoint(8, 70, 0), westFirst,
+                (x, z) -> 70, (x, z) -> false);
+        SettlementTerrainSnapshot second = new SettlementTerrainSnapshot(new VisualPoint(8, 70, 0), eastFirst,
+                (x, z) -> 70, (x, z) -> false);
+
+        assertEquals(64, first.approximateHeight(8, 0));
+        assertEquals(first.approximateHeight(8, 0), second.approximateHeight(8, 0));
+    }
+
     @Test void terrainFollowingRoadsExpandOnlyTheVerticalSiteIndex() {
         var coarse = new java.util.LinkedHashMap<Long, Integer>();
         for (int right = -SettlementLayoutPlanner.MASTER_HALF_WIDTH;

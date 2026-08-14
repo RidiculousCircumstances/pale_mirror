@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.visuals.genesis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.farfrontier.palemirror.api.VisualPoint;
 import java.util.List;
@@ -89,6 +90,37 @@ class FrontierRegionBatchPlannerTest {
 
         assertEquals(List.of(1000, 3000), result.manifests().stream().map(seed -> seed.anchor().x()).toList());
         assertEquals(1, result.spacingRejectedCandidates());
+    }
+
+    @Test void parallelCandidateWavesProduceTheSequentialManifestOrder() {
+        List<FrontierSiteSelector.SelectedSite> sites = List.of(
+                site(1000), site(3000), site(5000), site(7000), site(9000));
+        MineAnchorResolver mine = (requirement, candidates) -> new MountainMineAnchor(candidates.getFirst(), 0);
+        SettlementLayoutResolver layouts = (source, anchor, climate, direction, terrain) -> {
+            if (anchor.x() == 1000 || anchor.x() == 5000) {
+                throw new DryMineSiteUnavailableException("rejected " + anchor.x());
+            }
+            if (anchor.x() == 3000) java.util.concurrent.locks.LockSupport.parkNanos(5_000_000L);
+            return new SettlementLayoutPlanner().plan(source, anchor, climate, direction, terrain);
+        };
+        FrontierRegionBatchPlanner planner = new FrontierRegionBatchPlanner();
+        FrontierRegionBatchPlanner.Result sequential = planner.plan(42L,
+                new RegionCountRange(2, 2, 2), RegionPlacementProfiles.IRON_FRONTIER, sites,
+                new FrontierRegionPlanner(), mine, FrontierRegionPlanner::gradedManhattanRail,
+                layouts, 0);
+
+        try (DeterministicGenesisWorkers workers = new DeterministicGenesisWorkers(3)) {
+            FrontierRegionBatchPlanner.Result parallel = planner.plan(42L,
+                    new RegionCountRange(2, 2, 2), RegionPlacementProfiles.IRON_FRONTIER, sites,
+                    new FrontierRegionPlanner(), mine, FrontierRegionPlanner::gradedManhattanRail,
+                    layouts, 0, workers);
+
+            assertEquals(sequential.manifests(), parallel.manifests());
+            assertEquals(sequential.rejectedRegionCandidates(), parallel.rejectedRegionCandidates());
+            assertEquals(List.of(3000, 7000), parallel.manifests().stream()
+                    .map(seed -> seed.anchor().x()).toList());
+            assertTrue(parallel.speculativeRegionCandidates() > 0);
+        }
     }
 
     private static FrontierSiteSelector.SelectedSite site(int x) {

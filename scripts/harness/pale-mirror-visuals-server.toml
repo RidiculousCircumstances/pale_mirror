@@ -8,3 +8,4 @@
 	maximumRegions = 1
 	mapRadius = 20000
 	minimumSpacing = 2500
+	plannerWorkers = 4

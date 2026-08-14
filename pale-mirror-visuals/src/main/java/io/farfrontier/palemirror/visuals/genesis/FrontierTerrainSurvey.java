@@ -3,9 +3,10 @@ package io.farfrontier.palemirror.visuals.genesis;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
@@ -26,9 +27,14 @@ public final class FrontierTerrainSurvey {
 
     public Batch selectBatch(ServerLevel level, RegionPlacementProfile profile, int count, int reserve,
                              int mapRadius, int minimumSpacing) {
+        return selectBatch(level, profile, count, reserve, mapRadius, minimumSpacing, null);
+    }
+
+    public Batch selectBatch(ServerLevel level, RegionPlacementProfile profile, int count, int reserve,
+                             int mapRadius, int minimumSpacing, DeterministicGenesisWorkers workers) {
         CachedLevelTerrain terrain = new CachedLevelTerrain(level);
         BlockPos spawn = level.getSharedSpawnPos();
-        List<FrontierSiteSelector.SelectedSite> selected = new FrontierSiteSelector(profile).selectWithReserve(level.getSeed(),
+        List<FrontierSiteSelector.SelectedSite> selected = new FrontierSiteSelector(profile, workers).selectWithReserve(level.getSeed(),
                 new VisualPoint(spawn.getX(), spawn.getY(), spawn.getZ()), count, reserve, mapRadius,
                 minimumSpacing, terrain);
         return new Batch(selected, terrain);
@@ -56,21 +62,23 @@ public final class FrontierTerrainSurvey {
 
     private static final class CachedLevelTerrain implements FrontierSiteSelector.TerrainAccess {
         private final ServerLevel level;
-        private final Map<Long, Integer> oceanFloors = new HashMap<>();
-        private final Map<Long, Boolean> submergedColumns = new HashMap<>();
-        private final Map<Long, FrontierSiteSelector.BiomeSample> biomes = new HashMap<>();
-        private long heightHits;
-        private long heightMisses;
-        private long siteHeightProbes;
-        private long mineHeightProbes;
-        private long railHeightProbes;
-        private long biomeSamples;
-        private long discardedSiteCandidates;
+        private final Map<Long, Integer> oceanFloors = new ConcurrentHashMap<>();
+        private final Map<Long, Boolean> submergedColumns = new ConcurrentHashMap<>();
+        private final Map<Long, FrontierSiteSelector.BiomeSample> biomes = new ConcurrentHashMap<>();
+        private final LongAdder heightRequests = new LongAdder();
+        private final LongAdder heightMisses = new LongAdder();
+        private final LongAdder siteHeightProbes = new LongAdder();
+        private final LongAdder mineHeightProbes = new LongAdder();
+        private final LongAdder railHeightProbes = new LongAdder();
+        private final LongAdder biomeSamples = new LongAdder();
+        private final LongAdder discardedSiteCandidates = new LongAdder();
 
-        private CachedLevelTerrain(ServerLevel level) { this.level = level; }
+        private CachedLevelTerrain(ServerLevel level) {
+            this.level = level;
+        }
 
         @Override public TerrainSample exactSample(int x, int z) {
-            siteHeightProbes++;
+            siteHeightProbes.increment();
             boolean water = exactWater(x, z);
             return new TerrainSample(x, z, oceanFloor(x, z), water);
         }
@@ -79,7 +87,7 @@ public final class FrontierTerrainSurvey {
             long key = ChunkPos.asLong(x, z);
             return submergedColumns.computeIfAbsent(key, ignored -> {
                 int floor = oceanFloor(x, z);
-                mineHeightProbes++;
+                mineHeightProbes.increment();
                 // Surface water in the Overworld is governed by the horizontal
                 // biome field and sea-level fluid picker. A dry biome below sea
                 // level is still conservatively rejected; underground aquifers
@@ -94,7 +102,7 @@ public final class FrontierTerrainSurvey {
         }
 
         @Override public void recordDiscardedCandidate(TerrainCandidate candidate) {
-            discardedSiteCandidates++;
+            discardedSiteCandidates.increment();
             io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod.LOGGER.debug(
                     "Discarded exact genesis site at {} {}: relief={}, waterSamples={}, cutFillCost={}",
                     candidate.anchor().x(), candidate.anchor().z(), candidate.relief(), candidate.waterSamples(),
@@ -130,7 +138,7 @@ public final class FrontierTerrainSurvey {
                 VisualPoint candidate = ranked.point();
                 if (exactAttempts++ >= requirement.exactValidationBudget()) break;
                 int terrainSurface = oceanFloor(candidate.x(), candidate.z());
-                mineHeightProbes++;
+                mineHeightProbes.increment();
                 MountainFaceResolution face = mountainFace(candidate, terrainSurface, requirement.terrain());
                 MountainMineAnchor mountain = face.anchor();
                 if (mountain != null) {
@@ -189,7 +197,7 @@ public final class FrontierTerrainSurvey {
         /** Median far-rise prefilter; four-direction continuity and pad checks remain authoritative. */
         private int quickMountainRise(VisualPoint candidate, SiteTerrainPolicy policy, int direction) {
             int surface = oceanFloor(candidate.x(), candidate.z());
-            mineHeightProbes++;
+            mineHeightProbes.increment();
             int farthest = policy.riseSamples().getLast().distance();
             int dx = direction == 0 ? 1 : direction == 2 ? -1 : 0;
             int dz = direction == 1 ? 1 : direction == 3 ? -1 : 0;
@@ -208,11 +216,11 @@ public final class FrontierTerrainSurvey {
                      inward += SettlementTerrainSnapshot.GRID_STEP) {
                     VisualPoint point = settlementLocal(anchor, right, inward, freightDirection);
                     coarse.put(SettlementTerrainSnapshot.key(point.x(), point.z()), oceanFloor(point.x(), point.z()));
-                    siteHeightProbes++;
+                    siteHeightProbes.increment();
                 }
             }
             SettlementTerrainSnapshot snapshot = new SettlementTerrainSnapshot(anchor, coarse, (x, z) -> {
-                siteHeightProbes++;
+                siteHeightProbes.increment();
                 return oceanFloor(x, z);
             }, this::exactWater);
             return new SettlementLayoutPlanner().plan(source, anchor, climate, freightDirection, candidate, snapshot);
@@ -247,7 +255,7 @@ public final class FrontierTerrainSurvey {
                 int dz = direction == 1 ? 1 : direction == 3 ? -1 : 0;
                 int apron = oceanFloor(candidate.x() - dx * policy.apronDistance(),
                         candidate.z() - dz * policy.apronDistance());
-                mineHeightProbes++;
+                mineHeightProbes.increment();
                 boolean continuous = true;
                 int rise = Integer.MIN_VALUE;
                 for (SiteTerrainPolicy.RiseSample sample : policy.riseSamples()) {
@@ -276,7 +284,7 @@ public final class FrontierTerrainSurvey {
             for (int lateral : new int[]{-8, 0, 8}) {
                 samples[index++] = oceanFloor(candidate.x() + dx * distance + perpendicularX * lateral,
                         candidate.z() + dz * distance + perpendicularZ * lateral);
-                mineHeightProbes++;
+                mineHeightProbes.increment();
             }
             java.util.Arrays.sort(samples);
             return samples[1];
@@ -327,7 +335,7 @@ public final class FrontierTerrainSurvey {
                 for (int x : new int[]{minimumX, (minimumX + maximumX) / 2, maximumX}) {
                     for (int z : new int[]{minimumZ, (minimumZ + maximumZ) / 2, maximumZ}) {
                         int floor = oceanFloor(x, z);
-                        mineHeightProbes++;
+                        mineHeightProbes.increment();
                         samples.add(floor);
                         sampleColumns.add(new VisualPoint(x, 0, z));
                     }
@@ -395,7 +403,7 @@ public final class FrontierTerrainSurvey {
                 int floor = oceanFloor(point.x(), point.z());
                 boolean water = biome(point.x(), point.z()).water();
                 int surface = water ? Math.max(floor, level.getSeaLevel()) : floor;
-                railHeightProbes++;
+                railHeightProbes.increment();
                 wetRun = water ? wetRun + 1 : 0;
                 if (wetRun > requirement.maximumWaterSpan()) {
                     throw new DryMineSiteUnavailableException("Rail corridor water span exceeds "
@@ -412,21 +420,16 @@ public final class FrontierTerrainSurvey {
 
         private int oceanFloor(int x, int z) {
             long key = ChunkPos.asLong(x, z);
-            Integer cached = oceanFloors.get(key);
-            if (cached != null) {
-                heightHits++;
-                return cached;
-            }
-            heightMisses++;
-            int height = level.getChunkSource().getGenerator().getBaseHeight(x, z,
-                    Heightmap.Types.OCEAN_FLOOR_WG, level,
-                    level.getChunkSource().randomState());
-            oceanFloors.put(key, height);
-            return height;
+            heightRequests.increment();
+            return oceanFloors.computeIfAbsent(key, ignored -> {
+                heightMisses.increment();
+                return level.getChunkSource().getGenerator().getBaseHeight(x, z,
+                        Heightmap.Types.OCEAN_FLOOR_WG, level, level.getChunkSource().randomState());
+            });
         }
 
         private Holder<Biome> rawBiome(int x, int z) {
-            biomeSamples++;
+            biomeSamples.increment();
             int sampleY = level.getSeaLevel() + 16;
             var generator = level.getChunkSource().getGenerator();
             return generator.getBiomeSource().getNoiseBiome(QuartPos.fromBlock(x), QuartPos.fromBlock(sampleY),
@@ -454,8 +457,10 @@ public final class FrontierTerrainSurvey {
         }
 
         private Statistics statistics() {
-            return new Statistics(oceanFloors.size(), heightHits, heightMisses, siteHeightProbes,
-                    mineHeightProbes, railHeightProbes, biomeSamples, discardedSiteCandidates);
+            long misses = heightMisses.sum();
+            return new Statistics(oceanFloors.size(), heightRequests.sum() - misses, misses,
+                    siteHeightProbes.sum(), mineHeightProbes.sum(), railHeightProbes.sum(), biomeSamples.sum(),
+                    discardedSiteCandidates.sum());
         }
     }
 

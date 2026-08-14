@@ -39,7 +39,9 @@ final class SettlementTerrainSnapshot {
     }
 
     int approximateHeight(int x, int z) {
-        return coarseHeights.entrySet().stream().min(Comparator.comparingLong(entry -> distance(entry.getKey(), x, z)))
+        return coarseHeights.entrySet().stream().min(Comparator
+                        .comparingLong((Map.Entry<Long, Integer> entry) -> distance(entry.getKey(), x, z))
+                        .thenComparingLong(Map.Entry::getKey))
                 .map(Map.Entry::getValue).orElse(anchor.y());
     }
 

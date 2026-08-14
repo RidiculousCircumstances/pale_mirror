@@ -21,8 +21,11 @@ Each MineSite pins a portal, loading endpoint, controller anchor, orientation,
 complete bounds, semantic surface buildings, underground modules, independently
 surveyed local foundations, staged modules and semantic volumes.
 
-Terrain survey calls generator-only biome and bounded height APIs on a dedicated
-planning worker. It does not load prospective chunks. Cheap biome-footprint checks
+Terrain survey calls generator-only biome and bounded height APIs through one
+dedicated coordinator and a configurable bounded worker pool. It does not load
+prospective chunks. Candidate ranking and complete feasibility attempts may run
+concurrently, but their results remain index-addressed; one sequential reducer
+alone assigns region ordinals, applies spacing and accepts manifests. Cheap biome-footprint checks
 rank deterministic horizontal candidates. Each accepted region then receives
 one exact center/cardinal settlement survey and two bounded mountain-face
 searches; at most 24 exact candidates per MineSite may be attempted. Once the
@@ -67,6 +70,7 @@ targetRegions = 5
 maximumRegions = 6
 mapRadius = 20000
 minimumSpacing = 2500
+plannerWorkers = 6
 ```
 
 Genesis fails only below `minimumRegions`, reports whether `targetRegions` was
