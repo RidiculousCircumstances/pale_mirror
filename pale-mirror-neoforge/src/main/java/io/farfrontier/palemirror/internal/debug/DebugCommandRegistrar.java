@@ -51,6 +51,17 @@ public final class DebugCommandRegistrar {
         teleport.then(teleportTarget("object", (controller, player, id) -> controller.teleportObject(player, id)));
         debug.then(teleport);
 
+        LiteralArgumentBuilder<CommandSourceStack> visualAudit = Commands.literal("visual-audit");
+        visualAudit.then(Commands.literal("list").then(Commands.argument("settlement", ResourceLocationArgument.id())
+                .executes(context -> components(context, runtime(context).debug().visualAuditViews(new WorldObjectId(
+                        ResourceLocationArgument.getId(context, "settlement").toString()))))));
+        visualAudit.then(Commands.literal("tp").then(Commands.argument("settlement", ResourceLocationArgument.id())
+                .then(Commands.argument("view", StringArgumentType.word()).executes(context -> withPlayer(context,
+                        player -> action(context, runtime(context).debug().teleportVisualAudit(player,
+                                new WorldObjectId(ResourceLocationArgument.getId(context, "settlement").toString()),
+                                StringArgumentType.getString(context, "view"))))))));
+        debug.then(visualAudit);
+
         debug.then(Commands.literal("region").then(Commands.literal("status").executes(context ->
                 success(context, runtime(context).debug().regionStatus()))));
         debug.then(Commands.literal("verify").executes(context -> success(context, runtime(context).debug().verify())));

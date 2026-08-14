@@ -36,7 +36,13 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         // WORLD_SURFACE_WG top was stale without touching intentional timber,
         // hedges or planters from the PM modules that follow.
         for (CompiledChunkSlice.VegetationColumn column : slice.vegetation()) clearNaturalVegetation(level, column);
-        placeSurfaceDecorations(level, slice.surfaceDecorations());
+        // Surface-relative furniture is deliberately deferred until the
+        // chunk-load finalizer below.  Replaying it here and then resolving
+        // WORLD_SURFACE_WG again after the first pass made the first lamp or
+        // fence become the datum for the second pass, stacking whole fixtures
+        // on top of themselves.  The late pass runs after biome decoration and
+        // is protected by FINALIZATION_STAMP, so it is the one authoritative
+        // placement of terrain-following public-realm details.
         slice.blocks().forEach((position, state) -> setIfDifferent(level, position, state));
         for (CompiledChunkSlice.RailColumn rail : slice.rails()) placeRail(level, rail);
         var current = level.getChunk(chunk.x, chunk.z);

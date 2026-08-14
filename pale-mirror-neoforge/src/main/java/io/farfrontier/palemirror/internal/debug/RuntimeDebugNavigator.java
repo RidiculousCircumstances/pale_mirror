@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.WorldObjectId;
+import io.farfrontier.palemirror.api.VisualAuditView;
 import io.farfrontier.palemirror.domain.ObservationFreshness;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
@@ -127,25 +128,56 @@ public final class RuntimeDebugNavigator {
         return teleport(player, data.worldRegistry().find(id).orElse(null), "object");
     }
 
+    public List<Component> visualAuditViews(WorldObjectId settlementId) {
+        List<VisualAuditView> views = auditViews(settlementId);
+        if (views.isEmpty()) return List.of(Component.literal("No authored visual-audit views for "
+                + settlementId.value()));
+        List<Component> output = new ArrayList<>();
+        output.add(Component.literal("PM visual-audit views for " + settlementId.value() + ":")
+                .withStyle(ChatFormatting.GOLD));
+        views.forEach(view -> output.add(Component.literal("PM_AUDIT_VIEW|" + view.id() + "|"
+                + view.targetKind() + "|" + view.targetId() + "|" + view.dimensionId() + "|"
+                + view.playerFeet().x() + "|" + view.playerFeet().y() + "|" + view.playerFeet().z() + "|"
+                + view.yaw() + "|" + view.pitch())));
+        return List.copyOf(output);
+    }
+
+    public RuntimeDebugService.ActionResult teleportVisualAudit(ServerPlayer player, WorldObjectId settlementId,
+                                                                 String viewId) {
+        VisualAuditView view = auditViews(settlementId).stream().filter(value -> value.id().equals(viewId))
+                .findFirst().orElse(null);
+        if (view == null) return new RuntimeDebugService.ActionResult(false,
+                "Unknown visual-audit view " + viewId + " for " + settlementId.value());
+        WorldObjectId auditId = new WorldObjectId("pale_mirror:visual_audit/" + view.id());
+        BlockPos position = new BlockPos(view.playerFeet().x(), view.playerFeet().y(), view.playerFeet().z());
+        return teleport(player, auditId, view.dimensionId(), position, true, view.yaw(), view.pitch());
+    }
+
     private RuntimeDebugService.ActionResult teleport(ServerPlayer player, WorldObjectRegistryEntry entry, String kind) {
         if (entry == null) return new RuntimeDebugService.ActionResult(false, "Unknown physical " + kind + ".");
+        return teleport(player, entry.id(), entry.dimensionId(), entry.anchor(), false,
+                player.getYRot(), player.getXRot());
+    }
+
+    private RuntimeDebugService.ActionResult teleport(ServerPlayer player, WorldObjectId objectId,
+                                                       String dimensionId, BlockPos anchor, boolean exactPose,
+                                                       float yaw, float pitch) {
         ResourceKey<net.minecraft.world.level.Level> dimension;
         try {
-            dimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(entry.dimensionId()));
+            dimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(dimensionId));
         } catch (IllegalArgumentException invalid) {
-            return new RuntimeDebugService.ActionResult(false, "Invalid persisted dimension " + entry.dimensionId());
+            return new RuntimeDebugService.ActionResult(false, "Invalid persisted dimension " + dimensionId);
         }
         ServerLevel level = server.getLevel(dimension);
-        if (level == null) return new RuntimeDebugService.ActionResult(false, "Dimension is unavailable: " + entry.dimensionId());
-        BlockPos anchor = entry.anchor();
+        if (level == null) return new RuntimeDebugService.ActionResult(false, "Dimension is unavailable: " + dimensionId);
         ChunkPos chunk = new ChunkPos(anchor);
         if (level.getChunkSource().getChunkNow(chunk.x, chunk.z) != null) {
-            return teleportNow(player, level, entry.id(), anchor);
+            return teleportNow(player, level, objectId, anchor, exactPose, yaw, pitch);
         }
 
         PendingTeleport existing = pendingTeleports.get(player.getUUID());
-        if (existing != null && existing.objectId().equals(entry.id()) && existing.dimension().equals(dimension)) {
-            return new RuntimeDebugService.ActionResult(true, "Still preparing " + entry.id().value()
+        if (existing != null && existing.objectId().equals(objectId) && existing.dimension().equals(dimension)) {
+            return new RuntimeDebugService.ActionResult(true, "Still preparing " + objectId.value()
                     + "; teleport will complete automatically when its physical chunk is ready.");
         }
         if (existing != null) {
@@ -157,13 +189,13 @@ public final class RuntimeDebugNavigator {
                     "Another PM debug destination is already being prepared; wait for it to finish or cancel by disconnecting.");
         }
 
-        PendingTeleport pending = new PendingTeleport(player.getUUID(), entry.id(), dimension, anchor, chunk,
-                server.overworld().getGameTime());
+        PendingTeleport pending = new PendingTeleport(player.getUUID(), objectId, dimension, anchor, chunk,
+                server.overworld().getGameTime(), exactPose, yaw, pitch);
         level.getChunkSource().addRegionTicket(DEBUG_TELEPORT_TICKET, chunk,
                 DEBUG_TELEPORT_TICKET_DISTANCE, player.getUUID());
         pendingTeleports.put(player.getUUID(), pending);
-        return new RuntimeDebugService.ActionResult(true, "Preparing destination " + entry.id().value() + " in "
-                + entry.dimensionId() + " at " + anchor.getX() + "," + anchor.getZ()
+        return new RuntimeDebugService.ActionResult(true, "Preparing destination " + objectId.value() + " in "
+                + dimensionId + " at " + anchor.getX() + "," + anchor.getZ()
                 + " without blocking the server; teleport will complete automatically.");
     }
 
@@ -195,7 +227,8 @@ public final class RuntimeDebugNavigator {
                 continue;
             }
             try {
-                RuntimeDebugService.ActionResult result = teleportNow(player, level, pending.objectId(), pending.anchor());
+                RuntimeDebugService.ActionResult result = teleportNow(player, level, pending.objectId(), pending.anchor(),
+                        pending.exactPose(), pending.yaw(), pending.pitch());
                 player.sendSystemMessage(Component.literal(result.message()).withStyle(ChatFormatting.GREEN));
             } catch (RuntimeException failure) {
                 PaleMirrorMod.LOGGER.error("PM debug teleport to {} failed after chunk preparation",
@@ -219,9 +252,12 @@ public final class RuntimeDebugNavigator {
     }
 
     private RuntimeDebugService.ActionResult teleportNow(ServerPlayer player, ServerLevel level,
-                                                          WorldObjectId objectId, BlockPos anchor) {
-        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ()) + 2;
-        player.teleportTo(level, anchor.getX() + 0.5D, y, anchor.getZ() + 0.5D, player.getYRot(), player.getXRot());
+                                                          WorldObjectId objectId, BlockPos anchor,
+                                                          boolean exactPose, float yaw, float pitch) {
+        int y = exactPose ? anchor.getY()
+                : level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ()) + 2;
+        player.teleportTo(level, anchor.getX() + 0.5D, y, anchor.getZ() + 0.5D,
+                exactPose ? yaw : player.getYRot(), exactPose ? pitch : player.getXRot());
         return new RuntimeDebugService.ActionResult(true, "Teleported to " + objectId.value() + " in "
                 + level.dimension().location() + " at " + anchor.getX() + "," + y + "," + anchor.getZ());
     }
@@ -258,6 +294,47 @@ public final class RuntimeDebugNavigator {
         return null;
     }
 
+    private List<VisualAuditView> auditViews(WorldObjectId settlementId) {
+        var region = data.worldState().livingRegions().stream().filter(value -> value.placeId().equals(settlementId)
+                || value.id().equals(settlementId.value())).findFirst().orElse(null);
+        if (region == null) return List.of();
+        CampaignRegionRecord physical = data.campaignRegions().get(region.id());
+        if (physical == null) return List.of();
+        ResourceKey<net.minecraft.world.level.Level> dimension;
+        try {
+            dimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(physical.dimensionId()));
+        } catch (IllegalArgumentException invalid) {
+            return List.of();
+        }
+        ServerLevel level = server.getLevel(dimension);
+        if (level == null) return List.of();
+        List<VisualAuditView> result = new ArrayList<>(io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
+                .map(provider -> provider.visualAuditViews(level, region.id())).orElse(List.of()));
+        data.refugeeCamps().values().stream().filter(camp -> camp.communityId().equals(region.communityId()))
+                .forEach(camp -> addShelterViews(result, camp));
+        return result.stream().sorted(Comparator.comparing(VisualAuditView::id)).toList();
+    }
+
+    private static void addShelterViews(List<VisualAuditView> target,
+                                        io.farfrontier.palemirror.internal.settlement.RefugeeCampRecord camp) {
+        BlockPos anchor = camp.anchor();
+        auditView(target, "shelter/approach", camp, anchor.offset(0, 2, -14), anchor.offset(0, 2, 0));
+        auditView(target, "shelter/center", camp, anchor.offset(10, 2, 0), anchor.offset(0, 2, 0));
+        auditView(target, "shelter/perimeter", camp, anchor.offset(-11, 3, 11), anchor.offset(0, 2, 0));
+    }
+
+    private static void auditView(List<VisualAuditView> target, String id,
+                                  io.farfrontier.palemirror.internal.settlement.RefugeeCampRecord camp,
+                                  BlockPos camera, BlockPos focus) {
+        double dx = focus.getX() - camera.getX();
+        double dz = focus.getZ() - camera.getZ();
+        double horizontal = Math.max(0.001D, Math.sqrt(dx * dx + dz * dz));
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float pitch = (float) Math.toDegrees(Math.atan2(camera.getY() + 1.62D - focus.getY(), horizontal));
+        target.add(new VisualAuditView(id, "shelter", camp.siteId().value(), camp.dimensionId(),
+                new io.farfrontier.palemirror.api.VisualPoint(camera.getX(), camera.getY(), camera.getZ()), yaw, pitch));
+    }
+
     private static String pos(BlockPos position) {
         return position.getX() + "," + position.getY() + "," + position.getZ();
     }
@@ -266,5 +343,6 @@ public final class RuntimeDebugNavigator {
 
     private record PendingTeleport(UUID playerId, WorldObjectId objectId,
                                    ResourceKey<net.minecraft.world.level.Level> dimension,
-                                   BlockPos anchor, ChunkPos chunk, long startedAt) { }
+                                   BlockPos anchor, ChunkPos chunk, long startedAt,
+                                   boolean exactPose, float yaw, float pitch) { }
 }

@@ -13,6 +13,7 @@ height=1080
 radius=110
 view_height=72
 top_height=150
+only_prefix=
 
 usage() {
   cat <<'EOF'
@@ -29,6 +30,7 @@ Options:
   --radius BLOCKS          Horizontal diagonal radius (default 110)
   --view-height BLOCKS     Diagonal camera height over anchor (default 72)
   --top-height BLOCKS      Top camera height over anchor (default 150)
+  --only PREFIX            Capture only semantic view ids with this prefix
 
 The client pack must already exist in pale-mirror-neoforge/build/runs/railway-client.
 Set PALE_MIRROR_XVFB when Xvfb is not on PATH. Alternatively set
@@ -47,6 +49,7 @@ while (($#)); do
     --radius) radius=${2:?missing radius}; shift 2 ;;
     --view-height) view_height=${2:?missing view height}; shift 2 ;;
     --top-height) top_height=${2:?missing top height}; shift 2 ;;
+    --only) only_prefix=${2:?missing view prefix}; shift 2 ;;
     --size)
       [[ ${2:-} =~ ^([0-9]+)x([0-9]+)$ ]] || { printf 'Invalid --size: %s\n' "${2:-}" >&2; exit 2; }
       width=${BASH_REMATCH[1]}; height=${BASH_REMATCH[2]}; shift 2 ;;
@@ -79,6 +82,10 @@ if [[ -z "$external_display" ]]; then
   }
 fi
 command -v xwininfo >/dev/null || { printf 'Visual audit requires xwininfo.\n' >&2; exit 2; }
+python3 -c 'from PIL import Image, ImageDraw' >/dev/null 2>&1 || {
+  printf 'Visual audit requires Python Pillow for contact sheets.\n' >&2
+  exit 2
+}
 
 game_dir="$repo_dir/pale-mirror-neoforge/build/runs/railway-client"
 [[ -d "$game_dir/mods" ]] || {
@@ -262,11 +269,10 @@ send_command 'time set noon'
 python3 "$x11" key F1
 hud_hidden=true
 
-capture_view() {
-  local name=$1 x=$2 y=$3 z=$4 yaw=$5 pitch=$6
-  printf 'Capturing %-12s at %s,%s,%s...\n' "$name" "$x" "$y" "$z"
-  send_command "execute in minecraft:overworld run tp $username $x $y $z $yaw $pitch"
-  sleep "$frame_wait"
+captured_rows=()
+
+capture_frame() {
+  local name=$1 view_id=$2 kind=$3 target_id=$4 dimension=$5 x=$6 y=$7 z=$8 yaw=$9 pitch=${10}
   local before latest
   before=$(find "$game_dir/screenshots" -maxdepth 1 -type f -name '*.png' -printf '%T@ %p\n' 2>/dev/null \
     | sort -n | tail -1 | cut -d' ' -f2- || true)
@@ -288,13 +294,71 @@ capture_view() {
       && file "$latest" | rg -q 'PNG image data' \
       || { printf 'Minecraft did not finish saving %s.\n' "$name" >&2; exit 1; }
   cp "$latest" "$output_dir/$name.png"
+  captured_rows+=("$view_id"$'\t'"$kind"$'\t'"$target_id"$'\t'"$dimension"$'\t'"$x"$'\t'"$y"$'\t'"$z"$'\t'"$yaw"$'\t'"$pitch"$'\t'"$name.png")
 }
 
-capture_view top "$anchor_x" "$((anchor_y + top_height))" "$anchor_z" 0 90
-capture_view south_east "$((anchor_x + radius))" "$((anchor_y + view_height))" "$((anchor_z + radius))" 135 28
-capture_view south_west "$((anchor_x - radius))" "$((anchor_y + view_height))" "$((anchor_z + radius))" -135 28
-capture_view north_east "$((anchor_x + radius))" "$((anchor_y + view_height))" "$((anchor_z - radius))" 45 28
-capture_view north_west "$((anchor_x - radius))" "$((anchor_y + view_height))" "$((anchor_z - radius))" -45 28
+capture_view() {
+  local name=$1 x=$2 y=$3 z=$4 yaw=$5 pitch=$6
+  printf 'Capturing %-28s at %s,%s,%s...\n' "$name" "$x" "$y" "$z"
+  send_command "execute in minecraft:overworld run tp $username $x $y $z $yaw $pitch"
+  sleep "$frame_wait"
+  capture_frame "$name" "$name" settlement "${settlement_id:-manual_anchor}" minecraft:overworld \
+    "$x" "$y" "$z" "$yaw" "$pitch"
+}
+
+if [[ -n "$settlement_id" ]]; then
+  before_views=$(wc -l <"$client_log")
+  send_command "pale_mirror debug visual-audit list $settlement_id"
+  audit_lines=
+  previous_count=-1
+  stable_count=0
+  for _ in $(seq 1 20); do
+    audit_lines=$(tail -n "+$((before_views + 1))" "$client_log" | rg 'PM_AUDIT_VIEW\|' || true)
+    current_count=$(wc -l <<<"$audit_lines")
+    if [[ "$current_count" -gt 0 && "$current_count" -eq "$previous_count" ]]; then
+      stable_count=$((stable_count + 1))
+      if [[ "$stable_count" -ge 2 ]]; then break; fi
+    else
+      stable_count=0
+    fi
+    previous_count=$current_count
+    sleep 1
+  done
+  [[ -n "$audit_lines" ]] || { printf 'PM returned no semantic visual-audit views.\n' >&2; exit 1; }
+  while IFS= read -r raw_line; do
+    line=${raw_line#*PM_AUDIT_VIEW|}
+    IFS='|' read -r view_id kind target_id dimension x y z yaw pitch <<<"$line"
+    [[ -z "$only_prefix" || "$view_id" == "$only_prefix"* ]] || continue
+    name=${view_id//\//__}
+    printf 'Capturing %-28s at %s,%s,%s...\n' "$view_id" "$x" "$y" "$z"
+    before_tp=$(wc -l <"$client_log")
+    send_command "pale_mirror debug visual-audit tp $settlement_id $view_id"
+    teleported=false
+    for _ in $(seq 1 180); do
+      if tail -n "+$((before_tp + 1))" "$client_log" \
+          | rg -Fq "Teleported to pale_mirror:visual_audit/$view_id "; then
+        teleported=true
+        break
+      fi
+      if tail -n "+$((before_tp + 1))" "$client_log" | rg -q 'Unknown visual-audit view|timed out'; then break; fi
+      kill -0 "$client_pid" 2>/dev/null || break
+      sleep 1
+    done
+    "$teleported" || { printf 'Could not prepare semantic view %s.\n' "$view_id" >&2; exit 1; }
+    sleep "$frame_wait"
+    capture_frame "$name" "$view_id" "$kind" "$target_id" "$dimension" "$x" "$y" "$z" "$yaw" "$pitch"
+  done <<<"$audit_lines"
+  ((${#captured_rows[@]} > 0)) || {
+    printf 'No semantic views matched --only %s.\n' "${only_prefix:-<unset>}" >&2
+    exit 1
+  }
+else
+  capture_view top "$anchor_x" "$((anchor_y + top_height))" "$anchor_z" 0 90
+  capture_view south_east "$((anchor_x + radius))" "$((anchor_y + view_height))" "$((anchor_z + radius))" 135 28
+  capture_view south_west "$((anchor_x - radius))" "$((anchor_y + view_height))" "$((anchor_z + radius))" -135 28
+  capture_view north_east "$((anchor_x + radius))" "$((anchor_y + view_height))" "$((anchor_z - radius))" 45 28
+  capture_view north_west "$((anchor_x - radius))" "$((anchor_y + view_height))" "$((anchor_z - radius))" -45 28
+fi
 
 python3 "$x11" key F1
 hud_hidden=false
@@ -304,22 +368,54 @@ send_command "gamemode $original_gamemode $username"
 state_changed=false
 cp "$client_log" "$output_dir/client-latest.log"
 
+view_rows=$(printf '%s\n' "${captured_rows[@]}")
 TARGET="$safe_target" SETTLEMENT_ID="$settlement_id" ANCHOR="$anchor" SERVER="$server" USERNAME="$username" \
-OUTPUT_DIR="$output_dir" python3 - <<'PY'
+OUTPUT_DIR="$output_dir" VIEW_ROWS="$view_rows" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
+from PIL import Image, ImageDraw
 
 output = Path(os.environ["OUTPUT_DIR"])
+views = []
+for row in os.environ.get("VIEW_ROWS", "").splitlines():
+    if not row:
+        continue
+    view_id, kind, target_id, dimension, x, y, z, yaw, pitch, filename = row.split("\t")
+    views.append({
+        "id": view_id, "kind": kind, "targetId": target_id, "dimension": dimension,
+        "position": [int(x), int(y), int(z)], "yaw": float(yaw), "pitch": float(pitch),
+        "file": filename,
+    })
 manifest = {
     "target": os.environ["TARGET"],
     "settlementId": os.environ["SETTLEMENT_ID"] or None,
     "anchor": [int(value) for value in os.environ["ANCHOR"].split(",")],
     "server": os.environ["SERVER"],
     "username": os.environ["USERNAME"],
-    "views": [path.name for path in sorted(output.glob("*.png"))],
+    "views": views,
 }
 (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+def contact_sheet(name, selected):
+    if not selected:
+        return
+    thumb_w, thumb_h, label_h, columns = 480, 270, 28, 4
+    rows = (len(selected) + columns - 1) // columns
+    sheet = Image.new("RGB", (thumb_w * columns, (thumb_h + label_h) * rows), "#161616")
+    draw = ImageDraw.Draw(sheet)
+    for index, view in enumerate(selected):
+        image = Image.open(output / view["file"]).convert("RGB")
+        image.thumbnail((thumb_w, thumb_h))
+        left = (index % columns) * thumb_w
+        top = (index // columns) * (thumb_h + label_h)
+        sheet.paste(image, (left + (thumb_w - image.width) // 2, top + (thumb_h - image.height) // 2))
+        draw.text((left + 8, top + thumb_h + 6), view["id"], fill="white")
+    sheet.save(output / name)
+
+contact_sheet("contact-sheet-all.png", views)
+for kind in sorted({view["kind"] for view in views}):
+    contact_sheet(f"contact-sheet-{kind}.png", [view for view in views if view["kind"] == kind])
 PY
 
 printf 'Visual audit complete: %s\n' "$output_dir"

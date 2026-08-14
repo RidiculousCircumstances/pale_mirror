@@ -83,10 +83,15 @@ survey distribution; `minimumSpacing` is enforced between accepted regions, so
 discarded candidates cannot exclude unexplored geography. `mapRadius` constrains PM-authored centers; a Minecraft world
 border remains a separate server policy. A registered NeoForge
 worldgen feature applies only the current chunk's precompiled slice during normal
-generation, then persists a chunk attachment stamp. `ChunkEvent.Load` performs
-read-only stamp observation and resident commissioning; it never edits terrain,
-structures, MineSites or rails. The manifest and observed-stamp ledger survive
-restart, with no tickets, retrofit pass or loaded-chunk bulk construction.
+generation, then persists a chunk attachment stamp. Terrain-relative furniture
+is deliberately deferred to one post-decoration finalizer. That finalizer
+captures one stable height datum per column, deduplicates semantic `(x,z,offset)`
+slots and is protected by a separate persistent finalization stamp. Lamps,
+fences and planters therefore cannot become the heightmap datum for a second
+copy of themselves. `ChunkEvent.Load` performs stamp reconciliation and resident
+commissioning; it never replans terrain, structures, MineSites or rails. The
+manifest and observed-stamp ledger survive restart, with no tickets, retrofit
+pass or loaded-chunk bulk construction.
 
 Settlement preparation also compiles a six-block cleanup-only halo. The halo does
 not flatten or claim neighbouring ground; during fresh chunk generation it scans
@@ -128,6 +133,14 @@ planters and partial low wall/fence defences make the address legible without
 drawing an impermeable geometric circle around it. Reserved future parcels use
 survey stakes and small material stores, so their emptiness reads as planned
 development rather than unfinished generation.
+
+Public-realm paving is functional microgeometry, not a texture swap. Each
+climate owns compatible full-block, slab and stair states. Sidewalks, footpaths,
+market edges and street shoulders use half-block profiles, while actual tier
+changes compile oriented stair blocks. Street furniture uses region-global
+occupancy reservations against buildings, circulation and railway cells; a
+lamp/planter pair is accepted or rejected as one assembly. Hanging lamps declare
+real hanging support and raised fences must have vertical or horizontal support.
 
 The static Township composition is: town hall, market hall, inn, clinic, bakery,
 receiving depot, smeltery, smithy, mechanical workshop, stable, assay office,
@@ -301,7 +314,14 @@ only loaded chunks and never force-load their physical destination.
 ./gradlew verifyDistribution
 ```
 
-The dedicated visual GameTests cover manifest NBT round-trip and Threat Heart
-identity/stage persistence. Graphical model, texture, animation, audible range,
-building composition and terrain quality still require a real-client seed
-matrix before the visual cutover can be called product-validated.
+The dedicated visual GameTests cover manifest NBT round-trip, Threat Heart
+identity/stage persistence and an exhaustive structural matrix of 216 public
+realms (three climates, three layout archetypes and 24 bounded variants). The
+matrix rejects duplicate surface slots, missing slab/stair articulation and
+unsupported lantern/fence assemblies. A separate semantic-camera test proves
+the 25-view grammar across all nine climate/archetype representatives.
+
+Graphical model, texture, animation, audible range, building composition and
+terrain quality remain a real-client gate rather than a pixel-diff assertion.
+[`settlement-visual-audit.md`](settlement-visual-audit.md) describes the
+automated street-level capture and contact-sheet workflow used for that review.

@@ -93,13 +93,15 @@
   Mine17 uses an organic 18-block pad union for large modded crowns. A 28-column one-block gradient blends local pads
   into nature; resident commissioning rejects occupied spawn cells.
 - Added a repeatable X11 audit path that captures top and four diagonal daylight views without disturbing camera pitch; a real client pass now supplies settlement and Mine17 image evidence.
+- Expanded the audit path into 25 semantic settlement/mine/rail viewpoints with exact runtime teleport commands, a machine-readable capture manifest and contact sheets. Added supported low fixtures, mixed slab/stair public-realm paving and exhaustive 216-case climate/archetype/variant materialization coverage.
+- Removed the duplicate early-decoration pass from authored worldgen: surface fixtures and public-realm details now materialize once during stamped late finalization, so lamps, fences and other decorations cannot stack before biome decoration settles.
 
 ### Now
 - The approved v40 authored-settlement/POI visual-quality cut is implemented. Risk is `critical-code`: immutable manifests, persistence codecs, worldgen compilation and registration changed; genesis readiness remains the visible fail-closed recovery boundary.
-- Schema v40, Visual definition v11, compiled catalog v17 and genesis SavedData schema v10 intentionally reject every earlier world; the playtest world is disposable.
+- Schema v40, Visual definition v11, compiled catalog v18 and genesis SavedData schema v10 intentionally reject every earlier world; the playtest world is disposable.
 - The static 48-person Township has exact functional building/category/function/slot contracts, six open spaces, 20 exact <=4 cut/fill pads, an irregular managed union and stable resident building/slot assignments. Catalog-only 12/24/72 snapshots are validated without runtime stage growth.
 - Mine17 materializes a complete typed surface campus from portal/hoist, crew, processing, power, loading and maintenance assets; Red Valley remains a compact staged outpost. True NBT dimensions are part of the fail-closed footprint contract. The shorter branched underground grammar retains an adit, gallery and dry controller chamber.
-- Settlement pads now merge into broad one-block-per-column landscape transitions; mixed masonry streets, sidewalks, planters, lamps and segmented low defences establish a public-realm hierarchy. Reserved plots are physically surveyed and stocked rather than visually blank.
+- Settlement pads now merge into broad one-block-per-column landscape transitions; mixed masonry streets, slab sidewalks, stair transitions, planters, supported lamps and segmented low defences establish a public-realm hierarchy. Reserved plots are physically surveyed and stocked rather than visually blank.
 - Settlement manifests now carry stable module identity, local foundations, semantic ports, typed circulation/defence features and bounded visual-state profiles. Runtime damage/reconstruction, positive development and refugee camps use those authored contracts through Core jobs.
 - The baseline railway uses bounded dry-preferring A*, rejects water runs over 24 blocks or insufficient clearance, and materializes short bridges with decks/piers while preserving surrounding water. It never drains chunks.
 - Surface mine pads use a deterministic nearby search, keep structural footprints disjoint while allowing grading aprons to merge, and cap local grading at 8 relief/4 cut/4 fill.
@@ -109,7 +111,7 @@
 - The latest natural client audit shows intact settlement modules after late biome decoration cleanup, legible mixed paving and intentionally marked development parcels. Empty reserved parcels remain because runtime growth is explicitly outside this cut.
 
 ### Next
-- The multithreaded planner, deterministic manifest check and complete Core/Visuals verification matrix are green; continue product playtesting of street navigation, building interiors and the Mine17 encounter without adding settlement growth stages in v40.
+- The multithreaded planner, deterministic manifest check and complete Core/Visuals verification matrix are green; use the semantic 25-view audit to continue product playtesting of street navigation, fixtures, building interiors and the Mine17 encounter without adding settlement growth stages in v40.
 
 ## Open questions
 - Temperate natural placement and finalization are visually confirmed; cold-taiga and dry-arid art-family quality still needs equivalent natural client audits.

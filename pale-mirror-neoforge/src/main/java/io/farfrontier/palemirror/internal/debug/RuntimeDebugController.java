@@ -51,6 +51,13 @@ public final class RuntimeDebugController {
     public RuntimeDebugService.ActionResult teleportObject(ServerPlayer player, WorldObjectId id) {
         return navigator.teleportObject(player, id);
     }
+    public List<Component> visualAuditViews(WorldObjectId settlementId) {
+        return navigator.visualAuditViews(settlementId);
+    }
+    public RuntimeDebugService.ActionResult teleportVisualAudit(ServerPlayer player, WorldObjectId settlementId,
+                                                                 String viewId) {
+        return navigator.teleportVisualAudit(player, settlementId, viewId);
+    }
     public RuntimeDebugService.ActionResult bindNearest(ServerPlayer player) {
         return service.bindNearest(server, data, commands, player);
     }

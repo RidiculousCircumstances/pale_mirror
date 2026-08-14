@@ -30,11 +30,12 @@ final class SettlementGenesisCompiler {
 
     static void compile(AuthoredRegionSeed seed, FrontierPalette palette, Sink sink) {
         AuthoredSettlementSitePlan settlement = seed.settlementSite();
+        SettlementFixtureOccupancy fixtures = SettlementFixtureOccupancy.forSettlement(seed);
         cleanupVegetationEnvelope(seed, settlement, sink);
         settlement.foundations().forEach(value -> foundation(value, palette, sink));
-        settlement.openSpaces().forEach(value -> openSpace(value, palette, sink));
-        settlement.circulation().forEach(value -> linear(value, palette, sink));
-        settlement.defences().forEach(value -> linear(value, palette, sink));
+        settlement.openSpaces().forEach(value -> openSpace(value, palette, fixtures, sink));
+        settlement.circulation().forEach(value -> linear(value, palette, fixtures, sink));
+        settlement.defences().forEach(value -> linear(value, palette, fixtures, sink));
         freightGate(settlement, palette, sink);
         details(FrontierClimate.valueOf(seed.climate().toUpperCase(Locale.ROOT)), settlement, palette, sink);
         entrances(settlement, palette, sink);
@@ -65,7 +66,8 @@ final class SettlementGenesisCompiler {
         }
     }
 
-    private static void openSpace(AuthoredOpenSpacePlan space, FrontierPalette palette, Sink sink) {
+    private static void openSpace(AuthoredOpenSpacePlan space, FrontierPalette palette,
+                                  SettlementFixtureOccupancy fixtures, Sink sink) {
         int target = space.bounds().min().y();
         for (int x = space.bounds().min().x(); x <= space.bounds().max().x(); x++) {
             for (int z = space.bounds().min().z(); z <= space.bounds().max().z(); z++) {
@@ -79,6 +81,11 @@ final class SettlementGenesisCompiler {
                     case BRIDGE -> palette.planks();
                 };
                 sink.surfaceBlock(x, z, -1, surface);
+                if (space.kind() == OpenSpaceKind.MARKET_SQUARE
+                        && SettlementPublicRealm.perimeter(space, x, z)
+                        && !SettlementPublicRealm.cardinalEntrance(space, x, z)) {
+                    sink.surfaceBlock(x, z, 0, palette.pavingSlab());
+                }
                 sink.cleanup(x, z, target);
             }
         }
@@ -103,7 +110,8 @@ final class SettlementGenesisCompiler {
                 for (int dx = -2; dx <= 2; dx++) {
                     sink.surfaceBlock(centerX + dx, centerZ, 3, palette.planks());
                 }
-                sink.surfaceBlock(centerX, centerZ, 2, Blocks.LANTERN.defaultBlockState());
+                sink.surfaceBlock(centerX, centerZ, 2, Blocks.LANTERN.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.LanternBlock.HANGING, true));
                 for (int offset : new int[]{-5, 5}) {
                     sink.surfaceBlock(centerX + offset, centerZ, -1, Blocks.MOSS_BLOCK.defaultBlockState());
                     sink.surfaceBlock(centerX + offset, centerZ, 0, Blocks.FLOWERING_AZALEA.defaultBlockState());
@@ -130,9 +138,8 @@ final class SettlementGenesisCompiler {
             }
             case MARKET_SQUARE -> {
                 for (int side : new int[]{-5, 5}) {
-                    sink.surfaceBlock(centerX + side, centerZ, 0, fence(palette));
-                    sink.surfaceBlock(centerX + side, centerZ, 1, fence(palette));
-                    sink.surfaceBlock(centerX + side, centerZ, 2, Blocks.LANTERN.defaultBlockState());
+                    if (!fixtures.reserve(centerX + side, centerZ, 2)) continue;
+                    SettlementPublicRealm.lowLamp(centerX + side, centerZ, palette, sink);
                     for (int z = centerZ - 2; z <= centerZ + 2; z++) {
                         sink.surfaceBlock(centerX + side, z, 3, Math.floorMod(z, 2) == 0
                                 ? Blocks.WHITE_WOOL.defaultBlockState() : Blocks.ORANGE_WOOL.defaultBlockState());
@@ -162,10 +169,9 @@ final class SettlementGenesisCompiler {
                     }
                 }
                 for (int offset : new int[]{-5, 5}) {
-                    sink.surfaceBlock(centerX + offset, centerZ + 4, 0,
-                            Blocks.COBBLESTONE_WALL.defaultBlockState());
-                    sink.surfaceBlock(centerX + offset, centerZ + 4, 1,
-                            Blocks.LANTERN.defaultBlockState());
+                    if (fixtures.reserve(centerX + offset, centerZ + 4, 2)) {
+                        SettlementPublicRealm.lowLamp(centerX + offset, centerZ + 4, palette, sink);
+                    }
                 }
             }
             case TRAINING_YARD -> {
@@ -205,10 +211,13 @@ final class SettlementGenesisCompiler {
         return Math.max(0, Math.max(dx, dz));
     }
 
-    private static void linear(LinearFeaturePlan feature, FrontierPalette palette, Sink sink) {
+    private static void linear(LinearFeaturePlan feature, FrontierPalette palette,
+                               SettlementFixtureOccupancy fixtures, Sink sink) {
         for (int segment = 1; segment < feature.nodes().size(); segment++) {
             List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
-            if (feature.kind() == LinearFeatureKind.PALISADE) { palisade(points, palette, sink); continue; }
+            if (feature.kind() == LinearFeatureKind.PALISADE) {
+                palisade(points, palette, fixtures, sink); continue;
+            }
             if (feature.kind() == LinearFeatureKind.RETAINING_WALL) { retainingWall(points, palette, sink); continue; }
             int radius = feature.width() / 2;
             for (VisualPoint point : points) for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
@@ -221,15 +230,11 @@ final class SettlementGenesisCompiler {
                         case 4, 5, 6 -> Blocks.STONE_BRICKS.defaultBlockState();
                         default -> Blocks.COBBLESTONE.defaultBlockState();
                     };
-                    case FOOTPATH -> Math.floorMod(point.x() * 3 + point.z(), 9) == 0
-                            ? Blocks.ANDESITE.defaultBlockState() : Blocks.COBBLESTONE.defaultBlockState();
-                    case SIDEWALK -> Math.floorMod(point.x() + point.z() + dx + dz, 5) == 0
-                            ? Blocks.POLISHED_ANDESITE.defaultBlockState()
-                            : Blocks.STONE_BRICKS.defaultBlockState();
+                    case FOOTPATH, SIDEWALK -> palette.paving();
                     case PLAZA -> Math.floorMod(point.x() + point.z(), 6) == 0
                             ? Blocks.POLISHED_ANDESITE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
                     case BRIDGE -> palette.planks();
-                    case STAIRS -> Blocks.STONE_BRICKS.defaultBlockState();
+                    case STAIRS -> SettlementPublicRealm.stairState(feature, segment, palette);
                     case DITCH -> Blocks.COARSE_DIRT.defaultBlockState();
                     default -> Blocks.COBBLESTONE.defaultBlockState();
                 };
@@ -239,21 +244,27 @@ final class SettlementGenesisCompiler {
                     sink.terrain(point.x() + dx, point.z() + dz, target, surface, palette.foundation());
                 } else {
                     sink.surfaceBlock(point.x() + dx, point.z() + dz, -1, surface);
+                    if (feature.kind() == LinearFeatureKind.SIDEWALK
+                            || feature.kind() == LinearFeatureKind.FOOTPATH
+                            || feature.kind() == LinearFeatureKind.PLAZA
+                            && (Math.abs(dx) == radius || Math.abs(dz) == radius)) {
+                        sink.surfaceBlock(point.x() + dx, point.z() + dz, 0, palette.pavingSlab());
+                    }
                 }
                 sink.cleanup(point.x() + dx, point.z() + dz, target);
             }
             if (feature.kind() == LinearFeatureKind.FREIGHT_ROAD
                     || feature.kind() == LinearFeatureKind.STREET) {
                 if (feature.kind() == LinearFeatureKind.STREET) {
-                    streetShoulders(points, feature.width(), sink);
+                    streetShoulders(points, feature.width(), palette, sink);
                 }
-                streetFurniture(points, feature.width(), palette, sink);
+                streetFurniture(points, feature.width(), palette, fixtures, sink);
             }
         }
     }
 
     private static void streetShoulders(List<VisualPoint> points, int width,
-                                        Sink sink) {
+                                        FrontierPalette palette, Sink sink) {
         int setback = width / 2 + 1;
         for (int index = 0; index < points.size(); index++) {
             VisualPoint previous = points.get(Math.max(0, index - 1));
@@ -270,13 +281,14 @@ final class SettlementGenesisCompiler {
                         ? Blocks.MOSSY_COBBLESTONE.defaultBlockState()
                         : Blocks.COBBLESTONE.defaultBlockState();
                 sink.surfaceBlock(x, z, -1, shoulder);
+                sink.surfaceBlock(x, z, 0, palette.pavingSlab());
                 sink.cleanup(x, z, points.get(index).y());
             }
         }
     }
 
     private static void streetFurniture(List<VisualPoint> points, int width,
-                                        FrontierPalette palette, Sink sink) {
+                                        FrontierPalette palette, SettlementFixtureOccupancy fixtures, Sink sink) {
         for (int index = 7; index < points.size(); index += 14) {
             VisualPoint previous = points.get(Math.max(0, index - 1));
             VisualPoint next = points.get(Math.min(points.size() - 1, index + 1));
@@ -286,12 +298,10 @@ final class SettlementGenesisCompiler {
             int setback = width / 2 + 2;
             int x = points.get(index).x() - dz * setback * side;
             int z = points.get(index).z() + dx * setback * side;
-            sink.surfaceBlock(x, z, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
-            sink.surfaceBlock(x, z, 1, fence(palette));
-            sink.surfaceBlock(x, z, 2, fence(palette));
-            sink.surfaceBlock(x, z, 3, Blocks.LANTERN.defaultBlockState());
             int planterX = x - dz * side;
             int planterZ = z + dx * side;
+            if (!fixtures.reserveWithCompanion(x, z, planterX, planterZ, 4)) continue;
+            SettlementPublicRealm.streetLamp(x, z, dx, dz, side, palette, sink);
             sink.surfaceBlock(planterX, planterZ, -1, Blocks.MOSS_BLOCK.defaultBlockState());
             sink.surfaceBlock(planterX, planterZ, 0, index % 28 == 7
                     ? Blocks.FLOWERING_AZALEA.defaultBlockState()
@@ -308,14 +318,16 @@ final class SettlementGenesisCompiler {
         return result;
     }
 
-    private static void palisade(List<VisualPoint> points, FrontierPalette palette, Sink sink) {
+    private static void palisade(List<VisualPoint> points, FrontierPalette palette,
+                                 SettlementFixtureOccupancy fixtures, Sink sink) {
         for (int index = 0; index < points.size(); index++) {
             VisualPoint point = points.get(index);
             if (index % 6 == 0) {
                 sink.surfaceBlock(point.x(), point.z(), 0, palette.foundation());
                 sink.surfaceBlock(point.x(), point.z(), 1, palette.log());
-                if (index % 18 == 0) sink.surfaceBlock(point.x(), point.z(), 2,
-                        Blocks.LANTERN.defaultBlockState());
+                if (index % 18 == 0 && fixtures.reserve(point.x(), point.z(), 3)) {
+                    sink.surfaceBlock(point.x(), point.z(), 2, Blocks.LANTERN.defaultBlockState());
+                }
             } else {
                 sink.surfaceBlock(point.x(), point.z(), 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
                 sink.surfaceBlock(point.x(), point.z(), 1, fence(palette));
@@ -353,7 +365,8 @@ final class SettlementGenesisCompiler {
         }
         for (VisualModulePlacement module : settlement.modules()) module.ports().stream()
                 .filter(port -> port.kind() == VisualPortKind.SERVICE).findFirst().ifPresent(port -> {
-                    BlockPos p = block(port.position()); sink.block(p.above(), palette.planks());
+                    BlockPos p = SettlementPublicRealm.block(port.position());
+                    sink.block(p.above(), palette.planks());
                     sink.block(p.above(2), Blocks.HAY_BLOCK.defaultBlockState());
                     sink.block(p.offset(1, 1, 0), Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
                 });
@@ -425,8 +438,9 @@ final class SettlementGenesisCompiler {
         for (VisualModulePlacement module : settlement.modules()) {
             var port = module.ports().stream().filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
                     .findFirst().orElseThrow();
-            BlockPos base = block(port.position()); Direction facing = direction(port.outwardQuarterTurns());
-            BlockState lower = door(palette).setValue(DoorBlock.FACING, facing)
+            BlockPos base = SettlementPublicRealm.block(port.position());
+            Direction facing = SettlementPublicRealm.direction(port.outwardQuarterTurns());
+            BlockState lower = SettlementPublicRealm.door(palette).setValue(DoorBlock.FACING, facing)
                     .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
             sink.block(base, lower); sink.block(base.above(), lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
             sink.block(base.above(2), palette.planks()); BlockPos outside = base.relative(facing);
@@ -445,8 +459,9 @@ final class SettlementGenesisCompiler {
         BlockState shaft = optionalCreate("shaft", depot.quarterTurns());
         BlockState cog = optionalCreate("cogwheel", depot.quarterTurns());
         if (motor == null || shaft == null || cog == null) return;
-        Direction inward = direction(depot.quarterTurns()).getOpposite();
-        BlockPos visible = block(service.position()).above().relative(inward, 2); BlockPos hidden = visible.relative(inward);
+        Direction inward = SettlementPublicRealm.direction(depot.quarterTurns()).getOpposite();
+        BlockPos visible = SettlementPublicRealm.block(service.position()).above().relative(inward, 2);
+        BlockPos hidden = visible.relative(inward);
         sink.block(hidden, motor); sink.block(visible, shaft); sink.block(visible.above(), cog);
         sink.block(hidden.below(), palette.foundation()); sink.block(hidden.above(), palette.foundation());
         sink.block(hidden.relative(inward), palette.foundation());
@@ -463,25 +478,11 @@ final class SettlementGenesisCompiler {
         }).orElse(null);
     }
 
-    private static BlockState fence(FrontierPalette palette) {
+    static BlockState fence(FrontierPalette palette) {
         if (palette.planks().is(Blocks.ACACIA_PLANKS)) return Blocks.ACACIA_FENCE.defaultBlockState();
         if (palette.planks().is(Blocks.OAK_PLANKS)) return Blocks.OAK_FENCE.defaultBlockState();
         return Blocks.SPRUCE_FENCE.defaultBlockState();
     }
-
-    private static BlockState door(FrontierPalette palette) {
-        if (palette.planks().is(Blocks.ACACIA_PLANKS)) return Blocks.ACACIA_DOOR.defaultBlockState();
-        if (palette.planks().is(Blocks.OAK_PLANKS)) return Blocks.OAK_DOOR.defaultBlockState();
-        return Blocks.SPRUCE_DOOR.defaultBlockState();
-    }
-
-    private static Direction direction(int turns) {
-        return switch (Math.floorMod(turns, 4)) {
-            case 0 -> Direction.EAST; case 1 -> Direction.SOUTH; case 2 -> Direction.WEST; default -> Direction.NORTH;
-        };
-    }
-
-    private static BlockPos block(VisualPoint point) { return new BlockPos(point.x(), point.y(), point.z()); }
 
     interface Sink {
         void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation);
@@ -493,4 +494,5 @@ final class SettlementGenesisCompiler {
         void cleanup(int x, int z, int baseY);
         void block(BlockPos position, BlockState state);
     }
+
 }

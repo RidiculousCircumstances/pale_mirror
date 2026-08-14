@@ -48,6 +48,14 @@ public final class AuthoredVisualProvider implements VisualProvider {
         return markers.discovered(level.dimension().location().toString());
     }
 
+    @Override public Collection<io.farfrontier.palemirror.api.VisualAuditView> visualAuditViews(
+            ServerLevel level, String regionId) {
+        return markers.discovered(level.dimension().location().toString()).stream()
+                .filter(seed -> seed.planId().equals(regionId)).findFirst()
+                .map(io.farfrontier.palemirror.visuals.genesis.VisualAuditPlanner::views)
+                .orElse(java.util.List.of());
+    }
+
     @Override public java.util.Optional<io.farfrontier.palemirror.api.VisualModuleSnapshot> compileAuthoredModule(
             io.farfrontier.palemirror.api.StagedVisualModule module) {
         try {

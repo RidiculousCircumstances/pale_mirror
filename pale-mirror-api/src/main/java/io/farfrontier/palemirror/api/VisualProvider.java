@@ -10,6 +10,10 @@ public interface VisualProvider extends IntegrationAdapter {
     default GenesisReadiness genesisReadiness() { return GenesisReadiness.failed("Genesis readiness is unavailable"); }
     default String performanceSummary() { return "unavailable"; }
     Collection<AuthoredRegionSeed> discoverAuthoredRegions(ServerLevel level);
+    /** Semantic, repeatable camera poses; production state is never mutated by this diagnostic projection. */
+    default Collection<VisualAuditView> visualAuditViews(ServerLevel level, String regionId) {
+        return java.util.List.of();
+    }
     /** True only after genesis has durably completed this exact authored module. */
     default boolean authoredModuleReady(ServerLevel level, AuthoredRegionSeed region,
                                         VisualModulePlacement module) { return false; }

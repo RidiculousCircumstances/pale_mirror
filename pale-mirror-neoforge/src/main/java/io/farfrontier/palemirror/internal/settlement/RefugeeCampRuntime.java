@@ -31,7 +31,7 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class RefugeeCampRuntime {
     private static final String CHANNEL = "shelter";
     private static final String POLICY = "pale_mirror:shelter_camp";
-    private static final String VERSION = "v40-frontier-camp-1";
+    private static final String VERSION = "v40-frontier-camp-2";
 
     private RefugeeCampRuntime() { }
 
@@ -171,8 +171,8 @@ public final class RefugeeCampRuntime {
     private static Map<BlockPos, BlockState> campBlueprint(BlockPos anchor) {
         Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
         for (int offset = -8; offset <= 8; offset++) {
-            blocks.put(anchor.offset(offset, 0, 0), Blocks.COARSE_DIRT.defaultBlockState());
-            blocks.put(anchor.offset(0, 0, offset), Blocks.COARSE_DIRT.defaultBlockState());
+            blocks.put(anchor.offset(offset, 0, 0), Blocks.STONE_BRICK_SLAB.defaultBlockState());
+            blocks.put(anchor.offset(0, 0, offset), Blocks.STONE_BRICK_SLAB.defaultBlockState());
         }
         tent(blocks, anchor.offset(-5, 0, -5), Blocks.WHITE_WOOL.defaultBlockState());
         tent(blocks, anchor.offset(5, 0, -5), Blocks.LIGHT_GRAY_WOOL.defaultBlockState());
