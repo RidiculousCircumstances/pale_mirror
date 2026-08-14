@@ -20,6 +20,7 @@ dependencies {
             ?: new File(runtimeModDirectory, 'create-1.21.1-6.0.10.jar'))
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'com.google.code.gson:gson:2.11.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -109,11 +110,15 @@ tasks.register('verifyVisualsJar') {
                     'pale_mirror_visuals.mixins.json',
                     'assets/pale_mirror_visuals/textures/entity/threat_heart.png',
                     'assets/pale_mirror_visuals/geo/threat_heart.geo.json',
+                    'data/pale_mirror_visuals/settlement_archetype/iron_frontier.json',
                     'data/pale_mirror_visuals/structure/temperate/residence_1.nbt',
                     'data/pale_mirror_visuals/structure/temperate/mine/portal_hoist.nbt',
                     'data/pale_mirror_visuals/structure/temperate/mine/dispatch_commissioning.nbt',
                     'data/pale_mirror_visuals/structure/cold_taiga/mine/portal_hoist.nbt',
-                    'data/pale_mirror_visuals/structure/cold_taiga/mine/dispatch_commissioning.nbt'
+                    'data/pale_mirror_visuals/structure/cold_taiga/mine/dispatch_commissioning.nbt',
+                    'data/pale_mirror_visuals/structure/dry_arid/civic_hall.nbt',
+                    'data/pale_mirror_visuals/structure/dry_arid/mine/portal_hoist.nbt',
+                    'data/pale_mirror_visuals/structure/dry_arid/mine/dispatch_commissioning.nbt'
             ].each { entry ->
                 if (jar.getEntry(entry) == null) throw new GradleException("Visuals JAR is missing ${entry}")
             }

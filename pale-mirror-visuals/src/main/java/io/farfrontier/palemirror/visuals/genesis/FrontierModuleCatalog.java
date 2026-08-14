@@ -6,7 +6,7 @@ import java.util.Map;
 
 /** Versioned visual grammar metadata; NBT is content, this catalog is its semantic contract. */
 final class FrontierModuleCatalog {
-    static final int VERSION = 1;
+    static final int VERSION = 2;
     private static final Map<String, Definition> DEFINITIONS = definitions();
 
     private FrontierModuleCatalog() { }

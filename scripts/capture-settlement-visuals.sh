@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 server=127.0.0.1:25565
-username=PMAudit
+username=pmaudit
 settlement_id=
 anchor=
 output_root="$repo_dir/build/visual-audits"
@@ -22,7 +22,7 @@ Usage:
 
 Options:
   --server HOST:PORT       Multiplayer server (default 127.0.0.1:25565)
-  --username NAME          Dedicated permission-level-4 audit player (default PMAudit)
+  --username NAME          Dedicated permission-level-4 audit player (default pmaudit)
   --output DIRECTORY       Output root (default build/visual-audits)
   --frame-wait SECONDS     Chunk/render settling time per view (default 10)
   --size WIDTHxHEIGHT      Capture size (default 1920x1080)
@@ -31,7 +31,8 @@ Options:
   --top-height BLOCKS      Top camera height over anchor (default 150)
 
 The client pack must already exist in pale-mirror-neoforge/build/runs/railway-client.
-Set PALE_MIRROR_XVFB when Xvfb is not on PATH. The audit player must be an op.
+Set PALE_MIRROR_XVFB when Xvfb is not on PATH. Alternatively set
+PALE_MIRROR_DISPLAY to an unlocked X11/Xwayland display. The audit player must be an op.
 EOF
 }
 
@@ -68,17 +69,16 @@ if [[ -n "$anchor" ]]; then
   [[ "$anchor" =~ ^(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)$ ]] || { printf 'Invalid anchor: %s\n' "$anchor" >&2; exit 2; }
 fi
 
+external_display=${PALE_MIRROR_DISPLAY:-}
 xvfb_bin=${PALE_MIRROR_XVFB:-}
-if [[ -z "$xvfb_bin" ]]; then xvfb_bin=$(command -v Xvfb || true); fi
-[[ -x "$xvfb_bin" ]] || {
-  printf 'Visual audit requires Xvfb; install it or set PALE_MIRROR_XVFB to its executable.\n' >&2
-  exit 2
-}
+if [[ -z "$external_display" ]]; then
+  if [[ -z "$xvfb_bin" ]]; then xvfb_bin=$(command -v Xvfb || true); fi
+  [[ -x "$xvfb_bin" ]] || {
+    printf 'Visual audit requires Xvfb or PALE_MIRROR_DISPLAY pointing at an unlocked session.\n' >&2
+    exit 2
+  }
+fi
 command -v xwininfo >/dev/null || { printf 'Visual audit requires xwininfo.\n' >&2; exit 2; }
-python3 -c 'from PIL import ImageGrab' >/dev/null 2>&1 || {
-  printf 'Visual audit requires Python Pillow with X11 ImageGrab support.\n' >&2
-  exit 2
-}
 
 game_dir="$repo_dir/pale-mirror-neoforge/build/runs/railway-client"
 [[ -d "$game_dir/mods" ]] || {
@@ -104,17 +104,21 @@ client_log="$game_dir/logs/latest.log"
 launcher_log="$output_dir/client-launch.log"
 x11="$repo_dir/scripts/visual-audit-x11.py"
 
-display=
-for candidate in $(seq 90 109); do
-  if [[ ! -S "/tmp/.X11-unix/X$candidate" ]]; then display=":$candidate"; break; fi
-done
-[[ -n "$display" ]] || { printf 'No free X11 display in :90..:109.\n' >&2; exit 1; }
-
-setsid "$xvfb_bin" "$display" -screen 0 "${width}x${height}x24" -nolisten tcp >"$output_dir/xvfb.log" 2>&1 &
-xvfb_pid=$!
+display=$external_display
+xvfb_pid=
+if [[ -z "$display" ]]; then
+  for candidate in $(seq 90 109); do
+    if [[ ! -S "/tmp/.X11-unix/X$candidate" ]]; then display=":$candidate"; break; fi
+  done
+  [[ -n "$display" ]] || { printf 'No free X11 display in :90..:109.\n' >&2; exit 1; }
+  setsid "$xvfb_bin" "$display" -screen 0 "${width}x${height}x24" -nolisten tcp >"$output_dir/xvfb.log" 2>&1 &
+  xvfb_pid=$!
+fi
 client_pid=
 state_changed=false
 hud_hidden=false
+disabled_mod_sources=()
+disabled_mod_targets=()
 original_time=
 original_x=
 original_y=
@@ -134,11 +138,31 @@ cleanup() {
     set -e
   fi
   if [[ -n "$client_pid" ]]; then kill -TERM -- "-$client_pid" 2>/dev/null || true; wait "$client_pid" 2>/dev/null || true; fi
-  kill -TERM -- "-$xvfb_pid" 2>/dev/null || true
+  if [[ -n "$xvfb_pid" ]]; then kill -TERM -- "-$xvfb_pid" 2>/dev/null || true; fi
+  for index in "${!disabled_mod_sources[@]}"; do
+    if [[ -f "${disabled_mod_targets[$index]}" ]]; then
+      mv "${disabled_mod_targets[$index]}" "${disabled_mod_sources[$index]}"
+    fi
+  done
 }
 trap cleanup EXIT
-sleep 1
-kill -0 "$xvfb_pid" 2>/dev/null || { printf 'Xvfb failed; inspect %s/xvfb.log\n' "$output_dir" >&2; exit 1; }
+
+# The audit deliberately renders only vanilla full-detail chunks. Client-only DH
+# currently attempts an unsupported sync payload when the server-side mod is
+# disabled, and cached LODs would make before/after captures nondeterministic.
+mkdir -p "$output_dir/disabled-client-mods"
+shopt -s nullglob
+for client_mod in "$game_dir"/mods/DistantHorizons*.jar; do
+  disabled_target="$output_dir/disabled-client-mods/$(basename "$client_mod")"
+  mv "$client_mod" "$disabled_target"
+  disabled_mod_sources+=("$client_mod")
+  disabled_mod_targets+=("$disabled_target")
+done
+shopt -u nullglob
+if [[ -n "$xvfb_pid" ]]; then
+  sleep 1
+  kill -0 "$xvfb_pid" 2>/dev/null || { printf 'Xvfb failed; inspect %s/xvfb.log\n' "$output_dir" >&2; exit 1; }
+fi
 
 printf 'Launching visual-audit client for %s at %s...\n' "$username" "$server"
 : >"$client_log"
@@ -243,7 +267,27 @@ capture_view() {
   printf 'Capturing %-12s at %s,%s,%s...\n' "$name" "$x" "$y" "$z"
   send_command "execute in minecraft:overworld run tp $username $x $y $z $yaw $pitch"
   sleep "$frame_wait"
-  python3 "$x11" capture "$output_dir/$name.png"
+  local before latest
+  before=$(find "$game_dir/screenshots" -maxdepth 1 -type f -name '*.png' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -n | tail -1 | cut -d' ' -f2- || true)
+  python3 "$x11" key F2
+  latest=
+  for _ in $(seq 1 20); do
+    latest=$(find "$game_dir/screenshots" -maxdepth 1 -type f -name '*.png' -printf '%T@ %p\n' 2>/dev/null \
+      | sort -n | tail -1 | cut -d' ' -f2- || true)
+    if [[ -n "$latest" && "$latest" != "$before" && -s "$latest" ]] \
+        && file "$latest" | rg -q 'PNG image data'; then
+      first_size=$(stat -c '%s' "$latest")
+      sleep 1
+      second_size=$(stat -c '%s' "$latest" 2>/dev/null || printf 0)
+      if [[ "$first_size" -eq "$second_size" ]]; then break; fi
+    fi
+    sleep 1
+  done
+  [[ -n "$latest" && "$latest" != "$before" && -s "$latest" ]] \
+      && file "$latest" | rg -q 'PNG image data' \
+      || { printf 'Minecraft did not finish saving %s.\n' "$name" >&2; exit 1; }
+  cp "$latest" "$output_dir/$name.png"
 }
 
 capture_view top "$anchor_x" "$((anchor_y + top_height))" "$anchor_z" 0 90

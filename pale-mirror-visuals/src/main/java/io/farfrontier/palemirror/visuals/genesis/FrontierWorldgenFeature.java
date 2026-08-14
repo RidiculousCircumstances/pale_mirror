@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.visuals.genesis;
 import com.mojang.serialization.Codec;
 import io.farfrontier.palemirror.visuals.runtime.FrontierGenesisRuntime;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.WorldGenLevel;
@@ -28,6 +30,12 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         if (slice == null) return false;
         for (CompiledChunkSlice.VegetationColumn column : slice.vegetation()) clearNaturalVegetation(level, column);
         for (CompiledChunkSlice.TerrainColumn column : slice.terrain()) grade(level, column);
+        // Heightmaps are updated by grading and by other late worldgen
+        // features.  A second pass is therefore required before authored
+        // blocks are written: it catches crowns and trunks whose original
+        // WORLD_SURFACE_WG top was stale without touching intentional timber,
+        // hedges or planters from the PM modules that follow.
+        for (CompiledChunkSlice.VegetationColumn column : slice.vegetation()) clearNaturalVegetation(level, column);
         placeSurfaceDecorations(level, slice.surfaceDecorations());
         slice.blocks().forEach((position, state) -> setIfDifferent(level, position, state));
         for (CompiledChunkSlice.RailColumn rail : slice.rails()) placeRail(level, rail);
@@ -52,6 +60,39 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
             BlockPos position = new BlockPos(column.x(), y, column.z());
             var state = level.getBlockState(position);
             if (naturalVegetation(state)) setIfDifferent(level, position, Blocks.AIR.defaultBlockState());
+        }
+    }
+
+    /**
+     * Some modded biome features are appended after PM's top-layer feature.
+     * Finalize a freshly generated full chunk once, protecting exact authored
+     * timber and then restoring terrain-following PM decoration.
+     */
+    public static void finishAfterDecoration(ServerLevel level, LevelChunk chunk, CompiledChunkSlice slice) {
+        String finalized = chunk.getExistingData(VisualGenesisAttachments.FINALIZATION_STAMP).orElse("");
+        if (slice.stamp().equals(finalized)) return;
+        for (CompiledChunkSlice.VegetationColumn column : slice.vegetation()) {
+            clearLateNaturalVegetation(level, column, slice.blocks());
+        }
+        placeSurfaceDecorations(level, slice.surfaceDecorations());
+        slice.blocks().forEach((position, state) -> setIfDifferent(level, position, state));
+        chunk.setData(VisualGenesisAttachments.FINALIZATION_STAMP, slice.stamp());
+        chunk.setUnsaved(true);
+    }
+
+    static void clearLateNaturalVegetation(LevelAccessor level, CompiledChunkSlice.VegetationColumn column,
+                                           java.util.Map<BlockPos,
+                                                   net.minecraft.world.level.block.state.BlockState> authored) {
+        int last = Math.min(level.getMaxBuildHeight() - 1,
+                level.getHeight(Heightmap.Types.WORLD_SURFACE, column.x(), column.z()) - 1);
+        int first = Math.max(level.getMinBuildHeight(), column.baseY() - VEGETATION_BASE_MARGIN);
+        for (int y = first; y <= last; y++) {
+            BlockPos position = new BlockPos(column.x(), y, column.z());
+            var state = level.getBlockState(position);
+            if (!naturalVegetation(state)) continue;
+            var authoredState = authored.get(position);
+            if (authoredState != null && authoredState.equals(state)) continue;
+            setIfDifferent(level, position, Blocks.AIR.defaultBlockState());
         }
     }
 
@@ -96,8 +137,8 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
                 Math.min(authoredTarget + blendDistance, naturalTop));
     }
 
-    private static void placeSurfaceDecorations(LevelAccessor level,
-                                                 java.util.List<CompiledChunkSlice.SurfaceDecoration> decorations) {
+    static void placeSurfaceDecorations(LevelAccessor level,
+                                        java.util.List<CompiledChunkSlice.SurfaceDecoration> decorations) {
         java.util.Map<Long, Integer> bases = new java.util.HashMap<>();
         for (CompiledChunkSlice.SurfaceDecoration decoration : decorations) {
             long key = ChunkPos.asLong(decoration.x(), decoration.z());

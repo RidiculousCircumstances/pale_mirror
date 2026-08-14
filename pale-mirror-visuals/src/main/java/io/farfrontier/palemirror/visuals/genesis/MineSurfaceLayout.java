@@ -8,26 +8,27 @@ import java.util.List;
 /** Shared geometry for terrain surveying and the authored MineSite grammar. */
 final class MineSurfaceLayout {
     static final int APRON = 2;
-    static final int MAXIMUM_RELIEF = 14;
-    static final int MAXIMUM_CUT = 7;
-    static final int MAXIMUM_FILL = 8;
+    static final int MAXIMUM_RELIEF = 8;
+    static final int MAXIMUM_CUT = 4;
+    static final int MAXIMUM_FILL = 4;
 
     private MineSurfaceLayout() { }
 
     static List<Pad> pads(AuthoredMineRole role) {
         if (role == AuthoredMineRole.PRIMARY) return List.of(
-                new Pad("portal", 0, -8, 21, 17),
-                new Pad("crew", -20, -12, 12, 9),
-                new Pad("processing", 0, -34, 21, 21),
-                new Pad("power", -26, -32, 13, 15),
-                new Pad("loading", 22, -12, 14, 9));
+                new Pad("portal", 0, -10, 23, 19),
+                new Pad("crew", -18, -34, 12, 9),
+                new Pad("processing", 0, -51, 31, 17),
+                new Pad("power", -20, -52, 13, 15),
+                new Pad("loading", 19, -34, 14, 9),
+                new Pad("maintenance", 18, -52, 12, 10));
         return List.of(
-                new Pad("portal", 0, -8, 21, 17),
-                new Pad("crew", -20, -12, 12, 9),
-                new Pad("dispatch", 22, -12, 13, 13),
-                new Pad("processing", 0, -34, 31, 17),
-                new Pad("power", -30, -35, 19, 22),
-                new Pad("freight", 23, -34, 14, 9));
+                new Pad("portal", 0, -10, 23, 19),
+                new Pad("crew", -18, -34, 12, 9),
+                new Pad("dispatch", 19, -34, 14, 13),
+                new Pad("processing", 0, -51, 31, 17),
+                new Pad("power", -22, -52, 19, 22),
+                new Pad("freight", 19, -52, 14, 9));
     }
 
     static Pad require(AuthoredMineRole role, String id) {

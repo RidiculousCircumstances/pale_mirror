@@ -172,9 +172,9 @@ public final class FrontierSiteSelector {
             weight = Math.max(2, weight - 2);
         }
         for (SitePlacementRequirement site : profile.requiredSites()) {
-            if (site.separateCardinalSectorFromRole().isBlank()) continue;
+            if (site.relatedSiteRole().isBlank() || !site.requireSeparateCardinalSector()) continue;
             int current = directionMasks.getOrDefault(site.role(), 0);
-            int reference = directionMasks.getOrDefault(site.separateCardinalSectorFromRole(), 0);
+            int reference = directionMasks.getOrDefault(site.relatedSiteRole(), 0);
             if (hasSeparateDirections(reference, current)) score += 8;
         }
         return score;

@@ -6,9 +6,10 @@ They are not a dependency or a claim of ownership, and they must be removed or r
 | Embedded family | Source | Exact source version | Original namespace | Use |
 |---|---|---|---|---|
 | Cabin/clockwork structures | Integrated Villages | `1.3.3+1.21.1-neoforge` | `integrated_villages` | Remapped private NBT modules for civic, housing, workshop and above-ground frontier-industrial MineSite slots |
-| Ancient mine structures | Integrated Dungeons and Structures | `1.13.7+1.21.1-neoforge` | `idas` | Portal/hoist, gallery and staged machinery modules |
-| Mining complex structures | When Dungeons Arise | `2.1.1-1.21.1` | `dungeons_arise` | Retained private underground reference modules; no dungeon shell is used as an above-ground building |
-| Underground mining outposts | Terralith | `2.6.2-1.21.1-neoforge` | `terralith` | Entrance adit and crew support modules |
+| PM frontier-industrial mine kit | Pale Mirror | schema v40 generator | `pale_mirror_visuals` | Reproducible surface portal/hoist, crew office, processing hall, power house, loading canopy and staged dispatch assets |
+| Ancient mine structures | Integrated Dungeons and Structures | `1.13.7+1.21.1-neoforge` | `idas` | Curated underground gallery and controller machinery references |
+| Mining complex structures | When Dungeons Arise | `2.1.1-1.21.1` | `dungeons_arise` | Curated underground controller chamber reference |
+| Underground mining outposts | Terralith | `2.6.2-1.21.1-neoforge` | `terralith` | Curated underground entrance-adit reference |
 | Threat Heart texture | OpenAI image generation, project-directed | generated 2026-08-12 | n/a | GeckoLib entity texture |
 
 Source archive checksum (SHA-512):
@@ -27,11 +28,14 @@ machinery and replaces inventories and ore/raw-resource cells with inert
 materials. Per-module embedded SHA-256 values are enforced by
 `AuthoredAssetCatalog`.
 
-Schema v39 composes the visible mining campus from the already pinned
-Integrated Villages workshop, residence, stable and depot modules, then adds
-PM-authored headframe, chimney, loading-platform, local-foundation and path
-geometry. Dungeons Arise, IDAS and Terralith modules are restricted to the
-sealed underground adit, gallery and controller spaces.
+Schema v40 generates the principal surface kit from
+`scripts/generate-authored-mine-landmarks.py`; its source is reviewable, emits
+deterministic gzip/NBT and contains no entities, block entities, inventories or
+resource blocks. An Integrated Villages workshop supplies the remaining
+maintenance module. PM composes those assets into one industrial campus with
+typed buildings, local foundations, an irregular working yard, paths, safety
+details and climate transforms. The curated underground adit, gallery and
+controller modules pass through the same sanitizer.
 
 The generated Threat Heart prompt requested a square Minecraft-style infected organic texture with a burgundy/crimson,
 purple and sparse ember-orange palette, no text, logo, watermark or scene.

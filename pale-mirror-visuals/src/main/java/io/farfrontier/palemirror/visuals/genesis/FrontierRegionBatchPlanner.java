@@ -21,7 +21,24 @@ public final class FrontierRegionBatchPlanner {
     public Result plan(long worldSeed, RegionCountRange counts, RegionPlacementProfile profile,
                        List<FrontierSiteSelector.SelectedSite> candidates,
                        FrontierRegionPlanner planner, MineAnchorResolver mineAnchors, RailPathResolver railPaths,
+                       SettlementLayoutResolver settlementLayouts, int minimumRegionSpacing) {
+        return planInternal(worldSeed, counts, profile, candidates, planner, mineAnchors, railPaths,
+                settlementLayouts, minimumRegionSpacing);
+    }
+
+    public Result plan(long worldSeed, RegionCountRange counts, RegionPlacementProfile profile,
+                       List<FrontierSiteSelector.SelectedSite> candidates,
+                       FrontierRegionPlanner planner, MineAnchorResolver mineAnchors, RailPathResolver railPaths,
                        int minimumRegionSpacing) {
+        return planInternal(worldSeed, counts, profile, candidates, planner, mineAnchors, railPaths,
+                (source, anchor, climate, direction, terrain) -> new SettlementLayoutPlanner()
+                        .plan(source, anchor, climate, direction, terrain), minimumRegionSpacing);
+    }
+
+    private Result planInternal(long worldSeed, RegionCountRange counts, RegionPlacementProfile profile,
+                       List<FrontierSiteSelector.SelectedSite> candidates,
+                       FrontierRegionPlanner planner, MineAnchorResolver mineAnchors, RailPathResolver railPaths,
+                       SettlementLayoutResolver settlementLayouts, int minimumRegionSpacing) {
         if (counts.maximum() > profile.search().maximumRegions()) {
             throw new IllegalArgumentException("region maximum exceeds placement profile capacity");
         }
@@ -40,7 +57,7 @@ public final class FrontierRegionBatchPlanner {
             }
             try {
                 manifests.add(planner.plan(worldSeed, manifests.size(), site.terrain(), site.climate(),
-                        mineAnchors, railPaths));
+                        mineAnchors, railPaths, settlementLayouts));
                 if (site.nearCandidate()) nearAccepted++;
             } catch (DryMineSiteUnavailableException unavailable) {
                 rejected++;

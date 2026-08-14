@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.visuals.genesis.FrontierGenesisCompiler;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionBatchPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierTerrainSurvey;
+import io.farfrontier.palemirror.visuals.genesis.FrontierWorldgenFeature;
 import io.farfrontier.palemirror.visuals.genesis.RegionCountRange;
 import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfile;
 import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfiles;
@@ -38,7 +39,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
-/** Plans once, publishes immutable slices, and observes completed worldgen without mutating loaded chunks. */
+/** Plans once, publishes immutable slices, finalizes late biome features, and observes completed worldgen. */
 @EventBusSubscriber(modid = PaleMirrorVisualsMod.MOD_ID)
 public final class FrontierGenesisRuntime {
     private static final int OBSERVATION_BUDGET = 8;
@@ -112,7 +113,7 @@ public final class FrontierGenesisRuntime {
         FrontierTerrainSurvey.Batch batch = survey.selectBatch(level, profile, counts.minimum(), reserve,
                 VisualServerConfig.GENESIS_MAP_RADIUS.get(), VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
         FrontierRegionBatchPlanner.Result planned = new FrontierRegionBatchPlanner().plan(level.getSeed(), counts,
-                profile, batch.sites(), planner, batch.mineAnchors(), batch.railPaths(),
+                profile, batch.sites(), planner, batch.mineAnchors(), batch.railPaths(), batch.settlementLayouts(),
                 VisualServerConfig.GENESIS_MINIMUM_SPACING.get());
         List<AuthoredRegionSeed> manifests = planned.manifests();
         var statistics = batch.statistics();
@@ -134,8 +135,12 @@ public final class FrontierGenesisRuntime {
     private static void install(ServerLevel level, List<AuthoredRegionSeed> plans) {
         plans.forEach(seed -> {
             AuthoredVisualProvider.INSTANCE.markers().observe(seed);
-            PaleMirrorVisualsMod.LOGGER.info("Installed authored manifest {} at {} {} {} (climate {})", seed.planId(),
-                    seed.anchor().x(), seed.anchor().y(), seed.anchor().z(), seed.climate());
+            PaleMirrorVisualsMod.LOGGER.info(
+                    "Installed authored manifest {} at {} {} {} (climate {}), Mine17 portal {} {} {}, Red Valley portal {} {} {}",
+                    seed.planId(), seed.anchor().x(), seed.anchor().y(), seed.anchor().z(), seed.climate(),
+                    seed.primaryMineSite().portal().x(), seed.primaryMineSite().portal().y(),
+                    seed.primaryMineSite().portal().z(), seed.alternateMineSite().portal().x(),
+                    seed.alternateMineSite().portal().y(), seed.alternateMineSite().portal().z());
         });
         PLANS.put(level, plans);
     }
@@ -169,6 +174,7 @@ public final class FrontierGenesisRuntime {
                     chunk, expected.stamp(), pending.stamp().isBlank() ? "ABSENT" : pending.stamp());
             return;
         }
+        FrontierWorldgenFeature.finishAfterDecoration(level, level.getChunk(chunk.x, chunk.z), expected);
         VisualGenesisSavedData ledger = VisualGenesisSavedData.get(level);
         ledger.observeChunk(pending.chunk(), pending.stamp());
         if (FIRST_STAMP_OBSERVED.compareAndSet(false, true)) PaleMirrorVisualsMod.LOGGER.info(

@@ -27,7 +27,23 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
         }
         baselineRailNodes = List.copyOf(baselineRailNodes);
         residents = List.copyOf(residents);
-        if (residents.size() != 48) throw new IllegalArgumentException("Authored frontier requires exactly 48 residents");
+        if (residents.size() != settlementSite.stage().population()) {
+            throw new IllegalArgumentException("Authored resident count must match settlement stage population");
+        }
+        if (residents.stream().map(ResidentSeed::residentId).distinct().count() != residents.size()) {
+            throw new IllegalArgumentException("Authored resident identities must be unique");
+        }
+        if (residents.stream().map(value -> value.homeBuildingId() + ":" + value.homeSlotId()).distinct().count()
+                != residents.size()) {
+            throw new IllegalArgumentException("Authored residents must have exclusive home slots");
+        }
+        long assignedWorkplaces = residents.stream().filter(value -> !value.workplaceBuildingId().isBlank()).count();
+        if (residents.stream().filter(value -> !value.workplaceBuildingId().isBlank())
+                .map(value -> value.workplaceBuildingId() + ":" + value.workplaceSlotId()).distinct().count()
+                != assignedWorkplaces) {
+            throw new IllegalArgumentException("Authored residents must have exclusive workplace slots");
+        }
+        for (ResidentSeed resident : residents) validateResidentBinding(resident, settlementSite, primaryMineSite);
         if (baselineRailNodes.size() < 2) throw new IllegalArgumentException("Baseline railway requires a path");
     }
 
@@ -42,5 +58,34 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
 
     private static void require(String value, String field) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(field + " is required");
+    }
+
+    private static void validateResidentBinding(ResidentSeed resident, AuthoredSettlementSitePlan settlement,
+                                                AuthoredMineSitePlan primaryMine) {
+        AuthoredBuildingPlan home = settlement.buildings().stream()
+                .filter(value -> value.buildingId().equals(resident.homeBuildingId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Resident references unknown home building "
+                        + resident.homeBuildingId()));
+        BuildingSlot homeSlot = slot(home, resident.homeSlotId());
+        if (homeSlot.kind() != BuildingSlotKind.BED || !homeSlot.position().equals(resident.home())) {
+            throw new IllegalArgumentException("Resident home binding is not its exact BED slot");
+        }
+        if (resident.workplaceBuildingId().isBlank()) return;
+        AuthoredBuildingPlan workplace = java.util.stream.Stream.concat(settlement.buildings().stream(),
+                        primaryMine.surfaceBuildings().stream())
+                .filter(value -> value.buildingId().equals(resident.workplaceBuildingId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Resident references unknown workplace building "
+                        + resident.workplaceBuildingId()));
+        BuildingSlot workplaceSlot = slot(workplace, resident.workplaceSlotId());
+        if (workplaceSlot.kind() != BuildingSlotKind.WORKSTATION
+                && workplaceSlot.kind() != BuildingSlotKind.PATROL
+                || !workplaceSlot.position().equals(resident.workplace())) {
+            throw new IllegalArgumentException("Resident workplace binding is not its exact work slot");
+        }
+    }
+
+    private static BuildingSlot slot(AuthoredBuildingPlan building, String id) {
+        return building.slots().stream().filter(value -> value.id().equals(id)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown slot " + building.buildingId() + ":" + id));
     }
 }

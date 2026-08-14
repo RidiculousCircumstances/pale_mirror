@@ -44,6 +44,25 @@ public final class FrontierWorldgenCleanupGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void lateCleanupPreservesExactAuthoredTimber(GameTestHelper helper) {
+        BlockPos surface = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos natural = surface.above(3);
+        BlockPos authored = surface.above(5);
+        helper.getLevel().setBlock(natural, Blocks.BIRCH_LOG.defaultBlockState(), 2);
+        helper.getLevel().setBlock(natural.above(), Blocks.BIRCH_LEAVES.defaultBlockState(), 2);
+        helper.getLevel().setBlock(authored, Blocks.SPRUCE_LOG.defaultBlockState(), 2);
+
+        FrontierWorldgenFeature.clearLateNaturalVegetation(helper.getLevel(),
+                new CompiledChunkSlice.VegetationColumn(surface.getX(), surface.getZ(), surface.getY()),
+                java.util.Map.of(authored, Blocks.SPRUCE_LOG.defaultBlockState()));
+
+        helper.assertBlockPresent(Blocks.AIR, new BlockPos(5, 5, 5));
+        helper.assertBlockPresent(Blocks.AIR, new BlockPos(5, 6, 5));
+        helper.assertBlockPresent(Blocks.SPRUCE_LOG, new BlockPos(5, 7, 5));
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
     public static void settlementBlendNeverCreatesAHighCutFace(GameTestHelper helper) {
         var exact = new CompiledChunkSlice.TerrainColumn(0, 0, 70,
                 Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState());

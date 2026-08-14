@@ -11,6 +11,9 @@ public record LinearFeaturePlan(String id, LinearFeatureKind kind, List<VisualPo
         Objects.requireNonNull(kind, "kind");
         nodes = List.copyOf(nodes);
         if (nodes.size() < 2) throw new IllegalArgumentException("linear feature requires at least two nodes");
-        if (width < 1 || width > 7) throw new IllegalArgumentException("linear feature width must be 1..7");
+        int maximumWidth = kind == LinearFeatureKind.PLAZA ? 19 : 7;
+        if (width < 1 || width > maximumWidth) {
+            throw new IllegalArgumentException("linear feature width must be 1.." + maximumWidth);
+        }
     }
 }

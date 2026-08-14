@@ -1,0 +1,76 @@
+{
+  "id": "pale_mirror:iron_frontier",
+  "activeStage": "TOWNSHIP",
+  "stages": [
+    {
+      "stage": "PROSPECTING_POST",
+      "cohorts": {"CIVILIANS": 2, "WORKERS": 7, "SPECIALISTS": 1, "GUARDS": 2, "CHILDREN": 0},
+      "buildings": [
+        {"id":"foreman_assay_office","category":"CIVIC","template":"residence_2","housing":2,"work":2,"functions":["pale_mirror:administration","pale_mirror:assay"]},
+        {"id":"bunkhouse_1","category":"HOUSING","template":"inn","housing":8,"work":0,"functions":["pale_mirror:bunkhouse"]},
+        {"id":"cookhouse","category":"FOOD","template":"residence_1","housing":0,"work":2,"functions":["pale_mirror:cookhouse","pale_mirror:provisions"]},
+        {"id":"tool_shop","category":"INDUSTRY","template":"workshop_1","housing":0,"work":4,"functions":["pale_mirror:tool_workshop"]},
+        {"id":"receiving_shed","category":"LOGISTICS","template":"receiving_depot","housing":0,"work":2,"functions":["pale_mirror:receiving_depot","pale_mirror:storage"]},
+        {"id":"guard_post","category":"DEFENCE","template":"residence_1","housing":2,"work":2,"functions":["pale_mirror:guard_post"]}
+      ]
+    },
+    {
+      "stage": "MINING_CAMP",
+      "cohorts": {"CIVILIANS": 6, "WORKERS": 10, "SPECIALISTS": 2, "GUARDS": 4, "CHILDREN": 2},
+      "buildings": [
+        {"id":"assay_admin","category":"CIVIC","template":"residence_2","housing":0,"work":2,"functions":["pale_mirror:administration","pale_mirror:assay"]},
+        {"id":"bunkhouse_1","category":"HOUSING","template":"inn","housing":6,"work":0,"functions":["pale_mirror:bunkhouse"]},
+        {"id":"bunkhouse_2","category":"HOUSING","template":"inn","housing":6,"work":0,"functions":["pale_mirror:bunkhouse"]},
+        {"id":"cottage_1","category":"HOUSING","template":"residence_2","housing":4,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"cottage_2","category":"HOUSING","template":"residence_2","housing":4,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"cookhouse_store","category":"FOOD","template":"market","housing":0,"work":2,"functions":["pale_mirror:cookhouse","pale_mirror:general_store"]},
+        {"id":"infirmary","category":"HEALTH","template":"clinic","housing":0,"work":2,"functions":["pale_mirror:clinic","pale_mirror:apothecary"]},
+        {"id":"receiving_warehouse","category":"LOGISTICS","template":"receiving_depot","housing":0,"work":3,"functions":["pale_mirror:receiving_depot","pale_mirror:storage"]},
+        {"id":"small_smelter","category":"INDUSTRY","template":"workshop_2","housing":0,"work":4,"functions":["pale_mirror:smeltery"]},
+        {"id":"smithy","category":"INDUSTRY","template":"smithy","housing":0,"work":3,"functions":["pale_mirror:smithy"]},
+        {"id":"stable","category":"LOGISTICS","template":"stable","housing":0,"work":2,"functions":["pale_mirror:stable","pale_mirror:cart_shed"]},
+        {"id":"barracks","category":"DEFENCE","template":"barracks","housing":4,"work":4,"functions":["pale_mirror:barracks","pale_mirror:armoury"]}
+      ]
+    },
+    {
+      "stage": "TOWNSHIP",
+      "cohorts": {"CIVILIANS": 20, "WORKERS": 14, "SPECIALISTS": 4, "GUARDS": 6, "CHILDREN": 4},
+      "buildings": [
+        {"id":"town_hall","category":"CIVIC","template":"civic_hall","housing":0,"work":2,"functions":["pale_mirror:town_hall","pale_mirror:archive"]},
+        {"id":"market_hall","category":"TRADE","template":"market","housing":0,"work":2,"functions":["pale_mirror:market","pale_mirror:trading_post"]},
+        {"id":"inn","category":"TRADE","template":"inn","housing":1,"work":2,"functions":["pale_mirror:inn","pale_mirror:tavern"]},
+        {"id":"clinic","category":"HEALTH","template":"clinic","housing":0,"work":2,"functions":["pale_mirror:clinic","pale_mirror:apothecary"]},
+        {"id":"community_bakery","category":"FOOD","template":"residence_1","housing":0,"work":2,"functions":["pale_mirror:bakery","pale_mirror:community_kitchen"]},
+        {"id":"receiving_depot","category":"LOGISTICS","template":"receiving_depot","housing":0,"work":3,"functions":["pale_mirror:receiving_depot","pale_mirror:storage"]},
+        {"id":"smeltery","category":"INDUSTRY","template":"workshop_2","housing":0,"work":4,"functions":["pale_mirror:smeltery"]},
+        {"id":"smithy","category":"INDUSTRY","template":"smithy","housing":0,"work":2,"functions":["pale_mirror:smithy"]},
+        {"id":"mechanical_workshop","category":"INDUSTRY","template":"workshop_1","housing":0,"work":3,"functions":["pale_mirror:mechanical_workshop"]},
+        {"id":"stable","category":"LOGISTICS","template":"stable","housing":0,"work":2,"functions":["pale_mirror:stable","pale_mirror:cart_shed"]},
+        {"id":"assay_office","category":"CIVIC","template":"residence_1","housing":0,"work":2,"functions":["pale_mirror:assay","pale_mirror:miners_office"]},
+        {"id":"barracks","category":"DEFENCE","template":"barracks","housing":6,"work":6,"functions":["pale_mirror:barracks","pale_mirror:armoury"]},
+        {"id":"watch_house","category":"DEFENCE","template":"residence_1","housing":0,"work":2,"functions":["pale_mirror:watch_house"]},
+        {"id":"family_house_1","category":"HOUSING","template":"residence_1","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"family_house_2","category":"HOUSING","template":"residence_2","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"family_house_3","category":"HOUSING","template":"residence_3","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"family_house_4","category":"HOUSING","template":"residence_1","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"family_house_5","category":"HOUSING","template":"residence_2","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"workers_bunkhouse_1","category":"HOUSING","template":"inn","housing":8,"work":0,"functions":["pale_mirror:bunkhouse"]},
+        {"id":"workers_bunkhouse_2","category":"HOUSING","template":"inn","housing":8,"work":0,"functions":["pale_mirror:bunkhouse"]}
+      ]
+    },
+    {
+      "stage": "MINING_TOWN",
+      "cohorts": {"CIVILIANS": 28, "WORKERS": 22, "SPECIALISTS": 7, "GUARDS": 9, "CHILDREN": 6},
+      "inherit": "TOWNSHIP",
+      "buildings": [
+        {"id":"family_house_6","category":"HOUSING","template":"residence_1","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"family_house_7","category":"HOUSING","template":"residence_2","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"family_house_8","category":"HOUSING","template":"residence_3","housing":5,"work":0,"functions":["pale_mirror:family_house"]},
+        {"id":"workers_bunkhouse_3","category":"HOUSING","template":"inn","housing":8,"work":0,"functions":["pale_mirror:bunkhouse"]},
+        {"id":"rail_station","category":"LOGISTICS","template":"receiving_depot","housing":1,"work":4,"functions":["pale_mirror:rail_station","pale_mirror:freight_office"]},
+        {"id":"foundry_engine_house","category":"INDUSTRY","template":"workshop_2","housing":0,"work":6,"functions":["pale_mirror:foundry","pale_mirror:engine_house"]},
+        {"id":"school","category":"CIVIC","template":"residence_2","housing":0,"work":2,"functions":["pale_mirror:school"]}
+      ]
+    }
+  ]
+}

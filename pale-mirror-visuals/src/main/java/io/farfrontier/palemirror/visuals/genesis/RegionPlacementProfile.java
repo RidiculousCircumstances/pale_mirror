@@ -25,10 +25,8 @@ public record RegionPlacementProfile(
             if (!roles.add(site.role())) throw new IllegalArgumentException("duplicate site role " + site.role());
         }
         for (SitePlacementRequirement site : requiredSites) {
-            if (!site.separateCardinalSectorFromRole().isBlank()
-                    && !roles.contains(site.separateCardinalSectorFromRole())) {
-                throw new IllegalArgumentException("unknown cardinal-sector reference "
-                        + site.separateCardinalSectorFromRole());
+            if (!site.relatedSiteRole().isBlank() && !roles.contains(site.relatedSiteRole())) {
+                throw new IllegalArgumentException("unknown site relation reference " + site.relatedSiteRole());
             }
         }
         if (!route.originRole().equals("settlement") && !roles.contains(route.originRole())) {

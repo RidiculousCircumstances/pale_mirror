@@ -1,8 +1,18 @@
 package io.farfrontier.palemirror.visuals.genesis;
 
+import static io.farfrontier.palemirror.visuals.genesis.SettlementLayoutGeometry.*;
+
+import io.farfrontier.palemirror.visuals.genesis.SettlementLayoutGeometry.Local;
+import io.farfrontier.palemirror.api.AuthoredBuildingPlan;
+import io.farfrontier.palemirror.api.AuthoredOpenSpacePlan;
 import io.farfrontier.palemirror.api.AuthoredSettlementSitePlan;
+import io.farfrontier.palemirror.api.DevelopmentReservation;
+import io.farfrontier.palemirror.api.DevelopmentReservationKind;
 import io.farfrontier.palemirror.api.LinearFeatureKind;
 import io.farfrontier.palemirror.api.LinearFeaturePlan;
+import io.farfrontier.palemirror.api.ManagedAreaPlan;
+import io.farfrontier.palemirror.api.OpenSpaceKind;
+import io.farfrontier.palemirror.api.SettlementDevelopmentStage;
 import io.farfrontier.palemirror.api.SettlementFoundationPlan;
 import io.farfrontier.palemirror.api.SettlementLayoutArchetype;
 import io.farfrontier.palemirror.api.VisualBounds;
@@ -11,71 +21,185 @@ import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.api.VisualPort;
 import io.farfrontier.palemirror.api.VisualPortKind;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
-/** Pure, deterministic settlement grammar driven by the surveyed terrain shape. */
+/** Deterministic functional-district grammar for the static v40 Township snapshot. */
 final class SettlementLayoutPlanner {
-    static final int HALF_WIDTH = 45;
-    static final int HALF_LENGTH = 65;
-    private static final int FOUNDATION_APRON = 1;
+    static final int ACTIVE_HALF_WIDTH = 60;
+    static final int ACTIVE_HALF_LENGTH = 80;
+    static final int MASTER_HALF_WIDTH = 72;
+    static final int MASTER_HALF_LENGTH = 96;
+    static final int VARIANT_COUNT = 24;
+    private static final int FOUNDATION_APRON = 2;
 
     AuthoredSettlementSitePlan plan(String source, VisualPoint anchor, FrontierClimate climate,
                                     int freightDirection, TerrainCandidate terrain) {
+        return plan(source, anchor, climate, freightDirection, terrain, SettlementTerrainSnapshot.flat(anchor));
+    }
+
+    AuthoredSettlementSitePlan plan(String source, VisualPoint anchor, FrontierClimate climate,
+                                    int freightDirection, TerrainCandidate terrain,
+                                    SettlementTerrainSnapshot snapshot) {
         SettlementLayoutArchetype archetype = choose(terrain);
-        List<Placement> grammar = grammar(archetype);
-        List<VisualModulePlacement> modules = new ArrayList<>(grammar.size());
-        List<SettlementFoundationPlan> foundations = new ArrayList<>(grammar.size());
-        String family = climate == FrontierClimate.DRY_ARID ? "temperate"
-                : climate.name().toLowerCase(Locale.ROOT);
-        int ordinal = 0;
-        for (Placement placement : grammar) {
-            FrontierModuleCatalog.Definition definition = FrontierModuleCatalog.require(placement.template());
-            if (definition.landmark() != placement.landmark()) {
-                throw new IllegalStateException("settlement grammar/catalog landmark mismatch for "
-                        + placement.template());
+        SettlementArchetypeCatalog.Definition definition = SettlementArchetypeCatalog.ironFrontier();
+        DryMineSiteUnavailableException lastExactFailure = null;
+        for (int variant = 0; variant < VARIANT_COUNT; variant++) {
+            try {
+                LayoutTransform transform = LayoutTransform.forVariant(variant);
+                List<Placement> grammar = grammar(archetype, definition.active().buildings(), transform);
+                List<Placement> adapted = adaptToTerrain(anchor, freightDirection, archetype, terrain, grammar,
+                        snapshot, transform);
+                if (!adapted.isEmpty()) {
+                    return planVariant(source, anchor, climate, freightDirection, terrain, snapshot,
+                            archetype, definition, adapted, transform, variant);
+                }
+            } catch (DryMineSiteUnavailableException unavailable) {
+                lastExactFailure = unavailable;
             }
+        }
+        throw new DryMineSiteUnavailableException("Township has no bounded <=4 cut/fill layout variant at "
+                + anchor.x() + "," + anchor.z() + (lastExactFailure == null ? ""
+                : "; last exact rejection=" + lastExactFailure.getMessage()));
+    }
+
+    AuthoredSettlementSitePlan planKnownVariant(String source, VisualPoint anchor, FrontierClimate climate,
+                                                int freightDirection, TerrainCandidate terrain,
+                                                SettlementTerrainSnapshot snapshot, int variant) {
+        SettlementLayoutArchetype archetype = choose(terrain);
+        SettlementArchetypeCatalog.Definition definition = SettlementArchetypeCatalog.ironFrontier();
+        LayoutTransform transform = LayoutTransform.forVariant(variant);
+        List<Placement> grammar = grammar(archetype, definition.active().buildings(), transform);
+        return planVariant(source, anchor, climate, freightDirection, terrain, snapshot,
+                archetype, definition, grammar, transform, variant);
+    }
+
+    private static List<Placement> adaptToTerrain(VisualPoint anchor, int freightDirection,
+                                                   SettlementLayoutArchetype archetype, TerrainCandidate terrain,
+                                                   List<Placement> grammar, SettlementTerrainSnapshot snapshot,
+                                                   LayoutTransform transform) {
+        List<VisualBounds> occupied = new ArrayList<>();
+        List<VisualBounds> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
+                .map(AuthoredOpenSpacePlan::bounds).toList();
+        VisualBounds master = orientedBounds(anchor, MASTER_HALF_WIDTH, MASTER_HALF_LENGTH,
+                -8, 40, freightDirection);
+        List<Placement> adapted = new ArrayList<>(grammar.size());
+        int[][] refinements = {{0, 0}, {-4, 0}, {4, 0}, {0, -4}, {0, 4},
+                {-4, -4}, {4, -4}, {-4, 4}, {4, 4}, {-8, 0}, {8, 0}, {0, -8}, {0, 8}};
+        for (Placement original : grammar) {
+            Placement accepted = null;
+            VisualBounds acceptedParcel = null;
+            FrontierModuleCatalog.Definition definition = FrontierModuleCatalog.require(original.spec().template());
+            for (int[] refinement : refinements) {
+                Placement candidate = new Placement(original.spec(), original.right() + refinement[0],
+                        original.inward() + refinement[1], original.frontage());
+                VisualPoint origin = local(anchor, candidate.right(), candidate.inward(),
+                        tier(archetype, candidate.inward(), terrain.relief()), freightDirection);
+                VisualBounds footprint = moduleFootprint(definition, origin,
+                        Math.floorMod(freightDirection + candidate.frontage(), 4));
+                VisualBounds parcel = expand(footprint, 1, 0, 1);
+                if (!containsHorizontal(master, parcel) || !snapshot.roughlyAccepts(footprint)) continue;
+                if (!snapshot.resolvePad(footprint).accepted()) continue;
+                if (occupied.stream().anyMatch(value -> overlaps(value, parcel))) continue;
+                if (openSpaces.stream().anyMatch(value -> overlaps(value, parcel))) continue;
+                accepted = candidate;
+                acceptedParcel = parcel;
+                break;
+            }
+            if (accepted == null) return List.of();
+            adapted.add(accepted);
+            occupied.add(acceptedParcel);
+        }
+        return List.copyOf(adapted);
+    }
+
+    private AuthoredSettlementSitePlan planVariant(String source, VisualPoint anchor, FrontierClimate climate,
+                                                    int freightDirection, TerrainCandidate terrain,
+                                                    SettlementTerrainSnapshot snapshot,
+                                                    SettlementLayoutArchetype archetype,
+                                                    SettlementArchetypeCatalog.Definition definition,
+                                                    List<Placement> grammar, LayoutTransform transform, int variant) {
+        List<AuthoredBuildingPlan> buildings = new ArrayList<>(grammar.size());
+        List<SettlementFoundationPlan> foundations = new ArrayList<>(grammar.size());
+        String family = climate.name().toLowerCase(Locale.ROOT);
+        for (Placement placement : grammar) {
+            FrontierModuleCatalog.Definition moduleDefinition = FrontierModuleCatalog.require(placement.spec().template());
             int tier = tier(archetype, placement.inward(), terrain.relief());
-            VisualPoint origin = local(anchor, placement.right(), placement.inward(), tier, freightDirection);
+            VisualPoint roughOrigin = local(anchor, placement.right(), placement.inward(), tier, freightDirection);
             int rotation = Math.floorMod(freightDirection + placement.frontage(), 4);
-            VisualBounds footprint = moduleFootprint(placement.template(), origin, rotation);
-            String instanceId = placement.template() + "_" + ordinal++;
-            String foundationId = "foundation_" + instanceId;
+            VisualBounds roughFootprint = moduleFootprint(moduleDefinition, roughOrigin, rotation);
+            SettlementTerrainSnapshot.PadResolution pad = snapshot.resolvePad(roughFootprint);
+            if (!pad.accepted()) throw new DryMineSiteUnavailableException("Township building "
+                    + placement.spec().id() + " failed exact " + pad.failure() + " validation at "
+                    + anchor.x() + "," + anchor.z());
+            VisualPoint origin = new VisualPoint(roughOrigin.x(), pad.targetY(), roughOrigin.z());
+            VisualBounds footprint = moduleFootprint(moduleDefinition, origin, rotation);
+            String foundationId = "foundation_" + placement.spec().id();
             VisualPoint entrance = entrance(footprint, rotation);
             List<VisualPort> ports = new ArrayList<>();
             ports.add(new VisualPort("public", VisualPortKind.PUBLIC_ENTRANCE, entrance, rotation));
-            if (placement.role().equals("LOGISTICS") || placement.role().equals("INDUSTRY")) {
+            if (placement.spec().category() == io.farfrontier.palemirror.api.SettlementBuildingCategory.LOGISTICS
+                    || placement.spec().category() == io.farfrontier.palemirror.api.SettlementBuildingCategory.INDUSTRY) {
                 ports.add(new VisualPort("service", VisualPortKind.SERVICE,
                         oppositeEntrance(footprint, rotation), rotation + 2));
             }
-            if (placement.template().equals("receiving_depot")) {
+            if (placement.spec().id().equals("receiving_depot")) {
                 ports.add(new VisualPort("freight", VisualPortKind.FREIGHT, entrance, rotation));
                 ports.add(new VisualPort("rail", VisualPortKind.RAIL,
                         oppositeEntrance(footprint, rotation), rotation + 2));
             }
-            modules.add(new VisualModulePlacement(instanceId,
-                    "pale_mirror_visuals:" + family + "/" + placement.template(),
-                    climate.name().toLowerCase(Locale.ROOT), placement.role(), origin, rotation, footprint,
-                    foundationId, definition.stateProfile(), ports));
+            VisualModulePlacement module = new VisualModulePlacement(placement.spec().id() + "_shell",
+                    "pale_mirror_visuals:" + family + "/" + placement.spec().template(),
+                    family, placement.spec().category().name(), origin, rotation, footprint,
+                    foundationId, moduleDefinition.stateProfile(), ports);
+            VisualBounds parcel = expand(footprint, 1, 0, 1);
+            var slots = SettlementBuildingSlots.forBuilding(placement.spec(), footprint);
+            buildings.add(new AuthoredBuildingPlan(placement.spec().id(), earliestStage(placement.spec().id()),
+                    placement.spec().category(), placement.spec().functions(), parcel, List.of(module), slots));
             foundations.add(new SettlementFoundationPlan(foundationId, footprint, origin.y(),
-                    FOUNDATION_APRON, definition.landmark() ? 5 : 3, definition.landmark() ? 5 : 3,
-                    placement.role().equals("LOGISTICS") ? "FREIGHT" : "BUILDING"));
+                    FOUNDATION_APRON, 4, 4,
+                    placement.spec().category() == io.farfrontier.palemirror.api.SettlementBuildingCategory.LOGISTICS
+                            ? "FREIGHT" : "BUILDING"));
         }
-        validateNoOverlap(modules);
-        VisualPoint gate = local(anchor, 0, 62, 0, freightDirection);
-        VisualModulePlacement depot = modules.stream().filter(value -> value.templateId().endsWith("/receiving_depot"))
-                .findFirst().orElseThrow();
-        List<LinearFeaturePlan> circulation = circulation(archetype, anchor, freightDirection, gate, depot, modules);
-        List<LinearFeaturePlan> defences = defences(archetype, anchor, freightDirection);
-        List<VisualBounds> plots = expansionPlots(anchor, freightDirection, archetype, modules);
-        validateExpansionPlots(modules, plots);
-        List<VisualPoint> shelters = List.of(local(anchor, 100, -16, 0, freightDirection),
-                local(anchor, -104, -20, 0, freightDirection), local(anchor, 72, -96, 0, freightDirection));
-        return new AuthoredSettlementSitePlan(source + ":" + archetype.name().toLowerCase(Locale.ROOT), archetype,
-                orientedBounds(anchor, HALF_WIDTH, HALF_LENGTH, -8, 40, freightDirection), gate, depot.origin(),
-                modules, foundations, circulation, defences, plots, shelters);
+        validateNoOverlap(buildings);
+        VisualPoint roughGate = local(anchor, 0, 78, 0, freightDirection);
+        VisualPoint gate = withY(roughGate, snapshot.approximateHeight(roughGate.x(), roughGate.z()));
+        AuthoredBuildingPlan depot = building(buildings, "receiving_depot");
+        List<LinearFeaturePlan> circulation = circulation(archetype, anchor, freightDirection, gate, depot, buildings,
+                transform)
+                .stream().map(value -> followTerrain(value, snapshot)).toList();
+        requireDryCirculation(circulation, snapshot, anchor);
+        List<LinearFeaturePlan> defences = defences(archetype, anchor, freightDirection).stream()
+                .map(value -> followTerrain(value, snapshot)).toList();
+        List<AuthoredOpenSpacePlan> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
+                .map(value -> followTerrain(value, snapshot)).toList();
+        List<DevelopmentReservation> reservations = reservations(anchor, freightDirection, buildings, openSpaces,
+                transform);
+        ManagedAreaPlan managedArea = managedArea(buildings, circulation, defences, openSpaces, reservations);
+        List<VisualPoint> shelters = List.of(terrainPoint(local(anchor, 108, -22, 0, freightDirection), snapshot),
+                terrainPoint(local(anchor, -112, -26, 0, freightDirection), snapshot),
+                terrainPoint(local(anchor, 78, -108, 0, freightDirection), snapshot));
+        VisualBounds master = SettlementSiteBounds.fitVertical(
+                orientedBounds(anchor, MASTER_HALF_WIDTH, MASTER_HALF_LENGTH, -8, 40, freightDirection),
+                gate, depot.modules().getFirst().origin(), buildings, foundations, circulation, defences,
+                openSpaces, managedArea, reservations);
+        AuthoredSettlementSitePlan result = new AuthoredSettlementSitePlan(
+                source + ":" + archetype.name().toLowerCase(Locale.ROOT)
+                + ":v" + variant,
+                SettlementDevelopmentStage.TOWNSHIP, archetype,
+                master,
+                gate, depot.modules().getFirst().origin(), buildings, foundations, circulation, defences,
+                openSpaces, managedArea, reservations, shelters);
+        IronFrontierTownshipContract.validate(result);
+        return result;
+    }
+
+    private static SettlementDevelopmentStage earliestStage(String buildingId) {
+        for (SettlementDevelopmentStage stage : SettlementDevelopmentStage.values()) {
+            if (SettlementArchetypeCatalog.ironFrontier().stages().get(stage).buildings().stream()
+                    .anyMatch(value -> value.id().equals(buildingId))) return stage;
+        }
+        return SettlementDevelopmentStage.TOWNSHIP;
     }
 
     private static SettlementLayoutArchetype choose(TerrainCandidate terrain) {
@@ -84,103 +208,103 @@ final class SettlementLayoutPlanner {
         return SettlementLayoutArchetype.FOOTHILL_RIBBON;
     }
 
-    private static List<Placement> grammar(SettlementLayoutArchetype archetype) {
-        return switch (archetype) {
-            case FOOTHILL_RIBBON -> List.of(
-                    p("civic_hall", "CIVIC", 0, -4, 2, true),
-                    p("receiving_depot", "LOGISTICS", 0, 50, 0, true),
-                    p("barracks", "DEFENCE", -32, 31, 1, true),
-                    p("smithy", "INDUSTRY", 24, 39, 2, false),
-                    p("clinic", "CIVIC", -29, 5, 0, true),
-                    p("inn", "CIVIC", 29, 3, 2, true),
-                    p("stable", "LOGISTICS", -30, 51, 0, false),
-                    p("market", "ECONOMY", 29, 23, 2, false),
-                    p("residence_1", "HOUSING", -31, -22, 0, false),
-                    p("residence_2", "HOUSING", -13, -34, 0, false),
-                    p("residence_3", "HOUSING", 6, -34, 0, false),
-                    p("residence_1", "HOUSING", 25, -29, 2, false),
-                    p("residence_2", "HOUSING", -29, -50, 0, false),
-                    p("residence_3", "HOUSING", 27, -50, 2, false),
-                    p("workshop_1", "INDUSTRY", 10, 43, 2, false),
-                    p("workshop_2", "INDUSTRY", -10, 22, 0, false));
-            case TERRACED_BASIN -> List.of(
-                    p("civic_hall", "CIVIC", 0, -5, 2, true),
-                    p("receiving_depot", "LOGISTICS", 0, 50, 0, true),
-                    p("barracks", "DEFENCE", -31, 35, 1, true),
-                    p("smithy", "INDUSTRY", 24, 39, 2, false),
-                    p("clinic", "CIVIC", -29, 7, 0, true),
-                    p("inn", "CIVIC", 29, 6, 2, true),
-                    p("stable", "LOGISTICS", -30, 56, 0, false),
-                    p("market", "ECONOMY", 28, 24, 2, false),
-                    p("residence_1", "HOUSING", -31, -23, 0, false),
-                    p("residence_2", "HOUSING", -12, -35, 0, false),
-                    p("residence_3", "HOUSING", 7, -35, 0, false),
-                    p("residence_1", "HOUSING", 27, -25, 2, false),
-                    p("residence_2", "HOUSING", -29, -52, 0, false),
-                    p("residence_3", "HOUSING", 27, -51, 2, false),
-                    p("workshop_1", "INDUSTRY", 10, 43, 2, false),
-                    p("workshop_2", "INDUSTRY", -10, 22, 0, false));
-            case FREIGHT_CROSSROADS -> List.of(
-                    p("civic_hall", "CIVIC", -17, -12, 1, true),
-                    p("receiving_depot", "LOGISTICS", 0, 50, 0, true),
-                    p("barracks", "DEFENCE", -32, 32, 1, true),
-                    p("smithy", "INDUSTRY", 18, 35, 2, false),
-                    p("clinic", "CIVIC", -32, 7, 0, true),
-                    p("inn", "CIVIC", 27, -10, 2, true),
-                    p("stable", "LOGISTICS", -30, 51, 0, false),
-                    p("market", "ECONOMY", 27, 14, 2, false),
-                    p("residence_1", "HOUSING", -34, -36, 0, false),
-                    p("residence_2", "HOUSING", -12, -39, 0, false),
-                    p("residence_3", "HOUSING", 7, -39, 0, false),
-                    p("residence_1", "HOUSING", 28, -31, 2, false),
-                    p("residence_2", "HOUSING", -29, -55, 0, false),
-                    p("residence_3", "HOUSING", 27, -54, 2, false),
-                    p("workshop_1", "INDUSTRY", 8, 36, 2, false),
-                    p("workshop_2", "INDUSTRY", -9, 23, 0, false));
-        };
+    private static List<Placement> grammar(SettlementLayoutArchetype archetype,
+                                            List<SettlementArchetypeCatalog.Building> specifications,
+                                            LayoutTransform transform) {
+        java.util.Map<String, SettlementArchetypeCatalog.Building> values = specifications.stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(SettlementArchetypeCatalog.Building::id, value -> value));
+        int civicShift = archetype == SettlementLayoutArchetype.FREIGHT_CROSSROADS ? 5 : 0;
+        int rearTier = archetype == SettlementLayoutArchetype.TERRACED_BASIN ? -4 : 0;
+        List<Placement> base = List.of(
+                p(values, "town_hall", -13, 6 + civicShift, 2),
+                p(values, "market_hall", 22, 10 + civicShift, 2),
+                p(values, "inn", 54, -7 + civicShift, 2),
+                p(values, "clinic", -52, -8 + civicShift, 0),
+                p(values, "community_bakery", 13, -14 + civicShift, 0),
+                p(values, "receiving_depot", 0, 70, 0),
+                p(values, "smeltery", 25, 54, 2),
+                p(values, "smithy", 42, 38, 2),
+                p(values, "mechanical_workshop", 8, 54, 2),
+                p(values, "stable", -38, 66, 0),
+                p(values, "assay_office", -17, 43, 0),
+                p(values, "barracks", -42, 34, 1),
+                p(values, "watch_house", -61, 51, 0),
+                p(values, "family_house_1", -47, -34 + rearTier, 0),
+                p(values, "family_house_2", -27, -48 + rearTier, 0),
+                p(values, "family_house_3", -7, -54 + rearTier, 0),
+                p(values, "family_house_4", 16, -51 + rearTier, 2),
+                p(values, "family_house_5", 41, -37 + rearTier, 2),
+                p(values, "workers_bunkhouse_1", -26, -72 + rearTier, 0),
+                p(values, "workers_bunkhouse_2", 27, -72 + rearTier, 2));
+        return base.stream().map(value -> new Placement(value.spec(), transform.right(value.right()),
+                transform.inward(value.inward()), transform.mirror() == 1 ? value.frontage()
+                : Math.floorMod(2 - value.frontage(), 4))).toList();
+    }
+
+    private static Placement p(java.util.Map<String, SettlementArchetypeCatalog.Building> values,
+                               String id, int right, int inward, int frontage) {
+        SettlementArchetypeCatalog.Building value = values.get(id);
+        if (value == null) throw new IllegalStateException("Township grammar requires " + id);
+        return new Placement(value, right, inward, frontage);
     }
 
     private static int tier(SettlementLayoutArchetype archetype, int inward, int relief) {
         if (archetype != SettlementLayoutArchetype.TERRACED_BASIN || relief < 6) return 0;
-        if (inward < -20) return Math.min(3, relief / 5);
-        if (inward > 30) return -Math.min(2, relief / 7);
+        if (inward < -25) return Math.min(3, relief / 5);
+        if (inward > 32) return -Math.min(2, relief / 7);
         return 0;
     }
 
     private static List<LinearFeaturePlan> circulation(SettlementLayoutArchetype archetype, VisualPoint anchor,
-                                                        int direction, VisualPoint gate,
-                                                        VisualModulePlacement depot,
-                                                        List<VisualModulePlacement> modules) {
+                                                        int direction, VisualPoint gate, AuthoredBuildingPlan depot,
+                                                        List<AuthoredBuildingPlan> buildings,
+                                                        LayoutTransform transform) {
         List<LinearFeaturePlan> result = new ArrayList<>();
-        VisualPoint depotEntrance = depot.ports().stream()
-                .filter(port -> port.kind() == VisualPortKind.PUBLIC_ENTRANCE)
-                .findFirst().orElseThrow().position();
-        VisualPoint depotAccess = new VisualPoint(depotEntrance.x(), depotEntrance.y() - 1, depotEntrance.z());
+        VisualPoint depotEntrance = publicEntrance(depot);
+        VisualPoint depotAccess = below(depotEntrance);
         result.add(new LinearFeaturePlan("freight_spine", LinearFeatureKind.FREIGHT_ROAD,
-                List.of(gate, depotAccess, depot.origin(), local(anchor, 0, -22, 0, direction)), 5, true));
-        int crossInward = archetype == SettlementLayoutArchetype.FREIGHT_CROSSROADS ? 15 : 2;
+                List.of(gate, depotAccess, local(anchor, transform.right(0), transform.inward(28), 0, direction),
+                        local(anchor, transform.right(0), transform.inward(-28), 0, direction)), 7, true));
+        int cross = transform.inward(archetype == SettlementLayoutArchetype.FREIGHT_CROSSROADS ? 15 : 8);
         result.add(new LinearFeaturePlan("civic_street", LinearFeatureKind.STREET,
-                List.of(local(anchor, -40, crossInward, 0, direction),
-                        local(anchor, 40, crossInward, 0, direction)), 3, true));
+                List.of(local(anchor, transform.right(-55), cross, 0, direction),
+                        local(anchor, transform.right(55), cross, 0, direction)), 5, true));
+        result.add(new LinearFeaturePlan("civic_sidewalk_west", LinearFeatureKind.SIDEWALK,
+                List.of(local(anchor, transform.right(-55), cross - 4, 0, direction),
+                        local(anchor, transform.right(55), cross - 4, 0, direction)), 1, true));
+        result.add(new LinearFeaturePlan("civic_sidewalk_east", LinearFeatureKind.SIDEWALK,
+                List.of(local(anchor, transform.right(-55), cross + 4, 0, direction),
+                        local(anchor, transform.right(55), cross + 4, 0, direction)), 1, true));
+        result.add(new LinearFeaturePlan("industrial_lane", LinearFeatureKind.STREET,
+                List.of(local(anchor, transform.right(-47), transform.inward(43), 0, direction),
+                        local(anchor, transform.right(47), transform.inward(43), 0, direction)), 3, true));
+        result.add(new LinearFeaturePlan("residential_lane", LinearFeatureKind.STREET,
+                List.of(local(anchor, transform.right(-49), transform.inward(-39), 0, direction),
+                        local(anchor, transform.right(-26), transform.inward(-57), 0, direction),
+                        local(anchor, transform.right(27), transform.inward(-57), 0, direction),
+                        local(anchor, transform.right(49), transform.inward(-39), 0, direction)), 3, true));
+        result.add(new LinearFeaturePlan("market_square", LinearFeatureKind.PLAZA,
+                List.of(local(anchor, transform.right(5), transform.inward(10), 0, direction),
+                        local(anchor, transform.right(13), transform.inward(18), 0, direction)), 9, true));
         int index = 0;
-        for (VisualModulePlacement module : modules) {
-            VisualPoint entrance = module.ports().stream().filter(port -> port.kind() == VisualPortKind.PUBLIC_ENTRANCE)
-                    .findFirst().orElseThrow().position();
-            VisualPoint access = new VisualPoint(entrance.x(), entrance.y() - 1, entrance.z());
+        for (AuthoredBuildingPlan building : buildings) {
+            VisualPoint access = below(publicEntrance(building));
             Local coordinates = relative(anchor, access, direction);
             VisualPoint spine = local(anchor, 0, coordinates.inward(), 0, direction);
+            if (Math.abs(coordinates.inward() - cross) <= 12) {
+                spine = local(anchor, coordinates.right(), cross, 0, direction);
+            }
             if (access.x() == spine.x() && access.z() == spine.z()) {
-                spine = local(anchor, 0, coordinates.inward() - 1, 0, direction);
+                spine = local(anchor, coordinates.right(), coordinates.inward() - 1, 0, direction);
             }
             LinearFeatureKind kind = access.y() == spine.y() ? LinearFeatureKind.FOOTPATH : LinearFeatureKind.STAIRS;
-            result.add(new LinearFeaturePlan("access_" + index++, kind,
-                    List.of(access, spine), 2, true));
+            result.add(new LinearFeaturePlan("access_" + index++, kind, List.of(access, spine), 3, true));
         }
         if (archetype == SettlementLayoutArchetype.TERRACED_BASIN) {
             result.add(new LinearFeaturePlan("upper_retaining", LinearFeatureKind.RETAINING_WALL,
-                    List.of(local(anchor, -38, -20, 1, direction), local(anchor, 38, -20, 1, direction)), 1, false));
+                    List.of(local(anchor, -52, -29, 1, direction), local(anchor, 52, -29, 1, direction)), 1, false));
             result.add(new LinearFeaturePlan("upper_steps", LinearFeatureKind.STAIRS,
-                    List.of(local(anchor, 0, -15, 0, direction), local(anchor, 0, -28, 2, direction)), 3, true));
+                    List.of(local(anchor, 0, -24, 0, direction), local(anchor, 0, -39, 2, direction)), 3, true));
         }
         return List.copyOf(result);
     }
@@ -188,135 +312,176 @@ final class SettlementLayoutPlanner {
     private static List<LinearFeaturePlan> defences(SettlementLayoutArchetype archetype, VisualPoint anchor,
                                                      int direction) {
         List<LinearFeaturePlan> result = new ArrayList<>();
-        result.add(line("rear_west", LinearFeatureKind.PALISADE, anchor, direction, -42, -61, -7, -61, 2));
-        result.add(line("rear_east", LinearFeatureKind.PALISADE, anchor, direction, 7, -61, 42, -61, 2));
-        result.add(line("west_rear", LinearFeatureKind.PALISADE, anchor, direction, -42, -61, -42, -15, 2));
-        result.add(line("east_rear", LinearFeatureKind.PALISADE, anchor, direction, 42, -61, 42, -31, 2));
+        result.add(line("rear_west", LinearFeatureKind.PALISADE, anchor, direction, -59, -87, -12, -87, 2));
+        result.add(line("rear_east", LinearFeatureKind.PALISADE, anchor, direction, 12, -87, 59, -87, 2));
+        result.add(line("west_rear", LinearFeatureKind.PALISADE, anchor, direction, -59, -87, -59, -35, 2));
+        result.add(line("east_rear", LinearFeatureKind.PALISADE, anchor, direction, 59, -87, 59, -40, 2));
         if (archetype != SettlementLayoutArchetype.FOOTHILL_RIBBON) {
-            result.add(line("west_forward", LinearFeatureKind.DITCH, anchor, direction, -42, 16, -42, 49, 2));
+            result.add(line("west_approach", LinearFeatureKind.DITCH, anchor, direction, -59, 26, -59, 65, 2));
         }
         return List.copyOf(result);
     }
 
-    private static LinearFeaturePlan line(String id, LinearFeatureKind kind, VisualPoint anchor, int direction,
-                                          int rightA, int inwardA, int rightB, int inwardB, int width) {
-        return new LinearFeaturePlan(id, kind, List.of(local(anchor, rightA, inwardA, 0, direction),
-                local(anchor, rightB, inwardB, 0, direction)), width, kind == LinearFeatureKind.PALISADE);
+    private static List<AuthoredOpenSpacePlan> openSpaces(VisualPoint anchor, int direction,
+                                                           LayoutTransform transform) {
+        return List.of(
+                open("market_square", OpenSpaceKind.MARKET_SQUARE, anchor, direction,
+                        transform.right(0), transform.inward(34), 8, 7),
+                open("civic_green", OpenSpaceKind.CIVIC_GREEN, anchor, direction,
+                        transform.right(-11), transform.inward(-28), 9, 7),
+                open("allotments", OpenSpaceKind.GARDEN, anchor, direction,
+                        transform.right(54), transform.inward(-58), 9, 7),
+                open("freight_yard", OpenSpaceKind.FREIGHT_YARD, anchor, direction,
+                        transform.right(-15), transform.inward(60), 10, 6),
+                open("smeltery_yard", OpenSpaceKind.INDUSTRIAL_YARD, anchor, direction,
+                        transform.right(25), transform.inward(34), 9, 7),
+                open("training_yard", OpenSpaceKind.TRAINING_YARD, anchor, direction,
+                        transform.right(-43), transform.inward(15), 9, 7));
     }
 
-    private static List<VisualBounds> expansionPlots(VisualPoint anchor, int direction,
-                                                      SettlementLayoutArchetype archetype,
-                                                      List<VisualModulePlacement> modules) {
-        int crossInward = archetype == SettlementLayoutArchetype.FREIGHT_CROSSROADS ? 15 : 2;
-        int[] inwardCandidates = {-57, -45, -32, -18, -5, 10, 24, 38, 51};
-        int[] rightCandidates = {-38, 38, -25, 25, -12, 12};
-        List<VisualBounds> result = new ArrayList<>();
-        outer: for (int inward : inwardCandidates) for (int right : rightCandidates) {
-            if (Math.abs(right) <= 7 || Math.abs(inward - crossInward) <= 4) continue;
-            VisualPoint center = local(anchor, right, inward, 0, direction);
-            VisualBounds candidate = new VisualBounds(new VisualPoint(center.x() - 5, center.y() - 2, center.z() - 5),
-                    new VisualPoint(center.x() + 5, center.y() + 12, center.z() + 5));
-            if (modules.stream().anyMatch(module -> overlaps(expand(module.footprint(), 2), candidate))) continue;
-            if (result.stream().anyMatch(existing -> overlaps(expand(existing, 2), candidate))) continue;
-            result.add(candidate);
-            if (result.size() == 6) break outer;
+    private static AuthoredOpenSpacePlan open(String id, OpenSpaceKind kind, VisualPoint anchor, int direction,
+                                               int right, int inward, int halfWidth, int halfLength) {
+        VisualPoint center = local(anchor, right, inward, 0, direction);
+        VisualBounds bounds = orientedBounds(center, halfWidth, halfLength, 0, 5, direction);
+        return new AuthoredOpenSpacePlan(id, kind, bounds,
+                List.of(new VisualPort("public", VisualPortKind.PUBLIC_ENTRANCE, center, direction)));
+    }
+
+    private static List<DevelopmentReservation> reservations(VisualPoint anchor, int direction,
+                                                              List<AuthoredBuildingPlan> buildings,
+                                                              List<AuthoredOpenSpacePlan> openSpaces,
+                                                              LayoutTransform transform) {
+        List<DevelopmentReservation> result = new ArrayList<>();
+        VisualBounds master = orientedBounds(anchor, MASTER_HALF_WIDTH, MASTER_HALF_LENGTH,
+                -8, 40, direction);
+        DevelopmentReservation depotAnnex = resolveAnnex("depot_annex", "receiving_depot",
+                translatedAnnex(anchor, direction, transform, buildings, "receiving_depot", 0, 70,
+                        -10, 70, 6, 8), buildings, openSpaces, result, master);
+        result.add(depotAnnex);
+        DevelopmentReservation smelteryAnnex = resolveAnnex("smeltery_annex", "smeltery",
+                translatedAnnex(anchor, direction, transform, buildings, "smeltery", 25, 54,
+                        44, 54, 8, 9), buildings, openSpaces, result, master);
+        result.add(smelteryAnnex);
+        List<int[]> candidates = new ArrayList<>(List.of(
+                new int[]{-64, -70}, new int[]{64, -70}, new int[]{-64, -42}, new int[]{64, -42},
+                new int[]{0, -75}, new int[]{0, -89}, new int[]{-64, -10}, new int[]{64, -10},
+                new int[]{-42, -89}, new int[]{42, -89}, new int[]{-64, 10}, new int[]{64, 10}));
+        for (int inward = -88; inward <= 72; inward += 16) {
+            for (int right = -64; right <= 64; right += 16) candidates.add(new int[]{right, inward});
         }
-        if (result.size() != 6) throw new IllegalStateException("settlement grammar cannot reserve six buildable plots");
+        for (int[] candidate : candidates) {
+            VisualPoint center = local(anchor, candidate[0], candidate[1], 0, direction);
+            VisualBounds bounds = around(center, 6, 14);
+            if (buildings.stream().anyMatch(building -> overlaps(expand(building.parcel(), 2, 0, 2), bounds))) continue;
+            if (openSpaces.stream().anyMatch(space -> overlaps(expand(space.bounds(), 2, 0, 2), bounds))) continue;
+            if (overlaps(bounds, depotAnnex.bounds()) || overlaps(bounds, smelteryAnnex.bounds())) continue;
+            if (result.stream().anyMatch(reservation -> overlaps(bounds, reservation.bounds()))) continue;
+            long parcelIndex = result.stream().filter(value -> value.kind() == DevelopmentReservationKind.PARCEL)
+                    .count();
+            result.add(new DevelopmentReservation("town_parcel_" + parcelIndex, DevelopmentReservationKind.PARCEL,
+                    SettlementDevelopmentStage.MINING_TOWN, bounds, ""));
+            if (parcelIndex == 4) break;
+        }
+        if (result.stream().filter(value -> value.kind() == DevelopmentReservationKind.PARCEL).count() != 5) {
+            throw new DryMineSiteUnavailableException("Township cannot reserve five free Mining Town parcels");
+        }
         return List.copyOf(result);
     }
 
-    private static void validateExpansionPlots(List<VisualModulePlacement> modules, List<VisualBounds> plots) {
-        for (int index = 0; index < plots.size(); index++) {
-            VisualBounds plot = plots.get(index);
-            if (modules.stream().anyMatch(module -> overlaps(module.footprint(), plot))) {
-                throw new IllegalStateException("expansion plot overlaps authored module " + index);
-            }
-            for (int other = index + 1; other < plots.size(); other++) {
-                if (overlaps(plot, plots.get(other))) throw new IllegalStateException("expansion plots overlap");
-            }
+    /**
+     * Keeps a future annex attached to its functional owner even when exact
+     * terrain adaptation nudges that building away from its nominal grammar
+     * coordinate. The art-directed location wins when it remains free; the
+     * bounded alternatives walk the four parcel edges instead of silently
+     * reserving space through a neighbour.
+     */
+    private static DevelopmentReservation resolveAnnex(
+            String id, String ownerId, VisualBounds preferred,
+            List<AuthoredBuildingPlan> buildings, List<AuthoredOpenSpacePlan> openSpaces,
+            List<DevelopmentReservation> occupied, VisualBounds master) {
+        AuthoredBuildingPlan owner = building(buildings, ownerId);
+        List<VisualBounds> candidates = new ArrayList<>();
+        candidates.add(preferred);
+        int width = preferred.max().x() - preferred.min().x() + 1;
+        int depth = preferred.max().z() - preferred.min().z() + 1;
+        int ownerCenterX = (owner.parcel().min().x() + owner.parcel().max().x()) / 2;
+        int ownerCenterZ = (owner.parcel().min().z() + owner.parcel().max().z()) / 2;
+        for (int tangent : new int[]{0, -4, 4, -8, 8, -12, 12}) {
+            candidates.add(horizontalBounds(owner.parcel().max().x() + 1,
+                    ownerCenterZ - depth / 2 + tangent, width, depth, preferred));
+            candidates.add(horizontalBounds(owner.parcel().min().x() - width,
+                    ownerCenterZ - depth / 2 + tangent, width, depth, preferred));
+            candidates.add(horizontalBounds(ownerCenterX - width / 2 + tangent,
+                    owner.parcel().max().z() + 1, width, depth, preferred));
+            candidates.add(horizontalBounds(ownerCenterX - width / 2 + tangent,
+                    owner.parcel().min().z() - depth, width, depth, preferred));
         }
+        return candidates.stream().distinct()
+                .filter(candidate -> containsHorizontal(master, candidate))
+                .filter(candidate -> touchesOrOverlaps(candidate, owner.parcel()))
+                .filter(candidate -> buildings.stream().noneMatch(value -> !value.buildingId().equals(ownerId)
+                        && overlaps(candidate, value.parcel())))
+                .filter(candidate -> openSpaces.stream().noneMatch(value -> overlaps(candidate, value.bounds())))
+                .filter(candidate -> occupied.stream().noneMatch(value -> overlaps(candidate, value.bounds())))
+                .findFirst()
+                .map(bounds -> new DevelopmentReservation(id, DevelopmentReservationKind.ANNEX,
+                        SettlementDevelopmentStage.MINING_TOWN, bounds, ownerId))
+                .orElseThrow(() -> new DryMineSiteUnavailableException(
+                        "Township cannot reserve a free annex for " + ownerId));
     }
 
-    private static VisualBounds expand(VisualBounds bounds, int horizontal) {
-        return new VisualBounds(new VisualPoint(bounds.min().x() - horizontal, bounds.min().y(),
-                bounds.min().z() - horizontal), new VisualPoint(bounds.max().x() + horizontal,
-                bounds.max().y(), bounds.max().z() + horizontal));
+    private static VisualBounds horizontalBounds(int minX, int minZ, int width, int depth,
+                                                  VisualBounds verticalSource) {
+        return new VisualBounds(new VisualPoint(minX, verticalSource.min().y(), minZ),
+                new VisualPoint(minX + width - 1, verticalSource.max().y(), minZ + depth - 1));
     }
 
-    private static VisualBounds moduleFootprint(String name, VisualPoint origin, int rotation) {
-        FrontierModuleCatalog.Definition definition = FrontierModuleCatalog.require(name);
-        boolean swap = Math.floorMod(rotation, 2) == 1;
-        int xSize = swap ? definition.sizeZ() : definition.sizeX();
-        int zSize = swap ? definition.sizeX() : definition.sizeZ();
-        VisualPoint min = new VisualPoint(origin.x() - xSize / 2, origin.y() + 1, origin.z() - zSize / 2);
-        return new VisualBounds(min, new VisualPoint(min.x() + xSize - 1, min.y() + definition.sizeY() - 1,
-                min.z() + zSize - 1));
+    private static boolean touchesOrOverlaps(VisualBounds first, VisualBounds second) {
+        return first.min().x() <= second.max().x() + 1 && first.max().x() + 1 >= second.min().x()
+                && first.min().z() <= second.max().z() + 1 && first.max().z() + 1 >= second.min().z();
     }
 
-    private static VisualPoint entrance(VisualBounds bounds, int direction) {
-        int x = (bounds.min().x() + bounds.max().x()) / 2;
-        int z = (bounds.min().z() + bounds.max().z()) / 2;
-        if (direction == 0) x = bounds.max().x();
-        else if (direction == 1) z = bounds.max().z();
-        else if (direction == 2) x = bounds.min().x();
-        else z = bounds.min().z();
-        return new VisualPoint(x, bounds.min().y(), z);
+    private static VisualBounds translatedAnnex(VisualPoint anchor, int direction, LayoutTransform transform,
+                                                 List<AuthoredBuildingPlan> buildings, String buildingId,
+                                                 int expectedRight, int expectedInward,
+                                                 int annexRight, int annexInward,
+                                                 int halfWidth, int halfLength) {
+        VisualPoint expected = local(anchor, transform.right(expectedRight), transform.inward(expectedInward),
+                0, direction);
+        VisualPoint actual = building(buildings, buildingId).modules().getFirst().origin();
+        VisualPoint base = local(anchor, transform.right(annexRight), transform.inward(annexInward),
+                0, direction);
+        VisualPoint shifted = new VisualPoint(base.x() + actual.x() - expected.x(), base.y(),
+                base.z() + actual.z() - expected.z());
+        return orientedBounds(shifted, halfWidth, halfLength, -2, 14, direction);
     }
 
-    private static VisualPoint oppositeEntrance(VisualBounds bounds, int direction) {
-        return entrance(bounds, Math.floorMod(direction + 2, 4));
-    }
+    private record Placement(SettlementArchetypeCatalog.Building spec, int right, int inward, int frontage) { }
 
-    private static void validateNoOverlap(List<VisualModulePlacement> modules) {
-        Set<String> ids = new HashSet<>();
-        for (int first = 0; first < modules.size(); first++) {
-            VisualModulePlacement a = modules.get(first);
-            if (!ids.add(a.instanceId())) throw new IllegalStateException("duplicate module id " + a.instanceId());
-            for (int second = first + 1; second < modules.size(); second++) {
-                VisualModulePlacement b = modules.get(second);
-                if (overlaps(a.footprint(), b.footprint())) {
-                    throw new IllegalStateException("settlement grammar overlaps " + a.instanceId()
-                            + " and " + b.instanceId());
-                }
-            }
+    private record LayoutTransform(int mirror, int rightShift, int inwardShift) {
+        private static final List<Translation> TRANSLATIONS = List.of(
+                new Translation(0, 0), new Translation(0, -8), new Translation(0, 8),
+                new Translation(-4, 0), new Translation(4, 0),
+                new Translation(-4, -8), new Translation(4, -8),
+                new Translation(-4, 8), new Translation(4, 8),
+                new Translation(0, 12), new Translation(-4, 12), new Translation(4, 12));
+
+        private LayoutTransform {
+            if (mirror != -1 && mirror != 1) throw new IllegalArgumentException("layout mirror must be -1 or 1");
         }
+
+        static LayoutTransform forVariant(int variant) {
+            if (variant < 0 || variant >= VARIANT_COUNT) {
+                throw new IllegalArgumentException("layout variant must be in [0, " + VARIANT_COUNT + ")");
+            }
+            Translation translation = TRANSLATIONS.get(variant / 2);
+            return new LayoutTransform(variant % 2 == 0 ? 1 : -1,
+                    translation.right(), translation.inward());
+        }
+
+        int right(int value) { return value * mirror + rightShift; }
+        int inward(int value) { return value + inwardShift; }
     }
 
-    private static boolean overlaps(VisualBounds a, VisualBounds b) {
-        return a.min().x() <= b.max().x() && a.max().x() >= b.min().x()
-                && a.min().z() <= b.max().z() && a.max().z() >= b.min().z();
-    }
-
-    private static VisualPoint local(VisualPoint anchor, int right, int inward, int up, int direction) {
-        int dx = switch (Math.floorMod(direction, 4)) { case 0 -> inward; case 1 -> -right; case 2 -> -inward; default -> right; };
-        int dz = switch (Math.floorMod(direction, 4)) { case 0 -> right; case 1 -> inward; case 2 -> -right; default -> -inward; };
-        return new VisualPoint(anchor.x() + dx, anchor.y() + up, anchor.z() + dz);
-    }
-
-    private static Local relative(VisualPoint anchor, VisualPoint point, int direction) {
-        int dx = point.x() - anchor.x(); int dz = point.z() - anchor.z();
-        return switch (Math.floorMod(direction, 4)) {
-            case 0 -> new Local(dz, dx); case 1 -> new Local(-dx, dz);
-            case 2 -> new Local(-dz, -dx); default -> new Local(dx, -dz);
-        };
-    }
-
-    private static VisualBounds orientedBounds(VisualPoint anchor, int right, int inward, int down, int up,
-                                                int direction) {
-        List<VisualPoint> corners = List.of(local(anchor, -right, -inward, down, direction),
-                local(anchor, right, -inward, down, direction), local(anchor, -right, inward, up, direction),
-                local(anchor, right, inward, up, direction));
-        return new VisualBounds(new VisualPoint(corners.stream().mapToInt(VisualPoint::x).min().orElseThrow(),
-                anchor.y() + down, corners.stream().mapToInt(VisualPoint::z).min().orElseThrow()),
-                new VisualPoint(corners.stream().mapToInt(VisualPoint::x).max().orElseThrow(), anchor.y() + up,
-                        corners.stream().mapToInt(VisualPoint::z).max().orElseThrow()));
-    }
-
-    private static Placement p(String template, String role, int right, int inward, int frontage,
-                               boolean landmark) {
-        return new Placement(template, role, right, inward, frontage, landmark);
-    }
-
-    private record Placement(String template, String role, int right, int inward, int frontage, boolean landmark) { }
-    private record Local(int right, int inward) { }
+    private record Translation(int right, int inward) { }
 }

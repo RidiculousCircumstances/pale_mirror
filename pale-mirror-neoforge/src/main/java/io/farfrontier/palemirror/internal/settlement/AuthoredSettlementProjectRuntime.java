@@ -39,7 +39,7 @@ import net.minecraft.world.level.block.state.BlockState;
 final class AuthoredSettlementProjectRuntime {
     private static final String STRUCTURAL_CHANNEL = "settlement_structure";
     private static final String DEVELOPMENT_CHANNEL = "settlement_development";
-    private static final String VERSION = "authored-project-v39-frontier-art-1";
+    private static final String VERSION = "authored-project-v40-frontier-art-2";
     private AuthoredSettlementProjectRuntime() { }
 
     static boolean tick(MinecraftServer server, PaleMirrorSavedData data, DomainCommandExecutor commands) {
@@ -179,8 +179,6 @@ final class AuthoredSettlementProjectRuntime {
         boolean complete = true;
         for (int index = 0; index < seed.modules().size(); index++) {
             var module = seed.modules().get(index);
-            if (!(module.role().equals("CIVIC") || module.role().equals("DEFENCE")
-                    || module.role().equals("LOGISTICS") || module.role().equals("ECONOMY"))) continue;
             SemanticSlotKey key = new SemanticSlotKey(placeId, module.instanceId(), "authored_state_overlay");
             keys.add(key);
             if (data.semanticSlots().find(key).isPresent()) continue;
@@ -220,8 +218,6 @@ final class AuthoredSettlementProjectRuntime {
         String name = state == StructuralIntegrity.RUINED ? "RUINED" : "DAMAGED";
         Map<Long, BlockState> result = new java.util.LinkedHashMap<>();
         for (var module : seed.modules()) {
-            if (!(module.role().equals("CIVIC") || module.role().equals("DEFENCE")
-                    || module.role().equals("LOGISTICS") || module.role().equals("ECONOMY"))) continue;
             provider.compileAuthoredModuleState(module, name).ifPresent(snapshot -> snapshot.blocks().forEach(
                     placement -> result.put(block(placement.position()).asLong(), placement.state())));
         }
@@ -291,7 +287,7 @@ final class AuthoredSettlementProjectRuntime {
         var footprint = new io.farfrontier.palemirror.api.VisualBounds(
                 new io.farfrontier.palemirror.api.VisualPoint(centerX - 5, groundY + 1, centerZ - 4),
                 new io.farfrontier.palemirror.api.VisualPoint(centerX + 4, groundY + 7, centerZ + 3));
-        String family = seed.climate().equals("dry_arid") ? "temperate" : seed.climate();
+        String family = seed.climate();
         var entrance = new io.farfrontier.palemirror.api.VisualPoint(centerX, groundY + 1, centerZ - 4);
         return new io.farfrontier.palemirror.api.VisualModulePlacement("development_storehouse",
                 "pale_mirror_visuals:" + family + "/workshop_1", seed.climate(), "LOGISTICS", origin, 0,

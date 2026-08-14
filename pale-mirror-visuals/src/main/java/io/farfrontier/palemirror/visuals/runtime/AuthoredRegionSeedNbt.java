@@ -3,14 +3,25 @@ package io.farfrontier.palemirror.visuals.runtime;
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.AuthoredMineRole;
 import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
+import io.farfrontier.palemirror.api.AuthoredBuildingPlan;
+import io.farfrontier.palemirror.api.AuthoredOpenSpacePlan;
 import io.farfrontier.palemirror.api.AuthoredSettlementSitePlan;
+import io.farfrontier.palemirror.api.BuildingFunctionId;
+import io.farfrontier.palemirror.api.BuildingSlot;
+import io.farfrontier.palemirror.api.BuildingSlotKind;
+import io.farfrontier.palemirror.api.DevelopmentReservation;
+import io.farfrontier.palemirror.api.DevelopmentReservationKind;
 import io.farfrontier.palemirror.api.LinearFeatureKind;
 import io.farfrontier.palemirror.api.LinearFeaturePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
+import io.farfrontier.palemirror.api.ManagedAreaPlan;
+import io.farfrontier.palemirror.api.OpenSpaceKind;
 import io.farfrontier.palemirror.api.ResidentSeed;
 import io.farfrontier.palemirror.api.SemanticVisualVolume;
 import io.farfrontier.palemirror.api.StagedVisualModule;
 import io.farfrontier.palemirror.api.SettlementFoundationPlan;
+import io.farfrontier.palemirror.api.SettlementBuildingCategory;
+import io.farfrontier.palemirror.api.SettlementDevelopmentStage;
 import io.farfrontier.palemirror.api.SettlementLayoutArchetype;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
@@ -48,6 +59,10 @@ public final class AuthoredRegionSeedNbt {
             value.putString("nameKey", resident.nameKey());
             value.putString("cohort", resident.cohort());
             value.putString("role", resident.role());
+            value.putString("homeBuildingId", resident.homeBuildingId());
+            value.putString("homeSlotId", resident.homeSlotId());
+            value.putString("workplaceBuildingId", resident.workplaceBuildingId());
+            value.putString("workplaceSlotId", resident.workplaceSlotId());
             value.put("home", point(resident.home()));
             if (resident.workplace() != null) value.put("workplace", point(resident.workplace()));
             residents.add(value);
@@ -61,7 +76,10 @@ public final class AuthoredRegionSeedNbt {
         for (Tag raw : tag.getList("residents", Tag.TAG_COMPOUND)) {
             CompoundTag value = (CompoundTag) raw;
             residents.add(new ResidentSeed(value.getString("residentId"), value.getString("nameKey"),
-                    value.getString("cohort"), value.getString("role"), point(value.getCompound("home")),
+                    value.getString("cohort"), value.getString("role"),
+                    value.getString("homeBuildingId"), value.getString("homeSlotId"),
+                    value.getString("workplaceBuildingId"), value.getString("workplaceSlotId"),
+                    point(value.getCompound("home")),
                     value.contains("workplace", Tag.TAG_COMPOUND) ? point(value.getCompound("workplace")) : null));
         }
         return new AuthoredRegionSeed(tag.getString("planId"), tag.getString("archetypeId"),
@@ -75,11 +93,12 @@ public final class AuthoredRegionSeedNbt {
     private static CompoundTag settlement(AuthoredSettlementSitePlan settlement) {
         CompoundTag tag = new CompoundTag();
         tag.putString("layoutId", settlement.layoutId());
+        tag.putString("stage", settlement.stage().name());
         tag.putString("archetype", settlement.archetype().name());
         tag.put("bounds", bounds(settlement.bounds()));
         tag.put("freightGate", point(settlement.freightGate()));
         tag.put("receivingDepot", point(settlement.receivingDepot()));
-        tag.put("modules", modules(settlement.modules()));
+        tag.put("buildings", buildings(settlement.buildings()));
         ListTag foundations = new ListTag();
         settlement.foundations().forEach(value -> {
             CompoundTag entry = new CompoundTag();
@@ -91,9 +110,23 @@ public final class AuthoredRegionSeedNbt {
         tag.put("foundations", foundations);
         tag.put("circulation", linearFeatures(settlement.circulation()));
         tag.put("defences", linearFeatures(settlement.defences()));
-        ListTag plots = new ListTag();
-        settlement.expansionPlots().forEach(value -> plots.add(bounds(value)));
-        tag.put("expansionPlots", plots);
+        ListTag openSpaces = new ListTag();
+        settlement.openSpaces().forEach(value -> openSpaces.add(openSpace(value)));
+        tag.put("openSpaces", openSpaces);
+        ListTag managedAreas = new ListTag();
+        settlement.managedArea().areas().forEach(value -> managedAreas.add(bounds(value)));
+        tag.put("managedAreas", managedAreas);
+        ListTag reservations = new ListTag();
+        settlement.developmentReservations().forEach(value -> {
+            CompoundTag entry = new CompoundTag();
+            entry.putString("id", value.id());
+            entry.putString("kind", value.kind().name());
+            entry.putString("targetStage", value.targetStage().name());
+            entry.put("bounds", bounds(value.bounds()));
+            entry.putString("ownerBuildingId", value.ownerBuildingId());
+            reservations.add(entry);
+        });
+        tag.put("developmentReservations", reservations);
         tag.put("shelterCandidates", points(settlement.shelterCandidates()));
         return tag;
     }
@@ -106,15 +139,95 @@ public final class AuthoredRegionSeedNbt {
                     value.getInt("targetY"), value.getInt("apron"), value.getInt("maximumCut"),
                     value.getInt("maximumFill"), value.getString("surface")));
         }
-        List<VisualBounds> plots = new ArrayList<>();
-        for (Tag raw : tag.getList("expansionPlots", Tag.TAG_COMPOUND)) plots.add(bounds((CompoundTag) raw));
+        List<AuthoredOpenSpacePlan> openSpaces = new ArrayList<>();
+        for (Tag raw : tag.getList("openSpaces", Tag.TAG_COMPOUND)) openSpaces.add(openSpace((CompoundTag) raw));
+        List<VisualBounds> managedAreas = new ArrayList<>();
+        for (Tag raw : tag.getList("managedAreas", Tag.TAG_COMPOUND)) managedAreas.add(bounds((CompoundTag) raw));
+        List<DevelopmentReservation> reservations = new ArrayList<>();
+        for (Tag raw : tag.getList("developmentReservations", Tag.TAG_COMPOUND)) {
+            CompoundTag value = (CompoundTag) raw;
+            reservations.add(new DevelopmentReservation(value.getString("id"),
+                    DevelopmentReservationKind.valueOf(value.getString("kind")),
+                    SettlementDevelopmentStage.valueOf(value.getString("targetStage")),
+                    bounds(value.getCompound("bounds")), value.getString("ownerBuildingId")));
+        }
         return new AuthoredSettlementSitePlan(tag.getString("layoutId"),
+                SettlementDevelopmentStage.valueOf(tag.getString("stage")),
                 SettlementLayoutArchetype.valueOf(tag.getString("archetype")), bounds(tag.getCompound("bounds")),
                 point(tag.getCompound("freightGate")), point(tag.getCompound("receivingDepot")),
-                modules(tag.getList("modules", Tag.TAG_COMPOUND)), foundations,
+                buildings(tag.getList("buildings", Tag.TAG_COMPOUND)), foundations,
                 linearFeatures(tag.getList("circulation", Tag.TAG_COMPOUND)),
-                linearFeatures(tag.getList("defences", Tag.TAG_COMPOUND)), plots,
+                linearFeatures(tag.getList("defences", Tag.TAG_COMPOUND)), openSpaces,
+                new ManagedAreaPlan(managedAreas), reservations,
                 points(tag.getList("shelterCandidates", Tag.TAG_COMPOUND)));
+    }
+
+    private static ListTag buildings(List<AuthoredBuildingPlan> buildings) {
+        ListTag result = new ListTag();
+        buildings.forEach(building -> {
+            CompoundTag value = new CompoundTag();
+            value.putString("buildingId", building.buildingId());
+            value.putString("introducedAt", building.introducedAt().name());
+            value.putString("category", building.category().name());
+            ListTag functions = new ListTag();
+            building.functions().forEach(function -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putString("id", function.value());
+                functions.add(entry);
+            });
+            value.put("functions", functions);
+            value.put("parcel", bounds(building.parcel()));
+            value.put("modules", modules(building.modules()));
+            ListTag slots = new ListTag();
+            building.slots().forEach(slot -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putString("id", slot.id());
+                entry.putString("kind", slot.kind().name());
+                entry.put("position", point(slot.position()));
+                entry.putInt("capacity", slot.capacity());
+                slots.add(entry);
+            });
+            value.put("slots", slots);
+            result.add(value);
+        });
+        return result;
+    }
+
+    private static List<AuthoredBuildingPlan> buildings(ListTag tags) {
+        List<AuthoredBuildingPlan> result = new ArrayList<>();
+        for (Tag raw : tags) {
+            CompoundTag value = (CompoundTag) raw;
+            List<BuildingFunctionId> functions = new ArrayList<>();
+            for (Tag functionRaw : value.getList("functions", Tag.TAG_COMPOUND)) {
+                functions.add(new BuildingFunctionId(((CompoundTag) functionRaw).getString("id")));
+            }
+            List<BuildingSlot> slots = new ArrayList<>();
+            for (Tag slotRaw : value.getList("slots", Tag.TAG_COMPOUND)) {
+                CompoundTag slot = (CompoundTag) slotRaw;
+                slots.add(new BuildingSlot(slot.getString("id"), BuildingSlotKind.valueOf(slot.getString("kind")),
+                        point(slot.getCompound("position")), slot.getInt("capacity")));
+            }
+            result.add(new AuthoredBuildingPlan(value.getString("buildingId"),
+                    SettlementDevelopmentStage.valueOf(value.getString("introducedAt")),
+                    SettlementBuildingCategory.valueOf(value.getString("category")), functions,
+                    bounds(value.getCompound("parcel")), modules(value.getList("modules", Tag.TAG_COMPOUND)), slots));
+        }
+        return result;
+    }
+
+    private static CompoundTag openSpace(AuthoredOpenSpacePlan openSpace) {
+        CompoundTag value = new CompoundTag();
+        value.putString("id", openSpace.id());
+        value.putString("kind", openSpace.kind().name());
+        value.put("bounds", bounds(openSpace.bounds()));
+        value.put("ports", ports(openSpace.ports()));
+        return value;
+    }
+
+    private static AuthoredOpenSpacePlan openSpace(CompoundTag value) {
+        return new AuthoredOpenSpacePlan(value.getString("id"),
+                OpenSpaceKind.valueOf(value.getString("kind")), bounds(value.getCompound("bounds")),
+                ports(value.getList("ports", Tag.TAG_COMPOUND)));
     }
 
     private static ListTag linearFeatures(List<LinearFeaturePlan> features) {
@@ -147,7 +260,8 @@ public final class AuthoredRegionSeedNbt {
         tag.put("controllerAnchor", point(mine.controllerAnchor()));
         tag.put("bounds", bounds(mine.bounds()));
         tag.putInt("inwardQuarterTurns", mine.inwardQuarterTurns());
-        tag.put("initialModules", modules(mine.initialModules()));
+        tag.put("surfaceBuildings", buildings(mine.surfaceBuildings()));
+        tag.put("undergroundModules", modules(mine.undergroundModules()));
         ListTag staged = new ListTag();
         mine.stagedModules().forEach(value -> {
             CompoundTag entry = module(value.module());
@@ -201,7 +315,8 @@ public final class AuthoredRegionSeedNbt {
         return new AuthoredMineSitePlan(tag.getString("siteId"), AuthoredMineRole.valueOf(tag.getString("role")),
                 point(tag.getCompound("portal")), point(tag.getCompound("loadingEndpoint")),
                 point(tag.getCompound("controllerAnchor")), bounds(tag.getCompound("bounds")),
-                tag.getInt("inwardQuarterTurns"), modules(tag.getList("initialModules", Tag.TAG_COMPOUND)),
+                tag.getInt("inwardQuarterTurns"), buildings(tag.getList("surfaceBuildings", Tag.TAG_COMPOUND)),
+                modules(tag.getList("undergroundModules", Tag.TAG_COMPOUND)),
                 staged, foundations, volumes);
     }
 
@@ -228,28 +343,39 @@ public final class AuthoredRegionSeedNbt {
         value.put("footprint", bounds(module.footprint()));
         value.putString("foundationId", module.foundationId());
         value.putString("visualStateProfile", module.visualStateProfile());
-        ListTag ports = new ListTag();
-        module.ports().forEach(port -> {
-            CompoundTag entry = new CompoundTag();
-            entry.putString("id", port.id()); entry.putString("kind", port.kind().name());
-            entry.put("position", point(port.position()));
-            entry.putInt("outwardQuarterTurns", port.outwardQuarterTurns()); ports.add(entry);
-        });
-        value.put("ports", ports);
+        value.put("ports", ports(module.ports()));
         return value;
     }
 
     private static VisualModulePlacement module(CompoundTag value) {
-        List<VisualPort> ports = new ArrayList<>();
-        for (Tag raw : value.getList("ports", Tag.TAG_COMPOUND)) {
-            CompoundTag port = (CompoundTag) raw;
-            ports.add(new VisualPort(port.getString("id"), VisualPortKind.valueOf(port.getString("kind")),
-                    point(port.getCompound("position")), port.getInt("outwardQuarterTurns")));
-        }
+        List<VisualPort> ports = ports(value.getList("ports", Tag.TAG_COMPOUND));
         return new VisualModulePlacement(value.getString("instanceId"), value.getString("templateId"),
                 value.getString("variantId"), value.getString("role"), point(value.getCompound("origin")),
                 value.getInt("quarterTurns"), bounds(value.getCompound("footprint")),
                 value.getString("foundationId"), value.getString("visualStateProfile"), ports);
+    }
+
+    private static ListTag ports(List<VisualPort> ports) {
+        ListTag result = new ListTag();
+        ports.forEach(port -> {
+            CompoundTag entry = new CompoundTag();
+            entry.putString("id", port.id());
+            entry.putString("kind", port.kind().name());
+            entry.put("position", point(port.position()));
+            entry.putInt("outwardQuarterTurns", port.outwardQuarterTurns());
+            result.add(entry);
+        });
+        return result;
+    }
+
+    private static List<VisualPort> ports(ListTag tags) {
+        List<VisualPort> result = new ArrayList<>();
+        for (Tag raw : tags) {
+            CompoundTag port = (CompoundTag) raw;
+            result.add(new VisualPort(port.getString("id"), VisualPortKind.valueOf(port.getString("kind")),
+                    point(port.getCompound("position")), port.getInt("outwardQuarterTurns")));
+        }
+        return result;
     }
 
     private static CompoundTag point(VisualPoint point) {

@@ -9,7 +9,11 @@ public final class ManagedResident {
     public static final String COHORT = "pale_mirror_visuals_cohort";
     public static final String ROLE = "pale_mirror_visuals_role";
     public static final String HOME = "pale_mirror_visuals_home";
+    public static final String HOME_BUILDING = "pale_mirror_visuals_home_building";
+    public static final String HOME_SLOT = "pale_mirror_visuals_home_slot";
     public static final String WORKPLACE = "pale_mirror_visuals_workplace";
+    public static final String WORKPLACE_BUILDING = "pale_mirror_visuals_workplace_building";
+    public static final String WORKPLACE_SLOT = "pale_mirror_visuals_workplace_slot";
     public static final String GROWTH_PERMIT = "pale_mirror_visuals_growth_permit";
     public static final String JOURNEY = "pale_mirror_visuals_journey_id";
     public static final String JOURNEY_CARRIER = "pale_mirror_visuals_journey_carrier";
@@ -24,9 +28,14 @@ public final class ManagedResident {
         data.putString(REGION, regionId);
         data.putString(COHORT, seed.cohort());
         data.putString(ROLE, seed.role());
+        data.putString(HOME_BUILDING, seed.homeBuildingId());
+        data.putString(HOME_SLOT, seed.homeSlotId());
         data.putLong(HOME, pack(seed.home().x(), seed.home().y(), seed.home().z()));
-        if (seed.workplace() != null) data.putLong(WORKPLACE,
-                pack(seed.workplace().x(), seed.workplace().y(), seed.workplace().z()));
+        if (seed.workplace() != null) {
+            data.putString(WORKPLACE_BUILDING, seed.workplaceBuildingId());
+            data.putString(WORKPLACE_SLOT, seed.workplaceSlotId());
+            data.putLong(WORKPLACE, pack(seed.workplace().x(), seed.workplace().y(), seed.workplace().z()));
+        }
     }
 
     public static void attachJourney(Entity entity, String journeyId) {

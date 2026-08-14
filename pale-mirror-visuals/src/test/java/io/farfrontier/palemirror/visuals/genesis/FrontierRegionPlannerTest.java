@@ -27,30 +27,35 @@ class FrontierRegionPlannerTest {
         assertEquals(Map.of("CIVILIANS", 20L, "WORKERS", 14L, "SPECIALISTS", 4L,
                 "GUARDS", 6L, "CHILDREN", 4L), counts);
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
-        assertTrue(seed.modules().size() >= 16);
-        assertEquals(6, seed.expansionPlots().size());
-        assertEquals(10, seed.definitionVersion());
-        assertEquals(8, seed.primaryMineSite().initialModules().size());
+        assertEquals(20, seed.modules().size());
+        assertEquals(5, seed.expansionPlots().size());
+        assertEquals(11, seed.definitionVersion());
+        assertEquals(9, seed.primaryMineSite().initialModules().size());
         assertEquals(4, seed.alternateMineSite().initialModules().size());
-        assertEquals(5, seed.primaryMineSite().foundations().size());
+        assertEquals(6, seed.primaryMineSite().foundations().size());
         assertEquals(6, seed.alternateMineSite().foundations().size());
         assertEquals(java.util.List.of("foundation", "shell", "machinery", "commissioning"),
                 seed.alternateMineSite().stagedModules().stream().map(value -> value.stage()).toList());
         assertTrue(seed.primaryMineSite().semanticVolumes().stream()
                 .anyMatch(value -> value.purpose().equals("INFECTION")));
         assertTrue(seed.primaryMineSite().bounds().contains(seed.primaryMineSite().controllerAnchor()));
-        var surfaceRoles = java.util.Set.of("MINE_PORTAL", "MINE_SUPPORT", "MINE_PROCESSING",
-                "MINE_POWER", "MINE_LOGISTICS");
-        var surface = seed.primaryMineSite().initialModules().stream()
-                .filter(value -> surfaceRoles.contains(value.role())).toList();
-        assertEquals(5, surface.size());
-        assertTrue(surface.stream().noneMatch(value -> value.templateId().contains("/mine/")),
-                "surface industry must use building modules rather than enclosed underground rooms");
-        assertTrue(surface.stream().anyMatch(value -> value.templateId().endsWith("/stable")));
-        assertTrue(surface.stream().anyMatch(value -> value.templateId().endsWith("/receiving_depot")));
+        var surface = seed.primaryMineSite().surfaceBuildings();
+        assertEquals(6, surface.size());
+        assertTrue(surface.stream().flatMap(value -> value.modules().stream())
+                .anyMatch(value -> value.templateId().endsWith("/mine/portal_hoist")));
+        assertTrue(surface.stream().flatMap(value -> value.modules().stream())
+                .anyMatch(value -> value.templateId().endsWith("/mine/loading_yard")));
+        assertTrue(surface.stream().flatMap(value -> value.functions().stream())
+                .anyMatch(value -> value.value().equals("pale_mirror:ore_processing")));
         assertTrue(seed.alternateMineSite().stagedModules().stream()
-                        .noneMatch(value -> value.module().templateId().contains("/mine/")),
-                "staged surface industry must never reintroduce legacy mining-complex boxes");
+                .allMatch(value -> value.module().templateId().contains("/mine/dispatch_")));
+        assertEquals(48, seed.residents().stream().map(value -> value.homeBuildingId() + ":" + value.homeSlotId())
+                .distinct().count());
+        var assigned = seed.residents().stream().filter(value -> !value.workplaceBuildingId().isBlank()).toList();
+        assertEquals(24, assigned.size());
+        assertEquals(assigned.size(), assigned.stream()
+                .map(value -> value.workplaceBuildingId() + ":" + value.workplaceSlotId()).distinct().count());
+        assertTrue(seed.residents().stream().allMatch(value -> value.role().startsWith("pale_mirror:")));
     }
 
     @Test void railwayConsumesOnlyTheTwoExplicitMineAnchorQueries() {
@@ -70,6 +75,7 @@ class FrontierRegionPlannerTest {
         int alternate = manhattan(seed.anchor(), seed.alternateMine());
         assertTrue(primary >= 160 && primary <= 320);
         assertTrue(alternate >= 320 && alternate <= 560);
+        assertTrue(horizontalDistanceSquared(seed.primaryMine(), seed.alternateMine()) >= 128L * 128L);
         assertEquals(seed.receivingDepot().x(), seed.baselineRailNodes().getFirst().x());
         assertEquals(seed.receivingDepot().z(), seed.baselineRailNodes().getFirst().z());
         assertEquals(seed.primaryMineSite().loadingEndpoint().x(), seed.baselineRailNodes().getLast().x());
@@ -129,14 +135,14 @@ class FrontierRegionPlannerTest {
         AuthoredRegionSeed seed = planner.plan(621L, 0, new VisualPoint(0, 72, 0), FrontierClimate.TEMPERATE);
         var mine = seed.primaryMineSite();
 
-        assertTrue(manhattan(mine.portal(), mine.loadingEndpoint()) <= 52);
+        assertTrue(manhattan(mine.portal(), mine.loadingEndpoint()) <= 84);
         assertTrue(manhattan(mine.portal(), mine.controllerAnchor()) <= 60);
         for (var foundation : mine.foundations()) {
             VisualPoint center = new VisualPoint(
                     (foundation.footprint().min().x() + foundation.footprint().max().x()) / 2,
                     foundation.targetY(),
                     (foundation.footprint().min().z() + foundation.footprint().max().z()) / 2);
-            assertTrue(horizontalDistanceSquared(mine.portal(), center) <= 60 * 60,
+            assertTrue(horizontalDistanceSquared(mine.portal(), center) <= 80 * 80,
                     () -> foundation.id() + " escaped compact MineSite yard at " + center);
         }
     }
@@ -152,6 +158,8 @@ class FrontierRegionPlannerTest {
                 "the exact budget must reach lateral offsets instead of spending every probe on cardinal axes");
         assertTrue(firstBudget.stream().map(point -> Math.abs(point.x()) + Math.abs(point.z()))
                 .distinct().count() >= 3);
+        assertTrue(primary.lateralOffsets().containsAll(java.util.List.of(-32, 32, -96, 96)),
+                "mine-site search must resolve slopes between the former coarse 64-block rays");
     }
 
     @Test void mineSurfacePadsDoNotOverlapInAnyOrientation() {

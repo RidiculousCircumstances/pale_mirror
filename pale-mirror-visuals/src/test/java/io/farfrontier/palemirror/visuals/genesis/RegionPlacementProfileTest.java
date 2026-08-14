@@ -17,6 +17,10 @@ class RegionPlacementProfileTest {
                 .distanceFromSettlement());
         assertEquals(new DistanceBand(320, 560), profile.requireSite(RegionPlacementProfiles.ALTERNATE_MINE)
                 .distanceFromSettlement());
+        assertEquals(128, profile.requireSite(RegionPlacementProfiles.ALTERNATE_MINE)
+                .minimumSeparationFromRelatedSite());
+        assertEquals(false, profile.requireSite(RegionPlacementProfiles.ALTERNATE_MINE)
+                .requireSeparateCardinalSector());
         assertEquals(24, profile.requireSite(RegionPlacementProfiles.PRIMARY_MINE).exactValidationBudget());
         assertEquals(72, profile.settlementTerrain().surveyRadius());
         assertEquals(0, profile.settlementTerrain().minimumLandscapeScore());
@@ -55,7 +59,7 @@ class RegionPlacementProfileTest {
                 new RegionPlacementProfile("test:invalid", "invalid", search(), settlement(), List.of(primary),
                         new RoutePlacementRequirement("settlement", "primary", true,
                                 4, 96, 12_000, 24, 2, 250)));
-        assertEquals("unknown cardinal-sector reference missing", failure.getMessage());
+        assertEquals("unknown site relation reference missing", failure.getMessage());
     }
 
     @Test void ironPlannerRejectsAProfileWhoseRouteTargetsAnotherSite() {
@@ -79,6 +83,7 @@ class RegionPlacementProfileTest {
 
     private static SitePlacementRequirement site(String role, DistanceBand distance, String separateFrom) {
         return new SitePlacementRequirement(role, distance, separateFrom,
+                separateFrom.isBlank() ? 0 : 64, false,
                 List.of(distance.minimum()), List.of(0), 1, 1,
                 RegionPlacementProfiles.IRON_FRONTIER.requireSite(RegionPlacementProfiles.PRIMARY_MINE).terrain());
     }

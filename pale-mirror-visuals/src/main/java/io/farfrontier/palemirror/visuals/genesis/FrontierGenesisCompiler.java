@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.visuals.genesis;
 
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
+import io.farfrontier.palemirror.api.AuthoredMineRole;
 import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
@@ -19,14 +20,11 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LanternBlock;
-import net.minecraft.world.level.block.PoweredRailBlock;
-import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.RailShape;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 11;
+    public static final int CATALOG_VERSION = 17;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableSlice> slices = new LinkedHashMap<>();
@@ -64,9 +62,15 @@ public final class FrontierGenesisCompiler {
             @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
         });
         for (VisualModulePlacement module : seed.modules()) compileModule(module, slices);
-        compileMine(seed.primaryMineSite(), slices);
-        compileMine(seed.alternateMineSite(), slices);
-        compileRail(seed.baselineRailNodes(), slices);
+        compileMine(seed.primaryMineSite(), palette, slices);
+        compileMine(seed.alternateMineSite(), palette, slices);
+        FrontierRailGenesisCompiler.compile(seed.baselineRailNodes(), new FrontierRailGenesisCompiler.Sink() {
+            @Override public void rail(BlockPos rail, BlockState state, BlockState support) {
+                slice(slices, rail.getX(), rail.getZ()).rails.add(
+                        new CompiledChunkSlice.RailColumn(rail, state, support));
+            }
+            @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
+        });
     }
 
     private static void compileMineKinetics(AuthoredMineSitePlan mine, Map<Long, MutableSlice> slices) {
@@ -108,19 +112,142 @@ public final class FrontierGenesisCompiler {
                 new BlockPos(block.position().x(), block.position().y(), block.position().z()), block.state()));
     }
 
-    private static void compileMine(AuthoredMineSitePlan mine, Map<Long, MutableSlice> slices) {
+    private static void compileMine(AuthoredMineSitePlan mine, FrontierPalette palette,
+                                    Map<Long, MutableSlice> slices) {
+        compileMineVegetationEnvelope(mine, slices);
         compileMineFoundations(mine, slices);
+        compileMineWorkingYard(mine, slices);
         compileMinePaths(mine, slices);
         compileMineDrift(mine, slices);
         mine.initialModules().forEach(module -> compileModule(module, slices));
         mine.stagedModules().forEach(stage -> compileReservationFootprint(stage.module(), slices));
-        compileMineIndustrialDetails(mine, slices);
+        compileMineIndustrialDetails(mine, palette, slices);
         compileMineKinetics(mine, slices);
         put(slices, block(mine.controllerAnchor()).above(), Blocks.SOUL_LANTERN.defaultBlockState());
     }
 
-    private static void compileMineIndustrialDetails(AuthoredMineSitePlan mine, Map<Long, MutableSlice> slices) {
-        MineSurfaceGenesisCompiler.compile(mine, (position, state) -> put(slices, position, state));
+    /** Clears the connected working yard while leaving its terrain untouched. */
+    private static void compileMineVegetationEnvelope(AuthoredMineSitePlan mine,
+                                                       Map<Long, MutableSlice> slices) {
+        int minimumX = mine.foundations().stream().mapToInt(value -> value.footprint().min().x())
+                .min().orElseThrow();
+        int maximumX = mine.foundations().stream().mapToInt(value -> value.footprint().max().x())
+                .max().orElseThrow();
+        int minimumZ = mine.foundations().stream().mapToInt(value -> value.footprint().min().z())
+                .min().orElseThrow();
+        int maximumZ = mine.foundations().stream().mapToInt(value -> value.footprint().max().z())
+                .max().orElseThrow();
+        int baseY = mine.foundations().stream().mapToInt(MineFoundationPlan::targetY).min().orElseThrow();
+        // Large modded trees routinely carry crowns 10-14 blocks away from
+        // their trunks. Use an organic union around the actual pads instead
+        // of a rectangular clear-cut, but keep enough clearance for the
+        // industrial skyline and fire/safety lanes.
+        final int halo = 18;
+        for (int z = minimumZ - halo; z <= maximumZ + halo; z++) {
+            for (int x = minimumX - halo; x <= maximumX + halo; x++) {
+                final int columnX = x;
+                final int columnZ = z;
+                int nearestPad = mine.foundations().stream()
+                        .mapToInt(value -> distanceFrom(value, columnX, columnZ)).min().orElseThrow();
+                int edgeVariation = Math.floorMod(x * 31 + z * 19 + mine.portal().x() * 13, 4);
+                if (nearestPad > halo + edgeVariation) continue;
+                MutableSlice slice = slice(slices, x, z);
+                slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
+                        new CompiledChunkSlice.VegetationColumn(x, z, baseY));
+            }
+        }
+    }
+
+    private static void compileMineIndustrialDetails(AuthoredMineSitePlan mine, FrontierPalette palette,
+                                                     Map<Long, MutableSlice> slices) {
+        MineSurfaceGenesisCompiler.compile(mine, palette, (position, state) -> put(slices, position, state));
+    }
+
+    /**
+     * Paints an irregular, terrain-following working surface between the
+     * primary mine buildings. Foundations still own their exact pads and the
+     * natural relief remains intact; this layer only makes the separate pads
+     * read as one industrial campus.
+     */
+    private static void compileMineWorkingYard(AuthoredMineSitePlan mine,
+                                               Map<Long, MutableSlice> slices) {
+        if (mine.role() != AuthoredMineRole.PRIMARY) return;
+        for (int inward = -64; inward <= -18; inward++) {
+            for (int right = -34; right <= 34; right++) {
+                int radial = right * right * 9 + (inward + 41) * (inward + 41) * 16;
+                int edgeNoise = Math.floorMod(right * 31 + inward * 17 + mine.portal().x(), 97) * 16;
+                if (radial + edgeNoise > 34 * 34 * 9) continue;
+                VisualPoint point = MineSurfaceLayout.local(
+                        mine.portal(), right, inward, 0, mine.inwardQuarterTurns());
+                int pattern = Math.floorMod(point.x() * 17 + point.z() * 29, 23);
+                BlockState surface = switch (pattern) {
+                    case 0, 1, 2, 3 -> Blocks.COARSE_DIRT.defaultBlockState();
+                    case 4, 5, 6 -> Blocks.ANDESITE.defaultBlockState();
+                    case 7 -> Blocks.TUFF.defaultBlockState();
+                    default -> Blocks.GRAVEL.defaultBlockState();
+                };
+                mineSurface(slices, point, -1, surface);
+            }
+        }
+        // Stone drainage seams and freight wear lines articulate the yard
+        // without imposing another geometric plaza on the mountain foot.
+        for (int inward = -58; inward <= -25; inward++) {
+            for (int right : new int[]{-10, 10}) {
+                if (Math.floorMod(inward, 5) == 0) continue;
+                mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, inward, 0,
+                        mine.inwardQuarterTurns()), -1, Blocks.POLISHED_ANDESITE.defaultBlockState());
+            }
+        }
+        compileMineYardFurniture(mine, slices);
+    }
+
+    private static void compileMineYardFurniture(AuthoredMineSitePlan mine,
+                                                  Map<Long, MutableSlice> slices) {
+        for (int[] local : new int[][]{{-28, -29}, {28, -29}, {-30, -55}, {30, -55}}) {
+            VisualPoint point = MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
+                    mine.inwardQuarterTurns());
+            mineSurface(slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+            mineSurface(slices, point, 1, Blocks.IRON_BARS.defaultBlockState());
+            mineSurface(slices, point, 2, Blocks.LANTERN.defaultBlockState());
+        }
+        // Open ore-sort bins: deliberately non-valuable rock communicates
+        // function without becoming a free strategic-resource spawn.
+        for (int bin = 0; bin < 3; bin++) {
+            int centerRight = -25 + bin * 5;
+            for (int right = centerRight - 2; right <= centerRight + 2; right++) {
+                mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, -46, 0,
+                        mine.inwardQuarterTurns()), 0, Blocks.COBBLED_DEEPSLATE.defaultBlockState());
+            }
+            for (int inward = -45; inward <= -42; inward++) {
+                for (int right : new int[]{centerRight - 2, centerRight + 2}) {
+                    mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, inward, 0,
+                            mine.inwardQuarterTurns()), 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+                }
+            }
+            for (int right = centerRight - 1; right <= centerRight + 1; right++) {
+                mineSurface(slices, MineSurfaceLayout.local(mine.portal(), right, -43, 0,
+                        mine.inwardQuarterTurns()), 0,
+                        Math.floorMod(right + bin, 2) == 0
+                                ? Blocks.TUFF.defaultBlockState()
+                                : Blocks.ANDESITE.defaultBlockState());
+            }
+        }
+        for (int offset = 0; offset < 6; offset++) {
+            VisualPoint timber = MineSurfaceLayout.local(mine.portal(), 23 + offset, -49, 0,
+                    mine.inwardQuarterTurns());
+            mineSurface(slices, timber, 0, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
+            if (offset < 3) mineSurface(slices, timber, 1, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
+        }
+        for (int[] local : new int[][]{{22, -42}, {25, -42}, {22, -39}}) {
+            mineSurface(slices, MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
+                    mine.inwardQuarterTurns()), 0, Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
+        }
+    }
+
+    private static void mineSurface(Map<Long, MutableSlice> slices, VisualPoint point,
+                                    int offsetY, BlockState state) {
+        slice(slices, point.x(), point.z()).surfaceDecorations.add(
+                new CompiledChunkSlice.SurfaceDecoration(point.x(), point.z(), offsetY, state));
     }
 
     private static void compileReservationFootprint(VisualModulePlacement module, Map<Long, MutableSlice> slices) {
@@ -135,7 +262,11 @@ public final class FrontierGenesisCompiler {
 
     private static void compileMineFoundations(AuthoredMineSitePlan mine, Map<Long, MutableSlice> slices) {
         for (MineFoundationPlan foundation : mine.foundations()) {
-            int transition = Math.max(foundation.maximumCut(), foundation.maximumFill()) + 4;
+            // A mine is a connected industrial campus, not six buildings lost
+            // independently in forest. The wider transition joins nearby pads
+            // while resolvedTarget keeps the natural slope whenever it already
+            // sits inside the allowed band.
+            int transition = Math.max(foundation.maximumCut(), foundation.maximumFill()) + 10;
             int influence = foundation.apron() + transition;
             for (int x = foundation.footprint().min().x() - influence;
                  x <= foundation.footprint().max().x() + influence; x++) {
@@ -182,14 +313,20 @@ public final class FrontierGenesisCompiler {
         for (int index = 0; index < path.size(); index++) {
             VisualPoint point = path.get(index);
             int y = start.y() + (destination.y() - start.y()) * index / segments;
-            for (int offset = -1; offset <= 1; offset++) {
+            // Five-block service lanes visually bind the pads into one mine
+            // campus and still leave a one-block shoulder for lamps, drains
+            // and terrain transitions.
+            for (int offset = -2; offset <= 2; offset++) {
                 int x = point.x();
                 int z = point.z();
                 if (index + 1 < path.size() && path.get(index + 1).x() != point.x()) z += offset;
                 else x += offset;
                 MutableSlice slice = slice(slices, x, z);
+                BlockState surface = Math.floorMod(index + offset, 7) == 0
+                        ? Blocks.POLISHED_ANDESITE.defaultBlockState()
+                        : Blocks.GRAVEL.defaultBlockState();
                 slice.terrain(new CompiledChunkSlice.TerrainColumn(x, z, y,
-                        Blocks.GRAVEL.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState()));
+                        surface, Blocks.COBBLESTONE.defaultBlockState()));
                 slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
                         new CompiledChunkSlice.VegetationColumn(x, z, y));
             }
@@ -318,67 +455,6 @@ public final class FrontierGenesisCompiler {
         int dx = switch (Math.floorMod(direction, 4)) { case 0 -> inward; case 1 -> -right; case 2 -> -inward; default -> right; };
         int dz = switch (Math.floorMod(direction, 4)) { case 0 -> right; case 1 -> inward; case 2 -> -right; default -> -inward; };
         return origin.offset(dx, up, dz);
-    }
-
-    private static void compileRail(List<VisualPoint> nodes, Map<Long, MutableSlice> slices) {
-        for (int index = 0; index < nodes.size(); index++) {
-            VisualPoint point = nodes.get(index); BlockPos rail = new BlockPos(point.x(), point.y(), point.z());
-            Direction previous = direction(nodes, Math.max(0, index - 1), index == 0 ? 1 : index);
-            Direction next = direction(nodes, index == nodes.size() - 1 ? index - 1 : index,
-                    index == nodes.size() - 1 ? index : index + 1);
-            int nextY = nodes.get(Math.min(nodes.size() - 1, index + 1)).y();
-            int previousY = nodes.get(Math.max(0, index - 1)).y();
-            RailShape shape = railShape(previous, next, point.y(), nextY, previousY);
-            boolean powered = index > 0 && index % 12 == 0 && supportsPoweredRail(shape);
-            BlockState state = powered ? Blocks.POWERED_RAIL.defaultBlockState()
-                    .setValue(PoweredRailBlock.SHAPE, shape) : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape);
-            slice(slices, rail.getX(), rail.getZ()).rails.add(new CompiledChunkSlice.RailColumn(rail, state,
-                    powered ? Blocks.REDSTONE_BLOCK.defaultBlockState() : Blocks.GRAVEL.defaultBlockState()));
-            if (index % 3 == 0) {
-                boolean xAxis = next.getAxis() == Direction.Axis.X;
-                for (int side : new int[]{-1, 1}) {
-                    BlockPos sleeper = rail.below().offset(xAxis ? 0 : side, 0, xAxis ? side : 0);
-                    put(slices, sleeper, Blocks.STRIPPED_OAK_LOG.defaultBlockState());
-                }
-            }
-        }
-    }
-
-    private static Direction direction(List<VisualPoint> nodes, int from, int to) {
-        VisualPoint a = nodes.get(from); VisualPoint b = nodes.get(to);
-        if (b.x() > a.x()) return Direction.EAST; if (b.x() < a.x()) return Direction.WEST;
-        return b.z() > a.z() ? Direction.SOUTH : Direction.NORTH;
-    }
-
-    private static RailShape railShape(Direction previous, Direction next, int y, int nextY, int previousY) {
-        if (nextY > y) return ascending(next);
-        if (previousY > y) return ascending(previous.getOpposite());
-        return previous.getAxis() == next.getAxis() ? (next.getAxis() == Direction.Axis.X
-                ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH) : corner(previous, next);
-    }
-
-    private static RailShape ascending(Direction direction) {
-        return switch (direction) {
-            case EAST -> RailShape.ASCENDING_EAST; case WEST -> RailShape.ASCENDING_WEST;
-            case SOUTH -> RailShape.ASCENDING_SOUTH; default -> RailShape.ASCENDING_NORTH;
-        };
-    }
-
-    private static boolean supportsPoweredRail(RailShape shape) {
-        return switch (shape) {
-            case NORTH_SOUTH, EAST_WEST, ASCENDING_EAST, ASCENDING_WEST, ASCENDING_NORTH,
-                    ASCENDING_SOUTH -> true;
-            default -> false;
-        };
-    }
-
-    private static RailShape corner(Direction a, Direction b) {
-        boolean north = a == Direction.NORTH || b == Direction.NORTH;
-        boolean south = a == Direction.SOUTH || b == Direction.SOUTH;
-        boolean east = a == Direction.EAST || b == Direction.EAST;
-        if (north && east) return RailShape.NORTH_EAST;
-        if (north) return RailShape.NORTH_WEST;
-        return south && east ? RailShape.SOUTH_EAST : RailShape.SOUTH_WEST;
     }
 
     private static void put(Map<Long, MutableSlice> slices, BlockPos position, BlockState state) {

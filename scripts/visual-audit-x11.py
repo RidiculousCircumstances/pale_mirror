@@ -133,12 +133,16 @@ def focus(display: ctypes.c_void_p, window: int) -> None:
 def send_command(value: str) -> None:
     display = open_display()
     focus(display, minecraft_window())
-    press(display, "slash")
-    # A freshly connected, software-rendered audit client can drop the first
-    # characters while the chat screen is still being constructed.  Waiting
-    # for the screen here is cheaper and more reliable than compensating for a
-    # truncated command later in the capture workflow.
+    # Opening chat with T and then typing '/' is deliberately redundant.  If
+    # the software-rendered client drops T while it is still returning from an
+    # F2 capture, slash opens command chat itself.  If T succeeds, slash is
+    # inserted into the already-open chat.  With slash alone a dropped event
+    # made the command text hit gameplay bindings (notably E/inventory), which
+    # poisoned every later audit frame.
+    press(display, "t")
     time.sleep(0.4)
+    type_character(display, "/")
+    time.sleep(0.2)
     for character in value:
         type_character(display, character)
     press(display, "Return")
@@ -154,7 +158,13 @@ def resize(width: int, height: int) -> None:
 
 def send_key(value: str) -> None:
     display = open_display()
-    focus(display, minecraft_window())
+    # Minecraft uses captured relative pointer motion for camera rotation.  A
+    # synthetic click is useful before typing chat, but it also changes the
+    # audited camera angle immediately before F2.  Keyboard-only actions need
+    # focus without moving or clicking the pointer.
+    X11.XSetInputFocus(display, minecraft_window(), 2, 0)
+    flush(display)
+    time.sleep(0.05)
     press(display, value)
 
 

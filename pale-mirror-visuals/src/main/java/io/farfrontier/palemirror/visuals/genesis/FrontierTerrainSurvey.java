@@ -18,6 +18,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Generator-only access that keeps cheap biome ranking separate from explicitly budgeted exact heights. */
 public final class FrontierTerrainSurvey {
+    private static final int MINE_RISE_PREFILTER_MULTIPLIER = 6;
     public Batch selectBatch(ServerLevel level, RegionPlacementProfile profile, int count, int mapRadius,
                              int minimumSpacing) {
         return selectBatch(level, profile, count, 0, mapRadius, minimumSpacing);
@@ -45,6 +46,7 @@ public final class FrontierTerrainSurvey {
         public List<FrontierSiteSelector.SelectedSite> sites() { return sites; }
         public MineAnchorResolver mineAnchors() { return terrain::resolveMine; }
         public RailPathResolver railPaths() { return terrain::resolveRail; }
+        public SettlementLayoutResolver settlementLayouts() { return terrain::resolveSettlement; }
         public Statistics statistics() { return terrain.statistics(); }
     }
 
@@ -54,7 +56,6 @@ public final class FrontierTerrainSurvey {
 
     private static final class CachedLevelTerrain implements FrontierSiteSelector.TerrainAccess {
         private final ServerLevel level;
-        private final Map<Long, Integer> heights = new HashMap<>();
         private final Map<Long, Integer> oceanFloors = new HashMap<>();
         private final Map<Long, Boolean> submergedColumns = new HashMap<>();
         private final Map<Long, FrontierSiteSelector.BiomeSample> biomes = new HashMap<>();
@@ -71,26 +72,19 @@ public final class FrontierTerrainSurvey {
         @Override public TerrainSample exactSample(int x, int z) {
             siteHeightProbes++;
             boolean water = exactWater(x, z);
-            int terrainSurface = water ? height(x, z) : oceanFloor(x, z);
-            return new TerrainSample(x, z, terrainSurface, water);
+            return new TerrainSample(x, z, oceanFloor(x, z), water);
         }
 
         @Override public boolean exactWater(int x, int z) {
             long key = ChunkPos.asLong(x, z);
             return submergedColumns.computeIfAbsent(key, ignored -> {
-                int surface = height(x, z);
                 int floor = oceanFloor(x, z);
-                mineHeightProbes += 2;
-                if (surface <= floor) return false;
-                // Heightmap divergence is ambiguous: both water and vegetation raise
-                // WORLD_SURFACE above OCEAN_FLOOR. Inspect only the bounded vertical
-                // interval instead of classifying trees as lakes.
-                var column = level.getChunkSource().getGenerator().getBaseColumn(x, z, level,
-                        level.getChunkSource().randomState());
-                for (int y = floor; y < surface; y++) {
-                    if (!column.getBlock(y).getFluidState().isEmpty()) return true;
-                }
-                return false;
+                mineHeightProbes++;
+                // Surface water in the Overworld is governed by the horizontal
+                // biome field and sea-level fluid picker. A dry biome below sea
+                // level is still conservatively rejected; underground aquifers
+                // never turn a positive-density surface cell into water.
+                return biome(x, z).water() || floor < level.getSeaLevel();
             });
         }
 
@@ -110,12 +104,35 @@ public final class FrontierTerrainSurvey {
         private MountainMineAnchor resolveMine(SitePlacementRequirement requirement, List<VisualPoint> candidates) {
             int exactAttempts = 0;
             java.util.Map<String, Integer> surfaceFailures = new java.util.LinkedHashMap<>();
-            for (VisualPoint candidate : candidates) {
-                if (!FrontierTerrainSurvey.siteFootprint(candidate, requirement.terrain(), this)) continue;
+            List<RankedMineCandidate> biomeRanked = java.util.stream.IntStream.range(0, candidates.size())
+                    .mapToObj(index -> {
+                        MineEdgeEvidence evidence = mineEdgeEvidence(candidates.get(index), requirement.terrain());
+                        return new RankedMineCandidate(candidates.get(index), evidence.score(),
+                                evidence.direction(), index);
+                    })
+                    .sorted(java.util.Comparator.comparingInt(RankedMineCandidate::evidence).reversed()
+                            .thenComparingInt(RankedMineCandidate::index))
+                    .toList();
+            int prefilterBudget = Math.min(biomeRanked.size(), requirement.exactValidationBudget()
+                    * MINE_RISE_PREFILTER_MULTIPLIER);
+            List<RankedMineCandidate> exactRanked = biomeRanked.stream()
+                    .filter(value -> FrontierTerrainSurvey.siteFootprint(
+                            value.point(), requirement.terrain(), this))
+                    .limit(prefilterBudget)
+                    .map(value -> value.withRise(quickMountainRise(value.point(), requirement.terrain(),
+                            value.direction())))
+                    .sorted(java.util.Comparator.comparingInt(RankedMineCandidate::rise).reversed()
+                            .thenComparing(java.util.Comparator.comparingInt(
+                                    RankedMineCandidate::evidence).reversed())
+                            .thenComparingInt(RankedMineCandidate::index))
+                    .toList();
+            for (RankedMineCandidate ranked : exactRanked) {
+                VisualPoint candidate = ranked.point();
                 if (exactAttempts++ >= requirement.exactValidationBudget()) break;
                 int terrainSurface = oceanFloor(candidate.x(), candidate.z());
                 mineHeightProbes++;
-                MountainMineAnchor mountain = mountainFace(candidate, terrainSurface, requirement.terrain());
+                MountainFaceResolution face = mountainFace(candidate, terrainSurface, requirement.terrain());
+                MountainMineAnchor mountain = face.anchor();
                 if (mountain != null) {
                     if (!exactDryFootprint(candidate, requirement.terrain(), this)) {
                         surfaceFailures.merge("portal:water", 1, Integer::sum);
@@ -126,6 +143,8 @@ public final class FrontierTerrainSurvey {
                     if (surface.centers() != null) return new MountainMineAnchor(mountain.portal(),
                             mountain.inwardQuarterTurns(), surface.centers());
                     surfaceFailures.merge(surface.failure(), 1, Integer::sum);
+                } else {
+                    surfaceFailures.merge("portal:" + face.failure(), 1, Integer::sum);
                 }
             }
             throw new DryMineSiteUnavailableException("Cannot resolve a dry mountain MineSite within "
@@ -133,12 +152,96 @@ public final class FrontierTerrainSurvey {
                     + requirement.role() + (surfaceFailures.isEmpty() ? "" : "; surface=" + surfaceFailures));
         }
 
-        private MountainMineAnchor mountainFace(VisualPoint candidate, int surface, SiteTerrainPolicy policy) {
+        /** Cheap biome-edge ranking; exact noise validation remains authoritative. */
+        private MineEdgeEvidence mineEdgeEvidence(VisualPoint candidate, SiteTerrainPolicy policy) {
+            FrontierSiteSelector.BiomeSample center = biome(candidate.x(), candidate.z());
+            if (center.water()) return new MineEdgeEvidence(Integer.MIN_VALUE, 0);
+            int best = Integer.MIN_VALUE;
+            int bestDirection = 0;
+            for (int direction = 0; direction < 4; direction++) {
+                int dx = direction == 0 ? 1 : direction == 2 ? -1 : 0;
+                int dz = direction == 1 ? 1 : direction == 3 ? -1 : 0;
+                FrontierSiteSelector.BiomeSample apron = biome(candidate.x() - dx * policy.apronDistance(),
+                        candidate.z() - dz * policy.apronDistance());
+                if (apron.water()) continue;
+                int score = apron.suitable() ? 4 : 1;
+                if (!center.mountainEvidence()) score += 3;
+                int ordinal = 0;
+                for (SiteTerrainPolicy.RiseSample sample : policy.riseSamples()) {
+                    FrontierSiteSelector.BiomeSample inward = biome(candidate.x() + dx * sample.distance(),
+                            candidate.z() + dz * sample.distance());
+                    if (inward.water()) score -= 8;
+                    if (inward.mountainEvidence()) score += 4 + ordinal * 3;
+                    ordinal++;
+                }
+                FrontierSiteSelector.BiomeSample far = biome(candidate.x() + dx
+                                * policy.riseSamples().getLast().distance(),
+                        candidate.z() + dz * policy.riseSamples().getLast().distance());
+                if (far.mountainEvidence()) score += 8;
+                if (score > best) {
+                    best = score;
+                    bestDirection = direction;
+                }
+            }
+            return new MineEdgeEvidence(best, bestDirection);
+        }
+
+        /** Median far-rise prefilter; four-direction continuity and pad checks remain authoritative. */
+        private int quickMountainRise(VisualPoint candidate, SiteTerrainPolicy policy, int direction) {
+            int surface = oceanFloor(candidate.x(), candidate.z());
+            mineHeightProbes++;
+            int farthest = policy.riseSamples().getLast().distance();
+            int dx = direction == 0 ? 1 : direction == 2 ? -1 : 0;
+            int dz = direction == 1 ? 1 : direction == 3 ? -1 : 0;
+            return crossSectionHeight(candidate, dx, dz, farthest) - surface;
+        }
+
+        private io.farfrontier.palemirror.api.AuthoredSettlementSitePlan resolveSettlement(
+                String source, VisualPoint anchor, FrontierClimate climate, int freightDirection,
+                TerrainCandidate candidate) {
+            Map<Long, Integer> coarse = new java.util.LinkedHashMap<>();
+            for (int right = -SettlementLayoutPlanner.MASTER_HALF_WIDTH;
+                 right <= SettlementLayoutPlanner.MASTER_HALF_WIDTH;
+                 right += SettlementTerrainSnapshot.GRID_STEP) {
+                for (int inward = -SettlementLayoutPlanner.MASTER_HALF_LENGTH;
+                     inward <= SettlementLayoutPlanner.MASTER_HALF_LENGTH;
+                     inward += SettlementTerrainSnapshot.GRID_STEP) {
+                    VisualPoint point = settlementLocal(anchor, right, inward, freightDirection);
+                    coarse.put(SettlementTerrainSnapshot.key(point.x(), point.z()), oceanFloor(point.x(), point.z()));
+                    siteHeightProbes++;
+                }
+            }
+            SettlementTerrainSnapshot snapshot = new SettlementTerrainSnapshot(anchor, coarse, (x, z) -> {
+                siteHeightProbes++;
+                return oceanFloor(x, z);
+            }, this::exactWater);
+            return new SettlementLayoutPlanner().plan(source, anchor, climate, freightDirection, candidate, snapshot);
+        }
+
+        private static VisualPoint settlementLocal(VisualPoint anchor, int right, int inward, int direction) {
+            int dx = switch (Math.floorMod(direction, 4)) {
+                case 0 -> inward;
+                case 1 -> -right;
+                case 2 -> -inward;
+                default -> right;
+            };
+            int dz = switch (Math.floorMod(direction, 4)) {
+                case 0 -> right;
+                case 1 -> inward;
+                case 2 -> -right;
+                default -> -inward;
+            };
+            return new VisualPoint(anchor.x() + dx, anchor.y(), anchor.z() + dz);
+        }
+
+        private MountainFaceResolution mountainFace(VisualPoint candidate, int surface, SiteTerrainPolicy policy) {
             if (policy.feature() != SiteTerrainPolicy.Feature.MOUNTAIN_FACE) {
                 throw new IllegalStateException("Unsupported site terrain feature " + policy.feature());
             }
             MountainMineAnchor best = null;
             int bestRise = Integer.MIN_VALUE;
+            boolean terraceFound = false;
+            boolean finalRiseFound = false;
             for (int direction = 0; direction < 4; direction++) {
                 int dx = direction == 0 ? 1 : direction == 2 ? -1 : 0;
                 int dz = direction == 1 ? 1 : direction == 3 ? -1 : 0;
@@ -153,12 +256,16 @@ public final class FrontierTerrainSurvey {
                     continuous &= rise >= sample.minimumRise();
                 }
                 boolean terrace = Math.abs(apron - surface) <= policy.apronMaximumRelief();
+                terraceFound |= terrace;
+                finalRiseFound |= terrace && rise >= policy.riseSamples().getLast().minimumRise();
                 if (terrace && continuous && rise > bestRise) {
                     bestRise = rise;
                     best = new MountainMineAnchor(new VisualPoint(candidate.x(), surface, candidate.z()), direction);
                 }
             }
-            return best;
+            if (best != null) return new MountainFaceResolution(best, "");
+            return new MountainFaceResolution(null, !terraceFound ? "apron"
+                    : !finalRiseFound ? "rise" : "continuity");
         }
 
         private int crossSectionHeight(VisualPoint candidate, int dx, int dz, int distance) {
@@ -257,6 +364,17 @@ public final class FrontierTerrainSurvey {
 
         private record SurfacePadResolution(VisualPoint center, VisualBounds bounds, String failure) { }
         private record SurfaceResolution(java.util.Map<String, VisualPoint> centers, String failure) { }
+        private record MountainFaceResolution(MountainMineAnchor anchor, String failure) { }
+        private record MineEdgeEvidence(int score, int direction) { }
+        private record RankedMineCandidate(VisualPoint point, int evidence, int direction, int index, int rise) {
+            private RankedMineCandidate(VisualPoint point, int evidence, int direction, int index) {
+                this(point, evidence, direction, index, Integer.MIN_VALUE);
+            }
+
+            private RankedMineCandidate withRise(int value) {
+                return new RankedMineCandidate(point, evidence, direction, index, value);
+            }
+        }
 
         private List<VisualPoint> resolveRail(RoutePlacementRequirement requirement, VisualPoint from, VisualPoint to) {
             List<VisualPoint> horizontal = RailCorridorPathfinder.find(from, to, requirement,
@@ -276,8 +394,8 @@ public final class FrontierTerrainSurvey {
                         from.y() + Integer.signum(elevation) * progressed, point.z());
                 int floor = oceanFloor(point.x(), point.z());
                 boolean water = biome(point.x(), point.z()).water();
-                int surface = water ? height(point.x(), point.z()) : floor;
-                railHeightProbes += water ? 2 : 1;
+                int surface = water ? Math.max(floor, level.getSeaLevel()) : floor;
+                railHeightProbes++;
                 wetRun = water ? wetRun + 1 : 0;
                 if (wetRun > requirement.maximumWaterSpan()) {
                     throw new DryMineSiteUnavailableException("Rail corridor water span exceeds "
@@ -292,20 +410,6 @@ public final class FrontierTerrainSurvey {
             return List.copyOf(result);
         }
 
-        private int height(int x, int z) {
-            long key = ChunkPos.asLong(x, z);
-            Integer cached = heights.get(key);
-            if (cached != null) {
-                heightHits++;
-                return cached;
-            }
-            heightMisses++;
-            int height = level.getChunkSource().getGenerator().getBaseHeight(x, z,
-                    Heightmap.Types.WORLD_SURFACE_WG, level, level.getChunkSource().randomState());
-            heights.put(key, height);
-            return height;
-        }
-
         private int oceanFloor(int x, int z) {
             long key = ChunkPos.asLong(x, z);
             Integer cached = oceanFloors.get(key);
@@ -315,7 +419,8 @@ public final class FrontierTerrainSurvey {
             }
             heightMisses++;
             int height = level.getChunkSource().getGenerator().getBaseHeight(x, z,
-                    Heightmap.Types.OCEAN_FLOOR_WG, level, level.getChunkSource().randomState());
+                    Heightmap.Types.OCEAN_FLOOR_WG, level,
+                    level.getChunkSource().randomState());
             oceanFloors.put(key, height);
             return height;
         }
@@ -349,7 +454,7 @@ public final class FrontierTerrainSurvey {
         }
 
         private Statistics statistics() {
-            return new Statistics(heights.size() + oceanFloors.size(), heightHits, heightMisses, siteHeightProbes,
+            return new Statistics(oceanFloors.size(), heightHits, heightMisses, siteHeightProbes,
                     mineHeightProbes, railHeightProbes, biomeSamples, discardedSiteCandidates);
         }
     }

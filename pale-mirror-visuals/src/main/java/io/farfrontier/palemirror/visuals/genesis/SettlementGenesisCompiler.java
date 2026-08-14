@@ -2,8 +2,11 @@ package io.farfrontier.palemirror.visuals.genesis;
 
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.AuthoredSettlementSitePlan;
+import io.farfrontier.palemirror.api.DevelopmentReservationKind;
 import io.farfrontier.palemirror.api.LinearFeatureKind;
 import io.farfrontier.palemirror.api.LinearFeaturePlan;
+import io.farfrontier.palemirror.api.AuthoredOpenSpacePlan;
+import io.farfrontier.palemirror.api.OpenSpaceKind;
 import io.farfrontier.palemirror.api.SettlementFoundationPlan;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
 import io.farfrontier.palemirror.api.VisualPoint;
@@ -21,24 +24,156 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 /** Compiles a reusable authored settlement plan into a chunk-owning sink. */
 final class SettlementGenesisCompiler {
     static final int VEGETATION_HALO = 6;
-    static final int LANDSCAPE_BLEND_RADIUS = 28;
+    static final int LANDSCAPE_BLEND_RADIUS = 16;
 
     private SettlementGenesisCompiler() { }
 
     static void compile(AuthoredRegionSeed seed, FrontierPalette palette, Sink sink) {
         AuthoredSettlementSitePlan settlement = seed.settlementSite();
-        for (int x = settlement.bounds().min().x() - VEGETATION_HALO;
-             x <= settlement.bounds().max().x() + VEGETATION_HALO; x++) {
-            for (int z = settlement.bounds().min().z() - VEGETATION_HALO;
-                 z <= settlement.bounds().max().z() + VEGETATION_HALO; z++) sink.cleanup(x, z, seed.anchor().y());
-        }
+        cleanupVegetationEnvelope(seed, settlement, sink);
         settlement.foundations().forEach(value -> foundation(value, palette, sink));
+        settlement.openSpaces().forEach(value -> openSpace(value, palette, sink));
         settlement.circulation().forEach(value -> linear(value, palette, sink));
         settlement.defences().forEach(value -> linear(value, palette, sink));
         freightGate(settlement, palette, sink);
         details(FrontierClimate.valueOf(seed.climate().toUpperCase(Locale.ROOT)), settlement, palette, sink);
         entrances(settlement, palette, sink);
         depotKinetics(settlement, palette, sink);
+    }
+
+    /** Row-wise vegetation envelope; the managed union remains the ownership boundary. */
+    private static void cleanupVegetationEnvelope(AuthoredRegionSeed seed,
+                                                   AuthoredSettlementSitePlan settlement, Sink sink) {
+        List<io.farfrontier.palemirror.api.VisualBounds> areas = settlement.managedArea().areas();
+        int minimumZ = areas.stream().mapToInt(value -> value.min().z()).min().orElseThrow() - VEGETATION_HALO;
+        int maximumZ = areas.stream().mapToInt(value -> value.max().z()).max().orElseThrow() + VEGETATION_HALO;
+        for (int z = minimumZ; z <= maximumZ; z++) {
+            final int row = z;
+            List<io.farfrontier.palemirror.api.VisualBounds> rowAreas = areas.stream()
+                    .filter(value -> row >= value.min().z() - VEGETATION_HALO
+                            && row <= value.max().z() + VEGETATION_HALO)
+                    .toList();
+            if (rowAreas.isEmpty()) continue;
+            int edgeVariation = Math.floorMod(row * 31 + seed.anchor().x() * 17, 4);
+            int minimumX = rowAreas.stream().mapToInt(value -> value.min().x()).min().orElseThrow()
+                    - VEGETATION_HALO - edgeVariation;
+            int maximumX = rowAreas.stream().mapToInt(value -> value.max().x()).max().orElseThrow()
+                    + VEGETATION_HALO + edgeVariation;
+            int baseY = Math.min(seed.anchor().y(), rowAreas.stream()
+                    .mapToInt(value -> value.min().y()).min().orElse(seed.anchor().y()));
+            for (int x = minimumX; x <= maximumX; x++) sink.cleanup(x, z, baseY);
+        }
+    }
+
+    private static void openSpace(AuthoredOpenSpacePlan space, FrontierPalette palette, Sink sink) {
+        int target = space.bounds().min().y();
+        for (int x = space.bounds().min().x(); x <= space.bounds().max().x(); x++) {
+            for (int z = space.bounds().min().z(); z <= space.bounds().max().z(); z++) {
+                BlockState surface = switch (space.kind()) {
+                    case MARKET_SQUARE -> Math.floorMod(x + z, 6) == 0
+                            ? Blocks.POLISHED_ANDESITE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
+                    case FREIGHT_YARD, INDUSTRIAL_YARD -> Math.floorMod(x * 3 + z, 7) == 0
+                            ? Blocks.ANDESITE.defaultBlockState() : Blocks.GRAVEL.defaultBlockState();
+                    case TRAINING_YARD -> Blocks.PACKED_MUD.defaultBlockState();
+                    case CIVIC_GREEN, GARDEN -> Blocks.GRASS_BLOCK.defaultBlockState();
+                    case BRIDGE -> palette.planks();
+                };
+                sink.surfaceBlock(x, z, -1, surface);
+                sink.cleanup(x, z, target);
+            }
+        }
+        int centerX = (space.bounds().min().x() + space.bounds().max().x()) / 2;
+        int centerZ = (space.bounds().min().z() + space.bounds().max().z()) / 2;
+        switch (space.kind()) {
+            case CIVIC_GREEN -> {
+                // The roofed well turns the green into a civic destination
+                // instead of leaving another anonymous patch of lawn.
+                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                    sink.surfaceBlock(centerX + dx, centerZ + dz, -1,
+                            Math.abs(dx) + Math.abs(dz) == 2
+                                    ? Blocks.MOSSY_COBBLESTONE.defaultBlockState()
+                                    : Blocks.COBBLESTONE.defaultBlockState());
+                }
+                sink.surfaceBlock(centerX, centerZ, 0, Blocks.WATER_CAULDRON.defaultBlockState());
+                for (int dx : new int[]{-2, 2}) {
+                    sink.surfaceBlock(centerX + dx, centerZ, 0, fence(palette));
+                    sink.surfaceBlock(centerX + dx, centerZ, 1, fence(palette));
+                    sink.surfaceBlock(centerX + dx, centerZ, 2, palette.planks());
+                }
+                for (int dx = -2; dx <= 2; dx++) {
+                    sink.surfaceBlock(centerX + dx, centerZ, 3, palette.planks());
+                }
+                sink.surfaceBlock(centerX, centerZ, 2, Blocks.LANTERN.defaultBlockState());
+                for (int offset : new int[]{-5, 5}) {
+                    sink.surfaceBlock(centerX + offset, centerZ, -1, Blocks.MOSS_BLOCK.defaultBlockState());
+                    sink.surfaceBlock(centerX + offset, centerZ, 0, Blocks.FLOWERING_AZALEA.defaultBlockState());
+                }
+                for (int x = space.bounds().min().x() + 2; x <= space.bounds().max().x() - 2; x += 4) {
+                    for (int z : new int[]{space.bounds().min().z() + 1, space.bounds().max().z() - 1}) {
+                        sink.surfaceBlock(x, z, -1, Blocks.MOSS_BLOCK.defaultBlockState());
+                        sink.surfaceBlock(x, z, 0, Math.floorMod(x + z, 3) == 0
+                                ? Blocks.FLOWERING_AZALEA.defaultBlockState()
+                                : Blocks.AZALEA.defaultBlockState());
+                    }
+                }
+            }
+            case GARDEN -> {
+                for (int x = space.bounds().min().x() + 2; x <= space.bounds().max().x() - 2; x += 3) {
+                    for (int z = space.bounds().min().z() + 2; z <= space.bounds().max().z() - 2; z++) {
+                        if (x == centerX && z == centerZ) continue;
+                        sink.surfaceBlock(x, z, -1, Blocks.FARMLAND.defaultBlockState());
+                        sink.surfaceBlock(x, z, 0, Math.floorMod(x + z, 3) == 0
+                                ? Blocks.CARROTS.defaultBlockState() : Blocks.WHEAT.defaultBlockState());
+                    }
+                }
+                sink.surfaceBlock(centerX, centerZ, -1, Blocks.WATER.defaultBlockState());
+            }
+            case MARKET_SQUARE -> {
+                for (int side : new int[]{-5, 5}) {
+                    sink.surfaceBlock(centerX + side, centerZ, 0, fence(palette));
+                    sink.surfaceBlock(centerX + side, centerZ, 1, fence(palette));
+                    sink.surfaceBlock(centerX + side, centerZ, 2, Blocks.LANTERN.defaultBlockState());
+                    for (int z = centerZ - 2; z <= centerZ + 2; z++) {
+                        sink.surfaceBlock(centerX + side, z, 3, Math.floorMod(z, 2) == 0
+                                ? Blocks.WHITE_WOOL.defaultBlockState() : Blocks.ORANGE_WOOL.defaultBlockState());
+                    }
+                }
+            }
+            case FREIGHT_YARD -> {
+                for (int offset = -3; offset <= 3; offset++) {
+                    sink.surfaceBlock(centerX + offset, centerZ, 0,
+                            Blocks.STRIPPED_OAK_LOG.defaultBlockState());
+                }
+                sink.surfaceBlock(centerX, centerZ + 3, 0, Blocks.HAY_BLOCK.defaultBlockState());
+                for (int offset : new int[]{-4, 4}) {
+                    sink.surfaceBlock(centerX + offset, centerZ - 3, 0,
+                            Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
+                    sink.surfaceBlock(centerX + offset, centerZ - 2, 0,
+                            Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
+                }
+            }
+            case INDUSTRIAL_YARD -> {
+                sink.surfaceBlock(centerX, centerZ, 0, Blocks.ANVIL.defaultBlockState());
+                sink.surfaceBlock(centerX + 3, centerZ, 0, Blocks.STONECUTTER.defaultBlockState());
+                for (int dx = -3; dx <= -1; dx++) for (int dz = -3; dz <= -1; dz++) {
+                    if (Math.floorMod(dx + dz, 3) != 0) {
+                        sink.surfaceBlock(centerX + dx, centerZ + dz, 0,
+                                Blocks.BRICKS.defaultBlockState());
+                    }
+                }
+                for (int offset : new int[]{-5, 5}) {
+                    sink.surfaceBlock(centerX + offset, centerZ + 4, 0,
+                            Blocks.COBBLESTONE_WALL.defaultBlockState());
+                    sink.surfaceBlock(centerX + offset, centerZ + 4, 1,
+                            Blocks.LANTERN.defaultBlockState());
+                }
+            }
+            case TRAINING_YARD -> {
+                sink.surfaceBlock(centerX - 3, centerZ, 0, Blocks.HAY_BLOCK.defaultBlockState());
+                sink.surfaceBlock(centerX + 3, centerZ, 0, Blocks.HAY_BLOCK.defaultBlockState());
+            }
+            case BRIDGE -> { }
+        }
     }
 
     private static void foundation(SettlementFoundationPlan foundation, FrontierPalette palette, Sink sink) {
@@ -80,26 +215,68 @@ final class SettlementGenesisCompiler {
                 BlockState surface = switch (feature.kind()) {
                     case FREIGHT_ROAD -> Math.floorMod(point.x() + point.z() + dx + dz, 5) == 0
                             ? Blocks.POLISHED_ANDESITE.defaultBlockState() : Blocks.COBBLESTONE.defaultBlockState();
-                    case STREET -> Math.floorMod(point.x() + point.z(), 7) == 0
-                            ? Blocks.COBBLESTONE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
+                    case STREET -> switch (Math.floorMod(point.x() * 3 + point.z() + dx - dz, 11)) {
+                        case 0 -> Blocks.MOSSY_COBBLESTONE.defaultBlockState();
+                        case 1, 2, 3 -> Blocks.ANDESITE.defaultBlockState();
+                        case 4, 5, 6 -> Blocks.STONE_BRICKS.defaultBlockState();
+                        default -> Blocks.COBBLESTONE.defaultBlockState();
+                    };
                     case FOOTPATH -> Math.floorMod(point.x() * 3 + point.z(), 9) == 0
                             ? Blocks.ANDESITE.defaultBlockState() : Blocks.COBBLESTONE.defaultBlockState();
+                    case SIDEWALK -> Math.floorMod(point.x() + point.z() + dx + dz, 5) == 0
+                            ? Blocks.POLISHED_ANDESITE.defaultBlockState()
+                            : Blocks.STONE_BRICKS.defaultBlockState();
+                    case PLAZA -> Math.floorMod(point.x() + point.z(), 6) == 0
+                            ? Blocks.POLISHED_ANDESITE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
+                    case BRIDGE -> palette.planks();
                     case STAIRS -> Blocks.STONE_BRICKS.defaultBlockState();
                     case DITCH -> Blocks.COARSE_DIRT.defaultBlockState();
                     default -> Blocks.COBBLESTONE.defaultBlockState();
                 };
                 int target = feature.kind() == LinearFeatureKind.DITCH ? point.y() - 1 : point.y();
-                sink.terrain(point.x() + dx, point.z() + dz, target, surface, palette.foundation());
+                if (feature.kind() == LinearFeatureKind.STAIRS || feature.kind() == LinearFeatureKind.DITCH
+                        || feature.kind() == LinearFeatureKind.BRIDGE) {
+                    sink.terrain(point.x() + dx, point.z() + dz, target, surface, palette.foundation());
+                } else {
+                    sink.surfaceBlock(point.x() + dx, point.z() + dz, -1, surface);
+                }
                 sink.cleanup(point.x() + dx, point.z() + dz, target);
             }
             if (feature.kind() == LinearFeatureKind.FREIGHT_ROAD
                     || feature.kind() == LinearFeatureKind.STREET) {
-                streetFurniture(points, feature.width(), sink);
+                if (feature.kind() == LinearFeatureKind.STREET) {
+                    streetShoulders(points, feature.width(), sink);
+                }
+                streetFurniture(points, feature.width(), palette, sink);
             }
         }
     }
 
-    private static void streetFurniture(List<VisualPoint> points, int width, Sink sink) {
+    private static void streetShoulders(List<VisualPoint> points, int width,
+                                        Sink sink) {
+        int setback = width / 2 + 1;
+        for (int index = 0; index < points.size(); index++) {
+            VisualPoint previous = points.get(Math.max(0, index - 1));
+            VisualPoint next = points.get(Math.min(points.size() - 1, index + 1));
+            int dx = Integer.signum(next.x() - previous.x());
+            int dz = Integer.signum(next.z() - previous.z());
+            if (dx == 0 && dz == 0) continue;
+            for (int side : new int[]{-1, 1}) {
+                int x = points.get(index).x() - dz * setback * side;
+                int z = points.get(index).z() + dx * setback * side;
+                BlockState shoulder = Math.floorMod(index, 8) == 0
+                        ? Blocks.POLISHED_ANDESITE.defaultBlockState()
+                        : Math.floorMod(index, 5) == 0
+                        ? Blocks.MOSSY_COBBLESTONE.defaultBlockState()
+                        : Blocks.COBBLESTONE.defaultBlockState();
+                sink.surfaceBlock(x, z, -1, shoulder);
+                sink.cleanup(x, z, points.get(index).y());
+            }
+        }
+    }
+
+    private static void streetFurniture(List<VisualPoint> points, int width,
+                                        FrontierPalette palette, Sink sink) {
         for (int index = 7; index < points.size(); index += 14) {
             VisualPoint previous = points.get(Math.max(0, index - 1));
             VisualPoint next = points.get(Math.min(points.size() - 1, index + 1));
@@ -110,9 +287,15 @@ final class SettlementGenesisCompiler {
             int x = points.get(index).x() - dz * setback * side;
             int z = points.get(index).z() + dx * setback * side;
             sink.surfaceBlock(x, z, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
-            sink.surfaceBlock(x, z, 1, Blocks.SPRUCE_FENCE.defaultBlockState());
-            sink.surfaceBlock(x, z, 2, Blocks.SPRUCE_FENCE.defaultBlockState());
+            sink.surfaceBlock(x, z, 1, fence(palette));
+            sink.surfaceBlock(x, z, 2, fence(palette));
             sink.surfaceBlock(x, z, 3, Blocks.LANTERN.defaultBlockState());
+            int planterX = x - dz * side;
+            int planterZ = z + dx * side;
+            sink.surfaceBlock(planterX, planterZ, -1, Blocks.MOSS_BLOCK.defaultBlockState());
+            sink.surfaceBlock(planterX, planterZ, 0, index % 28 == 7
+                    ? Blocks.FLOWERING_AZALEA.defaultBlockState()
+                    : Blocks.AZALEA.defaultBlockState());
         }
     }
 
@@ -135,7 +318,7 @@ final class SettlementGenesisCompiler {
                         Blocks.LANTERN.defaultBlockState());
             } else {
                 sink.surfaceBlock(point.x(), point.z(), 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
-                sink.surfaceBlock(point.x(), point.z(), 1, Blocks.SPRUCE_FENCE.defaultBlockState());
+                sink.surfaceBlock(point.x(), point.z(), 1, fence(palette));
             }
         }
     }
@@ -175,6 +358,38 @@ final class SettlementGenesisCompiler {
                     sink.block(p.offset(1, 1, 0), Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
                 });
         climateThreshold(climate, settlement, palette, sink);
+        reservedPlots(settlement, palette, sink);
+    }
+
+    /** Marks future parcels without constructing their future buildings. */
+    private static void reservedPlots(AuthoredSettlementSitePlan settlement,
+                                      FrontierPalette palette, Sink sink) {
+        int parcelIndex = 0;
+        for (var reservation : settlement.developmentReservations()) {
+            if (reservation.kind() != DevelopmentReservationKind.PARCEL) continue;
+            var bounds = reservation.bounds();
+            int[][] corners = {
+                    {bounds.min().x(), bounds.min().z()}, {bounds.max().x(), bounds.min().z()},
+                    {bounds.min().x(), bounds.max().z()}, {bounds.max().x(), bounds.max().z()}
+            };
+            for (int corner = 0; corner < corners.length; corner++) {
+                int x = corners[corner][0];
+                int z = corners[corner][1];
+                sink.surfaceBlock(x, z, -1, Blocks.COBBLESTONE.defaultBlockState());
+                sink.surfaceBlock(x, z, 0, fence(palette));
+                sink.surfaceBlock(x, z, 1, fence(palette));
+                if (corner == Math.floorMod(parcelIndex, corners.length)) {
+                    sink.surfaceBlock(x, z, 2, Blocks.LANTERN.defaultBlockState());
+                }
+            }
+            int stockX = bounds.min().x() + 2;
+            int stockZ = bounds.min().z() + 2;
+            for (int offset = 0; offset < 4; offset++) {
+                sink.surfaceBlock(stockX + offset, stockZ, 0,
+                        offset % 2 == 0 ? palette.log() : Blocks.BRICKS.defaultBlockState());
+            }
+            parcelIndex++;
+        }
     }
 
     private static void climateThreshold(FrontierClimate climate, AuthoredSettlementSitePlan settlement,
@@ -211,7 +426,7 @@ final class SettlementGenesisCompiler {
             var port = module.ports().stream().filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
                     .findFirst().orElseThrow();
             BlockPos base = block(port.position()); Direction facing = direction(port.outwardQuarterTurns());
-            BlockState lower = Blocks.SPRUCE_DOOR.defaultBlockState().setValue(DoorBlock.FACING, facing)
+            BlockState lower = door(palette).setValue(DoorBlock.FACING, facing)
                     .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
             sink.block(base, lower); sink.block(base.above(), lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
             sink.block(base.above(2), palette.planks()); BlockPos outside = base.relative(facing);
@@ -246,6 +461,18 @@ final class SettlementGenesisCompiler {
             }
             return state;
         }).orElse(null);
+    }
+
+    private static BlockState fence(FrontierPalette palette) {
+        if (palette.planks().is(Blocks.ACACIA_PLANKS)) return Blocks.ACACIA_FENCE.defaultBlockState();
+        if (palette.planks().is(Blocks.OAK_PLANKS)) return Blocks.OAK_FENCE.defaultBlockState();
+        return Blocks.SPRUCE_FENCE.defaultBlockState();
+    }
+
+    private static BlockState door(FrontierPalette palette) {
+        if (palette.planks().is(Blocks.ACACIA_PLANKS)) return Blocks.ACACIA_DOOR.defaultBlockState();
+        if (palette.planks().is(Blocks.OAK_PLANKS)) return Blocks.OAK_DOOR.defaultBlockState();
+        return Blocks.SPRUCE_DOOR.defaultBlockState();
     }
 
     private static Direction direction(int turns) {

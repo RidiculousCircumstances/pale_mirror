@@ -224,7 +224,11 @@ public final class AuthoredRegionRegistrar {
     }
 
     private static void registerParcels(PaleMirrorSavedData data, AuthoredRegionSeed seed) {
-        data.parcels().register(parcel(seed, "influence", seed.settlementBounds(), "settlement", ParcelKind.INFLUENCE));
+        for (int index = 0; index < seed.settlementSite().managedArea().areas().size(); index++) {
+            data.parcels().register(parcel(seed, "influence_" + index,
+                    seed.settlementSite().managedArea().areas().get(index),
+                    "settlement_managed_area", ParcelKind.INFLUENCE));
+        }
         for (int index = 0; index < seed.modules().size(); index++) {
             var module = seed.modules().get(index);
             data.parcels().register(parcel(seed, "module_" + index, module.footprint(), module.templateId(), ParcelKind.COMMUNITY));

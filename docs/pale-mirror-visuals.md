@@ -8,26 +8,31 @@ curated structure assets, resident carriers, animation, particles and sound.
 
 ## Fresh-world contract
 
-There is intentionally no retrofit path. A new v39 world pins the configured
+There is intentionally no retrofit path. A new v40 world pins the configured
 set of complete `AuthoredRegionSeed` manifests and compiles them into an
 immutable chunk-addressed catalog before players are admitted. The default requires
 at least three, targets five and caps output at six regions. The first is 1024–4096 blocks from spawn; the remainder are
 distributed inside the configured map radius with a hard minimum spacing.
 The immutable manifest contains every object identity and coordinate needed by
 core: settlement bounds, freight gate, receiving depot, typed Mine17 and Red
-Valley blueprints, baseline rail path, modules, expansion plots and 48 resident
-identities. Each MineSite pins a portal, loading endpoint, controller anchor,
-orientation, complete bounds, independently surveyed local foundations,
-initial/staged modules and semantic volumes.
+Valley blueprints, baseline rail path, functional buildings, open spaces,
+development reservations and 48 resident identities with exact slot bindings.
+Each MineSite pins a portal, loading endpoint, controller anchor, orientation,
+complete bounds, semantic surface buildings, underground modules, independently
+surveyed local foundations, staged modules and semantic volumes.
 
 Terrain survey calls generator-only biome and bounded height APIs on a dedicated
 planning worker. It does not load prospective chunks. Cheap biome-footprint checks
 rank deterministic horizontal candidates. Each accepted region then receives
 one exact center/cardinal settlement survey and two bounded mountain-face
-searches; at most six site surveys and 24 exact candidates per MineSite may be
-attempted. A mine is accepted only when every surface-module pad is dry, has at
-most 14 blocks of relief and fits within the seven-block cut/eight-block fill
-limits, while its portal retains mountain-biome evidence and a sampled
+searches; at most 24 exact candidates per MineSite may be attempted. Once the
+primary mine is accepted, Township planning captures a 130-column coarse height
+snapshot on a sixteen-block grid, tries at most 24 deterministic grammar variants
+and admits at most 768 coarse and exact probes together. Every one of its twenty
+building pads receives exact nine-column validation and may cut or fill at most
+four blocks. A mine is accepted only when every surface-building pad is dry, has
+at most eight blocks of relief and fits within four-block cut/fill limits, while
+its portal retains mountain-biome evidence and a sampled
 continuous median rise of at least ten blocks over 48 blocks. Mine17 is 160–320 blocks
 from the fort; Red Valley is 320–560 blocks away in another cardinal mountain
 search. Railway planning runs a bounded deterministic corridor search which
@@ -85,11 +90,16 @@ from below the planned datum through the original world-surface top, before grad
 so arbitrarily tall crowns and attachments cannot survive a lowered pad. Logs, leaves, saplings, flowers, vines, cocoa, moss, cave vegetation and
 tagged beehives are included. This prevents a trunk cut by the fort footprint
 from leaving floating foliage or bee nests just outside the authored site.
+Mine17 applies the same original-surface rule over an organic union around its
+six surveyed pads. Its wider 18-block crown allowance removes large modded-tree
+overhangs from the working yard without turning the campus into a rectangular
+clear-cut or claiming the surrounding forest.
 
 ## Settlement grammar
 
-The current `iron_frontier` grammar produces a compact, terrain-led industrial
-frontier address of roughly 90×130 blocks and 16 primary buildings. It has no
+The current `iron_frontier` grammar produces a terrain-led industrial Township
+inside a 145×193 master envelope with an active irregular footprint of roughly
+120×160 blocks and exactly 20 functional buildings. It has no
 radial-fort fallback and does not flatten one global platform. The bounded
 terrain survey chooses one of three reusable layout archetypes:
 
@@ -100,15 +110,34 @@ terrain survey chooses one of three reusable layout archetypes:
 - `FREIGHT_CROSSROADS`: civic and industrial streets meet the baseline freight
   route on a broad low-relief site.
 
-Each curated module has a stable instance ID, one independently bounded local
-foundation, a state profile and typed public/service/freight/rail ports. Foundations
-retain a flat structural footprint and then blend toward natural height by at most
-one vertical block per horizontal column across a 28-block transition. The
-planner proves non-overlap, connects every public entrance to the circulation
-graph, reserves six actually free 11×11 development parcels, and emits typed
-stone/andesite streets, paths, stairs, freight roads, ditches, retaining walls,
-terrain-following lamps and segmented low wall/fence defences. The defences protect
-exposed approaches without drawing an impermeable geometric circle around the community.
+Each building has a stable ID, category, namespaced functions, one independently
+bounded local foundation, semantic interior slots, a state profile and typed
+public/service/freight/rail ports. Foundations retain a flat structural footprint,
+cut/fill no more than four blocks and blend over a bounded sixteen-block apron.
+Ordinary streets, sidewalks, plazas and open spaces follow microrelief rather than
+forcing a second terrace. The planner proves non-overlap, connects every public
+entrance to circulation, emits six typed open spaces, reserves five free future
+parcels plus depot/smeltery annex easements and derives an irregular managed-area
+union. Mixed cobblestone/andesite/stone-brick streets, distinct sidewalks,
+paths, stairs, freight roads, ditches, retaining walls, terrain-following lamps,
+planters and partial low wall/fence defences make the address legible without
+drawing an impermeable geometric circle around it. Reserved future parcels use
+survey stakes and small material stores, so their emptiness reads as planned
+development rather than unfinished generation.
+
+The static Township composition is: town hall, market hall, inn, clinic, bakery,
+receiving depot, smeltery, smithy, mechanical workshop, stable, assay office,
+barracks, watch house, five family houses and two worker bunkhouses. Six open
+spaces provide a market square, community green, allotments, freight court,
+smeltery yard and training yard. Freight and industry face Mine17, civic/market
+functions occupy the center and housing occupies the quieter rear shelf.
+
+The versioned archetype catalog also validates coherent population/building
+snapshots for Prospecting Post (12), Mining Camp (24), Township (48) and Mining
+Town (72). Only Township materializes in v40: there is deliberately no runtime
+growth or stage-transition implementation. The five parcels and two annex
+easements reserve the future 72-person masterplan without pretending it already
+exists.
 
 Temperate, cold-taiga and dry-arid settlements share functional roles but not
 only a block substitution. Their freight threshold gains climate-specific
@@ -117,27 +146,32 @@ freight marks provide a restrained common Pale Mirror identity kit. Depot and
 MineSite power buildings may contain one small isolated Create kinetic display;
 it is presentation only and never a second economy or route simulation.
 
-Temperate and cold variants use normalized private Integrated Villages-derived
-NBT modules. Required modules are fail-closed and SHA-pinned; there is no silent
-fallback to a generic box. The original private inputs and hashes are recorded
+Temperate, cold-taiga and dry-arid variants are real addressable asset families.
+Cold variants remap timber and masonry toward spruce/deepslate; dry variants use
+acacia and sandstone families while preserving compatible block-state properties.
+Required modules are fail-closed and SHA-pinned; there is no silent fallback to
+a generic box. The original private inputs and hashes are recorded
 in [`VISUAL_ASSET_PROVENANCE.md`](VISUAL_ASSET_PROVENANCE.md).
 
 ## Mountain MineSites
 
-Mine17 is a compact frontier-industrial mountain complex rather
-than a surface cube. Its composed grammar includes a timber portal headframe,
-processing hall, power house and chimney, crew office, loading shed,
-freight building, loading crane/platform, supported descending adit, iron gallery
-and a deep controller chamber. Every surface building has its own bounded foundation
+Mine17 is a complete frontier-industrial mountain campus rather than a surface
+cube. Its composed grammar includes a large portal/hoist works, processing hall,
+power house, crew outpost, loading yard, maintenance workshop, supported descending
+adit, iron gallery and a deep controller chamber. Every surface building has a
+stable semantic identity, work slots and its own bounded foundation
 and two-block apron. Three-wide gravel/cobble paths, steps, lamps and short safety
 fences connect those levels; graded pads transition smoothly back into natural terrain. The drift and chambers
 continue into the selected mountain face inside a continuous dry masonry shell.
 
-The visible campus remixes the pinned standalone Integrated Villages workshop,
-residence, stable and depot assets into a common frontier-industrial language;
-PM adds the headframe, chimney, loading platform, foundations and paths.
-Dungeons Arise, IDAS and Terralith assets are restricted to underground adit,
-gallery and controller spaces and compiled through one sanitizer. Entities and
+The five principal surface landmarks are generated from the reproducible
+PM-authored frontier-industrial kit in
+`scripts/generate-authored-mine-landmarks.py`; the maintenance workshop remains
+a curated private Integrated Villages derivative. PM composes them with an
+irregular gravel/coarse-dirt working yard, drainage seams, open ore-sort bins,
+timber/material stores, safety lighting, local foundations, circulation and
+climate transforms. The underground adit, gallery and controller spaces remain
+curated private source modules and use the same sanitizer. Entities and
 block-entity payloads are ignored. Spawners, TNT and structure machinery become
 air; inventories become inert timber; ore/raw-resource cells become ordinary
 deepslate. Consequently visible ore never mints canonical IRON and ordinary
@@ -167,7 +201,8 @@ Every frontier starts with exactly 48 commissioned physical carriers:
 | Guards | 6 |
 | Children | 4 |
 
-Each carrier has a stable UUID, region, cohort, role, home and workplace.
+Each carrier has a stable UUID, region, cohort, namespaced role, exact home
+building/bed slot and exact workplace or patrol building/slot binding.
 Villager Overhaul's exact pinned API provides guard patrol/combat and worker
 behavior through one isolated bridge. A fail-closed exact-version mixin denies
 player recruitment of PM residents. Ambient breeding inside the authored fort

@@ -47,6 +47,15 @@ public final class VisualsGameTests {
                 FrontierClimate.COLD_TAIGA);
         helper.assertValueEqual(AuthoredRegionSeedNbt.read(AuthoredRegionSeedNbt.write(seed)), seed,
                 "persisted authored manifest must preserve every identity and geometry fact");
+        CompoundTag legacyShape = AuthoredRegionSeedNbt.write(seed);
+        legacyShape.getCompound("settlementSite").remove("buildings");
+        try {
+            AuthoredRegionSeedNbt.read(legacyShape);
+            throw new AssertionError("a pre-v40 manifest shape must fail closed");
+        } catch (IllegalArgumentException expected) {
+            helper.assertTrue(expected.getMessage().contains("requires functional buildings"),
+                    "manifest rejection must identify the missing typed building contract");
+        }
         helper.succeed();
     }
 
@@ -65,6 +74,51 @@ public final class VisualsGameTests {
                         || id.getPath().contains("chest") || id.getPath().equals("barrel")
                         || id.getPath().contains("ore") || id.getPath().startsWith("raw_"));
         helper.assertTrue(!forbidden, "imported blueprint must not retain loot, hazards, or canonical-looking ore");
+        var allMineModules = java.util.stream.Stream.concat(
+                seed.primaryMineSite().initialModules().stream(),
+                java.util.stream.Stream.concat(seed.alternateMineSite().initialModules().stream(),
+                        seed.alternateMineSite().stagedModules().stream().map(value -> value.module()))).toList();
+        helper.assertTrue(allMineModules.stream().flatMap(value -> AuthoredModuleCompiler.compile(value).blocks().stream())
+                        .noneMatch(value -> value.state().hasBlockEntity()),
+                "sanitized imported MineSite cells must never create pending block entities");
+        var portal = seed.primaryMineSite().surfaceBuildings().stream()
+                .filter(value -> value.buildingId().equals("portal")).findFirst().orElseThrow()
+                .modules().getFirst();
+        boolean rawTerrainShell = AuthoredModuleCompiler.compile(portal).blocks().stream()
+                .map(value -> value.state())
+                .anyMatch(state -> state.is(net.minecraft.world.level.block.Blocks.STONE)
+                        || state.is(net.minecraft.world.level.block.Blocks.DEEPSLATE)
+                        || state.is(net.minecraft.world.level.block.Blocks.TUFF)
+                        || state.is(net.minecraft.world.level.block.Blocks.DIRT)
+                        || state.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK));
+        helper.assertTrue(!rawTerrainShell,
+                "surface mine buildings must not retain copied terrain shells that read as cubes");
+        var surfaceById = seed.primaryMineSite().surfaceBuildings().stream().collect(
+                java.util.stream.Collectors.toMap(value -> value.buildingId(),
+                        value -> AuthoredModuleCompiler.compile(value.modules().getFirst())));
+        var processingStates = surfaceById.get("processing").blocks().stream().map(value -> value.state()).toList();
+        helper.assertTrue(processingStates.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.BRICKS))
+                        && processingStates.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.IRON_BARS))
+                        && processingStates.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.DEEPSLATE_TILE_SLAB)),
+                "processing hall must compile articulated masonry bays, glazing and a roofline");
+        var powerStates = surfaceById.get("power").blocks().stream().map(value -> value.state()).toList();
+        helper.assertTrue(powerStates.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.BRICKS))
+                        && powerStates.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.DEEPSLATE_TILES)),
+                "power house must compile as a masonry building with an integrated stack");
+        var loadingModule = seed.primaryMineSite().surfaceBuildings().stream()
+                .filter(value -> value.buildingId().equals("loading")).findFirst().orElseThrow()
+                .modules().getFirst();
+        var loadingSnapshot = surfaceById.get("loading");
+        int loadingVolume = (loadingModule.footprint().max().x() - loadingModule.footprint().min().x() + 1)
+                * (loadingModule.footprint().max().y() - loadingModule.footprint().min().y() + 1)
+                * (loadingModule.footprint().max().z() - loadingModule.footprint().min().z() + 1);
+        helper.assertTrue(loadingSnapshot.blocks().size() < loadingVolume / 2,
+                "loading facility must remain an open freight canopy rather than a solid shell");
         var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
         boolean kinetic = catalog.chunks().values().stream().flatMap(value -> value.blocks().values().stream())
                 .map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(value.getBlock()))
@@ -119,6 +173,22 @@ public final class VisualsGameTests {
                 "settlement compilation must include a cleanup-only halo for overhanging tree crowns");
         helper.assertTrue(surfaceDecorations > 0,
                 "settlement compilation must provide terrain-following fences and lamps");
+        var decorations = first.chunks().values().stream()
+                .flatMap(value -> value.surfaceDecorations().stream()).map(value -> value.state()).toList();
+        helper.assertTrue(decorations.stream().noneMatch(net.minecraft.world.level.block.state.BlockState::hasBlockEntity),
+                "terrain-following public and industrial furniture must remain block-entity-free");
+        helper.assertTrue(decorations.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.GRAVEL))
+                        && decorations.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.COBBLED_DEEPSLATE))
+                        && decorations.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.LANTERN)),
+                "primary mine campus must compile a working yard, ore-sort furniture and safety lighting");
+        helper.assertTrue(decorations.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.FARMLAND))
+                        && decorations.stream().anyMatch(value -> value.is(
+                        net.minecraft.world.level.block.Blocks.FLOWERING_AZALEA)),
+                "township public realm must include productive gardens and maintained planting");
         helper.assertTrue(first.chunks().values().stream().flatMap(value -> value.terrain().stream())
                         .noneMatch(value -> value.surface().is(net.minecraft.world.level.block.Blocks.DIRT_PATH)),
                 "authored circulation must be paved rather than emitted as dirt paths");

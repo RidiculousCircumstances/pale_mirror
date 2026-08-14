@@ -31,7 +31,7 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class RefugeeCampRuntime {
     private static final String CHANNEL = "shelter";
     private static final String POLICY = "pale_mirror:shelter_camp";
-    private static final String VERSION = "v39-frontier-camp-1";
+    private static final String VERSION = "v40-frontier-camp-1";
 
     private RefugeeCampRuntime() { }
 

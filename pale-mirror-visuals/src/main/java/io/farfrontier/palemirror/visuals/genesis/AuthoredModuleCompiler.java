@@ -46,9 +46,9 @@ public final class AuthoredModuleCompiler {
                 CompoundTag block = (CompoundTag) value;
                 ListTag pos = block.getList("pos", Tag.TAG_INT);
                 int[] rotated = rotate(pos.getInt(0), pos.getInt(2), sx, sz, turns);
-                BlockState state = rotate(states.get(block.getInt("state")), turns);
+                BlockState state = rotate(climateState(states.get(block.getInt("state")), id), turns);
                 if (state.is(Blocks.STRUCTURE_BLOCK) || state.is(Blocks.JIGSAW)) continue;
-                if (surfaceMachinery(id) && naturalEnclosure(state)) continue;
+                if (surfaceMineAsset(module) && naturalEnclosure(state)) continue;
                 BlockPos world = origin.offset(rotated[0], pos.getInt(1), rotated[1]);
                 VisualPoint position = new VisualPoint(world.getX(), world.getY(), world.getZ());
                 if (!module.footprint().contains(position)) {
@@ -108,9 +108,12 @@ public final class AuthoredModuleCompiler {
         return baseline;
     }
 
-    private static boolean surfaceMachinery(ResourceLocation id) {
-        return id.getNamespace().equals(PaleMirrorVisualsMod.MOD_ID)
-                && id.getPath().endsWith("/mine/dispatch_machinery");
+    private static boolean surfaceMineAsset(VisualModulePlacement module) {
+        return module.templateId().startsWith(PaleMirrorVisualsMod.MOD_ID + ":")
+                && module.role().startsWith("MINE_")
+                && !module.role().equals("MINE_ADIT")
+                && !module.role().equals("MINE_GALLERY")
+                && !module.role().equals("MINE_CONTROLLER");
     }
 
     private static boolean naturalEnclosure(BlockState state) {
@@ -118,6 +121,81 @@ public final class AuthoredModuleCompiler {
                 || state.is(Blocks.TUFF) || state.is(Blocks.CALCITE) || state.is(Blocks.DRIPSTONE_BLOCK)
                 || state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.GRAVEL)
                 || state.is(Blocks.ANDESITE) || state.is(Blocks.DIORITE) || state.is(Blocks.GRANITE);
+    }
+
+    private static BlockState climateState(BlockState source, ResourceLocation moduleId) {
+        String path = moduleId.getPath();
+        if (path.startsWith("temperate/")) return source;
+        Block replacement = null;
+        if (path.startsWith("cold_taiga/")) {
+            replacement = coldReplacement(source.getBlock());
+        } else if (path.startsWith("dry_arid/")) {
+            replacement = dryReplacement(source.getBlock());
+        }
+        return replacement == null ? source : copySharedProperties(source, replacement.defaultBlockState());
+    }
+
+    private static Block coldReplacement(Block source) {
+        if (source == Blocks.OAK_LOG) return Blocks.SPRUCE_LOG;
+        if (source == Blocks.STRIPPED_OAK_LOG) return Blocks.STRIPPED_SPRUCE_LOG;
+        if (source == Blocks.OAK_WOOD) return Blocks.SPRUCE_WOOD;
+        if (source == Blocks.STRIPPED_OAK_WOOD) return Blocks.STRIPPED_SPRUCE_WOOD;
+        if (source == Blocks.OAK_PLANKS) return Blocks.SPRUCE_PLANKS;
+        if (source == Blocks.OAK_STAIRS) return Blocks.SPRUCE_STAIRS;
+        if (source == Blocks.OAK_SLAB) return Blocks.SPRUCE_SLAB;
+        if (source == Blocks.OAK_FENCE) return Blocks.SPRUCE_FENCE;
+        if (source == Blocks.OAK_FENCE_GATE) return Blocks.SPRUCE_FENCE_GATE;
+        if (source == Blocks.OAK_DOOR) return Blocks.SPRUCE_DOOR;
+        if (source == Blocks.OAK_TRAPDOOR) return Blocks.SPRUCE_TRAPDOOR;
+        if (source == Blocks.STONE_BRICKS) return Blocks.DEEPSLATE_BRICKS;
+        if (source == Blocks.STONE_BRICK_STAIRS) return Blocks.DEEPSLATE_BRICK_STAIRS;
+        if (source == Blocks.STONE_BRICK_SLAB) return Blocks.DEEPSLATE_BRICK_SLAB;
+        if (source == Blocks.STONE_BRICK_WALL) return Blocks.DEEPSLATE_BRICK_WALL;
+        return null;
+    }
+
+    private static Block dryReplacement(Block source) {
+        if (source == Blocks.OAK_LOG || source == Blocks.SPRUCE_LOG) return Blocks.ACACIA_LOG;
+        if (source == Blocks.STRIPPED_OAK_LOG || source == Blocks.STRIPPED_SPRUCE_LOG) {
+            return Blocks.STRIPPED_ACACIA_LOG;
+        }
+        if (source == Blocks.OAK_WOOD || source == Blocks.SPRUCE_WOOD) return Blocks.ACACIA_WOOD;
+        if (source == Blocks.STRIPPED_OAK_WOOD || source == Blocks.STRIPPED_SPRUCE_WOOD) {
+            return Blocks.STRIPPED_ACACIA_WOOD;
+        }
+        if (source == Blocks.OAK_PLANKS || source == Blocks.SPRUCE_PLANKS) return Blocks.ACACIA_PLANKS;
+        if (source == Blocks.OAK_STAIRS || source == Blocks.SPRUCE_STAIRS) return Blocks.ACACIA_STAIRS;
+        if (source == Blocks.OAK_SLAB || source == Blocks.SPRUCE_SLAB) return Blocks.ACACIA_SLAB;
+        if (source == Blocks.OAK_FENCE || source == Blocks.SPRUCE_FENCE) return Blocks.ACACIA_FENCE;
+        if (source == Blocks.OAK_FENCE_GATE || source == Blocks.SPRUCE_FENCE_GATE) return Blocks.ACACIA_FENCE_GATE;
+        if (source == Blocks.OAK_DOOR || source == Blocks.SPRUCE_DOOR) return Blocks.ACACIA_DOOR;
+        if (source == Blocks.OAK_TRAPDOOR || source == Blocks.SPRUCE_TRAPDOOR) return Blocks.ACACIA_TRAPDOOR;
+        if (source == Blocks.COBBLESTONE || source == Blocks.MOSSY_COBBLESTONE
+                || source == Blocks.STONE_BRICKS || source == Blocks.BRICKS) return Blocks.CUT_SANDSTONE;
+        if (source == Blocks.COBBLESTONE_STAIRS || source == Blocks.MOSSY_COBBLESTONE_STAIRS
+                || source == Blocks.STONE_BRICK_STAIRS || source == Blocks.BRICK_STAIRS) {
+            return Blocks.SANDSTONE_STAIRS;
+        }
+        if (source == Blocks.COBBLESTONE_SLAB || source == Blocks.MOSSY_COBBLESTONE_SLAB
+                || source == Blocks.STONE_BRICK_SLAB || source == Blocks.BRICK_SLAB) return Blocks.CUT_SANDSTONE_SLAB;
+        if (source == Blocks.COBBLESTONE_WALL || source == Blocks.MOSSY_COBBLESTONE_WALL
+                || source == Blocks.STONE_BRICK_WALL || source == Blocks.BRICK_WALL) return Blocks.SANDSTONE_WALL;
+        return null;
+    }
+
+    private static BlockState copySharedProperties(BlockState source, BlockState target) {
+        for (Property<?> property : source.getProperties()) {
+            Property<?> targetProperty = target.getBlock().getStateDefinition().getProperty(property.getName());
+            if (targetProperty != null) target = copyProperty(source, target, property, targetProperty);
+        }
+        return target;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static BlockState copyProperty(BlockState source, BlockState target,
+                                           Property sourceProperty, Property targetProperty) {
+        Comparable value = source.getValue(sourceProperty);
+        return targetProperty.getPossibleValues().contains(value) ? target.setValue(targetProperty, value) : target;
     }
 
     static BlockState readState(CompoundTag value) {
@@ -130,13 +208,30 @@ public final class AuthoredModuleCompiler {
         Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOptional(id)
                 .orElse(Blocks.CUT_COPPER);
         BlockState state = block.defaultBlockState();
-        if (!value.contains("Properties", Tag.TAG_COMPOUND)) return state;
-        CompoundTag properties = value.getCompound("Properties");
-        for (String name : properties.getAllKeys()) {
-            Property<?> property = block.getStateDefinition().getProperty(name);
-            if (property != null) state = setValue(state, property, properties.getString(name));
+        if (value.contains("Properties", Tag.TAG_COMPOUND)) {
+            CompoundTag properties = value.getCompound("Properties");
+            for (String name : properties.getAllKeys()) {
+                Property<?> property = block.getStateDefinition().getProperty(name);
+                if (property != null) state = setValue(state, property, properties.getString(name));
+            }
         }
-        return state;
+        return state.hasBlockEntity() ? inertBlockEntityReplacement(id) : state;
+    }
+
+    private static BlockState inertBlockEntityReplacement(ResourceLocation id) {
+        String path = id.getPath();
+        if (path.contains("campfire")) return path.startsWith("soul_")
+                ? Blocks.SOUL_SOIL.defaultBlockState() : Blocks.MAGMA_BLOCK.defaultBlockState();
+        if (path.contains("furnace") || path.equals("smoker")) {
+            return Blocks.POLISHED_DEEPSLATE.defaultBlockState();
+        }
+        if (path.contains("sign")) return Blocks.SPRUCE_FENCE.defaultBlockState();
+        if (path.equals("decorated_pot")) return Blocks.TERRACOTTA.defaultBlockState();
+        if (path.contains("banner")) return Blocks.GRAY_WOOL.defaultBlockState();
+        if (path.equals("bell")) return Blocks.GOLD_BLOCK.defaultBlockState();
+        if (path.equals("beehive") || path.equals("bee_nest")) return Blocks.STRIPPED_OAK_LOG.defaultBlockState();
+        return id.getNamespace().equals("create") ? Blocks.WAXED_EXPOSED_COPPER.defaultBlockState()
+                : Blocks.SPRUCE_PLANKS.defaultBlockState();
     }
 
     private static BlockState replacement(ResourceLocation id) {

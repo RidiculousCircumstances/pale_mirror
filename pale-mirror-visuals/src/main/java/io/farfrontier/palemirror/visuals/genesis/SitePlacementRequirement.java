@@ -6,7 +6,9 @@ import java.util.List;
 public record SitePlacementRequirement(
         String role,
         DistanceBand distanceFromSettlement,
-        String separateCardinalSectorFromRole,
+        String relatedSiteRole,
+        int minimumSeparationFromRelatedSite,
+        boolean requireSeparateCardinalSector,
         List<Integer> landscapeEvidenceDistances,
         List<Integer> lateralOffsets,
         int preferredDistanceCandidateLimit,
@@ -15,8 +17,14 @@ public record SitePlacementRequirement(
     public SitePlacementRequirement {
         if (role == null || role.isBlank()) throw new IllegalArgumentException("site role is required");
         if (distanceFromSettlement == null) throw new IllegalArgumentException("site distance is required");
-        separateCardinalSectorFromRole = separateCardinalSectorFromRole == null
-                ? "" : separateCardinalSectorFromRole;
+        relatedSiteRole = relatedSiteRole == null ? "" : relatedSiteRole;
+        if (minimumSeparationFromRelatedSite < 0) {
+            throw new IllegalArgumentException("site separation must be non-negative");
+        }
+        if (relatedSiteRole.isBlank()
+                && (minimumSeparationFromRelatedSite != 0 || requireSeparateCardinalSector)) {
+            throw new IllegalArgumentException("site relation policy requires a related site role");
+        }
         landscapeEvidenceDistances = List.copyOf(landscapeEvidenceDistances);
         lateralOffsets = List.copyOf(lateralOffsets);
         if (landscapeEvidenceDistances.isEmpty()

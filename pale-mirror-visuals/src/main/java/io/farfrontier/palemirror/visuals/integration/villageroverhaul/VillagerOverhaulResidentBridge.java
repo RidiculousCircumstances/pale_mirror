@@ -17,7 +17,7 @@ public final class VillagerOverhaulResidentBridge {
         VillagerBrain.ensureAttached(villager);
         VillagerBrain.setMode(villager, VillagerBrain.Mode.NEUTRAL);
         if (resident.cohort().equals("GUARDS")) configureGuard(villager, region);
-        else if (resident.role().equals("worker")) VillagerBrain.setManualFarmingActive(villager, true);
+        else if (resident.role().equals("pale_mirror:farmer")) VillagerBrain.setManualFarmingActive(villager, true);
     }
 
     private static void configureGuard(Villager guard, AuthoredRegionSeed region) {

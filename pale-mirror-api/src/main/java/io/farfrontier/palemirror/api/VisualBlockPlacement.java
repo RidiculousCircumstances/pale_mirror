@@ -8,5 +8,9 @@ public record VisualBlockPlacement(VisualPoint position, BlockState state) {
     public VisualBlockPlacement {
         Objects.requireNonNull(position, "position");
         Objects.requireNonNull(state, "state");
+        if (state.hasBlockEntity()) {
+            throw new IllegalArgumentException("VisualBlockPlacement must be block-entity-free at " + position
+                    + ": " + state);
+        }
     }
 }

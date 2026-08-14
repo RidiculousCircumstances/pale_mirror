@@ -18,12 +18,13 @@ public final class RegionPlacementProfiles {
             new SettlementTerrainPolicy(SettlementTerrainPolicy.LandscapeAffinity.MOUNTAIN_FOOTHILL,
                     72, true, 8, 24, 0),
             List.of(
-                    new SitePlacementRequirement(PRIMARY_MINE, new DistanceBand(160, 320), "",
+                    new SitePlacementRequirement(PRIMARY_MINE, new DistanceBand(160, 320), "", 0, false,
                             List.of(192, 256, 320),
-                            List.of(0, -64, 64, -128, 128), 12, 24, mountainMine()),
+                            List.of(0, -32, 32, -64, 64, -96, 96, -128, 128), 12, 24, mountainMine()),
                     new SitePlacementRequirement(ALTERNATE_MINE, new DistanceBand(320, 560), PRIMARY_MINE,
+                            128, false,
                             List.of(384, 480, 560),
-                            List.of(0, -64, 64, -128, 128), 12, 24, mountainMine())),
+                            List.of(0, -32, 32, -64, 64, -96, 96, -128, 128), 12, 24, mountainMine())),
             new RoutePlacementRequirement("settlement", PRIMARY_MINE, true,
                     4, 96, 12_000, 24, 2, 250));
 
