@@ -74,6 +74,18 @@ public record AuthoredSettlementSitePlan(String layoutId, SettlementDevelopmentS
         if (!bounds.contains(freightGate) || !bounds.contains(receivingDepot)) {
             throw new IllegalArgumentException("freight gate and depot must be inside the authored site bounds");
         }
+        AuthoredBuildingPlan depot = receivingDepotBuilding(buildings);
+        List<VisualPort> railPorts = depot.modules().stream().flatMap(module -> module.ports().stream())
+                .filter(port -> port.kind() == VisualPortKind.RAIL).toList();
+        if (railPorts.size() != 1 || !railPorts.getFirst().position().equals(receivingDepot)) {
+            throw new IllegalArgumentException("receiving depot must identify its one exact railway hand-off");
+        }
+        boolean publicRailCollision = depot.modules().stream().flatMap(module -> module.ports().stream())
+                .filter(port -> port.kind() == VisualPortKind.PUBLIC_ENTRANCE)
+                .anyMatch(port -> port.position().equals(receivingDepot));
+        if (publicRailCollision || depotFunctionalCore(depot).equals(receivingDepot)) {
+            throw new IllegalArgumentException("depot public, functional, and railway anchors must remain distinct");
+        }
         if (!environment.insideHard(anchorX(bounds), anchorZ(bounds))) {
             throw new IllegalArgumentException("settlement bounds must be centered inside its environment");
         }
@@ -156,6 +168,28 @@ public record AuthoredSettlementSitePlan(String layoutId, SettlementDevelopmentS
             }
         }
         if (shelterCandidates.size() < 2) throw new IllegalArgumentException("shelter candidates are required");
+    }
+
+    /** Exact transport hand-off; it is not the mutable functional core of the depot building. */
+    public VisualPoint receivingRailhead() { return receivingDepot; }
+
+    /** Stable PM-owned functional origin used by Core depot materialization. */
+    public VisualPoint depotFunctionalCore() { return depotFunctionalCore(receivingDepotBuilding(buildings)); }
+
+    private static AuthoredBuildingPlan receivingDepotBuilding(List<AuthoredBuildingPlan> buildings) {
+        List<AuthoredBuildingPlan> depots = buildings.stream()
+                .filter(building -> building.buildingId().equals("receiving_depot")).toList();
+        if (depots.size() != 1) {
+            throw new IllegalArgumentException("settlement requires one exact receiving_depot building");
+        }
+        return depots.getFirst();
+    }
+
+    private static VisualPoint depotFunctionalCore(AuthoredBuildingPlan depot) {
+        if (depot.modules().size() != 1) {
+            throw new IllegalArgumentException("receiving_depot requires one functional shell module");
+        }
+        return depot.modules().getFirst().origin();
     }
 
     public List<VisualModulePlacement> modules() {

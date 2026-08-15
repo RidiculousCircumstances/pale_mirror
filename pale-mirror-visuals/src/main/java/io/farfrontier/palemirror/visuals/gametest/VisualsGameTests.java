@@ -60,6 +60,27 @@ public final class VisualsGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void authoredDepotSeparatesFunctionalCoreFromRailhead(GameTestHelper helper) {
+        for (FrontierClimate climate : FrontierClimate.values()) {
+            for (int ordinal = 0; ordinal < 4; ordinal++) {
+                AuthoredRegionSeed seed = new FrontierRegionPlanner().plan(918273L, ordinal,
+                        new VisualPoint(8000 + ordinal * 1000, 72, -4000), climate);
+                var settlement = seed.settlementSite();
+                BlockPos core = block(settlement.depotFunctionalCore());
+                BlockPos railhead = block(settlement.receivingRailhead());
+                helper.assertTrue(!core.equals(railhead),
+                        "depot functional core must not alias the railway hand-off");
+                helper.assertValueEqual(railhead, block(seed.baselineRailNodes().getFirst()),
+                        "canonical railway must begin at the exact railhead");
+                helper.assertValueEqual(core, block(settlement.building("receiving_depot")
+                                .modules().getFirst().origin()),
+                        "functional core must retain the authored depot shell origin");
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
     public static void authoredMineBlueprintIsSanitizedAndReceivesBoundedKinetics(GameTestHelper helper) {
         var seed = new FrontierRegionPlanner().plan(918273L, 1, new VisualPoint(8000, 72, -4000),
                 FrontierClimate.TEMPERATE);
@@ -169,6 +190,10 @@ public final class VisualsGameTests {
                     "final tunnel carve must connect the authored underground room at " + position);
         }
         helper.succeed();
+    }
+
+    private static BlockPos block(VisualPoint point) {
+        return new BlockPos(point.x(), point.y(), point.z());
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)

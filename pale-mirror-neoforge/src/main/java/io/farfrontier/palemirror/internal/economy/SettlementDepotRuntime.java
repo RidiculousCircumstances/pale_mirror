@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.economy;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.api.ParcelKind;
 import io.farfrontier.palemirror.api.SemanticSlotKey;
 import io.farfrontier.palemirror.domain.DevelopmentIntentState;
@@ -27,7 +28,6 @@ import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticCellRecord;
 import io.farfrontier.palemirror.internal.materialization.SemanticSlotRegistration;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -54,21 +54,28 @@ public final class SettlementDepotRuntime {
                 if (level == null || !level.hasChunkAt(anchor)) continue;
                 WorldObjectId siteId = new WorldObjectId(region.communityId().value() + "_supply_depot");
                 SemanticSlotKey key = new SemanticSlotKey(siteId.value(), "receiving_depot", "functional_core");
-                ParcelRecord parcel = data.parcels().parcels().stream()
+                List<SemanticCellRecord> cells = SettlementDepotGeometry.capture(level, anchor);
+                ParcelRecord parcel = data.parcels().find(SettlementDepotGeometry.parcelId(region.id())).orElse(null);
+                if (parcel == null) parcel = data.parcels().parcels().stream()
                         .filter(candidate -> candidate.dimensionId().equals(place.dimensionId())
-                                && candidate.kind() == ParcelKind.COMMUNITY && candidate.contains(anchor))
+                                && candidate.kind() == ParcelKind.COMMUNITY
+                                && SettlementDepotGeometry.fits(candidate,
+                                        cells.stream().map(SemanticCellRecord::position).toList()))
                         .findFirst().orElse(null);
                 if (parcel == null) {
-                    parcel = new ParcelRecord(siteId.value() + ":parcel", region.id(), place.dimensionId(),
-                                anchor.offset(-3, -1, -3), anchor.offset(3, 3, 3), "supply_depot",
+                    parcel = new ParcelRecord(SettlementDepotGeometry.parcelId(region.id()), region.id(),
+                                place.dimensionId(), SettlementDepotGeometry.parcelMin(anchor),
+                                SettlementDepotGeometry.parcelMax(anchor), siteId.value(),
                                 ParcelKind.COMMUNITY, null, 0, "");
                     data.parcels().register(parcel);
                 }
                 if (data.semanticSlots().find(key).isEmpty()) SemanticSlotRegistration.register(data.semanticSlots(),
-                        data.parcels(), key, parcel.id(), place.dimensionId(), ParcelKind.COMMUNITY, capture(level, anchor));
+                        data.parcels(), key, parcel.id(), place.dimensionId(), ParcelKind.COMMUNITY, cells);
                 depot = new SettlementDepotRecord(siteId, region.communityId(), place.dimensionId(), anchor, key);
                 data.settlementDepots().put(region.communityId(), depot);
                 registerSite(data, commands, depot);
+                PaleMirrorMod.LOGGER.info("Registered supply depot {} at functional core {} with parcel {}",
+                        siteId.value(), anchor.toShortString(), parcel.id());
                 changed = true;
                 continue;
             }
@@ -155,14 +162,6 @@ public final class SettlementDepotRuntime {
                 "depot:" + depot.siteId().value()));
     }
 
-    private static List<SemanticCellRecord> capture(ServerLevel level, BlockPos anchor) {
-        List<SemanticCellRecord> result = new ArrayList<>();
-        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) add(level, result, anchor.offset(x, 0, z));
-        add(level, result, anchor.above()); add(level, result, anchor.offset(2, 1, 2)); return List.copyOf(result);
-    }
-    private static void add(ServerLevel level, List<SemanticCellRecord> cells, BlockPos pos) {
-        var value = level.getBlockState(pos); cells.add(new SemanticCellRecord(pos, value, value));
-    }
     private static Block block(SettlementDepotRecord depot, BlockPos pos, Desired desired) {
         if (desired == Desired.RUINED) return pos.equals(depot.interactionPosition()) ? Blocks.IRON_BARS
                 : pos.equals(depot.anchor().offset(2, 1, 2)) ? Blocks.SOUL_LANTERN : Blocks.CRACKED_STONE_BRICKS;

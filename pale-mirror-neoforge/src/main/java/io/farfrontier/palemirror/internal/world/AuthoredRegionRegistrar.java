@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.world;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.PaleMirrorVisuals;
 import io.farfrontier.palemirror.api.ParcelKind;
@@ -39,6 +40,7 @@ import io.farfrontier.palemirror.domain.WorldPath;
 import io.farfrontier.palemirror.domain.WorldPathNode;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinition;
 import io.farfrontier.palemirror.internal.content.CampaignRegionDefinitions;
+import io.farfrontier.palemirror.internal.economy.SettlementDepotGeometry;
 import io.farfrontier.palemirror.internal.materialization.ParcelRecord;
 import java.util.EnumMap;
 import java.util.List;
@@ -60,6 +62,18 @@ public final class AuthoredRegionRegistrar {
             var existing = data.worldState().livingRegion(seed.planId()).orElse(null);
             if (existing != null) {
                 if (ensureAuthoredPlace(data, existing.placeId(), seed)) changed = true;
+                CampaignRegionRecord presentation = data.campaignRegions().get(seed.planId());
+                if (presentation == null) {
+                    throw new IllegalStateException("Authored region has no presentation record " + seed.planId());
+                }
+                if (presentation.reconcileAuthoredDepotAnchors(block(seed.settlementSite().receivingRailhead()),
+                        block(seed.settlementSite().depotFunctionalCore()))) {
+                    PaleMirrorMod.LOGGER.info("Reconciled authored depot anchors for {}: functional core {}, railhead {}",
+                            seed.planId(), seed.settlementSite().depotFunctionalCore(),
+                            seed.settlementSite().receivingRailhead());
+                    changed = true;
+                }
+                if (ensureDepotParcel(data, seed, RegionBindings.forAuthored(seed.planId()))) changed = true;
                 continue;
             }
             register(data, commands, seed);
@@ -186,7 +200,7 @@ public final class AuthoredRegionRegistrar {
                 SettlementAuthorityProfile.pmManaged(ids.communityId())));
         ensureAuthoredPlace(data, placeId, seed);
         data.campaignRegions().put(ids.regionId(), record(seed, placeId, definition));
-        registerParcels(data, seed);
+        registerParcels(data, seed, ids);
         List<BlockPos> freightPath = seed.baselineRailNodes().stream().map(AuthoredRegionRegistrar::block)
                 .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
         java.util.Collections.reverse(freightPath);
@@ -224,7 +238,7 @@ public final class AuthoredRegionRegistrar {
         return false;
     }
 
-    private static void registerParcels(PaleMirrorSavedData data, AuthoredRegionSeed seed) {
+    private static void registerParcels(PaleMirrorSavedData data, AuthoredRegionSeed seed, RegionBindings ids) {
         for (int index = 0; index < seed.settlementSite().managedArea().areas().size(); index++) {
             data.parcels().register(parcel(seed, "influence_" + index,
                     seed.settlementSite().managedArea().areas().get(index),
@@ -234,6 +248,7 @@ public final class AuthoredRegionRegistrar {
             var module = seed.modules().get(index);
             data.parcels().register(parcel(seed, "module_" + index, module.footprint(), module.templateId(), ParcelKind.COMMUNITY));
         }
+        ensureDepotParcel(data, seed, ids);
         registerMineParcels(data, seed, seed.primaryMineSite(), "primary_mine", false);
         registerMineParcels(data, seed, seed.alternateMineSite(), "alternate_mine", true);
         for (int index = 0; index < seed.expansionPlots().size(); index++) {
@@ -260,6 +275,16 @@ public final class AuthoredRegionRegistrar {
                     seed.dimensionId(), new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
                     "baseline_rail", ParcelKind.PUBLIC_INFRASTRUCTURE, null, 0, ""));
         }
+    }
+
+    private static boolean ensureDepotParcel(PaleMirrorSavedData data, AuthoredRegionSeed seed, RegionBindings ids) {
+        String parcelId = SettlementDepotGeometry.parcelId(seed.planId());
+        if (data.parcels().find(parcelId).isPresent()) return false;
+        BlockPos anchor = block(seed.settlementSite().depotFunctionalCore());
+        data.parcels().register(new ParcelRecord(parcelId, seed.planId(), seed.dimensionId(),
+                SettlementDepotGeometry.parcelMin(anchor), SettlementDepotGeometry.parcelMax(anchor),
+                ids.communityId().value() + "_supply_depot", ParcelKind.COMMUNITY, null, 0, ""));
+        return true;
     }
 
     private static void registerMineParcels(PaleMirrorSavedData data, AuthoredRegionSeed seed,
@@ -292,7 +317,8 @@ public final class AuthoredRegionRegistrar {
                                                CampaignRegionDefinition definition) {
         return new CampaignRegionRecord(seed.planId(), definition.id().toString(), Math.max(2, definition.version()),
                 displayName(seed.planId()), seed.dimensionId(), placeId, block(seed.anchor()), block(seed.primaryMine()),
-                block(seed.alternateMine()), block(seed.freightGate()), block(seed.receivingDepot()), null, null,
+                block(seed.alternateMine()), block(seed.settlementSite().receivingRailhead()),
+                block(seed.settlementSite().depotFunctionalCore()), null, null,
                 CampaignRegionPresentationStatus.PLANNED, "", 0, -1, -1, 0, 0, "", "");
     }
 

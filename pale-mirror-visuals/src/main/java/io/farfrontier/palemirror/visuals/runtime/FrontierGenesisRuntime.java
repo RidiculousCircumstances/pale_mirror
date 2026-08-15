@@ -169,8 +169,12 @@ public final class FrontierGenesisRuntime {
         plans.forEach(seed -> {
             AuthoredVisualProvider.INSTANCE.markers().observe(seed);
             PaleMirrorVisualsMod.LOGGER.info(
-                    "Installed authored manifest {} at {} {} {} (climate {}), Mine17 portal {} {} {}, Red Valley portal {} {} {}",
+                    "Installed authored manifest {} at {} {} {} (climate {}), depotCore {} {} {}, railhead {} {} {}, "
+                            + "Mine17 portal {} {} {}, Red Valley portal {} {} {}",
                     seed.planId(), seed.anchor().x(), seed.anchor().y(), seed.anchor().z(), seed.climate(),
+                    seed.settlementSite().depotFunctionalCore().x(), seed.settlementSite().depotFunctionalCore().y(),
+                    seed.settlementSite().depotFunctionalCore().z(), seed.settlementSite().receivingRailhead().x(),
+                    seed.settlementSite().receivingRailhead().y(), seed.settlementSite().receivingRailhead().z(),
                     seed.primaryMineSite().portal().x(), seed.primaryMineSite().portal().y(),
                     seed.primaryMineSite().portal().z(), seed.alternateMineSite().portal().x(),
                     seed.alternateMineSite().portal().y(), seed.alternateMineSite().portal().z());

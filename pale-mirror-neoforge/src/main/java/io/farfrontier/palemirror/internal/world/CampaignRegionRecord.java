@@ -16,8 +16,8 @@ public final class CampaignRegionRecord {
     private final BlockPos settlementAnchor;
     private final BlockPos primaryMineColumn;
     private final BlockPos alternateMineColumn;
-    private final BlockPos receivingTerminalAnchor;
-    private final BlockPos depotAnchor;
+    private BlockPos receivingTerminalAnchor;
+    private BlockPos depotAnchor;
     private BlockPos primaryMineAnchor;
     private BlockPos alternateMineAnchor;
     private CampaignRegionPresentationStatus status;
@@ -99,6 +99,18 @@ public final class CampaignRegionRecord {
     public BlockPos alternateMineColumn() { return alternateMineColumn; }
     public BlockPos receivingTerminalAnchor() { return receivingTerminalAnchor; }
     public BlockPos depotAnchor() { return depotAnchor; }
+    /** Reconciles presentation-only anchors from the same immutable authored manifest. */
+    public boolean reconcileAuthoredDepotAnchors(BlockPos receivingTerminal, BlockPos depot) {
+        BlockPos terminal = Objects.requireNonNull(receivingTerminal, "receivingTerminal").immutable();
+        BlockPos functional = Objects.requireNonNull(depot, "depot").immutable();
+        if (terminal.equals(functional)) {
+            throw new IllegalArgumentException("Authored depot terminal and functional core must be distinct");
+        }
+        boolean changed = !terminal.equals(receivingTerminalAnchor) || !functional.equals(depotAnchor);
+        receivingTerminalAnchor = terminal;
+        depotAnchor = functional;
+        return changed;
+    }
     public BlockPos primaryMineAnchor() { return primaryMineAnchor; }
     public BlockPos alternateMineAnchor() { return alternateMineAnchor; }
     public CampaignRegionPresentationStatus status() { return status; }

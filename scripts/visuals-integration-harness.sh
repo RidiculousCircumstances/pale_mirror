@@ -72,14 +72,31 @@ start_server() {
 
 exercise_authored_worldgen() {
   local log_file=$1
-  local coordinates
+  local require_registration=${2:-true}
+  local coordinates depot_coordinates
   coordinates=$(awk '/Installed authored manifest/ {
     for (i = 1; i <= NF; i++) if ($i == "at") { print $(i + 1), $(i + 3); exit }
   }' "$log_file")
   [[ -n "$coordinates" ]] || return 1
+  depot_coordinates=$(awk '/Installed authored manifest/ {
+    for (i = 1; i <= NF; i++) if ($i == "depotCore") {
+      x = $(i + 1); z = $(i + 3); gsub(/,/, "", x); gsub(/,/, "", z); print x, z; exit
+    }
+  }' "$log_file")
+  [[ -n "$depot_coordinates" ]] || return 1
   printf 'forceload add %s\n' "$coordinates" >&9
+  printf 'forceload add %s\n' "$depot_coordinates" >&9
   for attempt in $(seq 1 120); do
-    if rg -q 'Observed first exact authored worldgen stamp' "$log_file"; then return 0; fi
+    if rg -q 'Observed first exact authored worldgen stamp' "$log_file"; then
+      if [[ "$require_registration" == false ]]; then
+        sleep 5
+        kill -0 "$server_pid" 2>/dev/null || return 1
+        ! rg -q 'Exception ticking world|Encountered an unexpected exception|semantic slot .* does not fit parcel' \
+          "$log_file" || return 1
+        return 0
+      fi
+      rg -q 'Registered supply depot .*functional core' "$log_file" && return 0
+    fi
     if ! kill -0 "$server_pid" 2>/dev/null; then return 1; fi
     sleep 1
   done
@@ -102,10 +119,10 @@ stop_server_gracefully() {
 }
 
 start_server "$runtime_dir/first-start.log" || fail
-exercise_authored_worldgen "$runtime_dir/first-start.log" || fail
+exercise_authored_worldgen "$runtime_dir/first-start.log" true || fail
 stop_server_gracefully || fail
 start_server "$runtime_dir/restart.log" || fail
-exercise_authored_worldgen "$runtime_dir/restart.log" || fail
+exercise_authored_worldgen "$runtime_dir/restart.log" false || fail
 stop_server_gracefully || fail
 
 printf 'Visuals packaged-JAR two-start harness passed.\n'

@@ -236,6 +236,9 @@ class SettlementLayoutPlannerTest {
                 assertFalse(publicEntrance.equals(rail),
                         "passenger threshold and freight railhead must remain physically distinct");
                 assertEquals(rail, plan.receivingDepot());
+                assertEquals(depot.origin(), plan.depotFunctionalCore());
+                assertFalse(plan.depotFunctionalCore().equals(plan.receivingRailhead()),
+                        "depot functional core and railway hand-off must remain distinct");
             }
         }
     }
