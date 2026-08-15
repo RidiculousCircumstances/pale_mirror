@@ -143,6 +143,8 @@ final class SettlementLayoutPlanner {
             VisualBounds footprint = moduleFootprint(moduleDefinition, origin, rotation);
             String foundationId = "foundation_" + placement.spec().id();
             VisualPoint entrance = authoredEntrance(moduleDefinition, footprint, rotation);
+            VisualPoint freightRailhead = SettlementFreightPorts.loadingThreshold(
+                    entrance, footprint, desiredFrontage);
             List<VisualPort> ports = new ArrayList<>();
             ports.add(new VisualPort("public", VisualPortKind.PUBLIC_ENTRANCE, entrance, desiredFrontage));
             if (placement.spec().category() == io.farfrontier.palemirror.api.SettlementBuildingCategory.LOGISTICS
@@ -151,9 +153,13 @@ final class SettlementLayoutPlanner {
                         oppositeEntrance(footprint, desiredFrontage), desiredFrontage + 2));
             }
             if (placement.spec().id().equals("receiving_depot")) {
-                ports.add(new VisualPort("freight", VisualPortKind.FREIGHT, entrance, desiredFrontage));
+                // The passenger threshold is a real NBT door. The canonical
+                // railway terminates on a separate loading threshold so
+                // rail compilation can never replace that door.
+                ports.add(new VisualPort("freight", VisualPortKind.FREIGHT,
+                        freightRailhead, desiredFrontage));
                 ports.add(new VisualPort("rail", VisualPortKind.RAIL,
-                        oppositeEntrance(footprint, desiredFrontage), desiredFrontage + 2));
+                        freightRailhead, desiredFrontage));
             }
             VisualModulePlacement module = new VisualModulePlacement(placement.spec().id() + "_shell",
                     "pale_mirror_visuals:" + family + "/" + placement.spec().template(),
@@ -196,14 +202,14 @@ final class SettlementLayoutPlanner {
                 terrainPoint(local(anchor, 78, -108, 0, freightDirection), snapshot));
         VisualBounds master = SettlementSiteBounds.fitVertical(
                 orientedBounds(anchor, MASTER_HALF_WIDTH, MASTER_HALF_LENGTH, -8, 40, freightDirection),
-                gate, depot.modules().getFirst().origin(), buildings, foundations, circulation, defences,
+                gate, SettlementFreightPorts.railhead(depot), buildings, foundations, circulation, defences,
                 openSpaces, managedArea, reservations);
         AuthoredSettlementSitePlan result = new AuthoredSettlementSitePlan(
                 source + ":" + archetype.name().toLowerCase(Locale.ROOT)
                 + ":v" + variant,
                 SettlementDevelopmentStage.TOWNSHIP, archetype,
                 master,
-                gate, depot.modules().getFirst().origin(), buildings, foundations, circulation, defences,
+                gate, SettlementFreightPorts.railhead(depot), buildings, foundations, circulation, defences,
                 openSpaces, managedArea,
                 new SiteEnvironmentPlan("pale_mirror:authored_settlement", anchor, 128, 176, 16,
                         surfacePlan.columns().stream().mapToInt(value -> value.groundY()).min().orElse(anchor.y()) - 1,

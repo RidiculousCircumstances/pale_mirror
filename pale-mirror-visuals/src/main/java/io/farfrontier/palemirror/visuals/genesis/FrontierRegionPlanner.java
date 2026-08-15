@@ -32,7 +32,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 14;
+    public static final int DEFINITION_VERSION = 15;
     private final RegionPlacementProfile placementProfile;
     public FrontierRegionPlanner() {
         this(RegionPlacementProfiles.IRON_FRONTIER);
@@ -114,8 +114,7 @@ public final class FrontierRegionPlanner {
         AuthoredMineSitePlan primary = minePlan(planId, AuthoredMineRole.PRIMARY, primaryAnchor, climate, source);
         AuthoredMineSitePlan alternate = minePlan(planId, AuthoredMineRole.ALTERNATE, alternateAnchor, climate, source);
         List<ResidentSeed> residents = residents(source, settlement, primary);
-        VisualPoint railStart = new VisualPoint(depot.x(), depot.y() + 1, depot.z());
-        List<VisualPoint> rail = railPaths.resolve(placementProfile.route(), railStart, primary.loadingEndpoint());
+        List<VisualPoint> rail = railPaths.resolve(placementProfile.route(), depot, primary.loadingEndpoint());
         String contentHash = sha256(planId + ":" + climate + ":" + direction + ":" + settlement + ":"
                 + primary + ":" + alternate + ":" + rail);
         return new AuthoredRegionSeed(planId, placementProfile.id(), DEFINITION_VERSION,

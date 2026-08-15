@@ -222,6 +222,20 @@ class SettlementLayoutPlannerTest {
                 assertEquals(20, plan.buildings().size());
                 assertEquals(6, plan.openSpaces().size());
                 assertEquals(7, plan.developmentReservations().size());
+                var depot = plan.buildings().stream()
+                        .filter(value -> value.buildingId().equals("receiving_depot"))
+                        .findFirst().orElseThrow().modules().getFirst();
+                var publicEntrance = depot.ports().stream()
+                        .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
+                        .findFirst().orElseThrow().position();
+                var freight = depot.ports().stream().filter(value -> value.kind() == VisualPortKind.FREIGHT)
+                        .findFirst().orElseThrow().position();
+                var rail = depot.ports().stream().filter(value -> value.kind() == VisualPortKind.RAIL)
+                        .findFirst().orElseThrow().position();
+                assertEquals(freight, rail, "freight capability and canonical railhead must share an endpoint");
+                assertFalse(publicEntrance.equals(rail),
+                        "passenger threshold and freight railhead must remain physically distinct");
+                assertEquals(rail, plan.receivingDepot());
             }
         }
     }

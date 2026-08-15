@@ -29,7 +29,7 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertEquals(20, seed.modules().size());
         assertEquals(5, seed.expansionPlots().size());
-        assertEquals(14, seed.definitionVersion());
+        assertEquals(15, seed.definitionVersion());
         assertEquals(9, seed.primaryMineSite().initialModules().size());
         assertEquals(4, seed.alternateMineSite().initialModules().size());
         assertEquals(6, seed.primaryMineSite().foundations().size());
@@ -79,8 +79,14 @@ class FrontierRegionPlannerTest {
         assertTrue(primary >= 160 && primary <= 320);
         assertTrue(alternate >= 320 && alternate <= 560);
         assertTrue(horizontalDistanceSquared(seed.primaryMine(), seed.alternateMine()) >= 128L * 128L);
-        assertEquals(seed.receivingDepot().x(), seed.baselineRailNodes().getFirst().x());
-        assertEquals(seed.receivingDepot().z(), seed.baselineRailNodes().getFirst().z());
+        assertEquals(seed.receivingDepot(), seed.baselineRailNodes().getFirst());
+        var depot = seed.settlementSite().buildings().stream()
+                .filter(value -> value.buildingId().equals("receiving_depot")).findFirst().orElseThrow();
+        var publicEntrance = depot.modules().getFirst().ports().stream()
+                .filter(value -> value.kind() == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE)
+                .findFirst().orElseThrow().position();
+        assertTrue(seed.baselineRailNodes().stream().noneMatch(publicEntrance::equals),
+                "the baseline railway must never compile through the depot's public door");
         assertEquals(seed.primaryMineSite().loadingEndpoint().x(), seed.baselineRailNodes().getLast().x());
         assertEquals(seed.primaryMineSite().loadingEndpoint().z(), seed.baselineRailNodes().getLast().z());
         for (int i = 1; i < seed.baselineRailNodes().size(); i++) {
