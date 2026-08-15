@@ -23,10 +23,14 @@ Source archive checksum (SHA-512):
 `terralith`: `35298f1682567f63dc16658b04cee5498b30819f1c05f9712b4480d7f5eb17059db3b13ab14f81a05fe257149d11ced2cce2030d3727c1747edd8657c53e2a85`
 
 Mine modules are copied only for this private pack. Their runtime compiler
-ignores entities and block-entity NBT, removes spawners/explosives/structure
-machinery and replaces inventories and ore/raw-resource cells with inert
-materials. Per-module embedded SHA-256 values are enforced by
-`AuthoredAssetCatalog`.
+ignores imported entity lists, removes spawners, explosives, structure
+machinery, creative power and unscoped external controllers, and fails closed
+on invalid states or missing dependencies unless a specific curator-approved
+substitution exists. Architectural materials, local Create machinery, finite
+container contents and block-entity NBT are preserved as one-shot authored
+state; coordinates are rewritten and source-world links are stripped. The
+module is not periodically rebuilt or refilled after first materialization.
+Per-module embedded SHA-256 values are enforced by `AuthoredAssetCatalog`.
 
 The curated-frontier revision replaces the five generated surface boxes with
 private Integrated Villages `clockwork_village` and `marketstead_village`

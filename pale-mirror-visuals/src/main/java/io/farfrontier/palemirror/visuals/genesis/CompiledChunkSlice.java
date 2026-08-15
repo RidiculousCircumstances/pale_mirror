@@ -2,14 +2,16 @@ package io.farfrontier.palemirror.visuals.genesis;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
 
 /** Immutable work owned by exactly one naturally-generating chunk. */
 public record CompiledChunkSlice(long chunkKey, String stamp, List<TerrainColumn> terrain,
                                  List<VegetationColumn> vegetation,
                                  List<AuthoredDecoration> decorations,
-                                 List<RailColumn> rails, Map<BlockPos, BlockState> blocks) {
+                                 List<RailColumn> rails, Map<BlockPos, CompiledBlock> blocks) {
     public CompiledChunkSlice {
         terrain = List.copyOf(terrain);
         vegetation = List.copyOf(vegetation);
@@ -43,4 +45,22 @@ public record CompiledChunkSlice(long chunkKey, String stamp, List<TerrainColumn
 
     public record RailColumn(BlockPos rail, BlockState railState, BlockState support,
                              boolean supportPier) { }
+
+    /** Exact authored block plus optional local, already-relocated block-entity payload. */
+    public record CompiledBlock(BlockState state, Optional<CompoundTag> blockEntityData) {
+        public CompiledBlock {
+            java.util.Objects.requireNonNull(state, "state");
+            java.util.Objects.requireNonNull(blockEntityData, "blockEntityData");
+            blockEntityData = blockEntityData.map(CompoundTag::copy);
+            if (blockEntityData.isPresent() && !state.hasBlockEntity()) {
+                throw new IllegalArgumentException("Block-entity payload requires a block-entity state: " + state);
+            }
+        }
+
+        public CompiledBlock(BlockState state) { this(state, Optional.empty()); }
+
+        @Override public Optional<CompoundTag> blockEntityData() {
+            return blockEntityData.map(CompoundTag::copy);
+        }
+    }
 }

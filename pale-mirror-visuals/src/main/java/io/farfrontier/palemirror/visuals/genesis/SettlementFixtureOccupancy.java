@@ -12,10 +12,14 @@ import java.util.Set;
 final class SettlementFixtureOccupancy {
     private final Set<Long> blocked = new HashSet<>();
     private final Set<Long> fixtures = new HashSet<>();
+    private final Set<Long> authoredModules = new HashSet<>();
 
     static SettlementFixtureOccupancy forSettlement(AuthoredRegionSeed seed) {
         SettlementFixtureOccupancy result = new SettlementFixtureOccupancy();
-        seed.settlementSite().modules().forEach(module -> result.block(module.footprint(), 1));
+        seed.settlementSite().modules().forEach(module -> {
+            result.block(module.footprint(), 1);
+            result.rememberAuthoredModule(module.footprint());
+        });
         seed.settlementSite().circulation().forEach(feature -> result.block(feature, feature.width() / 2));
         seed.baselineRailNodes().forEach(point -> result.block(point.x(), point.z(), 1));
         seed.settlementSite().modules().forEach(module -> module.ports().stream()
@@ -29,6 +33,14 @@ final class SettlementFixtureOccupancy {
         if (!freeOfBlocked(x, z, 0) || !freeOfFixtures(x, z, clearance)) return false;
         reserveArea(x, z, clearance);
         return true;
+    }
+
+    boolean insideAuthoredModule(int x, int z) { return authoredModules.contains(key(x, z)); }
+
+    private void rememberAuthoredModule(VisualBounds bounds) {
+        for (int x = bounds.min().x(); x <= bounds.max().x(); x++) {
+            for (int z = bounds.min().z(); z <= bounds.max().z(); z++) authoredModules.add(key(x, z));
+        }
     }
 
     boolean reserveWithCompanion(int x, int z, int companionX, int companionZ, int clearance) {

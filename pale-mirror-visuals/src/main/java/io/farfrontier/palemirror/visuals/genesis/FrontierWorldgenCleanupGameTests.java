@@ -175,7 +175,7 @@ public final class FrontierWorldgenCleanupGameTests {
                         .filter(value -> Math.abs(value.getKey().getX() - x) <= 2
                                 && Math.abs(value.getKey().getZ() - z) <= 2)
                         .noneMatch(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                                .getKey(value.getValue().getBlock()).getNamespace().equals("create")),
+                                .getKey(value.getValue().state().getBlock()).getNamespace().equals("create")),
                 "an unbuilt Red Valley power project must not materialize Create machinery");
         helper.succeed();
     }
@@ -220,7 +220,7 @@ public final class FrontierWorldgenCleanupGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 120)
-    public static void curatedMineModulesSealRoofsAndUseFullStructuralPosts(GameTestHelper helper) {
+    public static void curatedMineModulesCompileWithoutSyntheticStructuralGlue(GameTestHelper helper) {
         var seed = new FrontierRegionPlanner().plan(91_003L, 0,
                 new VisualPoint(8_000, 76, 8_000), FrontierClimate.TEMPERATE);
         var blocks = new java.util.LinkedHashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
@@ -231,55 +231,15 @@ public final class FrontierWorldgenCleanupGameTests {
                             value -> new BlockPos(value.position().x(), value.position().y(), value.position().z()),
                             io.farfrontier.palemirror.api.VisualBlockPlacement::state,
                             (left, right) -> right, java.util.LinkedHashMap::new));
-                    java.util.Set<Long> entrances = module.ports().stream()
-                            .filter(value -> value.kind()
-                                    == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE)
-                            .map(value -> net.minecraft.world.level.ChunkPos.asLong(
-                                    value.position().x(), value.position().z()))
-                            .collect(java.util.stream.Collectors.toSet());
-                    moduleBlocks.forEach((position, state) -> {
-                        boolean edge = position.getX() == module.footprint().min().x()
-                                || position.getX() == module.footprint().max().x()
-                                || position.getZ() == module.footprint().min().z()
-                                || position.getZ() == module.footprint().max().z();
-                        if (edge && position.getY() == module.footprint().min().y() + 1
-                                && mineEdgeSupport(state)
-                                && !entrances.contains(net.minecraft.world.level.ChunkPos.asLong(
-                                        position.getX(), position.getZ()))) {
-                            helper.assertTrue(moduleBlocks.containsKey(position.below())
-                                            && !moduleBlocks.get(position.below()).isAir(),
-                                    "mine edge structure retained a one-block floating base at " + position);
-                        }
-                    });
                     blocks.putAll(moduleBlocks);
                 });
-        blocks.forEach((position, state) -> {
-            if (state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                    && state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                    == SlabType.BOTTOM) {
-                for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.Plane.HORIZONTAL) {
-                    var upperNeighbour = blocks.get(position.above().relative(direction));
-                    helper.assertTrue(upperNeighbour == null || !upperNeighbour.hasProperty(
-                                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE),
-                            "stepped mine roof retained a half-block daylight seam at " + position);
-                }
-            }
-            if (state.is(net.minecraft.tags.BlockTags.LOGS)) {
-                var below = blocks.get(position.below());
-                helper.assertTrue(below == null
-                                || !(below.getBlock() instanceof net.minecraft.world.level.block.FenceBlock),
-                        "full mine roof post is balanced on a fence at " + position);
-            }
-            if (state.is(Blocks.CHAIN)
-                    || state.getBlock() instanceof net.minecraft.world.level.block.LanternBlock) {
-                var support = blocks.get(position.above());
-                helper.assertTrue(support == null || !support.hasProperty(
-                                net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                                || support.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                                != SlabType.TOP,
-                        "hanging mine fixture is attached to the air half of a top slab at " + position);
-            }
-        });
+        helper.assertTrue(blocks.values().stream().anyMatch(state -> state.hasBlockEntity()),
+                "curated MineSite must retain authored machinery instead of synthetic copper glue");
+        helper.assertTrue(blocks.values().stream().noneMatch(state ->
+                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock())
+                                .equals(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                                        "create", "creative_motor"))),
+                "curated MineSite must never contain free creative power");
         helper.succeed();
     }
 
@@ -291,7 +251,7 @@ public final class FrontierWorldgenCleanupGameTests {
         var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
         var blocks = catalog.chunks().values().stream().flatMap(value -> value.blocks().entrySet().stream())
                 .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
-                        java.util.Map.Entry::getValue, (left, right) -> right,
+                        value -> value.getValue().state(), (left, right) -> right,
                         java.util.LinkedHashMap::new));
         var portalRoute = MineAccessGenesisCompiler.routes(mine).stream()
                 .filter(value -> value.foundationId().equals("portal")).findFirst().orElseThrow();

@@ -81,7 +81,7 @@ public final class VisualsGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
-    public static void authoredMineBlueprintIsSanitizedAndReceivesBoundedKinetics(GameTestHelper helper) {
+    public static void authoredMineBlueprintPreservesCuratedMachineryAndRejectsUnsafeControllers(GameTestHelper helper) {
         var seed = new FrontierRegionPlanner().plan(918273L, 1, new VisualPoint(8000, 72, -4000),
                 FrontierClimate.TEMPERATE);
         var module = seed.alternateMineSite().stagedModules().stream()
@@ -92,16 +92,25 @@ public final class VisualsGameTests {
         boolean forbidden = snapshot.blocks().stream().map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK
                         .getKey(value.state().getBlock()))
                 .anyMatch(id -> id.getPath().contains("spawner") || id.getPath().equals("tnt")
-                        || id.getPath().contains("chest") || id.getPath().equals("barrel")
-                        || id.getPath().contains("ore") || id.getPath().startsWith("raw_"));
-        helper.assertTrue(!forbidden, "imported blueprint must not retain loot, hazards, or canonical-looking ore");
+                        || id.getPath().equals("creative_motor") || id.getPath().equals("redstone_link")
+                        || id.getPath().equals("display_link") || id.getPath().equals("linked_controller"));
+        helper.assertTrue(!forbidden, "imported blueprint must reject explosives, free power and unscoped links");
         var allMineModules = java.util.stream.Stream.concat(
                 seed.primaryMineSite().initialModules().stream(),
                 java.util.stream.Stream.concat(seed.alternateMineSite().initialModules().stream(),
                         seed.alternateMineSite().stagedModules().stream().map(value -> value.module()))).toList();
-        helper.assertTrue(allMineModules.stream().flatMap(value -> AuthoredModuleCompiler.compile(value).blocks().stream())
-                        .noneMatch(value -> value.state().hasBlockEntity()),
-                "sanitized imported MineSite cells must never create pending block entities");
+        var machineCells = allMineModules.stream()
+                .flatMap(value -> AuthoredModuleCompiler.compile(value).blocks().stream())
+                .filter(value -> value.state().hasBlockEntity()).toList();
+        helper.assertTrue(!machineCells.isEmpty(), "curated MineSite must preserve functional block entities");
+        helper.assertTrue(machineCells.stream().anyMatch(value -> value.blockEntityData().isPresent()),
+                "curated machine state must retain explicit one-shot payloads where the NBT defines them");
+        helper.assertTrue(machineCells.stream().filter(value -> value.blockEntityData().isPresent())
+                        .allMatch(value -> value.blockEntityData().orElseThrow().contains("id")),
+                "every retained machine payload must remain typed");
+        helper.assertTrue(machineCells.stream().filter(value -> value.blockEntityData().isPresent())
+                        .noneMatch(value -> containsUnsafeRuntimeReference(value.blockEntityData().orElseThrow())),
+                "retained machinery must not import source-world links or active contraptions");
         var portal = seed.primaryMineSite().surfaceBuildings().stream()
                 .filter(value -> value.buildingId().equals("portal")).findFirst().orElseThrow()
                 .modules().getFirst();
@@ -112,8 +121,8 @@ public final class VisualsGameTests {
                         || state.is(net.minecraft.world.level.block.Blocks.TUFF)
                         || state.is(net.minecraft.world.level.block.Blocks.DIRT)
                         || state.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK));
-        helper.assertTrue(!rawTerrainShell,
-                "surface mine buildings must not retain copied terrain shells that read as cubes");
+        helper.assertTrue(rawTerrainShell,
+                "curated architectural stone must not be stripped merely because it resembles terrain");
         var surfaceById = seed.primaryMineSite().surfaceBuildings().stream().collect(
                 java.util.stream.Collectors.toMap(value -> value.buildingId(),
                         value -> AuthoredModuleCompiler.compile(value.modules().getFirst())));
@@ -160,14 +169,14 @@ public final class VisualsGameTests {
         }
         var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
         boolean kinetic = catalog.chunks().values().stream().flatMap(value -> value.blocks().values().stream())
-                .map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(value.getBlock()))
+                .map(value -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(value.state().getBlock()))
                 .anyMatch(id -> id.getNamespace().equals("create") && (id.getPath().equals("shaft")
-                        || id.getPath().equals("creative_motor") || id.getPath().equals("encased_fan")));
+                        || id.getPath().equals("andesite_casing") || id.getPath().equals("encased_fan")));
         helper.assertTrue(kinetic, "mine grammar must add a bounded Create visual network");
         java.util.Map<BlockPos, net.minecraft.world.level.block.state.BlockState> compiledBlocks = catalog.chunks()
                 .values().stream().flatMap(value -> value.blocks().entrySet().stream()).collect(
                         java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
-                                java.util.Map.Entry::getValue));
+                                value -> value.getValue().state()));
         for (var underground : seed.primaryMineSite().undergroundModules()) {
             BlockPos position = new BlockPos(underground.origin().x(), underground.origin().y(),
                     underground.origin().z());
@@ -185,6 +194,23 @@ public final class VisualsGameTests {
                     "final tunnel carve must connect the authored underground room at " + position);
         }
         helper.succeed();
+    }
+
+    private static boolean containsUnsafeRuntimeReference(net.minecraft.nbt.Tag tag) {
+        if (tag instanceof net.minecraft.nbt.CompoundTag compound) {
+            for (String key : compound.getAllKeys()) {
+                String normalized = key.toLowerCase(java.util.Locale.ROOT);
+                if (java.util.Set.of("controller", "target", "lastknownpos", "linkedpos", "globalpos",
+                        "contraption", "movedcontraption", "running", "clientanglediff").contains(normalized)) {
+                    return true;
+                }
+                net.minecraft.nbt.Tag nested = compound.get(key);
+                if (nested != null && containsUnsafeRuntimeReference(nested)) return true;
+            }
+        } else if (tag instanceof net.minecraft.nbt.ListTag list) {
+            for (net.minecraft.nbt.Tag nested : list) if (containsUnsafeRuntimeReference(nested)) return true;
+        }
+        return false;
     }
 
     private static BlockPos block(VisualPoint point) {
@@ -329,7 +355,8 @@ public final class VisualsGameTests {
         long chunkKey = new net.minecraft.world.level.ChunkPos(candidatePosition).toLong();
         var slice = new io.farfrontier.palemirror.visuals.genesis.CompiledChunkSlice(chunkKey, "foundry-test",
                 java.util.List.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(),
-                java.util.Map.of(candidatePosition, candidateState));
+                java.util.Map.of(candidatePosition,
+                        new io.farfrontier.palemirror.visuals.genesis.CompiledChunkSlice.CompiledBlock(candidateState)));
         var catalog = new io.farfrontier.palemirror.visuals.genesis.CompiledGenesisCatalog(1, "foundry-test-hash",
                 java.util.List.of(seed), java.util.Map.of(chunkKey, slice));
         helper.getLevel().setBlock(candidatePosition, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 2);

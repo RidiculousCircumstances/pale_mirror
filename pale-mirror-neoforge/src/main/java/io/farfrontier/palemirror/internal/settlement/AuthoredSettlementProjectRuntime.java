@@ -37,6 +37,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Staged damage, pristine reconstruction and reserved-plot development through the shared gateway. */
 final class AuthoredSettlementProjectRuntime {
+    private static final String AUTHORED_PAYLOAD_MARKER = "pale_mirror_authored_payload";
     private static final String STRUCTURAL_CHANNEL = "settlement_structure";
     private static final String DEVELOPMENT_CHANNEL = "settlement_development";
     private static final String VERSION = "authored-project-v40-frontier-art-2";
@@ -121,7 +122,7 @@ final class AuthoredSettlementProjectRuntime {
             Map<Long, BlockState> desired = snapshot.blocks().stream().collect(Collectors.toMap(
                     value -> block(value.position()).asLong(), VisualBlockPlacement::state, (left, right) -> right));
             boolean changed = runOne(level, data, job, cell -> desired.getOrDefault(
-                    cell.position().asLong(), cell.lastAppliedState()));
+                    cell.position().asLong(), cell.lastAppliedState()), blockEntityData(snapshot));
             if (job.state() == JobState.BLOCKED) {
                 commands.execute(data.worldState(), new DomainCommand.BlockDevelopmentIntent(intent.id(), job.lastError()));
                 return true;
@@ -253,7 +254,8 @@ final class AuthoredSettlementProjectRuntime {
         Map<Long, BlockState> desired = snapshot.blocks().stream().collect(Collectors.toMap(
                 value -> block(value.position()).asLong(), VisualBlockPlacement::state, (left, right) -> right));
         boolean changed = runOne(level, data, job,
-                cell -> desired.getOrDefault(cell.position().asLong(), cell.baselineState()));
+                cell -> desired.getOrDefault(cell.position().asLong(), cell.baselineState()),
+                blockEntityData(snapshot));
         if (job.state() == JobState.BLOCKED) commands.execute(data.worldState(),
                 new DomainCommand.BlockDevelopmentIntent(intent.id(), job.lastError()));
         else if (job.state() == JobState.COMPLETED) commands.execute(data.worldState(),
@@ -312,6 +314,12 @@ final class AuthoredSettlementProjectRuntime {
 
     private static boolean runOne(ServerLevel level, PaleMirrorSavedData data, MaterializationJob job,
                                   Function<SemanticCellRecord, BlockState> desired) {
+        return runOne(level, data, job, desired, Map.of());
+    }
+
+    private static boolean runOne(ServerLevel level, PaleMirrorSavedData data, MaterializationJob job,
+                                  Function<SemanticCellRecord, BlockState> desired,
+                                  Map<Long, net.minecraft.nbt.CompoundTag> blockEntities) {
         if (job.state() == JobState.PLANNED || job.state() == JobState.BLOCKED) { job.start(); return true; }
         if (job.state() != JobState.RUNNING) return false;
         MaterializationOperation operation = job.nextOperation();
@@ -326,8 +334,38 @@ final class AuthoredSettlementProjectRuntime {
                 operation.block(result.diagnostic()); job.block(result.diagnostic()); return true;
             }
         }
+        for (SemanticCellRecord cell : data.semanticSlots().find(key).orElseThrow().cells()) {
+            net.minecraft.nbt.CompoundTag payload = blockEntities.get(cell.position().asLong());
+            if (payload == null) continue;
+            var blockEntity = level.getBlockEntity(cell.position());
+            if (blockEntity == null) {
+                String error = "Authored block entity did not materialize at " + cell.position();
+                operation.block(error); job.block(error); return true;
+            }
+            String marker = operation.idempotencyKey() + ":" + cell.position().asLong();
+            applyBlockEntityPayloadOnce(blockEntity, payload, level.registryAccess(), marker);
+        }
         gateway.completeReset(key); operation.complete(); job.advanceOperation();
         if (job.nextOperation() == null) job.complete(); return true;
+    }
+
+    private static Map<Long, net.minecraft.nbt.CompoundTag> blockEntityData(
+            io.farfrontier.palemirror.api.VisualModuleSnapshot snapshot) {
+        Map<Long, net.minecraft.nbt.CompoundTag> result = new java.util.LinkedHashMap<>();
+        for (VisualBlockPlacement placement : snapshot.blocks()) placement.blockEntityData().ifPresent(
+                data -> result.put(block(placement.position()).asLong(), data));
+        return java.util.Collections.unmodifiableMap(result);
+    }
+
+    static boolean applyBlockEntityPayloadOnce(net.minecraft.world.level.block.entity.BlockEntity blockEntity,
+                                                net.minecraft.nbt.CompoundTag payload,
+                                                net.minecraft.core.HolderLookup.Provider registries,
+                                                String marker) {
+        if (marker.equals(blockEntity.getPersistentData().getString(AUTHORED_PAYLOAD_MARKER))) return false;
+        blockEntity.loadWithComponents(payload.copy(), registries);
+        blockEntity.getPersistentData().putString(AUTHORED_PAYLOAD_MARKER, marker);
+        blockEntity.setChanged();
+        return true;
     }
 
     private static boolean plotAvailable(ServerLevel level, io.farfrontier.palemirror.api.VisualBounds footprint) {

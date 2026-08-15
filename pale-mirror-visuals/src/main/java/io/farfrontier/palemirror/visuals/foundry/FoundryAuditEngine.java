@@ -203,20 +203,51 @@ public final class FoundryAuditEngine {
                             "Entrance is more than 12 blocks from authored circulation.",
                             "Compile a flared access apron or move the semantic port to the real facade.");
                 }
-                FoundryRegionIndex.ExpectedCell threshold = index.expected(block(port.position()));
                 if (port.kind() == VisualPortKind.PUBLIC_ENTRANCE
-                        && (threshold == null || !(threshold.state().getBlock()
-                        instanceof net.minecraft.world.level.block.DoorBlock))) {
+                        && !semanticEntrance(index, block(port.position()))) {
                     disconnected++;
                     add(findings, "navigation.entrance.semantic", FoundrySeverity.BLOCKER, phase, "module",
                             module.instanceId(), index.region().dimensionId(), port.position(),
-                            "Semantic public entrance does not compile to a real door at its exact threshold.",
+                            "Semantic public entrance is not a real door, gate or grounded two-block opening.",
                             "Correct the curated local NBT entrance coordinate and module rotation contract.");
                 }
             }
         }
         metrics.add(new FoundryMetric("navigation.entrances", entrances, "ports"));
         metrics.add(new FoundryMetric("navigation.disconnected", disconnected, "ports"));
+    }
+
+    /**
+     * Public thresholds describe traversal, not a requirement to synthesize a
+     * door. Freight sheds, stables and watch shelters deliberately use open
+     * bays. They are valid only when the authored NBT itself supplies either a
+     * door/gate, a grounded two-block air opening, or a walkable sill followed
+     * by two clear cells.
+     */
+    private static boolean semanticEntrance(FoundryRegionIndex index, BlockPos position) {
+        FoundryRegionIndex.ExpectedCell threshold = index.expected(position);
+        if (threshold == null) return false;
+        BlockState state = threshold.state();
+        if (state.getBlock() instanceof net.minecraft.world.level.block.DoorBlock
+                || state.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock) return true;
+        if (passable(state) && passable(index.expected(position.above()))) {
+            int ground = index.plannedGroundY(position.getX(), position.getZ());
+            return ground >= position.getY() - 1 && ground <= position.getY();
+        }
+        boolean walkableSill = state.getBlock() instanceof net.minecraft.world.level.block.SlabBlock
+                || state.getBlock() instanceof net.minecraft.world.level.block.StairBlock
+                || state.getBlock() instanceof net.minecraft.world.level.block.CarpetBlock;
+        return walkableSill && passable(index.expected(position.above()))
+                && passable(index.expected(position.above(2)));
+    }
+
+    private static boolean passable(FoundryRegionIndex.ExpectedCell cell) {
+        return cell != null && passable(cell.state());
+    }
+
+    private static boolean passable(BlockState state) {
+        return state.isAir() || state.getBlock() instanceof net.minecraft.world.level.block.DoorBlock
+                || state.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock;
     }
 
     private static void railTopology(FoundryRegionIndex index, FoundryAuditPhase phase,

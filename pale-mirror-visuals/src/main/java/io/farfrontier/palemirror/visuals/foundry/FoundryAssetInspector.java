@@ -29,9 +29,12 @@ final class FoundryAssetInspector {
             }
             if (block.state().hasBlockEntity()) {
                 blockEntities++;
-                add(findings, "asset.block_entity", FoundrySeverity.BLOCKER, phase, module, dimensionId,
-                        block.position(), "Authored static NBT retained a block entity.",
-                        "Sanitize the cell or move stateful behavior behind a managed runtime projection.");
+                if (block.blockEntityData().isPresent()
+                        && !block.blockEntityData().orElseThrow().contains("id")) {
+                    add(findings, "asset.block_entity.untyped", FoundrySeverity.BLOCKER, phase, module, dimensionId,
+                            block.position(), "Authored block entity retained an untyped payload.",
+                            "Provide a valid block-entity id or remove the source payload.");
+                }
             }
             if (block.state().getBlock() instanceof net.minecraft.world.level.block.FallingBlock
                     && block.position().y() > module.footprint().min().y()

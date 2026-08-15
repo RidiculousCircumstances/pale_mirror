@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.api;
 import java.util.List;
 import java.util.Objects;
 
-/** Sanitized immutable blueprint compiled by Visuals for Core's guarded materialization gateway. */
+/** Curated immutable blueprint compiled by Visuals for one-shot genesis or guarded staged construction. */
 public record VisualModuleSnapshot(String templateId, VisualBounds footprint,
                                    List<VisualBlockPlacement> blocks) {
     public VisualModuleSnapshot {

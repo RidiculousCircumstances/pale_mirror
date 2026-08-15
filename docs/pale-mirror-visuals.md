@@ -188,13 +188,17 @@ engine house and covered freight stable. PM composes them with an
 irregular gravel/coarse-dirt working yard, drainage seams, open ore-sort bins,
 timber/material stores, safety lighting, local foundations, circulation and
 climate transforms. The underground adit, gallery and controller spaces remain
-curated private source modules and use the same sanitizer. Entities and
-block-entity payloads are ignored. Spawners, TNT and structure machinery become
-air; inventories become inert timber; ore/raw-resource cells become ordinary
-deepslate. Consequently visible ore never mints canonical IRON and ordinary
-containers never mirror settlement stock. Create blocks that survive this
-filter are visual/kinetic machinery only and carry no imported inventories or
-contraptions. Module dimensions, exact public thresholds, outward directions,
+curated private source modules and use the same fail-closed curator. Imported
+entity lists are ignored because PM owns resident and threat identity. Spawners,
+TNT, structure machinery, creative power and unscoped external controllers are
+removed or rejected. Architectural resource cells, finite container contents,
+local Create machinery and their typed block-entity payloads remain part of the
+authored building; they are materialized once, never treated as canonical IRON,
+never periodically rebuilt and never refilled after looting. Source coordinates
+are rewritten and foreign links are stripped before placement. Guarded staged
+construction persists an idempotency marker on every applied block entity, so
+crash recovery cannot replay container or machine payloads. Module
+dimensions, exact public thresholds, outward directions,
 parcel clearance and foundation aprons live in the fail-closed JSON module
 catalog; layout code does not guess them. Compilation rejects any catalog/NBT
 size mismatch, so replacing a curated asset cannot silently move an entrance

@@ -58,7 +58,10 @@ class CuratedModuleCatalogTest {
         assertEquals(6, house.entranceX());
         assertEquals(1, house.entranceY());
         assertEquals(6, house.entranceZ());
-        assertEquals(2, house.entranceOutward(), "bamboo front door faces west");
+        assertEquals(0, house.entranceOutward(), "the authored doormat identifies the exterior east threshold");
+
+        var assay = FrontierModuleCatalog.require("assay_office");
+        assertEquals(1, assay.entranceOutward(), "the clear authored porch exits south");
 
         var workshop = FrontierModuleCatalog.require("engineer_shop");
         assertEquals(4, workshop.entranceX());

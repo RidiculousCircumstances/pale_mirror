@@ -16,7 +16,7 @@ final class MutableGenesisSlice {
     final Map<Long, CompiledChunkSlice.VegetationColumn> vegetation = new LinkedHashMap<>();
     final Map<BlockPos, CompiledChunkSlice.AuthoredDecoration> decorations = new LinkedHashMap<>();
     final List<CompiledChunkSlice.RailColumn> rails = new ArrayList<>();
-    final Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
+    final Map<BlockPos, CompiledChunkSlice.CompiledBlock> blocks = new LinkedHashMap<>();
 
     MutableGenesisSlice(long key) {
         this.key = key;

@@ -44,17 +44,18 @@ public final class AuthoredModuleCompiler {
             int[] rotated = rotate(block.x(), block.z(), template.sizeX(), template.sizeZ(), turns);
             BlockState state = rotate(climateState(template.palette().get(block.state()), id), turns);
             if (state.is(Blocks.STRUCTURE_BLOCK) || state.is(Blocks.JIGSAW)) continue;
-            if (!module.foundationId().equals("underground") && copiedTerrainShell(state)) continue;
             BlockPos world = origin.offset(rotated[0], block.y(), rotated[1]);
             VisualPoint position = new VisualPoint(world.getX(), world.getY(), world.getZ());
             if (!module.footprint().contains(position)) {
                 throw new IllegalStateException("Authored module escaped its declared footprint: " + id
                         + " at " + position + " outside " + module.footprint());
             }
-            blocks.add(new VisualBlockPlacement(position, state));
+            CompoundTag data = state.hasBlockEntity() && block.data() != null
+                    ? sanitizeBlockEntityData(id, state, block.data(), world) : null;
+            blocks.add(data == null ? new VisualBlockPlacement(position, state)
+                    : new VisualBlockPlacement(position, state, data));
         }
-        return new VisualModuleSnapshot(module.templateId(), module.footprint(),
-                normalizeStructuralDetails(module, blocks));
+        return new VisualModuleSnapshot(module.templateId(), module.footprint(), blocks);
     }
 
     /**
@@ -72,14 +73,6 @@ public final class AuthoredModuleCompiler {
                     + ": footprint=" + actualX + "x" + actualY + "x" + actualZ
                     + ", nbt=" + expectedX + "x" + expectedY + "x" + expectedZ);
         }
-    }
-
-    /** Imported surface art contributes architecture; PM's surveyed pad remains the only terrain owner. */
-    private static boolean copiedTerrainShell(BlockState state) {
-        return state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE) || state.is(Blocks.TUFF)
-                || state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK)
-                || state.is(Blocks.COARSE_DIRT) || state.is(Blocks.ROOTED_DIRT)
-                || state.is(Blocks.PODZOL) || state.is(Blocks.MYCELIUM);
     }
 
     private static RawTemplate template(ResourceLocation id) {
@@ -113,7 +106,8 @@ public final class AuthoredModuleCompiler {
             for (Tag value : root.getList("blocks", Tag.TAG_COMPOUND)) {
                 CompoundTag block = (CompoundTag) value;
                 ListTag pos = block.getList("pos", Tag.TAG_INT);
-                blocks.add(new RawBlock(pos.getInt(0), pos.getInt(1), pos.getInt(2), block.getInt("state")));
+                CompoundTag data = block.contains("nbt", Tag.TAG_COMPOUND) ? block.getCompound("nbt").copy() : null;
+                blocks.add(new RawBlock(pos.getInt(0), pos.getInt(1), pos.getInt(2), block.getInt("state"), data));
             }
             return new RawTemplate(sx, sy, sz, List.copyOf(palette), List.copyOf(blocks));
         } catch (IOException failure) {
@@ -176,117 +170,6 @@ public final class AuthoredModuleCompiler {
             replacement = dryReplacement(source.getBlock());
         }
         return replacement == null ? source : copySharedProperties(source, replacement.defaultBlockState());
-    }
-
-    /**
-     * Private source structures are curated raw material, not an exemption
-     * from the authored-module contract. Mine roofs use stepped slab courses;
-     * a lower bottom slab beneath the next course leaves a visible half-block
-     * daylight seam, so that overlap becomes a double slab. Likewise a full
-     * structural log may not balance on a fence-sized decorative post.
-     */
-    private static List<VisualBlockPlacement> normalizeStructuralDetails(
-            VisualModulePlacement module, List<VisualBlockPlacement> source) {
-        if (!module.visualStateProfile().equals("frontier_mine")) return List.copyOf(source);
-        java.util.LinkedHashMap<BlockPos, VisualBlockPlacement> blocks = new java.util.LinkedHashMap<>();
-        for (VisualBlockPlacement value : source) blocks.put(block(value.position()), value);
-        int roofBand = module.footprint().min().y()
-                + Math.max(2, (module.footprint().max().y() - module.footprint().min().y()) / 2);
-        for (VisualBlockPlacement value : List.copyOf(blocks.values())) {
-            BlockPos position = block(value.position());
-            BlockState state = value.state();
-            if (position.getY() >= roofBand && state.hasProperty(
-                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                    && state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                    == net.minecraft.world.level.block.state.properties.SlabType.BOTTOM
-                    && steppedSlabAbove(blocks, position)) {
-                BlockState sealed = state.setValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
-                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE);
-                blocks.put(position, new VisualBlockPlacement(value.position(), sealed));
-            }
-            if ((state.is(Blocks.CHAIN) || state.getBlock() instanceof net.minecraft.world.level.block.LanternBlock)
-                    && slabLeavesHangingGap(blocks.get(position.above()))) {
-                VisualBlockPlacement support = blocks.get(position.above());
-                BlockState sealed = support.state().setValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
-                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE);
-                blocks.put(position.above(), new VisualBlockPlacement(support.position(), sealed));
-            }
-            VisualBlockPlacement below = blocks.get(position.below());
-            if (state.is(net.minecraft.tags.BlockTags.LOGS) && below != null
-                    && below.state().getBlock() instanceof net.minecraft.world.level.block.FenceBlock) {
-                blocks.put(position.below(), new VisualBlockPlacement(below.position(), state));
-            }
-        }
-        supportGroundedMineEdges(module, blocks);
-        return List.copyOf(blocks.values());
-    }
-
-    /**
-     * Curated source modules may contain a masonry/log edge column beginning
-     * one block above their declared pad. On natural terrain that reads as a
-     * floating arch even though the pad itself is valid. Ground only those
-     * structural edge columns; interiors and the semantic entrance stay open.
-     */
-    private static void supportGroundedMineEdges(VisualModulePlacement module,
-            java.util.Map<BlockPos, VisualBlockPlacement> blocks) {
-        if (module.foundationId().equals("underground")) return;
-        int supportY = module.footprint().min().y();
-        int firstRaisedY = supportY + 1;
-        java.util.Set<Long> entranceColumns = module.ports().stream()
-                .filter(value -> value.kind() == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE)
-                .map(value -> net.minecraft.world.level.ChunkPos.asLong(
-                        value.position().x(), value.position().z()))
-                .collect(java.util.stream.Collectors.toSet());
-        for (VisualBlockPlacement value : List.copyOf(blocks.values())) {
-            BlockPos position = block(value.position());
-            if (position.getY() != firstRaisedY || !structuralGroundSupport(value.state())) continue;
-            boolean edge = position.getX() == module.footprint().min().x()
-                    || position.getX() == module.footprint().max().x()
-                    || position.getZ() == module.footprint().min().z()
-                    || position.getZ() == module.footprint().max().z();
-            if (!edge || entranceColumns.contains(net.minecraft.world.level.ChunkPos.asLong(
-                    position.getX(), position.getZ()))) continue;
-            BlockPos below = position.below();
-            VisualBlockPlacement existing = blocks.get(below);
-            if (existing == null || existing.state().isAir()) {
-                blocks.put(below, new VisualBlockPlacement(
-                        new VisualPoint(below.getX(), below.getY(), below.getZ()), value.state()));
-            }
-        }
-    }
-
-    private static boolean structuralGroundSupport(BlockState state) {
-        return state.is(net.minecraft.tags.BlockTags.LOGS)
-                || state.is(net.minecraft.tags.BlockTags.PLANKS)
-                || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
-                || state.is(Blocks.STONE_BRICKS) || state.is(Blocks.CRACKED_STONE_BRICKS)
-                || state.is(Blocks.DEEPSLATE_BRICKS) || state.is(Blocks.CRACKED_DEEPSLATE_BRICKS)
-                || state.is(Blocks.BRICKS) || state.is(Blocks.CUT_SANDSTONE)
-                || state.is(Blocks.SANDSTONE) || state.is(Blocks.SMOOTH_SANDSTONE);
-    }
-
-    private static boolean slabLeavesHangingGap(VisualBlockPlacement support) {
-        return support != null && support.state().hasProperty(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                && support.state().getValue(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                == net.minecraft.world.level.block.state.properties.SlabType.TOP;
-    }
-
-    private static boolean steppedSlabAbove(java.util.Map<BlockPos, VisualBlockPlacement> blocks,
-                                            BlockPos position) {
-        for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.Plane.HORIZONTAL) {
-            VisualBlockPlacement neighbour = blocks.get(position.above().relative(direction));
-            if (neighbour != null && neighbour.state().hasProperty(
-                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)) return true;
-        }
-        return false;
-    }
-
-    private static BlockPos block(VisualPoint point) {
-        return new BlockPos(point.x(), point.y(), point.z());
     }
 
     private static Block coldReplacement(Block source) {
@@ -353,50 +236,123 @@ public final class AuthoredModuleCompiler {
     }
 
     static BlockState readState(CompoundTag value) {
-        ResourceLocation id = ResourceLocation.parse(value.getString("Name"));
+        ResourceLocation sourceId = ResourceLocation.parse(value.getString("Name"));
+        ResourceLocation id = sourceId;
+        Block curatedLegacy = curatedLegacyBlock(id);
+        if (curatedLegacy != null) id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(curatedLegacy);
         String path = id.getPath();
         if (path.contains("spawner") || path.equals("jigsaw") || path.equals("structure_block")
-                || path.equals("tnt") || path.contains("chest") || path.equals("barrel")
-                || path.equals("dispenser") || path.contains("ore") || path.startsWith("raw_")
-                || path.contains("crushed_raw")) return replacement(id);
-        Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOptional(id)
-                .orElse(Blocks.CUT_COPPER);
+                || path.equals("tnt")) return Blocks.AIR.defaultBlockState();
+        if (id.getNamespace().equals("create") && path.equals("creative_motor")) {
+            return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOptional(
+                            ResourceLocation.fromNamespaceAndPath("create", "andesite_casing"))
+                    .orElseThrow(() -> new IllegalStateException("Create is missing andesite_casing"))
+                    .defaultBlockState();
+        }
+        if (unsafeExternalController(id)) {
+            throw new IllegalStateException("Authored module contains an unscoped external controller: " + id);
+        }
+        Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+        if (block == null) throw new IllegalStateException("Authored module requires missing block " + id);
         BlockState state = block.defaultBlockState();
         if (value.contains("Properties", Tag.TAG_COMPOUND)) {
             CompoundTag properties = value.getCompound("Properties");
             for (String name : properties.getAllKeys()) {
                 Property<?> property = block.getStateDefinition().getProperty(name);
-                if (property != null) state = setValue(state, property, properties.getString(name));
+                if (property == null && (curatedLegacy != null || compatibleRemovedProperty(sourceId, name))) {
+                    continue;
+                }
+                if (property == null) throw new IllegalStateException("Unknown property " + name + " on " + id);
+                String encoded = properties.getString(name);
+                var parsed = property.getValue(encoded);
+                if (parsed.isEmpty()) throw new IllegalStateException(
+                        "Invalid property " + name + "=" + encoded + " on " + id);
+                state = setValue(state, property, encoded);
             }
         }
-        return state.hasBlockEntity() ? inertBlockEntityReplacement(id) : state;
+        return state;
     }
 
-    private static BlockState inertBlockEntityReplacement(ResourceLocation id) {
-        String path = id.getPath();
-        if (path.contains("campfire")) return path.startsWith("soul_")
-                ? Blocks.SOUL_SOIL.defaultBlockState() : Blocks.MAGMA_BLOCK.defaultBlockState();
-        if (path.contains("furnace") || path.equals("smoker")) {
-            return Blocks.POLISHED_DEEPSLATE.defaultBlockState();
-        }
-        if (path.contains("sign")) return Blocks.SPRUCE_FENCE.defaultBlockState();
-        if (path.equals("decorated_pot")) return Blocks.TERRACOTTA.defaultBlockState();
-        if (path.contains("banner")) return Blocks.GRAY_WOOL.defaultBlockState();
-        if (path.equals("bell")) return Blocks.GOLD_BLOCK.defaultBlockState();
-        if (path.equals("beehive") || path.equals("bee_nest")) return Blocks.STRIPPED_OAK_LOG.defaultBlockState();
-        return id.getNamespace().equals("create") ? Blocks.WAXED_EXPOSED_COPPER.defaultBlockState()
-                : Blocks.SPRUCE_PLANKS.defaultBlockState();
+    /** Exact harmless source-version deltas; this must not become a generic property fallback. */
+    private static boolean compatibleRemovedProperty(ResourceLocation id, String property) {
+        return id.equals(ResourceLocation.withDefaultNamespace("chiseled_tuff")) && property.equals("axis");
     }
 
-    private static BlockState replacement(ResourceLocation id) {
-        String path = id.getPath();
-        if (path.contains("spawner") || path.equals("tnt") || path.equals("jigsaw")
-                || path.equals("structure_block")) return Blocks.AIR.defaultBlockState();
-        if (path.contains("ore") || path.startsWith("raw_") || path.contains("crushed_raw")) {
-            return Blocks.DEEPSLATE.defaultBlockState();
+    /** Explicit substitutions for source-pack blocks unavailable on 1.21.1; never a generic unknown fallback. */
+    private static Block curatedLegacyBlock(ResourceLocation id) {
+        if (id.equals(ResourceLocation.withDefaultNamespace("grass"))) return Blocks.SHORT_GRASS;
+        if (id.equals(ResourceLocation.fromNamespaceAndPath("alexsmobs", "bison_carpet"))) {
+            return Blocks.BROWN_CARPET;
         }
-        return id.getNamespace().equals("create") ? Blocks.WAXED_EXPOSED_COPPER.defaultBlockState()
-                : Blocks.SPRUCE_PLANKS.defaultBlockState();
+        if (id.equals(ResourceLocation.fromNamespaceAndPath("alexsmobs", "bison_fur_block"))) {
+            return Blocks.BROWN_WOOL;
+        }
+        if (id.equals(ResourceLocation.fromNamespaceAndPath("furnish", "green_carpet_on_trapdoor"))) {
+            return Blocks.GREEN_CARPET;
+        }
+        if (id.equals(ResourceLocation.fromNamespaceAndPath("waystones", "waystone"))) {
+            return Blocks.LODESTONE;
+        }
+        if (!id.getNamespace().equals("redeco")) return null;
+        String path = id.getPath();
+        if (path.endsWith("_stairs")) return Blocks.DARK_OAK_STAIRS;
+        if (path.endsWith("_slab")) return Blocks.DARK_OAK_SLAB;
+        if (path.endsWith("_door")) return Blocks.DARK_OAK_DOOR;
+        if (path.endsWith("_trapdoor")) return Blocks.DARK_OAK_TRAPDOOR;
+        if (path.endsWith("_fence")) return Blocks.DARK_OAK_FENCE;
+        if (path.endsWith("_fence_gate")) return Blocks.DARK_OAK_FENCE_GATE;
+        if (path.contains("dark_oak")) return Blocks.DARK_OAK_PLANKS;
+        throw new IllegalStateException("Curated ReDeco substitution is not defined for " + id);
+    }
+
+    private static boolean unsafeExternalController(ResourceLocation id) {
+        String path = id.getPath();
+        if (!id.getNamespace().equals("create")) return false;
+        return path.equals("redstone_link") || path.equals("display_link") || path.equals("stock_link")
+                || path.equals("redstone_requester") || path.equals("factory_gauge")
+                || path.contains("train_station") || path.equals("track_station")
+                || path.equals("linked_controller");
+    }
+
+    private static CompoundTag sanitizeBlockEntityData(ResourceLocation moduleId, BlockState state,
+                                                        CompoundTag source, BlockPos world) {
+        CompoundTag result = source.copy();
+        result.putInt("x", world.getX());
+        result.putInt("y", world.getY());
+        result.putInt("z", world.getZ());
+        // Imported source-world coordinates cannot survive module rotation.
+        // Local machine adjacency is rediscovered from placed neighbours. A
+        // stopped bearing/contraption may remain as architecture, but imported
+        // runtime motion and nested links are never resumed in a new world.
+        stripUnsafeRuntimeReferences(result, true);
+        if (!result.contains("id", Tag.TAG_STRING)) {
+            ResourceLocation stateId = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock());
+            throw new IllegalStateException("Block entity in " + moduleId + " at " + world
+                    + " has no id for " + stateId);
+        }
+        return result;
+    }
+
+    private static void stripUnsafeRuntimeReferences(Tag tag, boolean root) {
+        if (tag instanceof CompoundTag compound) {
+            for (String key : List.copyOf(compound.getAllKeys())) {
+                String normalized = key.toLowerCase(java.util.Locale.ROOT);
+                boolean worldReference = normalized.equals("controller") || normalized.equals("target")
+                        || normalized.equals("lastknownpos") || normalized.equals("linkedpos")
+                        || normalized.equals("globalpos");
+                boolean orphanedRuntime = normalized.equals("contraption")
+                        || normalized.equals("movedcontraption") || normalized.equals("running")
+                        || normalized.equals("clientanglediff");
+                if ((!root || !normalized.equals("id")) && (worldReference || orphanedRuntime)) {
+                    compound.remove(key);
+                    continue;
+                }
+                Tag nested = compound.get(key);
+                if (nested != null) stripUnsafeRuntimeReferences(nested, false);
+            }
+        } else if (tag instanceof ListTag list) {
+            for (Tag nested : list) stripUnsafeRuntimeReferences(nested, false);
+        }
     }
 
     private static <T extends Comparable<T>> BlockState setValue(BlockState state, Property<T> property, String value) {
@@ -420,5 +376,8 @@ public final class AuthoredModuleCompiler {
     private record RawTemplate(int sizeX, int sizeY, int sizeZ, List<BlockState> palette,
                                List<RawBlock> blocks) { }
 
-    private record RawBlock(int x, int y, int z, int state) { }
+    private record RawBlock(int x, int y, int z, int state, CompoundTag data) {
+        private RawBlock { data = data == null ? null : data.copy(); }
+        @Override public CompoundTag data() { return data == null ? null : data.copy(); }
+    }
 }

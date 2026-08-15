@@ -47,9 +47,10 @@ final class FoundryRegionIndex {
         Map<BlockPos, ExpectedCell> expected = new LinkedHashMap<>();
         Map<Long, CompiledChunkSlice.RailColumn> rails = new LinkedHashMap<>();
         catalog.chunks().values().forEach(slice -> {
-            slice.blocks().forEach((position, state) -> {
+            slice.blocks().forEach((position, block) -> {
                 if (inside(region, railEnvelope, position.getX(), position.getZ())) {
-                    expected.put(position, new ExpectedCell(state, owner(region, modules, surface, position), "block"));
+                    expected.put(position, new ExpectedCell(block.state(),
+                            owner(region, modules, surface, position), "block"));
                 }
             });
             slice.decorations().forEach(value -> {

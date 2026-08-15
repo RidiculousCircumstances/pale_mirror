@@ -36,7 +36,11 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
         // WORLD_SURFACE_WG top was stale without touching intentional timber,
         // hedges or planters from the PM modules that follow.
         for (CompiledChunkSlice.VegetationColumn column : slice.vegetation()) clearNaturalVegetation(level, column);
-        slice.blocks().forEach((position, state) -> setIfDifferent(level, position, state));
+        slice.blocks().forEach((position, block) -> setIfDifferent(level, position, block.state()));
+        // Payloads are applied only after every state in this chunk exists, so
+        // local Create/copycat/container state observes its authored neighbours.
+        slice.blocks().forEach((position, block) -> block.blockEntityData()
+                .ifPresent(data -> loadBlockEntity(level, position, data)));
         slice.decorations().forEach(value -> setIfDifferent(level, value.position(), value.state()));
         for (CompiledChunkSlice.RailColumn rail : slice.rails()) placeRail(level, rail);
         var current = level.getChunk(chunk.x, chunk.z);
@@ -144,5 +148,16 @@ public final class FrontierWorldgenFeature extends Feature<NoneFeatureConfigurat
     private static void setIfDifferent(LevelAccessor level, BlockPos position,
                                        net.minecraft.world.level.block.state.BlockState state) {
         if (!level.getBlockState(position).equals(state)) level.setBlock(position, state, 2);
+    }
+
+    private static void loadBlockEntity(WorldGenLevel level, BlockPos position,
+                                        net.minecraft.nbt.CompoundTag data) {
+        var blockEntity = level.getBlockEntity(position);
+        if (blockEntity == null) {
+            throw new IllegalStateException("Authored block entity did not materialize at " + position
+                    + " for " + level.getBlockState(position));
+        }
+        blockEntity.loadWithComponents(data, level.registryAccess());
+        blockEntity.setChanged();
     }
 }

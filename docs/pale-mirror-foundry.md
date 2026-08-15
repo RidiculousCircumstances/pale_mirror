@@ -26,7 +26,9 @@ unload/reload or restart and exists to make recovery evidence explicit.
 ## Rules in the P0 gate
 
 - every declared module compiles non-air cells inside its true footprint;
-- sanitized NBT contains no block entities and flags unsupported falling cells;
+- imported NBT contains no forbidden controllers, creative power, explosives
+  or untyped payloads, while counting curated one-shot block entities and
+  flagging unsupported falling cells;
 - public/freight ports connect to authored circulation; service and rail ports
   remain subject to their specialized infrastructure rules;
 - canonical rail nodes are adjacent, compile exactly once, use real rail
@@ -82,8 +84,10 @@ deleted at any time.
 
 ## P1 laboratory
 
-The compiled audit passes every template through the production sanitizer and
-reports per-asset footprint, block-entity and falling-support defects. Raw NBT
+The compiled audit passes every template through the production curator and
+reports per-asset footprint, typed block-entity and falling-support defects.
+Curated block entities are a metric rather than a defect; missing types,
+forbidden external controllers and invalid source states fail closed. Raw NBT
 is parsed once into a bounded 128-template immutable cache; climate and
 rotation transforms still compile independently. The existing 468-state asset
 showcase and 216 public-realm materialization matrix remain the batch gold

@@ -25,7 +25,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 29;
+    public static final int CATALOG_VERSION = 30;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -41,9 +41,9 @@ public final class FrontierGenesisCompiler {
     private static void compileRegion(AuthoredRegionSeed seed, Map<Long, MutableGenesisSlice> slices) {
         FrontierPalette palette = FrontierPalette.forClimate(
                 FrontierClimate.valueOf(seed.climate().toUpperCase(Locale.ROOT)));
-        // Module shells are written first. Public entrances and their clear
-        // throats are the final settlement writer, so a source NBT wall can
-        // never overwrite the declared road/door contract.
+        // Curated modules own their complete true footprints. Settlement
+        // circulation is compiled afterwards but explicitly skips those
+        // columns and terminates at the module's real semantic threshold.
         for (VisualModulePlacement module : seed.modules()) compileModule(module, slices);
         Map<Long, Integer> settlementDatums = seed.settlementSite().surfacePlan().columns().stream()
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(
@@ -102,14 +102,14 @@ public final class FrontierGenesisCompiler {
         MineFoundationPlan power = mine.foundations().stream().filter(value -> value.id().equals("power"))
                 .findFirst().orElse(null);
         if (power == null) return;
-        BlockState motor = optionalCreate("creative_motor", mine.inwardQuarterTurns());
+        BlockState casing = optionalCreate("andesite_casing", mine.inwardQuarterTurns());
         BlockState shaft = optionalCreate("shaft", mine.inwardQuarterTurns());
         BlockState fan = optionalCreate("encased_fan", mine.inwardQuarterTurns());
-        if (motor == null || shaft == null || fan == null) return;
+        if (casing == null || shaft == null || fan == null) return;
         BlockPos center = new BlockPos((power.footprint().min().x() + power.footprint().max().x()) / 2,
                 power.targetY() + 2, (power.footprint().min().z() + power.footprint().max().z()) / 2);
         Direction facing = direction(mine.inwardQuarterTurns());
-        put(slices, center, motor); put(slices, center.relative(facing), shaft);
+        put(slices, center, casing); put(slices, center.relative(facing), shaft);
         put(slices, center.relative(facing, 2), fan);
         put(slices, center.relative(facing.getOpposite()), Blocks.BRICKS.defaultBlockState());
     }
@@ -134,7 +134,8 @@ public final class FrontierGenesisCompiler {
 
     private static void compileModule(VisualModulePlacement module, Map<Long, MutableGenesisSlice> slices) {
         AuthoredModuleCompiler.compile(module).blocks().forEach(block -> put(slices,
-                new BlockPos(block.position().x(), block.position().y(), block.position().z()), block.state()));
+                new BlockPos(block.position().x(), block.position().y(), block.position().z()),
+                new CompiledChunkSlice.CompiledBlock(block.state(), block.blockEntityData())));
     }
 
     private static void compileMine(AuthoredMineSitePlan mine, FrontierPalette palette,
@@ -364,7 +365,12 @@ public final class FrontierGenesisCompiler {
     private static BlockPos block(VisualPoint point) { return new BlockPos(point.x(), point.y(), point.z()); }
 
     private static void put(Map<Long, MutableGenesisSlice> slices, BlockPos position, BlockState state) {
-        slice(slices, position.getX(), position.getZ()).blocks.put(position.immutable(), state);
+        put(slices, position, new CompiledChunkSlice.CompiledBlock(state));
+    }
+
+    private static void put(Map<Long, MutableGenesisSlice> slices, BlockPos position,
+                            CompiledChunkSlice.CompiledBlock block) {
+        slice(slices, position.getX(), position.getZ()).blocks.put(position.immutable(), block);
     }
 
     private static MutableGenesisSlice slice(Map<Long, MutableGenesisSlice> slices, int x, int z) {
