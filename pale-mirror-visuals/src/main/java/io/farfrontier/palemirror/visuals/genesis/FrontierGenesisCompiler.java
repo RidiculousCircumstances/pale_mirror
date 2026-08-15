@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
 import io.farfrontier.palemirror.api.VisualPoint;
-import io.farfrontier.palemirror.api.SiteSurfaceColumn;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -24,7 +23,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 33;
+    public static final int CATALOG_VERSION = 35;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -44,9 +43,10 @@ public final class FrontierGenesisCompiler {
         // circulation is compiled afterwards but explicitly skips those
         // columns and terminates at the module's real semantic threshold.
         for (VisualModulePlacement module : seed.modules()) compileModule(module, slices);
-        Map<Long, Integer> settlementDatums = seed.settlementSite().surfacePlan().columns().stream()
-                .collect(java.util.stream.Collectors.toUnmodifiableMap(
-                        value -> ChunkPos.asLong(value.x(), value.z()), SiteSurfaceColumn::groundY));
+        Map<Long, Integer> settlementDatums = new java.util.HashMap<>(
+                seed.settlementSite().surfacePlan().columns().size() * 4 / 3 + 1);
+        seed.settlementSite().surfacePlan().columns().forEach(value ->
+                settlementDatums.put(ChunkPos.asLong(value.x(), value.z()), value.groundY()));
         SettlementGenesisCompiler.compile(seed, palette, new SettlementGenesisCompiler.Sink() {
             @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
                 MutableGenesisSlice slice = slice(slices, x, z);

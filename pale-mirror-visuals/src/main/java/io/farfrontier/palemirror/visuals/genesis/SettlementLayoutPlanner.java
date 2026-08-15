@@ -184,12 +184,8 @@ final class SettlementLayoutPlanner {
         // The freight road below it uses the solid surface explicitly.
         VisualPoint gate = withY(roughGate, snapshot.approximateHeight(roughGate.x(), roughGate.z()));
         AuthoredBuildingPlan depot = building(buildings, "receiving_depot");
-        List<LinearFeaturePlan> circulation = circulation(archetype, anchor, freightDirection, gate, depot, buildings,
-                transform).stream().map(value -> value.id().startsWith("access_")
-                        ? followAccessTerrain(value, snapshot)
-                        : value.id().equals("freight_spine")
-                        ? followFreightTerrain(value, snapshot)
-                        : followTerrain(value, snapshot)).toList();
+        List<LinearFeaturePlan> circulation = SettlementStreetNetworkPlanner.resolve(
+                circulation(archetype, anchor, freightDirection, gate, buildings, transform), snapshot);
         requireDryCirculation(circulation, snapshot, anchor);
         List<AuthoredOpenSpacePlan> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
                 .map(value -> resolveOpenSpace(value, snapshot)).toList();
@@ -288,14 +284,11 @@ final class SettlementLayoutPlanner {
     }
 
     private static List<LinearFeaturePlan> circulation(SettlementLayoutArchetype archetype, VisualPoint anchor,
-                                                        int direction, VisualPoint gate, AuthoredBuildingPlan depot,
-                                                        List<AuthoredBuildingPlan> buildings,
+                                                        int direction, VisualPoint gate, List<AuthoredBuildingPlan> buildings,
                                                         LayoutTransform transform) {
         List<LinearFeaturePlan> result = new ArrayList<>();
-        VisualPoint depotEntrance = publicEntrance(depot);
-        VisualPoint depotAccess = below(depotEntrance);
         result.add(new LinearFeaturePlan("freight_spine", LinearFeatureKind.FREIGHT_ROAD,
-                List.of(below(gate), depotAccess, local(anchor, transform.right(0), transform.inward(28), 0, direction),
+                List.of(below(gate), local(anchor, transform.right(0), transform.inward(28), 0, direction),
                         local(anchor, transform.right(0), transform.inward(-28), 0, direction)), 7, true));
         int cross = transform.inward(archetype == SettlementLayoutArchetype.FREIGHT_CROSSROADS ? 15 : 8);
         result.add(new LinearFeaturePlan("civic_street", LinearFeatureKind.STREET,
@@ -318,7 +311,9 @@ final class SettlementLayoutPlanner {
         result.add(new LinearFeaturePlan("market_square", LinearFeatureKind.PLAZA,
                 List.of(local(anchor, transform.right(5), transform.inward(10), 0, direction),
                         local(anchor, transform.right(13), transform.inward(18), 0, direction)), 9, true));
-        List<LinearFeaturePlan> publicGraph = List.copyOf(result);
+        List<LinearFeaturePlan> publicGraph = SettlementPublicStreetConnector.connect(result, buildings);
+        result.clear();
+        result.addAll(publicGraph);
         int index = 0;
         for (AuthoredBuildingPlan building : buildings) {
             result.add(new LinearFeaturePlan("access_" + index++, LinearFeatureKind.FOOTPATH,

@@ -372,37 +372,17 @@ public final class FoundryAuditEngine {
                     unloadedChunks.size() + " authored chunks were not loaded and were intentionally not inspected.",
                     "Visit the area, let neighbour updates settle, then rerun SETTLED or RELOADED audit.");
         }
-        runtimeEntrances(index, level, phase, findings);
+        int blockedEntrances = FoundrySettlementEntranceAuditor.runtime(index, level, phase, findings);
         FoundryMinePortalAuditor.runtime(index, level, phase, findings);
         runtimeRails(index, level, phase, findings);
         return new RuntimeResult(List.of(
+                new FoundryMetric("navigation.entrances_blocked", blockedEntrances, "ports"),
                 new FoundryMetric("world.cells_checked", checked, "cells"),
                 new FoundryMetric("world.cell_mismatches", mismatches, "cells"),
                 new FoundryMetric("world.unsupported", unsupported, "cells"),
                 new FoundryMetric("world.fluid_rails", fluidRails, "cells"),
                 new FoundryMetric("world.loaded_chunks", loadedChunks.size(), "chunks"),
                 new FoundryMetric("world.unloaded_chunks", unloadedChunks.size(), "chunks")));
-    }
-
-    private static void runtimeEntrances(FoundryRegionIndex index, ServerLevel level, FoundryAuditPhase phase,
-                                         List<FoundryFinding> findings) {
-        for (VisualModulePlacement module : index.modules()) for (var port : module.ports()) {
-            if (port.kind() != VisualPortKind.PUBLIC_ENTRANCE && port.kind() != VisualPortKind.FREIGHT) continue;
-            Direction outward = direction(port.outwardQuarterTurns());
-            BlockPos entrance = block(port.position());
-            if (!loaded(level, entrance) || !loaded(level, entrance.relative(outward, 2))) continue;
-            for (int distance = 1; distance <= 2; distance++) for (int up = 0; up <= 1; up++) {
-                BlockPos position = entrance.relative(outward, distance).above(up);
-                if (!level.getBlockState(position).getCollisionShape(level, position).isEmpty()) {
-                    addBounded(findings, "navigation.entrance.blocked", FoundrySeverity.ERROR, phase, "module",
-                            module.instanceId(), index.region().dimensionId(), point(position),
-                            "The two-block entrance throat is physically obstructed.",
-                            "Make the route/apron the final writer and clear a two-high throat.");
-                    distance = 3;
-                    break;
-                }
-            }
-        }
     }
 
     private static void runtimeRails(FoundryRegionIndex index, ServerLevel level, FoundryAuditPhase phase,
@@ -466,15 +446,6 @@ public final class FoundryAuditEngine {
         long dx = (long) first.x() - second.x();
         long dz = (long) first.z() - second.z();
         return dx * dx + dz * dz;
-    }
-
-    private static Direction direction(int quarterTurns) {
-        return switch (Math.floorMod(quarterTurns, 4)) {
-            case 0 -> Direction.EAST;
-            case 1 -> Direction.SOUTH;
-            case 2 -> Direction.WEST;
-            default -> Direction.NORTH;
-        };
     }
 
     private static VisualPoint point(BlockPos position) {

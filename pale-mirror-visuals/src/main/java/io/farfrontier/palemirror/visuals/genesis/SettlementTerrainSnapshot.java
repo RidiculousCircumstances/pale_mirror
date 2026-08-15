@@ -12,7 +12,15 @@ import java.util.function.IntBinaryOperator;
 /** Immutable coarse settlement relief plus a bounded exact pad validator. */
 final class SettlementTerrainSnapshot {
     static final int GRID_STEP = 16;
-    static final int MAX_UNIQUE_PROBES = 1_536;
+    /*
+     * One complete authored settlement now validates a connected public-realm
+     * graph, every facade threshold, and every physical palisade column. The
+     * old 1,536-column budget was sized for disconnected road segments and
+     * could reject an otherwise valid site at 1,406 exact columns after its
+     * 130-column coarse survey. Keep the work bounded, but budget the complete
+     * masterplan rather than its predecessor.
+     */
+    static final int MAX_UNIQUE_PROBES = 2_048;
     private final VisualPoint anchor;
     private final Map<Long, Integer> coarseHeights;
     private final IntBinaryOperator exactHeight;
@@ -150,7 +158,8 @@ final class SettlementTerrainSnapshot {
         if (exactColumns.contains(key)) return;
         if (coarseHeights.size() + exactColumns.size() >= MAX_UNIQUE_PROBES) {
             throw new DryMineSiteUnavailableException("Settlement terrain snapshot exceeded "
-                    + MAX_UNIQUE_PROBES + " bounded probes");
+                    + MAX_UNIQUE_PROBES + " bounded probes (coarse=" + coarseHeights.size()
+                    + ", exact=" + exactColumns.size() + ")");
         }
         exactColumns.add(key);
     }

@@ -36,7 +36,12 @@ unload/reload or restart and exists to make recovery evidence explicit.
 - compiled structural components expose plan-visible support evidence;
 - loaded physical cells match their authored block type;
 - attached blocks satisfy Minecraft survival predicates;
-- entrance throats remain two blocks high;
+- entrance throats retain two blocks of headroom over an empty cell or a
+  non-double slab/stair/carpet sill; full blocks, fences and other solid
+  obstructions remain runtime errors;
+- every public street component belongs to one compiled graph, shared junctions
+  have one datum, facade throats terminate on that graph, and walkable grades
+  change by no more than one block per horizontal cell;
 - loaded railway nodes remain rails and stay out of fluid;
 - each loaded `SiteSurfaceColumn` retains supported walkable ground at its
   authored first-air datum.

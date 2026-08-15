@@ -85,7 +85,7 @@ final class MineAccessGenesisCompiler {
             }
             List<VisualPoint> graded = new ArrayList<>(horizontal.size());
             int segments = Math.max(1, horizontal.size() - 1);
-            int targetY = minePortal ? mine.portal().y() - 1 : foundation.targetY();
+            int targetY = approach.targetY();
             for (int index = 0; index < horizontal.size(); index++) {
                 Cell cell = horizontal.get(index);
                 int y = hubY + (targetY - hubY) * index / segments;
@@ -103,7 +103,7 @@ final class MineAccessGenesisCompiler {
         int inwardZ = directionZ(mine.inwardQuarterTurns());
         return new Approach(new Cell(mine.portal().x() - inwardX * ACCESS_CLEARANCE,
                 mine.portal().z() - inwardZ * ACCESS_CLEARANCE),
-                inwardX, inwardZ, ACCESS_CLEARANCE, true);
+                inwardX, inwardZ, ACCESS_CLEARANCE, mine.portal().y() - 1, true);
     }
 
     private static void compileRoute(List<VisualPoint> points, FrontierPalette palette, Sink sink) {
@@ -162,16 +162,16 @@ final class MineAccessGenesisCompiler {
                     result.add(new Approach(new Cell(
                             port.position().x() + outwardX * clearance,
                             port.position().z() + outwardZ * clearance),
-                            -outwardX, -outwardZ, clearance, true));
+                            -outwardX, -outwardZ, clearance, port.position().y() - 1, true));
                 });
         addDistinct(result, new Approach(new Cell(bounds.min().x() - ACCESS_CLEARANCE, centerZ),
-                1, 0, ACCESS_CLEARANCE, false));
+                1, 0, ACCESS_CLEARANCE, foundation.targetY(), false));
         addDistinct(result, new Approach(new Cell(bounds.max().x() + ACCESS_CLEARANCE, centerZ),
-                -1, 0, ACCESS_CLEARANCE, false));
+                -1, 0, ACCESS_CLEARANCE, foundation.targetY(), false));
         addDistinct(result, new Approach(new Cell(centerX, bounds.min().z() - ACCESS_CLEARANCE),
-                0, 1, ACCESS_CLEARANCE, false));
+                0, 1, ACCESS_CLEARANCE, foundation.targetY(), false));
         addDistinct(result, new Approach(new Cell(centerX, bounds.max().z() + ACCESS_CLEARANCE),
-                0, -1, ACCESS_CLEARANCE, false));
+                0, -1, ACCESS_CLEARANCE, foundation.targetY(), false));
         return List.copyOf(result);
     }
 
@@ -253,7 +253,8 @@ final class MineAccessGenesisCompiler {
 
     record AccessRoute(String foundationId, List<VisualPoint> points, int entryStepX, int entryStepZ,
                        boolean minePortal) { }
-    private record Approach(Cell outer, int stepX, int stepZ, int clearance, boolean preferred) { }
+    private record Approach(Cell outer, int stepX, int stepZ, int clearance, int targetY,
+                            boolean preferred) { }
     private record Cell(int x, int z) { }
 
     private record SearchTree(Cell start, Map<Cell, Cell> previous, Map<Cell, Integer> distance) {

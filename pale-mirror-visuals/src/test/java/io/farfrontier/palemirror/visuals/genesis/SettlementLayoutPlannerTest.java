@@ -156,6 +156,28 @@ class SettlementLayoutPlannerTest {
                 "the perimeter contract must retain every physical wall column for structural compilation");
     }
 
+    @Test void freightRoadSamplesTheValleyInsteadOfBridgingBetweenSparseHighNodes() {
+        var feature = new io.farfrontier.palemirror.api.LinearFeaturePlan("freight",
+                LinearFeatureKind.FREIGHT_ROAD,
+                java.util.List.of(new VisualPoint(0, 72, 0), new VisualPoint(32, 72, 0)), 7, true);
+        var snapshot = new SettlementTerrainSnapshot(new VisualPoint(16, 65, 0),
+                java.util.Map.of(SettlementTerrainSnapshot.key(0, 0), 73,
+                        SettlementTerrainSnapshot.key(16, 0), 65,
+                        SettlementTerrainSnapshot.key(32, 0), 73),
+                (x, z) -> 73 - Math.min(8, Math.min(Math.max(0, x), Math.max(0, 32 - x))),
+                (x, z) -> false);
+
+        var followed = SettlementLayoutGeometry.followFreightTerrain(feature, snapshot);
+
+        assertEquals(33, followed.nodes().size(), "a physical freight road needs one datum per column");
+        assertEquals(64, followed.nodes().get(16).y(),
+                "the public road must descend into the real valley instead of becoming an exposed causeway");
+        for (int index = 1; index < followed.nodes().size(); index++) {
+            assertTrue(Math.abs(followed.nodes().get(index).y() - followed.nodes().get(index - 1).y()) <= 1,
+                    "walkable road grade changed by more than one block at " + index);
+        }
+    }
+
     @Test void everyFacadeGetsAGroundedObstacleFreeRouteToThePublicGraph() {
         var plan = plan(7);
         for (int index = 0; index < plan.buildings().size(); index++) {
@@ -172,6 +194,63 @@ class SettlementLayoutPlannerTest {
                         owner.buildingId() + " access crossed " + other.buildingId() + " at " + point));
             }
         }
+    }
+
+    @Test void settlementCirculationIsOneConnectedGradeConsistentStreetGraph() {
+        var plan = plan(7);
+        var datums = new java.util.HashMap<String, java.util.Set<Integer>>();
+        var graph = new java.util.HashSet<String>();
+        for (var feature : plan.circulation()) {
+            for (int index = 0; index < feature.nodes().size(); index++) {
+                VisualPoint point = feature.nodes().get(index);
+                String key = point.x() + ":" + point.z();
+                graph.add(key);
+                datums.computeIfAbsent(key, ignored -> new java.util.HashSet<>()).add(point.y());
+                var surface = plan.surfacePlan().require(point.x(), point.z());
+                if (surface.ownerId().equals("route:" + feature.id())) {
+                    assertEquals(point.y() + 1, surface.groundY(),
+                            feature.id() + " diverged from the shared physical street surface at " + key);
+                }
+                if (index > 0) {
+                    VisualPoint previous = feature.nodes().get(index - 1);
+                    assertTrue(Math.max(Math.abs(point.x() - previous.x()),
+                                    Math.abs(point.z() - previous.z())) <= 1,
+                            feature.id() + " skipped a physical street column");
+                    assertTrue(Math.abs(point.y() - previous.y()) <= 1,
+                            feature.id() + " contains a non-walkable grade break");
+                }
+            }
+        }
+        datums.forEach((coordinate, values) -> assertEquals(1, values.size(),
+                coordinate + " has conflicting street datums at one junction"));
+        plan.circulation().stream().filter(feature -> feature.id().startsWith("access_")).forEach(access -> {
+            VisualPoint threshold = access.nodes().getFirst();
+            var surface = plan.surfacePlan().require(threshold.x(), threshold.z());
+            assertEquals(threshold.y() + 1, surface.groundY(),
+                    access.id() + " lost its facade threshold in the physical surface plan");
+        });
+
+        var reached = new java.util.HashSet<String>();
+        var queue = new java.util.ArrayDeque<String>();
+        queue.add(graph.iterator().next());
+        while (!queue.isEmpty()) {
+            String current = queue.removeFirst();
+            if (!reached.add(current)) continue;
+            String[] parts = current.split(":");
+            int x = Integer.parseInt(parts[0]);
+            int z = Integer.parseInt(parts[1]);
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                String neighbour = (x + dx) + ":" + (z + dz);
+                if (graph.contains(neighbour) && !reached.contains(neighbour)) queue.add(neighbour);
+            }
+        }
+        var disconnectedFeatures = plan.circulation().stream().filter(feature -> feature.nodes().stream()
+                .anyMatch(point -> !reached.contains(point.x() + ":" + point.z())))
+                .map(io.farfrontier.palemirror.api.LinearFeaturePlan::id).toList();
+        assertEquals(graph.size(), reached.size(),
+                "every facade approach must belong to one traversable street network; disconnected="
+                        + disconnectedFeatures);
     }
 
     @Test void everyPublicPortUsesTheCuratedNbtThresholdAfterRotation() {
@@ -306,6 +385,27 @@ class SettlementLayoutPlannerTest {
         assertEquals(9, snapshot.exactProbes());
         assertEquals(9, heights.get());
         assertEquals(9, waters.get());
+    }
+
+    @Test void completeConnectedMasterplanFitsItsBoundedExactSurveyBudget() {
+        java.util.Map<Long, Integer> coarse = new java.util.LinkedHashMap<>();
+        for (int x = anchor.x() - SettlementLayoutPlanner.MASTER_HALF_WIDTH;
+             x <= anchor.x() + SettlementLayoutPlanner.MASTER_HALF_WIDTH;
+             x += SettlementTerrainSnapshot.GRID_STEP) {
+            for (int z = anchor.z() - SettlementLayoutPlanner.MASTER_HALF_LENGTH;
+                 z <= anchor.z() + SettlementLayoutPlanner.MASTER_HALF_LENGTH;
+                 z += SettlementTerrainSnapshot.GRID_STEP) {
+                coarse.put(SettlementTerrainSnapshot.key(x, z), anchor.y());
+            }
+        }
+        SettlementTerrainSnapshot snapshot = new SettlementTerrainSnapshot(anchor, coarse,
+                (x, z) -> anchor.y(), (x, z) -> false);
+
+        planner.plan("probe_budget", anchor, FrontierClimate.TEMPERATE, 0,
+                new TerrainCandidate(anchor, 2, 0, 0, 0), snapshot);
+
+        assertTrue(coarse.size() + snapshot.exactProbes() < SettlementTerrainSnapshot.MAX_UNIQUE_PROBES,
+                "the complete masterplan must retain headroom inside its hard survey budget");
     }
 
     @Test void equidistantCoarseHeightsUseAStableCoordinateTieBreak() {

@@ -8,12 +8,14 @@ import io.farfrontier.palemirror.api.LinearFeaturePlan;
 import io.farfrontier.palemirror.api.AuthoredOpenSpacePlan;
 import io.farfrontier.palemirror.api.OpenSpaceKind;
 import io.farfrontier.palemirror.api.SettlementFoundationPlan;
+import io.farfrontier.palemirror.api.SiteSurfaceColumn;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.api.VisualPortKind;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
@@ -28,11 +30,15 @@ final class SettlementGenesisCompiler {
     private SettlementGenesisCompiler() { }
     static void compile(AuthoredRegionSeed seed, FrontierPalette palette, Sink sink) {
         AuthoredSettlementSitePlan settlement = seed.settlementSite();
+        Map<Long, SiteSurfaceColumn> surfaceIndex = new java.util.HashMap<>(
+                settlement.surfacePlan().columns().size() * 4 / 3 + 1);
+        settlement.surfacePlan().columns().forEach(value ->
+                surfaceIndex.put(coordinateKey(value.x(), value.z()), value));
         SettlementFixtureOccupancy fixtures = SettlementFixtureOccupancy.forSettlement(seed);
         cleanupVegetationEnvelope(seed, settlement, sink);
         settlement.foundations().forEach(value -> foundation(value, palette, sink));
         settlement.openSpaces().forEach(value -> openSpace(value, settlement, palette, fixtures, sink));
-        settlement.circulation().forEach(value -> linear(value, palette, fixtures, sink));
+        settlement.circulation().forEach(value -> linear(value, surfaceIndex, palette, fixtures, sink));
         SettlementPerimeterCompiler.compile(settlement.perimeter(), palette, fixtures, sink);
         details(FrontierClimate.valueOf(seed.climate().toUpperCase(Locale.ROOT)),
                 settlement, palette, fixtures, sink);
@@ -230,17 +236,21 @@ final class SettlementGenesisCompiler {
         return Math.max(0, Math.max(dx, dz));
     }
 
-    private static void linear(LinearFeaturePlan feature, FrontierPalette palette,
+    private static void linear(LinearFeaturePlan feature, Map<Long, SiteSurfaceColumn> surfaceIndex,
+                               FrontierPalette palette,
                                SettlementFixtureOccupancy fixtures, Sink sink) {
-        for (int segment = 1; segment < feature.nodes().size(); segment++) {
-            List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
-            if (feature.kind() == LinearFeatureKind.RETAINING_WALL) { retainingWall(points, palette, sink); continue; }
-            int radius = feature.width() / 2;
-            for (int pointIndex = 0; pointIndex < points.size(); pointIndex++) {
-                VisualPoint point = points.get(pointIndex);
-                boolean elevationTransition = SettlementLayoutGeometry.elevationTransition(points, pointIndex);
-                boolean lowerTransition = SettlementLayoutGeometry.lowerTransition(points, pointIndex);
-                for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+        List<VisualPoint> points = raster(feature);
+        if (feature.kind() == LinearFeatureKind.RETAINING_WALL) {
+            retainingWall(points, palette, sink);
+            return;
+        }
+        int radius = feature.width() / 2;
+        for (int pointIndex = 0; pointIndex < points.size(); pointIndex++) {
+            VisualPoint point = points.get(pointIndex);
+            boolean elevationTransition = SettlementLayoutGeometry.elevationTransition(points, pointIndex);
+            boolean lowerTransition = SettlementLayoutGeometry.lowerTransition(points, pointIndex);
+            int stairSegment = Math.max(1, Math.min(feature.nodes().size() - 1, pointIndex));
+            for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
                 int x = point.x() + dx;
                 int z = point.z() + dz;
                 if (fixtures.insideAuthoredModule(x, z)) continue;
@@ -258,48 +268,47 @@ final class SettlementGenesisCompiler {
                             ? Blocks.POLISHED_ANDESITE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
                     case BRIDGE -> palette.planks();
                     case STAIRS -> elevationTransition
-                            ? SettlementPublicRealm.stairState(feature, segment, palette) : palette.paving();
+                            ? SettlementPublicRealm.stairState(feature, stairSegment, palette) : palette.paving();
                     case DITCH -> Blocks.COARSE_DIRT.defaultBlockState();
                     default -> Blocks.COBBLESTONE.defaultBlockState();
                 };
-                int target = feature.kind() == LinearFeatureKind.DITCH ? point.y() - 1 : point.y();
-                if (feature.kind() == LinearFeatureKind.STAIRS || feature.kind() == LinearFeatureKind.DITCH
-                        || feature.kind() == LinearFeatureKind.BRIDGE
-                        || feature.kind() == LinearFeatureKind.FREIGHT_ROAD
-                        || feature.kind() == LinearFeatureKind.STREET
-                        || feature.kind() == LinearFeatureKind.FOOTPATH
-                        || feature.kind() == LinearFeatureKind.SIDEWALK
-                        || feature.kind() == LinearFeatureKind.PLAZA) {
+                int targetSurfaceY = surface(surfaceIndex, x, z).groundY() - 1;
+                int target = feature.kind() == LinearFeatureKind.DITCH ? targetSurfaceY - 1 : targetSurfaceY;
+                if (physicalSurface(feature.kind())) {
                     sink.terrain(x, z, target, surface, palette.foundation());
-                    if ((feature.kind() == LinearFeatureKind.FREIGHT_ROAD
-                            || feature.kind() == LinearFeatureKind.STREET) && lowerTransition) {
-                        sink.block(new BlockPos(x, target + 1, z),
-                                palette.pavingSlab());
-                    }
-                    if ((feature.kind() == LinearFeatureKind.SIDEWALK
-                            || feature.kind() == LinearFeatureKind.FOOTPATH
-                            || feature.kind() == LinearFeatureKind.PLAZA)
-                            && lowerTransition) {
-                        sink.block(new BlockPos(x, target + 1, z),
-                                palette.pavingSlab());
+                    if (lowerTransition && usesTransitionSlab(feature.kind())) {
+                        sink.block(new BlockPos(x, target + 1, z), palette.pavingSlab());
                     }
                 } else {
                     sink.surfaceBlock(x, z, -1, surface);
                 }
                 sink.cleanup(x, z, target);
             }
+        }
+        if (feature.kind() == LinearFeatureKind.FREIGHT_ROAD
+                || feature.kind() == LinearFeatureKind.STREET) {
+            if (feature.kind() == LinearFeatureKind.STREET) {
+                streetShoulders(points, feature.width(), surfaceIndex, palette, fixtures, sink);
             }
-            if (feature.kind() == LinearFeatureKind.FREIGHT_ROAD
-                    || feature.kind() == LinearFeatureKind.STREET) {
-                if (feature.kind() == LinearFeatureKind.STREET) {
-                    streetShoulders(points, feature.width(), palette, fixtures, sink);
-                }
-                streetFurniture(points, feature.width(), palette, fixtures, sink);
-            }
+            streetFurniture(points, feature.width(), palette, fixtures, sink);
         }
     }
 
+    private static boolean physicalSurface(LinearFeatureKind kind) {
+        return kind == LinearFeatureKind.STAIRS || kind == LinearFeatureKind.DITCH
+                || kind == LinearFeatureKind.BRIDGE || kind == LinearFeatureKind.FREIGHT_ROAD
+                || kind == LinearFeatureKind.STREET || kind == LinearFeatureKind.FOOTPATH
+                || kind == LinearFeatureKind.SIDEWALK || kind == LinearFeatureKind.PLAZA;
+    }
+
+    private static boolean usesTransitionSlab(LinearFeatureKind kind) {
+        return kind == LinearFeatureKind.FREIGHT_ROAD || kind == LinearFeatureKind.STREET
+                || kind == LinearFeatureKind.SIDEWALK || kind == LinearFeatureKind.FOOTPATH
+                || kind == LinearFeatureKind.PLAZA;
+    }
+
     private static void streetShoulders(List<VisualPoint> points, int width,
+                                        Map<Long, SiteSurfaceColumn> surfaceIndex,
                                         FrontierPalette palette, SettlementFixtureOccupancy fixtures, Sink sink) {
         int setback = width / 2 + 1;
         for (int index = 0; index < points.size(); index++) {
@@ -317,8 +326,9 @@ final class SettlementGenesisCompiler {
                         : Math.floorMod(index, 5) == 0
                         ? Blocks.MOSSY_COBBLESTONE.defaultBlockState()
                         : Blocks.COBBLESTONE.defaultBlockState();
-                sink.terrain(x, z, points.get(index).y(), shoulder, palette.foundation());
-                sink.cleanup(x, z, points.get(index).y());
+                int target = surface(surfaceIndex, x, z).groundY() - 1;
+                sink.terrain(x, z, target, shoulder, palette.foundation());
+                sink.cleanup(x, z, target);
             }
         }
     }
@@ -351,6 +361,21 @@ final class SettlementGenesisCompiler {
         List<VisualPoint> result = new ArrayList<>(steps + 1);
         for (int step = 0; step <= steps; step++) result.add(new VisualPoint(
                 from.x() + dx * step / steps, from.y() + dy * step / steps, from.z() + dz * step / steps));
+        return result;
+    }
+
+    private static List<VisualPoint> raster(LinearFeaturePlan feature) {
+        List<VisualPoint> result = new ArrayList<>();
+        for (int segment = 1; segment < feature.nodes().size(); segment++) {
+            List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
+            result.addAll(segment == 1 ? points : points.subList(1, points.size()));
+        }
+        return result;
+    }
+
+    private static SiteSurfaceColumn surface(Map<Long, SiteSurfaceColumn> surface, int x, int z) {
+        SiteSurfaceColumn result = surface.get(coordinateKey(x, z));
+        if (result == null) throw new IllegalArgumentException("unclaimed site surface " + x + "," + z);
         return result;
     }
 

@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "modules": [
     {"id":"barracks","size":[9,8,18],"landmark":true,"stateProfile":"frontier_defence","entrance":{"x":2,"y":1,"z":9,"outward":3},"parcelClearance":1,"foundationApron":2,"tags":["settlement","defence"]},
     {"id":"civic_hall","size":[29,37,22],"landmark":true,"stateProfile":"frontier_community","entrance":{"x":15,"y":2,"z":16,"outward":1},"parcelClearance":1,"foundationApron":2,"tags":["settlement","civic"]},
@@ -20,7 +20,7 @@
     {"id":"forge","size":[18,13,19],"landmark":true,"stateProfile":"frontier_industry","entrance":{"x":10,"y":0,"z":13,"outward":0},"parcelClearance":2,"foundationApron":2,"tags":["settlement","industry"]},
     {"id":"engineer_shop","size":[14,15,12],"landmark":false,"stateProfile":"frontier_industry","entrance":{"x":4,"y":0,"z":2,"outward":3},"parcelClearance":1,"foundationApron":2,"tags":["settlement","industry"]},
     {"id":"stable_yard","size":[16,9,19],"landmark":false,"stateProfile":"frontier_freight","entrance":{"x":8,"y":0,"z":18,"outward":1},"parcelClearance":1,"foundationApron":2,"tags":["settlement","logistics"]},
-    {"id":"assay_office","size":[13,11,17],"landmark":false,"stateProfile":"frontier_community","entrance":{"x":7,"y":0,"z":12,"outward":1},"parcelClearance":1,"foundationApron":2,"tags":["settlement","civic"]},
+    {"id":"assay_office","size":[13,11,17],"landmark":false,"stateProfile":"frontier_community","entrance":{"x":9,"y":4,"z":16,"outward":1},"parcelClearance":1,"foundationApron":2,"tags":["settlement","civic"]},
     {"id":"watch_house","size":[5,7,7],"landmark":false,"stateProfile":"frontier_defence","entrance":{"x":4,"y":1,"z":2,"outward":0},"parcelClearance":1,"foundationApron":2,"tags":["settlement","defence"]},
     {"id":"smithy","size":[5,7,7],"landmark":false,"stateProfile":"frontier_industry","entrance":{"x":4,"y":1,"z":2,"outward":0},"parcelClearance":1,"foundationApron":2,"tags":["settlement","industry"]},
     {"id":"stable","size":[19,8,16],"landmark":false,"stateProfile":"frontier_freight","entrance":{"x":6,"y":1,"z":2,"outward":3},"parcelClearance":1,"foundationApron":2,"tags":["settlement","logistics"]},
@@ -29,11 +29,11 @@
     {"id":"mine/portal_hoist","size":[14,15,12],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":4,"y":0,"z":2,"outward":3},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","portal"]},
     {"id":"mine/crew_outpost","size":[15,8,11],"landmark":false,"stateProfile":"frontier_mine","entrance":{"x":7,"y":0,"z":9,"outward":1},"parcelClearance":1,"foundationApron":2,"tags":["mine_surface","support"]},
     {"id":"mine/processing_hall","size":[17,12,23],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":5,"y":0,"z":7,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","industry"]},
-    {"id":"mine/power_house","size":[13,11,17],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":7,"y":0,"z":12,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","industry"]},
+    {"id":"mine/power_house","size":[13,11,17],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":9,"y":4,"z":16,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","industry"]},
     {"id":"mine/loading_yard","size":[16,9,19],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":8,"y":0,"z":18,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","logistics"]},
     {"id":"mine/dispatch_foundation","size":[13,7,13],"landmark":false,"stateProfile":"frontier_mine","entrance":{"x":6,"y":0,"z":12,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","staged"]},
     {"id":"mine/dispatch_shell","size":[17,12,23],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":5,"y":0,"z":7,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","staged"]},
-    {"id":"mine/dispatch_machinery","size":[13,11,17],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":7,"y":0,"z":12,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","staged"]},
+    {"id":"mine/dispatch_machinery","size":[13,11,17],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":9,"y":4,"z":16,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","staged"]},
     {"id":"mine/dispatch_commissioning","size":[16,9,19],"landmark":true,"stateProfile":"frontier_mine","entrance":{"x":8,"y":0,"z":18,"outward":1},"parcelClearance":2,"foundationApron":2,"tags":["mine_surface","staged"]}
   ]
 }

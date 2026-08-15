@@ -61,6 +61,9 @@ class CuratedModuleCatalogTest {
         assertEquals(0, house.entranceOutward(), "the authored doormat identifies the exterior east threshold");
 
         var assay = FrontierModuleCatalog.require("assay_office");
+        assertEquals(9, assay.entranceX());
+        assertEquals(4, assay.entranceY());
+        assertEquals(16, assay.entranceZ());
         assertEquals(1, assay.entranceOutward(), "the clear authored porch exits south");
 
         var workshop = FrontierModuleCatalog.require("engineer_shop");

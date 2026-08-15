@@ -123,9 +123,18 @@ Each building has a stable ID, category, namespaced functions, one independently
 bounded local foundation, semantic interior slots, a state profile and typed
 public/service/freight/rail ports. Foundations retain a flat structural footprint,
 cut/fill no more than four blocks and blend over a bounded sixteen-block apron.
-Ordinary streets, sidewalks, plazas and open spaces follow microrelief rather than
-forcing a second terrace. The planner proves non-overlap, connects every public
-entrance to circulation, emits six typed open spaces, reserves five free future
+Ordinary streets, sidewalks and freight roads are compiled as one connected
+public-realm graph. A deterministic obstacle-aware connector joins every public
+fragment to the freight trunk before elevation is resolved. Junctions and real
+curated facade thresholds become shared hard datums; every other road cell owns
+one graph-wide physical datum and may change by at most one block per horizontal
+cell. Exact natural-surface controls every four blocks keep the graph terrain-led,
+so sparse high endpoints cannot turn a shallow valley into an exposed stone
+causeway. Each facade access attaches at the first reachable graph cell, and one
+final `SiteSurfacePlan` arbitrates overlapping street, plaza and access claims.
+Plazas and open spaces use independent bounded pads rather than forcing a second
+terrace. The planner proves non-overlap and whole-graph connectivity, emits six
+typed open spaces, reserves five free future
 parcels plus depot/smeltery annex easements and derives an irregular managed-area
 union. Mixed cobblestone/andesite/stone-brick streets, distinct sidewalks,
 paths, stairs, freight roads, ditches, retaining walls, terrain-following lamps,
@@ -141,6 +150,9 @@ changes compile oriented stair blocks. Street furniture uses region-global
 occupancy reservations against buildings, circulation and railway cells; a
 lamp/planter pair is accepted or rejected as one assembly. Hanging lamps declare
 real hanging support and raised fences must have vertical or horizontal support.
+The worldgen compiler indexes the final surface plan by column and emits each
+complete route once, so dense one-cell graph nodes do not multiply materialization
+work or change street ownership.
 
 The static Township composition is: town hall, market hall, inn, clinic, bakery,
 receiving depot, smeltery, smithy, mechanical workshop, stable, assay office,

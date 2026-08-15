@@ -44,6 +44,8 @@ final class SettlementAccessRouter {
             int expansion = building == owner ? 0 : OTHER_BUILDING_CLEARANCE;
             fill(blocked, footprint, expansion);
         }
+        for (int step = 0; step < approachLength; step++) blocked.add(new Cell(
+                access.x() + outwardX * step, access.z() + outwardZ * step));
         blocked.remove(throat);
 
         Set<Cell> targets = new LinkedHashSet<>();

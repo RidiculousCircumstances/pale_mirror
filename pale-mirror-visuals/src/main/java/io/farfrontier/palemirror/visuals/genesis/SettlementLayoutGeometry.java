@@ -26,8 +26,7 @@ final class SettlementLayoutGeometry {
     private SettlementLayoutGeometry() { }
 
     static LinearFeaturePlan followTerrain(LinearFeaturePlan feature, SettlementTerrainSnapshot snapshot) {
-        return new LinearFeaturePlan(feature.id(), feature.kind(), feature.nodes().stream()
-                .map(value -> surfacePoint(value, snapshot)).toList(), feature.width(), feature.walkable());
+        return SettlementStreetNetworkPlanner.resolvePublic(List.of(feature), snapshot).getFirst();
     }
 
     /**
@@ -117,26 +116,23 @@ final class SettlementLayoutGeometry {
      */
     static LinearFeaturePlan followAccessTerrain(LinearFeaturePlan feature,
                                                   SettlementTerrainSnapshot snapshot) {
-        java.util.List<VisualPoint> nodes = new java.util.ArrayList<>(feature.nodes().size());
-        for (int index = 0; index < feature.nodes().size(); index++) {
-            VisualPoint point = feature.nodes().get(index);
-            // The authored doorway and its four-block apron form one threshold.
-            // Snapping the second node to natural terrain created a one-block
-            // cliff directly outside raised NBT doors.
-            nodes.add(index <= 1 ? point : surfacePoint(point, snapshot));
+        List<VisualPoint> physical = raster(feature);
+        int thresholdLength = horizontalDistance(feature.nodes().getFirst(), feature.nodes().get(1));
+        List<VisualPoint> nodes = new ArrayList<>(physical.size());
+        for (int index = 0; index < physical.size(); index++) {
+            VisualPoint point = physical.get(index);
+            int desired = index <= thresholdLength ? feature.nodes().getFirst().y()
+                    : snapshot.surfaceHeight(point.x(), point.z());
+            int y = nodes.isEmpty() ? desired : approach(nodes.getLast().y(), desired);
+            nodes.add(withY(point, y));
         }
         return new LinearFeaturePlan(feature.id(), feature.kind(), nodes, feature.width(), feature.walkable());
     }
 
-    /** The depot node is a raised authored pad; the rest of the spine is native ground. */
+    /** The freight spine follows the real ground; the depot receives its own short access apron. */
     static LinearFeaturePlan followFreightTerrain(LinearFeaturePlan feature,
                                                    SettlementTerrainSnapshot snapshot) {
-        java.util.List<VisualPoint> nodes = new java.util.ArrayList<>(feature.nodes().size());
-        for (int index = 0; index < feature.nodes().size(); index++) {
-            VisualPoint point = feature.nodes().get(index);
-            nodes.add(index == 1 ? point : surfacePoint(point, snapshot));
-        }
-        return new LinearFeaturePlan(feature.id(), feature.kind(), nodes, feature.width(), feature.walkable());
+        return followTerrain(feature, snapshot);
     }
 
     static void requireDryCirculation(List<LinearFeaturePlan> features,
@@ -146,22 +142,37 @@ final class SettlementLayoutGeometry {
                     && feature.kind() != LinearFeatureKind.STREET
                     && feature.kind() != LinearFeatureKind.SIDEWALK
                     && feature.kind() != LinearFeatureKind.PLAZA) continue;
-            for (int segment = 1; segment < feature.nodes().size(); segment++) {
-                List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
-                for (int index = 0; index < points.size(); index += CORRIDOR_VALIDATION_STEP) {
-                    VisualPoint point = points.get(index);
-                    if (snapshot.waterAt(point.x(), point.z())) {
-                        throw new DryMineSiteUnavailableException("Township circulation crosses water at "
-                                + point.x() + "," + point.z() + " near " + anchor.x() + "," + anchor.z());
-                    }
-                    int actual = snapshot.exactSurfaceHeight(point.x(), point.z());
-                    if (Math.abs(actual - point.y()) > MAXIMUM_CORRIDOR_CUT_FILL) {
-                        throw new DryMineSiteUnavailableException("Township circulation exceeds bounded cut/fill at "
-                                + point.x() + "," + point.z() + " near " + anchor.x() + "," + anchor.z());
-                    }
+            List<VisualPoint> points = raster(feature);
+            for (int index = 0; index < points.size(); index += CORRIDOR_VALIDATION_STEP) {
+                VisualPoint point = points.get(index);
+                if (snapshot.waterAt(point.x(), point.z())) {
+                    throw new DryMineSiteUnavailableException("Township circulation crosses water at "
+                            + point.x() + "," + point.z() + " near " + anchor.x() + "," + anchor.z());
+                }
+                int actual = snapshot.exactSurfaceHeight(point.x(), point.z());
+                if (Math.abs(actual - point.y()) > MAXIMUM_CORRIDOR_CUT_FILL) {
+                    throw new DryMineSiteUnavailableException("Township circulation exceeds bounded cut/fill at "
+                            + point.x() + "," + point.z() + " near " + anchor.x() + "," + anchor.z());
                 }
             }
         }
+    }
+
+    private static int approach(int current, int desired) {
+        return current + Integer.signum(desired - current);
+    }
+
+    private static int horizontalDistance(VisualPoint first, VisualPoint second) {
+        return Math.max(Math.abs(first.x() - second.x()), Math.abs(first.z() - second.z()));
+    }
+
+    private static List<VisualPoint> raster(LinearFeaturePlan feature) {
+        List<VisualPoint> result = new ArrayList<>();
+        for (int segment = 1; segment < feature.nodes().size(); segment++) {
+            List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
+            result.addAll(segment == 1 ? points : points.subList(1, points.size()));
+        }
+        return result;
     }
 
     private static List<VisualPoint> raster(VisualPoint from, VisualPoint to) {

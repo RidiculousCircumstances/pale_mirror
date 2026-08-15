@@ -62,14 +62,23 @@ final class SiteSurfacePlanner {
         int radius = feature.kind() == LinearFeatureKind.PALISADE_GATE ? 7
                 : feature.kind() == LinearFeatureKind.STREET || feature.kind() == LinearFeatureKind.FREIGHT_ROAD
                 ? feature.width() / 2 + 3 : feature.width() / 2;
+        Map<Long, FeatureColumn> featureClaims = new LinkedHashMap<>();
         for (int segment = 1; segment < feature.nodes().size(); segment++) {
             for (VisualPoint point : raster(feature.nodes().get(segment - 1), feature.nodes().get(segment))) {
                 for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
-                    claim(claims, new SiteSurfaceColumn(point.x() + dx, point.z() + dz, point.y() + 1,
-                            use, owner));
+                    SiteSurfaceColumn column = new SiteSurfaceColumn(point.x() + dx, point.z() + dz,
+                            point.y() + 1, use, owner);
+                    long coordinate = key(column.x(), column.z());
+                    int distance = Math.max(Math.abs(dx), Math.abs(dz));
+                    FeatureColumn prior = featureClaims.get(coordinate);
+                    if (prior == null || distance < prior.distance()
+                            || distance == prior.distance() && column.groundY() > prior.column().groundY()) {
+                        featureClaims.put(coordinate, new FeatureColumn(column, distance));
+                    }
                 }
             }
         }
+        featureClaims.values().forEach(value -> claim(claims, value.column()));
     }
 
     private static void claim(Map<Long, SiteSurfaceColumn> claims, SiteSurfaceColumn value) {
@@ -82,13 +91,14 @@ final class SiteSurfacePlanner {
         // Intersections are compiled into one explicit public-realm owner.
         // The more specific semantic claim owns both the column and its datum;
         // downstream compilers never re-query or average the terrain.
-        if (priority(value.use()) >= priority(prior.use())) claims.put(coordinate, value);
+        if (priority(value) >= priority(prior)) claims.put(coordinate, value);
     }
 
     private static long key(int x, int z) { return ((long) x << 32) ^ (z & 0xffffffffL); }
 
-    private static int priority(SiteSurfaceUse use) {
-        return switch (use) {
+    private static int priority(SiteSurfaceColumn value) {
+        if (value.ownerId().startsWith("route:access_")) return 4;
+        return switch (value.use()) {
             case CLEARANCE -> 0;
             case OPEN_SPACE -> 1;
             case PLAZA, SIDEWALK -> 2;
@@ -118,4 +128,6 @@ final class SiteSurfacePlanner {
                 from.y() + dy * step / steps, from.z() + dz * step / steps));
         return result;
     }
+
+    private record FeatureColumn(SiteSurfaceColumn column, int distance) { }
 }
