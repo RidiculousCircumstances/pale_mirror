@@ -32,13 +32,11 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 13;
+    public static final int DEFINITION_VERSION = 14;
     private final RegionPlacementProfile placementProfile;
-
     public FrontierRegionPlanner() {
         this(RegionPlacementProfiles.IRON_FRONTIER);
     }
-
     public FrontierRegionPlanner(RegionPlacementProfile placementProfile) {
         this.placementProfile = java.util.Objects.requireNonNull(placementProfile, "placementProfile");
         placementProfile.requireSite(RegionPlacementProfiles.PRIMARY_MINE);
@@ -188,8 +186,14 @@ public final class FrontierRegionPlanner {
                 new SemanticVisualVolume("machinery", "MACHINERY", around(machinery, 12, 12)),
                 new SemanticVisualVolume("loading", "LOGISTICS", around(loading, 20, 7)));
         String id = planId + (role == AuthoredMineRole.PRIMARY ? ":mine17" : ":red_valley");
+        List<MineFoundationPlan> mineFoundations = foundations(role, anchor);
+        int minimumSurface = mineFoundations.stream().mapToInt(MineFoundationPlan::targetY).min().orElse(portal.y());
+        int maximumSurface = mineFoundations.stream().mapToInt(MineFoundationPlan::targetY).max().orElse(portal.y());
         return new AuthoredMineSitePlan(id, role, portal, loading, controller, siteBounds, direction,
-                surface, underground, staged, foundations(role, anchor), volumes);
+                surface, underground, staged, mineFoundations,
+                new io.farfrontier.palemirror.api.SiteEnvironmentPlan("pale_mirror:authored_mine", portal,
+                        role == AuthoredMineRole.PRIMARY ? 78 : 48,
+                        role == AuthoredMineRole.PRIMARY ? 110 : 72, 12, minimumSurface, maximumSurface), volumes);
     }
 
     private static List<MineFoundationPlan> foundations(AuthoredMineRole role, MountainMineAnchor anchor) {

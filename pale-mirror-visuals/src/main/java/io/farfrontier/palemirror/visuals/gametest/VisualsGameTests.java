@@ -201,9 +201,9 @@ public final class VisualsGameTests {
                         "rail write escaped its chunk-local slice");
                 rails++;
             }
-            for (var decoration : slice.surfaceDecorations()) {
-                helper.assertValueEqual(net.minecraft.world.level.ChunkPos.asLong(
-                                decoration.x() >> 4, decoration.z() >> 4), entry.getKey(),
+            for (var decoration : slice.decorations()) {
+                helper.assertValueEqual(new net.minecraft.world.level.ChunkPos(
+                                decoration.position()).toLong(), entry.getKey(),
                         "surface decoration escaped its chunk-local slice");
                 surfaceDecorations++;
             }
@@ -226,11 +226,18 @@ public final class VisualsGameTests {
                         .allMatch(value -> value.support().is(net.minecraft.world.level.block.Blocks.REDSTONE_BLOCK)),
                 "every powered rail must receive an actual redstone power source");
         helper.assertTrue(cleanupOnlyColumns > 0,
-                "settlement compilation must include a cleanup-only halo for overhanging tree crowns");
+                "baseline rail compilation must retain a narrow cleanup-only safety envelope");
         helper.assertTrue(surfaceDecorations > 0,
                 "settlement compilation must provide terrain-following fences and lamps");
         var decorations = first.chunks().values().stream()
-                .flatMap(value -> value.surfaceDecorations().stream()).map(value -> value.state()).toList();
+                .flatMap(value -> value.decorations().stream()).map(value -> value.state()).toList();
+        var gates = decorations.stream().filter(value -> value.getBlock()
+                instanceof net.minecraft.world.level.block.FenceGateBlock).toList();
+        helper.assertValueEqual(gates.size(), 8,
+                "one five-block freight gate and three pedestrian gates must compile exactly once");
+        helper.assertTrue(gates.stream().allMatch(value -> value.getValue(
+                        net.minecraft.world.level.block.FenceGateBlock.OPEN)),
+                "fresh-world settlement gates must begin open and remain manually closable");
         helper.assertTrue(decorations.stream().noneMatch(net.minecraft.world.level.block.state.BlockState::hasBlockEntity),
                 "terrain-following public and industrial furniture must remain block-entity-free");
         helper.assertTrue(decorations.stream().anyMatch(value -> value.is(

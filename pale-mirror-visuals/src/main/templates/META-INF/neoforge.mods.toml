@@ -14,6 +14,9 @@ Fresh-world authored settlements, infrastructure, residents and dynamic physical
 config="pale_mirror_visuals.mixins.json"
 requiredMods=["villageroverhaul"]
 
+[[mixins]]
+config="pale_mirror_visuals.worldgen.mixins.json"
+
 [[dependencies.pale_mirror_visuals]]
 modId="pale_mirror"
 type="required"

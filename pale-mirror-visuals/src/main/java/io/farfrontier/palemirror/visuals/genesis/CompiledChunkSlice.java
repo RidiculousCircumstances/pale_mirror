@@ -8,12 +8,12 @@ import net.minecraft.world.level.block.state.BlockState;
 /** Immutable work owned by exactly one naturally-generating chunk. */
 public record CompiledChunkSlice(long chunkKey, String stamp, List<TerrainColumn> terrain,
                                  List<VegetationColumn> vegetation,
-                                 List<SurfaceDecoration> surfaceDecorations,
+                                 List<AuthoredDecoration> decorations,
                                  List<RailColumn> rails, Map<BlockPos, BlockState> blocks) {
     public CompiledChunkSlice {
         terrain = List.copyOf(terrain);
         vegetation = List.copyOf(vegetation);
-        surfaceDecorations = List.copyOf(surfaceDecorations);
+        decorations = List.copyOf(decorations);
         rails = List.copyOf(rails);
         blocks = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(blocks));
     }
@@ -38,8 +38,8 @@ public record CompiledChunkSlice(long chunkKey, String stamp, List<TerrainColumn
     /** Cleanup-only column; unlike TerrainColumn it never grades or claims the ground. */
     public record VegetationColumn(int x, int z, int baseY) { }
 
-    /** Decoration whose vertical datum is the final locally graded surface. */
-    public record SurfaceDecoration(int x, int z, int offsetY, BlockState state) { }
+    /** Decoration pinned to the manifest's absolute first-air datum. */
+    public record AuthoredDecoration(BlockPos position, BlockState state) { }
 
     public record RailColumn(BlockPos rail, BlockState railState, BlockState support,
                              boolean supportPier) { }

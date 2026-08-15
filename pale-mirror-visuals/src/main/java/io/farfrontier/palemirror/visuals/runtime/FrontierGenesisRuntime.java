@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.visuals.genesis.RegionCountRange;
 import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfile;
 import io.farfrontier.palemirror.visuals.genesis.RegionPlacementProfiles;
 import io.farfrontier.palemirror.visuals.genesis.VisualGenesisAttachments;
+import io.farfrontier.palemirror.visuals.genesis.WorldgenExclusionIndex;
 import io.farfrontier.palemirror.visuals.resident.ResidentMaterializer;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -92,6 +93,7 @@ public final class FrontierGenesisRuntime {
             }
             VisualGenesisSavedData current = VisualGenesisSavedData.get(level);
             current.pinManifests(catalog.manifests());
+            WorldgenExclusionIndex.install(level.getChunkSource().getGenerator(), catalog.manifests());
             CATALOG.set(catalog);
             install(level, catalog.manifests());
             READINESS.set(new GenesisReadiness(GenesisReadiness.State.READY, catalog.version(), catalog.hash(), ""));
@@ -184,7 +186,6 @@ public final class FrontierGenesisRuntime {
                     chunk, expected.stamp(), pending.stamp().isBlank() ? "ABSENT" : pending.stamp());
             return;
         }
-        FrontierWorldgenFeature.finishAfterDecoration(level, level.getChunk(chunk.x, chunk.z), expected);
         VisualGenesisSavedData ledger = VisualGenesisSavedData.get(level);
         ledger.observeChunk(pending.chunk(), pending.stamp());
         if (FIRST_STAMP_OBSERVED.compareAndSet(false, true)) PaleMirrorVisualsMod.LOGGER.info(
@@ -221,6 +222,7 @@ public final class FrontierGenesisRuntime {
                 + (slices == 0 ? 0D : WORLDGEN_NANOS.get() / 1_000_000D / slices)
                 + ", worldgenMaxMs=" + WORLDGEN_MAX_NANOS.get() / 1_000_000D
                 + ", pendingChunkObservations=" + PENDING_CHUNKS.size()
+                + ", " + WorldgenExclusionIndex.metrics()
                 + ", " + planningMetrics.summary();
     }
 
@@ -242,6 +244,7 @@ public final class FrontierGenesisRuntime {
         if (plannerExecutor != null) plannerExecutor.shutdownNow();
         plannerExecutor = null;
         AuthoredVisualProvider.INSTANCE.resetRuntime();
+        WorldgenExclusionIndex.clear();
     }
 
     private static String rootMessage(Throwable failure) {

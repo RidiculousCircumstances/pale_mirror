@@ -108,6 +108,7 @@ tasks.register('verifyVisualsJar') {
                     'io/farfrontier/palemirror/visuals/genesis/FrontierRegionPlanner.class',
                     'META-INF/neoforge.mods.toml',
                     'pale_mirror_visuals.mixins.json',
+                    'pale_mirror_visuals.worldgen.mixins.json',
                     'assets/pale_mirror_visuals/textures/entity/threat_heart.png',
                     'assets/pale_mirror_visuals/geo/threat_heart.geo.json',
                     'data/pale_mirror_visuals/settlement_archetype/iron_frontier.json',

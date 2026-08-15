@@ -41,18 +41,27 @@ public final class MaterializationMatrixGameTests {
                                             SettlementTerrainSnapshot.flat(settlementAnchor), layoutVariant));
                     var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
                     var decorations = catalog.chunks().values().stream()
-                            .flatMap(slice -> slice.surfaceDecorations().stream()).toList();
+                            .flatMap(slice -> slice.decorations().stream()).toList();
                     Map<SurfaceSlot, BlockState> states = new HashMap<>();
+                    java.util.Set<SurfaceSlot> occupied = new java.util.HashSet<>();
+                    seed.settlementSite().surfacePlan().columns().forEach(value -> occupied.add(
+                            new SurfaceSlot(value.x(), value.z(), value.groundY() - 1)));
+                    catalog.chunks().values().stream().flatMap(slice -> slice.terrain().stream())
+                            .forEach(value -> occupied.add(new SurfaceSlot(value.x(), value.z(), value.targetY())));
+                    catalog.chunks().values().stream().flatMap(slice -> slice.blocks().keySet().stream())
+                            .forEach(value -> occupied.add(new SurfaceSlot(value.getX(), value.getZ(), value.getY())));
                     decorations.forEach(value -> {
-                        SurfaceSlot slot = new SurfaceSlot(value.x(), value.z(), value.offsetY());
+                        SurfaceSlot slot = new SurfaceSlot(value.position().getX(), value.position().getZ(),
+                                value.position().getY());
                         helper.assertTrue(states.put(slot, value.state()) == null,
                                 "duplicate surface slot in combination " + combination + ": " + slot);
+                        occupied.add(slot);
                     });
                     helper.assertTrue(decorations.stream()
                                     .anyMatch(value -> value.state().getBlock() instanceof SlabBlock),
                             "public realm has no slab articulation in combination " + combination);
                     assertFlatAccessUsesLevelPaving(helper, seed, catalog, combination);
-                    assertSupportedFixtures(helper, states, combination);
+                    assertSupportedFixtures(helper, states, occupied, combination);
                     combinations++;
                 }
             }
@@ -80,18 +89,18 @@ public final class MaterializationMatrixGameTests {
     }
 
     private static void assertSupportedFixtures(GameTestHelper helper, Map<SurfaceSlot, BlockState> states,
-                                                int combination) {
+                                                java.util.Set<SurfaceSlot> occupied, int combination) {
         states.forEach((slot, state) -> {
             if (state.getBlock() instanceof LanternBlock) {
                 boolean hanging = state.getValue(LanternBlock.HANGING);
-                helper.assertTrue(states.containsKey(slot.above(hanging ? 1 : -1)),
+                helper.assertTrue(occupied.contains(slot.above(hanging ? 1 : -1)),
                         "unsupported lantern in combination " + combination + ": " + slot);
             }
             if ((state.getBlock() instanceof FenceBlock || state.getBlock() instanceof WallBlock)
                     && slot.offsetY() > 0) {
-                boolean connected = states.containsKey(slot.above(-1))
-                        || states.containsKey(slot.east()) || states.containsKey(slot.west())
-                        || states.containsKey(slot.north()) || states.containsKey(slot.south());
+                boolean connected = occupied.contains(slot.above(-1))
+                        || occupied.contains(slot.east()) || occupied.contains(slot.west())
+                        || occupied.contains(slot.north()) || occupied.contains(slot.south());
                 helper.assertTrue(connected,
                         "floating fence/wall in combination " + combination + ": " + slot);
             }

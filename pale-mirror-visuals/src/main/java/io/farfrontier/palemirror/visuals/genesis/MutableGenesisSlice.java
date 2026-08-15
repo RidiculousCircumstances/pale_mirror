@@ -14,7 +14,7 @@ final class MutableGenesisSlice {
     final long key;
     final Map<Long, CompiledChunkSlice.TerrainColumn> terrain = new LinkedHashMap<>();
     final Map<Long, CompiledChunkSlice.VegetationColumn> vegetation = new LinkedHashMap<>();
-    final Map<SurfaceKey, CompiledChunkSlice.SurfaceDecoration> surfaceDecorations = new LinkedHashMap<>();
+    final Map<BlockPos, CompiledChunkSlice.AuthoredDecoration> decorations = new LinkedHashMap<>();
     final List<CompiledChunkSlice.RailColumn> rails = new ArrayList<>();
     final Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
 
@@ -28,21 +28,29 @@ final class MutableGenesisSlice {
                 replacement.blendDistance() <= previous.blendDistance() ? replacement : previous);
     }
 
-    void surfaceDecoration(CompiledChunkSlice.SurfaceDecoration decoration) {
-        surfaceDecorations.put(new SurfaceKey(decoration.x(), decoration.z(), decoration.offsetY()), decoration);
+    void decoration(CompiledChunkSlice.AuthoredDecoration decoration) {
+        CompiledChunkSlice.AuthoredDecoration prior = decorations.putIfAbsent(decoration.position(), decoration);
+        if (prior != null && !prior.state().equals(decoration.state())) {
+            throw new IllegalStateException("Conflicting authored decoration at " + decoration.position()
+                    + ": " + prior.state() + " vs " + decoration.state());
+        }
+    }
+
+    /** Explicit final-paint operation inside one already-owned semantic surface compiler. */
+    void replaceDecoration(CompiledChunkSlice.AuthoredDecoration decoration) {
+        decorations.put(decoration.position(), decoration);
     }
 
     CompiledChunkSlice freeze(String catalogHash) {
         String stamp = catalogHash.substring(0, 16) + ":" + Long.toUnsignedString(key, 16) + ":"
-                + terrain.size() + ":" + vegetation.size() + ":" + surfaceDecorations.size()
+                + terrain.size() + ":" + vegetation.size() + ":" + decorations.size()
                 + ":" + rails.size() + ":" + blocks.size();
         return new CompiledChunkSlice(key, stamp, terrain.values().stream().toList(),
-                vegetation.values().stream().toList(), surfaceDecorations.values().stream()
-                        .sorted(Comparator.comparingInt(CompiledChunkSlice.SurfaceDecoration::x)
-                                .thenComparingInt(CompiledChunkSlice.SurfaceDecoration::z)
-                                .thenComparingInt(CompiledChunkSlice.SurfaceDecoration::offsetY))
+                vegetation.values().stream().toList(), decorations.values().stream()
+                        .sorted(Comparator.comparingInt((CompiledChunkSlice.AuthoredDecoration value) ->
+                                        value.position().getX())
+                                .thenComparingInt(value -> value.position().getZ())
+                                .thenComparingInt(value -> value.position().getY()))
                         .toList(), rails, blocks);
     }
-
-    private record SurfaceKey(int x, int z, int offsetY) { }
 }

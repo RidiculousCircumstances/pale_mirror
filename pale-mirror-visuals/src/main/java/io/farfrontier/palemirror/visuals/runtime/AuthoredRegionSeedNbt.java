@@ -16,6 +16,9 @@ import io.farfrontier.palemirror.api.LinearFeaturePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
 import io.farfrontier.palemirror.api.ManagedAreaPlan;
 import io.farfrontier.palemirror.api.OpenSpaceKind;
+import io.farfrontier.palemirror.api.PerimeterModuleKind;
+import io.farfrontier.palemirror.api.PerimeterModulePlan;
+import io.farfrontier.palemirror.api.PerimeterPlan;
 import io.farfrontier.palemirror.api.ResidentSeed;
 import io.farfrontier.palemirror.api.SemanticVisualVolume;
 import io.farfrontier.palemirror.api.StagedVisualModule;
@@ -23,6 +26,10 @@ import io.farfrontier.palemirror.api.SettlementFoundationPlan;
 import io.farfrontier.palemirror.api.SettlementBuildingCategory;
 import io.farfrontier.palemirror.api.SettlementDevelopmentStage;
 import io.farfrontier.palemirror.api.SettlementLayoutArchetype;
+import io.farfrontier.palemirror.api.SiteEnvironmentPlan;
+import io.farfrontier.palemirror.api.SiteSurfaceColumn;
+import io.farfrontier.palemirror.api.SiteSurfacePlan;
+import io.farfrontier.palemirror.api.SiteSurfaceUse;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
 import io.farfrontier.palemirror.api.VisualPoint;
@@ -116,6 +123,9 @@ public final class AuthoredRegionSeedNbt {
         ListTag managedAreas = new ListTag();
         settlement.managedArea().areas().forEach(value -> managedAreas.add(bounds(value)));
         tag.put("managedAreas", managedAreas);
+        tag.put("environment", environment(settlement.environment()));
+        tag.put("surfacePlan", surfacePlan(settlement.surfacePlan()));
+        tag.put("perimeter", perimeter(settlement.perimeter()));
         ListTag reservations = new ListTag();
         settlement.developmentReservations().forEach(value -> {
             CompoundTag entry = new CompoundTag();
@@ -158,7 +168,9 @@ public final class AuthoredRegionSeedNbt {
                 buildings(tag.getList("buildings", Tag.TAG_COMPOUND)), foundations,
                 linearFeatures(tag.getList("circulation", Tag.TAG_COMPOUND)),
                 linearFeatures(tag.getList("defences", Tag.TAG_COMPOUND)), openSpaces,
-                new ManagedAreaPlan(managedAreas), reservations,
+                new ManagedAreaPlan(managedAreas), environment(tag.getCompound("environment")),
+                surfacePlan(tag.getList("surfacePlan", Tag.TAG_COMPOUND)),
+                perimeter(tag.getList("perimeter", Tag.TAG_COMPOUND)), reservations,
                 points(tag.getList("shelterCandidates", Tag.TAG_COMPOUND)));
     }
 
@@ -281,6 +293,7 @@ public final class AuthoredRegionSeedNbt {
             foundations.add(entry);
         });
         tag.put("foundations", foundations);
+        tag.put("environment", environment(mine.environment()));
         ListTag volumes = new ListTag();
         mine.semanticVolumes().forEach(value -> {
             CompoundTag entry = new CompoundTag();
@@ -317,7 +330,69 @@ public final class AuthoredRegionSeedNbt {
                 point(tag.getCompound("controllerAnchor")), bounds(tag.getCompound("bounds")),
                 tag.getInt("inwardQuarterTurns"), buildings(tag.getList("surfaceBuildings", Tag.TAG_COMPOUND)),
                 modules(tag.getList("undergroundModules", Tag.TAG_COMPOUND)),
-                staged, foundations, volumes);
+                staged, foundations, environment(tag.getCompound("environment")), volumes);
+    }
+
+    private static CompoundTag environment(SiteEnvironmentPlan plan) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("policyId", plan.policyId());
+        tag.put("center", point(plan.center()));
+        tag.putInt("hardRadius", plan.hardRadius());
+        tag.putInt("transitionRadius", plan.transitionRadius());
+        tag.putInt("structureClearance", plan.structureClearance());
+        tag.putInt("minimumSurfaceY", plan.minimumSurfaceY());
+        tag.putInt("maximumSurfaceY", plan.maximumSurfaceY());
+        return tag;
+    }
+
+    private static SiteEnvironmentPlan environment(CompoundTag tag) {
+        return new SiteEnvironmentPlan(tag.getString("policyId"), point(tag.getCompound("center")),
+                tag.getInt("hardRadius"), tag.getInt("transitionRadius"), tag.getInt("structureClearance"),
+                tag.getInt("minimumSurfaceY"), tag.getInt("maximumSurfaceY"));
+    }
+
+    private static ListTag surfacePlan(SiteSurfacePlan plan) {
+        ListTag result = new ListTag();
+        plan.columns().forEach(column -> {
+            CompoundTag tag = new CompoundTag();
+            tag.putInt("x", column.x()); tag.putInt("z", column.z()); tag.putInt("groundY", column.groundY());
+            tag.putString("use", column.use().name()); tag.putString("ownerId", column.ownerId());
+            result.add(tag);
+        });
+        return result;
+    }
+
+    private static SiteSurfacePlan surfacePlan(ListTag tags) {
+        List<SiteSurfaceColumn> result = new ArrayList<>();
+        for (Tag raw : tags) {
+            CompoundTag tag = (CompoundTag) raw;
+            result.add(new SiteSurfaceColumn(tag.getInt("x"), tag.getInt("z"), tag.getInt("groundY"),
+                    SiteSurfaceUse.valueOf(tag.getString("use")), tag.getString("ownerId")));
+        }
+        return new SiteSurfacePlan(result);
+    }
+
+    private static ListTag perimeter(PerimeterPlan plan) {
+        ListTag result = new ListTag();
+        plan.modules().forEach(module -> {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("moduleId", module.moduleId()); tag.putString("kind", module.kind().name());
+            tag.put("anchor", point(module.anchor())); tag.putInt("quarterTurns", module.quarterTurns());
+            tag.putInt("length", module.length()); tag.put("footprint", bounds(module.footprint()));
+            result.add(tag);
+        });
+        return result;
+    }
+
+    private static PerimeterPlan perimeter(ListTag tags) {
+        List<PerimeterModulePlan> result = new ArrayList<>();
+        for (Tag raw : tags) {
+            CompoundTag tag = (CompoundTag) raw;
+            result.add(new PerimeterModulePlan(tag.getString("moduleId"),
+                    PerimeterModuleKind.valueOf(tag.getString("kind")), point(tag.getCompound("anchor")),
+                    tag.getInt("quarterTurns"), tag.getInt("length"), bounds(tag.getCompound("footprint"))));
+        }
+        return new PerimeterPlan(result);
     }
 
     private static ListTag modules(List<VisualModulePlacement> modules) {

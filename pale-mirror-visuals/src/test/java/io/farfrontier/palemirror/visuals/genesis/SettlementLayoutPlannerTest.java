@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.farfrontier.palemirror.api.LinearFeatureKind;
+import io.farfrontier.palemirror.api.PerimeterModuleKind;
 import io.farfrontier.palemirror.api.SettlementLayoutArchetype;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.api.VisualPortKind;
@@ -91,6 +92,19 @@ class SettlementLayoutPlannerTest {
                                 .noneMatch(value -> overlaps(annex.bounds(), value.bounds())),
                                 annex.id() + " overlaps an authored open space");
                     });
+            assertEquals(128, plan.environment().hardRadius());
+            assertEquals(176, plan.environment().transitionRadius());
+            assertEquals(16, plan.environment().structureClearance());
+            assertEquals(1, plan.perimeter().modules().stream()
+                    .filter(value -> value.kind() == PerimeterModuleKind.FREIGHT_GATE).count());
+            assertEquals(3, plan.perimeter().modules().stream()
+                    .filter(value -> value.kind() == PerimeterModuleKind.PEDESTRIAN_GATE).count());
+            assertEquals(plan.surfacePlan().columns().size(), plan.surfacePlan().columns().stream()
+                    .map(value -> value.x() + ":" + value.z()).distinct().count(),
+                    "every authored surface column must have exactly one final owner");
+            plan.modules().stream().flatMap(value -> value.ports().stream())
+                    .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
+                    .forEach(value -> plan.surfacePlan().require(value.position().x(), value.position().z()));
         }
     }
 

@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
 import io.farfrontier.palemirror.api.VisualPoint;
+import io.farfrontier.palemirror.api.SiteSurfaceColumn;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -24,7 +25,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 21;
+    public static final int CATALOG_VERSION = 22;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -44,6 +45,9 @@ public final class FrontierGenesisCompiler {
         // throats are the final settlement writer, so a source NBT wall can
         // never overwrite the declared road/door contract.
         for (VisualModulePlacement module : seed.modules()) compileModule(module, slices);
+        Map<Long, Integer> settlementDatums = seed.settlementSite().surfacePlan().columns().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        value -> ChunkPos.asLong(value.x(), value.z()), SiteSurfaceColumn::groundY));
         SettlementGenesisCompiler.compile(seed, palette, new SettlementGenesisCompiler.Sink() {
             @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
                 MutableGenesisSlice slice = slice(slices, x, z);
@@ -56,12 +60,14 @@ public final class FrontierGenesisCompiler {
                         x, z, targetY, surface, foundation, blendDistance));
             }
             @Override public void cleanup(int x, int z, int baseY) {
-                slice(slices, x, z).vegetation.putIfAbsent(ChunkPos.asLong(x, z),
-                        new CompiledChunkSlice.VegetationColumn(x, z, baseY));
+                // Worldgen exclusion owns authored-site ecology before PM placement.
             }
             @Override public void surfaceBlock(int x, int z, int offsetY, BlockState state) {
-                slice(slices, x, z).surfaceDecoration(
-                        new CompiledChunkSlice.SurfaceDecoration(x, z, offsetY, state));
+                Integer datum = settlementDatums.get(ChunkPos.asLong(x, z));
+                if (datum == null) throw new IllegalStateException("Decoration escaped SiteSurfacePlan at "
+                        + x + "," + z);
+                BlockPos position = new BlockPos(x, datum + offsetY, z);
+                slice(slices, x, z).decoration(new CompiledChunkSlice.AuthoredDecoration(position, state));
             }
             @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
         });
@@ -133,7 +139,6 @@ public final class FrontierGenesisCompiler {
 
     private static void compileMine(AuthoredMineSitePlan mine, FrontierPalette palette,
                                     Map<Long, MutableGenesisSlice> slices) {
-        compileMineVegetationEnvelope(mine, slices);
         compileMineFoundations(mine, slices);
         List<MineAccessGenesisCompiler.AccessRoute> accessRoutes = MineAccessGenesisCompiler.routes(mine);
         java.util.Set<Long> access = MineAccessGenesisCompiler.occupied(accessRoutes);
@@ -144,8 +149,7 @@ public final class FrontierGenesisCompiler {
                         x, z, targetY, surface, foundation));
             }
             @Override public void cleanup(int x, int z, int baseY) {
-                slice(slices, x, z).vegetation.putIfAbsent(ChunkPos.asLong(x, z),
-                        new CompiledChunkSlice.VegetationColumn(x, z, baseY));
+                // Worldgen exclusion owns authored-site ecology before PM placement.
             }
             @Override public void block(BlockPos position, BlockState state) { put(slices, position, state); }
         });
@@ -157,41 +161,6 @@ public final class FrontierGenesisCompiler {
         put(slices, block(mine.controllerAnchor()).above(), Blocks.SOUL_LANTERN.defaultBlockState());
     }
 
-    /** Clears the connected working yard while leaving its terrain untouched. */
-    private static void compileMineVegetationEnvelope(AuthoredMineSitePlan mine,
-                                                       Map<Long, MutableGenesisSlice> slices) {
-        java.util.Set<String> materialized = MineSurfaceLayout.materializedFoundationIds(mine);
-        List<MineFoundationPlan> foundations = mine.foundations().stream()
-                .filter(value -> materialized.contains(value.id())).toList();
-        int minimumX = foundations.stream().mapToInt(value -> value.footprint().min().x())
-                .min().orElseThrow();
-        int maximumX = foundations.stream().mapToInt(value -> value.footprint().max().x())
-                .max().orElseThrow();
-        int minimumZ = foundations.stream().mapToInt(value -> value.footprint().min().z())
-                .min().orElseThrow();
-        int maximumZ = foundations.stream().mapToInt(value -> value.footprint().max().z())
-                .max().orElseThrow();
-        int baseY = foundations.stream().mapToInt(MineFoundationPlan::targetY).min().orElseThrow();
-        // Large modded trees routinely carry crowns 10-14 blocks away from
-        // their trunks. Use an organic union around the actual pads instead
-        // of a rectangular clear-cut, but keep enough clearance for the
-        // industrial skyline and fire/safety lanes.
-        final int halo = 18;
-        for (int z = minimumZ - halo; z <= maximumZ + halo; z++) {
-            for (int x = minimumX - halo; x <= maximumX + halo; x++) {
-                final int columnX = x;
-                final int columnZ = z;
-                int nearestPad = foundations.stream()
-                        .mapToInt(value -> distanceFrom(value, columnX, columnZ)).min().orElseThrow();
-                int edgeVariation = Math.floorMod(x * 31 + z * 19 + mine.portal().x() * 13, 4);
-                if (nearestPad > halo + edgeVariation) continue;
-                MutableGenesisSlice slice = slice(slices, x, z);
-                slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
-                        new CompiledChunkSlice.VegetationColumn(x, z, baseY));
-            }
-        }
-    }
-
     private static void compileMineIndustrialDetails(AuthoredMineSitePlan mine, FrontierPalette palette,
                                                      java.util.Set<Long> access,
                                                      Map<Long, MutableGenesisSlice> slices) {
@@ -200,8 +169,10 @@ public final class FrontierGenesisCompiler {
                 FrontierGenesisCompiler.put(slices, position, state);
             }
             @Override public void surface(int x, int z, int offsetY, BlockState state) {
-                slice(slices, x, z).surfaceDecoration(
-                        new CompiledChunkSlice.SurfaceDecoration(x, z, offsetY, state));
+                int datum = mineDatum(mine, x, z);
+                BlockPos position = new BlockPos(x, datum + offsetY, z);
+                slice(slices, x, z).replaceDecoration(
+                        new CompiledChunkSlice.AuthoredDecoration(position, state));
             }
         });
     }
@@ -252,7 +223,7 @@ public final class FrontierGenesisCompiler {
                     case 7 -> Blocks.TUFF.defaultBlockState();
                     default -> Blocks.GRAVEL.defaultBlockState();
                 };
-                mineSurface(slices, point, -1, surface);
+                mineSurface(mine, slices, point, -1, surface);
             }
         }
         // Stone drainage seams and freight wear lines articulate the yard
@@ -264,7 +235,7 @@ public final class FrontierGenesisCompiler {
                         mine.inwardQuarterTurns());
                 if (!insideFoundationApron(mine, point.x(), point.z())
                         && !access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                    mineSurface(slices, point, -1, Blocks.POLISHED_ANDESITE.defaultBlockState());
+                    mineSurface(mine, slices, point, -1, Blocks.POLISHED_ANDESITE.defaultBlockState());
                 }
             }
         }
@@ -277,9 +248,9 @@ public final class FrontierGenesisCompiler {
             VisualPoint point = MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
                     mine.inwardQuarterTurns());
             if (access.contains(ChunkPos.asLong(point.x(), point.z()))) continue;
-            mineSurface(slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
-            mineSurface(slices, point, 1, Blocks.IRON_BARS.defaultBlockState());
-            mineSurface(slices, point, 2, Blocks.LANTERN.defaultBlockState());
+            mineSurface(mine, slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+            mineSurface(mine, slices, point, 1, Blocks.IRON_BARS.defaultBlockState());
+            mineSurface(mine, slices, point, 2, Blocks.LANTERN.defaultBlockState());
         }
         // Open ore-sort bins: deliberately non-valuable rock communicates
         // function without becoming a free strategic-resource spawn.
@@ -289,7 +260,7 @@ public final class FrontierGenesisCompiler {
                 VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, -46, 0,
                         mine.inwardQuarterTurns());
                 if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                    mineSurface(slices, point, 0, Blocks.COBBLED_DEEPSLATE.defaultBlockState());
+                    mineSurface(mine, slices, point, 0, Blocks.COBBLED_DEEPSLATE.defaultBlockState());
                 }
             }
             for (int inward = -45; inward <= -42; inward++) {
@@ -297,7 +268,7 @@ public final class FrontierGenesisCompiler {
                     VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, inward, 0,
                             mine.inwardQuarterTurns());
                     if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                        mineSurface(slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
+                        mineSurface(mine, slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
                     }
                 }
             }
@@ -305,7 +276,7 @@ public final class FrontierGenesisCompiler {
                 VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, -43, 0,
                         mine.inwardQuarterTurns());
                 if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                    mineSurface(slices, point, 0, Math.floorMod(right + bin, 2) == 0
+                    mineSurface(mine, slices, point, 0, Math.floorMod(right + bin, 2) == 0
                             ? Blocks.TUFF.defaultBlockState() : Blocks.ANDESITE.defaultBlockState());
                 }
             }
@@ -314,22 +285,28 @@ public final class FrontierGenesisCompiler {
             VisualPoint timber = MineSurfaceLayout.local(mine.portal(), 23 + offset, -49, 0,
                     mine.inwardQuarterTurns());
             if (access.contains(ChunkPos.asLong(timber.x(), timber.z()))) continue;
-            mineSurface(slices, timber, 0, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-            if (offset < 3) mineSurface(slices, timber, 1, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
+            mineSurface(mine, slices, timber, 0, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
+            if (offset < 3) mineSurface(mine, slices, timber, 1, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
         }
         for (int[] local : new int[][]{{22, -42}, {25, -42}, {22, -39}}) {
             VisualPoint point = MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
                     mine.inwardQuarterTurns());
             if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                mineSurface(slices, point, 0, Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
+                mineSurface(mine, slices, point, 0, Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
             }
         }
     }
 
-    private static void mineSurface(Map<Long, MutableGenesisSlice> slices, VisualPoint point,
+    private static void mineSurface(AuthoredMineSitePlan mine, Map<Long, MutableGenesisSlice> slices, VisualPoint point,
                                     int offsetY, BlockState state) {
-        slice(slices, point.x(), point.z()).surfaceDecoration(
-                new CompiledChunkSlice.SurfaceDecoration(point.x(), point.z(), offsetY, state));
+        BlockPos position = new BlockPos(point.x(), mineDatum(mine, point.x(), point.z()) + offsetY, point.z());
+        slice(slices, point.x(), point.z()).replaceDecoration(
+                new CompiledChunkSlice.AuthoredDecoration(position, state));
+    }
+
+    private static int mineDatum(AuthoredMineSitePlan mine, int x, int z) {
+        return mine.foundations().stream().min(java.util.Comparator.comparingInt(value -> distanceFrom(value, x, z)))
+                .map(value -> value.targetY() + 1).orElseThrow();
     }
 
     private static void compileMineFoundations(AuthoredMineSitePlan mine,
@@ -356,8 +333,6 @@ public final class FrontierGenesisCompiler {
                     slice.terrain(new CompiledChunkSlice.TerrainColumn(x, z, foundation.targetY(), surface,
                             blendDistance == 0 ? Blocks.COBBLESTONE.defaultBlockState()
                                     : Blocks.DIRT.defaultBlockState(), blendDistance));
-                    slice.vegetation.putIfAbsent(ChunkPos.asLong(x, z),
-                            new CompiledChunkSlice.VegetationColumn(x, z, foundation.targetY()));
                 }
             }
         }

@@ -13,6 +13,9 @@ public record AuthoredSettlementSitePlan(String layoutId, SettlementDevelopmentS
                                          List<LinearFeaturePlan> defences,
                                          List<AuthoredOpenSpacePlan> openSpaces,
                                          ManagedAreaPlan managedArea,
+                                         SiteEnvironmentPlan environment,
+                                         SiteSurfacePlan surfacePlan,
+                                         PerimeterPlan perimeter,
                                          List<DevelopmentReservation> developmentReservations,
                                          List<VisualPoint> shelterCandidates) {
     public AuthoredSettlementSitePlan {
@@ -23,6 +26,9 @@ public record AuthoredSettlementSitePlan(String layoutId, SettlementDevelopmentS
         Objects.requireNonNull(freightGate, "freightGate");
         Objects.requireNonNull(receivingDepot, "receivingDepot");
         Objects.requireNonNull(managedArea, "managedArea");
+        Objects.requireNonNull(environment, "environment");
+        Objects.requireNonNull(surfacePlan, "surfacePlan");
+        Objects.requireNonNull(perimeter, "perimeter");
         buildings = List.copyOf(buildings);
         foundations = List.copyOf(foundations);
         circulation = List.copyOf(circulation);
@@ -67,6 +73,12 @@ public record AuthoredSettlementSitePlan(String layoutId, SettlementDevelopmentS
         }
         if (!bounds.contains(freightGate) || !bounds.contains(receivingDepot)) {
             throw new IllegalArgumentException("freight gate and depot must be inside the authored site bounds");
+        }
+        if (!environment.insideHard(anchorX(bounds), anchorZ(bounds))) {
+            throw new IllegalArgumentException("settlement bounds must be centered inside its environment");
+        }
+        if (perimeter.modules().stream().anyMatch(value -> !contains(bounds, value.footprint()))) {
+            throw new IllegalArgumentException("perimeter module escaped authored site bounds");
         }
         if (circulation.stream().noneMatch(value -> value.kind() == LinearFeatureKind.FREIGHT_ROAD)) {
             throw new IllegalArgumentException("settlement requires a freight road");
@@ -164,6 +176,9 @@ public record AuthoredSettlementSitePlan(String layoutId, SettlementDevelopmentS
     private static boolean contains(VisualBounds outer, VisualBounds inner) {
         return outer.contains(inner.min()) && outer.contains(inner.max());
     }
+
+    private static int anchorX(VisualBounds bounds) { return (bounds.min().x() + bounds.max().x()) / 2; }
+    private static int anchorZ(VisualBounds bounds) { return (bounds.min().z() + bounds.max().z()) / 2; }
 
     private static boolean overlaps(VisualBounds first, VisualBounds second) {
         return first.min().x() <= second.max().x() && first.max().x() >= second.min().x()

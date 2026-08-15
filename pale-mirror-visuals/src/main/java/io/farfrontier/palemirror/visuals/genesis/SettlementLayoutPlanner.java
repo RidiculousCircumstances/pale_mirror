@@ -15,6 +15,9 @@ import io.farfrontier.palemirror.api.OpenSpaceKind;
 import io.farfrontier.palemirror.api.SettlementDevelopmentStage;
 import io.farfrontier.palemirror.api.SettlementFoundationPlan;
 import io.farfrontier.palemirror.api.SettlementLayoutArchetype;
+import io.farfrontier.palemirror.api.SiteEnvironmentPlan;
+import io.farfrontier.palemirror.api.SiteSurfacePlan;
+import io.farfrontier.palemirror.api.PerimeterPlan;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
 import io.farfrontier.palemirror.api.VisualPoint;
@@ -183,6 +186,9 @@ final class SettlementLayoutPlanner {
         List<DevelopmentReservation> reservations = reservations(anchor, freightDirection, buildings, openSpaces,
                 transform);
         ManagedAreaPlan managedArea = managedArea(buildings, circulation, defences, openSpaces, reservations);
+        SiteSurfacePlan surfacePlan = SiteSurfacePlanner.settlement(foundations, openSpaces, circulation,
+                defences, reservations);
+        PerimeterPlan perimeter = StructuralPerimeterPlanner.plan(defences);
         List<VisualPoint> shelters = List.of(terrainPoint(local(anchor, 108, -22, 0, freightDirection), snapshot),
                 terrainPoint(local(anchor, -112, -26, 0, freightDirection), snapshot),
                 terrainPoint(local(anchor, 78, -108, 0, freightDirection), snapshot));
@@ -196,7 +202,11 @@ final class SettlementLayoutPlanner {
                 SettlementDevelopmentStage.TOWNSHIP, archetype,
                 master,
                 gate, depot.modules().getFirst().origin(), buildings, foundations, circulation, defences,
-                openSpaces, managedArea, reservations, shelters);
+                openSpaces, managedArea,
+                new SiteEnvironmentPlan("pale_mirror:authored_settlement", anchor, 128, 176, 16,
+                        surfacePlan.columns().stream().mapToInt(value -> value.groundY()).min().orElse(anchor.y()) - 1,
+                        surfacePlan.columns().stream().mapToInt(value -> value.groundY()).max().orElse(anchor.y()) - 1),
+                surfacePlan, perimeter, reservations, shelters);
         IronFrontierTownshipContract.validate(result);
         return result;
     }

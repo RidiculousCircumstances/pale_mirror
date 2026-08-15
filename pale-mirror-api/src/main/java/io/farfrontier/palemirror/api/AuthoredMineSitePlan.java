@@ -11,6 +11,7 @@ public record AuthoredMineSitePlan(String siteId, AuthoredMineRole role, VisualP
                                    List<VisualModulePlacement> undergroundModules,
                                    List<StagedVisualModule> stagedModules,
                                    List<MineFoundationPlan> foundations,
+                                   SiteEnvironmentPlan environment,
                                    List<SemanticVisualVolume> semanticVolumes) {
     public AuthoredMineSitePlan {
         if (siteId == null || siteId.isBlank()) throw new IllegalArgumentException("siteId is required");
@@ -19,6 +20,7 @@ public record AuthoredMineSitePlan(String siteId, AuthoredMineRole role, VisualP
         Objects.requireNonNull(loadingEndpoint, "loadingEndpoint");
         Objects.requireNonNull(controllerAnchor, "controllerAnchor");
         Objects.requireNonNull(bounds, "bounds");
+        Objects.requireNonNull(environment, "environment");
         inwardQuarterTurns = Math.floorMod(inwardQuarterTurns, 4);
         surfaceBuildings = List.copyOf(surfaceBuildings);
         undergroundModules = List.copyOf(undergroundModules);

@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.visuals.genesis;
 
 import io.farfrontier.palemirror.api.VisualPoint;
+import io.farfrontier.palemirror.api.SiteEnvironmentPlan;
 import io.farfrontier.palemirror.visuals.PaleMirrorVisualsMod;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -9,6 +10,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -50,21 +52,39 @@ public final class FrontierWorldgenCleanupGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
-    public static void lateCleanupPreservesExactAuthoredTimber(GameTestHelper helper) {
-        BlockPos surface = helper.absolutePos(new BlockPos(5, 2, 5));
-        BlockPos natural = surface.above(3);
-        BlockPos authored = surface.above(5);
-        helper.getLevel().setBlock(natural, Blocks.BIRCH_LOG.defaultBlockState(), 2);
-        helper.getLevel().setBlock(natural.above(), Blocks.BIRCH_LEAVES.defaultBlockState(), 2);
-        helper.getLevel().setBlock(authored, Blocks.SPRUCE_LOG.defaultBlockState(), 2);
+    public static void authoredDecorationRetainsItsAbsoluteDatum(GameTestHelper helper) {
+        BlockPos position = helper.absolutePos(new BlockPos(5, 7, 5));
+        var decoration = new CompiledChunkSlice.AuthoredDecoration(position,
+                Blocks.SPRUCE_LOG.defaultBlockState());
+        helper.assertValueEqual(decoration.position(), position,
+                "authored decoration must persist an absolute position rather than a heightmap offset");
+        helper.succeed();
+    }
 
-        FrontierWorldgenFeature.clearLateNaturalVegetation(helper.getLevel(),
-                new CompiledChunkSlice.VegetationColumn(surface.getX(), surface.getZ(), surface.getY()),
-                java.util.Map.of(authored, Blocks.SPRUCE_LOG.defaultBlockState()));
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void authoredEnvironmentUsesCircularEcologyAndSurfaceOnlyStructureClearance(
+            GameTestHelper helper) {
+        var environment = new SiteEnvironmentPlan("test", new VisualPoint(1_000, 70, -2_000),
+                128, 176, 16, 52, 96);
 
-        helper.assertBlockPresent(Blocks.AIR, new BlockPos(5, 5, 5));
-        helper.assertBlockPresent(Blocks.AIR, new BlockPos(5, 6, 5));
-        helper.assertBlockPresent(Blocks.SPRUCE_LOG, new BlockPos(5, 7, 5));
+        helper.assertTrue(environment.insideHard(1_128, -2_000),
+                "hard ecology reservation must include its 128-block circular edge");
+        helper.assertTrue(!environment.insideHard(1_128, -1_872),
+                "hard ecology reservation must be circular rather than a square");
+        helper.assertTrue(environment.insideTransition(1_160, -2_000),
+                "transition woodland must extend beyond the hard ecology reservation");
+        helper.assertTrue(environment.insideStructureClearance(1_144, -2_000),
+                "surface structures must respect the additional 16-block clearance");
+
+        helper.assertTrue(WorldgenExclusionIndex.intersectsSurfaceStructure(environment,
+                        new BoundingBox(1_138, 60, -2_004, 1_152, 84, -1_996)),
+                "a surface structure crossing the clearance circle must be rejected as a whole");
+        helper.assertTrue(!WorldgenExclusionIndex.intersectsSurfaceStructure(environment,
+                        new BoundingBox(1_138, 10, -2_004, 1_152, 40, -1_996)),
+                "a deep structure below authored foundations must remain available");
+        helper.assertTrue(!WorldgenExclusionIndex.intersectsSurfaceStructure(environment,
+                        new BoundingBox(1_150, 60, -2_004, 1_164, 84, -1_996)),
+                "a surface structure wholly outside the clearance circle must remain available");
         helper.succeed();
     }
 
@@ -116,7 +136,7 @@ public final class FrontierWorldgenCleanupGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
-    public static void lateFinalizationRestoresRailAfterOverlappingDecoration(GameTestHelper helper) {
+    public static void railwayRemainsTheFinalWriterInsideItsSlice(GameTestHelper helper) {
         int x = helper.absolutePos(new BlockPos(7, 2, 7)).getX();
         int z = helper.absolutePos(new BlockPos(7, 2, 7)).getZ();
         int y = helper.getLevel().getHeight(
@@ -126,12 +146,8 @@ public final class FrontierWorldgenCleanupGameTests {
                 Blocks.POWERED_RAIL.defaultBlockState().setValue(
                         net.minecraft.world.level.block.PoweredRailBlock.SHAPE, RailShape.NORTH_SOUTH),
                 Blocks.REDSTONE_BLOCK.defaultBlockState(), true);
-        var slice = new CompiledChunkSlice(new net.minecraft.world.level.ChunkPos(rail).toLong(),
-                "late-rail-regression", java.util.List.of(), java.util.List.of(), java.util.List.of(),
-                java.util.List.of(column), java.util.Map.of(rail, Blocks.BRICKS.defaultBlockState()));
-
-        FrontierWorldgenFeature.finishAfterDecoration(helper.getLevel(),
-                helper.getLevel().getChunkAt(rail), slice);
+        helper.getLevel().setBlock(rail, Blocks.BRICKS.defaultBlockState(), 2);
+        FrontierWorldgenFeature.placeRailColumn(helper.getLevel(), column, rail.getY() - 1, rail.getY() - 1);
 
         helper.assertValueEqual(helper.getLevel().getBlockState(rail).getBlock(), Blocks.POWERED_RAIL,
                 "late module decoration must not replace the immutable railway graph");

@@ -29,7 +29,7 @@ class FrontierRegionPlannerTest {
         assertEquals(48, seed.residents().stream().map(value -> value.residentId()).distinct().count());
         assertEquals(20, seed.modules().size());
         assertEquals(5, seed.expansionPlots().size());
-        assertEquals(13, seed.definitionVersion());
+        assertEquals(14, seed.definitionVersion());
         assertEquals(9, seed.primaryMineSite().initialModules().size());
         assertEquals(4, seed.alternateMineSite().initialModules().size());
         assertEquals(6, seed.primaryMineSite().foundations().size());
