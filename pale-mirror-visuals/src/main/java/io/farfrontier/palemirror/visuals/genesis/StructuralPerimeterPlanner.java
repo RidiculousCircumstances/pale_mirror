@@ -38,16 +38,18 @@ final class StructuralPerimeterPlanner {
             wallPoints.addAll(points);
             int cursor = 0;
             while (cursor < points.size()) {
-                int remaining = points.size() - cursor;
-                int length = remaining >= 9 ? 9 : remaining >= 5 ? 5 : remaining >= 3 ? 3 : 1;
+                int sameDatum = 1;
+                while (cursor + sameDatum < points.size() && sameDatum < 9
+                        && points.get(cursor + sameDatum).y() == points.get(cursor).y()) sameDatum++;
+                int length = sameDatum >= 9 ? 9 : sameDatum >= 7 ? 7
+                        : sameDatum >= 5 ? 5 : sameDatum >= 3 ? 3 : 1;
                 VisualPoint start = points.get(cursor);
                 VisualPoint end = points.get(Math.min(points.size() - 1, cursor + length - 1));
                 VisualPoint center = new VisualPoint((start.x() + end.x()) / 2,
                         (start.y() + end.y()) / 2, (start.z() + end.z()) / 2);
                 int turn = axisTurn(List.of(start, end));
-                PerimeterModuleKind kind = end.y() > start.y() ? PerimeterModuleKind.STEP_UP
-                        : end.y() < start.y() ? PerimeterModuleKind.STEP_DOWN : PerimeterModuleKind.STRAIGHT;
-                modules.add(new PerimeterModulePlan("wall:" + feature.id() + ":" + cursor, kind,
+                modules.add(new PerimeterModulePlan("wall:" + feature.id() + ":" + cursor,
+                        PerimeterModuleKind.STRAIGHT,
                         center, turn, length, footprint(center, turn, length, 5)));
                 cursor += length;
             }

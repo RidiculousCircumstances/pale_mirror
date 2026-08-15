@@ -30,6 +30,8 @@ final class SettlementPerimeterCompiler {
             int x = alongX(module, offset);
             int z = alongZ(module, offset);
             boolean post = Math.abs(offset) == module.length() / 2 || Math.floorMod(offset, 5) == 0;
+            sink.terrain(x, z, module.anchor().y(), post ? palette.foundation()
+                    : Blocks.COBBLESTONE.defaultBlockState(), palette.foundation());
             sink.surfaceBlock(x, z, -1, post ? palette.foundation() : Blocks.COBBLESTONE.defaultBlockState());
             sink.surfaceBlock(x, z, 0, post ? palette.log() : Blocks.COBBLESTONE_WALL.defaultBlockState());
             if (post) sink.surfaceBlock(x, z, 1, SettlementGenesisCompiler.fence(palette));
@@ -46,15 +48,19 @@ final class SettlementPerimeterCompiler {
         int opening = module.kind() == PerimeterModuleKind.FREIGHT_GATE ? 5 : 1;
         int openingHalf = opening / 2;
         Direction facing = module.quarterTurns() % 2 == 0 ? Direction.NORTH : Direction.EAST;
-        BlockState openGate = fenceGate(palette).setValue(FenceGateBlock.FACING, facing)
+        BlockState pedestrianGate = fenceGate(palette).setValue(FenceGateBlock.FACING, facing)
                 .setValue(FenceGateBlock.OPEN, true);
         int jamb = openingHalf + 1;
         for (int offset = -module.length() / 2; offset <= module.length() / 2; offset++) {
             int x = alongX(module, offset);
             int z = alongZ(module, offset);
+            sink.terrain(x, z, module.anchor().y(), palette.foundation(), palette.foundation());
             sink.surfaceBlock(x, z, -1, palette.foundation());
             if (Math.abs(offset) <= openingHalf) {
-                sink.surfaceBlock(x, z, 0, openGate);
+                // A freight opening is physical clearance, not five gates in a row.
+                sink.surfaceBlock(x, z, 0, module.kind() == PerimeterModuleKind.FREIGHT_GATE
+                        ? Blocks.AIR.defaultBlockState() : pedestrianGate);
+                sink.surfaceBlock(x, z, 1, Blocks.AIR.defaultBlockState());
             } else if (Math.abs(offset) == jamb) {
                 sink.surfaceBlock(x, z, 0, palette.log());
                 sink.surfaceBlock(x, z, 1, palette.log());
@@ -76,6 +82,7 @@ final class SettlementPerimeterCompiler {
         int x = module.anchor().x();
         int z = module.anchor().z();
         if (!fixtures.reserve(x, z, 2)) return;
+        sink.terrain(x, z, module.anchor().y(), palette.foundation(), palette.foundation());
         sink.surfaceBlock(x, z, 2, palette.log());
         sink.surfaceBlock(x, z, 3, Blocks.LANTERN.defaultBlockState());
     }

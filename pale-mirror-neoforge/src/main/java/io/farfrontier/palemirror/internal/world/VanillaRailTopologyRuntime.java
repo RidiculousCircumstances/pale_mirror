@@ -76,8 +76,15 @@ final class VanillaRailTopologyRuntime {
         int budget = CHUNK_GRAPH_BUDGET;
         while (!pending.isEmpty() && budget-- > 0) {
             BlockPos position = pending.removeFirst();
-            if (!new ChunkPos(position).equals(chunk) || !record.containsTopologyPosition(position)
-                    || !visited.add(position.asLong())) continue;
+            if (!record.containsTopologyPosition(position)) continue;
+            if (!new ChunkPos(position).equals(chunk)) {
+                // Preserve the bounded graph frontier across chunk borders.
+                // The adjacent cell is observed by the small local scanner on
+                // a later pass; this scan never walks an unrelated chunk.
+                if (level.hasChunkAt(position)) changed |= record.markTopologyDirty(position);
+                continue;
+            }
+            if (!visited.add(position.asLong())) continue;
             var shape = adapter.observedShape(level, position);
             changed |= record.observeRail(position, shape);
             if (shape == null) continue;

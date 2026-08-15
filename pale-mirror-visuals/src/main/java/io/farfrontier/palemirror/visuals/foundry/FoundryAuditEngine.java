@@ -203,6 +203,16 @@ public final class FoundryAuditEngine {
                             "Entrance is more than 12 blocks from authored circulation.",
                             "Compile a flared access apron or move the semantic port to the real facade.");
                 }
+                FoundryRegionIndex.ExpectedCell threshold = index.expected(block(port.position()));
+                if (port.kind() == VisualPortKind.PUBLIC_ENTRANCE
+                        && (threshold == null || !(threshold.state().getBlock()
+                        instanceof net.minecraft.world.level.block.DoorBlock))) {
+                    disconnected++;
+                    add(findings, "navigation.entrance.semantic", FoundrySeverity.BLOCKER, phase, "module",
+                            module.instanceId(), index.region().dimensionId(), port.position(),
+                            "Semantic public entrance does not compile to a real door at its exact threshold.",
+                            "Correct the curated local NBT entrance coordinate and module rotation contract.");
+                }
             }
         }
         metrics.add(new FoundryMetric("navigation.entrances", entrances, "ports"));

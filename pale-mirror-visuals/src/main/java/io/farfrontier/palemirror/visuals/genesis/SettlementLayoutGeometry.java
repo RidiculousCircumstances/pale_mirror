@@ -37,7 +37,10 @@ final class SettlementLayoutGeometry {
         java.util.List<VisualPoint> nodes = new java.util.ArrayList<>(feature.nodes().size());
         for (int index = 0; index < feature.nodes().size(); index++) {
             VisualPoint point = feature.nodes().get(index);
-            nodes.add(index == 0 ? point : surfacePoint(point, snapshot));
+            // The authored doorway and its four-block apron form one threshold.
+            // Snapping the second node to natural terrain created a one-block
+            // cliff directly outside raised NBT doors.
+            nodes.add(index <= 1 ? point : surfacePoint(point, snapshot));
         }
         return new LinearFeaturePlan(feature.id(), feature.kind(), nodes, feature.width(), feature.walkable());
     }
@@ -202,6 +205,29 @@ final class SettlementLayoutGeometry {
         else if (direction == 2) x = bounds.min().x();
         else z = bounds.min().z();
         return new VisualPoint(x, bounds.min().y(), z);
+    }
+
+    /** Resolves the curated NBT threshold through the exact compiler rotation. */
+    static VisualPoint authoredEntrance(FrontierModuleCatalog.Definition definition,
+                                        VisualBounds footprint, int rotation) {
+        int turns = Math.floorMod(rotation, 4);
+        int x;
+        int z;
+        if (turns == 1) {
+            x = definition.sizeZ() - 1 - definition.entranceZ();
+            z = definition.entranceX();
+        } else if (turns == 2) {
+            x = definition.sizeX() - 1 - definition.entranceX();
+            z = definition.sizeZ() - 1 - definition.entranceZ();
+        } else if (turns == 3) {
+            x = definition.entranceZ();
+            z = definition.sizeX() - 1 - definition.entranceX();
+        } else {
+            x = definition.entranceX();
+            z = definition.entranceZ();
+        }
+        return new VisualPoint(footprint.min().x() + x,
+                footprint.min().y() + definition.entranceY(), footprint.min().z() + z);
     }
 
     static VisualPoint oppositeEntrance(VisualBounds bounds, int direction) {

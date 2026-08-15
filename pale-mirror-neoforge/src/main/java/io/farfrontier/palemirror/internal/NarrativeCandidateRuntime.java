@@ -55,11 +55,11 @@ final class NarrativeCandidateRuntime {
                         region.primaryFacilityId(), NarrativeCandidateType.SUPPLY_CRISIS,
                         ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS, 96, 94, 100, 74));
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED) {
-                regionFor(event.subject()).ifPresent(region -> append(candidates, event, region.primaryAudience(),
+                regionFor(event.subject()).filter(region -> opportunityStillPending(event)).ifPresent(region -> append(candidates, event, region.primaryAudience(),
                         region.primaryFacilityId(), NarrativeCandidateType.DEVELOPMENT_OPPORTUNITY,
                         ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, 50, 82, 88, 95));
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_RETURN_PLANNED) {
-                regionFor(event.subject()).ifPresent(region -> append(candidates, event, region.primaryAudience(),
+                regionFor(event.subject()).filter(region -> opportunityStillPending(event)).ifPresent(region -> append(candidates, event, region.primaryAudience(),
                         region.primaryFacilityId(), NarrativeCandidateType.RESETTLEMENT_OPPORTUNITY,
                         ScenarioArchetype.RESETTLEMENT_OPPORTUNITY, 58, 86, 96, 90));
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.REGION_DISCOVERED) {
@@ -76,6 +76,8 @@ final class NarrativeCandidateRuntime {
                 .filter(event -> event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED
                         || event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED
                         || event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_RETURN_PLANNED)
+                .filter(event -> event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED
+                        || opportunityStillPending(event))
                 .forEach(event -> regionFor(event.subject()).ifPresent(region -> {
                     if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED) {
                         append(candidates, event, region.primaryAudience(), region.primaryFacilityId(),
@@ -90,6 +92,13 @@ final class NarrativeCandidateRuntime {
                             ScenarioArchetype.RESETTLEMENT_OPPORTUNITY, 58, 86, 96, 90);
                 }));
         offer(candidates);
+    }
+
+    private boolean opportunityStillPending(DomainEvent event) {
+        if (event.causationId() == null || event.causationId().isBlank()) return false;
+        return data.worldState().developmentIntent(event.causationId())
+                .map(intent -> intent.state() == io.farfrontier.palemirror.domain.DevelopmentIntentState.PLANNED)
+                .orElse(false);
     }
 
     private void appendKnownCrisis(Map<StoryAudienceId, List<NarrativeCandidate>> candidates, WorldObjectId communityId) {

@@ -49,17 +49,8 @@ final class SiteSurfacePlanner {
         defences.forEach(feature -> line(claims, feature,
                 feature.kind() == LinearFeatureKind.PALISADE_GATE ? SiteSurfaceUse.GATE
                         : SiteSurfaceUse.PERIMETER, "perimeter:" + feature.id()));
-        // Reservation markers are small fixtures at exact corners. Pin those
-        // datums without claiming or grading an entire future parcel.
-        for (DevelopmentReservation reservation : reservations) for (int[] corner : new int[][]{
-                {reservation.bounds().min().x(), reservation.bounds().min().z()},
-                {reservation.bounds().max().x(), reservation.bounds().min().z()},
-                {reservation.bounds().min().x(), reservation.bounds().max().z()},
-                {reservation.bounds().max().x(), reservation.bounds().max().z()}}) {
-            claims.putIfAbsent(key(corner[0], corner[1]), new SiteSurfaceColumn(corner[0], corner[1],
-                    reservation.bounds().min().y() + 1, SiteSurfaceUse.CLEARANCE,
-                    "reservation:" + reservation.id()));
-        }
+        // A future parcel is planning data, not physical geometry. It acquires
+        // surface ownership only when a staged project is actually compiled.
         return new SiteSurfacePlan(claims.values().stream().sorted(Comparator.comparingInt(SiteSurfaceColumn::z)
                 .thenComparingInt(SiteSurfaceColumn::x)).toList());
     }

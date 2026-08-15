@@ -20,7 +20,7 @@ public final class MaterializationGateway implements GuardedWorldAccess {
 
     @Override
     public Result setBlock(SemanticSlotKey key, BlockPos position, BlockState desired, int flags) {
-        return setBlock(key, position, desired, flags, desired::equals);
+        return setBlock(key, position, desired, flags, observed -> equivalent(desired, observed));
     }
 
     public Result setBlock(SemanticSlotKey key, BlockPos position, BlockState desired, int flags,
@@ -40,11 +40,11 @@ public final class MaterializationGateway implements GuardedWorldAccess {
         if (cell == null) return Result.blocked("Position is outside semantic slot " + key.value());
         if (!slot.mutable()) return Result.blocked(slot.conflicted() ? slot.diagnostic() : "Parcel is not PM-managed");
         BlockState current = level.getBlockState(position);
-        if (current.equals(desired)) {
+        if (equivalent(current, desired)) {
             cell.applied(desired);
             return Result.unchanged();
         }
-        if (!current.equals(cell.baselineState()) && !current.equals(cell.lastAppliedState())
+        if (!equivalent(current, cell.baselineState()) && !equivalent(current, cell.lastAppliedState())
                 && slot.resetPermit().isBlank()) {
             slot.conflict("Unknown change at " + position);
             return Result.blocked(slot.diagnostic());
@@ -71,4 +71,17 @@ public final class MaterializationGateway implements GuardedWorldAccess {
     }
 
     public static String identity(BlockState state) { return state.toString(); }
+
+    /**
+     * Fence and wall connections are derived by Minecraft from neighbouring
+     * blocks. They are not authored semantic state and therefore cannot make
+     * an otherwise successful PM write fail its postcondition.
+     */
+    static boolean equivalent(BlockState expected, BlockState observed) {
+        if (expected.equals(observed)) return true;
+        if (expected.getBlock() != observed.getBlock()) return false;
+        return expected.getBlock() instanceof net.minecraft.world.level.block.FenceBlock
+                || expected.getBlock() instanceof net.minecraft.world.level.block.WallBlock
+                || expected.getBlock() instanceof net.minecraft.world.level.block.IronBarsBlock;
+    }
 }

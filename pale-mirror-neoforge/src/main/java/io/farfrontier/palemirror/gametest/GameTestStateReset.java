@@ -47,13 +47,25 @@ final class GameTestStateReset {
     }
 
     static void registerMinimalRouteRegion(PaleMirrorSavedData data, String regionId, WorldObjectId routeId) {
+        registerMinimalRouteRegion(data, regionId, routeId, RouteProvider.PALE_MIRROR);
+    }
+
+    static void registerMinimalRouteRegion(PaleMirrorSavedData data, String regionId, WorldObjectId routeId,
+                                           RouteProvider primaryProvider) {
         String namespace = routeId.value().substring(0, routeId.value().indexOf(':'));
         String prefix = namespace + ":fixture_" + Integer.toUnsignedString(regionId.hashCode(), 36);
-        registerMinimalRegion(data, new WorldObjectId(prefix + "_community"), prefix, regionId, routeId);
+        registerMinimalRegion(data, new WorldObjectId(prefix + "_community"), prefix, regionId, routeId,
+                primaryProvider);
     }
 
     private static void registerMinimalRegion(PaleMirrorSavedData data, WorldObjectId communityId,
                                               String prefix, String regionId, WorldObjectId primaryRouteId) {
+        registerMinimalRegion(data, communityId, prefix, regionId, primaryRouteId, RouteProvider.PALE_MIRROR);
+    }
+
+    private static void registerMinimalRegion(PaleMirrorSavedData data, WorldObjectId communityId,
+                                              String prefix, String regionId, WorldObjectId primaryRouteId,
+                                              RouteProvider primaryProvider) {
         WorldObjectId placeId = new WorldObjectId(prefix + "_place");
         WorldObjectId primaryFacilityId = new WorldObjectId(prefix + "_primary_mine");
         WorldObjectId alternateFacilityId = new WorldObjectId(prefix + "_alternate_mine");
@@ -76,7 +88,7 @@ final class GameTestStateReset {
         List<SiteCapability> capabilities = sites.stream()
                 .map(site -> new SiteCapability(site.id(), SiteCapabilityType.LOGISTICS, ResourceKind.IRON, 8)).toList();
         List<RouteContract> routes = List.of(
-                new RouteContract(primaryRouteId, originId, destinationId, RouteProvider.PALE_MIRROR,
+                new RouteContract(primaryRouteId, originId, destinationId, primaryProvider,
                         ResourceKind.IRON, 8, 4, 8, RouteContractStatus.PLANNED),
                 new RouteContract(alternateRouteId, alternateOriginId, destinationId, RouteProvider.PALE_MIRROR,
                         ResourceKind.IRON, 8, 4, 8, RouteContractStatus.PLANNED));

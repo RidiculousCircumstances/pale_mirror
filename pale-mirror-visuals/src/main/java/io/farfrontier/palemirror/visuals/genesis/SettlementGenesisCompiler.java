@@ -369,30 +369,9 @@ final class SettlementGenesisCompiler {
     /** Marks future parcels without constructing their future buildings. */
     private static void reservedPlots(AuthoredSettlementSitePlan settlement,
                                       FrontierPalette palette, SettlementFixtureOccupancy fixtures, Sink sink) {
-        int parcelIndex = 0;
-        for (var reservation : settlement.developmentReservations()) {
-            if (reservation.kind() != DevelopmentReservationKind.PARCEL) continue;
-            var bounds = reservation.bounds();
-            int[][] corners = {
-                    {bounds.min().x(), bounds.min().z()}, {bounds.max().x(), bounds.min().z()},
-                    {bounds.min().x(), bounds.max().z()}, {bounds.max().x(), bounds.max().z()}
-            };
-            boolean lit = false;
-            for (int step = 0; step < corners.length; step++) {
-                int corner = Math.floorMod(parcelIndex + step, corners.length);
-                int x = corners[corner][0];
-                int z = corners[corner][1];
-                if (!fixtures.reserve(x, z, 1)) continue;
-                sink.surfaceBlock(x, z, -1, Blocks.COBBLESTONE.defaultBlockState());
-                sink.surfaceBlock(x, z, 0, fence(palette));
-                sink.surfaceBlock(x, z, 1, fence(palette));
-                if (!lit) {
-                    sink.surfaceBlock(x, z, 2, Blocks.LANTERN.defaultBlockState());
-                    lit = true;
-                }
-            }
-            parcelIndex++;
-        }
+        // Reservations are canonical planning data. Posts made an empty future
+        // parcel look like a broken building and could float after grading.
+        // Atlas/Foundry expose them until a real staged project claims a slot.
     }
 
     private static void climateThreshold(FrontierClimate climate, AuthoredSettlementSitePlan settlement,
@@ -431,7 +410,14 @@ final class SettlementGenesisCompiler {
             BlockPos base = SettlementPublicRealm.block(port.position());
             Direction facing = SettlementPublicRealm.direction(port.outwardQuarterTurns());
             Direction tangent = facing.getClockWise();
-            for (int depth = 1; depth <= 3; depth++) {
+            int exteriorDepth = switch (Math.floorMod(port.outwardQuarterTurns(), 4)) {
+                case 0 -> module.footprint().max().x() - port.position().x();
+                case 1 -> module.footprint().max().z() - port.position().z();
+                case 2 -> port.position().x() - module.footprint().min().x();
+                default -> port.position().z() - module.footprint().min().z();
+            };
+            int apronDepth = Math.max(3, exteriorDepth + 2);
+            for (int depth = 1; depth <= apronDepth; depth++) {
                 int halfWidth = depth <= 2 ? 2 : 1;
                 for (int across = -halfWidth; across <= halfWidth; across++) {
                     int x = base.getX() + facing.getStepX() * depth + tangent.getStepX() * across;

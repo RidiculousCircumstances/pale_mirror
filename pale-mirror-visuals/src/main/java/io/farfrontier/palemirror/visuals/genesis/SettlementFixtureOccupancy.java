@@ -20,7 +20,8 @@ final class SettlementFixtureOccupancy {
         seed.baselineRailNodes().forEach(point -> result.block(point.x(), point.z(), 1));
         seed.settlementSite().modules().forEach(module -> module.ports().stream()
                 .filter(port -> port.kind() == VisualPortKind.PUBLIC_ENTRANCE)
-                .forEach(port -> result.blockEntranceApron(port.position(), port.outwardQuarterTurns())));
+                .forEach(port -> result.blockEntranceApron(port.position(), port.outwardQuarterTurns(),
+                        module.footprint())));
         return result;
     }
 
@@ -52,10 +53,16 @@ final class SettlementFixtureOccupancy {
         return true;
     }
 
-    private void blockEntranceApron(VisualPoint entrance, int outwardQuarterTurns) {
+    private void blockEntranceApron(VisualPoint entrance, int outwardQuarterTurns, VisualBounds footprint) {
         var outward = SettlementPublicRealm.direction(outwardQuarterTurns);
         var tangent = outward.getClockWise();
-        for (int depth = 1; depth <= 3; depth++) {
+        int exterior = switch (Math.floorMod(outwardQuarterTurns, 4)) {
+            case 0 -> footprint.max().x() - entrance.x();
+            case 1 -> footprint.max().z() - entrance.z();
+            case 2 -> entrance.x() - footprint.min().x();
+            default -> entrance.z() - footprint.min().z();
+        };
+        for (int depth = 1; depth <= Math.max(3, exterior + 2); depth++) {
             int halfWidth = depth <= 2 ? 2 : 1;
             for (int across = -halfWidth; across <= halfWidth; across++) {
                 block(entrance.x() + outward.getStepX() * depth + tangent.getStepX() * across,

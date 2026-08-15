@@ -21,6 +21,32 @@ Use these headings exactly:
 
 If a fact is missing, record `UNCONFIRMED`; do not invent it.
 
+## Mandatory project skills
+
+Project skills live in `.agents/skills`. Before acting on a matching task,
+read the complete `SKILL.md` for every matching skill and announce the skill
+use in the commentary update. This routing is mandatory even when the host UI
+does not list repo-local skills; open the file directly instead. A summary in
+this file never substitutes for reading the selected skill.
+
+- Materialization, Foundry reports/rules, physical ownership, unsupported or
+  obstructed structures: `.agents/skills/pm-foundry-audit/SKILL.md`.
+- Screenshots, coordinates, settlement/mine/rail aesthetics, terrain
+  integration, or visual acceptance: `.agents/skills/pm-visual-audit/SKILL.md`.
+- Chunk generation/loading, planner CPU, JFR, C2ME/DH, TPS, watchdogs, or
+  performance changes: `.agents/skills/pm-worldgen-performance/SKILL.md`.
+- Build/package/release readiness, completion claims, or pre-commit gates:
+  `.agents/skills/pm-release-verification/SKILL.md`.
+- Test-server rebuild, reset, deploy, restart, logs, pack/client installer, or
+  live-server validation: `.agents/skills/pm-test-server-ops/SKILL.md`.
+- Product review, version scope, player promise, playtest gates, or roadmap:
+  `.agents/skills/pm-product-review/SKILL.md`.
+
+When scopes overlap, use the smallest matching set. Structural visual defects
+require both visual and Foundry skills. Verify an implementation before using
+the server-operations skill to deploy it. Product decisions precede technical
+implementation; release verification follows it.
+
 ## Sources of truth
 
 - `architecture.yml` owns component boundaries, ownership, invariants, and

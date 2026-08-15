@@ -233,8 +233,8 @@ public final class VisualsGameTests {
                 .flatMap(value -> value.decorations().stream()).map(value -> value.state()).toList();
         var gates = decorations.stream().filter(value -> value.getBlock()
                 instanceof net.minecraft.world.level.block.FenceGateBlock).toList();
-        helper.assertValueEqual(gates.size(), 8,
-                "one five-block freight gate and three pedestrian gates must compile exactly once");
+        helper.assertValueEqual(gates.size(), 3,
+                "the freight gatehouse must stay five blocks clear while three pedestrian gates compile once");
         helper.assertTrue(gates.stream().allMatch(value -> value.getValue(
                         net.minecraft.world.level.block.FenceGateBlock.OPEN)),
                 "fresh-world settlement gates must begin open and remain manually closable");

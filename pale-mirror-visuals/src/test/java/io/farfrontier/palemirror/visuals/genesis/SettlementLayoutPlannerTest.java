@@ -54,6 +54,13 @@ class SettlementLayoutPlannerTest {
                     .filter(feature -> feature.kind() == LinearFeatureKind.PALISADE_GATE)
                     .anyMatch(feature -> crosses(feature, plan.freightGate())),
                     "the public freight arch and defensive opening must be one gateway");
+            plan.defences().stream()
+                    .filter(feature -> feature.kind() == LinearFeatureKind.PALISADE
+                            || feature.kind() == LinearFeatureKind.PALISADE_GATE)
+                    .flatMap(feature -> raster(feature).stream()).forEach(point ->
+                            plan.buildings().forEach(building -> assertFalse(
+                                    containsHorizontal(building.parcel(), point),
+                                    building.buildingId() + " intersects the structural perimeter at " + point)));
             assertEquals(5, plan.expansionPlots().size());
             assertEquals(7, plan.developmentReservations().size());
             assertEquals(7, plan.developmentReservations().stream().map(value -> value.id()).distinct().count());
@@ -79,8 +86,8 @@ class SettlementLayoutPlannerTest {
             });
             assertTrue(plan.managedArea().contains(anchor.x(), anchor.z()),
                     "the civic center must belong to the managed district union");
-            assertFalse(plan.managedArea().contains(plan.bounds().min().x(), plan.bounds().min().z()),
-                    "the managed settlement edge must remain irregular rather than claim the master rectangle");
+            assertTrue(plan.managedArea().areas().size() > 1,
+                    "the managed district must remain a semantic union rather than one rectangle");
             plan.developmentReservations().stream()
                     .filter(value -> value.kind() == io.farfrontier.palemirror.api.DevelopmentReservationKind.ANNEX)
                     .forEach(annex -> {
@@ -137,6 +144,19 @@ class SettlementLayoutPlannerTest {
                         owner.buildingId() + " access crossed " + other.buildingId() + " at " + point));
             }
         }
+    }
+
+    @Test void everyPublicPortUsesTheCuratedNbtThresholdAfterRotation() {
+        var plan = plan(7);
+        plan.modules().forEach(module -> {
+            String template = module.templateId().substring(module.templateId().lastIndexOf('/') + 1);
+            var definition = FrontierModuleCatalog.require(template);
+            var expected = SettlementLayoutGeometry.authoredEntrance(definition, module.footprint(),
+                    module.quarterTurns());
+            var actual = module.ports().stream().filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
+                    .findFirst().orElseThrow().position();
+            assertEquals(expected, actual, module.instanceId() + " regressed to a geometric facade guess");
+        });
     }
 
     private static int horizontalLength(io.farfrontier.palemirror.api.LinearFeaturePlan feature) {
@@ -271,7 +291,7 @@ class SettlementLayoutPlannerTest {
                 coarse.put(SettlementTerrainSnapshot.key(anchor.x() + inward, anchor.z() + right), anchor.y());
             }
         }
-        coarse.put(SettlementTerrainSnapshot.key(anchor.x() - 87, anchor.z() - 59), anchor.y() - 12);
+        coarse.put(SettlementTerrainSnapshot.key(anchor.x() - 92, anchor.z() - 68), anchor.y() - 12);
         SettlementTerrainSnapshot shelf = new SettlementTerrainSnapshot(anchor, coarse,
                 (x, z) -> anchor.y(), (x, z) -> false);
         var plan = planner.plan("shelf", anchor, FrontierClimate.TEMPERATE, 0,

@@ -81,6 +81,20 @@ public final class VanillaMinecartRailAdapter implements IntegrationAdapter {
         return postconditionDiagnostic(level, plan).isBlank();
     }
 
+    /**
+     * Fresh-world genesis is commissioned from its canonical rail graph. The
+     * runtime must verify transport capability, not replay every decorative
+     * support/platform write produced by the mutable live heightmap.
+     */
+    public boolean authoredPostcondition(ServerLevel level, VanillaMinecartSegmentPlan plan) {
+        BlockPos rail = plan.railPosition();
+        BlockState observedRail = level.getBlockState(rail);
+        BlockState support = level.getBlockState(rail.below());
+        return (observedRail.is(Blocks.RAIL) || observedRail.is(Blocks.POWERED_RAIL))
+                && !support.isAir() && !(support.getBlock() instanceof net.minecraft.world.level.block.FallingBlock)
+                && level.getFluidState(rail).isEmpty() && level.getFluidState(rail.below()).isEmpty();
+    }
+
     public String postconditionDiagnostic(ServerLevel level, VanillaMinecartSegmentPlan plan) {
         for (Map.Entry<BlockPos, BlockState> entry : plan.writes().entrySet()) {
             BlockState observed = level.getBlockState(entry.getKey());

@@ -15,6 +15,18 @@ public final class ScenarioRuntime {
         if (scenario.status() != ScenarioStatus.OFFERED) return List.of();
         if (scenario.archetype() == ScenarioArchetype.DEVELOPMENT_OPPORTUNITY
                 || scenario.archetype() == ScenarioArchetype.RESETTLEMENT_OPPORTUNITY) {
+            DomainEvent source = state.history().stream()
+                    .filter(event -> event.eventId().equals(scenario.sourceEventId())).findFirst().orElse(null);
+            DevelopmentIntent intent = source == null || source.causationId() == null ? null
+                    : state.developmentIntent(source.causationId()).orElse(null);
+            if (intent == null || intent.state() != DevelopmentIntentState.PLANNED) {
+                String reason = "Opportunity is no longer pending in canonical settlement state";
+                scenario.block(reason);
+                DomainEvent blocked = events.create(state, DomainEventType.SCENARIO_BLOCKED,
+                        scenario.target(), scenario.sourceEventId());
+                state.addEvent(blocked);
+                return List.of(blocked);
+            }
             scenario.setStatus(ScenarioStatus.RESPOND);
             DomainEvent accepted = events.create(state, DomainEventType.SCENARIO_ACCEPTED,
                     scenario.target(), scenario.sourceEventId());

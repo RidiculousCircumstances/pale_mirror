@@ -32,8 +32,11 @@ final class SettlementAccessRouter {
         int outwardZ = switch (Math.floorMod(port.outwardQuarterTurns(), 4)) {
             case 1 -> 1; case 3 -> -1; default -> 0;
         };
-        Cell throat = new Cell(access.x() + outwardX * DOORWAY_APPROACH_LENGTH,
-                access.z() + outwardZ * DOORWAY_APPROACH_LENGTH);
+        VisualBounds ownerFootprint = owner.modules().getFirst().footprint();
+        int approachLength = Math.max(DOORWAY_APPROACH_LENGTH,
+                distanceOutside(ownerFootprint, access, port.outwardQuarterTurns()) + 2);
+        Cell throat = new Cell(access.x() + outwardX * approachLength,
+                access.z() + outwardZ * approachLength);
 
         Set<Cell> blocked = new HashSet<>();
         for (AuthoredBuildingPlan building : buildings) {
@@ -55,7 +58,12 @@ final class SettlementAccessRouter {
                 "Settlement public street graph has no free access cells");
 
         Bounds bounds = Bounds.around(buildings, publicGraph, SEARCH_MARGIN);
-        List<Cell> path = search(throat, targets, blocked, bounds);
+        List<Cell> path;
+        try {
+            path = search(throat, targets, blocked, bounds);
+        } catch (DryMineSiteUnavailableException failure) {
+            throw new DryMineSiteUnavailableException(owner.buildingId() + ": " + failure.getMessage());
+        }
         List<VisualPoint> result = new ArrayList<>();
         result.add(access);
         // Keep this as one authored segment. The circulation compiler then
@@ -124,6 +132,15 @@ final class SettlementAccessRouter {
                 target.add(new Cell(x, z));
             }
         }
+    }
+
+    private static int distanceOutside(VisualBounds bounds, VisualPoint point, int outward) {
+        return switch (Math.floorMod(outward, 4)) {
+            case 0 -> bounds.max().x() - point.x();
+            case 1 -> bounds.max().z() - point.z();
+            case 2 -> point.x() - bounds.min().x();
+            default -> point.z() - bounds.min().z();
+        };
     }
 
     private static List<VisualPoint> raster(VisualPoint from, VisualPoint to) {

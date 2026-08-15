@@ -1,0 +1,6 @@
+interface:
+  display_name: "PM Release Verification"
+  short_description: "Run evidence-based release and package gates"
+  default_prompt: "Use $pm-release-verification to verify this Pale Mirror release candidate."
+policy:
+  allow_implicit_invocation: true

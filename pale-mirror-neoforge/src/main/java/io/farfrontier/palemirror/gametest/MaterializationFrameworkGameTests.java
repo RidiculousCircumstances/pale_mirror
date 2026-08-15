@@ -89,6 +89,32 @@ public final class MaterializationFrameworkGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-materialization-connectivity", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void derivedFenceConnectionsDoNotBlockAnAuthoredSlot(GameTestHelper helper) {
+        BlockPos position = helper.absolutePos(new BlockPos(1, 2, 1));
+        BlockPos neighbour = position.east();
+        var authored = net.minecraft.world.level.block.Blocks.OAK_FENCE.defaultBlockState();
+        helper.getLevel().setBlock(position, authored, 3);
+        helper.getLevel().setBlock(neighbour, authored, 3);
+        String dimension = helper.getLevel().dimension().location().toString();
+        ParcelLedger parcels = new ParcelLedger();
+        ParcelRecord parcel = new ParcelRecord("pale_mirror:fence", "pale_mirror:test_region", dimension,
+                position, position, "test", ParcelKind.COMMUNITY, null, 0, "");
+        parcels.register(parcel);
+        SemanticSlotKey key = new SemanticSlotKey("pale_mirror:test", "module", "fence");
+        SemanticSlotLedger slots = new SemanticSlotLedger();
+        slots.register(new SemanticSlotRecord(key, parcel.id(), ParcelKind.COMMUNITY,
+                java.util.List.of(new SemanticCellRecord(position, authored, authored)), false, "", ""));
+
+        var result = new MaterializationGateway(helper.getLevel(), slots, parcels)
+                .setBlock(key, position, authored, 3);
+
+        helper.assertTrue(result.status() == io.farfrontier.palemirror.api.GuardedWorldAccess.Status.UNCHANGED,
+                "Minecraft-derived fence connections must not look like a player conflict");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-settlement-territory", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void settlementColumnRejectsTreesAndBackgroundHostiles(GameTestHelper helper) {

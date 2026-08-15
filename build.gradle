@@ -71,6 +71,19 @@ def guardedJavaSources = fileTree('.') {
     include 'pale-mirror-domain/src/**/*.java', 'pale-mirror-neoforge/src/**/*.java', 'pale-mirror-visuals/src/**/*.java'
     exclude '**/build/**'
 }
+def mandatoryProjectSkills = [
+        'pm-foundry-audit',
+        'pm-visual-audit',
+        'pm-worldgen-performance',
+        'pm-release-verification',
+        'pm-test-server-ops',
+        'pm-product-review'
+]
+def agentRulesFile = layout.projectDirectory.file('AGENTS.md').asFile
+def mandatoryProjectSkillFiles = mandatoryProjectSkills.collectEntries { name -> [(name): [
+        skill: layout.projectDirectory.file(".agents/skills/${name}/SKILL.md").asFile,
+        metadata: layout.projectDirectory.file(".agents/skills/${name}/agents/openai.yaml").asFile
+]] }
 def trackedFiles = providers.exec {
     commandLine 'git', 'ls-files'
 }.standardOutput.asText.map { text -> text.readLines() }
@@ -87,7 +100,7 @@ def requiredArchitectureStatements = [
         'Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.',
         'The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence.'
         ,'Fresh-world visual genesis is distinct from reconciliation materialization; one dedicated coordinator uses a bounded configurable worker pool for independent terrain probes and candidate attempts, then deterministically reduces indexed results and compiles immutable manifests into chunk-addressed slices before players are admitted. A registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v40 compatibility path.'
-        ,'Every authored settlement is an immutable terrain-led site plan selected from a bounded archetype catalog. Buildings have stable identity, categories, functions, local foundations, semantic slots, ports and state profiles; open spaces, circulation, segmented defences, irregular managed-area unions and five parcels plus two annex easements are typed and validated, and no radial wall or global settlement terrace is synthesized as a hidden fallback.'
+        ,'Every authored settlement is an immutable terrain-led site plan selected from a bounded archetype catalog. Buildings have stable identity, categories, functions, local foundations, semantic slots, ports and state profiles; each curated NBT module declares its real local threshold and canonical outward facade, and module rotation, door, apron and obstacle-aware circulation derive from that one contract rather than a bounding-box midpoint. Open spaces, circulation, segmented defences, irregular managed-area unions and five parcels plus two annex easements are typed and validated, and no radial wall or global settlement terrace is synthesized as a hidden fallback.'
         ,'The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions.'
 ]
 
@@ -239,6 +252,35 @@ tasks.register('verifyWorkspaceHygiene') {
     }
 }
 
+tasks.register('verifyProjectSkills') {
+    group = 'verification'
+    description = 'Checks mandatory repo-local Pale Mirror skills and their AGENTS routing.'
+    inputs.file(agentRulesFile)
+    inputs.files(mandatoryProjectSkillFiles.values().collectMany { files -> [files.skill, files.metadata] })
+    doLast {
+        String agentRules = agentRulesFile.getText('UTF-8')
+        mandatoryProjectSkills.each { name ->
+            File skill = mandatoryProjectSkillFiles[name].skill
+            File metadata = mandatoryProjectSkillFiles[name].metadata
+            if (!skill.exists() || !metadata.exists()) {
+                throw new GradleException("Mandatory project skill is incomplete: ${name}")
+            }
+            String skillText = skill.getText('UTF-8')
+            String metadataText = metadata.getText('UTF-8')
+            if (!skillText.startsWith("---\nname: ${name}\ndescription: ") || skillText.contains('TODO')) {
+                throw new GradleException("Mandatory project skill has invalid frontmatter or TODOs: ${name}")
+            }
+            if (!metadataText.contains('allow_implicit_invocation: true')) {
+                throw new GradleException("Mandatory project skill must allow implicit invocation: ${name}")
+            }
+            String route = ".agents/skills/${name}/SKILL.md"
+            if (!agentRules.contains(route)) {
+                throw new GradleException("AGENTS.md is missing mandatory skill routing: ${route}")
+            }
+        }
+    }
+}
+
 tasks.register('verifyLargeFiles') {
     group = 'verification'
     description = 'Applies the 500-line Java-file debt ratchet.'
@@ -257,7 +299,7 @@ tasks.register('guardrails') {
     dependsOn tasks.named('verifyJava21'), tasks.named('verifyArchitecture'),
             tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles'),
             tasks.named('verifySourceIsolation'), tasks.named('verifyJavaStyle'),
-            tasks.named('verifyPortableConfiguration')
+            tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills')
 }
 
 tasks.named('check') {

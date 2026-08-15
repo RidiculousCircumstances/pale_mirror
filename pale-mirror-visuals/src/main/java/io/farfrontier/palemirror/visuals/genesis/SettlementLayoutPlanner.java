@@ -98,8 +98,9 @@ final class SettlementLayoutPlanner {
                         original.inward() + refinement[1], original.frontage());
                 VisualPoint origin = local(anchor, candidate.right(), candidate.inward(),
                         tier(archetype, candidate.inward(), terrain.relief()), freightDirection);
-                VisualBounds footprint = moduleFootprint(definition, origin,
-                        Math.floorMod(freightDirection + candidate.frontage(), 4));
+                int desiredFrontage = Math.floorMod(freightDirection + candidate.frontage(), 4);
+                int rotation = Math.floorMod(desiredFrontage - definition.entranceOutward(), 4);
+                VisualBounds footprint = moduleFootprint(definition, origin, rotation);
                 VisualBounds parcel = expand(footprint, 1, 0, 1);
                 if (!containsHorizontal(master, parcel) || !snapshot.roughlyAccepts(footprint)) continue;
                 if (!snapshot.resolvePad(footprint).accepted()) continue;
@@ -129,7 +130,8 @@ final class SettlementLayoutPlanner {
             FrontierModuleCatalog.Definition moduleDefinition = FrontierModuleCatalog.require(placement.spec().template());
             int tier = tier(archetype, placement.inward(), terrain.relief());
             VisualPoint roughOrigin = local(anchor, placement.right(), placement.inward(), tier, freightDirection);
-            int rotation = Math.floorMod(freightDirection + placement.frontage(), 4);
+            int desiredFrontage = Math.floorMod(freightDirection + placement.frontage(), 4);
+            int rotation = Math.floorMod(desiredFrontage - moduleDefinition.entranceOutward(), 4);
             VisualBounds roughFootprint = moduleFootprint(moduleDefinition, roughOrigin, rotation);
             SettlementTerrainSnapshot.PadResolution pad = snapshot.resolvePad(roughFootprint);
             if (!pad.accepted()) throw new DryMineSiteUnavailableException("Township building "
@@ -140,18 +142,18 @@ final class SettlementLayoutPlanner {
             VisualPoint origin = new VisualPoint(roughOrigin.x(), pad.targetY() - 1, roughOrigin.z());
             VisualBounds footprint = moduleFootprint(moduleDefinition, origin, rotation);
             String foundationId = "foundation_" + placement.spec().id();
-            VisualPoint entrance = entrance(footprint, rotation);
+            VisualPoint entrance = authoredEntrance(moduleDefinition, footprint, rotation);
             List<VisualPort> ports = new ArrayList<>();
-            ports.add(new VisualPort("public", VisualPortKind.PUBLIC_ENTRANCE, entrance, rotation));
+            ports.add(new VisualPort("public", VisualPortKind.PUBLIC_ENTRANCE, entrance, desiredFrontage));
             if (placement.spec().category() == io.farfrontier.palemirror.api.SettlementBuildingCategory.LOGISTICS
                     || placement.spec().category() == io.farfrontier.palemirror.api.SettlementBuildingCategory.INDUSTRY) {
                 ports.add(new VisualPort("service", VisualPortKind.SERVICE,
-                        oppositeEntrance(footprint, rotation), rotation + 2));
+                        oppositeEntrance(footprint, desiredFrontage), desiredFrontage + 2));
             }
             if (placement.spec().id().equals("receiving_depot")) {
-                ports.add(new VisualPort("freight", VisualPortKind.FREIGHT, entrance, rotation));
+                ports.add(new VisualPort("freight", VisualPortKind.FREIGHT, entrance, desiredFrontage));
                 ports.add(new VisualPort("rail", VisualPortKind.RAIL,
-                        oppositeEntrance(footprint, rotation), rotation + 2));
+                        oppositeEntrance(footprint, desiredFrontage), desiredFrontage + 2));
             }
             VisualModulePlacement module = new VisualModulePlacement(placement.spec().id() + "_shell",
                     "pale_mirror_visuals:" + family + "/" + placement.spec().template(),
@@ -167,7 +169,7 @@ final class SettlementLayoutPlanner {
                             ? "FREIGHT" : "BUILDING"));
         }
         validateNoOverlap(buildings);
-        VisualPoint roughGate = local(anchor, 0, 78, 0, freightDirection);
+        VisualPoint roughGate = local(anchor, 0, 84, 0, freightDirection);
         // The exported gate point is the first-air block occupied by its arch.
         // The freight road below it uses the solid surface explicitly.
         VisualPoint gate = withY(roughGate, snapshot.approximateHeight(roughGate.x(), roughGate.z()));

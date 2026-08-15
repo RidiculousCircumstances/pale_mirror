@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRecord;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRuntime;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteStatus;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
@@ -129,6 +130,39 @@ public final class VanillaMinecartRouteGameTests {
                     "restart must retain vanilla-route progress and its provenance cells");
             helper.succeed();
         });
+    }
+
+    @GameTest(batch = "pm-vanilla-minecart-authored-commissioning", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void authoredCorridorCommissionsFromCarrierCapabilityNotDecorativeReplay(GameTestHelper helper) {
+        if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
+        ServerLevel level = helper.getLevel();
+        PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
+        reset(data);
+        BlockPos start = helper.absolutePos(new BlockPos(0, 6, 0));
+        BlockPos target = start.east();
+        for (BlockPos rail : List.of(start, target)) {
+            level.setBlock(rail.below(), Blocks.STONE_BRICKS.defaultBlockState(), 3);
+            level.setBlock(rail, Blocks.RAIL.defaultBlockState()
+                    .setValue(RailBlock.SHAPE, RailShape.EAST_WEST), 3);
+        }
+        VanillaMinecartRouteRecord record = VanillaMinecartRouteRecord.authored(
+                "pale_mirror:authored_commissioning_test", level.dimension().location().toString(),
+                "pale_mirror:authored_commissioning_route", List.of(start, target));
+        GameTestStateReset.registerMinimalRouteRegion(data, record.regionId(),
+                new WorldObjectId(record.routeId()), io.farfrontier.palemirror.domain.RouteProvider.VANILLA_MINECART);
+        data.vanillaMinecartRoutes().put(record.regionId(), record);
+
+        for (int step = 0; step < 32 && record.status() != VanillaMinecartRouteStatus.ACTIVE; step++)
+            VanillaMinecartRouteRuntime.tick(level.getServer(), data, new DomainServices().commands());
+        helper.assertValueEqual(record.status(), VanillaMinecartRouteStatus.ACTIVE,
+                "a stamped authored route must commission from connected dry rails and stable supports; diagnostic="
+                        + record.diagnostic() + ", conflicts=" + record.cells().values().stream()
+                        .filter(io.farfrontier.palemirror.internal.world.VanillaMinecartMutableCell::conflicted)
+                        .map(cell -> cell.position().toShortString() + "=" + cell.lastAppliedState()).toList());
+        helper.assertTrue(level.getBlockState(target.relative(Direction.EAST)).isAir(),
+                "commissioning must not require or synthesize a heightmap-derived receiving decoration");
+        helper.succeed();
     }
 
     @GameTest(batch = "pm-vanilla-minecart-powered-corner", templateNamespace = "minecraft",

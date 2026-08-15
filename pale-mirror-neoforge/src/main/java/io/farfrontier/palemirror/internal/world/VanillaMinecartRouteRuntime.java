@@ -146,7 +146,7 @@ public final class VanillaMinecartRouteRuntime {
                     record.nextRailY(index), record.previousRailY(index), index,
                     index == record.segmentCount() - 1);
             if (record.worldgenAuthored()) {
-                if (!adapter.postcondition(level, plan)) {
+                if (!adapter.authoredPostcondition(level, plan)) {
                     // The canonical authored topology is optimistic only while its
                     // chunks are unknown. Once material evidence is loaded, absence
                     // of the expected segment must immediately stop abstract flow.
@@ -198,12 +198,17 @@ public final class VanillaMinecartRouteRuntime {
                                                 VanillaMinecartRailAdapter adapter,
                                                 VanillaMinecartRouteRecord record,
                                                 VanillaMinecartSegmentPlan plan, int index) {
-        for (BlockPos position : plan.writes().keySet()) {
+        // Genesis already wrote the complete immutable corridor. Runtime
+        // commissioning owns only the carrier capability cells it observes;
+        // replayed heightmap-dependent platform/clearance predictions are not
+        // provenance and must never hold a healthy route in VERIFYING.
+        List<BlockPos> capabilityCells = List.of(plan.railPosition().below(), plan.railPosition());
+        for (BlockPos position : capabilityCells) {
             String observed = adapter.signature(level.getBlockState(position));
             record.capture(position, observed);
             record.approve(position, observed);
         }
-        registerSlot(level, data, record, plan, index);
+        registerSlot(level, data, record, plan, index, capabilityCells);
     }
 
     private static PreflightResult preflight(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRailAdapter adapter,
@@ -231,17 +236,23 @@ public final class VanillaMinecartRouteRuntime {
 
     private static void registerSlot(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRouteRecord record,
                                      VanillaMinecartSegmentPlan plan, int index) {
+        registerSlot(level, data, record, plan, index, plan.writes().keySet());
+    }
+
+    private static void registerSlot(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRouteRecord record,
+                                     VanillaMinecartSegmentPlan plan, int index,
+                                     java.util.Collection<BlockPos> ownedPositions) {
         SemanticSlotKey key = routeSlot(record, index);
         if (data.semanticSlots().find(key).isPresent()) return;
-        BlockPos min = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.min(a.getX(), b.getX()),
+        BlockPos min = ownedPositions.stream().reduce((a, b) -> new BlockPos(Math.min(a.getX(), b.getX()),
                 Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()))).orElseThrow();
-        BlockPos max = plan.writes().keySet().stream().reduce((a, b) -> new BlockPos(Math.max(a.getX(), b.getX()),
+        BlockPos max = ownedPositions.stream().reduce((a, b) -> new BlockPos(Math.max(a.getX(), b.getX()),
                 Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ()))).orElseThrow();
         String parcelId = record.routeId() + ":parcel:segment_" + index;
         if (data.parcels().find(parcelId).isEmpty()) data.parcels().register(new ParcelRecord(parcelId,
                 record.regionId(), record.dimensionId(), min, max, "baseline_rail", ParcelKind.PUBLIC_INFRASTRUCTURE,
                 null, 0, ""));
-        List<SemanticCellRecord> cells = plan.writes().keySet().stream().map(position -> {
+        List<SemanticCellRecord> cells = ownedPositions.stream().map(position -> {
             var state = level.getBlockState(position); return new SemanticCellRecord(position, state, state);
         }).toList();
         SemanticSlotRegistration.register(data.semanticSlots(), data.parcels(), key, parcelId, record.dimensionId(),

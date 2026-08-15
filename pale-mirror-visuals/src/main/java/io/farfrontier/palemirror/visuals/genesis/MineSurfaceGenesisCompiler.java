@@ -73,8 +73,13 @@ final class MineSurfaceGenesisCompiler {
             for (int x : new int[]{foundation.footprint().min().x() - 1,
                     foundation.footprint().max().x() + 1}) {
                 if (occupied(access, x, centerZ)) continue;
-                sink.surface(x, centerZ, 0, wall(palette));
-                sink.surface(x, centerZ, 1, Blocks.LANTERN.defaultBlockState());
+                // Furniture beside a graded pad must use that pad's absolute
+                // datum. A generic natural-surface lookup made railings and
+                // lamps hover when the surrounding hillside differed.
+                sink.put(new BlockPos(x, foundation.targetY(), centerZ), palette.foundation());
+                sink.put(new BlockPos(x, foundation.targetY() + 1, centerZ), wall(palette));
+                sink.put(new BlockPos(x, foundation.targetY() + 2, centerZ),
+                        Blocks.LANTERN.defaultBlockState());
             }
         }
     }

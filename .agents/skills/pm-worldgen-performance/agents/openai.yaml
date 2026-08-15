@@ -1,0 +1,6 @@
+interface:
+  display_name: "PM Worldgen Performance"
+  short_description: "Profile chunk generation and runtime load"
+  default_prompt: "Use $pm-worldgen-performance to diagnose this Pale Mirror worldgen performance regression."
+policy:
+  allow_implicit_invocation: true

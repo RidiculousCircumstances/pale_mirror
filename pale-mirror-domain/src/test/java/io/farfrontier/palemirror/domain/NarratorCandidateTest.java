@@ -64,7 +64,12 @@ class NarratorCandidateTest {
     void acceptedDevelopmentOpportunityResolvesOnlyAfterVerifiedResult() {
         WorldState state = new WorldState();
         WorldObjectId community = new WorldObjectId("pale_mirror:community");
-        DomainEvent source = event("pm:event:development", community);
+        DevelopmentIntent intent = new DevelopmentIntent("pm:intent:development", community,
+                DevelopmentIntentType.UPGRADE_STOREHOUSE, null, null, 0, "test",
+                DevelopmentIntentState.PLANNED, "");
+        state.putDevelopmentIntent(intent);
+        DomainEvent source = new DomainEvent("pm:event:development",
+                DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED, community, 10, intent.id(), intent.id());
         state.addEvent(source);
         ScenarioInstance scenario = new ScenarioInstance("pm:scenario:development", source.eventId(), community, AUDIENCE,
                 "pale_mirror:development_opportunity", "1", List.of("OFFERED", "ASSESS", "RESPOND", "RESOLVED"),
@@ -78,6 +83,29 @@ class NarratorCandidateTest {
                 "STOREHOUSE_UPGRADED");
         assertEquals(ScenarioStatus.RESOLVED, scenario.status());
         assertEquals("STOREHOUSE_UPGRADED", scenario.resolutionOutcome());
+    }
+
+    @Test
+    void staleDevelopmentOpportunityCannotEnterResponseState() {
+        WorldState state = new WorldState();
+        WorldObjectId community = new WorldObjectId("pale_mirror:community");
+        DevelopmentIntent intent = new DevelopmentIntent("pm:intent:development", community,
+                DevelopmentIntentType.UPGRADE_STOREHOUSE, null, null, 0, "test",
+                DevelopmentIntentState.PLANNED, "");
+        state.putDevelopmentIntent(intent);
+        intent.block("materialization failed");
+        DomainEvent source = new DomainEvent("pm:event:development",
+                DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED, community, 10, intent.id(), intent.id());
+        state.addEvent(source);
+        ScenarioInstance scenario = new ScenarioInstance("pm:scenario:development", source.eventId(), community, AUDIENCE,
+                "pale_mirror:development_opportunity", "1", List.of("OFFERED", "ASSESS", "RESPOND", "RESOLVED"),
+                List.of(), "", "", ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, ScenarioStatus.OFFERED, null, "");
+        state.putScenario(scenario);
+
+        new DomainServices().commands().execute(state, new DomainCommand.AcceptScenario(scenario.id()));
+
+        assertEquals(ScenarioStatus.BLOCKED, scenario.status());
+        assertTrue(state.history().stream().anyMatch(value -> value.type() == DomainEventType.SCENARIO_BLOCKED));
     }
 
     private static NarrativeCandidate candidate(DomainEvent event, int urgency, int significance, int relevance, int novelty) {

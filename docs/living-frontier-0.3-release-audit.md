@@ -20,14 +20,14 @@ disconnected loaded graph still blocks the contract immediately.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Pure domain and module tests | PASS | 137 JUnit tests, 0 failures, 0 errors |
-| Core server behavior | PASS | 42/42 required NeoForge GameTests |
-| Visual/materialization behavior | PASS | 20/20 required Visuals GameTests |
+| Pure domain and module tests | PASS | 139 JUnit tests, 0 failures, 0 errors |
+| Core server behavior | PASS | 44/44 required NeoForge GameTests |
+| Visual/materialization behavior | PASS | 23/23 required Visuals GameTests, including 216 public-realm combinations |
 | Build and architecture | PASS | `check`, architecture guardrails, Java style and source isolation |
 | Distribution | PASS | Core and Visuals production JAR verification |
 | Restart/crash safety | PASS | Packaged core restart/crash harness and two-start Visuals harness |
 | Multi-region identity | PASS | Independent region/community/site/route identities are covered; fresh authored genesis supports a bounded configurable region count |
-| Baseline freight | PASS | Authored vanilla topology starts healthy off-screen, loaded damage blocks it, connected repair/reroute restores it, and Create evidence still expires independently |
+| Baseline freight | PASS | Authored vanilla topology starts healthy off-screen, commissions from dry rails and stable supports without claiming speculative decoration, loaded damage blocks it, connected cross-chunk repair/reroute restores it, and Create evidence still expires independently |
 | Combat recovery | PASS mechanically | Threat gate, controller, recovery, flow restoration and physical cleanup are covered |
 | Evacuation | PASS mechanically | Prepared shelter validation, population displacement, representative camp and autonomous fallback are covered |
 | Refusal/autonomy | PASS mechanically | Policy progresses without Narrator and uses an audience-aware intervention window before irreversible displacement |
