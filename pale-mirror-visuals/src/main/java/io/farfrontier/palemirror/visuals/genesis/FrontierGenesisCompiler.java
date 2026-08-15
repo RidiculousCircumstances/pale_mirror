@@ -25,7 +25,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 24;
+    public static final int CATALOG_VERSION = 25;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -168,6 +168,10 @@ public final class FrontierGenesisCompiler {
             @Override public void put(BlockPos position, BlockState state) {
                 FrontierGenesisCompiler.put(slices, position, state);
             }
+            @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
+                slice(slices, x, z).terrain(new CompiledChunkSlice.TerrainColumn(
+                        x, z, targetY, surface, foundation));
+            }
             @Override public void surface(int x, int z, int offsetY, BlockState state) {
                 int datum = mineDatum(mine, x, z);
                 BlockPos position = new BlockPos(x, datum + offsetY, z);
@@ -190,11 +194,18 @@ public final class FrontierGenesisCompiler {
             VisualPoint outside = route.points().getLast();
             BlockPos threshold = new BlockPos(outside.x() + route.entryStepX(),
                     foundation.targetY() + 1, outside.z() + route.entryStepZ());
-            for (int depth = 0; depth <= 2; depth++) for (int up = 0; up <= 2; up++) {
-                put(slices, threshold.offset(route.entryStepX() * depth, up,
-                        route.entryStepZ() * depth), Blocks.AIR.defaultBlockState());
+            int tangentX = -route.entryStepZ();
+            int tangentZ = route.entryStepX();
+            int halfWidth = route.foundationId().equals("portal") ? 1 : 0;
+            for (int depth = 0; depth <= 2; depth++) for (int across = -halfWidth;
+                    across <= halfWidth; across++) for (int up = 0; up <= 2; up++) {
+                put(slices, threshold.offset(route.entryStepX() * depth + tangentX * across, up,
+                        route.entryStepZ() * depth + tangentZ * across), Blocks.AIR.defaultBlockState());
             }
-            put(slices, threshold.below(), Blocks.COBBLESTONE.defaultBlockState());
+            for (int across = -halfWidth; across <= halfWidth; across++) {
+                put(slices, threshold.offset(tangentX * across, -1, tangentZ * across),
+                        Blocks.COBBLESTONE.defaultBlockState());
+            }
         }
     }
 

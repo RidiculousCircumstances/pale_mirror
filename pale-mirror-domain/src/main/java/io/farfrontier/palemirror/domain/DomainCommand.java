@@ -10,7 +10,7 @@ import java.util.List;
  */
 public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.OfferScenario, DomainCommand.AcceptScenario,
-        DomainCommand.DeclineScenario,
+        DomainCommand.DeclineScenario, DomainCommand.CancelScenario,
         DomainCommand.PlayerEnteredFacility, DomainCommand.ThreatControllerDestroyed,
         DomainCommand.MaterializationObserved, DomainCommand.NoScenario,
         DomainCommand.SetScenarioBlocked, DomainCommand.ActivateGate,
@@ -51,6 +51,14 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
 
     record DeclineScenario(String scenarioId) implements DomainCommand {
         public DeclineScenario { Objects.requireNonNull(scenarioId, "scenarioId"); }
+    }
+
+    /** System-side retirement of an offer whose canonical eligibility no longer holds. */
+    record CancelScenario(String scenarioId, String reason) implements DomainCommand {
+        public CancelScenario {
+            Objects.requireNonNull(scenarioId, "scenarioId");
+            if (reason == null || reason.isBlank()) throw new IllegalArgumentException("reason is required");
+        }
     }
 
     record PlayerEnteredFacility(StoryAudienceId audience, WorldObjectId facilityId) implements DomainCommand {

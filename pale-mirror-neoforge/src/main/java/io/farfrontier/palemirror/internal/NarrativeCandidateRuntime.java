@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandExecutor;
 import io.farfrontier.palemirror.domain.DomainEvent;
+import io.farfrontier.palemirror.domain.DevelopmentOpportunityEligibility;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.NarrativeCandidate;
@@ -42,6 +43,7 @@ final class NarrativeCandidateRuntime {
     }
 
     void handleDomainEvents(List<DomainEvent> events) {
+        retireIneligibleDevelopmentOffers();
         Map<StoryAudienceId, List<NarrativeCandidate>> candidates = new LinkedHashMap<>();
         events.forEach(event -> {
             if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.MINE_INFECTED) {
@@ -55,7 +57,9 @@ final class NarrativeCandidateRuntime {
                         region.primaryFacilityId(), NarrativeCandidateType.SUPPLY_CRISIS,
                         ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS, 96, 94, 100, 74));
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED) {
-                regionFor(event.subject()).filter(region -> opportunityStillPending(event)).ifPresent(region -> append(candidates, event, region.primaryAudience(),
+                regionFor(event.subject()).filter(region -> opportunityStillPending(event)
+                        && DevelopmentOpportunityEligibility.isRecoveryOpportunity(data.worldState(), event))
+                        .ifPresent(region -> append(candidates, event, region.primaryAudience(),
                         region.primaryFacilityId(), NarrativeCandidateType.DEVELOPMENT_OPPORTUNITY,
                         ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, 50, 82, 88, 95));
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_RETURN_PLANNED) {
@@ -71,6 +75,7 @@ final class NarrativeCandidateRuntime {
 
     /** Re-derives delayed candidates until a cooldown is over or a decision is durable. */
     void offerPendingOpportunities() {
+        retireIneligibleDevelopmentOffers();
         Map<StoryAudienceId, List<NarrativeCandidate>> candidates = new LinkedHashMap<>();
         data.worldState().history().stream()
                 .filter(event -> event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED
@@ -84,6 +89,7 @@ final class NarrativeCandidateRuntime {
                                 NarrativeCandidateType.SUPPLY_CRISIS,
                                 ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS, 96, 94, 100, 74);
                     } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED) {
+                        if (!DevelopmentOpportunityEligibility.isRecoveryOpportunity(data.worldState(), event)) return;
                         append(candidates, event, region.primaryAudience(), region.primaryFacilityId(),
                                 NarrativeCandidateType.DEVELOPMENT_OPPORTUNITY,
                                 ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, 50, 82, 88, 95);
@@ -92,6 +98,32 @@ final class NarrativeCandidateRuntime {
                             ScenarioArchetype.RESETTLEMENT_OPPORTUNITY, 58, 86, 96, 90);
                 }));
         offer(candidates);
+    }
+
+    /** Performs startup reconciliation before autonomous development gets its first runtime turn. */
+    void reconcileExistingOffers() {
+        retireIneligibleDevelopmentOffers();
+    }
+
+    /**
+     * Reconciles offers created by the former broad rule without touching the
+     * valid settlement-owned DevelopmentIntent. Once the invalid presentation
+     * is retired, ordinary prosperity continues through autonomous policy.
+     */
+    private void retireIneligibleDevelopmentOffers() {
+        for (var scenario : data.worldState().scenarios().stream()
+                .filter(value -> value.archetype() == ScenarioArchetype.DEVELOPMENT_OPPORTUNITY)
+                .filter(value -> value.status() == io.farfrontier.palemirror.domain.ScenarioStatus.OFFERED)
+                .toList()) {
+            DomainEvent source = data.worldState().history().stream()
+                    .filter(value -> value.eventId().equals(scenario.sourceEventId())).findFirst().orElse(null);
+            if (source != null && DevelopmentOpportunityEligibility.isRecoveryOpportunity(
+                    data.worldState(), source)) continue;
+            if (!commands.execute(data.worldState(), new DomainCommand.CancelScenario(scenario.id(),
+                    "Ordinary prosperity is autonomous; no recovered crisis qualifies this offer")).isEmpty()) {
+                data.setDirty();
+            }
+        }
     }
 
     private boolean opportunityStillPending(DomainEvent event) {

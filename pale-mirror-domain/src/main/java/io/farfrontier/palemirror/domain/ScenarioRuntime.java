@@ -58,6 +58,16 @@ public final class ScenarioRuntime {
                 }).toList();
     }
 
+    public List<DomainEvent> cancel(WorldState state, String scenarioId, String reason) {
+        ScenarioInstance scenario = state.scenario(scenarioId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown scenario " + scenarioId));
+        if (!scenario.cancel(reason)) return List.of();
+        DomainEvent event = events.create(state, DomainEventType.SCENARIO_CANCELLED,
+                scenario.target(), scenario.sourceEventId());
+        state.addEvent(event);
+        return List.of(event);
+    }
+
     public List<DomainEvent> reconcileRecovery(WorldState state, WorldObjectId facilityId) {
         return state.scenarios().stream()
                 .filter(scenario -> scenario.target().equals(facilityId) && (scenario.status() == ScenarioStatus.RECOVER || scenario.status() == ScenarioStatus.INVESTIGATE))

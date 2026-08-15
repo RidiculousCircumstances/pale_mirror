@@ -25,11 +25,17 @@ Do not confuse a successful shell command with a running Minecraft server.
    Validate the pack index and hosted URLs before restart.
 4. Update client installers only when client-required mods, configs, pack
    metadata, or installer logic changed. Server-only code does not require it.
+5. The standing delivery policy is immediate deployment: after a verified
+   implementation, publish the affected artifacts and restart this disposable
+   test server unless the user explicitly requests source-only work. A
+   fresh-world Visuals version bump also authorizes resetting the exact resolved
+   test-world paths without a backup; never generalize this to another server.
 
 ## Reset a disposable test world
 
-The current product decision is that this server is disposable. When the user
-explicitly asks to recreate or reset it, do not ask about backups. Still stop
+The current product decision is that this server is disposable. An explicit
+reset request or the standing fresh-world deployment policy above requires no
+backup prompt. Still stop
 the service first, resolve and print the exact world directories, reject broad
 or unresolved targets, and never delete through `$HOME`, `~`, globs, or an
 empty variable. Start only after the exact reset completes.

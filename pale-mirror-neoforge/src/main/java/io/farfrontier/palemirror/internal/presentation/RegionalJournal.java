@@ -196,7 +196,7 @@ public final class RegionalJournal {
                 + iron.capacity() + ", flow " + iron.netFlow() + ", reserve " + reserve + ", "
                 + iron.availability() + ", policy " + community.crisisState()));
         data.worldState().settlementDevelopment(community.id()).ifPresent(value -> player.sendSystemMessage(Component.literal(
-                "Development — prosperity " + value.prosperity() + ", pressure " + value.developmentPressure()
+                "Development investment — prosperity " + value.prosperity() + ", pressure " + value.developmentPressure()
                         + ", housing " + data.worldState().population(community.id()) + "/" + value.housingCapacity()
                         + ", growth " + value.stableGrowthSteps() + ".")));
         data.worldState().settlementAuthorityProfile(community.id()).ifPresent(profile -> {

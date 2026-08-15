@@ -20,9 +20,9 @@ disconnected loaded graph still blocks the contract immediately.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Pure domain and module tests | PASS | 139 JUnit tests, 0 failures, 0 errors |
+| Pure domain and module tests | PASS | 143 JUnit tests, 0 failures, 0 errors |
 | Core server behavior | PASS | 44/44 required NeoForge GameTests |
-| Visual/materialization behavior | PASS | 23/23 required Visuals GameTests, including 216 public-realm combinations |
+| Visual/materialization behavior | PASS | 25/25 required Visuals GameTests, including 216 public-realm combinations and grounded/readable mine infrastructure |
 | Build and architecture | PASS | `check`, architecture guardrails, Java style and source isolation |
 | Distribution | PASS | Core and Visuals production JAR verification |
 | Restart/crash safety | PASS | Packaged core restart/crash harness and two-start Visuals harness |
@@ -33,7 +33,7 @@ disconnected loaded graph still blocks the contract immediately.
 | Refusal/autonomy | PASS mechanically | Policy progresses without Narrator and uses an audience-aware intervention window before irreversible displacement |
 | Positive aftermath | PASS mechanically | Funded staged storehouse project changes physical depot state and canonical capacity/prosperity |
 | Delayed consequence | PASS mechanically | Development and resettlement facts are re-derived from history into later Narrator candidates |
-| Narrator v2 | PASS mechanically | Deterministic candidate scoring, novelty/intensity penalties, cooldown retry and explicit `NO_SCENARIO` are covered |
+| Narrator v2 | PASS mechanically | Deterministic candidate scoring, novelty/intensity penalties, cooldown retry and explicit `NO_SCENARIO` are covered; recovery investment requires a real stabilized crisis and never captures ordinary prosperity |
 | Presentation contract | PASS mechanically | Atlas is actionable, Ledger is causal detail, JourneyMap is navigation-only, and opaque IDs are excluded from normal Atlas cards |
 | Fresh-world bootstrap | PASS | Seed `6149572031884207731` authored six isolated regions; after two simulation steps every healthy baseline delivered 16 IRON against consumption 8 (`netFlow +8`, stock 79/87), with no crisis, rationing, scenario or active threat |
 

@@ -225,9 +225,34 @@ public final class FrontierWorldgenCleanupGameTests {
                 new VisualPoint(8_000, 76, 8_000), FrontierClimate.TEMPERATE);
         var blocks = new java.util.LinkedHashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
         seed.primaryMineSite().surfaceBuildings().stream().flatMap(value -> value.modules().stream())
-                .map(AuthoredModuleCompiler::compile).flatMap(value -> value.blocks().stream())
-                .forEach(value -> blocks.put(new BlockPos(value.position().x(), value.position().y(),
-                        value.position().z()), value.state()));
+                .forEach(module -> {
+                    var snapshot = AuthoredModuleCompiler.compile(module);
+                    var moduleBlocks = snapshot.blocks().stream().collect(java.util.stream.Collectors.toMap(
+                            value -> new BlockPos(value.position().x(), value.position().y(), value.position().z()),
+                            io.farfrontier.palemirror.api.VisualBlockPlacement::state,
+                            (left, right) -> right, java.util.LinkedHashMap::new));
+                    java.util.Set<Long> entrances = module.ports().stream()
+                            .filter(value -> value.kind()
+                                    == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE)
+                            .map(value -> net.minecraft.world.level.ChunkPos.asLong(
+                                    value.position().x(), value.position().z()))
+                            .collect(java.util.stream.Collectors.toSet());
+                    moduleBlocks.forEach((position, state) -> {
+                        boolean edge = position.getX() == module.footprint().min().x()
+                                || position.getX() == module.footprint().max().x()
+                                || position.getZ() == module.footprint().min().z()
+                                || position.getZ() == module.footprint().max().z();
+                        if (edge && position.getY() == module.footprint().min().y() + 1
+                                && mineEdgeSupport(state)
+                                && !entrances.contains(net.minecraft.world.level.ChunkPos.asLong(
+                                        position.getX(), position.getZ()))) {
+                            helper.assertTrue(moduleBlocks.containsKey(position.below())
+                                            && !moduleBlocks.get(position.below()).isAir(),
+                                    "mine edge structure retained a one-block floating base at " + position);
+                        }
+                    });
+                    blocks.putAll(moduleBlocks);
+                });
         blocks.forEach((position, state) -> {
             if (state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
                     && state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
@@ -256,5 +281,93 @@ public final class FrontierWorldgenCleanupGameTests {
             }
         });
         helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 120)
+    public static void minePortalAndSpoilHeapsCompileAsGroundedReadableInfrastructure(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(91_004L, 0,
+                new VisualPoint(8_000, 76, 8_000), FrontierClimate.TEMPERATE);
+        var mine = seed.primaryMineSite();
+        var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
+        var blocks = catalog.chunks().values().stream().flatMap(value -> value.blocks().entrySet().stream())
+                .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
+                        java.util.Map.Entry::getValue, (left, right) -> right,
+                        java.util.LinkedHashMap::new));
+        var portalRoute = MineAccessGenesisCompiler.routes(mine).stream()
+                .filter(value -> value.foundationId().equals("portal")).findFirst().orElseThrow();
+        var outside = portalRoute.points().getLast();
+        BlockPos threshold = new BlockPos(outside.x() + portalRoute.entryStepX(),
+                mine.foundations().stream().filter(value -> value.id().equals("portal"))
+                        .findFirst().orElseThrow().targetY() + 1,
+                outside.z() + portalRoute.entryStepZ());
+        int tangentX = -portalRoute.entryStepZ();
+        int tangentZ = portalRoute.entryStepX();
+        for (int depth = 0; depth <= 2; depth++) for (int across = -1; across <= 1; across++) {
+            for (int up = 0; up <= 2; up++) {
+                BlockPos cell = threshold.offset(portalRoute.entryStepX() * depth + tangentX * across,
+                        up, portalRoute.entryStepZ() * depth + tangentZ * across);
+                helper.assertTrue(blocks.getOrDefault(cell, Blocks.STONE.defaultBlockState()).isAir(),
+                        "public mine portal is not three-wide and walkable at " + cell);
+            }
+        }
+        var portalModule = mine.surfaceBuildings().stream()
+                .filter(value -> value.buildingId().equals("portal"))
+                .flatMap(value -> value.modules().stream()).findFirst().orElseThrow();
+        var port = portalModule.ports().stream().filter(value -> value.kind()
+                == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE).findFirst().orElseThrow();
+        net.minecraft.core.Direction outward = direction(port.outwardQuarterTurns());
+        net.minecraft.core.Direction tangent = outward.getClockWise();
+        BlockPos portBlock = new BlockPos(port.position().x(), port.position().y(), port.position().z());
+        helper.assertTrue(blocks.getOrDefault(portBlock.relative(outward).above(4),
+                        Blocks.AIR.defaultBlockState()).is(Blocks.WAXED_CUT_COPPER),
+                "public mine portal lacks its visible industrial keystone");
+        for (int side : new int[]{-2, 2}) helper.assertTrue(blocks.getOrDefault(
+                        portBlock.relative(outward).relative(tangent, side).above(3),
+                        Blocks.AIR.defaultBlockState()).is(Blocks.LANTERN),
+                "public mine portal lacks paired safety lights");
+
+        var terrain = catalog.chunks().values().stream().flatMap(value -> value.terrain().stream())
+                .collect(java.util.stream.Collectors.toMap(value -> net.minecraft.world.level.ChunkPos.asLong(
+                                value.x(), value.z()), value -> value, (left, right) -> right));
+        int supportedSpoilColumns = 0;
+        for (int side : new int[]{-1, 1}) {
+            VisualPoint center = MineSurfaceLayout.local(mine.portal(), side * 33, -51, 0,
+                    mine.inwardQuarterTurns());
+            for (var decoration : catalog.chunks().values().stream()
+                    .flatMap(value -> value.decorations().stream()).toList()) {
+                BlockPos position = decoration.position();
+                if (Math.abs(position.getX() - center.x()) + Math.abs(position.getZ() - center.z()) > 4
+                        || !(decoration.state().is(Blocks.TUFF)
+                        || decoration.state().is(Blocks.COBBLED_DEEPSLATE))) continue;
+                var column = terrain.get(net.minecraft.world.level.ChunkPos.asLong(
+                        position.getX(), position.getZ()));
+                helper.assertTrue(column != null && column.blendDistance() == 0
+                                && column.targetY() < position.getY(),
+                        "spoil heap lacks an exact compact ground pad at " + position);
+                supportedSpoilColumns++;
+            }
+        }
+        helper.assertTrue(supportedSpoilColumns >= 20,
+                "primary mine must compile two visibly grounded spoil heaps");
+        helper.succeed();
+    }
+
+    private static boolean mineEdgeSupport(net.minecraft.world.level.block.state.BlockState state) {
+        return state.is(net.minecraft.tags.BlockTags.LOGS)
+                || state.is(net.minecraft.tags.BlockTags.PLANKS)
+                || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
+                || state.is(Blocks.STONE_BRICKS) || state.is(Blocks.CRACKED_STONE_BRICKS)
+                || state.is(Blocks.DEEPSLATE_BRICKS) || state.is(Blocks.CRACKED_DEEPSLATE_BRICKS)
+                || state.is(Blocks.BRICKS) || state.is(Blocks.CUT_SANDSTONE)
+                || state.is(Blocks.SANDSTONE) || state.is(Blocks.SMOOTH_SANDSTONE);
+    }
+
+    private static net.minecraft.core.Direction direction(int quarterTurns) {
+        return switch (Math.floorMod(quarterTurns, 4)) {
+            case 0 -> net.minecraft.core.Direction.EAST;
+            case 1 -> net.minecraft.core.Direction.SOUTH;
+            case 2 -> net.minecraft.core.Direction.WEST;
+            default -> net.minecraft.core.Direction.NORTH;
+        };
     }
 }

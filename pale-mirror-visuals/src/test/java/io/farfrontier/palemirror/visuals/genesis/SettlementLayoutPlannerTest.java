@@ -128,6 +128,23 @@ class SettlementLayoutPlannerTest {
         assertTrue(SettlementLayoutGeometry.elevationTransition(rising, 2));
     }
 
+    @Test void perimeterSamplesAndRetainsAOneBlockRiseBetweenItsEndpoints() {
+        var feature = new io.farfrontier.palemirror.api.LinearFeaturePlan("wall",
+                LinearFeatureKind.PALISADE,
+                java.util.List.of(new VisualPoint(0, 64, 0), new VisualPoint(8, 64, 0)), 2, false);
+        var snapshot = new SettlementTerrainSnapshot(new VisualPoint(4, 65, 0),
+                java.util.Map.of(SettlementTerrainSnapshot.key(0, 0), 65,
+                        SettlementTerrainSnapshot.key(8, 0), 65),
+                (x, z) -> x == 4 ? 66 : 65, (x, z) -> false);
+
+        var followed = SettlementLayoutGeometry.followExactTerrain(feature, snapshot);
+        assertEquals(9, followed.nodes().size());
+        assertEquals(65, followed.nodes().get(4).y(), "wall datum must follow the hidden one-block hill");
+        assertEquals(java.util.List.of(0, 1, 2, 3, 4, 5, 6, 7, 8),
+                followed.nodes().stream().map(VisualPoint::x).toList(),
+                "the perimeter contract must retain every physical wall column for structural compilation");
+    }
+
     @Test void everyFacadeGetsAGroundedObstacleFreeRouteToThePublicGraph() {
         var plan = plan(7);
         for (int index = 0; index < plan.buildings().size(); index++) {
@@ -310,7 +327,8 @@ class SettlementLayoutPlannerTest {
         }
         coarse.put(SettlementTerrainSnapshot.key(anchor.x() - 92, anchor.z() - 68), anchor.y() - 12);
         SettlementTerrainSnapshot shelf = new SettlementTerrainSnapshot(anchor, coarse,
-                (x, z) -> anchor.y(), (x, z) -> false);
+                (x, z) -> x == anchor.x() - 92 && z == anchor.z() - 68
+                        ? anchor.y() - 12 : anchor.y(), (x, z) -> false);
         var plan = planner.plan("shelf", anchor, FrontierClimate.TEMPERATE, 0,
                 new TerrainCandidate(anchor, 2, 0, 0, 0), shelf);
         assertEquals(2 * SettlementLayoutPlanner.MASTER_HALF_LENGTH,

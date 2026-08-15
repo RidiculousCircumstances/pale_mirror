@@ -14,6 +14,7 @@ final class MineSurfaceGenesisCompiler {
     static void compile(AuthoredMineSitePlan mine, FrontierPalette palette,
                         java.util.Set<Long> access, Sink sink) {
         headframe(mine, palette, sink);
+        publicPortalLandmark(mine, palette, sink);
         loadingApron(mine, palette, sink);
         if (mine.role() == io.farfrontier.palemirror.api.AuthoredMineRole.ALTERNATE) return;
         safetyFurniture(mine, palette, access, sink);
@@ -63,6 +64,48 @@ final class MineSurfaceGenesisCompiler {
                 palette.log());
         for (int up = 1; up <= 3; up++) sink.put(
                 local(loading, 0, 2, up, mine.inwardQuarterTurns()), Blocks.CHAIN.defaultBlockState());
+    }
+
+    /** A wide lit portal frame makes the mine's public threshold readable from the yard. */
+    private static void publicPortalLandmark(AuthoredMineSitePlan mine, FrontierPalette palette, Sink sink) {
+        var portalModule = mine.surfaceBuildings().stream()
+                .filter(value -> value.buildingId().equals("portal"))
+                .flatMap(value -> value.modules().stream())
+                .filter(value -> value.ports().stream().anyMatch(port ->
+                        port.kind() == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE))
+                .findFirst().orElseThrow();
+        var entrance = portalModule.ports().stream()
+                .filter(value -> value.kind() == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE)
+                .findFirst().orElseThrow();
+        net.minecraft.core.Direction outward = switch (Math.floorMod(entrance.outwardQuarterTurns(), 4)) {
+            case 0 -> net.minecraft.core.Direction.EAST;
+            case 1 -> net.minecraft.core.Direction.SOUTH;
+            case 2 -> net.minecraft.core.Direction.WEST;
+            default -> net.minecraft.core.Direction.NORTH;
+        };
+        net.minecraft.core.Direction tangent = outward.getClockWise();
+        BlockPos threshold = new BlockPos(entrance.position().x(), entrance.position().y(), entrance.position().z());
+        for (int depth = 1; depth <= 5; depth++) for (int across = -2; across <= 2; across++) {
+            BlockPos floor = threshold.relative(outward, depth).relative(tangent, across).below();
+            sink.put(floor, Math.abs(across) == 2 ? palette.foundation()
+                    : across == 0 ? Blocks.CUT_COPPER.defaultBlockState()
+                    : Blocks.POLISHED_ANDESITE.defaultBlockState());
+            sink.put(floor.above(), Blocks.AIR.defaultBlockState());
+            sink.put(floor.above(2), Blocks.AIR.defaultBlockState());
+        }
+        for (int side : new int[]{-3, 3}) for (int up = 0; up <= 5; up++) {
+            sink.put(threshold.relative(outward).relative(tangent, side).above(up - 1),
+                    up == 0 ? palette.foundation() : palette.log());
+        }
+        for (int side = -3; side <= 3; side++) {
+            sink.put(threshold.relative(outward).relative(tangent, side).above(4), palette.log());
+        }
+        for (int side : new int[]{-2, 2}) {
+            sink.put(threshold.relative(outward).relative(tangent, side).above(3),
+                    Blocks.LANTERN.defaultBlockState().setValue(
+                            net.minecraft.world.level.block.LanternBlock.HANGING, true));
+        }
+        sink.put(threshold.relative(outward).above(4), Blocks.WAXED_CUT_COPPER.defaultBlockState());
     }
 
     private static void safetyFurniture(AuthoredMineSitePlan mine, FrontierPalette palette,
@@ -120,9 +163,13 @@ final class MineSurfaceGenesisCompiler {
                 int radius = Math.abs(dx) + Math.abs(dz);
                 if (radius > 4) continue;
                 if (occupied(access, horizontal.getX() + dx, horizontal.getZ() + dz)) continue;
+                int x = horizontal.getX() + dx;
+                int z = horizontal.getZ() + dz;
+                sink.terrain(x, z, nearestFoundationDatum(mine, x, z),
+                        Blocks.COARSE_DIRT.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState());
                 int height = radius <= 1 ? 3 : radius <= 3 ? 2 : 1;
                 for (int up = 0; up < height; up++) sink.surface(
-                        horizontal.getX() + dx, horizontal.getZ() + dz, up,
+                        x, z, up,
                         Math.floorMod(dx * 3 + dz + up, 4) == 0
                                 ? Blocks.TUFF.defaultBlockState()
                                 : Blocks.COBBLED_DEEPSLATE.defaultBlockState());
@@ -155,8 +202,17 @@ final class MineSurfaceGenesisCompiler {
         return access.contains(net.minecraft.world.level.ChunkPos.asLong(x, z));
     }
 
+    private static int nearestFoundationDatum(AuthoredMineSitePlan mine, int x, int z) {
+        return mine.foundations().stream().min(java.util.Comparator.comparingInt(value -> {
+            int dx = Math.max(value.footprint().min().x() - x, x - value.footprint().max().x());
+            int dz = Math.max(value.footprint().min().z() - z, z - value.footprint().max().z());
+            return Math.max(0, Math.max(dx, dz));
+        })).map(MineFoundationPlan::targetY).orElseThrow();
+    }
+
     interface Sink {
         void put(BlockPos position, BlockState state);
+        void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation);
         void surface(int x, int z, int offsetY, BlockState state);
     }
 }

@@ -92,6 +92,13 @@ public final class ScenarioInstance {
         resolutionOutcome = "DECLINED";
         return true;
     }
+    public boolean cancel(String reason) {
+        if (status != ScenarioStatus.OFFERED) return false;
+        status = ScenarioStatus.CANCELLED;
+        blockedReason = Objects.requireNonNull(reason, "reason");
+        resolutionOutcome = "CANCELLED";
+        return true;
+    }
     public boolean block(String reason) {
         if (status == ScenarioStatus.BLOCKED || status.isTerminal()) return false;
         resumeStatus = status;

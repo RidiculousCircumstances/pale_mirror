@@ -36,7 +36,7 @@
   "screen.pale_mirror.atlas.reachability.regional": "в регионе",
   "screen.pale_mirror.atlas.reachability.remote": "далеко",
   "screen.pale_mirror.atlas.reachability.connected": "есть транспорт",
-  "screen.pale_mirror.atlas.development": "Склад: %s/%s железа в депо; автономно %s/%s",
+  "screen.pale_mirror.atlas.development": "Инвестиция в развитие — склад: %s/%s железа; автономно %s/%s",
   "screen.pale_mirror.atlas.development_complete": "Расширенный склад работает",
   "screen.pale_mirror.atlas.commission_dispatch": "Построить грузовой узел",
   "screen.pale_mirror.atlas.dispatch_project": "Узел Red Valley: %s",

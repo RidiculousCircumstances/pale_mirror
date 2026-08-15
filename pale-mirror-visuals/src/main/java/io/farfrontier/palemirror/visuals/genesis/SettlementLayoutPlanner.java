@@ -188,7 +188,7 @@ final class SettlementLayoutPlanner {
                         : followTerrain(value, snapshot)).toList();
         requireDryCirculation(circulation, snapshot, anchor);
         List<LinearFeaturePlan> defences = SettlementDefencePlanner.plan(archetype, anchor, freightDirection).stream()
-                .map(value -> followTerrain(value, snapshot)).toList();
+                .map(value -> followExactTerrain(value, snapshot)).toList();
         List<AuthoredOpenSpacePlan> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
                 .map(value -> resolveOpenSpace(value, snapshot)).toList();
         List<DevelopmentReservation> reservations = reservations(anchor, freightDirection, buildings, openSpaces,

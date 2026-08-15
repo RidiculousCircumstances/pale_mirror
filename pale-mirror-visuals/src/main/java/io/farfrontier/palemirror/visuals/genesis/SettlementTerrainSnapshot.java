@@ -12,7 +12,7 @@ import java.util.function.IntBinaryOperator;
 /** Immutable coarse settlement relief plus a bounded exact pad validator. */
 final class SettlementTerrainSnapshot {
     static final int GRID_STEP = 16;
-    static final int MAX_UNIQUE_PROBES = 768;
+    static final int MAX_UNIQUE_PROBES = 1_536;
     private final VisualPoint anchor;
     private final Map<Long, Integer> coarseHeights;
     private final IntBinaryOperator exactHeight;

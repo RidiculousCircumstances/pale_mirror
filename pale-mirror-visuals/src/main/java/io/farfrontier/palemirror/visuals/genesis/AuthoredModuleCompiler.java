@@ -192,7 +192,52 @@ public final class AuthoredModuleCompiler {
                 blocks.put(position.below(), new VisualBlockPlacement(below.position(), state));
             }
         }
+        supportGroundedMineEdges(module, blocks);
         return List.copyOf(blocks.values());
+    }
+
+    /**
+     * Curated source modules may contain a masonry/log edge column beginning
+     * one block above their declared pad. On natural terrain that reads as a
+     * floating arch even though the pad itself is valid. Ground only those
+     * structural edge columns; interiors and the semantic entrance stay open.
+     */
+    private static void supportGroundedMineEdges(VisualModulePlacement module,
+            java.util.Map<BlockPos, VisualBlockPlacement> blocks) {
+        if (module.foundationId().equals("underground")) return;
+        int supportY = module.footprint().min().y();
+        int firstRaisedY = supportY + 1;
+        java.util.Set<Long> entranceColumns = module.ports().stream()
+                .filter(value -> value.kind() == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE)
+                .map(value -> net.minecraft.world.level.ChunkPos.asLong(
+                        value.position().x(), value.position().z()))
+                .collect(java.util.stream.Collectors.toSet());
+        for (VisualBlockPlacement value : List.copyOf(blocks.values())) {
+            BlockPos position = block(value.position());
+            if (position.getY() != firstRaisedY || !structuralGroundSupport(value.state())) continue;
+            boolean edge = position.getX() == module.footprint().min().x()
+                    || position.getX() == module.footprint().max().x()
+                    || position.getZ() == module.footprint().min().z()
+                    || position.getZ() == module.footprint().max().z();
+            if (!edge || entranceColumns.contains(net.minecraft.world.level.ChunkPos.asLong(
+                    position.getX(), position.getZ()))) continue;
+            BlockPos below = position.below();
+            VisualBlockPlacement existing = blocks.get(below);
+            if (existing == null || existing.state().isAir()) {
+                blocks.put(below, new VisualBlockPlacement(
+                        new VisualPoint(below.getX(), below.getY(), below.getZ()), value.state()));
+            }
+        }
+    }
+
+    private static boolean structuralGroundSupport(BlockState state) {
+        return state.is(net.minecraft.tags.BlockTags.LOGS)
+                || state.is(net.minecraft.tags.BlockTags.PLANKS)
+                || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
+                || state.is(Blocks.STONE_BRICKS) || state.is(Blocks.CRACKED_STONE_BRICKS)
+                || state.is(Blocks.DEEPSLATE_BRICKS) || state.is(Blocks.CRACKED_DEEPSLATE_BRICKS)
+                || state.is(Blocks.BRICKS) || state.is(Blocks.CUT_SANDSTONE)
+                || state.is(Blocks.SANDSTONE) || state.is(Blocks.SMOOTH_SANDSTONE);
     }
 
     private static boolean slabLeavesHangingGap(VisualBlockPlacement support) {

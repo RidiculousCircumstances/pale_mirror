@@ -41,7 +41,7 @@
   "screen.pale_mirror.atlas.reachability.regional": "regional",
   "screen.pale_mirror.atlas.reachability.remote": "remote",
   "screen.pale_mirror.atlas.reachability.connected": "connected",
-  "screen.pale_mirror.atlas.development": "Storehouse: %s/%s IRON at depot; autonomy %s/%s",
+  "screen.pale_mirror.atlas.development": "Development investment — storehouse: %s/%s IRON; autonomy %s/%s",
   "screen.pale_mirror.atlas.development_complete": "Storehouse upgrade is operational",
   "screen.pale_mirror.atlas.commission_dispatch": "Build freight works",
   "screen.pale_mirror.atlas.dispatch_project": "Red Valley works: %s",

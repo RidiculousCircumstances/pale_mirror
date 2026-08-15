@@ -56,6 +56,7 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
             case DomainCommand.OfferScenario offer -> narrator.offerFor(state, offer.sourceEvent(), offer.audience(), offer.definition());
             case DomainCommand.AcceptScenario accept -> acceptScenario(state, accept.scenarioId());
             case DomainCommand.DeclineScenario decline -> declineScenario(state, decline.scenarioId());
+            case DomainCommand.CancelScenario cancel -> scenarios.cancel(state, cancel.scenarioId(), cancel.reason());
             case DomainCommand.PlayerEnteredFacility entered -> scenarios.playerEntered(state, entered.audience(), entered.facilityId());
             case DomainCommand.ThreatControllerDestroyed destroyed -> reconcileDestroyedController(state, destroyed);
             case DomainCommand.MaterializationObserved observed -> reconcileMaterialization(state, observed);

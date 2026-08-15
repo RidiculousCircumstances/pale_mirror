@@ -20,7 +20,7 @@ final class StructuralPerimeterPlanner {
         List<PerimeterModulePlan> modules = new ArrayList<>();
         List<VisualPoint> wallPoints = new ArrayList<>();
         for (LinearFeaturePlan feature : features) {
-            List<VisualPoint> points = raster(feature.nodes().getFirst(), feature.nodes().getLast());
+            List<VisualPoint> points = raster(feature);
             if (feature.kind() == LinearFeatureKind.PALISADE_GATE) {
                 VisualPoint center = points.get(points.size() / 2);
                 boolean freight = feature.id().contains("freight");
@@ -94,6 +94,15 @@ final class StructuralPerimeterPlanner {
         List<VisualPoint> result = new ArrayList<>(steps + 1);
         for (int step = 0; step <= steps; step++) result.add(new VisualPoint(from.x() + dx * step / steps,
                 from.y() + dy * step / steps, from.z() + dz * step / steps));
+        return result;
+    }
+
+    private static List<VisualPoint> raster(LinearFeaturePlan feature) {
+        List<VisualPoint> result = new ArrayList<>();
+        for (int segment = 1; segment < feature.nodes().size(); segment++) {
+            List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
+            result.addAll(segment == 1 ? points : points.subList(1, points.size()));
+        }
         return result;
     }
 }

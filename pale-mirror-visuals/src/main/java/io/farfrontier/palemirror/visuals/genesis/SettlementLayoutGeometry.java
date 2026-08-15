@@ -27,6 +27,25 @@ final class SettlementLayoutGeometry {
     }
 
     /**
+     * Perimeter pieces are narrow enough that a missed one-block rise is
+     * immediately visible as a buried or floating fence. Sample every actual
+     * wall column and retain those nodes for the structural module compiler.
+     */
+    static LinearFeaturePlan followExactTerrain(LinearFeaturePlan feature,
+                                                 SettlementTerrainSnapshot snapshot) {
+        List<VisualPoint> sampled = new ArrayList<>();
+        for (int segment = 1; segment < feature.nodes().size(); segment++) {
+            List<VisualPoint> points = raster(feature.nodes().get(segment - 1), feature.nodes().get(segment));
+            for (int index = segment == 1 ? 0 : 1; index < points.size(); index++) {
+                VisualPoint point = points.get(index);
+                sampled.add(withY(point, snapshot.exactSurfaceHeight(point.x(), point.z())));
+            }
+        }
+        return new LinearFeaturePlan(feature.id(), feature.kind(), sampled,
+                feature.width(), feature.walkable());
+    }
+
+    /**
      * Building access starts on the authored foundation surface. Every later
      * node follows the natural solid surface, not Minecraft's first-air
      * height. Keeping the first node exact prevents a road from silently

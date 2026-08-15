@@ -108,6 +108,59 @@ class NarratorCandidateTest {
         assertTrue(state.history().stream().anyMatch(value -> value.type() == DomainEventType.SCENARIO_BLOCKED));
     }
 
+    @Test
+    void ordinaryFreshWorldProsperityIsNotARecoveryOpportunity() {
+        WorldState state = new WorldState();
+        WorldObjectId community = new WorldObjectId("pale_mirror:community");
+        DomainEvent planned = new DomainEvent("pm:event:1",
+                DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED, community, 8,
+                "pm:intent:development", "pm:intent:development");
+        state.addEvent(planned);
+
+        assertTrue(!DevelopmentOpportunityEligibility.isRecoveryOpportunity(state, planned));
+    }
+
+    @Test
+    void stabilizedCrisisMakesALaterDevelopmentPlanARecoveryOpportunity() {
+        WorldState state = new WorldState();
+        WorldObjectId community = new WorldObjectId("pale_mirror:community");
+        state.addEvent(new DomainEvent("pm:event:1", DomainEventType.SETTLEMENT_CRISIS_DETECTED,
+                community, 8, "test", "test"));
+        state.addEvent(new DomainEvent("pm:event:2", DomainEventType.SETTLEMENT_STABILIZED,
+                community, 12, "test", "test"));
+        DomainEvent planned = new DomainEvent("pm:event:3",
+                DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED, community, 14,
+                "pm:intent:development", "pm:intent:development");
+        state.addEvent(planned);
+
+        assertTrue(DevelopmentOpportunityEligibility.isRecoveryOpportunity(state, planned));
+    }
+
+    @Test
+    void systemCancellationRetiresOnlyTheFalseOfferAndPreservesItsDevelopmentIntent() {
+        WorldState state = new WorldState();
+        WorldObjectId community = new WorldObjectId("pale_mirror:community");
+        DevelopmentIntent intent = new DevelopmentIntent("pm:intent:development", community,
+                DevelopmentIntentType.UPGRADE_STOREHOUSE, null, null, 0, "test",
+                DevelopmentIntentState.PLANNED, "");
+        state.putDevelopmentIntent(intent);
+        DomainEvent source = new DomainEvent("pm:event:development",
+                DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED, community, 10, intent.id(), intent.id());
+        state.addEvent(source);
+        ScenarioInstance scenario = new ScenarioInstance("pm:scenario:development", source.eventId(), community,
+                AUDIENCE, "pale_mirror:development_opportunity", "1",
+                List.of("OFFERED", "ASSESS", "RESPOND", "RESOLVED"), List.of(), "", "",
+                ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, ScenarioStatus.OFFERED, null, "");
+        state.putScenario(scenario);
+
+        List<DomainEvent> events = new DomainServices().commands().execute(state,
+                new DomainCommand.CancelScenario(scenario.id(), "not a recovered crisis"));
+
+        assertEquals(ScenarioStatus.CANCELLED, scenario.status());
+        assertEquals(DevelopmentIntentState.PLANNED, intent.state());
+        assertEquals(List.of(DomainEventType.SCENARIO_CANCELLED), events.stream().map(DomainEvent::type).toList());
+    }
+
     private static NarrativeCandidate candidate(DomainEvent event, int urgency, int significance, int relevance, int novelty) {
         return new NarrativeCandidate(event, AUDIENCE, NarrativeCandidateType.SUPPLY_CRISIS, definition(),
                 urgency, significance, relevance, 100, novelty, 5);

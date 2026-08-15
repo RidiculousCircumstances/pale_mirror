@@ -85,6 +85,7 @@ public final class PaleMirrorRuntime {
         this.commands = new DomainTransaction(data, commandProcessor);
         this.reconciler = new ObservationReconciler(commands);
         this.narrative = new NarrativeCandidateRuntime(server, data, commands, this::audienceFor);
+        this.narrative.reconcileExistingOffers();
         this.evacuation = new PreparedEvacuationRuntime(data, commands, this::audienceFor, this::handleDomainEvents);
         this.debug = new RuntimeDebugController(server, data, commands, this::handleDomainEvents);
         this.playtestMetrics = new PlaytestMetrics(server);
