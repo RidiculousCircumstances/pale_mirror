@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
+import io.farfrontier.palemirror.api.VisualPortKind;
 
 import org.junit.jupiter.api.Test;
 
@@ -47,9 +48,17 @@ class MineUndergroundLayoutTest {
                 assertTrue(Math.abs(previous.y() - current.y()) <= 1,
                         route.foundationId() + " emitted an unwalkable road step");
             }
-            assertTrue(ownerModules.isEmpty() || ownerModules.stream().anyMatch(value ->
-                            horizontalDistance(value.footprint(), route.points().getLast()) == 1),
-                    route.foundationId() + " did not terminate at its authored facade");
+            if (!ownerModules.isEmpty()) {
+                var port = ownerModules.stream().flatMap(value -> value.ports().stream())
+                        .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
+                        .findFirst().orElseThrow();
+                VisualPoint expected = outside(port.position(), port.outwardQuarterTurns());
+                VisualPoint actual = route.points().getLast();
+                assertEquals(expected.x(), actual.x(), route.foundationId() + " access x");
+                assertEquals(expected.z(), actual.z(), route.foundationId() + " access z");
+                assertTrue(Math.abs(expected.y() - actual.y()) <= 2,
+                        route.foundationId() + " access does not meet the authored threshold grade");
+            }
         }
     }
 
@@ -58,9 +67,12 @@ class MineUndergroundLayoutTest {
                 && point.z() >= bounds.min().z() && point.z() <= bounds.max().z();
     }
 
-    private static int horizontalDistance(VisualBounds bounds, VisualPoint point) {
-        int dx = Math.max(bounds.min().x() - point.x(), point.x() - bounds.max().x());
-        int dz = Math.max(bounds.min().z() - point.z(), point.z() - bounds.max().z());
-        return Math.max(0, Math.max(dx, dz));
+    private static VisualPoint outside(VisualPoint entrance, int outward) {
+        return switch (Math.floorMod(outward, 4)) {
+            case 0 -> new VisualPoint(entrance.x() + 1, entrance.y(), entrance.z());
+            case 1 -> new VisualPoint(entrance.x(), entrance.y(), entrance.z() + 1);
+            case 2 -> new VisualPoint(entrance.x() - 1, entrance.y(), entrance.z());
+            default -> new VisualPoint(entrance.x(), entrance.y(), entrance.z() - 1);
+        };
     }
 }

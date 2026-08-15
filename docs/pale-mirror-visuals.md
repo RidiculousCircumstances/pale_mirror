@@ -181,10 +181,10 @@ and two-block apron. Three-wide gravel/cobble paths, steps, lamps and short safe
 fences connect those levels; graded pads transition smoothly back into natural terrain. The drift and chambers
 continue into the selected mountain face inside a continuous dry masonry shell.
 
-The five principal surface landmarks are generated from the reproducible
-PM-authored frontier-industrial kit in
-`scripts/generate-authored-mine-landmarks.py`; the maintenance workshop remains
-a curated private Integrated Villages derivative. PM composes them with an
+The five principal surface landmarks and the maintenance workshop are curated
+private Integrated Villages derivatives selected for real architectural
+silhouettes: a tall tool/hoist works, crew office, masonry processing hall,
+engine house and covered freight stable. PM composes them with an
 irregular gravel/coarse-dirt working yard, drainage seams, open ore-sort bins,
 timber/material stores, safety lighting, local foundations, circulation and
 climate transforms. The underground adit, gallery and controller spaces remain
@@ -194,7 +194,11 @@ air; inventories become inert timber; ore/raw-resource cells become ordinary
 deepslate. Consequently visible ore never mints canonical IRON and ordinary
 containers never mirror settlement stock. Create blocks that survive this
 filter are visual/kinetic machinery only and carry no imported inventories or
-contraptions.
+contraptions. Module dimensions, exact public thresholds, outward directions,
+parcel clearance and foundation aprons live in the fail-closed JSON module
+catalog; layout code does not guess them. Compilation rejects any catalog/NBT
+size mismatch, so replacing a curated asset cannot silently move an entrance
+or overlap a neighbouring parcel.
 
 Red Valley starts as a small operational adit, not a finished freight factory.
 Its dispatch endpoint is canonical `DEGRADED`. After Red Valley is known and

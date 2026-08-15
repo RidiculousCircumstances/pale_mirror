@@ -32,7 +32,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 16;
+    public static final int DEFINITION_VERSION = 20;
     private final RegionPlacementProfile placementProfile;
     public FrontierRegionPlanner() {
         this(RegionPlacementProfiles.IRON_FRONTIER);
@@ -136,10 +136,10 @@ public final class FrontierRegionPlanner {
         List<StagedVisualModule> staged = new ArrayList<>();
         addSurfaceBuilding(surface, family, "portal_hoist", "portal", "MINE_PORTAL",
                 SettlementBuildingCategory.INDUSTRY, List.of("mine_portal", "hoist"), 0, 4,
-                role, anchor, 23, 14, 19);
+                role, anchor);
         addSurfaceBuilding(surface, family, "crew_outpost", "crew", "MINE_SUPPORT",
                 SettlementBuildingCategory.UTILITY, List.of("crew_outpost", "mine_office"), 0, 4,
-                role, anchor, 12, 6, 9);
+                role, anchor);
         addUndergroundMine(underground, family, "entrance_adit", "MINE_ADIT", portal,
                 MineUndergroundLayout.ADIT, direction, 7, 6, 7);
         addUndergroundMine(underground, family, "controller_chamber", "MINE_CONTROLLER", portal,
@@ -147,27 +147,27 @@ public final class FrontierRegionPlanner {
         if (role == AuthoredMineRole.PRIMARY) {
             addSurfaceBuilding(surface, family, "processing_hall", "processing", "MINE_PROCESSING",
                     SettlementBuildingCategory.INDUSTRY, List.of("ore_processing", "ore_sorting"), 0, 6,
-                    role, anchor, 31, 10, 17);
+                    role, anchor);
             addSurfaceBuilding(surface, family, "power_house", "power", "MINE_POWER",
                     SettlementBuildingCategory.INDUSTRY, List.of("power_house", "machinery"), 0, 3,
-                    role, anchor, 13, 15, 15);
+                    role, anchor);
             addSurfaceBuilding(surface, family, "loading_yard", "loading", "MINE_LOGISTICS",
                     SettlementBuildingCategory.LOGISTICS, List.of("loading_yard", "freight_endpoint"), 0, 4,
-                    role, anchor, 14, 10, 9);
+                    role, anchor);
             addSurfaceBuilding(surface, family, "../workshop_1", "maintenance", "MINE_MAINTENANCE",
                     SettlementBuildingCategory.INDUSTRY, List.of("maintenance_workshop"), 0, 3,
-                    role, anchor, 10, 7, 8);
+                    role, anchor);
             addUndergroundMine(underground, family, "iron_gallery", "MINE_GALLERY", portal,
                     MineUndergroundLayout.GALLERY, direction, 40, 9, 17);
         } else {
             staged.add(stageSurfaceMine("foundation", family, "dispatch_foundation", "dispatch",
-                    "MINE_LOGISTICS", role, anchor, 13, 7, 13));
+                    "MINE_LOGISTICS", role, anchor));
             staged.add(stageSurfaceMine("shell", family, "dispatch_shell", "processing",
-                    "MINE_PROCESSING", role, anchor, 31, 10, 17));
+                    "MINE_PROCESSING", role, anchor));
             staged.add(stageSurfaceMine("machinery", family, "dispatch_machinery", "power",
-                    "MINE_POWER", role, anchor, 19, 9, 22));
+                    "MINE_POWER", role, anchor));
             staged.add(stageSurfaceMine("commissioning", family, "dispatch_commissioning", "freight",
-                    "MINE_LOGISTICS", role, anchor, 14, 10, 9));
+                    "MINE_LOGISTICS", role, anchor));
         }
         VisualPoint controller = local(portal, MineUndergroundLayout.CONTROLLER, direction);
         String loadingPad = role == AuthoredMineRole.PRIMARY ? "loading" : "dispatch";
@@ -207,10 +207,9 @@ public final class FrontierRegionPlanner {
     private static void addSurfaceBuilding(List<AuthoredBuildingPlan> target, String family, String template,
                                            String padId, String moduleRole, SettlementBuildingCategory category,
                                            List<String> functions, int housing, int work,
-                                           AuthoredMineRole mineRole, MountainMineAnchor anchor,
-                                           int sx, int sy, int sz) {
+                                           AuthoredMineRole mineRole, MountainMineAnchor anchor) {
         VisualModulePlacement module = MineSurfaceModuleFactory.place(family, template, padId, moduleRole,
-                mineRole, anchor, sx, sy, sz);
+                mineRole, anchor);
         List<BuildingSlot> slots = new ArrayList<>();
         for (int index = 0; index < housing; index++) {
             slots.add(mineSlot("bed_" + index, BuildingSlotKind.BED, module.footprint(), index));
@@ -242,16 +241,16 @@ public final class FrontierRegionPlanner {
 
     private static StagedVisualModule stageSurfaceMine(String stage, String family, String template,
                                                         String padId, String moduleRole, AuthoredMineRole mineRole,
-                                                        MountainMineAnchor anchor, int sx, int sy, int sz) {
+                                                        MountainMineAnchor anchor) {
         return new StagedVisualModule(stage, surfaceMineModule(family, template, padId, moduleRole,
-                mineRole, anchor, sx, sy, sz));
+                mineRole, anchor));
     }
 
     private static VisualModulePlacement surfaceMineModule(String family, String template, String padId,
                                                             String moduleRole, AuthoredMineRole mineRole,
-                                                            MountainMineAnchor anchor, int sx, int sy, int sz) {
+                                                            MountainMineAnchor anchor) {
         return MineSurfaceModuleFactory.place(family, template, padId, moduleRole,
-                mineRole, anchor, sx, sy, sz);
+                mineRole, anchor);
     }
 
     private static void addUndergroundMine(List<VisualModulePlacement> target, String family, String name,

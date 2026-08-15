@@ -5,8 +5,8 @@ They are not a dependency or a claim of ownership, and they must be removed or r
 
 | Embedded family | Source | Exact source version | Original namespace | Use |
 |---|---|---|---|---|
-| Cabin/clockwork structures | Integrated Villages | `1.3.3+1.21.1-neoforge` | `integrated_villages` | Remapped private NBT modules for civic, housing, workshop and above-ground frontier-industrial MineSite slots |
-| PM frontier-industrial mine kit | Pale Mirror | schema v40 generator | `pale_mirror_visuals` | Reproducible surface portal/hoist, crew office, processing hall, power house, loading canopy and staged dispatch assets |
+| Cabin/clockwork/marketstead structures | Integrated Villages | `1.3.3+1.21.1-neoforge` | `integrated_villages` | Remapped private NBT modules for civic, housing, trade, health, food, freight, industry and above-ground MineSite slots |
+| PM frontier-industrial context kit | Pale Mirror | schema v40 generator | `pale_mirror_visuals` | Reproducible foundations, roads, yards, portal frame, loading context and the first dormant Red Valley foundation stage |
 | Ancient mine structures | Integrated Dungeons and Structures | `1.13.7+1.21.1-neoforge` | `idas` | Curated underground gallery and controller machinery references |
 | Mining complex structures | When Dungeons Arise | `2.1.1-1.21.1` | `dungeons_arise` | Curated underground controller chamber reference |
 | Underground mining outposts | Terralith | `2.6.2-1.21.1-neoforge` | `terralith` | Curated underground entrance-adit reference |
@@ -28,14 +28,19 @@ machinery and replaces inventories and ore/raw-resource cells with inert
 materials. Per-module embedded SHA-256 values are enforced by
 `AuthoredAssetCatalog`.
 
-Schema v40 generates the principal surface kit from
-`scripts/generate-authored-mine-landmarks.py`; its source is reviewable, emits
-deterministic gzip/NBT and contains no entities, block entities, inventories or
-resource blocks. An Integrated Villages workshop supplies the remaining
-maintenance module. PM composes those assets into one industrial campus with
-typed buildings, local foundations, an irregular working yard, paths, safety
-details and climate transforms. The curated underground adit, gallery and
-controller modules pass through the same sanitizer.
+The curated-frontier revision replaces the five generated surface boxes with
+private Integrated Villages `clockwork_village` and `marketstead_village`
+buildings. Exact source entries are: `clockwork_village_toolsmith` for the
+portal/hoist works; `marketstead_village_botanist` for the crew office;
+`marketstead_village_mason` for processing; `marketstead_village_engineer` for
+power; and `marketstead_village_stables` for loading. The same coherent source
+kit supplies the staged Red Valley shell, machinery and commissioning forms.
+PM still authors terrain integration, foundations, circulation, semantic
+ports, portal frame, yards and safety details. The pinned import is reproducible
+through `scripts/import-curated-frontier-assets.sh`; the old deterministic
+generator is restricted to the dormant Red Valley context foundation and can
+no longer overwrite active surface buildings. The underground adit, gallery
+and controller modules pass through the same sanitizer.
 
 The generated Threat Heart prompt requested a square Minecraft-style infected organic texture with a burgundy/crimson,
 purple and sparse ember-orange palette, no text, logo, watermark or scene.

@@ -17,19 +17,24 @@ final class MineSurfaceLayout {
 
     static List<Pad> pads(AuthoredMineRole role) {
         if (role == AuthoredMineRole.PRIMARY) return List.of(
-                new Pad("portal", 0, -10, 23, 19),
-                new Pad("crew", -18, -34, 12, 9),
-                new Pad("processing", 0, -51, 31, 17),
-                new Pad("power", -20, -52, 13, 15),
-                new Pad("loading", 19, -34, 14, 9),
-                new Pad("maintenance", 18, -52, 12, 10));
+                pad("portal", 0, -8, "mine/portal_hoist"),
+                pad("crew", -22, -30, "mine/crew_outpost"),
+                pad("processing", 0, -51, "mine/processing_hall"),
+                pad("power", -22, -52, "mine/power_house"),
+                pad("loading", 22, -28, "mine/loading_yard"),
+                pad("maintenance", 22, -52, "workshop_1"));
         return List.of(
-                new Pad("portal", 0, -10, 23, 19),
-                new Pad("crew", -18, -34, 12, 9),
-                new Pad("dispatch", 19, -34, 14, 13),
-                new Pad("processing", 0, -51, 31, 17),
-                new Pad("power", -22, -52, 19, 22),
-                new Pad("freight", 19, -52, 14, 9));
+                pad("portal", 0, -8, "mine/portal_hoist"),
+                pad("crew", -22, -30, "mine/crew_outpost"),
+                pad("dispatch", 22, -28, "mine/dispatch_foundation"),
+                pad("processing", 0, -51, "mine/dispatch_shell"),
+                pad("power", -22, -52, "mine/dispatch_machinery"),
+                pad("freight", 22, -52, "mine/dispatch_commissioning"));
+    }
+
+    private static Pad pad(String id, int right, int inward, String moduleId) {
+        FrontierModuleCatalog.Definition definition = FrontierModuleCatalog.require(moduleId);
+        return new Pad(id, right, inward, definition.sizeX(), definition.sizeZ());
     }
 
     static Pad require(AuthoredMineRole role, String id) {

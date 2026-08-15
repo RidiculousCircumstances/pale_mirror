@@ -36,6 +36,7 @@ public final class AuthoredModuleCompiler {
         int turns = Math.floorMod(module.quarterTurns(), 4);
         int rx = turns % 2 == 0 ? template.sizeX() : template.sizeZ();
         int rz = turns % 2 == 0 ? template.sizeZ() : template.sizeX();
+        requireExactFootprint(module, id, rx, template.sizeY(), rz);
         BlockPos origin = new BlockPos(module.origin().x() - rx / 2, module.origin().y() + 1,
                 module.origin().z() - rz / 2);
         List<VisualBlockPlacement> blocks = new ArrayList<>(template.blocks().size());
@@ -43,6 +44,7 @@ public final class AuthoredModuleCompiler {
             int[] rotated = rotate(block.x(), block.z(), template.sizeX(), template.sizeZ(), turns);
             BlockState state = rotate(climateState(template.palette().get(block.state()), id), turns);
             if (state.is(Blocks.STRUCTURE_BLOCK) || state.is(Blocks.JIGSAW)) continue;
+            if (!module.foundationId().equals("underground") && copiedTerrainShell(state)) continue;
             BlockPos world = origin.offset(rotated[0], block.y(), rotated[1]);
             VisualPoint position = new VisualPoint(world.getX(), world.getY(), world.getZ());
             if (!module.footprint().contains(position)) {
@@ -53,6 +55,31 @@ public final class AuthoredModuleCompiler {
         }
         return new VisualModuleSnapshot(module.templateId(), module.footprint(),
                 normalizeStructuralDetails(module, blocks));
+    }
+
+    /**
+     * The JSON catalog is an exact sidecar contract, not a generous placement
+     * envelope. A replaced NBT must update its dimensions explicitly; otherwise
+     * doors, pads and collision reservations would silently drift apart.
+     */
+    private static void requireExactFootprint(VisualModulePlacement module, ResourceLocation id,
+                                              int expectedX, int expectedY, int expectedZ) {
+        int actualX = module.footprint().max().x() - module.footprint().min().x() + 1;
+        int actualY = module.footprint().max().y() - module.footprint().min().y() + 1;
+        int actualZ = module.footprint().max().z() - module.footprint().min().z() + 1;
+        if (actualX != expectedX || actualY != expectedY || actualZ != expectedZ) {
+            throw new IllegalStateException("Authored module catalog/NBT size mismatch for " + id
+                    + ": footprint=" + actualX + "x" + actualY + "x" + actualZ
+                    + ", nbt=" + expectedX + "x" + expectedY + "x" + expectedZ);
+        }
+    }
+
+    /** Imported surface art contributes architecture; PM's surveyed pad remains the only terrain owner. */
+    private static boolean copiedTerrainShell(BlockState state) {
+        return state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE) || state.is(Blocks.TUFF)
+                || state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK)
+                || state.is(Blocks.COARSE_DIRT) || state.is(Blocks.ROOTED_DIRT)
+                || state.is(Blocks.PODZOL) || state.is(Blocks.MYCELIUM);
     }
 
     private static RawTemplate template(ResourceLocation id) {

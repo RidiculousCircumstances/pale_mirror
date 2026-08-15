@@ -1,59 +1,82 @@
 package io.farfrontier.palemirror.visuals.genesis;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Versioned visual grammar metadata; NBT is content, this catalog is its semantic contract. */
+/** Data-driven visual grammar metadata; NBT is content, this catalog is its semantic contract. */
 final class FrontierModuleCatalog {
-    static final int VERSION = 3;
-    private static final Map<String, Definition> DEFINITIONS = definitions();
+    private static final String RESOURCE = "/data/pale_mirror_visuals/module_catalog/frontier.json";
+    private static final Catalog CATALOG = load();
 
     private FrontierModuleCatalog() { }
 
+    static int version() { return CATALOG.version(); }
+
     static Definition require(String id) {
-        Definition result = DEFINITIONS.get(id);
+        Definition result = CATALOG.definitions().get(id);
         if (result == null) throw new IllegalArgumentException("Unknown frontier visual module " + id);
         return result;
     }
 
-    static List<Definition> definitionsInOrder() { return List.copyOf(DEFINITIONS.values()); }
-
-    private static Map<String, Definition> definitions() {
-        Map<String, Definition> values = new LinkedHashMap<>();
-        add(values, "barracks", 9, 8, 18, true, "frontier_defence", 2, 1, 9, 2);
-        add(values, "civic_hall", 29, 37, 22, true, "frontier_community", 15, 2, 16, 1);
-        add(values, "clinic", 13, 18, 14, true, "frontier_community", 9, 1, 9, 0);
-        add(values, "inn", 17, 13, 26, true, "frontier_community", 4, 0, 20, 2);
-        add(values, "market", 19, 8, 16, false, "frontier_market", 6, 1, 2, 3);
-        add(values, "receiving_depot", 10, 6, 6, true, "frontier_freight", 0, 1, 2, 2);
-        add(values, "residence_1", 10, 7, 9, false, "frontier_community", 6, 1, 6, 1);
-        add(values, "residence_2", 11, 11, 14, false, "frontier_community", 8, 0, 5, 0);
-        add(values, "residence_3", 10, 7, 9, false, "frontier_community", 6, 1, 6, 1);
-        add(values, "smithy", 5, 7, 7, false, "frontier_industry", 4, 1, 2, 0);
-        add(values, "stable", 19, 8, 16, false, "frontier_freight", 6, 1, 2, 3);
-        add(values, "workshop_1", 10, 7, 8, false, "frontier_industry", 9, 1, 3, 0);
-        add(values, "workshop_2", 16, 6, 20, false, "frontier_industry", 5, 1, 3, 3);
-        return Map.copyOf(values);
+    static List<Definition> definitionsInOrder() {
+        return CATALOG.definitions().values().stream().filter(value -> !value.mine()).toList();
     }
 
-    private static void add(Map<String, Definition> values, String id, int sizeX, int sizeY, int sizeZ,
-                            boolean landmark, String stateProfile, int entranceX, int entranceY,
-                            int entranceZ, int entranceOutward) {
-        values.put(id, new Definition(id, sizeX, sizeY, sizeZ, landmark, stateProfile,
-                entranceX, entranceY, entranceZ, entranceOutward));
+    static List<Definition> allDefinitionsInOrder() { return List.copyOf(CATALOG.definitions().values()); }
+
+    private static Catalog load() {
+        try (var input = FrontierModuleCatalog.class.getResourceAsStream(RESOURCE)) {
+            if (input == null) throw new IllegalStateException("Missing frontier module catalog " + RESOURCE);
+            JsonObject root = JsonParser.parseReader(new InputStreamReader(input, StandardCharsets.UTF_8))
+                    .getAsJsonObject();
+            int version = root.get("version").getAsInt();
+            if (version < 1) throw new IllegalStateException("Invalid frontier module catalog version " + version);
+            Map<String, Definition> definitions = new LinkedHashMap<>();
+            for (JsonElement raw : root.getAsJsonArray("modules")) {
+                JsonObject value = raw.getAsJsonObject();
+                var size = value.getAsJsonArray("size");
+                JsonObject entrance = value.getAsJsonObject("entrance");
+                List<String> tags = new ArrayList<>();
+                value.getAsJsonArray("tags").forEach(entry -> tags.add(entry.getAsString()));
+                Definition definition = new Definition(value.get("id").getAsString(), size.get(0).getAsInt(),
+                        size.get(1).getAsInt(), size.get(2).getAsInt(), value.get("landmark").getAsBoolean(),
+                        value.get("stateProfile").getAsString(), entrance.get("x").getAsInt(),
+                        entrance.get("y").getAsInt(), entrance.get("z").getAsInt(),
+                        entrance.get("outward").getAsInt(), value.get("parcelClearance").getAsInt(),
+                        value.get("foundationApron").getAsInt(), tags);
+                if (definitions.put(definition.id(), definition) != null) {
+                    throw new IllegalStateException("Duplicate frontier module " + definition.id());
+                }
+            }
+            return new Catalog(version, Map.copyOf(definitions));
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("Cannot read frontier module catalog " + RESOURCE, failure);
+        }
     }
+
+    private record Catalog(int version, Map<String, Definition> definitions) { }
 
     record Definition(String id, int sizeX, int sizeY, int sizeZ, boolean landmark, String stateProfile,
-                      int entranceX, int entranceY, int entranceZ, int entranceOutward) {
+                      int entranceX, int entranceY, int entranceZ, int entranceOutward,
+                      int parcelClearance, int foundationApron, List<String> tags) {
         Definition {
             if (id == null || id.isBlank() || sizeX < 1 || sizeY < 1 || sizeZ < 1
                     || stateProfile == null || stateProfile.isBlank()
                     || entranceX < 0 || entranceX >= sizeX || entranceY < 0 || entranceY >= sizeY
-                    || entranceZ < 0 || entranceZ >= sizeZ
-                    || entranceOutward < 0 || entranceOutward > 3) {
-                throw new IllegalArgumentException("Invalid frontier module definition");
+                    || entranceZ < 0 || entranceZ >= sizeZ || entranceOutward < 0 || entranceOutward > 3
+                    || parcelClearance < 0 || foundationApron < 0 || tags == null || tags.isEmpty()) {
+                throw new IllegalArgumentException("Invalid frontier module definition " + id);
             }
+            tags = List.copyOf(tags);
         }
+
+        boolean mine() { return tags.contains("mine_surface"); }
     }
 }

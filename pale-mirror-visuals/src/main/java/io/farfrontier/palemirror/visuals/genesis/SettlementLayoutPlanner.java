@@ -34,7 +34,6 @@ final class SettlementLayoutPlanner {
     static final int MASTER_HALF_WIDTH = 72;
     static final int MASTER_HALF_LENGTH = 96;
     static final int VARIANT_COUNT = 24;
-    private static final int FOUNDATION_APRON = 2;
 
     AuthoredSettlementSitePlan plan(String source, VisualPoint anchor, FrontierClimate climate,
                                     int freightDirection, TerrainCandidate terrain) {
@@ -101,7 +100,8 @@ final class SettlementLayoutPlanner {
                 int desiredFrontage = Math.floorMod(freightDirection + candidate.frontage(), 4);
                 int rotation = Math.floorMod(desiredFrontage - definition.entranceOutward(), 4);
                 VisualBounds footprint = moduleFootprint(definition, origin, rotation);
-                VisualBounds parcel = expand(footprint, 1, 0, 1);
+                VisualBounds parcel = expand(footprint, definition.parcelClearance(), 0,
+                        definition.parcelClearance());
                 if (!containsHorizontal(master, parcel) || !snapshot.roughlyAccepts(footprint)) continue;
                 if (!snapshot.resolvePad(footprint).accepted()) continue;
                 if (occupied.stream().anyMatch(value -> overlaps(value, parcel))) continue;
@@ -165,12 +165,13 @@ final class SettlementLayoutPlanner {
                     "pale_mirror_visuals:" + family + "/" + placement.spec().template(),
                     family, placement.spec().category().name(), origin, rotation, footprint,
                     foundationId, moduleDefinition.stateProfile(), ports);
-            VisualBounds parcel = expand(footprint, 1, 0, 1);
+            VisualBounds parcel = expand(footprint, moduleDefinition.parcelClearance(), 0,
+                    moduleDefinition.parcelClearance());
             var slots = SettlementBuildingSlots.forBuilding(placement.spec(), footprint);
             buildings.add(new AuthoredBuildingPlan(placement.spec().id(), earliestStage(placement.spec().id()),
                     placement.spec().category(), placement.spec().functions(), parcel, List.of(module), slots));
             foundations.add(new SettlementFoundationPlan(foundationId, footprint, origin.y(),
-                    FOUNDATION_APRON, 4, 4,
+                    moduleDefinition.foundationApron(), 4, 4,
                     placement.spec().category() == io.farfrontier.palemirror.api.SettlementBuildingCategory.LOGISTICS
                             ? "FREIGHT" : "BUILDING"));
         }
@@ -191,6 +192,11 @@ final class SettlementLayoutPlanner {
                 .map(value -> followExactTerrain(value, snapshot)).toList();
         List<AuthoredOpenSpacePlan> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
                 .map(value -> resolveOpenSpace(value, snapshot)).toList();
+        for (AuthoredOpenSpacePlan space : openSpaces) for (AuthoredBuildingPlan authoredBuilding : buildings) {
+            if (overlaps(space.bounds(), authoredBuilding.parcel())) throw new IllegalStateException(
+                    "Township open space " + space.id() + " " + space.bounds() + " overlaps "
+                            + authoredBuilding.buildingId() + " " + authoredBuilding.parcel());
+        }
         List<DevelopmentReservation> reservations = reservations(anchor, freightDirection, buildings, openSpaces,
                 transform);
         ManagedAreaPlan managedArea = managedArea(buildings, circulation, defences, openSpaces, reservations);
@@ -247,13 +253,13 @@ final class SettlementLayoutPlanner {
                 p(values, "clinic", -52, -8 + civicShift, 0),
                 p(values, "community_bakery", 13, -14 + civicShift, 0),
                 p(values, "receiving_depot", 0, 70, 0),
-                p(values, "smeltery", 25, 54, 2),
-                p(values, "smithy", 42, 38, 2),
-                p(values, "mechanical_workshop", 8, 54, 2),
+                p(values, "smeltery", 21, 57, 2),
+                p(values, "smithy", 54, 34, 2),
+                p(values, "mechanical_workshop", 0, 53, 2),
                 p(values, "stable", -38, 66, 0),
                 p(values, "assay_office", -17, 43, 0),
                 p(values, "barracks", -42, 34, 1),
-                p(values, "watch_house", -61, 51, 0),
+                p(values, "watch_house", -54, 49, 0),
                 p(values, "family_house_1", -47, -34 + rearTier, 0),
                 p(values, "family_house_2", -27, -48 + rearTier, 0),
                 p(values, "family_house_3", -7, -54 + rearTier, 0),
@@ -336,7 +342,7 @@ final class SettlementLayoutPlanner {
                 open("allotments", OpenSpaceKind.GARDEN, anchor, direction,
                         transform.right(54), transform.inward(-58), 9, 7),
                 open("freight_yard", OpenSpaceKind.FREIGHT_YARD, anchor, direction,
-                        transform.right(-15), transform.inward(60), 10, 6),
+                        transform.right(55), transform.inward(72), 8, 6),
                 open("smeltery_yard", OpenSpaceKind.INDUSTRIAL_YARD, anchor, direction,
                         transform.right(25), transform.inward(34), 9, 7),
                 open("training_yard", OpenSpaceKind.TRAINING_YARD, anchor, direction,
@@ -363,8 +369,8 @@ final class SettlementLayoutPlanner {
                         -10, 70, 6, 8), buildings, openSpaces, result, master);
         result.add(depotAnnex);
         DevelopmentReservation smelteryAnnex = resolveAnnex("smeltery_annex", "smeltery",
-                translatedAnnex(anchor, direction, transform, buildings, "smeltery", 25, 54,
-                        44, 54, 8, 9), buildings, openSpaces, result, master);
+                translatedAnnex(anchor, direction, transform, buildings, "smeltery", 21, 57,
+                        38, 57, 6, 7), buildings, openSpaces, result, master);
         result.add(smelteryAnnex);
         List<int[]> candidates = new ArrayList<>(List.of(
                 new int[]{-64, -70}, new int[]{64, -70}, new int[]{-64, -42}, new int[]{64, -42},

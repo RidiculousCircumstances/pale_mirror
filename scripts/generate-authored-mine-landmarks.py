@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Generate the PM-authored surface-mine kit kept as versioned structure NBT.
+"""Generate the remaining PM-owned mine context foundation.
 
-The imported quarry template previously used for the portal was 45x19x37 and
-contained a moving Create contraption.  The other imported surface modules were
-safe after sanitising, but read as unrelated rectangular shells.  This
-generator owns one compact, block-entity-free industrial language for the
-portal, processing hall, power house, crew office and loading canopy so every
-binary asset remains reviewable and reproducible.
+Active above-ground buildings are curated complete NBT modules imported by
+``import-curated-frontier-assets.sh``.  Keeping this script from writing those
+paths prevents a historical procedural kit from accidentally replacing the
+curated library.  The old builders remain below as design history, but only the
+dormant Red Valley foundation is emitted.
 """
 
 from __future__ import annotations
@@ -374,17 +373,7 @@ def dispatch_machinery() -> Structure:
 
 
 def main() -> None:
-    assets = {
-        "portal_hoist": portal_hoist(),
-        "crew_outpost": crew_outpost(),
-        "processing_hall": processing_hall(),
-        "power_house": power_house(),
-        "loading_yard": loading_yard(),
-        "dispatch_foundation": dispatch_foundation(),
-        "dispatch_shell": processing_hall(),
-        "dispatch_machinery": dispatch_machinery(),
-        "dispatch_commissioning": loading_yard(),
-    }
+    assets = {"dispatch_foundation": dispatch_foundation()}
     for family in ("temperate", "cold_taiga", "dry_arid"):
         for name, asset in assets.items():
             destination = STRUCTURES / family / f"mine/{name}.nbt"

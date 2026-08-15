@@ -14,22 +14,24 @@ final class MineSurfaceModuleFactory {
 
     static VisualModulePlacement place(String family, String template, String padId,
                                        String moduleRole, AuthoredMineRole mineRole,
-                                       MountainMineAnchor anchor, int sx, int sy, int sz) {
+                                       MountainMineAnchor anchor) {
         VisualPoint origin = anchor.surfaceCenter(mineRole, padId);
-        String path = template.startsWith("../") ? family + "/" + template.substring(3)
-                : family + "/mine/" + template;
+        String relative = template.startsWith("../") ? template.substring(3) : "mine/" + template;
+        String path = family + "/" + relative;
+        FrontierModuleCatalog.Definition definition = FrontierModuleCatalog.require(relative);
         int direction = anchor.inwardQuarterTurns();
         boolean swap = Math.floorMod(direction, 2) == 1;
-        int width = swap ? sz : sx;
-        int depth = swap ? sx : sz;
+        int width = swap ? definition.sizeZ() : definition.sizeX();
+        int depth = swap ? definition.sizeX() : definition.sizeZ();
         VisualBounds footprint = new VisualBounds(new VisualPoint(origin.x() - width / 2, origin.y() + 1,
-                origin.z() - depth / 2), new VisualPoint(origin.x() + (width - 1) / 2, origin.y() + sy,
+                origin.z() - depth / 2), new VisualPoint(origin.x() + (width - 1) / 2,
+                origin.y() + definition.sizeY(),
                 origin.z() + (depth - 1) / 2));
-        int outward = Math.floorMod(direction + 2, 4);
-        VisualPoint entrance = SettlementLayoutGeometry.entrance(footprint, outward);
+        int outward = Math.floorMod(definition.entranceOutward() + direction, 4);
+        VisualPoint entrance = SettlementLayoutGeometry.authoredEntrance(definition, footprint, direction);
         return new VisualModulePlacement(path.replace('/', '_') + "_" + origin.x() + "_" + origin.z(),
                 "pale_mirror_visuals:" + path, family, moduleRole, origin, direction, footprint, padId,
-                "frontier_mine", List.of(new VisualPort(
+                definition.stateProfile(), List.of(new VisualPort(
                         "public", VisualPortKind.PUBLIC_ENTRANCE, entrance, outward)));
     }
 }

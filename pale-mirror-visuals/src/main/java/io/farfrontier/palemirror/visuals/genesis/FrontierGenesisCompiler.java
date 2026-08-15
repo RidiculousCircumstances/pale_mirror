@@ -25,7 +25,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 25;
+    public static final int CATALOG_VERSION = 29;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -197,13 +197,15 @@ public final class FrontierGenesisCompiler {
             int tangentX = -route.entryStepZ();
             int tangentZ = route.entryStepX();
             int halfWidth = route.foundationId().equals("portal") ? 1 : 0;
-            for (int depth = 0; depth <= 2; depth++) for (int across = -halfWidth;
+            for (int depth = -2; depth <= 2; depth++) for (int across = -halfWidth;
                     across <= halfWidth; across++) for (int up = 0; up <= 2; up++) {
                 put(slices, threshold.offset(route.entryStepX() * depth + tangentX * across, up,
                         route.entryStepZ() * depth + tangentZ * across), Blocks.AIR.defaultBlockState());
             }
-            for (int across = -halfWidth; across <= halfWidth; across++) {
-                put(slices, threshold.offset(tangentX * across, -1, tangentZ * across),
+            for (int depth = -2; depth <= 0; depth++) for (int across = -halfWidth;
+                    across <= halfWidth; across++) {
+                put(slices, threshold.offset(route.entryStepX() * depth + tangentX * across, -1,
+                                route.entryStepZ() * depth + tangentZ * across),
                         Blocks.COBBLESTONE.defaultBlockState());
             }
         }

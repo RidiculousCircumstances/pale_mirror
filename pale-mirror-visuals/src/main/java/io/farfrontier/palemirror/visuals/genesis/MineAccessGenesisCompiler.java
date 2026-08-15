@@ -76,7 +76,7 @@ final class MineAccessGenesisCompiler {
                     .orElseThrow(() -> new IllegalStateException(
                             "MineSite access could not reach " + foundation.id()));
             List<Cell> horizontal = tree.path(approach.outer());
-            for (int step = 1; step < ACCESS_CLEARANCE; step++) {
+            for (int step = 1; step < approach.clearance(); step++) {
                 horizontal.add(new Cell(approach.outer().x() + approach.stepX() * step,
                         approach.outer().z() + approach.stepZ() * step));
             }
@@ -145,16 +145,32 @@ final class MineAccessGenesisCompiler {
                 .findFirst().ifPresent(port -> {
                     int outwardX = directionX(port.outwardQuarterTurns());
                     int outwardZ = directionZ(port.outwardQuarterTurns());
+                    int clearance = entranceClearance(bounds, port.position(), port.outwardQuarterTurns());
                     result.add(new Approach(new Cell(
-                            port.position().x() + outwardX * ACCESS_CLEARANCE,
-                            port.position().z() + outwardZ * ACCESS_CLEARANCE),
-                            -outwardX, -outwardZ, true));
+                            port.position().x() + outwardX * clearance,
+                            port.position().z() + outwardZ * clearance),
+                            -outwardX, -outwardZ, clearance, true));
                 });
-        addDistinct(result, new Approach(new Cell(bounds.min().x() - ACCESS_CLEARANCE, centerZ), 1, 0, false));
-        addDistinct(result, new Approach(new Cell(bounds.max().x() + ACCESS_CLEARANCE, centerZ), -1, 0, false));
-        addDistinct(result, new Approach(new Cell(centerX, bounds.min().z() - ACCESS_CLEARANCE), 0, 1, false));
-        addDistinct(result, new Approach(new Cell(centerX, bounds.max().z() + ACCESS_CLEARANCE), 0, -1, false));
+        addDistinct(result, new Approach(new Cell(bounds.min().x() - ACCESS_CLEARANCE, centerZ),
+                1, 0, ACCESS_CLEARANCE, false));
+        addDistinct(result, new Approach(new Cell(bounds.max().x() + ACCESS_CLEARANCE, centerZ),
+                -1, 0, ACCESS_CLEARANCE, false));
+        addDistinct(result, new Approach(new Cell(centerX, bounds.min().z() - ACCESS_CLEARANCE),
+                0, 1, ACCESS_CLEARANCE, false));
+        addDistinct(result, new Approach(new Cell(centerX, bounds.max().z() + ACCESS_CLEARANCE),
+                0, -1, ACCESS_CLEARANCE, false));
         return List.copyOf(result);
+    }
+
+    /** Reaches beyond the expanded obstacle while retaining the real authored door as the threshold. */
+    private static int entranceClearance(VisualBounds bounds, VisualPoint entrance, int outward) {
+        int distance = switch (Math.floorMod(outward, 4)) {
+            case 0 -> bounds.max().x() + ROAD_RADIUS + 1 - entrance.x();
+            case 1 -> bounds.max().z() + ROAD_RADIUS + 1 - entrance.z();
+            case 2 -> entrance.x() - (bounds.min().x() - ROAD_RADIUS - 1);
+            default -> entrance.z() - (bounds.min().z() - ROAD_RADIUS - 1);
+        };
+        return Math.max(ACCESS_CLEARANCE, distance);
     }
 
     private static void addDistinct(List<Approach> approaches, Approach candidate) {
@@ -223,7 +239,7 @@ final class MineAccessGenesisCompiler {
     }
 
     record AccessRoute(String foundationId, List<VisualPoint> points, int entryStepX, int entryStepZ) { }
-    private record Approach(Cell outer, int stepX, int stepZ, boolean preferred) { }
+    private record Approach(Cell outer, int stepX, int stepZ, int clearance, boolean preferred) { }
     private record Cell(int x, int z) { }
 
     private record SearchTree(Cell start, Map<Cell, Cell> previous, Map<Cell, Integer> distance) {

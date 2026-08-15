@@ -20,8 +20,8 @@ disconnected loaded graph still blocks the contract immediately.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Pure domain and module tests | PASS | 143 JUnit tests, 0 failures, 0 errors |
-| Core server behavior | PASS | 44/44 required NeoForge GameTests |
+| Pure domain and module tests | PASS | 148 JUnit tests, 0 failures, 0 errors |
+| Core server behavior | PASS | 45/45 required NeoForge GameTests |
 | Visual/materialization behavior | PASS | 25/25 required Visuals GameTests, including 216 public-realm combinations and grounded/readable mine infrastructure |
 | Build and architecture | PASS | `check`, architecture guardrails, Java style and source isolation |
 | Distribution | PASS | Core and Visuals production JAR verification |
