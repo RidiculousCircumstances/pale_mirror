@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.visuals.genesis;
 
 import io.farfrontier.palemirror.api.AuthoredRegionSeed;
-import io.farfrontier.palemirror.api.AuthoredMineRole;
 import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
 import io.farfrontier.palemirror.api.VisualModulePlacement;
@@ -25,7 +24,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 30;
+    public static final int CATALOG_VERSION = 32;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -143,7 +142,6 @@ public final class FrontierGenesisCompiler {
         compileMineFoundations(mine, slices);
         List<MineAccessGenesisCompiler.AccessRoute> accessRoutes = MineAccessGenesisCompiler.routes(mine);
         java.util.Set<Long> access = MineAccessGenesisCompiler.occupied(accessRoutes);
-        compileMineWorkingYard(mine, access, slices);
         MineAccessGenesisCompiler.compile(accessRoutes, palette, new MineAccessGenesisCompiler.Sink() {
             @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
                 slice(slices, x, z).terrain(new CompiledChunkSlice.TerrainColumn(
@@ -168,16 +166,6 @@ public final class FrontierGenesisCompiler {
         MineSurfaceGenesisCompiler.compile(mine, palette, access, new MineSurfaceGenesisCompiler.Sink() {
             @Override public void put(BlockPos position, BlockState state) {
                 FrontierGenesisCompiler.put(slices, position, state);
-            }
-            @Override public void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation) {
-                slice(slices, x, z).terrain(new CompiledChunkSlice.TerrainColumn(
-                        x, z, targetY, surface, foundation));
-            }
-            @Override public void surface(int x, int z, int offsetY, BlockState state) {
-                int datum = mineDatum(mine, x, z);
-                BlockPos position = new BlockPos(x, datum + offsetY, z);
-                slice(slices, x, z).replaceDecoration(
-                        new CompiledChunkSlice.AuthoredDecoration(position, state));
             }
         });
     }
@@ -212,117 +200,6 @@ public final class FrontierGenesisCompiler {
         }
     }
 
-    /**
-     * Paints an irregular, terrain-following working surface between the
-     * primary mine buildings. Foundations still own their exact pads and the
-     * natural relief remains intact; this layer only makes the separate pads
-     * read as one industrial campus.
-     */
-    private static void compileMineWorkingYard(AuthoredMineSitePlan mine, java.util.Set<Long> access,
-                                               Map<Long, MutableGenesisSlice> slices) {
-        if (mine.role() != AuthoredMineRole.PRIMARY) return;
-        for (int inward = -64; inward <= -18; inward++) {
-            for (int right = -34; right <= 34; right++) {
-                int radial = right * right * 9 + (inward + 41) * (inward + 41) * 16;
-                int edgeNoise = Math.floorMod(right * 31 + inward * 17 + mine.portal().x(), 97) * 16;
-                if (radial + edgeNoise > 34 * 34 * 9) continue;
-                VisualPoint point = MineSurfaceLayout.local(
-                        mine.portal(), right, inward, 0, mine.inwardQuarterTurns());
-                if (insideFoundationApron(mine, point.x(), point.z())
-                        || access.contains(ChunkPos.asLong(point.x(), point.z()))) continue;
-                int pattern = Math.floorMod(point.x() * 17 + point.z() * 29, 23);
-                BlockState surface = switch (pattern) {
-                    case 0, 1, 2, 3 -> Blocks.COARSE_DIRT.defaultBlockState();
-                    case 4, 5, 6 -> Blocks.ANDESITE.defaultBlockState();
-                    case 7 -> Blocks.TUFF.defaultBlockState();
-                    default -> Blocks.GRAVEL.defaultBlockState();
-                };
-                mineSurface(mine, slices, point, -1, surface);
-            }
-        }
-        // Stone drainage seams and freight wear lines articulate the yard
-        // without imposing another geometric plaza on the mountain foot.
-        for (int inward = -58; inward <= -25; inward++) {
-            for (int right : new int[]{-10, 10}) {
-                if (Math.floorMod(inward, 5) == 0) continue;
-                VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, inward, 0,
-                        mine.inwardQuarterTurns());
-                if (!insideFoundationApron(mine, point.x(), point.z())
-                        && !access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                    mineSurface(mine, slices, point, -1, Blocks.POLISHED_ANDESITE.defaultBlockState());
-                }
-            }
-        }
-        compileMineYardFurniture(mine, access, slices);
-    }
-
-    private static void compileMineYardFurniture(AuthoredMineSitePlan mine, java.util.Set<Long> access,
-                                                  Map<Long, MutableGenesisSlice> slices) {
-        for (int[] local : new int[][]{{-28, -29}, {28, -29}, {-30, -55}, {30, -55}}) {
-            VisualPoint point = MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
-                    mine.inwardQuarterTurns());
-            if (access.contains(ChunkPos.asLong(point.x(), point.z()))) continue;
-            mineSurface(mine, slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
-            mineSurface(mine, slices, point, 1, Blocks.IRON_BARS.defaultBlockState());
-            mineSurface(mine, slices, point, 2, Blocks.LANTERN.defaultBlockState());
-        }
-        // Open ore-sort bins: deliberately non-valuable rock communicates
-        // function without becoming a free strategic-resource spawn.
-        for (int bin = 0; bin < 3; bin++) {
-            int centerRight = -25 + bin * 5;
-            for (int right = centerRight - 2; right <= centerRight + 2; right++) {
-                VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, -46, 0,
-                        mine.inwardQuarterTurns());
-                if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                    mineSurface(mine, slices, point, 0, Blocks.COBBLED_DEEPSLATE.defaultBlockState());
-                }
-            }
-            for (int inward = -45; inward <= -42; inward++) {
-                for (int right : new int[]{centerRight - 2, centerRight + 2}) {
-                    VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, inward, 0,
-                            mine.inwardQuarterTurns());
-                    if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                        mineSurface(mine, slices, point, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
-                    }
-                }
-            }
-            for (int right = centerRight - 1; right <= centerRight + 1; right++) {
-                VisualPoint point = MineSurfaceLayout.local(mine.portal(), right, -43, 0,
-                        mine.inwardQuarterTurns());
-                if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                    mineSurface(mine, slices, point, 0, Math.floorMod(right + bin, 2) == 0
-                            ? Blocks.TUFF.defaultBlockState() : Blocks.ANDESITE.defaultBlockState());
-                }
-            }
-        }
-        for (int offset = 0; offset < 6; offset++) {
-            VisualPoint timber = MineSurfaceLayout.local(mine.portal(), 23 + offset, -49, 0,
-                    mine.inwardQuarterTurns());
-            if (access.contains(ChunkPos.asLong(timber.x(), timber.z()))) continue;
-            mineSurface(mine, slices, timber, 0, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-            if (offset < 3) mineSurface(mine, slices, timber, 1, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
-        }
-        for (int[] local : new int[][]{{22, -42}, {25, -42}, {22, -39}}) {
-            VisualPoint point = MineSurfaceLayout.local(mine.portal(), local[0], local[1], 0,
-                    mine.inwardQuarterTurns());
-            if (!access.contains(ChunkPos.asLong(point.x(), point.z()))) {
-                mineSurface(mine, slices, point, 0, Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState());
-            }
-        }
-    }
-
-    private static void mineSurface(AuthoredMineSitePlan mine, Map<Long, MutableGenesisSlice> slices, VisualPoint point,
-                                    int offsetY, BlockState state) {
-        BlockPos position = new BlockPos(point.x(), mineDatum(mine, point.x(), point.z()) + offsetY, point.z());
-        slice(slices, point.x(), point.z()).replaceDecoration(
-                new CompiledChunkSlice.AuthoredDecoration(position, state));
-    }
-
-    private static int mineDatum(AuthoredMineSitePlan mine, int x, int z) {
-        return mine.foundations().stream().min(java.util.Comparator.comparingInt(value -> distanceFrom(value, x, z)))
-                .map(value -> value.targetY() + 1).orElseThrow();
-    }
-
     private static void compileMineFoundations(AuthoredMineSitePlan mine,
                                                Map<Long, MutableGenesisSlice> slices) {
         java.util.Set<String> activeIds = MineSurfaceLayout.materializedFoundationIds(mine);
@@ -343,7 +220,7 @@ public final class FrontierGenesisCompiler {
                     BlockState surface = (building ? Blocks.COBBLESTONE
                             : distance <= foundation.apron() ? Blocks.COARSE_DIRT : Blocks.GRASS_BLOCK)
                             .defaultBlockState();
-                    int blendDistance = Math.max(0, distance - foundation.apron());
+                    int blendDistance = distance;
                     slice.terrain(new CompiledChunkSlice.TerrainColumn(x, z, foundation.targetY(), surface,
                             blendDistance == 0 ? Blocks.COBBLESTONE.defaultBlockState()
                                     : Blocks.DIRT.defaultBlockState(), blendDistance));
@@ -356,10 +233,6 @@ public final class FrontierGenesisCompiler {
         int dx = Math.max(foundation.footprint().min().x() - x, x - foundation.footprint().max().x());
         int dz = Math.max(foundation.footprint().min().z() - z, z - foundation.footprint().max().z());
         return Math.max(0, Math.max(dx, dz));
-    }
-
-    private static boolean insideFoundationApron(AuthoredMineSitePlan mine, int x, int z) {
-        return mine.foundations().stream().anyMatch(value -> distanceFrom(value, x, z) <= value.apron());
     }
 
     private static BlockPos block(VisualPoint point) { return new BlockPos(point.x(), point.y(), point.z()); }

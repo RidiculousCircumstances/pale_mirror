@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.api.DevelopmentReservation;
 import io.farfrontier.palemirror.api.LinearFeatureKind;
 import io.farfrontier.palemirror.api.LinearFeaturePlan;
 import io.farfrontier.palemirror.api.ManagedAreaPlan;
+import io.farfrontier.palemirror.api.SettlementLayoutArchetype;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.api.VisualPort;
@@ -19,6 +20,9 @@ import java.util.Set;
 final class SettlementLayoutGeometry {
     private static final int CORRIDOR_VALIDATION_STEP = 4;
     private static final int MAXIMUM_CORRIDOR_CUT_FILL = 4;
+    private static final int PERIMETER_VALIDATION_STEP = 4;
+    private static final int PERIMETER_VERGE_DISTANCE = 3;
+    private static final int MAXIMUM_PERIMETER_VERGE_RELIEF = 3;
     private SettlementLayoutGeometry() { }
 
     static LinearFeaturePlan followTerrain(LinearFeaturePlan feature, SettlementTerrainSnapshot snapshot) {
@@ -43,6 +47,66 @@ final class SettlementLayoutGeometry {
         }
         return new LinearFeaturePlan(feature.id(), feature.kind(), sampled,
                 feature.width(), feature.walkable());
+    }
+
+    /**
+     * A low frontier enclosure may follow a slope, but it must not become the
+     * lip of an unseen ravine. The coarse masterplan grid can legitimately
+     * miss a narrow depression between its sixteen-block samples, so inspect
+     * a bounded cross-section on both sides of every fourth physical wall
+     * column. Rejecting the site preserves the natural terrain instead of
+     * synthesizing a tall retaining face or filling the ravine.
+     */
+    static void requireStablePerimeter(List<LinearFeaturePlan> features,
+                                       SettlementTerrainSnapshot snapshot, VisualPoint anchor) {
+        for (LinearFeaturePlan feature : features) {
+            if (feature.kind() != LinearFeatureKind.PALISADE
+                    && feature.kind() != LinearFeatureKind.PALISADE_GATE) continue;
+            List<VisualPoint> points = feature.nodes();
+            for (int index = 0; index < points.size(); index += PERIMETER_VALIDATION_STEP) {
+                requireStablePerimeterCrossSection(feature, points, index, snapshot, anchor);
+            }
+            if ((points.size() - 1) % PERIMETER_VALIDATION_STEP != 0) {
+                requireStablePerimeterCrossSection(feature, points, points.size() - 1, snapshot, anchor);
+            }
+        }
+    }
+
+    static List<LinearFeaturePlan> resolveDefences(SettlementLayoutArchetype archetype,
+                                                    VisualPoint anchor, int freightDirection,
+                                                    SettlementTerrainSnapshot snapshot) {
+        List<LinearFeaturePlan> defences = SettlementDefencePlanner.plan(archetype, anchor, freightDirection).stream()
+                .map(value -> followExactTerrain(value, snapshot)).toList();
+        requireStablePerimeter(defences, snapshot, anchor);
+        return defences;
+    }
+
+    private static void requireStablePerimeterCrossSection(LinearFeaturePlan feature,
+                                                            List<VisualPoint> points, int index,
+                                                            SettlementTerrainSnapshot snapshot,
+                                                            VisualPoint anchor) {
+        VisualPoint point = points.get(index);
+        VisualPoint previous = points.get(Math.max(0, index - 1));
+        VisualPoint next = points.get(Math.min(points.size() - 1, index + 1));
+        int tangentX = Integer.signum(next.x() - previous.x());
+        int tangentZ = Integer.signum(next.z() - previous.z());
+        int normalX = -tangentZ;
+        int normalZ = tangentX;
+        if (normalX == 0 && normalZ == 0) return;
+        for (int side : new int[]{-1, 1}) {
+            int x = point.x() + normalX * PERIMETER_VERGE_DISTANCE * side;
+            int z = point.z() + normalZ * PERIMETER_VERGE_DISTANCE * side;
+            if (snapshot.waterAt(x, z)) {
+                throw new DryMineSiteUnavailableException("Township perimeter " + feature.id()
+                        + " reaches water at " + x + "," + z + " near " + anchor.x() + "," + anchor.z());
+            }
+            int verge = snapshot.exactSurfaceHeight(x, z);
+            if (Math.abs(verge - point.y()) > MAXIMUM_PERIMETER_VERGE_RELIEF) {
+                throw new DryMineSiteUnavailableException("Township perimeter " + feature.id()
+                        + " borders unstable relief at " + x + "," + z + " near "
+                        + anchor.x() + "," + anchor.z());
+            }
+        }
     }
 
     /**

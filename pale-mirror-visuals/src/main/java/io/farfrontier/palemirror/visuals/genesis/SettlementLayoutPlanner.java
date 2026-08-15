@@ -45,6 +45,7 @@ final class SettlementLayoutPlanner {
                                     SettlementTerrainSnapshot snapshot) {
         SettlementLayoutArchetype archetype = choose(terrain);
         SettlementArchetypeCatalog.Definition definition = SettlementArchetypeCatalog.ironFrontier();
+        List<LinearFeaturePlan> defences = resolveDefences(archetype, anchor, freightDirection, snapshot);
         DryMineSiteUnavailableException lastExactFailure = null;
         for (int variant = 0; variant < VARIANT_COUNT; variant++) {
             try {
@@ -54,7 +55,7 @@ final class SettlementLayoutPlanner {
                         snapshot, transform);
                 if (!adapted.isEmpty()) {
                     return planVariant(source, anchor, climate, freightDirection, terrain, snapshot,
-                            archetype, definition, adapted, transform, variant);
+                            archetype, definition, adapted, defences, transform, variant);
                 }
             } catch (DryMineSiteUnavailableException unavailable) {
                 lastExactFailure = unavailable;
@@ -70,10 +71,11 @@ final class SettlementLayoutPlanner {
                                                 SettlementTerrainSnapshot snapshot, int variant) {
         SettlementLayoutArchetype archetype = choose(terrain);
         SettlementArchetypeCatalog.Definition definition = SettlementArchetypeCatalog.ironFrontier();
+        List<LinearFeaturePlan> defences = resolveDefences(archetype, anchor, freightDirection, snapshot);
         LayoutTransform transform = LayoutTransform.forVariant(variant);
         List<Placement> grammar = grammar(archetype, definition.active().buildings(), transform);
         return planVariant(source, anchor, climate, freightDirection, terrain, snapshot,
-                archetype, definition, grammar, transform, variant);
+                archetype, definition, grammar, defences, transform, variant);
     }
 
     private static List<Placement> adaptToTerrain(VisualPoint anchor, int freightDirection,
@@ -122,7 +124,8 @@ final class SettlementLayoutPlanner {
                                                     SettlementTerrainSnapshot snapshot,
                                                     SettlementLayoutArchetype archetype,
                                                     SettlementArchetypeCatalog.Definition definition,
-                                                    List<Placement> grammar, LayoutTransform transform, int variant) {
+                                                    List<Placement> grammar, List<LinearFeaturePlan> defences,
+                                                    LayoutTransform transform, int variant) {
         List<AuthoredBuildingPlan> buildings = new ArrayList<>(grammar.size());
         List<SettlementFoundationPlan> foundations = new ArrayList<>(grammar.size());
         String family = climate.name().toLowerCase(Locale.ROOT);
@@ -188,8 +191,6 @@ final class SettlementLayoutPlanner {
                         ? followFreightTerrain(value, snapshot)
                         : followTerrain(value, snapshot)).toList();
         requireDryCirculation(circulation, snapshot, anchor);
-        List<LinearFeaturePlan> defences = SettlementDefencePlanner.plan(archetype, anchor, freightDirection).stream()
-                .map(value -> followExactTerrain(value, snapshot)).toList();
         List<AuthoredOpenSpacePlan> openSpaces = openSpaces(anchor, freightDirection, transform).stream()
                 .map(value -> resolveOpenSpace(value, snapshot)).toList();
         for (AuthoredOpenSpacePlan space : openSpaces) for (AuthoredBuildingPlan authoredBuilding : buildings) {

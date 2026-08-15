@@ -109,6 +109,17 @@ class SettlementLayoutPlannerTest {
             assertEquals(plan.surfacePlan().columns().size(), plan.surfacePlan().columns().stream()
                     .map(value -> value.x() + ":" + value.z()).distinct().count(),
                     "every authored surface column must have exactly one final owner");
+            plan.foundations().forEach(foundation -> {
+                var hardFoundationColumns = plan.surfacePlan().columns().stream()
+                        .filter(value -> value.ownerId().equals(foundation.id())).toList();
+                assertFalse(hardFoundationColumns.isEmpty(), foundation.id() + " lost its surface ownership");
+                assertTrue(hardFoundationColumns.stream().allMatch(value ->
+                                value.x() >= foundation.footprint().min().x()
+                                        && value.x() <= foundation.footprint().max().x()
+                                        && value.z() >= foundation.footprint().min().z()
+                                        && value.z() <= foundation.footprint().max().z()),
+                        foundation.id() + " apron became an exposed stone platform");
+            });
             plan.modules().stream().flatMap(value -> value.ports().stream())
                     .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
                     .forEach(value -> plan.surfacePlan().require(value.position().x(), value.position().z()));
@@ -316,7 +327,7 @@ class SettlementLayoutPlannerTest {
         assertEquals(first.approximateHeight(8, 0), second.approximateHeight(8, 0));
     }
 
-    @Test void terrainFollowingRoadsExpandOnlyTheVerticalSiteIndex() {
+    @Test void narrowPerimeterRavineRejectsTheCenterInsteadOfCreatingAHighRetainingFace() {
         var coarse = new java.util.LinkedHashMap<Long, Integer>();
         for (int right = -SettlementLayoutPlanner.MASTER_HALF_WIDTH;
              right <= SettlementLayoutPlanner.MASTER_HALF_WIDTH; right += SettlementTerrainSnapshot.GRID_STEP) {
@@ -325,19 +336,13 @@ class SettlementLayoutPlannerTest {
                 coarse.put(SettlementTerrainSnapshot.key(anchor.x() + inward, anchor.z() + right), anchor.y());
             }
         }
-        coarse.put(SettlementTerrainSnapshot.key(anchor.x() - 92, anchor.z() - 68), anchor.y() - 12);
         SettlementTerrainSnapshot shelf = new SettlementTerrainSnapshot(anchor, coarse,
-                (x, z) -> x == anchor.x() - 92 && z == anchor.z() - 68
+                (x, z) -> x == anchor.x() - 95
+                        && z >= anchor.z() - 68 && z <= anchor.z() - 5
                         ? anchor.y() - 12 : anchor.y(), (x, z) -> false);
-        var plan = planner.plan("shelf", anchor, FrontierClimate.TEMPERATE, 0,
-                new TerrainCandidate(anchor, 2, 0, 0, 0), shelf);
-        assertEquals(2 * SettlementLayoutPlanner.MASTER_HALF_LENGTH,
-                plan.bounds().max().x() - plan.bounds().min().x());
-        assertEquals(2 * SettlementLayoutPlanner.MASTER_HALF_WIDTH,
-                plan.bounds().max().z() - plan.bounds().min().z());
-        assertTrue(plan.bounds().min().y() <= anchor.y() - 12);
-        plan.circulation().stream().flatMap(value -> value.nodes().stream())
-                .forEach(point -> assertTrue(plan.bounds().contains(point)));
+        org.junit.jupiter.api.Assertions.assertThrows(DryMineSiteUnavailableException.class, () -> planner.plan(
+                "shelf", anchor, FrontierClimate.TEMPERATE, 0,
+                new TerrainCandidate(anchor, 2, 0, 0, 0), shelf));
     }
 
     private io.farfrontier.palemirror.api.AuthoredSettlementSitePlan plan(int relief) {

@@ -351,6 +351,14 @@ if [[ -n "$settlement_id" ]]; then
     previous_count=$current_count
     sleep 1
   done
+  # Log4j can rotate/reopen latest.log while the client is finishing its first
+  # world join. In that narrow window line numbers from before_views no longer
+  # address the same file, although the complete command response is present.
+  # The file is truncated for every audit launch, so the current-run fallback
+  # cannot accidentally reuse semantic cameras from an earlier session.
+  if [[ -z "$audit_lines" ]]; then
+    audit_lines=$(rg 'PM_AUDIT_VIEW\|' "$client_log" || true)
+  fi
   [[ -n "$audit_lines" ]] || { printf 'PM returned no semantic visual-audit views.\n' >&2; exit 1; }
   while IFS= read -r raw_line; do
     line=${raw_line#*PM_AUDIT_VIEW|}

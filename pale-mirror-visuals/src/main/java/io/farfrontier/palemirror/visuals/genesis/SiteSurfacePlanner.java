@@ -25,11 +25,13 @@ final class SiteSurfacePlanner {
                                       List<DevelopmentReservation> reservations) {
         Map<Long, SiteSurfaceColumn> claims = new LinkedHashMap<>();
         for (SettlementFoundationPlan foundation : foundations) {
-            int radius = foundation.apron();
-            for (int x = foundation.footprint().min().x() - radius;
-                 x <= foundation.footprint().max().x() + radius; x++) {
-                for (int z = foundation.footprint().min().z() - radius;
-                     z <= foundation.footprint().max().z() + radius; z++) {
+            // Only the actual authored footprint is a hard foundation. The
+            // catalog apron is a graded transition allowance, not a second
+            // exposed stone platform around every imported building.
+            for (int x = foundation.footprint().min().x();
+                 x <= foundation.footprint().max().x(); x++) {
+                for (int z = foundation.footprint().min().z();
+                     z <= foundation.footprint().max().z(); z++) {
                     claim(claims, new SiteSurfaceColumn(x, z, foundation.targetY() + 1,
                             SiteSurfaceUse.FOUNDATION, foundation.id()));
                 }

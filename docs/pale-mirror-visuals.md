@@ -101,7 +101,7 @@ tagged beehives are included. This prevents a trunk cut by the fort footprint
 from leaving floating foliage or bee nests just outside the authored site.
 Mine17 applies the same original-surface rule over an organic union around its
 six surveyed pads. Its wider 18-block crown allowance removes large modded-tree
-overhangs from the working yard without turning the campus into a rectangular
+overhangs from the authored campus without turning the campus into a rectangular
 clear-cut or claiming the surrounding forest.
 
 ## Settlement grammar
@@ -177,16 +177,16 @@ cube. Its composed grammar includes a large portal/hoist works, processing hall,
 power house, crew outpost, loading yard, maintenance workshop, supported descending
 adit, iron gallery and a deep controller chamber. Every surface building has a
 stable semantic identity, work slots and its own bounded foundation
-and two-block apron. Three-wide gravel/cobble paths, steps, lamps and short safety
+and two-block terrain-transition apron. Only the real NBT footprint is hard-graded;
+the apron never becomes a generic elevated platform. Three-wide gravel/cobble paths, steps, lamps and short safety
 fences connect those levels; graded pads transition smoothly back into natural terrain. The drift and chambers
 continue into the selected mountain face inside a continuous dry masonry shell.
 
 The five principal surface landmarks and the maintenance workshop are curated
 private Integrated Villages derivatives selected for real architectural
 silhouettes: a tall tool/hoist works, crew office, masonry processing hall,
-engine house and covered freight stable. PM composes them with an
-irregular gravel/coarse-dirt working yard, drainage seams, open ore-sort bins,
-timber/material stores, safety lighting, local foundations, circulation and
+engine house and covered freight stable. PM composes them with explicit loading
+and circulation surfaces, safety lighting, local foundations and
 climate transforms. The underground adit, gallery and controller spaces remain
 curated private source modules and use the same fail-closed curator. Imported
 entity lists are ignored because PM owns resident and threat identity. Spawners,

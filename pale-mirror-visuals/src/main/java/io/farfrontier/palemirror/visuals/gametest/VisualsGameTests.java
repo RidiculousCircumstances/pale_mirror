@@ -286,13 +286,11 @@ public final class VisualsGameTests {
                 "fresh-world settlement gates must begin open and remain manually closable");
         helper.assertTrue(decorations.stream().noneMatch(net.minecraft.world.level.block.state.BlockState::hasBlockEntity),
                 "terrain-following public and industrial furniture must remain block-entity-free");
-        helper.assertTrue(decorations.stream().anyMatch(value -> value.is(
-                        net.minecraft.world.level.block.Blocks.GRAVEL))
-                        && decorations.stream().anyMatch(value -> value.is(
-                        net.minecraft.world.level.block.Blocks.COBBLED_DEEPSLATE))
-                        && decorations.stream().anyMatch(value -> value.is(
+        var compiledBlocks = first.chunks().values().stream().flatMap(value -> value.blocks().values().stream())
+                .map(value -> value.state()).toList();
+        helper.assertTrue(compiledBlocks.stream().anyMatch(value -> value.is(
                         net.minecraft.world.level.block.Blocks.LANTERN)),
-                "primary mine campus must compile a working yard, ore-sort furniture and safety lighting");
+                "curated MineSite modules and explicit access must retain readable safety lighting");
         helper.assertTrue(decorations.stream().anyMatch(value -> value.is(
                         net.minecraft.world.level.block.Blocks.FARMLAND))
                         && decorations.stream().anyMatch(value -> value.is(

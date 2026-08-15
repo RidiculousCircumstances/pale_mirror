@@ -211,14 +211,13 @@ final class SettlementGenesisCompiler {
                 int distance = distanceFrom(foundation, x, z);
                 boolean building = distance == 0;
                 BlockState surface = building ? palette.foundation()
-                        : foundation.surface().equals("FREIGHT") ? Blocks.GRAVEL.defaultBlockState()
-                        : distance <= foundation.apron() ? Blocks.COBBLESTONE.defaultBlockState()
-                        : Blocks.GRASS_BLOCK.defaultBlockState();
-                if (distance <= foundation.apron()) {
+                        : distance <= foundation.apron() && foundation.surface().equals("FREIGHT")
+                        ? Blocks.COARSE_DIRT.defaultBlockState() : Blocks.GRASS_BLOCK.defaultBlockState();
+                if (building) {
                     sink.terrain(x, z, foundation.targetY(), surface, palette.foundation());
                 } else {
                     sink.blend(x, z, foundation.targetY(), surface, Blocks.DIRT.defaultBlockState(),
-                            distance - foundation.apron());
+                            distance);
                 }
                 sink.cleanup(x, z, foundation.targetY());
             }

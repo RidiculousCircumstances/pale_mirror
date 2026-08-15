@@ -32,7 +32,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 21;
+    public static final int DEFINITION_VERSION = 23;
     private final RegionPlacementProfile placementProfile;
     public FrontierRegionPlanner() {
         this(RegionPlacementProfiles.IRON_FRONTIER);

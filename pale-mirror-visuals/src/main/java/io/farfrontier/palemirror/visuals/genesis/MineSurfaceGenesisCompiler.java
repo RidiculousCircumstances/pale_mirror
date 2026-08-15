@@ -18,8 +18,6 @@ final class MineSurfaceGenesisCompiler {
         loadingApron(mine, palette, sink);
         if (mine.role() == io.farfrontier.palemirror.api.AuthoredMineRole.ALTERNATE) return;
         safetyFurniture(mine, palette, access, sink);
-        industrialThreshold(mine, palette, access, sink);
-        spoilHeaps(mine, access, sink);
     }
 
     private static void headframe(AuthoredMineSitePlan mine, FrontierPalette palette, Sink sink) {
@@ -127,56 +125,6 @@ final class MineSurfaceGenesisCompiler {
         }
     }
 
-    private static void industrialThreshold(AuthoredMineSitePlan mine, FrontierPalette palette,
-                                            java.util.Set<Long> access, Sink sink) {
-        for (int side : new int[]{-15, 15}) {
-            BlockPos light = local(mine.portal(), side, -24, 0, mine.inwardQuarterTurns());
-            if (!occupied(access, light.getX(), light.getZ())) {
-            for (int up = 0; up <= 3; up++) {
-                sink.surface(light.getX(), light.getZ(), up, palette.log());
-            }
-            sink.surface(light.getX(), light.getZ(), 4, Blocks.LANTERN.defaultBlockState());
-            }
-            for (int inward = -30; inward <= -20; inward += 2) {
-                BlockPos position = local(mine.portal(), side, inward, 0, mine.inwardQuarterTurns());
-                if (!occupied(access, position.getX(), position.getZ())) {
-                    sink.surface(position.getX(), position.getZ(), 0, fence(palette));
-                }
-            }
-        }
-        for (int right = -4; right <= 4; right++) {
-            BlockPos position = local(mine.portal(), right, -25, 0, mine.inwardQuarterTurns());
-            if (!occupied(access, position.getX(), position.getZ())) sink.surface(
-                    position.getX(), position.getZ(), -1,
-                    Math.floorMod(right, 2) == 0 ? Blocks.POLISHED_ANDESITE.defaultBlockState()
-                            : Blocks.CUT_COPPER.defaultBlockState());
-        }
-    }
-
-    private static void spoilHeaps(AuthoredMineSitePlan mine, java.util.Set<Long> access, Sink sink) {
-        MineFoundationPlan power = mine.foundations().stream().filter(value -> value.id().equals("power"))
-                .findFirst().orElse(null);
-        if (power == null) return;
-        for (int side : new int[]{-1, 1}) {
-            BlockPos horizontal = local(mine.portal(), side * 33, -51, 0, mine.inwardQuarterTurns());
-            for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
-                int radius = Math.abs(dx) + Math.abs(dz);
-                if (radius > 4) continue;
-                if (occupied(access, horizontal.getX() + dx, horizontal.getZ() + dz)) continue;
-                int x = horizontal.getX() + dx;
-                int z = horizontal.getZ() + dz;
-                sink.terrain(x, z, nearestFoundationDatum(mine, x, z),
-                        Blocks.COARSE_DIRT.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState());
-                int height = radius <= 1 ? 3 : radius <= 3 ? 2 : 1;
-                for (int up = 0; up < height; up++) sink.surface(
-                        x, z, up,
-                        Math.floorMod(dx * 3 + dz + up, 4) == 0
-                                ? Blocks.TUFF.defaultBlockState()
-                                : Blocks.COBBLED_DEEPSLATE.defaultBlockState());
-            }
-        }
-    }
-
     private static BlockPos local(VisualPoint origin, int right, int inward, int up, int direction) {
         int dx = switch (Math.floorMod(direction, 4)) {
             case 0 -> inward; case 1 -> -right; case 2 -> -inward; default -> right;
@@ -202,17 +150,7 @@ final class MineSurfaceGenesisCompiler {
         return access.contains(net.minecraft.world.level.ChunkPos.asLong(x, z));
     }
 
-    private static int nearestFoundationDatum(AuthoredMineSitePlan mine, int x, int z) {
-        return mine.foundations().stream().min(java.util.Comparator.comparingInt(value -> {
-            int dx = Math.max(value.footprint().min().x() - x, x - value.footprint().max().x());
-            int dz = Math.max(value.footprint().min().z() - z, z - value.footprint().max().z());
-            return Math.max(0, Math.max(dx, dz));
-        })).map(MineFoundationPlan::targetY).orElseThrow();
-    }
-
     interface Sink {
         void put(BlockPos position, BlockState state);
-        void terrain(int x, int z, int targetY, BlockState surface, BlockState foundation);
-        void surface(int x, int z, int offsetY, BlockState state);
     }
 }

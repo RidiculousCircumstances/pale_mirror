@@ -102,6 +102,33 @@ public final class FrontierWorldgenCleanupGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 20)
+    public static void settlementPlannerRejectsARavineBesideThePhysicalPerimeter(GameTestHelper helper) {
+        VisualPoint anchor = new VisualPoint(800, 72, -400);
+        java.util.Map<Long, Integer> coarse = new java.util.LinkedHashMap<>();
+        for (int right = -SettlementLayoutPlanner.MASTER_HALF_WIDTH;
+             right <= SettlementLayoutPlanner.MASTER_HALF_WIDTH; right += SettlementTerrainSnapshot.GRID_STEP) {
+            for (int inward = -SettlementLayoutPlanner.MASTER_HALF_LENGTH;
+                 inward <= SettlementLayoutPlanner.MASTER_HALF_LENGTH;
+                 inward += SettlementTerrainSnapshot.GRID_STEP) {
+                coarse.put(SettlementTerrainSnapshot.key(anchor.x() + inward, anchor.z() + right), anchor.y());
+            }
+        }
+        SettlementTerrainSnapshot ravine = new SettlementTerrainSnapshot(anchor, coarse,
+                (x, z) -> x == anchor.x() - 95 && z >= anchor.z() - 68 && z <= anchor.z() - 5
+                        ? anchor.y() - 12 : anchor.y(),
+                (x, z) -> false);
+        try {
+            new SettlementLayoutPlanner().plan("ravine", anchor, FrontierClimate.TEMPERATE, 0,
+                    new TerrainCandidate(anchor, 2, 0, 0, 0), ravine);
+            helper.fail("a narrow ravine outside the coarse grid must reject the settlement center");
+        } catch (DryMineSiteUnavailableException expected) {
+            helper.assertTrue(expected.getMessage().contains("perimeter"),
+                    "the rejection must identify the physical perimeter terrain contract");
+            helper.succeed();
+        }
+    }
+
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 40)
     public static void plannedBridgeKeepsRailAboveWaterAndPreservesTheRiver(GameTestHelper helper) {
         BlockPos rail = helper.absolutePos(new BlockPos(4, 9, 4));
@@ -244,7 +271,7 @@ public final class FrontierWorldgenCleanupGameTests {
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 120)
-    public static void minePortalAndSpoilHeapsCompileAsGroundedReadableInfrastructure(GameTestHelper helper) {
+    public static void minePortalAndOwnedSurfacesCompileAsGroundedReadableInfrastructure(GameTestHelper helper) {
         var seed = new FrontierRegionPlanner().plan(91_004L, 0,
                 new VisualPoint(8_000, 76, 8_000), FrontierClimate.TEMPERATE);
         var mine = seed.primaryMineSite();
@@ -289,26 +316,40 @@ public final class FrontierWorldgenCleanupGameTests {
         var terrain = catalog.chunks().values().stream().flatMap(value -> value.terrain().stream())
                 .collect(java.util.stream.Collectors.toMap(value -> net.minecraft.world.level.ChunkPos.asLong(
                                 value.x(), value.z()), value -> value, (left, right) -> right));
-        int supportedSpoilColumns = 0;
-        for (int side : new int[]{-1, 1}) {
-            VisualPoint center = MineSurfaceLayout.local(mine.portal(), side * 33, -51, 0,
-                    mine.inwardQuarterTurns());
-            for (var decoration : catalog.chunks().values().stream()
-                    .flatMap(value -> value.decorations().stream()).toList()) {
-                BlockPos position = decoration.position();
-                if (Math.abs(position.getX() - center.x()) + Math.abs(position.getZ() - center.z()) > 4
-                        || !(decoration.state().is(Blocks.TUFF)
-                        || decoration.state().is(Blocks.COBBLED_DEEPSLATE))) continue;
-                var column = terrain.get(net.minecraft.world.level.ChunkPos.asLong(
-                        position.getX(), position.getZ()));
-                helper.assertTrue(column != null && column.blendDistance() == 0
-                                && column.targetY() < position.getY(),
-                        "spoil heap lacks an exact compact ground pad at " + position);
-                supportedSpoilColumns++;
+        var access = MineAccessGenesisCompiler.occupied(MineAccessGenesisCompiler.routes(mine));
+        for (var foundation : mine.foundations()) {
+            int minX = foundation.footprint().min().x() - foundation.apron();
+            int maxX = foundation.footprint().max().x() + foundation.apron();
+            int minZ = foundation.footprint().min().z() - foundation.apron();
+            int maxZ = foundation.footprint().max().z() + foundation.apron();
+            for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
+                int distance = Math.max(0, Math.max(
+                        Math.max(foundation.footprint().min().x() - x,
+                                x - foundation.footprint().max().x()),
+                        Math.max(foundation.footprint().min().z() - z,
+                                z - foundation.footprint().max().z())));
+                if (distance == 0 || access.contains(net.minecraft.world.level.ChunkPos.asLong(x, z))) continue;
+                boolean otherFootprint = false;
+                for (var other : mine.foundations()) {
+                    if (x >= other.footprint().min().x() && x <= other.footprint().max().x()
+                            && z >= other.footprint().min().z() && z <= other.footprint().max().z()) {
+                        otherFootprint = true;
+                        break;
+                    }
+                }
+                if (otherFootprint) continue;
+                var column = terrain.get(net.minecraft.world.level.ChunkPos.asLong(x, z));
+                helper.assertTrue(column != null && column.blendDistance() > 0,
+                        "mine foundation apron became an unsupported exact platform at " + x + "," + z);
             }
         }
-        helper.assertTrue(supportedSpoilColumns >= 20,
-                "primary mine must compile two visibly grounded spoil heaps");
+        var looseNoise = java.util.Set.of(Blocks.GRAVEL, Blocks.TUFF, Blocks.COBBLED_DEEPSLATE,
+                Blocks.ANDESITE, Blocks.COARSE_DIRT);
+        helper.assertTrue(catalog.chunks().values().stream().flatMap(value -> value.decorations().stream())
+                        .filter(value -> mine.bounds().contains(new VisualPoint(value.position().getX(),
+                                value.position().getY(), value.position().getZ())))
+                        .noneMatch(value -> looseNoise.contains(value.state().getBlock())),
+                "mine campus must not paint loose yard noise at a borrowed foundation datum");
         helper.succeed();
     }
 
