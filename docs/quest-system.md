@@ -19,7 +19,7 @@ KubeJS are deliberately *not* part of this decision.
 |---|---|---|
 | FTB Quests | Campaign UI, readable briefings, chapter graph, task display, ordinary turn-ins and visible player/team progress | Boss lifecycle, target coordinates, world safety, chunk loading, authoritative chapter artifacts or event spawning |
 | `far_frontier_core` (planned) | Contract state, selected destination, activation validation, server-safe rewards, retry/recovery and world consequences | A second quest-book UI or a duplicate editable campaign tree |
-| Ravents | Automatic ambient encounters and configured raid composition | Named contracts or their completion state |
+| Ravents | Future PM-requested encounter materialization; currently dormant | Automatic ambient waves, named contracts or completion state |
 | Third-party content mods | Their native mobs, structures, boss mechanics and drops | The global sequence of Far Frontier chapters |
 
 The quest book may display a completed operation only after the core emits its

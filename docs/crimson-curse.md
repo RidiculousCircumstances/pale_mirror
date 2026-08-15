@@ -15,7 +15,7 @@ made until combat tests are complete.
 
 ## Director boundary
 
-Ravents remains Far Frontier's only automatic world-encounter director. Crimson
+Pale Mirror is Far Frontier's authoritative world-encounter director. Crimson
 Curse's automatic raids seek players and create new infected areas, so enabling them
 by default would establish a competing global progression/event system.
 
@@ -42,7 +42,7 @@ replaced to conceal that upstream packaging defect.
   function-order, Spore-tag or Spore-effect error.
 - Client boot with Sodium/Polytone/EMF/ETF plus Distant Horizons and Sable.
 - Fresh-world and existing-world infection generation, reload and 10 km travel.
-- Confirm automatic Crimson raids remain disabled while Ravents Tier 0 still works.
+- Confirm automatic Crimson raids remain disabled while PM-controlled threat actors work.
 - Measure MSPT/heap during infection nodes, then with Create machinery and a
   Millénaire settlement loaded.
 - Evaluate whether infection phase gains need a future documented cap; do not add

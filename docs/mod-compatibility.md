@@ -16,9 +16,9 @@ whole pack has completed a runtime smoke test.
    overrides for its `structure_set` files; Structurify controls every other
    structure set. This is the user-approved resolution of an otherwise blocking
    conflict.
-2. **Enhanced Celestials 2 is the Core + Default Lunar Events pair**, not the older
-   monolithic Enhanced Celestials 6.x project. Both EC2 artifacts were released on
-   2026-08-08 and are intentionally a gated risk.
+2. **Enhanced Celestials is excluded.** Live play showed that independent Blood
+   Moon timing adds unexplained global pressure beside Pale Mirror. Both EC2
+   modules and their orphan libraries are absent from the default manifest.
 3. **Chunk optimisation is server-profiled.** Lithium `0.15.4`, ModernFix `5.27.2`,
    Fast Noise `1.0.13` and FerriteCore `7.0.3` form the stable candidate. ScalableLux `0.1.0.1` is
    excluded because Sable `2.0.3` declares it incompatible. Exact
@@ -31,15 +31,14 @@ whole pack has completed a runtime smoke test.
    save/reload and performance suite before being called release-ready.
 5. **Create: Caliber is an evaluated candidate and is not distributed by the default pack.** Its only 1.21.1 build is
    a two-day-old beta. It is not part of the core progression or combat balance.
-6. **Crimson Curse is bounded by Ravents.** Crimson Curse `1.4.3.1` is a native
+6. **Crimson Curse is bounded by Pale Mirror.** Crimson Curse `1.4.3.1` is a native
    NeoForge multi-loader artifact, but it has its own infection phases and automatic
    player-seeking raids. The versioned `crimson-curse-raids-disabled` datapack keeps
-   infection/exploration content while disabling only its automatic raids; Ravents
-   remains the sole automatic encounter director.
+   infection/exploration content while disabling its automatic raids; PM remains
+   the sole authoritative encounter director.
 7. **Spore is local, not a second director.** Native NeoForge Spore `2.2.0j` is
    included with explicit structure-set and safety controls. It supplies rare
-   contamination sites while Crimson Curse remains the global infection layer and
-   Ravents remains the automatic progression director.
+   contamination sites while Pale Mirror owns canonical threat progression.
 8. **FTB Quests is the adopted campaign presentation layer.** The official
    NeoForge 1.21.1 `2101.1.30` artifact is selected for chapters, briefings and
    visible progress; it does not replace the planned authoritative expedition core.
@@ -72,8 +71,8 @@ whole pack has completed a runtime smoke test.
 | [Naturalist](https://modrinth.com/mod/naturalist) | `2.0.2+1.21.1-neoforge`, [artifact](https://modrinth.com/mod/naturalist/version/5VOUtmLM) | 2026-07-28; 1.21.1; NeoForge; both | None | Official. Spawn configs/datapack hooks where exposed. Latest stable release is recent; audit spawn weights against vanilla during ecology testing. | WARNING |
 | [Mowzie's Mobs](https://modrinth.com/mod/mowzies-mobs) | `1.8.2`, [artifact](https://modrinth.com/mod/mowzies-mobs/version/xgAXTl17) | 2026-03-15; 1.21.1; NeoForge; both | GeckoLib | Official. Configs. Treat as rare special encounters; test Better Combat animations, shields and boss scripts. | CONFIRMED |
 | [Born in Chaos](https://modrinth.com/mod/borninchaos) | `1.7.6`, [artifact](https://modrinth.com/mod/borninchaos/version/ttcWWp3r) | 2026-06-17; 1.21.1; NeoForge; both | GeckoLib (JEI and Better Combat optional) | Official. Spawn configs. Better Combat integration exists; cap its spawn weights so it remains uncommon compared with vanilla hostile mobs. | CONFIRMED |
-| [Enhanced Celestials 2: Core](https://modrinth.com/mod/enhanced-celestials-2-core) + [Default Lunar Events](https://modrinth.com/mod/enhanced-celestials-2-default-lunar-events) | both `2.0.0.0`, [Core artifact](https://modrinth.com/mod/enhanced-celestials-2-core/version/gq5iL0hu), [events artifact](https://modrinth.com/mod/enhanced-celestials-2-default-lunar-events/version/Ku532Uv8) | 2026-08-08; 1.21.1; NeoForge; both | CorgiLib; Data Anchor; Default Events also requires EC2 Core | Official rewrite with datapack lunar-event loader. Use low base frequency for Blood Moon; no direct Ravents integration/API is documented, so it must not promise a guaranteed siege. | WARNING |
-| [Ravents](https://modrinth.com/mod/ravents) | `3.0`, [artifact](https://modrinth.com/mod/ravents/version/nTTlZTlJ) | 2026-06-08; 1.21.1; NeoForge; both | Architectury API (Pehkui optional) | Official. JSON under `config/Ravents/`; per-player counters, raids and spawn replacements. It supports dimensions, biomes, structures, items and block actions but published schema has no advancement trigger, event-pool probability/cooldown, lunar hook or settlement context. Tiers use robust native triggers; settlement/Blood Moon prototypes remain disabled unless an API is verified. | WARNING |
+| [Enhanced Celestials 2: Core](https://modrinth.com/mod/enhanced-celestials-2-core) + [Default Lunar Events](https://modrinth.com/mod/enhanced-celestials-2-default-lunar-events) | both `2.0.0.0` | CorgiLib; Data Anchor | Removed with its dependencies: Blood Moon timing is not causally owned by PM. | DISABLED |
+| [Ravents](https://modrinth.com/mod/ravents) | `3.0`, [artifact](https://modrinth.com/mod/ravents/version/nTTlZTlJ) | 2026-06-08; 1.21.1; NeoForge; both | Architectury API (Pehkui optional) | Retained as a dormant future PM adapter. Default config contains two inert generated templates, zero raids and zero events. | CONFIRMED |
 | [FTB Quests](https://www.curseforge.com/minecraft/mc-mods/ftb-quests-forge) | `2101.1.30`, [official file](https://www.curseforge.com/minecraft/mc-mods/ftb-quests-forge/files/8589821) | 2026-08-06; 1.21.1; NeoForge; both | FTB Library (FTB XMod Compat only if later KubeJS/JEI/stages integration is deliberately adopted) | Official. Chosen solely as the campaign journal and editable quest graph; its chapter UI may show core-authoritative contracts but must not control boss lifecycle, selected locations or unique artifacts. The file is verified on the official page, but Packwiz metadata, FTB Library closure and full-profile boot have not yet been materialised; no quest content is enabled. | WARNING |
 | [Crimson Curse: Infection](https://modrinth.com/datapack/crimson_curse) | `1.4.3.1+mod`, [artifact](https://modrinth.com/datapack/crimson_curse/version/RZ4LrIs5) | 2026-05-15; 1.21/1.21.1; NeoForge; both | Entity Model Features, Entity Texture Features, Sodium NeoForge and Polytone (client) | Official multi-loader JAR; its NeoForge descriptor has no required server dependency. Adds infection mass/points/phases, infection biomes, entities and its own raids. `crimson-curse-raids-disabled` preserves Ravents as director. Its optional Spore resources are active with the pinned Spore artifact. Dedicated server boot passes, but the upstream JAR retains one ignored invalid disabled-advancement-path log. Its custom-block infection, phase progression, DH/Sable renderer stack and server performance remain test gates. | WARNING |
 | [Fungal Infection: Spore](https://modrinth.com/mod/fungal-infectionspore) | `2.2.0j`, [artifact](https://modrinth.com/mod/fungal-infectionspore/version/DwE3w8IX) | 2026-06-29; 1.21.1; NeoForge; both | NeoForge `>=21.1.212` only | Official. `config/spore-startup.toml` and `datapacks/far-frontier-spore-zones` restrict it to rare local contamination sites; Crimson's obsolete no-Spore quarantine is removed so its optional Spore resources load. The full dedicated profile boots, but actual density, hivemind lifecycle, combat, DH/Sable client rendering and MSPT remain gates. | WARNING |
@@ -106,7 +105,6 @@ resolver graph.
 | [Architectury](https://modrinth.com/mod/architectury-api) | `13.0.11`, 2026-07-23 | Ravents, Simply Swords | API. |
 | [playerAnimator](https://modrinth.com/mod/playeranimator) + [Cloth Config](https://modrinth.com/mod/cloth-config) | `2.0.4` beta, 2025-12-28 + `15.0.140`, 2024-09-16 | Better Combat | Animation/config dependencies; playerAnimator beta is a test focus. |
 | [Fzzy Config](https://modrinth.com/mod/fzzy-config) + [Simply Tooltips](https://modrinth.com/mod/simply-tooltips) | `0.7.6`, 2026-02-03 + `0.1.3`, 2026-03-06 | Simply Swords | Configuration and client tooltip dependency. |
-| [CorgiLib](https://modrinth.com/mod/corgilib) + [Data Anchor](https://modrinth.com/mod/data-anchor) | `5.0.0.9`, 2026-03-17 + `2.0.0.16`, 2026-08-08 | EC2 | EC2 dependency closure; both are part of the fresh EC2 risk. |
 | [EZ Emerald Pouch](https://modrinth.com/mod/ez-emerald-pouch), [Timeline](https://modrinth.com/mod/rpg-timeline), [EZ Actions](https://modrinth.com/mod/ez-actions) | `1.0.3.3`, 2026-04-24; `2.0.4.1`, 2026-02-25; `2.0.3.5`, 2026-04-22 | Villager Overhaul | Required by the selected newest Villager Overhaul artifact. |
 | [Citadel — Unofficial Port](https://modrinth.com/mod/citadel-(1.21.1-port)) | `2.7.6`, 2026-04-25 | Alex's Caves port | Must exactly match the Alex's Caves port release line; feature-flagged with it. |
 | [Entity Model Features](https://modrinth.com/mod/entity-model-features) + [Entity Texture Features](https://modrinth.com/mod/entitytexturefeatures) | `3.2.4-neoforge-1.21`, 2026-05-09 + `7.1-neoforge-1.21`, 2026-04-15 | Crimson Curse client assets | Required client entity-model/texture support for the pinned Crimson Curse artifact. |
@@ -121,14 +119,13 @@ resolver graph.
 | Millénaire 9 beta | Fresh rewrite; official site asks for a fresh world and backup. | Keep in core only after dedicated multi-seed, economy, chunk-load and reload pass. If it corrupts or destabilises the server, ship a documented `no-millenaire` server profile rather than silently replacing it. |
 | Alex's Caves port + Tectonic | Unofficial port; no 1.21.1 native compatibility patch; known cave/ocean terrain concern. | Test each cave biome over several seeds, 10+ km pregeneration and restart. Fallback is the `alex-caves` option off (also removes unofficial Citadel). |
 | DH + Sable/Aeronautics | DH is beta; public reports include freezes with Sable and Aeronautics has shader visual issues. | Baseline without shaders/performance mods; test LO/MD/HI LOD profiles and flight separately. No shader stack is a release requirement. |
-| EC2 + Ravents | EC2 was released today; Ravents has no published lunar-event or probability-pool hook. | Tune them independently. Do not activate automatic combined events without a confirmed stable API; document manual prototype only. |
-| Ravents tier model | Published triggers do not include advancements or global settlement context. | Use per-player durable triggers: Nether visit; a specific placed Create/Aeronautics milestone; End/Wither/structure milestones. No day-only escalation and no global HP scaling. |
+| Independent event directors | Ravents raid waves and EC2 lunar events looked like PM consequences without participating in PM state. | EC2 is excluded and Ravents has no automatic raids/events. Any future adapter call must originate from PM. |
 | Hostile Tactics release label | Modrinth version label and JAR filename disagree. | Pin Modrinth hash, record in-game manifest, boot server-only first, and disable griefing by default. |
 | Integrated ecosystem breadth | IDA/IDAS/IV require Create/Quark/Supplementaries and, for IDA, FD/Amendments. | These are justified dependencies, not elective expansion. Audit their optional modules and prevent recipes/loot from creating a second uncontrolled progression. |
 | IDAS optional-integration data | Initial core boot parsed 10 IDAS loot tables and two spawner pools with absent Ice and Fire / Ars Nouveau content. | Resolved in `idas-optional-integration-quarantine`; 2026-08-08 retest auto-enabled it and eliminated these missing-registry errors. Do not add either unrelated mod. |
 | IDA legacy loot data | Five `dungeons_arise` tables used obsolete nested `minecraft:loot_table.name` entries. | Resolved in `ida-legacy-loot-fix`; it copies upstream tables verbatim except `name` → `value`, and the 2026-08-08 boot retest has no remaining IDA loot parse error. |
 | Caliber | `0.2.0` is beta/WIP and no balance history exists. | Excluded from the default manifest; preliminary decision **EVALUATION ONLY**, never core until measured ammo-chain and boss-TTK tests pass. |
-| Crimson Curse + Spore + Ravents | Crimson has world-level mass/phase progression, Spore defaults to whole-Overworld infected spawns and hivemind raids, and both could otherwise compete with Ravents. | Crimson automatic raids remain disabled. Spore is capped, natural-spawned only in mushroom fields, has no conversion/spread/chunk-loading/raids, and its structure sets use an explicit sparse datapack. No tier-gated placement is claimed without a stable API. |
+| Crimson Curse + Spore + PM | Crimson and Spore both have upstream autonomous escalation that could compete with PM. | Crimson automatic raids remain disabled. Spore is capped, natural-spawned only in mushroom fields, has no conversion/spread/chunk-loading/raids, and its structure sets use an explicit sparse datapack. |
 
 ## Sources and verification method
 

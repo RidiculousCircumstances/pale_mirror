@@ -41,14 +41,12 @@ chunk loading; Pale Mirror's adapter remains optional.
 
 ## Progression and campaign journal
 
-Ravents is the only global world-progression director. Its four documented tiers
-use durable player milestones rather than elapsed days or global mob-stat scaling.
-Tier 0 is enabled as a one-time, per-player three-mob encounter after exploration
-activity; it has no global spawn replacement. Later tiers remain disabled until
-their trigger and encounter tests are recorded.
-Enhanced Celestials 2 provides separate temporal events; a Blood Moon is not an
-automatic siege. Create and Aeronautics are intended to unlock practical long-range
-travel, not early-game toys.
+Pale Mirror is the authoritative world-state and story director. Ravents remains
+installed only as a dormant future materialization adapter: the default profile has
+no Ravents raids or events. Enhanced Celestials and its Blood Moon events are
+excluded, so ambient global waves cannot be mistaken for PM-authored consequences.
+Create and Aeronautics are intended to unlock practical long-range travel, not
+early-game toys.
 
 FTB Quests is adopted as the client/server campaign journal: it will display
 chapters, operation briefings and ordinary progress, while the planned Far Frontier
@@ -66,7 +64,7 @@ and full-profile boot test; no quest chain is enabled yet.
 - Infection: Crimson Curse (global strategic state) + Spore (rare local contamination sites)
 - Combat: Better Combat, Simply Swords
 - Campaign journal: FTB Quests (adopted; materialisation/boot gate pending)
-- Director: Ravents, Enhanced Celestials 2
+- Director: Pale Mirror; Ravents is dormant with no configured raids/events
 - Civilization: PM-authored settlements + Villager Overhaul; Integrated Villages
   remains an installed private asset source with both settlement sets disabled
 

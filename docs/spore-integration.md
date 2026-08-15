@@ -10,8 +10,9 @@ It is not a second world director:
 
 | System | Far Frontier role |
 |---|---|
-| Crimson Curse | Global strategic infection state, phases and long-lived world threat. Its automatic raids remain disabled; Ravents owns automatic escalation. |
-| Ravents | The sole automatic encounter/progression director. |
+| Crimson Curse | PM-controlled physical infection provider; its automatic raids remain disabled. |
+| Pale Mirror | Canonical threat state, activation, escalation and story ownership. |
+| Ravents | Dormant future materialization adapter with no configured raids/events. |
 | Spore | Local biological contamination sites: infected ecology, hivemind encounters and structure-specific expeditions. |
 
 Crimson Curse's now-present optional Spore resources are no longer quarantined.
@@ -45,16 +46,15 @@ single owner of Spore structure placement.
 
 ## What is intentionally not promised
 
-There is no verified public Ravents hook that can enable a vanilla worldgen
-structure set only after a Ravents tier. Structure placement happens as chunks are
-generated, while the tier is mutable player/world state. Therefore the current
-profile makes sites geographically rare from the first generated chunk; it does
-not claim a false tier-gate.
+There is no verified public hook that can enable a vanilla worldgen structure set
+from mutable PM story state. Therefore the current profile makes sites
+geographically rare from the first generated chunk; it does not claim a false
+tier-gate.
 
 The future Tier 2 proposal is to gate activation/access to discovered sites by a
 documented integration only if a stable API or minimal server-side implementation
 is available. It must not use brittle repeating command hacks. Until then, Spore
-remains a rare exploration layer and Ravents remains the progression authority.
+remains a rare exploration layer and Pale Mirror remains the progression authority.
 
 ## Remaining gates
 

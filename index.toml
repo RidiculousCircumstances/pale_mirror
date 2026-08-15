@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "095e5b3658e1a318e03fbbfc3c42c38bcf704fa1c7cc0f0960ab80871c0bcb15"
+hash = "8d3255e292502cef460ae47206f29d6065f576dea22c0e64234183b5b8ff8276"
 
 [[files]]
 file = "config/README.md"
@@ -15,18 +15,6 @@ hash = "a0efd176a1c739ebcd242865e92aa8ffa7dd6ecf213bc3582a4205b8b7a37172"
 [[files]]
 file = "config/Ravents/division_zombie.json"
 hash = "c42b8a443935176143295e7c0a323968fc4f1b2f60fe14d86d1a7c0881e2957c"
-
-[[files]]
-file = "config/Ravents/frontier_raider.json"
-hash = "3317fca0e2e85076675fa3647fcb5f8956d15475bd3dc292f398bbfac51d3b1e"
-
-[[files]]
-file = "config/Ravents/frontier_scout.json"
-hash = "c2df7eabcb6fbf45c692cc92ab7d8cfecb6f3a1d2d2b7ace9d137748fdf235ef"
-
-[[files]]
-file = "config/Ravents/raids/frontier_first_contact.json"
-hash = "ce644abbe18eb8b30eba5ff8d7a8efdc39bf0c5fba3ec58778f33bae593d0d0a"
 
 [[files]]
 file = "config/Ravents_settings.json"
@@ -390,7 +378,7 @@ hash = "38382bb65990fd167f36587fdca37bb1ec2a1b38a31845aa947b14368961b77c"
 
 [[files]]
 file = "docs/architecture.md"
-hash = "72cbe0c4bdad3c63776b0859095e91c6c0c11e878153346f8ab1fd941bf25c7e"
+hash = "6b78672416c8e8a8e4746df4f54d0a20eab8420377ebc047b5d1514c28af9766"
 
 [[files]]
 file = "docs/balancing.md"
@@ -402,7 +390,7 @@ hash = "a2bf11f985e0a20acddf8d5cc33bcd6be9c1295712c882df0249926002f0cc60"
 
 [[files]]
 file = "docs/crimson-curse.md"
-hash = "d9aaaa03e246658d1efc110715838ff32f9c69acf8cf567f68a9e7504c0f5ac0"
+hash = "97ec899645a3fc4a9d8013d17d96576044f91a273b6c7abc8f9c2d8c252f165a"
 
 [[files]]
 file = "docs/expedition-system.md"
@@ -410,7 +398,7 @@ hash = "463a83f786b5f652652b5b0b8503e64d312e3f108828d9527ea897a44a524cb7"
 
 [[files]]
 file = "docs/mod-compatibility.md"
-hash = "0287a370503dc49897aa4bd54d4de7644f3b66129c8267d65c2abf27c6d22cc3"
+hash = "0bc7aa8a015d89599ab27221860d5aaf077118d12b496c058a220fa06329fe36"
 
 [[files]]
 file = "docs/performance.md"
@@ -418,15 +406,15 @@ hash = "3c82d374a4f282530558e25a801c51a8a19e36cbf4f6abf96d2e118df092ee9f"
 
 [[files]]
 file = "docs/quest-system.md"
-hash = "a869fc41afcd21444f2703a70a5e2ba18a3ee211278308698dbc1065f7764b76"
+hash = "2cc32507206a23adcd581cf03114e13753dfcc130155adaa6aecb184e8232c14"
 
 [[files]]
 file = "docs/ravents-progression.md"
-hash = "8450685a8fe5480b78cfd3c54d0b6270a219e364b4498ccdcc2e65a8b0e0d9f9"
+hash = "6161fb4a85126ce13059a7622a65be25abf9f7cb8d7a94b977fc0de359147005"
 
 [[files]]
 file = "docs/spore-integration.md"
-hash = "315871cdc59b24e6d2149bbbea2dabc04d9786bba67a022bd80a57096f7e290a"
+hash = "a87df11689b28af26c284888772c940c57a83076c3237a5ffe3dee497c018d2d"
 
 [[files]]
 file = "docs/structures.md"
@@ -434,7 +422,7 @@ hash = "913f9fa38fcb0e3db9a34e3e6ce3a58ff5e80655edae2c471ff9e35f20728163"
 
 [[files]]
 file = "docs/testing.md"
-hash = "afc920551b2b3e30e70825a3c39787ecf938181d7f8434990801ac2e2ebbe883"
+hash = "6cc8f1502fdcea714f01daee3e14c04da5189f3d25b0fb77bb75a09e8ba99935"
 
 [[files]]
 file = "mods/alexs-caves-(unofficial-port).pw.toml"
@@ -477,11 +465,6 @@ hash = "75181b55e0407d1fca1e2f346c6501f919f5109545990ddfb66db9cd1b771f8a"
 metafile = true
 
 [[files]]
-file = "mods/corgilib.pw.toml"
-hash = "2b8c5286980b8d864085d02a6b2153cefa401a965833139ffac8e7661a322f7c"
-metafile = true
-
-[[files]]
 file = "mods/create-aeronautics.pw.toml"
 hash = "5fab8d2e412683dfd72f08cf6750e51b03cb43192e8eb783e962ba28d20978bc"
 metafile = true
@@ -502,23 +485,8 @@ hash = "36debf7653e95a855b4fedacc19027cf2e01960fc0b6d55ef2ffbffbcb455690"
 metafile = true
 
 [[files]]
-file = "mods/data-anchor.pw.toml"
-hash = "bdc409a5eb4e06535a0387250fc4002ea578213bc2a1c5fbcdd4a836f54281c0"
-metafile = true
-
-[[files]]
 file = "mods/distanthorizons.pw.toml"
 hash = "d5b9c23df79ef871a70032567db2512904251347bdf13da80fbb8b00a846a79a"
-metafile = true
-
-[[files]]
-file = "mods/enhanced-celestials-2-core.pw.toml"
-hash = "71d735b7b94982da22614cda2f4f6d5b8d4dead915c27ca1e5eda55190d7b2a4"
-metafile = true
-
-[[files]]
-file = "mods/enhanced-celestials-2-default-lunar-events.pw.toml"
-hash = "65011ca9cb33847f16cca3d01cb89bad0756249a6410f2fdcc4ec5774ac68f76"
 metafile = true
 
 [[files]]

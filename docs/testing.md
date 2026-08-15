@@ -27,9 +27,8 @@ means it has not been run in this environment.
 | CREATE | Basic machine, train, contraption | PENDING |
 | AERONAUTICS | Assemble, fly, land, restart, chunk-edge test | PENDING |
 | COMBAT | Vanilla groups, shields, all modded encounter tiers | PENDING |
-| EVENTS | Ravents Tier 0 configuration parses on dedicated server | PASS — 2026-08-08; Ravents reports `Loaded 4 mobs, 1 raids, 0 events`. The two additional mobs are inert upstream templates committed to prevent first-boot writes. |
-| EVENTS | Execute Ravents Tier 0, save/restart and validate one-time completion | PENDING — requires a connected test player. |
-| EVENTS | Tiers 1–3 and EC2/Blood Moon combinations | PENDING |
+| EVENTS | Dormant Ravents profile parses on dedicated server | PASS — 2026-08-15 live server reports `Loaded 2 mobs, 0 raids, 0 events`; the former Tier 0 wave raid was removed. |
+| EVENTS | Enhanced Celestials / Blood Moon | DISABLED — 2026-08-15 boot contains neither EC2 module nor its orphan dependencies. |
 | CRIMSON + SPORE | Native NeoForge dedicated-server boot with active native Spore integration; automatic Crimson raids guard | PASS — 2026-08-08; pinned Crimson `1.4.3.1` + Spore `2.2.0j` reaches `Done` on NeoForge 21.1.248 with the obsolete no-Spore quarantine absent. `far-frontier-spore-zones` is auto-enabled and no missing `spore:*` resource error occurs. `Global/Raids_Enabled=0` remains the Crimson policy. One upstream Crimson disabled-advancement invalid-path log remains non-fatal. |
 | SPORE | Conservative config and sparse structure-set datapack parse in full server profile | PASS — 2026-08-08; 13 Spore `structure_set` overrides at 4096/3072 chunks load on the dedicated server. |
 | SPORE | Multi-seed density, hivemind lifecycle, local containment and combat | PENDING |
@@ -61,9 +60,8 @@ means it has not been run in this environment.
   Terralith biomes. This is an upstream spawn-cap risk to quantify in ecology tests.
 - Historical Millénaire findings remain relevant only to a future isolated compatibility
   profile. Its JAR and generated configuration are not part of the active pack.
-- Ravents' enabled Tier 0 has no `events/` files, so it does not globally replace or
-  clone vanilla spawns. Its single small raid is documented in
-  `docs/ravents-progression.md`; player execution remains pending.
+- Ravents has no configured raids or events. Any future use must originate in a
+  canonical Pale Mirror decision and must not present independent ambient waves.
 
 Raw smoke logs and disposable worlds stay outside git; commands and pass criteria are
 kept in `scripts/`.
