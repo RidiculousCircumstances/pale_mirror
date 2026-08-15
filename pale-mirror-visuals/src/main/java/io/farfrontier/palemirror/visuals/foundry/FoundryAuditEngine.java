@@ -87,6 +87,7 @@ public final class FoundryAuditEngine {
         compiledCoverage(index, phase, findings, metrics);
         assetLint(index, phase, findings, metrics);
         entranceTopology(index, phase, findings, metrics);
+        FoundryMinePortalAuditor.compiled(index, phase, findings, metrics);
         railTopology(index, phase, findings, metrics);
         plannedSupport(index, phase, findings, metrics);
         List<FoundryMapSample> samples = FoundrySurfaceInspector.inspect(index, null, phase).samples();
@@ -372,6 +373,7 @@ public final class FoundryAuditEngine {
                     "Visit the area, let neighbour updates settle, then rerun SETTLED or RELOADED audit.");
         }
         runtimeEntrances(index, level, phase, findings);
+        FoundryMinePortalAuditor.runtime(index, level, phase, findings);
         runtimeRails(index, level, phase, findings);
         return new RuntimeResult(List.of(
                 new FoundryMetric("world.cells_checked", checked, "cells"),

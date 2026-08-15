@@ -99,7 +99,10 @@ public final class VisualAuditPlanner {
                 local(mine.loadingEndpoint(), 0, -18, 5, mine.inwardQuarterTurns()),
                 raised(mine.loadingEndpoint(), 4));
         add(result, region, prefix + "/portal", "mine", mine.siteId(),
-                local(mine.portal(), 0, -24, 5, mine.inwardQuarterTurns()), raised(mine.portal(), 4));
+                // Judge the walkable threshold and portal-house facade from
+                // player scale. The former high aim point framed only the
+                // roof and could hide a buried or suspended entrance.
+                local(mine.portal(), 0, -18, 3, mine.inwardQuarterTurns()), raised(mine.portal(), 2));
         mine.surfaceBuildings().stream().filter(value -> value.category() == SettlementBuildingCategory.INDUSTRY)
                 .findFirst().or(() -> mine.surfaceBuildings().stream().findFirst()).ifPresent(building ->
                         buildingView(region, mine, prefix + "/industrial_campus", building, result));

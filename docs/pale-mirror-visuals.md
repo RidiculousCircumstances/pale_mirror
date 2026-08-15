@@ -182,6 +182,14 @@ the apron never becomes a generic elevated platform. Three-wide gravel/cobble pa
 fences connect those levels; graded pads transition smoothly back into natural terrain. The drift and chambers
 continue into the selected mountain face inside a continuous dry masonry shell.
 
+The actual mountain opening is the sole public adit portal. Its access road meets
+the portal datum through a continuous five-wide, four-high masonry throat, and a
+grounded timber-and-copper frame keeps that opening legible at player height.
+This clearance is compiled last and is a blocking Foundry invariant, so neither
+terrain, decoration nor an imported module may seal or suspend it. The larger
+curated winding/hoist house sits beside the adit and keeps its own semantic door;
+it is an industrial landmark rather than a substitute entrance.
+
 The five principal surface landmarks and the maintenance workshop are curated
 private Integrated Villages derivatives selected for real architectural
 silhouettes: a tall tool/hoist works, crew office, masonry processing hall,

@@ -24,7 +24,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Compiles global manifests once into independent chunk-local worldgen slices. */
 public final class FrontierGenesisCompiler {
-    public static final int CATALOG_VERSION = 32;
+    public static final int CATALOG_VERSION = 33;
 
     public CompiledGenesisCatalog compile(List<AuthoredRegionSeed> manifests) {
         Map<Long, MutableGenesisSlice> slices = new LinkedHashMap<>();
@@ -154,8 +154,11 @@ public final class FrontierGenesisCompiler {
         });
         mine.initialModules().forEach(module -> compileModule(module, slices));
         MineUndergroundGenesisCompiler.compile(mine, (position, state) -> put(slices, position, state));
-        compileMineEntrances(mine, accessRoutes, slices);
         compileMineIndustrialDetails(mine, palette, access, slices);
+        // Entrance clearance is deliberately the final MineSite geometry
+        // writer. Curated NBT, the underground grammar and decorative frames
+        // may shape the portal, but none may close its public throat.
+        compileMineEntrances(mine, accessRoutes, slices);
         compileMineKinetics(mine, slices);
         put(slices, block(mine.controllerAnchor()).above(), Blocks.SOUL_LANTERN.defaultBlockState());
     }
@@ -182,20 +185,30 @@ public final class FrontierGenesisCompiler {
                     .filter(value -> value.id().equals(route.foundationId())).findFirst().orElseThrow();
             VisualPoint outside = route.points().getLast();
             BlockPos threshold = new BlockPos(outside.x() + route.entryStepX(),
-                    foundation.targetY() + 1, outside.z() + route.entryStepZ());
+                    route.minePortal() ? mine.portal().y() : foundation.targetY() + 1,
+                    outside.z() + route.entryStepZ());
             int tangentX = -route.entryStepZ();
             int tangentZ = route.entryStepX();
-            int halfWidth = route.foundationId().equals("portal") ? 1 : 0;
-            for (int depth = -2; depth <= 2; depth++) for (int across = -halfWidth;
-                    across <= halfWidth; across++) for (int up = 0; up <= 2; up++) {
+            int halfWidth = route.minePortal() ? 2 : 0;
+            int outsideDepth = route.minePortal() ? -5 : -2;
+            int insideDepth = route.minePortal() ? 4 : 2;
+            int clearHeight = route.minePortal() ? 3 : 2;
+            for (int depth = outsideDepth; depth <= insideDepth; depth++) for (int across = -halfWidth;
+                    across <= halfWidth; across++) for (int up = 0; up <= clearHeight; up++) {
                 put(slices, threshold.offset(route.entryStepX() * depth + tangentX * across, up,
                         route.entryStepZ() * depth + tangentZ * across), Blocks.AIR.defaultBlockState());
             }
-            for (int depth = -2; depth <= 0; depth++) for (int across = -halfWidth;
+            // The final throat writer owns one continuous floor on both sides
+            // of the threshold.  Depending on the adit's initial slope, the
+            // underground grammar alone cannot guarantee every inner lane at
+            // the surface datum.
+            for (int depth = outsideDepth; depth <= insideDepth; depth++) for (int across = -halfWidth;
                     across <= halfWidth; across++) {
                 put(slices, threshold.offset(route.entryStepX() * depth + tangentX * across, -1,
                                 route.entryStepZ() * depth + tangentZ * across),
-                        Blocks.COBBLESTONE.defaultBlockState());
+                        route.minePortal() && Math.abs(across) <= 1
+                                ? Blocks.POLISHED_ANDESITE.defaultBlockState()
+                                : Blocks.COBBLESTONE.defaultBlockState());
             }
         }
     }

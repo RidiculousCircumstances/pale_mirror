@@ -281,37 +281,40 @@ public final class FrontierWorldgenCleanupGameTests {
                         value -> value.getValue().state(), (left, right) -> right,
                         java.util.LinkedHashMap::new));
         var portalRoute = MineAccessGenesisCompiler.routes(mine).stream()
-                .filter(value -> value.foundationId().equals("portal")).findFirst().orElseThrow();
+                .filter(MineAccessGenesisCompiler.AccessRoute::minePortal).findFirst().orElseThrow();
         var outside = portalRoute.points().getLast();
         BlockPos threshold = new BlockPos(outside.x() + portalRoute.entryStepX(),
-                mine.foundations().stream().filter(value -> value.id().equals("portal"))
-                        .findFirst().orElseThrow().targetY() + 1,
+                mine.portal().y(),
                 outside.z() + portalRoute.entryStepZ());
         int tangentX = -portalRoute.entryStepZ();
         int tangentZ = portalRoute.entryStepX();
-        for (int depth = 0; depth <= 2; depth++) for (int across = -1; across <= 1; across++) {
-            for (int up = 0; up <= 2; up++) {
+        for (int depth = -3; depth <= 3; depth++) for (int across = -2; across <= 2; across++) {
+            BlockPos floor = threshold.offset(portalRoute.entryStepX() * depth + tangentX * across,
+                    -1, portalRoute.entryStepZ() * depth + tangentZ * across);
+            helper.assertTrue(!blocks.getOrDefault(floor, Blocks.AIR.defaultBlockState()).isAir()
+                            && !(blocks.get(floor).getBlock() instanceof net.minecraft.world.level.block.FallingBlock),
+                    "public mine portal has no stable floor at " + floor);
+            for (int up = 0; up <= 3; up++) {
                 BlockPos cell = threshold.offset(portalRoute.entryStepX() * depth + tangentX * across,
                         up, portalRoute.entryStepZ() * depth + tangentZ * across);
                 helper.assertTrue(blocks.getOrDefault(cell, Blocks.STONE.defaultBlockState()).isAir(),
-                        "public mine portal is not three-wide and walkable at " + cell);
+                        "public mine portal is not five-wide and four-high at " + cell);
             }
         }
-        var portalModule = mine.surfaceBuildings().stream()
-                .filter(value -> value.buildingId().equals("portal"))
-                .flatMap(value -> value.modules().stream()).findFirst().orElseThrow();
-        var port = portalModule.ports().stream().filter(value -> value.kind()
-                == io.farfrontier.palemirror.api.VisualPortKind.PUBLIC_ENTRANCE).findFirst().orElseThrow();
-        net.minecraft.core.Direction outward = direction(port.outwardQuarterTurns());
-        net.minecraft.core.Direction tangent = outward.getClockWise();
-        BlockPos portBlock = new BlockPos(port.position().x(), port.position().y(), port.position().z());
-        helper.assertTrue(blocks.getOrDefault(portBlock.relative(outward).above(4),
+        net.minecraft.core.Direction inward = direction(mine.inwardQuarterTurns());
+        net.minecraft.core.Direction tangent = inward.getClockWise();
+        BlockPos portBlock = new BlockPos(mine.portal().x(), mine.portal().y(), mine.portal().z());
+        helper.assertTrue(blocks.getOrDefault(portBlock.relative(inward, -2).above(7),
                         Blocks.AIR.defaultBlockState()).is(Blocks.WAXED_CUT_COPPER),
                 "public mine portal lacks its visible industrial keystone");
         for (int side : new int[]{-2, 2}) helper.assertTrue(blocks.getOrDefault(
-                        portBlock.relative(outward).relative(tangent, side).above(3),
+                        portBlock.relative(inward, -2).relative(tangent, side).above(5),
                         Blocks.AIR.defaultBlockState()).is(Blocks.LANTERN),
                 "public mine portal lacks paired safety lights");
+        for (int side : new int[]{-3, 3}) helper.assertTrue(blocks.getOrDefault(
+                        portBlock.relative(tangent, side), Blocks.AIR.defaultBlockState())
+                        .is(net.minecraft.tags.BlockTags.LOGS),
+                "public mine portal lacks grounded timber jambs");
 
         var terrain = catalog.chunks().values().stream().flatMap(value -> value.terrain().stream())
                 .collect(java.util.stream.Collectors.toMap(value -> net.minecraft.world.level.ChunkPos.asLong(

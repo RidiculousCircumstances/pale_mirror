@@ -17,14 +17,19 @@ final class MineSurfaceLayout {
 
     static List<Pad> pads(AuthoredMineRole role) {
         if (role == AuthoredMineRole.PRIMARY) return List.of(
-                pad("portal", 0, -8, "mine/portal_hoist"),
+                // Keep the winding/hoist house beside the adit axis. Placing
+                // this imported building directly in front of the mountain
+                // portal made its roof and interior compete with the actual
+                // underground entrance even when the final tunnel carve was
+                // technically clear.
+                pad("portal", 10, -8, "mine/portal_hoist"),
                 pad("crew", -22, -30, "mine/crew_outpost"),
                 pad("processing", 0, -51, "mine/processing_hall"),
                 pad("power", -22, -52, "mine/power_house"),
                 pad("loading", 22, -28, "mine/loading_yard"),
                 pad("maintenance", 22, -52, "workshop_1"));
         return List.of(
-                pad("portal", 0, -8, "mine/portal_hoist"),
+                pad("portal", 10, -8, "mine/portal_hoist"),
                 pad("crew", -22, -30, "mine/crew_outpost"),
                 pad("dispatch", 22, -28, "mine/dispatch_foundation"),
                 pad("processing", 0, -51, "mine/dispatch_shell"),

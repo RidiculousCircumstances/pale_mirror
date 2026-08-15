@@ -4,7 +4,9 @@ import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
 import io.farfrontier.palemirror.api.MineFoundationPlan;
 import io.farfrontier.palemirror.api.VisualPoint;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 /** Reusable industrial detail grammar shared by every authored surface MineSite. */
@@ -21,24 +23,40 @@ final class MineSurfaceGenesisCompiler {
     }
 
     private static void headframe(AuthoredMineSitePlan mine, FrontierPalette palette, Sink sink) {
-        // Open timber headframe embedded into the mountain portal. The
-        // winding/support house remains a separate building on the outer pad.
-        for (int side : new int[]{-3, 3}) for (int up = 0; up <= 8; up++) {
-            sink.put(local(mine.portal(), side, 0, up, mine.inwardQuarterTurns()),
-                    palette.log());
+        // A freestanding, grounded portal house owns the real adit axis. The
+        // imported winding house is deliberately offset beside it; no roof or
+        // machinery is allowed to masquerade as the underground threshold.
+        for (int side : new int[]{-4, -3, 3, 4}) for (int inward = -2; inward <= 2; inward++) {
+            sink.put(local(mine.portal(), side, inward, -1, mine.inwardQuarterTurns()), palette.foundation());
+            if (Math.abs(side) == 4 || inward >= 1) {
+                sink.put(local(mine.portal(), side, inward, 0, mine.inwardQuarterTurns()), palette.foundation());
+            }
         }
-        for (int side : new int[]{-4, 4}) for (int inward : new int[]{-1, 1}) for (int up = 0; up <= 4; up++) {
-            if (up <= 2 || inward == 1) sink.put(local(mine.portal(), side, inward, up,
-                    mine.inwardQuarterTurns()), palette.foundation());
+        for (int side : new int[]{-3, 3}) for (int inward : new int[]{-2, 0}) {
+            for (int up = 0; up <= 6; up++) {
+                sink.put(local(mine.portal(), side, inward, up, mine.inwardQuarterTurns()), palette.log());
+            }
         }
-        for (int right = -3; right <= 3; right++) sink.put(
-                local(mine.portal(), right, 0, 8, mine.inwardQuarterTurns()),
-                palette.log());
-        for (int up = 3; up <= 7; up++) sink.put(
-                local(mine.portal(), 2, 0, up, mine.inwardQuarterTurns()), Blocks.CHAIN.defaultBlockState());
-        sink.put(local(mine.portal(), 2, 0, 2, mine.inwardQuarterTurns()), Blocks.GRINDSTONE.defaultBlockState());
-        sink.put(local(mine.portal(), -2, -1, 5, mine.inwardQuarterTurns()), Blocks.LANTERN.defaultBlockState());
-        sink.put(local(mine.portal(), 0, 0, 9, mine.inwardQuarterTurns()),
+        for (int inward : new int[]{-2, 0}) for (int right = -3; right <= 3; right++) {
+            sink.put(local(mine.portal(), right, inward, 6, mine.inwardQuarterTurns()), palette.log());
+        }
+        Direction tangent = direction(mine.inwardQuarterTurns()).getClockWise();
+        for (int inward = -3; inward <= 1; inward++) {
+            sink.put(local(mine.portal(), 0, inward, 9, mine.inwardQuarterTurns()), palette.planks());
+            for (int right = 1; right <= 4; right++) {
+                int roofY = 9 - right;
+                sink.put(local(mine.portal(), right, inward, roofY, mine.inwardQuarterTurns()),
+                        roofStair(palette, tangent));
+                sink.put(local(mine.portal(), -right, inward, roofY, mine.inwardQuarterTurns()),
+                        roofStair(palette, tangent.getOpposite()));
+            }
+        }
+        for (int side : new int[]{-2, 2}) {
+            sink.put(local(mine.portal(), side, -2, 5, mine.inwardQuarterTurns()),
+                    Blocks.LANTERN.defaultBlockState().setValue(
+                            net.minecraft.world.level.block.LanternBlock.HANGING, true));
+        }
+        sink.put(local(mine.portal(), 0, -2, 7, mine.inwardQuarterTurns()),
                 Blocks.WAXED_CUT_COPPER.defaultBlockState());
     }
 
@@ -64,7 +82,7 @@ final class MineSurfaceGenesisCompiler {
                 local(loading, 0, 2, up, mine.inwardQuarterTurns()), Blocks.CHAIN.defaultBlockState());
     }
 
-    /** A wide lit portal frame makes the mine's public threshold readable from the yard. */
+    /** The offset winding-house door receives a short porch connected to the main portal road. */
     private static void publicPortalLandmark(AuthoredMineSitePlan mine, FrontierPalette palette, Sink sink) {
         var portalModule = mine.surfaceBuildings().stream()
                 .filter(value -> value.buildingId().equals("portal"))
@@ -144,6 +162,23 @@ final class MineSurfaceGenesisCompiler {
     private static BlockState wall(FrontierPalette palette) {
         return palette.planks().is(Blocks.ACACIA_PLANKS)
                 ? Blocks.SANDSTONE_WALL.defaultBlockState() : Blocks.COBBLESTONE_WALL.defaultBlockState();
+    }
+
+    private static BlockState roofStair(FrontierPalette palette, Direction facing) {
+        BlockState state = palette.planks().is(Blocks.ACACIA_PLANKS)
+                ? Blocks.ACACIA_STAIRS.defaultBlockState()
+                : palette.planks().is(Blocks.OAK_PLANKS)
+                ? Blocks.OAK_STAIRS.defaultBlockState() : Blocks.SPRUCE_STAIRS.defaultBlockState();
+        return state.setValue(StairBlock.FACING, facing);
+    }
+
+    private static Direction direction(int quarterTurns) {
+        return switch (Math.floorMod(quarterTurns, 4)) {
+            case 0 -> Direction.EAST;
+            case 1 -> Direction.SOUTH;
+            case 2 -> Direction.WEST;
+            default -> Direction.NORTH;
+        };
     }
 
     private static boolean occupied(java.util.Set<Long> access, int x, int z) {

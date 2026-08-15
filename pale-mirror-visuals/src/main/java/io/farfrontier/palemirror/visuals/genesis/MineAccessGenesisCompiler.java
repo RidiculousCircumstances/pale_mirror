@@ -69,7 +69,10 @@ final class MineAccessGenesisCompiler {
         SearchTree tree = search(hub, blocked, search);
         List<AccessRoute> result = new ArrayList<>();
         for (MineFoundationPlan foundation : foundations) {
-            Approach approach = approaches(mine, foundation).stream()
+            boolean minePortal = foundation.id().equals("portal");
+            List<Approach> candidates = minePortal
+                    ? List.of(minePortalApproach(mine)) : approaches(mine, foundation);
+            Approach approach = candidates.stream()
                     .filter(value -> tree.distance().containsKey(value.outer()))
                     .min(Comparator.comparingInt((Approach value) -> value.preferred() ? 0 : 1)
                             .thenComparingInt(value -> tree.distance().get(value.outer())))
@@ -82,15 +85,25 @@ final class MineAccessGenesisCompiler {
             }
             List<VisualPoint> graded = new ArrayList<>(horizontal.size());
             int segments = Math.max(1, horizontal.size() - 1);
+            int targetY = minePortal ? mine.portal().y() - 1 : foundation.targetY();
             for (int index = 0; index < horizontal.size(); index++) {
                 Cell cell = horizontal.get(index);
-                int y = hubY + (foundation.targetY() - hubY) * index / segments;
+                int y = hubY + (targetY - hubY) * index / segments;
                 graded.add(new VisualPoint(cell.x(), y, cell.z()));
             }
             result.add(new AccessRoute(foundation.id(), List.copyOf(graded),
-                    approach.stepX(), approach.stepZ()));
+                    approach.stepX(), approach.stepZ(), minePortal));
         }
         return List.copyOf(result);
+    }
+
+    /** The main road terminates at the real adit, not at the hoist-house side door. */
+    private static Approach minePortalApproach(AuthoredMineSitePlan mine) {
+        int inwardX = directionX(mine.inwardQuarterTurns());
+        int inwardZ = directionZ(mine.inwardQuarterTurns());
+        return new Approach(new Cell(mine.portal().x() - inwardX * ACCESS_CLEARANCE,
+                mine.portal().z() - inwardZ * ACCESS_CLEARANCE),
+                inwardX, inwardZ, ACCESS_CLEARANCE, true);
     }
 
     private static void compileRoute(List<VisualPoint> points, FrontierPalette palette, Sink sink) {
@@ -238,7 +251,8 @@ final class MineAccessGenesisCompiler {
         return new SearchTree(start, previous, distance);
     }
 
-    record AccessRoute(String foundationId, List<VisualPoint> points, int entryStepX, int entryStepZ) { }
+    record AccessRoute(String foundationId, List<VisualPoint> points, int entryStepX, int entryStepZ,
+                       boolean minePortal) { }
     private record Approach(Cell outer, int stepX, int stepZ, int clearance, boolean preferred) { }
     private record Cell(int x, int z) { }
 

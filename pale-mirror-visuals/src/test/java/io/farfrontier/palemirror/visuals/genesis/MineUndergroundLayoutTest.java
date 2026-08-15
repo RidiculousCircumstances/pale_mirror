@@ -48,6 +48,14 @@ class MineUndergroundLayoutTest {
                 assertTrue(Math.abs(previous.y() - current.y()) <= 1,
                         route.foundationId() + " emitted an unwalkable road step");
             }
+            if (route.minePortal()) {
+                VisualPoint expected = outside(mine.portal(), Math.floorMod(mine.inwardQuarterTurns() + 2, 4));
+                VisualPoint actual = route.points().getLast();
+                assertEquals(expected.x(), actual.x(), "main mine road must meet the real adit x");
+                assertEquals(expected.z(), actual.z(), "main mine road must meet the real adit z");
+                assertEquals(mine.portal().y() - 1, actual.y(), "main mine road must meet the adit floor");
+                continue;
+            }
             if (!ownerModules.isEmpty()) {
                 var port = ownerModules.stream().flatMap(value -> value.ports().stream())
                         .filter(value -> value.kind() == VisualPortKind.PUBLIC_ENTRANCE)
@@ -60,6 +68,7 @@ class MineUndergroundLayoutTest {
                         route.foundationId() + " access does not meet the authored threshold grade");
             }
         }
+        assertEquals(1L, routes.stream().filter(MineAccessGenesisCompiler.AccessRoute::minePortal).count());
     }
 
     private static boolean contains(VisualBounds bounds, VisualPoint point) {
