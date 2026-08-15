@@ -62,6 +62,34 @@ public final class DebugCommandRegistrar {
                                 StringArgumentType.getString(context, "view"))))))));
         debug.then(visualAudit);
 
+        LiteralArgumentBuilder<CommandSourceStack> foundry = Commands.literal("foundry");
+        LiteralArgumentBuilder<CommandSourceStack> foundryAudit = Commands.literal("audit");
+        foundryAudit.then(foundryRegionPhases("settlement", (context, id, phase) ->
+                components(context, runtime(context).debug().foundryAudit(id, phase))));
+        foundry.then(foundryAudit);
+        LiteralArgumentBuilder<CommandSourceStack> foundryExport = Commands.literal("export");
+        foundryExport.then(foundryRegionPhases("settlement", (context, id, phase) ->
+                action(context, runtime(context).debug().exportFoundryAudit(id, phase))));
+        foundry.then(foundryExport);
+        LiteralArgumentBuilder<CommandSourceStack> foundryBatch = Commands.literal("batch")
+                .executes(context -> components(context, runtime(context).debug().foundryBatch(
+                        io.farfrontier.palemirror.api.FoundryAuditPhase.SETTLED)));
+        for (io.farfrontier.palemirror.api.FoundryAuditPhase phase
+                : io.farfrontier.palemirror.api.FoundryAuditPhase.values()) {
+            foundryBatch.then(Commands.literal(phase.name().toLowerCase(java.util.Locale.ROOT))
+                    .executes(context -> components(context, runtime(context).debug().foundryBatch(phase))));
+        }
+        foundry.then(foundryBatch);
+        foundry.then(Commands.literal("inspect").then(Commands.argument("settlement", ResourceLocationArgument.id())
+                .executes(context -> withPlayer(context, player -> action(context,
+                        runtime(context).debug().inspectFoundryBlock(player, new WorldObjectId(
+                                ResourceLocationArgument.getId(context, "settlement").toString())))))));
+        foundry.then(Commands.literal("markers").then(Commands.argument("settlement", ResourceLocationArgument.id())
+                .executes(context -> withPlayer(context, player -> action(context,
+                        runtime(context).debug().showFoundryMarkers(player, new WorldObjectId(
+                                ResourceLocationArgument.getId(context, "settlement").toString())))))));
+        debug.then(foundry);
+
         debug.then(Commands.literal("region").then(Commands.literal("status").executes(context ->
                 success(context, runtime(context).debug().regionStatus()))));
         debug.then(Commands.literal("verify").executes(context -> success(context, runtime(context).debug().verify())));
@@ -94,6 +122,22 @@ public final class DebugCommandRegistrar {
         return Commands.literal(kind).then(Commands.argument("id", ResourceLocationArgument.id()).executes(context ->
                 withPlayer(context, player -> action(context, operation.apply(runtime(context).debug(), player,
                         new WorldObjectId(ResourceLocationArgument.getId(context, "id").toString()))))));
+    }
+
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack,
+            net.minecraft.resources.ResourceLocation> foundryRegionPhases(String argument,
+                                                                           FoundryRegionOperation operation) {
+        var region = Commands.argument(argument, ResourceLocationArgument.id())
+                .executes(context -> operation.apply(context, new WorldObjectId(
+                        ResourceLocationArgument.getId(context, argument).toString()),
+                        io.farfrontier.palemirror.api.FoundryAuditPhase.SETTLED));
+        for (io.farfrontier.palemirror.api.FoundryAuditPhase phase
+                : io.farfrontier.palemirror.api.FoundryAuditPhase.values()) {
+            region.then(Commands.literal(phase.name().toLowerCase(java.util.Locale.ROOT))
+                    .executes(context -> operation.apply(context, new WorldObjectId(
+                            ResourceLocationArgument.getId(context, argument).toString()), phase)));
+        }
+        return region;
     }
 
     private static int withPlayer(CommandContext<CommandSourceStack> context,
@@ -135,5 +179,11 @@ public final class DebugCommandRegistrar {
     @FunctionalInterface
     private interface TeleportOperation {
         RuntimeDebugService.ActionResult apply(RuntimeDebugController controller, ServerPlayer player, WorldObjectId id);
+    }
+
+    @FunctionalInterface
+    private interface FoundryRegionOperation {
+        int apply(CommandContext<CommandSourceStack> context, WorldObjectId id,
+                  io.farfrontier.palemirror.api.FoundryAuditPhase phase);
     }
 }

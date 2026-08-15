@@ -14,18 +14,23 @@ the sole owner of `IRON` capacity and flow. A PM-labelled chest minecart is a
 single lease-authorized visual carrier, not a delivery mechanism and not an
 inventory boundary.
 
+For a fresh authored region, the immutable genesis manifest is the initial
+topology observation. Canonical baseline capacity is therefore available as
+soon as the healthy region is registered; it does not wait for a player to
+load every corridor chunk. Unlike a Create traversal receipt, this topology
+evidence does not expire with simulation time. It remains valid until loaded
+physical evidence explicitly reports a disconnected or missing graph.
+
 ## Lifecycle
 
 ```text
-fresh eligible settlement
--> MineSites materialized
--> persisted VANILLA_MINECART RouteContract and route job
+fresh authored region manifest
+-> persisted VALIDATED VANILLA_MINECART RouteContract and route projection job
+-> healthy abstract flow begins off-screen
 -> player naturally loads corridor chunks
--> capture baseline on one bounded segment
--> recheck baseline / apply PM-owned rail, support and platform
--> postcondition and provenance receipt
--> structural route validation
--> ACTIVE abstract capacity
+-> adopt world-generated rail, support and platform into provenance
+-> reconcile the observed RailShape graph
+-> keep capacity when connected, or block it when loaded evidence is missing
 -> one optional representative cart
 ```
 
@@ -47,9 +52,10 @@ the job rather than being overwritten.
 
 Every segment has a postcondition. After restart, completed segments are
 verified from provenance and unfinished segments resume only where their chunk
-is loaded. Canonical flow is not inferred from merely placing rail: the
-physical corridor must finish verification, then the domain receives a typed
-route validation command.
+is loaded. Unknown chunks preserve the genesis topology assertion; a loaded
+segment that fails its postcondition immediately validates the canonical route
+at zero capacity. Repair or a connected player reroute restores nominal
+capacity through the same typed validation boundary.
 
 Existing schema-v26 `MANAGED_RAILWAY` records are retained as legacy physical
 plans. Schema-v27 creates no vanilla route for them, does not rewrite their

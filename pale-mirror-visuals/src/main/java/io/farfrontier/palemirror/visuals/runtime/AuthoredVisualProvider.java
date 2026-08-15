@@ -24,6 +24,8 @@ public final class AuthoredVisualProvider implements VisualProvider {
     private final ThreatHeartRuntime threatHearts = new ThreatHeartRuntime();
     private final SettlementStateCueRuntime settlementCues = new SettlementStateCueRuntime();
     private final JourneyProjectionRuntime journeys = new JourneyProjectionRuntime();
+    private final io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine foundry =
+            new io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine();
     private final java.util.LinkedHashMap<String, ResidentDeathObservation> deaths = new java.util.LinkedHashMap<>();
 
     private AuthoredVisualProvider() { }
@@ -50,10 +52,53 @@ public final class AuthoredVisualProvider implements VisualProvider {
 
     @Override public Collection<io.farfrontier.palemirror.api.VisualAuditView> visualAuditViews(
             ServerLevel level, String regionId) {
-        return markers.discovered(level.dimension().location().toString()).stream()
+        java.util.List<io.farfrontier.palemirror.api.VisualAuditView> views = new java.util.ArrayList<>(
+                markers.discovered(level.dimension().location().toString()).stream()
                 .filter(seed -> seed.planId().equals(regionId)).findFirst()
                 .map(io.farfrontier.palemirror.visuals.genesis.VisualAuditPlanner::views)
-                .orElse(java.util.List.of());
+                .orElse(java.util.List.of()));
+        foundryAudit(level, regionId, io.farfrontier.palemirror.api.FoundryAuditPhase.SETTLED)
+                .map(io.farfrontier.palemirror.visuals.foundry.FoundryAuditCameras::views)
+                .ifPresent(views::addAll);
+        return java.util.List.copyOf(views);
+    }
+
+    @Override public java.util.Optional<io.farfrontier.palemirror.api.FoundryAuditReport> foundryAudit(
+            ServerLevel level, String regionId, io.farfrontier.palemirror.api.FoundryAuditPhase phase) {
+        var catalog = FrontierGenesisRuntime.compiledCatalog();
+        if (catalog == null || catalog.manifests().stream().noneMatch(value -> value.planId().equals(regionId))) {
+            return java.util.Optional.empty();
+        }
+        try {
+            return java.util.Optional.of(foundry.audit(catalog, regionId, level, phase));
+        } catch (RuntimeException failure) {
+            PaleMirrorVisualsMod.LOGGER.error("Foundry audit failed for {} at {}", regionId, phase, failure);
+            return java.util.Optional.empty();
+        }
+    }
+
+    @Override public java.util.Optional<io.farfrontier.palemirror.api.FoundryAuditExport> exportFoundryAudit(
+            ServerLevel level, String regionId, io.farfrontier.palemirror.api.FoundryAuditPhase phase) {
+        return foundryAudit(level, regionId, phase).flatMap(report -> {
+            try {
+                return java.util.Optional.of(new io.farfrontier.palemirror.visuals.foundry.FoundryReportExporter()
+                        .export(level, report));
+            } catch (java.io.IOException failure) {
+                PaleMirrorVisualsMod.LOGGER.error("Cannot export Foundry report for {}", regionId, failure);
+                return java.util.Optional.empty();
+            }
+        });
+    }
+
+    @Override public java.util.Optional<io.farfrontier.palemirror.api.FoundryBlockInspection> inspectFoundryBlock(
+            ServerLevel level, String regionId, io.farfrontier.palemirror.api.VisualPoint position) {
+        var catalog = FrontierGenesisRuntime.compiledCatalog();
+        if (catalog == null) return java.util.Optional.empty();
+        try {
+            return java.util.Optional.of(foundry.inspect(catalog, regionId, level, position));
+        } catch (IllegalArgumentException unavailable) {
+            return java.util.Optional.empty();
+        }
     }
 
     @Override public java.util.Optional<io.farfrontier.palemirror.api.VisualModuleSnapshot> compileAuthoredModule(

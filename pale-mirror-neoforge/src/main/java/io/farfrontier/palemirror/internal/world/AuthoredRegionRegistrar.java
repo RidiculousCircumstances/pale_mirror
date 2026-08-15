@@ -169,9 +169,10 @@ public final class AuthoredRegionRegistrar {
                     shelterId, ids.receivingSiteId(), returnNodes));
         }
         List<RouteContract> routes = List.of(
-                new RouteContract(ids.primaryRouteId(), ids.primaryDispatchSiteId(), ids.receivingSiteId(),
-                        RouteProvider.VANILLA_MINECART, ResourceKind.IRON, definition.ironProduction(),
-                        definition.routeCurrentWindowSteps(), definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED),
+                RouteContract.authoredVanillaMinecart(ids.primaryRouteId(), ids.primaryDispatchSiteId(),
+                        ids.receivingSiteId(), ResourceKind.IRON, definition.ironProduction(),
+                        definition.routeCurrentWindowSteps(), definition.routeExpiryWindowSteps(),
+                        data.worldState().simulationStep(), "authored-topology:" + seed.contentHash()),
                 new RouteContract(ids.alternateRouteId(), ids.alternateDispatchSiteId(), ids.receivingSiteId(),
                         RouteProvider.CREATE, ResourceKind.IRON, definition.ironProduction(),
                         definition.routeCurrentWindowSteps(), definition.routeExpiryWindowSteps(), RouteContractStatus.PLANNED));

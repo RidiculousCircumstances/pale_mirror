@@ -82,6 +82,8 @@ public final class LivingRegionGameTests {
         helper.assertValueEqual(data.worldState().routeContract(region.primaryRouteId()).orElseThrow().provider(),
                 io.farfrontier.palemirror.domain.RouteProvider.VANILLA_MINECART,
                 "a fresh small settlement must receive a narrow vanilla baseline route, not industrial Create track");
+        helper.assertValueEqual(data.worldState().routeContract(region.primaryRouteId()).orElseThrow().status().name(),
+                "PLANNED", "an observed vanilla village has no authored topology proof before its route materializes");
         helper.assertTrue(data.campaignRegions().containsKey(bindings.regionId()),
                 "physical coordinates are persisted separately from the canonical region aggregate");
         var depot = data.settlementDepots().get(bindings.communityId());

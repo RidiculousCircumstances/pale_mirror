@@ -1,6 +1,6 @@
 # Continuity Ledger
 ## Goal (success criteria)
-- Cut fresh-world visuals to schema v40 and make `iron_frontier` a reusable, typed authored-settlement framework: a static 48-person Township with coherent functional districts, semantic interiors, terrain-led streets/open spaces, compact industrial Mine17/Red Valley campuses and three real climate families.
+- Cut fresh-world visuals to schema v40 and make `iron_frontier` a reusable, typed authored-settlement framework with a read-only Foundry audit SDK: a static 48-person Township with coherent functional districts, semantic interiors, terrain-led streets/open spaces, compact industrial Mine17/Red Valley campuses and three real climate families.
 - Define validated 12/24/48/72 composition snapshots and reserve the 72-person masterplan, but do not implement settlement stage transitions, population growth or stage construction in this cut.
 - Keep live unexplored-world flight responsive: C2ME owns bounded parallel chunk generation while DH remains a client-side LOD cache by default; the measured server cache is benchmark-only.
 - Keep authored settlement columns free of tree growth, background hostile spawning and grading debris; keep debug teleport non-blocking through one bounded asynchronous chunk ticket.
@@ -50,7 +50,7 @@
 - Damage is a deterministic bounded module-state overlay. Reconstruction restores the captured authored baseline; positive development compiles a real climate-family module on a verified free reserved plot.
 - Resource production shared by multiple routes is allocated deterministically by actual demand and an explicit route weight; route identity is only a remainder tie-breaker.
 - Causal history retains a bounded detailed window plus compact per-subject/type summaries. Terminal journeys and materialization jobs have bounded receipt/summary retention.
-- The Visuals compile boundary is a dedicated `pale-mirror-api` module; documentation-only separation is insufficient.
+- The Visuals compile boundary is a dedicated `pale-mirror-api` module; Foundry diagnostics cross it only as immutable reports/inspections and never expose Visuals internals or gain repair authority.
 ## State
 ### Done
 - Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; schema v40 intentionally rejects all older worlds.
@@ -91,8 +91,9 @@
 - Removed the destructive managed-union settlement terrace. Buildings and open spaces now accept independent exact bounded pads, circulation follows the solid natural surface, access paths route around every foreign footprint from the actual facade, and local eight-column foundation blends preserve the surrounding terrain. Slabs appear only on the lower side of a real rise.
 - Rebuilt Mine17 circulation as obstacle-aware five-wide routes between a free yard hub and every surface-building throat. Yard fixtures avoid those routes, all surface details bind to their local floor, and the underground grammar performs a final connected two-block-high carve after imported modules so no NBT wall can reseal the adit or galleries.
 - Regenerated the mine art kit with supported stepped roof courses and attached hanging fixtures; surface-module natural blocks are retained because they are structural foundations, while loot, hazards and ores remain sanitized. Rail corners now use actual neighbouring directions instead of the previous travel vector.
+- Added Pale Mirror Foundry P0-P1: compiled-plan gating, bounded NBT lint/cache, loaded-only settled/reloaded verification, rail/entrance/surface/support rules, target/observed/ownership PNG maps, JSON/HTML export, block inspection, one-shot markers, batch audit and defect-driven visual-audit cameras.
 ### Now
-- The approved fresh-world materialization replacement is implemented and green. Risk remains `critical-code`: immutable manifests, persistence codecs, worldgen interception, chunk-slice compilation and structural perimeter generation changed; genesis readiness remains the visible fail-closed recovery boundary.
+- Foundry P0-P1 is implemented and verified: production COMPILED gating passes, negative/recovery Visuals GameTests are green, Core GameTests/package gates pass, and the packaged two-start integration harness preserves the exact catalog/stamp across restart. Genesis readiness remains the visible fail-closed recovery boundary, and Foundry never force-loads or repairs a material chunk.
 - Locked environment policy: settlement core radius 128 suppresses foreign surface decoration, a deterministic 48-block ring restores natural density, and foreign surface structures intersecting the core plus 16-block clearance are cancelled as whole starts. Snow, water, caves, ores and deep structures remain; PM-authored landscaping is exempt.
 - Locked perimeter policy: a terrain-following low frontier boundary follows the authored footprint rather than the circular ecology mask. One freight and three pedestrian gate modules begin open and remain player-closable; no duplicate procedural gate renderer remains.
 - Schema v40, Visual definition v14, compiled catalog v22, authored mine art-6 and genesis SavedData schema v11 intentionally reject every earlier world; the playtest world is disposable.
@@ -107,8 +108,7 @@
 - Mine surface NBT is now a reproducible PM-authored block-entity-free industrial kit. The natural client audit shows a compact portal/hoist campus, articulated halls and an irregular equipped yard integrated into a mountain saddle; no DUMMY/air records or overhanging forest remain.
 - The latest 21-view semantic audit at `5832,67,8968` shows a canyon-free natural foothill shelf, a mountain-native industrial Mine17 campus and coherent public circulation. A second cold-taiga aerial at `24,67,-5320` also has a broad unbroken shelf. Controller/portal/rail audit cameras were corrected after the pass exposed misleading positions; empty reserved parcels remain because runtime growth is outside this cut.
 ### Next
-- Publish the new Core/Visuals artifacts, replace the disposable server world and run the 25-view natural client audit against all three climate families. Verify the ecology core/transition, foreign-structure exclusion, gate readability, boundary support, absolute street datums and mine/rail integration in real decorated chunks.
-- Re-check the former cold-taiga defect coordinates conceptually in the new world: the worldgen exclusion must prevent the tree/ice intersection before PM placement, absolute boundary columns must prevent floating cells, and the single typed gate stream must prevent repeated impassable gate assemblies.
+- Finish Foundry verification, publish the new Core/Visuals artifacts, replace the disposable server world and use `foundry export` plus the expanded natural client audit against all three climate families; confirm SETTLED and RELOADED reports without hidden chunk tickets.
 ## Open questions
 - Temperate natural placement and finalization are visually confirmed; cold-taiga and dry-arid art-family quality still needs equivalent natural client audits.
 - The exact VO public surface plus one fail-closed recruitment mixin loads in GameTest and packaged server; live patrol/combat quality still needs client playtesting.

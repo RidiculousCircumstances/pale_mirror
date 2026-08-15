@@ -5,6 +5,9 @@ Frontier mechanics into a closed-alpha completion candidate. It does not
 declare the product gate passed: unaided client playtests, a real Create train
 run and a cooperative session remain human acceptance evidence.
 
+The current requirement-by-requirement evidence is recorded in
+[`living-frontier-0.3-release-audit.md`](living-frontier-0.3-release-audit.md).
+
 ## Player-facing causal loop
 
 The introductory `iron_frontier` definition is now layout version 2. A fresh
@@ -37,6 +40,13 @@ It is a singleton, non-colliding PM projection rather than physical cargo:
 loaded duplicates are removed, external impulses are discarded and it parks at
 the loading yard while the mine has no production. It never simulates deliveries
 in unloaded chunks.
+
+The fresh authored manifest validates that baseline topology at region
+registration, so an unvisited healthy settlement does not starve merely
+because its railway chunks have not yet been loaded. This persistent topology
+evidence does not use the Create freshness window. As corridor chunks become
+material, missing or disconnected loaded rail explicitly blocks the contract;
+unloaded chunks retain their last canonical revision.
 
 Route health is no longer inferred from the exact PM-authored block mask. PM
 persists a graph of observed rail nodes and their connections between the fixed

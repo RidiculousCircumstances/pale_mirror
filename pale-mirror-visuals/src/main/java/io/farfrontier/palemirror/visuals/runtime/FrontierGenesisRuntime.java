@@ -80,6 +80,7 @@ public final class FrontierGenesisRuntime {
             READINESS.set(new GenesisReadiness(GenesisReadiness.State.COMPILING, 0, "", "Compiling chunk-local catalog"));
             long compileStarted = System.nanoTime();
             CompiledGenesisCatalog catalog = new FrontierGenesisCompiler().compile(plans);
+            validateFoundry(catalog);
             planningMetrics = planningMetrics.withCompileNanos(System.nanoTime() - compileStarted);
             return catalog;
         }, plannerExecutor);
@@ -142,6 +143,26 @@ public final class FrontierGenesisRuntime {
                 planned.rejectedRegionCandidates(), planned.spacingRejectedCandidates(),
                 planned.evaluatedRegionCandidates(), planned.speculativeRegionCandidates(), statistics.biomeSamples());
         return manifests;
+    }
+
+    private static void validateFoundry(CompiledGenesisCatalog catalog) {
+        var engine = new io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine();
+        for (AuthoredRegionSeed region : catalog.manifests()) {
+            var report = engine.auditCompiled(catalog, region.planId());
+            if (!report.passed()) {
+                String defects = report.findings().stream().filter(value -> value.severity().failsGate())
+                        .limit(8).map(value -> value.ruleId() + "@" + value.position()).toList().toString();
+                throw new IllegalStateException(report.summary() + " " + defects);
+            }
+            long warnings = report.count(io.farfrontier.palemirror.api.FoundrySeverity.WARNING);
+            PaleMirrorVisualsMod.LOGGER.info("{}; warnings={}, auditedCells={}, elapsedMs={}", report.summary(),
+                    warnings, metric(report, "compiled.cells"), metric(report, "compiled.elapsed"));
+        }
+    }
+
+    private static double metric(io.farfrontier.palemirror.api.FoundryAuditReport report, String id) {
+        return report.metrics().stream().filter(value -> value.id().equals(id)).mapToDouble(
+                io.farfrontier.palemirror.api.FoundryMetric::value).findFirst().orElse(0D);
     }
 
     private static void install(ServerLevel level, List<AuthoredRegionSeed> plans) {
@@ -207,6 +228,9 @@ public final class FrontierGenesisRuntime {
         CompiledGenesisCatalog catalog = CATALOG.get();
         return catalog == null ? null : catalog.chunk(chunk);
     }
+
+    /** Immutable catalog exposure for read-only Foundry diagnostics. */
+    public static CompiledGenesisCatalog compiledCatalog() { return CATALOG.get(); }
 
     public static GenesisReadiness readiness() { return READINESS.get(); }
 

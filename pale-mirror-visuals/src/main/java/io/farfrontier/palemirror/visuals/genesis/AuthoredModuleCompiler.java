@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -23,10 +25,53 @@ import net.minecraft.world.level.block.state.properties.Property;
 
 /** Single sanitizer/compiler used by fresh-world genesis and later staged construction. */
 public final class AuthoredModuleCompiler {
+    private static final int MAX_TEMPLATE_CACHE = 128;
+    private static final Map<ResourceLocation, RawTemplate> TEMPLATES = new ConcurrentHashMap<>();
+
     private AuthoredModuleCompiler() { }
 
     public static VisualModuleSnapshot compile(VisualModulePlacement module) {
         ResourceLocation id = ResourceLocation.parse(module.templateId());
+        RawTemplate template = template(id);
+        int turns = Math.floorMod(module.quarterTurns(), 4);
+        int rx = turns % 2 == 0 ? template.sizeX() : template.sizeZ();
+        int rz = turns % 2 == 0 ? template.sizeZ() : template.sizeX();
+        BlockPos origin = new BlockPos(module.origin().x() - rx / 2, module.origin().y() + 1,
+                module.origin().z() - rz / 2);
+        List<VisualBlockPlacement> blocks = new ArrayList<>(template.blocks().size());
+        for (RawBlock block : template.blocks()) {
+            int[] rotated = rotate(block.x(), block.z(), template.sizeX(), template.sizeZ(), turns);
+            BlockState state = rotate(climateState(template.palette().get(block.state()), id), turns);
+            if (state.is(Blocks.STRUCTURE_BLOCK) || state.is(Blocks.JIGSAW)) continue;
+            BlockPos world = origin.offset(rotated[0], block.y(), rotated[1]);
+            VisualPoint position = new VisualPoint(world.getX(), world.getY(), world.getZ());
+            if (!module.footprint().contains(position)) {
+                throw new IllegalStateException("Authored module escaped its declared footprint: " + id
+                        + " at " + position + " outside " + module.footprint());
+            }
+            blocks.add(new VisualBlockPlacement(position, state));
+        }
+        return new VisualModuleSnapshot(module.templateId(), module.footprint(),
+                normalizeStructuralDetails(module, blocks));
+    }
+
+    private static RawTemplate template(ResourceLocation id) {
+        RawTemplate present = TEMPLATES.get(id);
+        if (present != null) return present;
+        synchronized (TEMPLATES) {
+            present = TEMPLATES.get(id);
+            if (present != null) return present;
+            if (TEMPLATES.size() >= MAX_TEMPLATE_CACHE) {
+                throw new IllegalStateException("Authored template cache exceeded " + MAX_TEMPLATE_CACHE
+                        + " immutable assets");
+            }
+            RawTemplate loaded = loadTemplate(id);
+            TEMPLATES.put(id, loaded);
+            return loaded;
+        }
+    }
+
+    private static RawTemplate loadTemplate(ResourceLocation id) {
         String path = "data/" + id.getNamespace() + "/structure/" + id.getPath() + ".nbt";
         try (InputStream input = PaleMirrorVisualsMod.class.getClassLoader().getResourceAsStream(path)) {
             if (input == null) throw new IllegalStateException("Required authored module is missing: " + id);
@@ -34,30 +79,16 @@ public final class AuthoredModuleCompiler {
             ListTag size = root.getList("size", Tag.TAG_INT);
             int sx = size.getInt(0); int sy = size.getInt(1); int sz = size.getInt(2);
             if (sx > 48 || sy > 48 || sz > 48) throw new IllegalStateException("Module exceeds 48 blocks: " + id);
-            ListTag palette = root.getList("palette", Tag.TAG_COMPOUND);
-            List<BlockState> states = new ArrayList<>(palette.size());
-            for (Tag value : palette) states.add(readState((CompoundTag) value));
-            int turns = Math.floorMod(module.quarterTurns(), 4);
-            int rx = turns % 2 == 0 ? sx : sz; int rz = turns % 2 == 0 ? sz : sx;
-            BlockPos origin = new BlockPos(module.origin().x() - rx / 2, module.origin().y() + 1,
-                    module.origin().z() - rz / 2);
-            List<VisualBlockPlacement> blocks = new ArrayList<>();
+            ListTag paletteTag = root.getList("palette", Tag.TAG_COMPOUND);
+            List<BlockState> palette = new ArrayList<>(paletteTag.size());
+            for (Tag value : paletteTag) palette.add(readState((CompoundTag) value));
+            List<RawBlock> blocks = new ArrayList<>();
             for (Tag value : root.getList("blocks", Tag.TAG_COMPOUND)) {
                 CompoundTag block = (CompoundTag) value;
                 ListTag pos = block.getList("pos", Tag.TAG_INT);
-                int[] rotated = rotate(pos.getInt(0), pos.getInt(2), sx, sz, turns);
-                BlockState state = rotate(climateState(states.get(block.getInt("state")), id), turns);
-                if (state.is(Blocks.STRUCTURE_BLOCK) || state.is(Blocks.JIGSAW)) continue;
-                BlockPos world = origin.offset(rotated[0], pos.getInt(1), rotated[1]);
-                VisualPoint position = new VisualPoint(world.getX(), world.getY(), world.getZ());
-                if (!module.footprint().contains(position)) {
-                    throw new IllegalStateException("Authored module escaped its declared footprint: " + id
-                            + " at " + position + " outside " + module.footprint());
-                }
-                blocks.add(new VisualBlockPlacement(position, state));
+                blocks.add(new RawBlock(pos.getInt(0), pos.getInt(1), pos.getInt(2), block.getInt("state")));
             }
-            return new VisualModuleSnapshot(module.templateId(), module.footprint(),
-                    normalizeStructuralDetails(module, blocks));
+            return new RawTemplate(sx, sy, sz, List.copyOf(palette), List.copyOf(blocks));
         } catch (IOException failure) {
             throw new IllegalStateException("Cannot read authored module " + id, failure);
         }
@@ -313,4 +344,9 @@ public final class AuthoredModuleCompiler {
         for (int i = 0; i < turns; i++) state = state.rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90);
         return state;
     }
+
+    private record RawTemplate(int sizeX, int sizeY, int sizeZ, List<BlockState> palette,
+                               List<RawBlock> blocks) { }
+
+    private record RawBlock(int x, int y, int z, int state) { }
 }

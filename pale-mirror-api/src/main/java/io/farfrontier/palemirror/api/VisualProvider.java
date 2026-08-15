@@ -14,6 +14,15 @@ public interface VisualProvider extends IntegrationAdapter {
     default Collection<VisualAuditView> visualAuditViews(ServerLevel level, String regionId) {
         return java.util.List.of();
     }
+    /** Bounded read-only comparison of an authored plan with already-loaded physical chunks. */
+    default Optional<FoundryAuditReport> foundryAudit(ServerLevel level, String regionId,
+                                                       FoundryAuditPhase phase) { return Optional.empty(); }
+    /** Explicit diagnostic export. Artifacts are non-canonical and never affect reconciliation. */
+    default Optional<FoundryAuditExport> exportFoundryAudit(ServerLevel level, String regionId,
+                                                             FoundryAuditPhase phase) { return Optional.empty(); }
+    /** Looks up plan ownership and physical state without loading the containing chunk. */
+    default Optional<FoundryBlockInspection> inspectFoundryBlock(ServerLevel level, String regionId,
+                                                                  VisualPoint position) { return Optional.empty(); }
     /** True only after genesis has durably completed this exact authored module. */
     default boolean authoredModuleReady(ServerLevel level, AuthoredRegionSeed region,
                                         VisualModulePlacement module) { return false; }

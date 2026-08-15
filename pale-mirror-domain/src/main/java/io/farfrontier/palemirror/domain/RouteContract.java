@@ -2,7 +2,10 @@ package io.farfrontier.palemirror.domain;
 
 import java.util.Objects;
 
-/** Canonical permission for abstract flow, backed by bounded validation evidence. */
+/**
+ * Canonical permission for abstract flow, backed by physical validation evidence.
+ * Service observations may expire; authored topology remains valid until contradicted.
+ */
 public final class RouteContract {
     private final WorldObjectId id;
     private final WorldObjectId originEndpoint;
@@ -17,6 +20,26 @@ public final class RouteContract {
     private long lastSuccessfulValidationStep;
     private String lastObservationId;
     private RouteContractStatus status;
+
+    /**
+     * Creates the canonical baseline represented by an immutable authored-world
+     * manifest. Chunk generation may materialize this topology later; loaded-world
+     * reconciliation is responsible for explicitly blocking it when the physical
+     * graph is absent or damaged.
+     */
+    public static RouteContract authoredVanillaMinecart(WorldObjectId id, WorldObjectId originEndpoint,
+                                                         WorldObjectId destinationEndpoint,
+                                                         ResourceKind resource, int nominalCapacity,
+                                                         long currentWindowSteps, long expiryWindowSteps,
+                                                         long genesisStep, String topologyObservationId) {
+        Objects.requireNonNull(topologyObservationId, "topologyObservationId");
+        if (topologyObservationId.isBlank()) {
+            throw new IllegalArgumentException("Authored topology observation id must not be blank");
+        }
+        return new RouteContract(id, originEndpoint, destinationEndpoint, RouteProvider.VANILLA_MINECART,
+                resource, nominalCapacity, currentWindowSteps, expiryWindowSteps, nominalCapacity,
+                genesisStep, topologyObservationId, RouteContractStatus.VALIDATED);
+    }
 
     public RouteContract(WorldObjectId id, WorldObjectId originEndpoint, WorldObjectId destinationEndpoint,
                          RouteProvider provider, ResourceKind resource, int nominalCapacity,
@@ -87,6 +110,7 @@ public final class RouteContract {
 
     public RouteFreshness freshness(long simulationStep) {
         if (status != RouteContractStatus.VALIDATED || lastSuccessfulValidationStep < 0) return RouteFreshness.EXPIRED;
+        if (provider.hasPersistentTopologyEvidence()) return RouteFreshness.CURRENT;
         long age = Math.max(0, simulationStep - lastSuccessfulValidationStep);
         if (age <= currentWindowSteps) return RouteFreshness.CURRENT;
         return age <= expiryWindowSteps ? RouteFreshness.STALE : RouteFreshness.EXPIRED;

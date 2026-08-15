@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandExecutor;
+import io.farfrontier.palemirror.domain.RouteContractStatus;
 import io.farfrontier.palemirror.domain.RouteProvider;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
@@ -114,7 +115,7 @@ public final class VanillaMinecartRouteRuntime {
         if (job.state() == JobState.PLANNED) { job.start(); return true; }
         boolean changed = switch (record.status()) {
             case PLANNED -> { record.begin(); yield true; }
-            case BUILDING -> buildLoadedSegments(level, data, adapter, record);
+            case BUILDING -> buildLoadedSegments(level, data, commands, adapter, record);
             case VERIFYING -> verifyAndActivate(level, data, commands, adapter, record);
             case ACTIVE -> refreshActiveRoute(level, data, commands, adapter, record);
             case SUSPENDED -> recoverSuspended(level, data, commands, adapter, record);
@@ -130,7 +131,9 @@ public final class VanillaMinecartRouteRuntime {
         return changed;
     }
 
-    private static boolean buildLoadedSegments(ServerLevel level, PaleMirrorSavedData data, VanillaMinecartRailAdapter adapter,
+    private static boolean buildLoadedSegments(ServerLevel level, PaleMirrorSavedData data,
+                                                DomainCommandExecutor commands,
+                                                VanillaMinecartRailAdapter adapter,
                                                 VanillaMinecartRouteRecord record) {
         boolean changed = false;
         int budget = BUILD_SEGMENT_BUDGET;
@@ -143,7 +146,13 @@ public final class VanillaMinecartRouteRuntime {
                     record.nextRailY(index), record.previousRailY(index), index,
                     index == record.segmentCount() - 1);
             if (record.worldgenAuthored()) {
-                if (!adapter.postcondition(level, plan)) continue;
+                if (!adapter.postcondition(level, plan)) {
+                    // The canonical authored topology is optimistic only while its
+                    // chunks are unknown. Once material evidence is loaded, absence
+                    // of the expected segment must immediately stop abstract flow.
+                    changed |= validateCanonicalRoute(data, commands, record, 0);
+                    continue;
+                }
                 captureWorldgenSegment(level, data, adapter, record, plan, index);
                 record.complete(index);
                 budget--;
@@ -324,6 +333,12 @@ public final class VanillaMinecartRouteRuntime {
         if (region == null) return false;
         var route = data.worldState().routeContract(region.primaryRouteId()).orElse(null);
         if (route == null || route.provider() != RouteProvider.VANILLA_MINECART) return false;
+        int boundedCapacity = Math.min(route.nominalCapacity(), capacity);
+        RouteContractStatus expectedStatus = boundedCapacity > 0
+                ? RouteContractStatus.VALIDATED : RouteContractStatus.BLOCKED;
+        if (route.provider().hasPersistentTopologyEvidence()
+                && route.status() == expectedStatus
+                && route.validatedCapacity() == boundedCapacity) return false;
         String observationId = "vanilla-minecart:" + record.routeId() + ":" + capacity + ":"
                 + data.worldState().simulationStep() + ":" + record.status();
         if (observationId.equals(route.lastObservationId())) return false;

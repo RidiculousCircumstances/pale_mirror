@@ -11,6 +11,10 @@ import java.util.UUID;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.api.VisualAuditView;
+import io.farfrontier.palemirror.api.FoundryAuditPhase;
+import io.farfrontier.palemirror.api.FoundryAuditReport;
+import io.farfrontier.palemirror.api.FoundrySeverity;
+import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.domain.ObservationFreshness;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.world.CampaignRegionRecord;
@@ -32,6 +36,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 /** Read-only location projections plus explicit operator teleportation to persisted physical anchors. */
 public final class RuntimeDebugNavigator {
@@ -151,6 +159,106 @@ public final class RuntimeDebugNavigator {
         WorldObjectId auditId = new WorldObjectId("pale_mirror:visual_audit/" + view.id());
         BlockPos position = new BlockPos(view.playerFeet().x(), view.playerFeet().y(), view.playerFeet().z());
         return teleport(player, auditId, view.dimensionId(), position, true, view.yaw(), view.pitch());
+    }
+
+    public List<Component> foundryAudit(WorldObjectId settlementId, FoundryAuditPhase phase) {
+        AuditTarget target = auditTarget(settlementId);
+        if (target == null) return List.of(Component.literal("Unknown authored region " + settlementId.value()));
+        FoundryAuditReport report = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
+                .flatMap(provider -> provider.foundryAudit(target.level(), target.regionId(), phase)).orElse(null);
+        if (report == null) return List.of(Component.literal("Foundry is unavailable for " + target.regionId()));
+        List<Component> output = new ArrayList<>();
+        output.add(Component.literal(report.summary()).withStyle(report.passed()
+                ? ChatFormatting.GREEN : ChatFormatting.RED));
+        report.metrics().forEach(metric -> output.add(Component.literal("  " + metric.id() + "="
+                + format(metric.value()) + (metric.unit().isBlank() ? "" : " " + metric.unit()))
+                .withStyle(ChatFormatting.GRAY)));
+        report.findings().stream().limit(40).forEach(finding -> output.add(Component.literal("  ["
+                + finding.severity() + "] " + finding.ruleId() + " @ " + finding.position().x() + ","
+                + finding.position().y() + "," + finding.position().z() + " — " + finding.message())
+                .withStyle(color(finding.severity()))));
+        if (report.findings().size() > 40) output.add(Component.literal("  … "
+                + (report.findings().size() - 40) + " more findings; use Foundry export.")
+                .withStyle(ChatFormatting.YELLOW));
+        return List.copyOf(output);
+    }
+
+    public List<Component> foundryBatch(FoundryAuditPhase phase) {
+        List<Component> output = new ArrayList<>();
+        output.add(Component.literal("PM Foundry batch " + phase + ":").withStyle(ChatFormatting.GOLD));
+        data.worldState().livingRegions().stream().sorted(Comparator.comparing(value -> value.id()))
+                .forEach(region -> {
+                    AuditTarget target = auditTarget(new WorldObjectId(region.id()));
+                    if (target == null) return;
+                    io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
+                            .flatMap(provider -> provider.foundryAudit(target.level(), target.regionId(), phase))
+                            .ifPresent(report -> output.add(Component.literal("- " + report.summary())
+                                    .withStyle(report.passed() ? ChatFormatting.GREEN : ChatFormatting.RED)));
+                });
+        if (output.size() == 1) output.add(Component.literal("No authored regions are available."));
+        return List.copyOf(output);
+    }
+
+    public RuntimeDebugService.ActionResult exportFoundryAudit(WorldObjectId settlementId, FoundryAuditPhase phase) {
+        AuditTarget target = auditTarget(settlementId);
+        if (target == null) return new RuntimeDebugService.ActionResult(false,
+                "Unknown authored region " + settlementId.value());
+        var exported = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
+                .flatMap(provider -> provider.exportFoundryAudit(target.level(), target.regionId(), phase));
+        return exported.map(value -> new RuntimeDebugService.ActionResult(true,
+                        value.report().summary() + "; artifacts: " + value.directory()))
+                .orElseGet(() -> new RuntimeDebugService.ActionResult(false,
+                        "Foundry export failed; inspect the server log."));
+    }
+
+    public RuntimeDebugService.ActionResult inspectFoundryBlock(ServerPlayer player, WorldObjectId settlementId) {
+        AuditTarget target = auditTarget(settlementId);
+        if (target == null) return new RuntimeDebugService.ActionResult(false,
+                "Unknown authored region " + settlementId.value());
+        if (player.serverLevel() != target.level()) return new RuntimeDebugService.ActionResult(false,
+                "The selected region is in " + target.level().dimension().location());
+        Vec3 start = player.getEyePosition();
+        Vec3 end = start.add(player.getLookAngle().scale(64D));
+        HitResult hit = target.level().clip(new ClipContext(start, end, ClipContext.Block.OUTLINE,
+                ClipContext.Fluid.ANY, player));
+        if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK) {
+            return new RuntimeDebugService.ActionResult(false, "Look at a block within 64 blocks.");
+        }
+        BlockPos position = blockHit.getBlockPos();
+        var inspection = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
+                .flatMap(provider -> provider.inspectFoundryBlock(target.level(), target.regionId(),
+                        new VisualPoint(position.getX(), position.getY(), position.getZ()))).orElse(null);
+        if (inspection == null) return new RuntimeDebugService.ActionResult(false, "Foundry inspection unavailable.");
+        return new RuntimeDebugService.ActionResult(true, "Foundry " + position.getX() + "," + position.getY()
+                + "," + position.getZ() + " owner=" + inspection.ownerId() + " expected="
+                + inspection.expectedState() + " actual=" + inspection.actualState() + " targetGroundY="
+                + inspection.targetGroundY() + " — " + inspection.diagnostic());
+    }
+
+    public RuntimeDebugService.ActionResult showFoundryMarkers(ServerPlayer player, WorldObjectId settlementId) {
+        AuditTarget target = auditTarget(settlementId);
+        if (target == null) return new RuntimeDebugService.ActionResult(false,
+                "Unknown authored region " + settlementId.value());
+        if (player.serverLevel() != target.level()) return new RuntimeDebugService.ActionResult(false,
+                "The selected region is in " + target.level().dimension().location());
+        FoundryAuditReport report = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
+                .flatMap(provider -> provider.foundryAudit(target.level(), target.regionId(),
+                        FoundryAuditPhase.SETTLED)).orElse(null);
+        if (report == null) return new RuntimeDebugService.ActionResult(false, "Foundry audit unavailable.");
+        int rendered = 0;
+        for (var finding : report.findings()) {
+            if (finding.severity() != FoundrySeverity.ERROR && finding.severity() != FoundrySeverity.BLOCKER) continue;
+            BlockPos position = new BlockPos(finding.position().x(), finding.position().y(), finding.position().z());
+            if (!target.level().hasChunkAt(position)) continue;
+            target.level().sendParticles(player, finding.severity() == FoundrySeverity.BLOCKER
+                            ? net.minecraft.core.particles.ParticleTypes.FLAME
+                            : net.minecraft.core.particles.ParticleTypes.END_ROD,
+                    true, position.getX() + 0.5D, position.getY() + 0.7D, position.getZ() + 0.5D,
+                    8, 0.25D, 0.35D, 0.25D, 0.01D);
+            if (++rendered == 64) break;
+        }
+        return new RuntimeDebugService.ActionResult(true, "Rendered " + rendered
+                + " one-shot Foundry defect markers; no chunks were loaded.");
     }
 
     private RuntimeDebugService.ActionResult teleport(ServerPlayer player, WorldObjectRegistryEntry entry, String kind) {
@@ -295,24 +403,45 @@ public final class RuntimeDebugNavigator {
     }
 
     private List<VisualAuditView> auditViews(WorldObjectId settlementId) {
-        var region = data.worldState().livingRegions().stream().filter(value -> value.placeId().equals(settlementId)
-                || value.id().equals(settlementId.value())).findFirst().orElse(null);
+        AuditTarget target = auditTarget(settlementId);
+        if (target == null) return List.of();
+        var region = data.worldState().livingRegion(target.regionId()).orElse(null);
         if (region == null) return List.of();
-        CampaignRegionRecord physical = data.campaignRegions().get(region.id());
-        if (physical == null) return List.of();
-        ResourceKey<net.minecraft.world.level.Level> dimension;
-        try {
-            dimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(physical.dimensionId()));
-        } catch (IllegalArgumentException invalid) {
-            return List.of();
-        }
-        ServerLevel level = server.getLevel(dimension);
-        if (level == null) return List.of();
+        ServerLevel level = target.level();
         List<VisualAuditView> result = new ArrayList<>(io.farfrontier.palemirror.api.PaleMirrorVisuals.provider()
-                .map(provider -> provider.visualAuditViews(level, region.id())).orElse(List.of()));
+                .map(provider -> provider.visualAuditViews(level, target.regionId())).orElse(List.of()));
         data.refugeeCamps().values().stream().filter(camp -> camp.communityId().equals(region.communityId()))
                 .forEach(camp -> addShelterViews(result, camp));
         return result.stream().sorted(Comparator.comparing(VisualAuditView::id)).toList();
+    }
+
+    private AuditTarget auditTarget(WorldObjectId settlementId) {
+        var region = data.worldState().livingRegions().stream().filter(value -> value.placeId().equals(settlementId)
+                || value.id().equals(settlementId.value())).findFirst().orElse(null);
+        if (region == null) return null;
+        CampaignRegionRecord physical = data.campaignRegions().get(region.id());
+        if (physical == null) return null;
+        try {
+            ResourceKey<net.minecraft.world.level.Level> dimension = ResourceKey.create(Registries.DIMENSION,
+                    ResourceLocation.parse(physical.dimensionId()));
+            ServerLevel level = server.getLevel(dimension);
+            return level == null ? null : new AuditTarget(region.id(), level);
+        } catch (IllegalArgumentException invalid) {
+            return null;
+        }
+    }
+
+    private static ChatFormatting color(FoundrySeverity severity) {
+        return switch (severity) {
+            case BLOCKER, ERROR -> ChatFormatting.RED;
+            case WARNING -> ChatFormatting.YELLOW;
+            case INFO -> ChatFormatting.AQUA;
+        };
+    }
+
+    private static String format(double value) {
+        return value == Math.rint(value) ? Long.toString(Math.round(value))
+                : String.format(java.util.Locale.ROOT, "%.3f", value);
     }
 
     private static void addShelterViews(List<VisualAuditView> target,
@@ -340,6 +469,8 @@ public final class RuntimeDebugNavigator {
     }
 
     private record PlannedMine(String dimensionId, BlockPos column) { }
+
+    private record AuditTarget(String regionId, ServerLevel level) { }
 
     private record PendingTeleport(UUID playerId, WorldObjectId objectId,
                                    ResourceKey<net.minecraft.world.level.Level> dimension,

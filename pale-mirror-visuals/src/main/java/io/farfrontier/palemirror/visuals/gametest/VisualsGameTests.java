@@ -258,6 +258,84 @@ public final class VisualsGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)
+    public static void foundryAuditsTheProductionCompiledPlan(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(9_182_733L, 0, new VisualPoint(8_000, 72, -4_000),
+                FrontierClimate.TEMPERATE);
+        var catalog = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
+        var report = new io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine()
+                .auditCompiled(catalog, seed.planId());
+        helper.assertTrue(report.findings().stream().noneMatch(value -> value.ruleId().equals(
+                        "compiled.module.empty")),
+                "Foundry must see compiled cells for every authored module");
+        helper.assertTrue(report.findings().stream().noneMatch(value -> value.ruleId().equals(
+                        "rail.node.missing")),
+                "Foundry must see every canonical baseline-rail node");
+        helper.assertTrue(report.metrics().stream().anyMatch(value -> value.id().equals("structure.components")),
+                "Foundry must expose structural component metrics");
+        helper.assertTrue(report.mapSamples().size() > 1_000,
+                "Foundry must expose the complete authored settlement surface map");
+        helper.assertTrue(report.passed(), "production compiled plan must pass the Foundry gate: "
+                + report.findings().stream().filter(value -> value.severity().failsGate()).limit(20).toList());
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)
+    public static void foundryFailsClosedWhenCompiledCellsDisappear(GameTestHelper helper) {
+        var seed = new FrontierRegionPlanner().plan(9_182_733L, 0, new VisualPoint(8_000, 72, -4_000),
+                FrontierClimate.TEMPERATE);
+        var original = new FrontierGenesisCompiler().compile(java.util.List.of(seed));
+        var broken = new io.farfrontier.palemirror.visuals.genesis.CompiledGenesisCatalog(original.version(),
+                original.hash(), original.manifests(), java.util.Map.of());
+        var report = new io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine()
+                .auditCompiled(broken, seed.planId());
+        helper.assertTrue(!report.passed(), "missing compiled address space must fail the Foundry gate");
+        helper.assertTrue(report.findings().stream().anyMatch(value -> value.ruleId().equals("rail.node.missing")
+                        && value.severity() == io.farfrontier.palemirror.api.FoundrySeverity.BLOCKER),
+                "missing railway must be a locatable Foundry blocker");
+        helper.assertTrue(report.findings().stream().anyMatch(value -> value.ruleId().equals("compiled.module.empty")),
+                "missing module cells must be reported independently from railway failure");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)
+    public static void foundryObservesASettledDefectAndItsRecovery(GameTestHelper helper) {
+        BlockPos testOrigin = helper.absolutePos(BlockPos.ZERO);
+        VisualPoint anchor = new VisualPoint(testOrigin.getX(), testOrigin.getY() + 1, testOrigin.getZ());
+        var seed = new FrontierRegionPlanner().plan(7_731_991L, 0, anchor, FrontierClimate.TEMPERATE,
+                (x, z) -> anchor.y());
+        BlockPos candidatePosition = helper.absolutePos(new BlockPos(2, 2, 2));
+        var candidateState = net.minecraft.world.level.block.Blocks.STONE_BRICKS.defaultBlockState();
+        long chunkKey = new net.minecraft.world.level.ChunkPos(candidatePosition).toLong();
+        var slice = new io.farfrontier.palemirror.visuals.genesis.CompiledChunkSlice(chunkKey, "foundry-test",
+                java.util.List.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(),
+                java.util.Map.of(candidatePosition, candidateState));
+        var catalog = new io.farfrontier.palemirror.visuals.genesis.CompiledGenesisCatalog(1, "foundry-test-hash",
+                java.util.List.of(seed), java.util.Map.of(chunkKey, slice));
+        helper.getLevel().setBlock(candidatePosition, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 2);
+        var engine = new io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine();
+        VisualPoint candidatePoint = new VisualPoint(candidatePosition.getX(), candidatePosition.getY(),
+                candidatePosition.getZ());
+        var inspection = engine.inspect(catalog, seed.planId(), helper.getLevel(), candidatePoint);
+        helper.assertTrue(!inspection.expectedState().equals("unplanned") && inspection.actualState().startsWith(
+                        "minecraft:air"),
+                "test defect must address one loaded Foundry-owned non-air cell: " + inspection);
+        var broken = engine.audit(catalog, seed.planId(), helper.getLevel(),
+                io.farfrontier.palemirror.api.FoundryAuditPhase.SETTLED);
+        helper.assertTrue(broken.findings().stream().anyMatch(value -> value.ruleId().equals("world.cell.mismatch")
+                        && value.position().equals(candidatePoint)),
+                "settled audit must locate an authored cell removed from a loaded chunk: " + broken.summary()
+                        + " metrics=" + broken.metrics().stream().filter(value -> value.id().startsWith("world."))
+                        .toList() + " candidate=" + candidatePoint);
+        helper.getLevel().setBlock(candidatePosition, candidateState, 2);
+        var recovered = engine.audit(catalog, seed.planId(), helper.getLevel(),
+                io.farfrontier.palemirror.api.FoundryAuditPhase.RELOADED);
+        helper.assertTrue(recovered.findings().stream().noneMatch(value -> value.ruleId().equals("world.cell.mismatch")
+                        && value.position().equals(candidatePoint)),
+                "reloaded audit must clear the exact defect after its physical cell is restored");
+        helper.succeed();
+    }
+
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 40)
     public static void poweredRailScheduleSkipsAuthoredCorners(GameTestHelper helper) {
         var seed = new FrontierRegionPlanner().plan(54_185_464_310_597_810L, 0,

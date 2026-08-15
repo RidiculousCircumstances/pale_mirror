@@ -58,6 +58,23 @@ public final class RuntimeDebugController {
                                                                  String viewId) {
         return navigator.teleportVisualAudit(player, settlementId, viewId);
     }
+    public List<Component> foundryAudit(WorldObjectId settlementId,
+                                        io.farfrontier.palemirror.api.FoundryAuditPhase phase) {
+        return navigator.foundryAudit(settlementId, phase);
+    }
+    public List<Component> foundryBatch(io.farfrontier.palemirror.api.FoundryAuditPhase phase) {
+        return navigator.foundryBatch(phase);
+    }
+    public RuntimeDebugService.ActionResult exportFoundryAudit(WorldObjectId settlementId,
+                                                                io.farfrontier.palemirror.api.FoundryAuditPhase phase) {
+        return navigator.exportFoundryAudit(settlementId, phase);
+    }
+    public RuntimeDebugService.ActionResult inspectFoundryBlock(ServerPlayer player, WorldObjectId settlementId) {
+        return navigator.inspectFoundryBlock(player, settlementId);
+    }
+    public RuntimeDebugService.ActionResult showFoundryMarkers(ServerPlayer player, WorldObjectId settlementId) {
+        return navigator.showFoundryMarkers(player, settlementId);
+    }
     public RuntimeDebugService.ActionResult bindNearest(ServerPlayer player) {
         return service.bindNearest(server, data, commands, player);
     }
