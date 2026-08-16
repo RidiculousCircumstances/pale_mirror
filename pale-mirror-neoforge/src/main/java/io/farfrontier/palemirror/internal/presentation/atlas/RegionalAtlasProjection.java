@@ -20,7 +20,7 @@ import net.minecraft.nbt.ListTag;
 
 /** Bounded server projection for the client Atlas and optional map integrations. */
 public final class RegionalAtlasProjection {
-    private static final int MAX_REGIONS = 3;
+    private static final int MAX_REGIONS = 20;
 
     private RegionalAtlasProjection() { }
 
@@ -31,7 +31,8 @@ public final class RegionalAtlasProjection {
         root.putString("notice", limited(notice, 160));
         ListTag regions = new ListTag();
         data.worldState().livingRegions().stream()
-                .filter(region -> region.primaryAudience() == null || region.primaryAudience().equals(audience))
+                .filter(region -> data.worldState().regionKnowledge(audience, region.id())
+                        .map(knowledge -> knowledge.knows(KnownRegionalFeature.SETTLEMENT)).orElse(false))
                 .sorted(Comparator.comparing(region -> region.id()))
                 .limit(MAX_REGIONS)
                 .forEach(region -> regions.add(region(data, region.id(), region.communityId().value(),

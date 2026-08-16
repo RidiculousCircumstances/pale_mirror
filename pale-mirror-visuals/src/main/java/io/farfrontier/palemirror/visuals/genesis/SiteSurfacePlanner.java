@@ -62,12 +62,17 @@ final class SiteSurfacePlanner {
         int radius = feature.kind() == LinearFeatureKind.PALISADE_GATE ? 7
                 : feature.kind() == LinearFeatureKind.STREET || feature.kind() == LinearFeatureKind.FREIGHT_ROAD
                 ? feature.width() / 2 + 3 : feature.width() / 2;
+        // A gate is one framed opening. Its two jambs and lintel must share the
+        // upper approach datum even when the terrain drops by one block across
+        // the opening; ordinary enclosure runs remain terrain-following.
+        Integer gateGroundY = feature.kind() == LinearFeatureKind.PALISADE_GATE
+                ? feature.nodes().stream().mapToInt(VisualPoint::y).max().orElseThrow() + 1 : null;
         Map<Long, FeatureColumn> featureClaims = new LinkedHashMap<>();
         for (int segment = 1; segment < feature.nodes().size(); segment++) {
             for (VisualPoint point : raster(feature.nodes().get(segment - 1), feature.nodes().get(segment))) {
                 for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
                     SiteSurfaceColumn column = new SiteSurfaceColumn(point.x() + dx, point.z() + dz,
-                            point.y() + 1, use, owner);
+                            gateGroundY == null ? point.y() + 1 : gateGroundY, use, owner);
                     long coordinate = key(column.x(), column.z());
                     int distance = Math.max(Math.abs(dx), Math.abs(dz));
                     FeatureColumn prior = featureClaims.get(coordinate);

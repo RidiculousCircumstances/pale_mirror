@@ -17,6 +17,10 @@ The immutable manifest contains every object identity and coordinate needed by
 core: settlement bounds, freight gate, receiving depot, typed Mine17 and Red
 Valley blueprints, baseline rail path, functional buildings, open spaces,
 development reservations and 48 resident identities with exact slot bindings.
+It also pins a sorted horizontal discovery-chunk set compiled from the irregular
+managed address, its gates and depot, plus the first 64 blocks of railway arrival.
+This set recognizes player knowledge only: it is independent of height and grants
+no parcel ownership, ecology policy or mutation authority.
 Each MineSite pins a portal, loading endpoint, controller anchor, orientation,
 complete bounds, semantic surface buildings, underground modules, independently
 surveyed local foundations, staged modules and semantic volumes.
@@ -150,6 +154,9 @@ changes compile oriented stair blocks. Street furniture uses region-global
 occupancy reservations against buildings, circulation and railway cells; a
 lamp/planter pair is accepted or rejected as one assembly. Hanging lamps declare
 real hanging support and raised fences must have vertical or horizontal support.
+Every semantic gate is one framed opening: its pad, both jambs and lintel share
+the upper approach datum across a one-block terrain step, while ordinary wall
+runs immediately outside it continue to follow the terrain.
 The worldgen compiler indexes the final surface plan by column and emits each
 complete route once, so dense one-cell graph nodes do not multiply materialization
 work or change street ownership.

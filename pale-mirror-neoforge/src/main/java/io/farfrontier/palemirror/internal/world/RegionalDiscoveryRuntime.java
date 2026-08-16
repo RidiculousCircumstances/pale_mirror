@@ -1,9 +1,13 @@
 package io.farfrontier.palemirror.internal.world;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.BiConsumer;
 
+import io.farfrontier.palemirror.api.PaleMirrorVisuals;
+import io.farfrontier.palemirror.api.VisualChunk;
 import io.farfrontier.palemirror.domain.AudienceRegionReachability;
 import io.farfrontier.palemirror.domain.DomainCommand;
 import io.farfrontier.palemirror.domain.DomainCommandExecutor;
@@ -24,13 +28,14 @@ public final class RegionalDiscoveryRuntime {
     public static void observePlayers(MinecraftServer server, PaleMirrorSavedData data,
                                       DomainCommandExecutor commands,
                                       Function<ServerPlayer, StoryAudienceId> audiences,
-                                      Consumer<List<DomainEvent>> eventSink) {
+                                      Consumer<List<DomainEvent>> eventSink,
+                                      BiConsumer<ServerPlayer, String> discoverySink) {
         data.worldState().livingRegions().forEach(region -> {
             if (region.recognition() != RecognitionState.DISCOVERED) return;
             data.worldRegistry().find(region.placeId()).ifPresent(settlement -> {
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                     if (player.serverLevel().dimension().location().toString().equals(settlement.dimensionId())
-                            && settlement.contains(player.blockPosition())) {
+                            && reachedDiscoveryChunk(server, region.id(), settlement, player)) {
                         List<DomainEvent> events = commands.execute(data.worldState(),
                                 new DomainCommand.DiscoverLivingRegion(region.id(), audiences.apply(player),
                                         "player:" + player.getUUID()));
@@ -38,6 +43,7 @@ public final class RegionalDiscoveryRuntime {
                             CampaignWelcomeKit.grant(player, settlement);
                             data.setDirty();
                             eventSink.accept(events);
+                            discoverySink.accept(player, region.id());
                         }
                     }
                 }
@@ -68,6 +74,22 @@ public final class RegionalDiscoveryRuntime {
                 if (!events.isEmpty()) { data.setDirty(); eventSink.accept(events); }
             }
         });
+    }
+
+    private static boolean reachedDiscoveryChunk(MinecraftServer server, String regionId,
+                                                  WorldObjectRegistryEntry settlement, ServerPlayer player) {
+        var provider = PaleMirrorVisuals.provider().orElse(null);
+        if (provider != null) {
+            var authored = provider.discoverAuthoredRegions(server.overworld()).stream()
+                    .filter(seed -> seed.planId().equals(regionId)).findFirst().orElse(null);
+            if (authored != null) {
+                var chunk = player.chunkPosition();
+                return Collections.binarySearch(authored.discoveryChunks(), new VisualChunk(chunk.x, chunk.z)) >= 0;
+            }
+        }
+        // Non-authored compatibility profiles do not have immutable discovery
+        // chunks and retain their observed-place bounds contract.
+        return settlement.contains(player.blockPosition());
     }
 
     public static void discoverDepot(PaleMirrorSavedData data, DomainCommandExecutor commands,

@@ -95,6 +95,31 @@ class FrontierRegionPlannerTest {
         }
     }
 
+    @Test void discoveryChunksCoverTheAuthoredAddressAndArrivalButNotTheMine() {
+        AuthoredRegionSeed seed = planner.plan(984L, 0, new VisualPoint(1500, 70, 0), FrontierClimate.TEMPERATE);
+
+        assertTrue(seed.discoveryChunks().contains(
+                io.farfrontier.palemirror.api.VisualChunk.containing(seed.anchor())));
+        assertTrue(seed.discoveryChunks().contains(
+                io.farfrontier.palemirror.api.VisualChunk.containing(seed.freightGate())));
+        assertTrue(seed.discoveryChunks().contains(
+                io.farfrontier.palemirror.api.VisualChunk.containing(seed.receivingDepot())));
+        seed.settlementSite().managedArea().areas().forEach(area -> {
+            assertTrue(seed.discoveryChunks().contains(
+                    io.farfrontier.palemirror.api.VisualChunk.containing(area.min())));
+            assertTrue(seed.discoveryChunks().contains(
+                    io.farfrontier.palemirror.api.VisualChunk.containing(area.max())));
+        });
+        assertTrue(seed.baselineRailNodes().stream()
+                .filter(point -> horizontalDistanceSquared(point, seed.receivingDepot()) <= 64L * 64L)
+                .allMatch(point -> seed.discoveryChunks().contains(
+                        io.farfrontier.palemirror.api.VisualChunk.containing(point))),
+                "the railway arrival corridor must discover the settlement before the train reaches the depot");
+        assertTrue(!seed.discoveryChunks().contains(
+                io.farfrontier.palemirror.api.VisualChunk.containing(seed.primaryMine())),
+                "settlement discovery must not swallow the separately discoverable Mine17");
+    }
+
     @Test void dryResolverMayMovePrimaryMineAndFreightGateTogether() {
         java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
         AuthoredRegionSeed seed = planner.plan(983L, 0, new VisualPoint(1500, 70, 0),

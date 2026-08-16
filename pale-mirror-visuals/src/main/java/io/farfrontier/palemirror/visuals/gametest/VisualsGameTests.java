@@ -453,7 +453,7 @@ public final class VisualsGameTests {
     private static AuthoredRegionSeed withRail(AuthoredRegionSeed seed, java.util.List<VisualPoint> rail) {
         return new AuthoredRegionSeed(seed.planId(), seed.archetypeId(), seed.definitionVersion(), seed.contentHash(),
                 seed.dimensionId(), seed.climate(), seed.palette(), seed.anchor(), seed.settlementSite(),
-                seed.primaryMineSite(), seed.alternateMineSite(), rail, seed.residents());
+                seed.primaryMineSite(), seed.alternateMineSite(), rail, seed.discoveryChunks(), seed.residents());
     }
 
     @GameTest(templateNamespace = "pale_mirror_visuals", template = "gametest_empty", timeoutTicks = 200)

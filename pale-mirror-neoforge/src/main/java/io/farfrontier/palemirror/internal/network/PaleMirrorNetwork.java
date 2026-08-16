@@ -36,6 +36,18 @@ public final class PaleMirrorNetwork {
         PacketDistributor.sendToServer(new AtlasActionPayload(action, targetId));
     }
 
+    /** Pushes newly canonical knowledge only when the negotiated client actually supports Atlas. */
+    public static void synchronizeDiscoveredRegion(ServerPlayer player, String regionId) {
+        PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                "Settlement added to the Pale Mirror Atlas. Press P to open it."));
+        if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(
+                player.connection, AtlasSnapshotPayload.TYPE.id())) {
+            PacketDistributor.sendToPlayer(player, runtime.atlasSnapshot(
+                    player, "Settlement added to the Atlas.", false));
+        }
+    }
+
     private static void receiveSnapshot(AtlasSnapshotPayload payload, IPayloadContext context) {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             io.farfrontier.palemirror.internal.client.PaleMirrorAtlasClient.receive(payload);

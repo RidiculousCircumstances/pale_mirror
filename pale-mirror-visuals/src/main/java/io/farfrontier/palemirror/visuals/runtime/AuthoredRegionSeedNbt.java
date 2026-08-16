@@ -59,6 +59,7 @@ public final class AuthoredRegionSeedNbt {
         tag.put("primaryMineSite", mine(seed.primaryMineSite()));
         tag.put("alternateMineSite", mine(seed.alternateMineSite()));
         tag.put("baselineRailNodes", points(seed.baselineRailNodes()));
+        tag.put("discoveryChunks", VisualChunkNbt.write(seed.discoveryChunks()));
         ListTag residents = new ListTag();
         seed.residents().forEach(resident -> {
             CompoundTag value = new CompoundTag();
@@ -94,7 +95,7 @@ public final class AuthoredRegionSeedNbt {
                 tag.getString("climate"), tag.getString("palette"), point(tag.getCompound("anchor")),
                 settlement(tag.getCompound("settlementSite")), mine(tag.getCompound("primaryMineSite")),
                 mine(tag.getCompound("alternateMineSite")), points(tag.getList("baselineRailNodes", Tag.TAG_COMPOUND)),
-                residents);
+                VisualChunkNbt.read(tag.getList("discoveryChunks", Tag.TAG_COMPOUND)), residents);
     }
 
     private static CompoundTag settlement(AuthoredSettlementSitePlan settlement) {

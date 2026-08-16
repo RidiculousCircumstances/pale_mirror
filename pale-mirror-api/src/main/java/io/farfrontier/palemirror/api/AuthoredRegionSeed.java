@@ -8,7 +8,8 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
                                  String dimensionId, String climate, String palette, VisualPoint anchor,
                                  AuthoredSettlementSitePlan settlementSite,
                                  AuthoredMineSitePlan primaryMineSite, AuthoredMineSitePlan alternateMineSite,
-                                 List<VisualPoint> baselineRailNodes, List<ResidentSeed> residents) {
+                                 List<VisualPoint> baselineRailNodes, List<VisualChunk> discoveryChunks,
+                                 List<ResidentSeed> residents) {
     public AuthoredRegionSeed {
         require(planId, "planId");
         require(archetypeId, "archetypeId");
@@ -26,7 +27,15 @@ public record AuthoredRegionSeed(String planId, String archetypeId, int definiti
             throw new IllegalArgumentException("Authored region requires primary and alternate MineSite roles");
         }
         baselineRailNodes = List.copyOf(baselineRailNodes);
+        discoveryChunks = discoveryChunks.stream().sorted().toList();
         residents = List.copyOf(residents);
+        if (discoveryChunks.isEmpty()) throw new IllegalArgumentException("Authored discovery chunks are required");
+        if (discoveryChunks.stream().distinct().count() != discoveryChunks.size()) {
+            throw new IllegalArgumentException("Authored discovery chunks must be unique");
+        }
+        if (!discoveryChunks.contains(VisualChunk.containing(anchor))) {
+            throw new IllegalArgumentException("Authored discovery chunks must contain the settlement anchor");
+        }
         if (residents.size() != settlementSite.stage().population()) {
             throw new IllegalArgumentException("Authored resident count must match settlement stage population");
         }

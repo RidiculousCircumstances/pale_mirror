@@ -94,10 +94,24 @@ public final class LivingRegionGameTests {
                         + ", diagnostic=" + (depot == null ? "" : SettlementDepotRuntime.diagnostic(data, depot)));
         helper.assertValueEqual(level.getBlockState(depot.interactionPosition()).getBlock(), Blocks.BARREL,
                 "the depot interaction endpoint must have a verified physical postcondition");
+        String unclaimedRegionId = "pale_mirror:unclaimed_atlas_region";
+        GameTestStateReset.registerMinimalRouteRegion(data, unclaimedRegionId,
+                new WorldObjectId("pale_mirror:unclaimed_atlas_route"));
+        var unclaimedRegion = data.worldState().livingRegion(unclaimedRegionId).orElseThrow();
+        data.worldRegistry().register(new io.farfrontier.palemirror.internal.world.WorldObjectRegistryEntry(
+                unclaimedRegion.placeId(), level.dimension().location().toString(), villageAnchor.offset(64, 0, 0),
+                villageAnchor.offset(48, -8, -16), villageAnchor.offset(80, 16, 16),
+                "pale_mirror:atlas_fixture", "1",
+                io.farfrontier.palemirror.internal.world.WorldObjectLifecycle.REPRESENTED));
+        data.campaignRegions().put(unclaimedRegionId, new io.farfrontier.palemirror.internal.world.CampaignRegionRecord(
+                unclaimedRegionId, level.dimension().location().toString(), unclaimedRegion.placeId(),
+                villageAnchor.offset(64, 0, 0), villageAnchor.offset(96, 0, 0), villageAnchor.offset(128, 0, 0),
+                null, null, io.farfrontier.palemirror.internal.world.CampaignRegionPresentationStatus.PLANNED,
+                "", 0, -1, -1, 0, 0, "", ""));
         var atlas = RegionalAtlasProjection.snapshot(data, region.primaryAudience(), "", false).snapshot();
         var atlasCards = atlas.getList("regions", net.minecraft.nbt.Tag.TAG_COMPOUND);
         helper.assertValueEqual(atlasCards.size(), 1,
-                "the client Atlas must receive one bounded card for the audience-owned region");
+                "the Atlas must exclude an unclaimed region even when it sorts beside the discovered one");
         helper.assertTrue(!atlasCards.getCompound(0).getString("name").isBlank()
                         && !atlasCards.getCompound(0).getString("name").contains("pale_mirror:"),
                 "the Atlas must expose a player-facing region name rather than require an opaque region id");

@@ -42,6 +42,8 @@ unload/reload or restart and exists to make recovery evidence explicit.
 - every public street component belongs to one compiled graph, shared junctions
   have one datum, facade throats terminate on that graph, and walkable grades
   change by no more than one block per horizontal cell;
+- each gate compiles as one upper-datum frame across local one-block terrain
+  steps, without a lowered jamb or disconnected lintel;
 - loaded railway nodes remain rails and stay out of fluid;
 - each loaded `SiteSurfaceColumn` retains supported walkable ground at its
   authored first-air datum.

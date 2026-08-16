@@ -32,7 +32,7 @@ import java.util.UUID;
 
 /** Pure deterministic layout grammar. Terrain selection supplies one settlement datum and two mine anchors. */
 public final class FrontierRegionPlanner {
-    public static final int DEFINITION_VERSION = 26;
+    public static final int DEFINITION_VERSION = 27;
     private final RegionPlacementProfile placementProfile;
     public FrontierRegionPlanner() {
         this(RegionPlacementProfiles.IRON_FRONTIER);
@@ -115,11 +115,12 @@ public final class FrontierRegionPlanner {
         AuthoredMineSitePlan alternate = minePlan(planId, AuthoredMineRole.ALTERNATE, alternateAnchor, climate, source);
         List<ResidentSeed> residents = residents(source, settlement, primary);
         List<VisualPoint> rail = railPaths.resolve(placementProfile.route(), depot, primary.loadingEndpoint());
+        var discoveryChunks = AuthoredDiscoveryChunkPlanner.plan(settlement, rail);
         String contentHash = sha256(planId + ":" + climate + ":" + direction + ":" + settlement + ":"
-                + primary + ":" + alternate + ":" + rail);
+                + primary + ":" + alternate + ":" + rail + ":" + discoveryChunks);
         return new AuthoredRegionSeed(planId, placementProfile.id(), DEFINITION_VERSION,
                 contentHash, "minecraft:overworld", climate.name().toLowerCase(Locale.ROOT), climate.palette(), anchor,
-                settlement, primary, alternate, rail, residents);
+                settlement, primary, alternate, rail, discoveryChunks, residents);
     }
 
     private static TerrainCandidate syntheticTerrain(VisualPoint anchor) {

@@ -126,7 +126,7 @@ invariants:
   - id: presentation-read-only
     statement: FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression.
   - id: client-atlas-projection
-    statement: The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence.
+    statement: The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence. Every authored manifest pins a horizontal semantic discovery-chunk set covering the irregular managed address, gates, depot and short railway approach without granting block ownership; only audiences with canonical SETTLEMENT knowledge receive that region's Atlas card, and successful discovery immediately pushes a refreshed snapshot.
   - id: transactional-resource-boundary
     statement: Physical items cross the settlement economy boundary only through a persisted bounded transfer ledger; ordinary container contents never mirror canonical stock, and reserved stacks fail closed until reconciliation completes.
   - id: pm-owned-settlement-sites

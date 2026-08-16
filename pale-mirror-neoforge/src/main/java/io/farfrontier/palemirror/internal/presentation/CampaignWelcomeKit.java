@@ -33,6 +33,6 @@ public final class CampaignWelcomeKit {
         player.getInventory().placeItemBackInInventory(map);
         player.getInventory().placeItemBackInInventory(ledger);
         player.getPersistentData().putBoolean(GRANTED_KEY, true);
-        player.sendSystemMessage(Component.literal("A survey map, Ironhill letter and Pale Mirror Regional Ledger were added to your inventory."));
+        player.sendSystemMessage(Component.literal("A survey map, Ironhill letter and Pale Mirror Regional Ledger were added to your inventory. Press P to open the Atlas."));
     }
 }

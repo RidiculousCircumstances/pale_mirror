@@ -420,9 +420,9 @@ public final class PaleMirrorRuntime {
                 }
             }
         }
-        RegionalDiscoveryRuntime.observePlayers(server, data, commands, this::audienceFor, this::handleDomainEvents);
+        RegionalDiscoveryRuntime.observePlayers(server, data, commands, this::audienceFor, this::handleDomainEvents,
+                io.farfrontier.palemirror.internal.network.PaleMirrorNetwork::synchronizeDiscoveredRegion);
     }
-
     private void reconcileMaterialization() {
         materializationScheduler.schedule(server, data).forEach(this::publish);
     }

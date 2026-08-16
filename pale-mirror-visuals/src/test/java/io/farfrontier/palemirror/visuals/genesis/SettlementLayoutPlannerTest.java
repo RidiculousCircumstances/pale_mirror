@@ -156,6 +156,23 @@ class SettlementLayoutPlannerTest {
                 "the perimeter contract must retain every physical wall column for structural compilation");
     }
 
+    @Test void aGateUsesOneUpperDatumAcrossAOneBlockTerrainStep() {
+        var gate = new io.farfrontier.palemirror.api.LinearFeaturePlan("front_gate",
+                LinearFeatureKind.PALISADE_GATE,
+                java.util.List.of(new VisualPoint(0, 64, 0), new VisualPoint(8, 65, 0)), 7, false);
+
+        var surface = SiteSurfacePlanner.settlement(java.util.List.of(), java.util.List.of(),
+                java.util.List.of(), java.util.List.of(gate), java.util.List.of());
+        var gateColumns = surface.columns().stream()
+                .filter(value -> value.ownerId().equals("perimeter:front_gate")).toList();
+
+        assertFalse(gateColumns.isEmpty());
+        assertEquals(java.util.Set.of(66), gateColumns.stream()
+                .map(io.farfrontier.palemirror.api.SiteSurfaceColumn::groundY)
+                .collect(java.util.stream.Collectors.toSet()),
+                "both gate jambs and the lintel must align to the upper approach level");
+    }
+
     @Test void freightRoadSamplesTheValleyInsteadOfBridgingBetweenSparseHighNodes() {
         var feature = new io.farfrontier.palemirror.api.LinearFeaturePlan("freight",
                 LinearFeatureKind.FREIGHT_ROAD,
