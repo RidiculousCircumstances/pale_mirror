@@ -38,9 +38,9 @@ public final class SettlementEmergencyWindow {
     public long remainingGraceSteps() { return remainingGraceSteps; }
     public AudienceRegionReachability reachabilityAtOpen() { return reachabilityAtOpen; }
     public EmergencyWindowState state() { return state; }
-    /** Offline audiences do not spend irreversible intervention time. */
-    public boolean elapse(boolean audiencePresent) {
-        if (state != EmergencyWindowState.OPEN || !audiencePresent || remainingGraceSteps == 0) return false;
+    /** A fully offline informed audience set does not spend irreversible intervention time. */
+    public boolean elapse(boolean anyAudienceOnline) {
+        if (state != EmergencyWindowState.OPEN || !anyAudienceOnline || remainingGraceSteps == 0) return false;
         remainingGraceSteps--;
         return remainingGraceSteps == 0;
     }

@@ -119,6 +119,14 @@ public final class WorldState {
     public Optional<AudienceRegionKnowledge> regionKnowledge(StoryAudienceId audience, String regionId) {
         return Optional.ofNullable(regionKnowledge.get(knowledgeKey(audience, regionId)));
     }
+    public List<AudienceRegionKnowledge> regionKnowledge(String regionId) {
+        return regionKnowledge.values().stream().filter(value -> value.regionId().equals(regionId))
+                .sorted(java.util.Comparator.comparing(value -> value.audience().value())).toList();
+    }
+    public List<StoryAudienceId> audiencesKnowing(String regionId, KnownRegionalFeature feature) {
+        return regionKnowledge(regionId).stream().filter(value -> value.knows(feature))
+                .map(AudienceRegionKnowledge::audience).toList();
+    }
     public Optional<AudienceRegionAccess> regionAccess(StoryAudienceId audience, String regionId) {
         return Optional.ofNullable(regionAccess.get(knowledgeKey(audience, regionId)));
     }
@@ -242,6 +250,12 @@ public final class WorldState {
     }
     public boolean narratorReady(StoryAudienceId audience) {
         return simulationStep >= narratorCooldowns.getOrDefault(audience, 0L);
+    }
+    public boolean hasRespondingScenario(StoryAudienceId audience, WorldObjectId target,
+                                         ScenarioArchetype archetype) {
+        return scenarios.values().stream().anyMatch(value -> value.audience().equals(audience)
+                && value.target().equals(target) && value.archetype() == archetype
+                && value.status() == ScenarioStatus.RESPOND);
     }
     void setNarratorCooldown(StoryAudienceId audience, long availableAtStep) {
         narratorCooldowns.put(audience, availableAtStep);

@@ -156,8 +156,10 @@ public final class RuntimeDebugService {
         StringBuilder output = new StringBuilder("Region ").append(region.id())
                 .append("\n- community=").append(region.communityId().value())
                 .append(" place=").append(region.placeId().value())
-                .append(" recognition=").append(region.recognition())
-                .append(" audience=").append(region.primaryAudience() == null ? "none" : region.primaryAudience().value());
+                .append(" firstDiscoveredAt=").append(region.firstDiscoveredAtStep())
+                .append(" incidentArmedAt=").append(region.incidentArmedAtStep())
+                .append(" audiences=").append(data.worldState().audiencesKnowing(region.id(),
+                        io.farfrontier.palemirror.domain.KnownRegionalFeature.SETTLEMENT).size());
         if (physical != null) output.append("\n- presentation=").append(physical.status())
                 .append(" op=").append(physical.nextOperationIndex()).append("/2 settlement=").append(shortPos(physical.settlementAnchor()))
                 .append(" primaryColumn=").append(shortPos(physical.primaryMineColumn()))

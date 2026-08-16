@@ -3,7 +3,6 @@ import java.util.IdentityHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DomainCommand;
@@ -50,6 +49,7 @@ import io.farfrontier.palemirror.internal.world.RegionalDiscoveryRuntime;
 import io.farfrontier.palemirror.internal.world.ManagedRailwayRuntime;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRuntime;
 import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
+import io.farfrontier.palemirror.internal.world.StoryAudienceResolver;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.TestMineTemplate;
 import net.minecraft.server.MinecraftServer;
@@ -227,18 +227,19 @@ public final class PaleMirrorRuntime {
     public boolean issueRefugeeAnchor(ServerPlayer player, String communityId) {
         return evacuation.issue(player, communityId);
     }
-
     public boolean commissionAlternateDispatch(String communityId, StoryAudienceId audience, String causationId) {
         try {
             WorldObjectId community = new WorldObjectId(communityId);
             var region = data.worldState().livingRegions().stream()
                     .filter(value -> value.communityId().equals(community))
-                    .filter(value -> value.primaryAudience() == null || value.primaryAudience().equals(audience))
+                    .filter(value -> data.worldState().regionKnowledge(audience, value.id())
+                            .filter(knowledge -> knowledge.knows(
+                                    io.farfrontier.palemirror.domain.KnownRegionalFeature.SETTLEMENT)).isPresent())
                     .findFirst().orElse(null);
             if (region == null) return false;
             RegionBindings bindings = RegionBindings.fromRegionId(region.id());
             List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.PlanAlternateDispatch(
-                    community, bindings.alternateDispatchSiteId(), 12, causationId));
+                    community, audience, bindings.alternateDispatchSiteId(), 12, causationId));
             handleDomainEvents(events);
             if (!events.isEmpty()) data.setDirty();
             return !events.isEmpty();
@@ -258,11 +259,7 @@ public final class PaleMirrorRuntime {
     }
 
     public StoryAudienceId audienceFor(ServerPlayer player) {
-        String binding = player.getTeam() == null ? "player:" + player.getUUID() : "team:" + player.getTeam().getName();
-        StoryAudienceId audience = data.audienceMappings().computeIfAbsent(binding, key ->
-                new StoryAudienceId("pm:audience:" + UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8))));
-        data.setDirty();
-        return audience;
+        return StoryAudienceResolver.resolve(data, player);
     }
 
     public StoryAudienceId defaultAudience() { return StoryAudienceId.globalTestAudience(); }
@@ -464,9 +461,8 @@ public final class PaleMirrorRuntime {
     }
     private void triggerDueRegionCrises() {
         List<DomainEvent> produced = new ArrayList<>();
-        data.worldState().livingRegions().stream().filter(region -> region.incidentDue(data.worldState().simulationStep(),
-                        region.primaryAudience() == null ? null : data.worldState()
-                                .regionKnowledge(region.primaryAudience(), region.id()).orElse(null)))
+        data.worldState().livingRegions().stream()
+                .filter(region -> region.incidentDue(data.worldState().simulationStep()))
                 .filter(this::baselineInfrastructureReady)
                 .forEach(region -> {
                     List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.TriggerFacilityInfection(

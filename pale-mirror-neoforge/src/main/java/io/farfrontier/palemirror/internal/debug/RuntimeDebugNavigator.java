@@ -77,7 +77,8 @@ public final class RuntimeDebugNavigator {
                 .filter(region -> !data.settlementObservations().containsKey(region.placeId()))
                 .forEach(region -> data.worldRegistry().find(region.placeId()).ifPresent(entry -> output.add(locationLine(
                         region.placeId(), entry.dimensionId(), entry.anchor(),
-                        "AUTHORED region=" + region.id() + " recognition=" + region.recognition(),
+                        "AUTHORED region=" + region.id() + " audiences=" + data.worldState()
+                                .audiencesKnowing(region.id(), io.farfrontier.palemirror.domain.KnownRegionalFeature.SETTLEMENT).size(),
                         "settlement", player))));
         if (output.size() == 1) output.add(Component.literal("No observed or authored settlements."));
         return List.copyOf(output);

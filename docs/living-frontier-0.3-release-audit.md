@@ -1,6 +1,6 @@
 # Pale Mirror 0.3 release audit
 
-Audit date: 2026-08-15.
+Audit date: 2026-08-16.
 
 ## Decision
 
@@ -20,13 +20,14 @@ disconnected loaded graph still blocks the contract immediately.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Pure domain and module tests | PASS | 148 JUnit tests, 0 failures, 0 errors |
-| Core server behavior | PASS | 45/45 required NeoForge GameTests |
-| Visual/materialization behavior | PASS | 25/25 required Visuals GameTests, including 216 public-realm combinations and grounded/readable mine infrastructure |
+| Pure domain and module tests | PASS | 157 JUnit tests, 0 failures, 0 errors |
+| Core server behavior | PASS | 47/47 required NeoForge GameTests |
+| Visual/materialization behavior | PASS | 29/29 required Visuals GameTests, including 216 public-realm combinations and grounded/readable mine infrastructure |
 | Build and architecture | PASS | `check`, architecture guardrails, Java style and source isolation |
 | Distribution | PASS | Core and Visuals production JAR verification |
 | Restart/crash safety | PASS | Packaged core restart/crash harness and two-start Visuals harness |
 | Multi-region identity | PASS | Independent region/community/site/route identities are covered; fresh authored genesis supports a bounded configurable region count |
+| Multi-audience authority | PASS mechanically | Independent knowledge/access/scenario decisions share one region, incident clock and physical outcome; first outcome closes linked scenarios exactly once, and spectator audit creates no knowledge |
 | Baseline freight | PASS | Authored vanilla topology starts healthy off-screen, commissions from dry rails and stable supports without claiming speculative decoration, loaded damage blocks it, connected cross-chunk repair/reroute restores it, and Create evidence still expires independently |
 | Combat recovery | PASS mechanically | Threat gate, controller, recovery, flow restoration and physical cleanup are covered |
 | Evacuation | PASS mechanically | Prepared shelter validation, population displacement, representative camp and autonomous fallback are covered |
@@ -48,7 +49,7 @@ enjoyed the path.
 | Clean-room comprehension | Not recorded | Five unbriefed players; at least 4/5 explain event, cause, choices and consequence |
 | Choice discoverability | Not recorded | At least 4/5 independently discover two responses; combat, logistics and evacuation all occur across the sessions |
 | Real Create logistics | Adapter and synthetic tests only | One real scheduled Red Valley → Ironhill train proves the same vehicle at both endpoints and restores supply |
-| Cooperative audience | Not recorded | One 2–4 player session with shared story, single outcome and no duplicate actions |
+| Cooperative audience | Automated authority model only | One 2–4 player session proves private offers/decisions, shared physical help, RESPOND-gated strategy, one outcome and no duplicate actions |
 | Full refusal path | Not recorded | One player deliberately declines/ignores and correctly understands the fair delayed consequence |
 | Visual/audio quality | Previous visual reviews found defects; the latest authored-surface redesign is not yet accepted | Fresh-world pass over settlement, mine, baseline rail, infection, recovery, camp and storehouse |
 | Session pacing | Algorithmic tests only | Two active regions in a live session demonstrate selection, quiet time, novelty and recovery/development pacing |
@@ -59,7 +60,10 @@ enjoyed the path.
 
 Natural proximity and interaction discovery exists for settlement, depot,
 baseline route, Mine17, Red Valley and refugee site. The first infection is
-knowledge-gated and delayed after the settlement, depot and route are known.
+knowledge-gated and delayed after any audience knows the settlement, depot and
+route. This arms one global clock exactly once; later audiences independently
+learn the region and receive private scenarios without postponing the world.
+Spectators and operator audit do not discover or count as online.
 Atlas distinguishes a mine with no production from a damaged route and shows
 stock, net flow, reserve, defence and the intervention window. This satisfies
 the implementation requirement, while actual comprehension remains the main

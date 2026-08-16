@@ -12,15 +12,16 @@ The current requirement-by-requirement evidence is recorded in
 
 The introductory `iron_frontier` definition is now layout version 2. A fresh
 region pins the receiving rail terminal and depot before physical work starts.
-The first infection is not scheduled merely because a village was registered.
-It waits until the primary audience has discovered:
+The first infection is not scheduled merely because a settlement was registered.
+It waits until any non-spectator audience has discovered:
 
 1. the settlement;
 2. its PM-owned receiving depot;
 3. the baseline vanilla minecart line;
 
-and then waits five more simulation steps. Discovery is audience-scoped
-canonical knowledge and survives restart. Mine17 appears in Atlas and
+and then arms one global incident clock exactly once and waits five more
+simulation steps. A later audience cannot reset that clock. Discovery is
+audience-scoped canonical knowledge and survives restart. Mine17 appears in Atlas and
 JourneyMap only after the player follows the completed line or approaches its
 MineSite. Red Valley is revealed when settlement policy requests alternate
 supply.
@@ -89,7 +90,7 @@ not the trigger that makes the already-existing infection visible.
 
 ## Fair intervention
 
-Each primary audience has a source-neutral reachability observation:
+Each informed audience has its own source-neutral reachability observation:
 `LOCAL`, `REGIONAL`, `REMOTE` or `CONNECTED`. An emergency pins its grace at
 open time:
 
@@ -100,10 +101,20 @@ open time:
 | Remote | 120 |
 | Connected | 40 |
 
-Abstract economy and settlement policy continue while players are offline,
-but irreversible evacuation grace does not decrease when no member of the
-StoryAudience is online. Refugee permits are validated against the canonical
-open window rather than an obsolete absolute deadline.
+Abstract economy and settlement policy continue while players are offline.
+The one global irreversible evacuation grace advances while at least one
+informed non-spectator audience is online and pauses only when all are offline.
+Refugee permits are validated against the canonical open window rather than an
+obsolete absolute deadline.
+
+Every audience receives a private scenario for the same global crisis and may
+accept or decline independently. Fighting, repairing, validating a route and
+depositing supplies are shared physical help available after settlement
+discovery. Alternate dispatch, shelter registration and player-started
+evacuation are strategic commands and require that audience's active `RESPOND`
+crisis plus their physical prerequisites. The first canonical recovery,
+alternate-supply or evacuation outcome resolves every linked nonterminal
+scenario exactly once; it never duplicates the world outcome.
 
 ## Positive aftermath
 

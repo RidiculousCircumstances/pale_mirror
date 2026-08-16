@@ -11,14 +11,14 @@
 ## Constraints/Assumptions
 - Java 21 bytecode/toolchain; Minecraft 1.21.1; NeoForge 21.1.248. The private dedicated server runs Java 22; clients and PM artifacts remain Java 21 compatible.
 - `pale-mirror-domain` remains free of Minecraft, NeoForge, persistence and adapters.
-- Every pre-v40 world is intentionally unsupported; verified implementations are immediately deployed to the disposable test server, and incompatible fresh-world Visuals cuts reset its exact resolved world paths without a backup unless the user requests source-only work.
+- Core schema v41 and Visuals schema v40 are exact fresh-world boundaries; every older world is intentionally unsupported. Verified implementations are immediately deployed to the disposable test server, and incompatible cuts reset its exact resolved world paths without a backup unless the user requests source-only work.
 - The product profile requires Pale Mirror Core, Pale Mirror Visuals, Create 6.0.10, Supplementaries, GeckoLib 4.9.2 and exact Villager Overhaul 3.10.17.16.
 - Millénaire is absent from the active private-pack profile after an observed 32-second village-chunk stall; its read-only adapter remains an optional compatibility surface and reports `ABSENT` by design.
 - Ordinary loaded ecology is intentionally sparse: ambient hostile attempts use a 0.20 acceptance chance/cap 24 per active player/dimension; passive/ambient/water attempts use 0.55/cap 32. Explicit PM, resident, breeding, structure, spawner, event and command spawns are outside this policy.
 - Integrated Villages ARR structures may be copied and remixed for this private non-distributed mod; every imported template retains an origin/version/hash manifest.
 - Crimson 1.4.3.1 is the default infection source; Spore remains optional/test-only.
 ## Key decisions
-- Schema v40 replaces string/index-based building semantics with stable building, function, slot, open-space and resident bindings. Core remains authoritative; the stage catalog and physical plans are Visuals-owned immutable genesis facts.
+- Core schema v41 makes region/economy/facility/route/population/incident outcome global while knowledge, access and scenario response remain private per StoryAudience. The first informed audience arms one incident; any informed online audience advances its fair window; physical help is shared, strategic commands require that audience's RESPOND scenario, and the first canonical outcome closes all linked scenarios. Visuals schema v40 retains stable building/function/slot/open-space/resident bindings and immutable genesis facts.
 - Only `TOWNSHIP` materializes. Prospecting Post (12), Mining Camp (24) and Mining Town (72) are validated composition requirements without runtime transitions. The future Town uses five reserved parcels plus depot/smeltery annex easements.
 - The active Township has exactly 20 functional buildings, six typed open spaces, fully semantic interiors, an irregular managed footprint and a nearly complete terrain-following enclosure with four semantic gates. Freight/industry faces the mine, civic/market forms the center, housing occupies the quieter rear shelf.
 - Detailed settlement terrain work is lazy and bounded after primary-mine acceptance: one cached 16-block footprint snapshot rejects local cliffs, roughness, depressions and insufficient buildable area before deterministic grammar variants and exact pad validation. Pads cut/fill at most four blocks; the low enclosure also samples a dry cross-section on both sides of every fourth wall column, so a missed narrow ravine rejects the center rather than becoming a retaining face. No bad site is rescued by destructive grading.
@@ -53,7 +53,7 @@
 - The Visuals compile boundary is a dedicated `pale-mirror-api` module; Foundry diagnostics cross it only as immutable reports/inspections and never expose Visuals internals or gain repair authority.
 ## State
 ### Done
-- Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; schema v40 intentionally rejects all older worlds.
+- Added the required `pale-mirror-visuals` JAR and narrow experimental Core/Visuals SPI; Core v41 and Visuals v40 intentionally reject older worlds.
 - Replaced the crash-prone loaded-chunk genesis materializer with an asynchronous immutable catalog and a chunk-local worldgen Feature. Static settlement, MineSite and baseline-rail geometry is no longer written from `ChunkEvent.Load` or the normal server tick.
 - Added persisted chunk generation stamps, readiness/status SPI, player admission gating, authored MineSite adoption and worldgen-only baseline-rail provenance registration.
 - Added the shared runtime work coordinator with configurable 3 ms / 256-op defaults, staggered cadences and operator telemetry.
@@ -68,7 +68,6 @@
 - Replaced automatic observed-village campaign binding when Visuals is installed; core registers authored communities, places, facilities, sites, route contracts and exact 48-person PM-owned cohort state.
 - Added stable resident UUID commissioning, canonical-growth-only breeding, confirmed-death reconciliation and the isolated exact Villager Overhaul guard/worker/recruitment bridge.
 - Added the GeckoLib Threat Heart, four projected threat stages, infection sound/particles and depot crisis/recovery/prosperity cues. Core remains authoritative.
-- Removed first-generation mine force-loading; authored settlement work, MineSites and baseline rail work advance from naturally loaded chunks only.
 - Cut every long-lived representation over to the shared schema-v40 materialization registry, guarded gateway, exact semantic cells and parcel ledger.
 - Added explicit influence/community/public-infrastructure/reserved/player-lease parcels; player work becomes PM-managed only through an explicit commissioning permit.
 - Added canonical `WorldJourney`, deterministic off-screen travel/risk, exclusive stable-resident identity leases, bounded nearby physical groups and canonical return journeys.
@@ -76,7 +75,7 @@
 - Added terrain-costed, grade-safe persisted baseline rail paths with arbitrary turns, loaded-chunk construction and topology-based player reroute adoption.
 - Added 72 Visuals unit/planner tests and 29 Visuals GameTests including deterministic chunk-local compilation, the 468-case climate/rotation/state showcase matrix, blueprint sanitizing, powered-rail corners, route-indexed bridge piers, late-write rail recovery, bridge water preservation, full-height vegetation cleanup, circular environment/structure exclusion, terrain blending, dormant Red Valley projects, supported mine roofs/posts, safe resident spawn, semantic discovery chunks, shared gate datums, real facade-throat validation and biome-feature registration under exact Sable 2.0.3.
 - Made `WorldState` collection views immutable and mutations package-private; production mutations cross `DomainCommandExecutor`/`DomainTransaction`, while a codec-only hydration builder rejects duplicate persisted identities.
-- Added schema-v40 canonical and physical integrity validation on load and save, typed command failures, atomic aggregate registration and command-owned Narrator evaluation/reset/registration paths.
+- Added schema-v41 canonical and physical integrity validation on load and save, typed command failures, atomic aggregate registration and command-owned Narrator evaluation/reset/registration paths.
 - Added a configurable ephemeral NeoForge ambient-spawn budget that strongly reduces natural hostiles and moderately reduces natural fauna without deleting existing entities or suppressing authored content.
 - Added indexed settlement-influence ecology protection: natural/chunk-generation/patrol monsters and tree-like growth are rejected across the full vertical column without granting block ownership or suppressing explicit PM encounters/spawners. Fresh genesis removes bounded natural vegetation before modules.
 - Bound every semantic slot to one explicit parcel, added postcondition rollback, rejected duplicate current materialization jobs and compacted terminal jobs into bounded receipts.
@@ -110,10 +109,11 @@
 - On the current clean server seed `498271306745119823`, the selector planned five strict complete regions in 119.615s; v27/v36 catalog `283fab40d6bc60e2` owns 947 slices and every COMPILED Foundry gate passed with zero blockers/errors. Settlements are `-4760,64,16280`, `13816,67,10744`, `15704,65,2104`, `-4552,67,-6008`, and `-9912,66,1608`.
 - Settlement and mine surface NBT now use a pinned curated architectural library with role-specific civic, residential, industrial and logistics buildings. PM continues to own the site plan, exact semantic entrances, terrain integration, roads, yards and runtime state. Imported entities remain excluded; finite local inventories and intentional Create machinery are preserved once, while creative motors, unsafe external links, runtime contraption state, hazards and unknown blocks fail closed. PM no longer glues synthetic doors, lintels, aprons or machinery onto curated buildings.
 - The v27/v36 client audits at settlement `15704,65,2104` (`build/visual-audits/20260816T062346Z-first-authored`) and the former gate-defect region `-4552,67,-6008` (`build/visual-audits/20260816T062559Z-pale_mirror_iron_frontier_ee42ab5fe39f_place`) prove a complete shared-datum freight frame and successful semantic-chunk discovery with the immediate Atlas/P notice. The earlier full v26/v35 audit remains at `build/visual-audits/20260815T232830Z-first-authored`; conservative perimeter/access `surface_datum_drift` viewpoints remain audit-tooling/art-direction follow-up rather than a COMPILED blocker.
+- Replaced single-owner regions with schema-v41 multi-audience authority: independent personal/team knowledge, access and scenario decisions share one incident clock and physical outcome; spectators are excluded, all-offline grace pauses, strategic actions require RESPOND, and linked nonterminal scenarios resolve exactly once. The cut passes 157 JUnit tests, 47 Core GameTests, packaged crash/restart and all seven Xvfb client profiles.
 ### Next
-- Exercise the deployed street network on foot, then Mine17 traversal/recovery, retained Create machinery and baseline freight. Use the captured perimeter/access `surface_datum_drift` cluster to tune the conservative Foundry rule separately from the now-correct authored geometry.
+- Exercise two independent audiences against one deployed crisis, then Mine17 traversal/recovery, retained Create machinery and baseline freight. Verify private offers/decisions, shared physical help, RESPOND-gated strategy, one outcome and all-audiences-offline grace pause before the external 0.3 product gates.
 ## Open questions
 - Temperate natural placement and finalization are visually confirmed; cold-taiga and dry-arid art-family quality plus live VO patrol/combat quality still need equivalent client playtesting.
 - Public redistribution remains out of scope; re-audit all imported asset and dependency licences before changing that assumption.
 ## Working set
-- `AGENTS.md`, `architecture.yml`, Gradle build; `pale-mirror-api`; Visuals genesis/layout/assets/residents; NeoForge authored registration/persistence.
+- `AGENTS.md`, `architecture.yml`, Gradle build; domain regional knowledge/scenarios/emergency; NeoForge discovery/presentation/persistence; server deployment.

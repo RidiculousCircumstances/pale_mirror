@@ -51,7 +51,9 @@ public final class RegionalJournal {
                 + cause + "\n\nFalling reserves cause rationing, weaker defence and eventually evacuation."));
         MutableComponent responses = Component.literal("AVAILABLE RESPONSES\n\n1. Clear the infected mine and let the legacy line recover.\n\n"
                 + "2. Validate a Create route from the alternate source.\n\n3. Preserve people through evacuation.\n\nIgnoring the crisis remains a choice; the world keeps its outcome.");
-        data.worldState().emergencyWindow(community.id()).filter(window ->
+        boolean responding = data.worldState().hasRespondingScenario(audience, community.id(),
+                io.farfrontier.palemirror.domain.ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS);
+        data.worldState().emergencyWindow(community.id()).filter(window -> responding &&
                 window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).ifPresent(window -> {
             MutableComponent prepare = Component.literal("\n\n[Prepare refugee site]").withStyle(Style.EMPTY.withUnderlined(true)
                     .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
@@ -249,7 +251,10 @@ public final class RegionalJournal {
                 .filter(entry -> entry.dimensionId().equals(dimensionId)
                         && entry.anchor().distSqr(position) <= 256L * 256L).isPresent()).findFirst();
         if (local.isPresent()) return local.get();
-        return data.worldState().livingRegions().stream().filter(candidate -> audience.equals(candidate.primaryAudience()))
+        return data.worldState().livingRegions().stream().filter(candidate -> data.worldState()
+                        .regionKnowledge(audience, candidate.id())
+                        .filter(knowledge -> knowledge.knows(io.farfrontier.palemirror.domain.KnownRegionalFeature.SETTLEMENT))
+                        .isPresent())
                 .sorted(java.util.Comparator.comparing(io.farfrontier.palemirror.domain.LivingRegionState::id)).findFirst().orElse(null);
     }
 

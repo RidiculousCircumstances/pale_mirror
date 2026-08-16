@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.domain;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /** Resolves presentation from canonical supply facts; it never creates the crisis itself. */
@@ -23,12 +24,19 @@ public final class SettlementCrisisRuntime {
 
     public List<DomainEvent> reconcile(WorldState state) {
         List<DomainEvent> produced = new ArrayList<>();
-        for (ScenarioInstance scenario : state.scenarios()) {
-            if (scenario.archetype() != ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS || scenario.status().isTerminal()
-                    || scenario.status() == ScenarioStatus.BLOCKED) continue;
-            LivingRegionState region = state.livingRegions().stream()
-                    .filter(value -> value.communityId().equals(scenario.target())).findFirst().orElse(null);
-            if (region == null) continue;
+        for (LivingRegionState region : state.livingRegions().stream()
+                .sorted(Comparator.comparing(LivingRegionState::id)).toList()) {
+            List<ScenarioInstance> linked = state.scenarios().stream()
+                    .filter(value -> value.target().equals(region.communityId()))
+                    .filter(value -> value.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)
+                    .filter(value -> !value.status().isTerminal())
+                    .sorted(Comparator.comparing(ScenarioInstance::id)).toList();
+            boolean incidentStarted = region.incidentResolvedAtStep() >= 0 || region.incidentArmedAtStep() >= 0
+                    && state.history().stream()
+                    .anyMatch(value -> value.type() == DomainEventType.MINE_INFECTED
+                            && value.subject().equals(region.primaryFacilityId())
+                            && value.simulationStep() >= region.incidentArmedAtStep());
+            if (!incidentStarted) continue;
             ResourceAccount iron = state.economy(region.communityId()).map(value -> value.require(ResourceKind.IRON)).orElse(null);
             if (iron == null) continue;
             boolean primaryRecovered = state.facility(region.primaryFacilityId())
@@ -39,19 +47,33 @@ public final class SettlementCrisisRuntime {
             boolean evacuated = state.populationGroups(region.communityId()).stream().allMatch(value ->
                     value.disposition() == PopulationDisposition.DISPLACED
                             || value.disposition() == PopulationDisposition.RESETTLED);
-            String outcome = primaryRecovered ? PRIMARY_OUTCOME : alternateValidated ? ALTERNATE_OUTCOME
+            String outcome = region.incidentResolvedAtStep() >= 0 ? region.incidentOutcome()
+                    : primaryRecovered ? PRIMARY_OUTCOME : alternateValidated ? ALTERNATE_OUTCOME
                     : evacuated ? EVACUATED_OUTCOME : "";
-            if (outcome.isEmpty() || !scenario.resolve(outcome)) continue;
+            if (outcome.isEmpty()) continue;
             DomainEventType outcomeType = primaryRecovered ? DomainEventType.PRIMARY_SUPPLY_RESTORED
                     : alternateValidated ? DomainEventType.ALTERNATE_SUPPLY_VALIDATED : DomainEventType.COMMUNITY_EVACUATED;
-            DomainEvent outcomeEvent = events.create(state, outcomeType, scenario.target(), scenario.sourceEventId());
-            DomainEvent resolved = events.create(state, DomainEventType.SCENARIO_RESOLVED,
-                    scenario.target(), scenario.sourceEventId());
-            state.addEvent(outcomeEvent);
-            state.addEvent(resolved);
-            produced.add(outcomeEvent);
-            produced.add(resolved);
+            if (region.resolveIncident(outcome, state.simulationStep())) {
+                String cause = linked.isEmpty() ? incidentCausation(state, region) : linked.getFirst().sourceEventId();
+                DomainEvent outcomeEvent = events.create(state, outcomeType, region.communityId(), cause);
+                state.addEvent(outcomeEvent);
+                produced.add(outcomeEvent);
+            }
+            for (ScenarioInstance scenario : linked) {
+                if (!scenario.resolve(outcome)) continue;
+                DomainEvent resolved = events.create(state, DomainEventType.SCENARIO_RESOLVED,
+                        scenario.target(), scenario.sourceEventId());
+                state.addEvent(resolved);
+                produced.add(resolved);
+            }
         }
         return List.copyOf(produced);
+    }
+
+    private static String incidentCausation(WorldState state, LivingRegionState region) {
+        return state.history().stream().filter(value -> value.type() == DomainEventType.MINE_INFECTED
+                        && value.subject().equals(region.primaryFacilityId()))
+                .reduce((ignored, latest) -> latest).map(DomainEvent::eventId)
+                .orElse("region-incident:" + region.id());
     }
 }

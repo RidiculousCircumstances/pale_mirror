@@ -170,7 +170,7 @@ class SimulationEngineTest {
 
         assertEquals(ScenarioStatus.RESOLVED, scenario.status());
         assertEquals(SettlementCrisisRuntime.ALTERNATE_OUTCOME, scenario.resolutionOutcome());
-        assertEquals(RecognitionState.RECOGNIZED, region.recognition());
+        assertEquals(0, region.firstDiscoveredAtStep());
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.ALTERNATE_SUPPLY_VALIDATED));
     }
 
@@ -279,8 +279,7 @@ class SimulationEngineTest {
         WorldObjectId primaryRoute = new WorldObjectId("pale_mirror:mine17_route");
         WorldObjectId alternateRoute = new WorldObjectId("pale_mirror:red_valley_route");
         LivingRegionState region = new LivingRegionState("pale_mirror:ironhill_v2", communityId, placeId, primaryMine,
-                alternateMine, primaryRoute, alternateRoute, 0, StoryAudienceId.globalTestAudience(),
-                RecognitionState.RECOGNIZED, 0);
+                alternateMine, primaryRoute, alternateRoute, 0, false, 0, 0);
         services.commands().execute(state, new DomainCommand.RegisterLivingRegion(region,
                 java.util.List.of(new FacilityState(primaryMine, TEST_SOURCE, 18, 99, 0),
                         new FacilityState(alternateMine, TEST_SOURCE, 18, 99, 0)),

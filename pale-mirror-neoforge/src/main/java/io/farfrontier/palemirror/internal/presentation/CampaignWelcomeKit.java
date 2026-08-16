@@ -18,8 +18,12 @@ public final class CampaignWelcomeKit {
 
     private CampaignWelcomeKit() { }
 
-    public static void grant(ServerPlayer player, WorldObjectRegistryEntry settlement) {
-        if (player.getPersistentData().getBoolean(GRANTED_KEY)) return;
+    public static boolean granted(ServerPlayer player) {
+        return player.getPersistentData().getBoolean(GRANTED_KEY);
+    }
+
+    public static boolean grant(ServerPlayer player, WorldObjectRegistryEntry settlement) {
+        if (granted(player)) return false;
         ItemStack letter = new ItemStack(Items.PAPER);
         letter.set(DataComponents.CUSTOM_NAME, Component.literal("Letter from Ironhill"));
         letter.set(DataComponents.LORE, new ItemLore(List.of(
@@ -34,5 +38,6 @@ public final class CampaignWelcomeKit {
         player.getInventory().placeItemBackInInventory(ledger);
         player.getPersistentData().putBoolean(GRANTED_KEY, true);
         player.sendSystemMessage(Component.literal("A survey map, Ironhill letter and Pale Mirror Regional Ledger were added to your inventory. Press P to open the Atlas."));
+        return true;
     }
 }

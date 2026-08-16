@@ -27,7 +27,6 @@ import io.farfrontier.palemirror.domain.SiteAffiliation;
 import io.farfrontier.palemirror.domain.SiteAffiliationRole;
 import io.farfrontier.palemirror.domain.SiteCapability;
 import io.farfrontier.palemirror.domain.SiteCapabilityType;
-import io.farfrontier.palemirror.domain.StoryAudienceId;
 import io.farfrontier.palemirror.domain.StructuralIntegrity;
 import io.farfrontier.palemirror.domain.WorldObjectId;
 import io.farfrontier.palemirror.domain.WorldSite;
@@ -299,19 +298,20 @@ final class RegionalStateCodec {
         tag.putString("primaryRoute", value.primaryRouteId().value());
         tag.putString("alternateRoute", value.alternateRouteId().value());
         tag.putLong("incidentDelaySteps", value.incidentDelaySteps());
-        if (value.primaryAudience() != null) tag.putString("audience", value.primaryAudience().value());
-        tag.putString("recognition", value.recognition().name());
-        tag.putLong("discoveredAtStep", value.discoveredAtStep());
         tag.putBoolean("knowledgeGatedIncident", value.knowledgeGatedIncident());
+        tag.putLong("firstDiscoveredAtStep", value.firstDiscoveredAtStep());
+        tag.putLong("incidentArmedAtStep", value.incidentArmedAtStep());
+        tag.putString("incidentOutcome", value.incidentOutcome());
+        tag.putLong("incidentResolvedAtStep", value.incidentResolvedAtStep());
         return tag;
     }
 
     private static LivingRegionState readRegion(CompoundTag tag) {
-        StoryAudienceId audience = tag.contains("audience", Tag.TAG_STRING) ? new StoryAudienceId(tag.getString("audience")) : null;
         return new LivingRegionState(tag.getString("id"), id(tag, "community"), id(tag, "place"),
                 id(tag, "primaryFacility"), id(tag, "alternateFacility"), id(tag, "primaryRoute"), id(tag, "alternateRoute"),
-                tag.getLong("incidentDelaySteps"), audience, RecognitionState.valueOf(tag.getString("recognition")),
-                tag.getLong("discoveredAtStep"), tag.getBoolean("knowledgeGatedIncident"));
+                tag.getLong("incidentDelaySteps"), tag.getBoolean("knowledgeGatedIncident"),
+                tag.getLong("firstDiscoveredAtStep"), tag.getLong("incidentArmedAtStep"),
+                tag.getString("incidentOutcome"), tag.getLong("incidentResolvedAtStep"));
     }
 
     private static CompoundTag writePopulationGroup(PopulationGroup value) {

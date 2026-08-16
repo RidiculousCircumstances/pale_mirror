@@ -3,8 +3,10 @@ package io.farfrontier.palemirror.domain;
 import java.util.List;
 import java.util.Comparator;
 import java.util.Optional;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
-/** First rule-based storyteller: it turns a global incident into at most one audience scenario. */
+/** Rule-based storyteller: it turns one global fact into at most one private scenario per audience. */
 public final class Narrator {
     private final DomainEventFactory events;
 
@@ -66,7 +68,7 @@ public final class Narrator {
         if (state.hasNarratorDecisionForSource(event.eventId(), audience) || !state.narratorReady(audience)
                 || audienceBusyForTarget(state, audience, event.subject())) return List.of();
         ScenarioInstance scenario = new ScenarioInstance(
-                "pm:scenario:" + event.eventId().substring("pm:event:".length()), event.eventId(), event.subject(), audience,
+                scenarioId(event.eventId(), audience), event.eventId(), event.subject(), audience,
                 definition.id(), definition.version(), definition.stages(), definition.requiredCapabilities(),
                 definition.encounterProfileId(), definition.encounterProfileVersion(), definition.archetype(), ScenarioStatus.OFFERED, null, "");
         state.putScenario(scenario);
@@ -74,6 +76,12 @@ public final class Narrator {
         DomainEvent offered = events.create(state, DomainEventType.SCENARIO_OFFERED, event.subject(), event.eventId());
         state.addEvent(offered);
         return List.of(offered);
+    }
+
+    private static String scenarioId(String sourceEventId, StoryAudienceId audience) {
+        UUID identity = UUID.nameUUIDFromBytes((sourceEventId + "\u0000" + audience.value())
+                .getBytes(StandardCharsets.UTF_8));
+        return "pm:scenario:" + identity;
     }
 
     public List<DomainEvent> noScenario(WorldState state, DomainEvent event, StoryAudienceId audience, String reason) {

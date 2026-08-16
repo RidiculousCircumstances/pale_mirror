@@ -88,8 +88,7 @@ class SettlementAuthorityProfileTest {
         state.putFacility(mine);
         state.putLivingRegion(new LivingRegionState("native-test", COMMUNITY, PLACE, mine.id(),
                 new WorldObjectId("pale_mirror:alternate"), new WorldObjectId("pale_mirror:route"),
-                new WorldObjectId("pale_mirror:alternate_route"), 0, StoryAudienceId.globalTestAudience(),
-                RecognitionState.RECOGNIZED, 0));
+                new WorldObjectId("pale_mirror:alternate_route"), 0, false, 0, 0));
         return state;
     }
 }

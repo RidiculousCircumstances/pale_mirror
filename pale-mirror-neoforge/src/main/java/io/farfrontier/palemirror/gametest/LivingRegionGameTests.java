@@ -66,8 +66,19 @@ public final class LivingRegionGameTests {
         setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.DiscoverLivingRegion(region.id(), audience, "gametest:discover"));
         setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.DiscoverRegionalFeature(region.id(), audience,
                 io.farfrontier.palemirror.domain.KnownRegionalFeature.DEPOT, "gametest:depot"));
+        setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.DiscoverRegionalFeature(region.id(), audience,
+                io.farfrontier.palemirror.domain.KnownRegionalFeature.PRIMARY_ROUTE, "gametest:route"));
         setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.ObserveAudienceRegionAccess(region.id(), audience,
                 io.farfrontier.palemirror.domain.AudienceRegionReachability.LOCAL, true, data.worldState().simulationStep(), "gametest:access"));
+        var otherAudience = new io.farfrontier.palemirror.domain.StoryAudienceId("pm:audience:other");
+        setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.DiscoverLivingRegion(
+                region.id(), otherAudience, "gametest:other-discover"));
+        setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.DiscoverRegionalFeature(
+                region.id(), otherAudience, io.farfrontier.palemirror.domain.KnownRegionalFeature.DEPOT,
+                "gametest:other-depot"));
+        setupCommands.execute(data.worldState(), new io.farfrontier.palemirror.domain.DomainCommand.ObserveAudienceRegionAccess(
+                region.id(), otherAudience, io.farfrontier.palemirror.domain.AudienceRegionReachability.REMOTE,
+                false, data.worldState().simulationStep(), "gametest:other-offline"));
         var settlement = data.worldState().community(region.communityId()).orElseThrow();
         helper.assertValueEqual(region.primaryFacilityId(), bindings.primaryMineId(),
                 "a region instance must have its deterministically derived primary mine");
@@ -108,7 +119,7 @@ public final class LivingRegionGameTests {
                 villageAnchor.offset(64, 0, 0), villageAnchor.offset(96, 0, 0), villageAnchor.offset(128, 0, 0),
                 null, null, io.farfrontier.palemirror.internal.world.CampaignRegionPresentationStatus.PLANNED,
                 "", 0, -1, -1, 0, 0, "", ""));
-        var atlas = RegionalAtlasProjection.snapshot(data, region.primaryAudience(), "", false).snapshot();
+        var atlas = RegionalAtlasProjection.snapshot(data, audience, "", false).snapshot();
         var atlasCards = atlas.getList("regions", net.minecraft.nbt.Tag.TAG_COMPOUND);
         helper.assertValueEqual(atlasCards.size(), 1,
                 "the Atlas must exclude an unclaimed region even when it sorts beside the discovered one");
@@ -170,7 +181,14 @@ public final class LivingRegionGameTests {
                 "restart snapshot must retain positive development state");
         helper.assertTrue(reloaded.worldState().regionKnowledge(audience, region.id()).orElseThrow().knows(
                 io.farfrontier.palemirror.domain.KnownRegionalFeature.DEPOT), "restart must retain audience-scoped discovery");
-        helper.assertTrue(reloaded.worldState().regionAccess(audience, region.id()).orElseThrow().present(), "restart must retain fairness evidence");
+        helper.assertTrue(reloaded.worldState().regionKnowledge(otherAudience, region.id()).orElseThrow().knows(
+                io.farfrontier.palemirror.domain.KnownRegionalFeature.DEPOT),
+                "restart must retain a second independent audience's discovery");
+        helper.assertTrue(reloaded.worldState().regionAccess(audience, region.id()).orElseThrow().online(), "restart must retain fairness evidence");
+        helper.assertTrue(!reloaded.worldState().regionAccess(otherAudience, region.id()).orElseThrow().online(),
+                "restart must retain independent offline evidence");
+        helper.assertValueEqual(reloaded.worldState().livingRegion(region.id()).orElseThrow().incidentArmedAtStep(),
+                region.incidentArmedAtStep(), "restart must retain the one global incident clock");
         helper.assertValueEqual(reloaded.worldState().settlementAuthorityProfile(region.communityId()).orElseThrow().profileId(),
                 "pale_mirror:pm_managed", "restart snapshot must retain the immutable settlement authority contract");
         CompoundTag schema32 = snapshot.copy();
@@ -179,7 +197,7 @@ public final class LivingRegionGameTests {
             PaleMirrorSavedData.load(schema32, level.registryAccess());
             throw new AssertionError("schema v32 must not be retrofitted with authored settlements");
         } catch (IllegalStateException expected) {
-            helper.assertTrue(expected.getMessage().contains("not compatible with schema 40"),
+            helper.assertTrue(expected.getMessage().contains("not compatible with schema 41"),
                     "fresh-world rejection must explain the exact schema boundary");
         }
         helper.succeed();
@@ -260,7 +278,6 @@ public final class LivingRegionGameTests {
                 "autonomous commissioning must persist both physical MineSite identities");
         helper.succeed();
     }
-
     @GameTest(batch = "pm-autonomous-region", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 400)
     public static void autonomousMineSitePreflightPreservesProtectedBlocksBeforeWrites(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -278,7 +295,6 @@ public final class LivingRegionGameTests {
                 new WorldObjectId("pale_mirror:blocked_region"));
         var record = campaignRecord(level, settlement, primary, primary.east(32), bindings.regionId());
         data.campaignRegions().put(record.id(), record);
-
         CampaignRegionBootstrapper.advancePhysicalPlan(level, data, record);
         helper.assertValueEqual(record.status(),
                 io.farfrontier.palemirror.internal.world.CampaignRegionPresentationStatus.BLOCKED,
@@ -359,7 +375,6 @@ public final class LivingRegionGameTests {
                 "the mine listing must still expose planned coordinates when teleport is unavailable");
         helper.succeed();
     }
-
     @GameTest(batch = "pm-runtime-debug", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     @SuppressWarnings("removal")
     public static void offeredScenarioRendersReadableClickableAcceptCommand(GameTestHelper helper) {
@@ -384,7 +399,6 @@ public final class LivingRegionGameTests {
                 "the command tree must consume the complete colon-bearing opaque scenario ID");
         helper.succeed();
     }
-
     @GameTest(batch = "pm-runtime-debug", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void resetIsTwoPhaseAndFailsClosedOncePhysicalWorkStarts(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -432,12 +446,10 @@ public final class LivingRegionGameTests {
                 "successful reset must prevent immediate automatic re-registration in the same runtime");
         helper.succeed();
     }
-
     static SettlementObservation observation(ServerLevel level, BlockPos anchor, int population, int guards,
                                                      long observedAt) {
         return observation(level, new WorldObjectId("pale_mirror:test_observed_village"), anchor, population, guards, observedAt);
     }
-
     static SettlementObservation observation(ServerLevel level, WorldObjectId id, BlockPos anchor,
                                                      int population, int guards, long observedAt) {
         java.util.List<io.farfrontier.palemirror.internal.adapter.SettlementRepresentativeObservation> representatives

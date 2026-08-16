@@ -8,7 +8,6 @@ import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.OperationalState;
 import io.farfrontier.palemirror.domain.PopulationGroup;
-import io.farfrontier.palemirror.domain.RecognitionState;
 import io.farfrontier.palemirror.domain.ResourceAccount;
 import io.farfrontier.palemirror.domain.ResourceKind;
 import io.farfrontier.palemirror.domain.RouteContract;
@@ -94,7 +93,7 @@ final class GameTestStateReset {
                         ResourceKind.IRON, 8, 4, 8, RouteContractStatus.PLANNED));
         LivingRegionState region = new LivingRegionState(regionId, communityId, placeId,
                 primaryFacilityId, alternateFacilityId, primaryRouteId, alternateRouteId,
-                4, null, RecognitionState.DISCOVERED, -1);
+                4, false);
         new DomainServices().commands().execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region,
                 List.of(new FacilityState(primaryFacilityId, new InfectionSourceId("pale_mirror:test"), 8, 10, 0),
                         new FacilityState(alternateFacilityId, new InfectionSourceId("pale_mirror:test"), 8, 10, 0)),

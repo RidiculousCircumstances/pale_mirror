@@ -17,20 +17,20 @@ class AudienceRegionKnowledgeTest {
 
         commands.execute(state, new DomainCommand.DiscoverLivingRegion(region.id(), AUDIENCE, "test:settlement"));
         state.setSimulationStep(100);
-        assertFalse(region.incidentDue(state.simulationStep(),
-                state.regionKnowledge(AUDIENCE, region.id()).orElseThrow()));
+        assertFalse(region.incidentDue(state.simulationStep()));
 
         commands.execute(state, new DomainCommand.DiscoverRegionalFeature(region.id(), AUDIENCE,
                 KnownRegionalFeature.DEPOT, "test:depot"));
         commands.execute(state, new DomainCommand.DiscoverRegionalFeature(region.id(), AUDIENCE,
                 KnownRegionalFeature.PRIMARY_ROUTE, "test:route"));
-        AudienceRegionKnowledge knowledge = state.regionKnowledge(AUDIENCE, region.id()).orElseThrow();
-        assertFalse(region.incidentDue(104, knowledge));
-        assertTrue(region.incidentDue(105, knowledge));
+        assertFalse(region.incidentDue(104));
+        assertTrue(region.incidentDue(105));
+        assertTrue(region.firstDiscoveredAtStep() == 0);
+        assertTrue(region.incidentArmedAtStep() == 100);
     }
 
     @Test
-    void anotherAudienceCannotRevealAClaimedRegion() {
+    void audiencesDiscoverTheSameRegionIndependentlyWithoutResettingTheIncidentClock() {
         WorldState state = state();
         DomainCommandProcessor commands = new DomainServices().commands();
         LivingRegionState region = state.livingRegion("test-region").orElseThrow();
@@ -38,7 +38,25 @@ class AudienceRegionKnowledgeTest {
 
         assertTrue(commands.execute(state, new DomainCommand.DiscoverRegionalFeature(region.id(), OTHER,
                 KnownRegionalFeature.DEPOT, "test:foreign")).isEmpty());
-        assertTrue(state.regionKnowledge(OTHER, region.id()).isEmpty());
+        commands.execute(state, new DomainCommand.DiscoverRegionalFeature(region.id(), AUDIENCE,
+                KnownRegionalFeature.DEPOT, "test:first-depot"));
+        commands.execute(state, new DomainCommand.DiscoverRegionalFeature(region.id(), AUDIENCE,
+                KnownRegionalFeature.PRIMARY_ROUTE, "test:first-route"));
+        long armedAt = region.incidentArmedAtStep();
+
+        state.setSimulationStep(3);
+        assertFalse(commands.execute(state, new DomainCommand.DiscoverLivingRegion(region.id(), OTHER,
+                "test:other-settlement")).isEmpty());
+        assertFalse(commands.execute(state, new DomainCommand.DiscoverRegionalFeature(region.id(), OTHER,
+                KnownRegionalFeature.DEPOT, "test:other-depot")).isEmpty());
+        assertFalse(commands.execute(state, new DomainCommand.DiscoverRegionalFeature(region.id(), OTHER,
+                KnownRegionalFeature.PRIMARY_ROUTE, "test:other-route")).isEmpty());
+
+        assertTrue(state.regionKnowledge(AUDIENCE, region.id()).orElseThrow().knows(KnownRegionalFeature.DEPOT));
+        assertTrue(state.regionKnowledge(OTHER, region.id()).orElseThrow().knows(KnownRegionalFeature.DEPOT));
+        assertTrue(region.incidentArmedAtStep() == armedAt);
+        assertTrue(commands.execute(state, new DomainCommand.DiscoverLivingRegion(region.id(), OTHER,
+                "test:duplicate")).isEmpty());
     }
 
     private static WorldState state() {
@@ -49,7 +67,7 @@ class AudienceRegionKnowledgeTest {
                 new WorldObjectId("pale_mirror:test_community"), place,
                 new WorldObjectId("pale_mirror:test_mine"), new WorldObjectId("pale_mirror:test_alternate"),
                 new WorldObjectId("pale_mirror:test_route"), new WorldObjectId("pale_mirror:test_alt_route"),
-                5, null, RecognitionState.DISCOVERED, -1, true));
+                5, true));
         return state;
     }
 }

@@ -503,9 +503,10 @@ overwriting the village or player construction.
 Schema v22 removes population from `SettlementCommunity`. Cohort counts and
 location now belong to `PopulationGroup`, so a ruined place cannot erase the
 community's identity or memory. A critical threatened community with defence
-at or below 20 opens an eight-step intervention window. The primary audience
-may begin evacuation from the journal; otherwise deterministic settlement
-policy begins it when the window expires. Narrator does not own this fact.
+at or below 20 opens one intervention window. An informed audience with an
+active `RESPOND` crisis and a verified shelter may begin evacuation; otherwise
+deterministic settlement policy begins it when the reachability-adjusted window
+expires. Narrator does not own this fact.
 
 Evacuation takes two simulation steps and then empties the original place.
 Without a registered shelter the group becomes `DISPLACED` and PM plans a

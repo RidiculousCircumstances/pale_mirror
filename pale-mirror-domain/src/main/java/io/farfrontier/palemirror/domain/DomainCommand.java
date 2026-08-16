@@ -227,10 +227,12 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
     }
 
     /** Player-approved use of canonical settlement reserves for an alternate freight works. */
-    record PlanAlternateDispatch(WorldObjectId communityId, WorldObjectId dispatchSiteId,
+    record PlanAlternateDispatch(WorldObjectId communityId, StoryAudienceId audience,
+                                 WorldObjectId dispatchSiteId,
                                  int requiredIron, String causationId) implements DomainCommand {
         public PlanAlternateDispatch {
             Objects.requireNonNull(communityId, "communityId");
+            Objects.requireNonNull(audience, "audience");
             Objects.requireNonNull(dispatchSiteId, "dispatchSiteId");
             Objects.requireNonNull(causationId, "causationId");
             if (requiredIron <= 0) throw new IllegalArgumentException("requiredIron must be positive");
@@ -270,7 +272,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
     }
 
     record ObserveAudienceRegionAccess(String regionId, StoryAudienceId audience,
-                                       AudienceRegionReachability reachability, boolean present,
+                                       AudienceRegionReachability reachability, boolean online,
                                        long observedStep, String observationId) implements DomainCommand {
         public ObserveAudienceRegionAccess {
             Objects.requireNonNull(regionId, "regionId");

@@ -18,6 +18,7 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
     private final SettlementCrisisRuntime settlementCrises;
     private final DomainEventFactory events;
     private final LivingRegionRegistrationRuntime regionRegistration;
+    private final RegionalAudienceCommandRuntime regionalAudienceCommands;
     private final DevelopmentCommandRuntime developmentCommands;
 
     DomainCommandProcessor(SimulationEngine simulation, ResourceFlowSimulation resources,
@@ -39,6 +40,7 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
         this.settlementCrises = Objects.requireNonNull(settlementCrises, "settlementCrises");
         this.events = Objects.requireNonNull(events, "events");
         this.regionRegistration = new LivingRegionRegistrationRuntime(events);
+        this.regionalAudienceCommands = new RegionalAudienceCommandRuntime(events);
         this.developmentCommands = new DevelopmentCommandRuntime(events, scenarios);
     }
 
@@ -68,9 +70,9 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
             case DomainCommand.ValidateRouteContract observed -> validateRouteContract(state, observed);
             case DomainCommand.ObserveSettlementPlace observed -> observeSettlementPlace(state, observed);
             case DomainCommand.RegisterLivingRegion registered -> regionRegistration.register(state, registered);
-            case DomainCommand.DiscoverLivingRegion discovered -> discoverLivingRegion(state, discovered);
-            case DomainCommand.DiscoverRegionalFeature discovered -> discoverRegionalFeature(state, discovered);
-            case DomainCommand.ObserveAudienceRegionAccess observed -> observeAudienceRegionAccess(state, observed);
+            case DomainCommand.DiscoverLivingRegion discovered -> regionalAudienceCommands.discover(state, discovered);
+            case DomainCommand.DiscoverRegionalFeature discovered -> regionalAudienceCommands.discoverFeature(state, discovered);
+            case DomainCommand.ObserveAudienceRegionAccess observed -> regionalAudienceCommands.observeAccess(state, observed);
             case DomainCommand.TriggerFacilityInfection triggered -> triggerFacilityInfection(state, triggered);
             case DomainCommand.DepositResource deposited -> depositResource(state, deposited);
             case DomainCommand.WithdrawResource withdrawn -> withdrawResource(state, withdrawn);
@@ -326,49 +328,6 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
         return List.copyOf(produced);
     }
 
-    private List<DomainEvent> discoverLivingRegion(WorldState state, DomainCommand.DiscoverLivingRegion command) {
-        LivingRegionState region = state.livingRegion(command.regionId())
-                .orElseThrow(() -> new IllegalArgumentException("Unknown living region " + command.regionId()));
-        if (!region.recognize(command.audience(), state.simulationStep())) return List.of();
-        state.place(region.placeId()).orElseThrow().recognize();
-        state.requireOrCreateRegionKnowledge(command.audience(), region.id())
-                .discover(KnownRegionalFeature.SETTLEMENT, state.simulationStep());
-        return record(state, DomainEventType.REGION_DISCOVERED, region.communityId(), command.causationId());
-    }
-
-    private List<DomainEvent> discoverRegionalFeature(WorldState state,
-            DomainCommand.DiscoverRegionalFeature command) {
-        LivingRegionState region = state.livingRegion(command.regionId())
-                .orElseThrow(() -> new IllegalArgumentException("Unknown living region " + command.regionId()));
-        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
-        AudienceRegionKnowledge knowledge = state.requireOrCreateRegionKnowledge(command.audience(), region.id());
-        if (!knowledge.discover(command.feature(), state.simulationStep())) return List.of();
-        return record(state, DomainEventType.REGIONAL_FEATURE_DISCOVERED, region.communityId(),
-                command.feature().name() + ":" + command.causationId());
-    }
-
-    private List<DomainEvent> observeAudienceRegionAccess(WorldState state,
-            DomainCommand.ObserveAudienceRegionAccess command) {
-        LivingRegionState region = state.livingRegion(command.regionId())
-                .orElseThrow(() -> new IllegalArgumentException("Unknown living region " + command.regionId()));
-        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
-        if (command.observedStep() > state.simulationStep()) {
-            throw new IllegalArgumentException("Audience access observation cannot come from the future");
-        }
-        AudienceRegionAccess access = state.regionAccess(command.audience(), command.regionId()).orElse(null);
-        if (access == null) {
-            state.putRegionAccess(new AudienceRegionAccess(command.audience(), command.regionId(),
-                    command.reachability(), command.present(), command.observedStep(), command.observationId()));
-            return record(state, DomainEventType.AUDIENCE_REGION_ACCESS_CHANGED, region.communityId(),
-                    command.observationId());
-        }
-        if (!access.observe(command.reachability(), command.present(), command.observedStep(), command.observationId())) {
-            return List.of();
-        }
-        return record(state, DomainEventType.AUDIENCE_REGION_ACCESS_CHANGED, region.communityId(),
-                command.observationId());
-    }
-
     private List<DomainEvent> triggerFacilityInfection(WorldState state, DomainCommand.TriggerFacilityInfection command) {
         FacilityState facility = state.facility(command.facilityId())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown facility " + command.facilityId()));
@@ -402,7 +361,8 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
         LivingRegionState region = state.livingRegions().stream()
                 .filter(value -> value.communityId().equals(command.communityId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown settlement region " + command.communityId()));
-        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
+        if (!state.hasRespondingScenario(command.audience(), command.communityId(),
+                ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)) return List.of();
         List<DomainEvent> produced = settlementEmergencies.beginEvacuation(state, command.communityId(), command.causationId());
         produced.forEach(state::addEvent);
         return produced;
@@ -413,7 +373,8 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
         LivingRegionState region = state.livingRegions().stream()
                 .filter(value -> value.communityId().equals(command.communityId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown settlement region " + command.communityId()));
-        if (region.primaryAudience() == null || !region.primaryAudience().equals(command.audience())) return List.of();
+        if (!state.hasRespondingScenario(command.audience(), command.communityId(),
+                ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)) return List.of();
         if (!state.emergencyWindow(command.communityId()).map(window -> window.state() == EmergencyWindowState.OPEN).orElse(false)) {
             return List.of();
         }

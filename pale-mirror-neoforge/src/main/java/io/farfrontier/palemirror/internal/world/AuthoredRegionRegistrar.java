@@ -14,7 +14,6 @@ import io.farfrontier.palemirror.domain.GuardCapability;
 import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.OperationalState;
 import io.farfrontier.palemirror.domain.PopulationGroup;
-import io.farfrontier.palemirror.domain.RecognitionState;
 import io.farfrontier.palemirror.domain.ResourceAccount;
 import io.farfrontier.palemirror.domain.ResourceKind;
 import io.farfrontier.palemirror.domain.RouteContract;
@@ -134,7 +133,7 @@ public final class AuthoredRegionRegistrar {
         WorldObjectId placeId = new WorldObjectId(ids.regionId() + "_place");
         LivingRegionState region = new LivingRegionState(ids.regionId(), ids.communityId(), placeId,
                 ids.primaryMineId(), ids.alternateMineId(), ids.primaryRouteId(), ids.alternateRouteId(),
-                definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1, true);
+                definition.crisisDelaySteps(), true);
         FacilityState primary = new FacilityState(ids.primaryMineId(), definition.infectionSource(),
                 definition.ironProduction(), Integer.MAX_VALUE, 0);
         FacilityState alternate = new FacilityState(ids.alternateMineId(), definition.infectionSource(),

@@ -44,7 +44,7 @@ final class AudienceRegionalStateCodec {
         tag.putString("audience", value.audience().value());
         tag.putString("region", value.regionId());
         tag.putString("reachability", value.reachability().name());
-        tag.putBoolean("present", value.present());
+        tag.putBoolean("online", value.online());
         tag.putLong("observedAtStep", value.observedAtStep());
         tag.putString("observationId", value.observationId());
         return tag;
@@ -52,7 +52,7 @@ final class AudienceRegionalStateCodec {
 
     static AudienceRegionAccess readAccess(CompoundTag tag) {
         return new AudienceRegionAccess(new StoryAudienceId(tag.getString("audience")), tag.getString("region"),
-                AudienceRegionReachability.valueOf(tag.getString("reachability")), tag.getBoolean("present"),
+                AudienceRegionReachability.valueOf(tag.getString("reachability")), tag.getBoolean("online"),
                 tag.getLong("observedAtStep"), tag.getString("observationId"));
     }
 }

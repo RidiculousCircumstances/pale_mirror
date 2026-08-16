@@ -130,10 +130,12 @@ public final class RegionalAtlasProjection {
                                 .alternateDispatchSiteId().value()))
                 .map(site -> site.operationalState() != io.farfrontier.palemirror.domain.OperationalState.OPERATIONAL)
                 .orElse(false);
-        value.putBoolean("canCommissionAlternate", alternateKnown && community.supplyRequested()
+        boolean responding = data.worldState().hasRespondingScenario(audience, community.id(),
+                io.farfrontier.palemirror.domain.ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS);
+        value.putBoolean("canCommissionAlternate", responding && alternateKnown && community.supplyRequested()
                 && dispatchOffline && dispatchIntent == null && iron.stock() >= 12);
         boolean canPrepare = data.worldState().emergencyWindow(community.id())
-                .map(window -> window.state() == EmergencyWindowState.OPEN).orElse(false);
+                .map(window -> responding && window.state() == EmergencyWindowState.OPEN).orElse(false);
         value.putBoolean("canPrepareEvacuation", canPrepare);
         value.putBoolean("canBeginEvacuation", canPrepare && preparedShelter(data, community.id()));
         return value;

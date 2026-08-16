@@ -8,7 +8,6 @@ import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.OperationalState;
 import io.farfrontier.palemirror.domain.ObservationFreshness;
-import io.farfrontier.palemirror.domain.RecognitionState;
 import io.farfrontier.palemirror.domain.ResourceAccount;
 import io.farfrontier.palemirror.domain.ResourceKind;
 import io.farfrontier.palemirror.domain.RouteContract;
@@ -194,7 +193,7 @@ public final class CampaignRegionBootstrapper {
         if (definition.version() >= 2 && plannedDepot == null) return;
         LivingRegionState region = new LivingRegionState(bindings.regionId(), bindings.communityId(), placeId,
                 bindings.primaryMineId(), bindings.alternateMineId(), bindings.primaryRouteId(), bindings.alternateRouteId(),
-                definition.crisisDelaySteps(), null, RecognitionState.DISCOVERED, -1, definition.version() >= 2);
+                definition.crisisDelaySteps(), definition.version() >= 2);
         FacilityState primary = new FacilityState(bindings.primaryMineId(), definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
         FacilityState alternate = new FacilityState(bindings.alternateMineId(), definition.infectionSource(), definition.ironProduction(), Integer.MAX_VALUE, 0);
         SettlementCommunity community = new SettlementCommunity(bindings.communityId());

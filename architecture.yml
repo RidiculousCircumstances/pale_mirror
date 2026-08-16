@@ -126,7 +126,7 @@ invariants:
   - id: presentation-read-only
     statement: FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression.
   - id: client-atlas-projection
-    statement: The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence. Every authored manifest pins a horizontal semantic discovery-chunk set covering the irregular managed address, gates, depot and short railway approach without granting block ownership; only audiences with canonical SETTLEMENT knowledge receive that region's Atlas card, and successful discovery immediately pushes a refreshed snapshot.
+    statement: The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence. Every authored manifest pins a horizontal semantic discovery-chunk set covering the irregular managed address, gates, depot and short railway approach without granting block ownership. Every non-spectator StoryAudience discovers and persists its own knowledge independently, receives only known region cards, and gets an immediate refreshed snapshot; spectator/operator audit never creates knowledge or online-presence facts.
   - id: transactional-resource-boundary
     statement: Physical items cross the settlement economy boundary only through a persisted bounded transfer ledger; ordinary container contents never mirror canonical stock, and reserved stacks fail closed until reconciliation completes.
   - id: pm-owned-settlement-sites
@@ -134,15 +134,17 @@ invariants:
   - id: population-separation
     statement: SettlementCommunity owns social identity while PopulationGroup owns cohort counts and disposition; evacuation changes occupancy and location without deleting community identity or inferring deaths from missing entities.
   - id: settlement-catastrophe-fairness
-    statement: A known critical settlement receives a persisted reachability-adjusted grace window before automatic evacuation. Abstract policy continues without Narrator, but irreversible grace pauses while the entire primary StoryAudience is offline; physical consequences touch only PM-owned cells.
+    statement: A known critical settlement receives one persisted global reachability-adjusted grace window before automatic evacuation. Abstract policy continues without Narrator, but irreversible grace advances while any informed non-spectator audience is online and pauses only while all informed audiences are offline; physical consequences touch only PM-owned cells.
+  - id: multi-audience-region-authority
+    statement: LivingRegion, economy, facilities, routes, population, incident timing and physical outcome are global world facts. Knowledge, access observations, scenario offers, acceptance and decline are private per StoryAudience; scoreboard teams are one audience and unteamed players are personal audiences, and team changes never merge old knowledge. Physical help is open to every audience that knows the settlement, strategic commands require that audience's active RESPOND crisis plus world prerequisites, and the first canonical outcome resolves every linked nonterminal private scenario exactly once.
   - id: settlement-positive-development
     statement: Stable surplus creates a persisted domain DevelopmentIntent with bounded project escrow. Player physical IRON crosses through idempotent receipts, or the settlement reserves the remainder after 24 qualifying steps; only a fully funded, provenance-safe verified PM-owned storehouse may advance capacity, housing, prosperity and growth.
   - id: living-frontier-instancing
     statement: An iron_frontier instance derives all canonical object identities from its deterministic fresh-world authored genesis manifest, pins settlement, mines, sites, residents and route geometry before any physical work, and cannot share a community, route, resident or physical job with another instance; observed villages never bootstrap the default campaign.
   - id: narrator-candidate-boundary
-    statement: Narrator candidates are deterministic, transient interpretations of canonical events/history. Replayed development and return opportunities are eligible only while the causally referenced DevelopmentIntent remains PLANNED, and a recovery investment additionally requires a same-community CRISIS_DETECTED -> STABILIZED history before its development plan. Ordinary fresh-world prosperity remains autonomous; stale offers are command-cancelled without cancelling their valid settlement intent. Acceptance revalidates canonical intent state before entering RESPOND. Candidates may select a scenario or persist NO_SCENARIO, but never create a crisis, change settlement policy, inspect Minecraft/adapters, or become a competing mutable queue.
+    statement: Narrator candidates are deterministic, transient per-audience interpretations of canonical events/history. The same global event may yield distinct private scenario identities and decisions for every informed audience. Replayed development and return opportunities are eligible only while the causally referenced DevelopmentIntent remains PLANNED, and a recovery investment additionally requires a same-community CRISIS_DETECTED -> STABILIZED history before its development plan. Ordinary fresh-world prosperity remains autonomous; stale offers are command-cancelled without cancelling their valid settlement intent. Acceptance revalidates canonical intent state before entering RESPOND. Candidates may select a scenario or persist NO_SCENARIO, but never create a crisis, change settlement policy, inspect Minecraft/adapters, or become a competing mutable queue.
   - id: prepared-evacuation
-    statement: A Refugee Anchor item is only a signed player proposal. Canonical shelter registration validates audience, emergency, dimension, safe PM-owned footprint and capacity before physical camp work; camp materialization reconciles site operation through domain commands, while automatic evacuation remains possible without a player permit.
+    statement: A Refugee Anchor item is only a signed player proposal and a strategic action. Canonical shelter registration and player-started evacuation require that audience's active RESPOND supply-crisis scenario, then validate emergency, dimension, safe PM-owned footprint and capacity before physical camp work; camp materialization reconciles site operation through domain commands, while automatic settlement-policy evacuation remains possible without a player permit.
   - id: settlement-field-authority
     statement: Every campaign settlement pins a source-neutral field authority profile; native-reconciled settlements may contribute population and integrity facts while PM remains unable to move, ruin, grow or construct the native society.
   - id: operator-debug-safety
@@ -168,6 +170,10 @@ critical_flows:
   - id: core-recovery
     path: simulation -> MineInfected -> Narrator -> scenario -> materialization job -> observation -> reconciliation -> recovery
     owner: domain plus neoforge bridge
+    verification: critical-code
+  - id: multi-audience-crisis
+    path: authored discovery chunks -> independent audience knowledge -> one globally armed incident -> private scenario offers and responses -> shared physical help or RESPOND-gated strategic action -> first canonical outcome -> all linked nonterminal scenarios resolve exactly once
+    owner: domain regional knowledge/scenario authority plus NeoForge discovery and presentation bridges
     verification: critical-code
   - id: restart-recovery
     path: persisted job -> restart -> postcondition check -> idempotent completion

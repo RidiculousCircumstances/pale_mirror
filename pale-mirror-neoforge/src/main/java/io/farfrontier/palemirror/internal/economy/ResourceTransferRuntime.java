@@ -36,8 +36,10 @@ public final class ResourceTransferRuntime {
         if (depot == null) return InteractionResult.notHandled();
         if (data.resourceTransfers().hasActiveFor(player.getUUID())) return InteractionResult.failure("A resource transfer is already pending");
         var region = data.worldState().livingRegions().stream().filter(value -> value.communityId().equals(depot.communityId())).findFirst().orElse(null);
-        if (region == null || region.primaryAudience() == null || !region.primaryAudience().equals(audience)) {
-            return InteractionResult.failure("This depot belongs to another story audience");
+        if (region == null || data.worldState().regionKnowledge(audience, region.id())
+                .filter(value -> value.knows(io.farfrontier.palemirror.domain.KnownRegionalFeature.SETTLEMENT))
+                .isEmpty()) {
+            return InteractionResult.failure("Discover this settlement before using its managed depot");
         }
         ResourceAccount account = data.worldState().economy(depot.communityId()).orElseThrow().require(ResourceKind.IRON);
         ItemStack held = player.getMainHandItem();

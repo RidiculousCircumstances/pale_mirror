@@ -107,20 +107,26 @@ class SettlementDevelopmentEngineTest {
                 ResourceKind.IRON, 18, 8, 24, RouteContractStatus.PLANNED));
         state.putLivingRegion(new LivingRegionState("pale_mirror:development_region", COMMUNITY, PLACE,
                 new WorldObjectId("pale_mirror:primary_mine"), new WorldObjectId("pale_mirror:alternate_mine"),
-                new WorldObjectId("pale_mirror:primary_route"), alternateRoute, 0, null,
-                RecognitionState.DISCOVERED, -1));
+                new WorldObjectId("pale_mirror:primary_route"), alternateRoute, 0, false));
         DomainServices services = new DomainServices();
+        StoryAudienceId audience = StoryAudienceId.globalTestAudience();
 
         assertTrue(services.commands().execute(state, new DomainCommand.ValidateRouteContract(alternateRoute,
                 18, 0, "train:before-factory", "test:before-factory")).isEmpty());
+        assertTrue(services.commands().execute(state, new DomainCommand.PlanAlternateDispatch(
+                COMMUNITY, audience, dispatch, 12, "atlas:without-response")).isEmpty());
+        state.putScenario(new ScenarioInstance("pm:scenario:alternate-dispatch", "pm:event:dispatch", COMMUNITY,
+                audience, "pale_mirror:settlement_supply_crisis", "1", java.util.List.of("RESPOND"),
+                java.util.List.of(), "", "", ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS,
+                ScenarioStatus.RESPOND, null, ""));
         assertEquals(2, services.commands().execute(state, new DomainCommand.PlanAlternateDispatch(
-                COMMUNITY, dispatch, 12, "atlas:test")).size());
+                COMMUNITY, audience, dispatch, 12, "atlas:test")).size());
         DevelopmentIntent intent = state.developmentIntents().stream()
                 .filter(value -> value.type() == DevelopmentIntentType.COMMISSION_ALTERNATE_DISPATCH)
                 .findFirst().orElseThrow();
         assertEquals(12, state.economy(COMMUNITY).orElseThrow().require(ResourceKind.IRON).reserved());
         assertTrue(services.commands().execute(state, new DomainCommand.PlanAlternateDispatch(
-                COMMUNITY, dispatch, 12, "atlas:duplicate")).isEmpty());
+                COMMUNITY, audience, dispatch, 12, "atlas:duplicate")).isEmpty());
         services.commands().execute(state, new DomainCommand.StartDevelopmentIntent(intent.id()));
         services.commands().execute(state, new DomainCommand.CompleteDevelopmentIntent(intent.id()));
         assertEquals(OperationalState.OPERATIONAL, state.site(dispatch).orElseThrow().operationalState());

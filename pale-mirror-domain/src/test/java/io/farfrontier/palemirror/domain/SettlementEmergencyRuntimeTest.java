@@ -27,7 +27,7 @@ class SettlementEmergencyRuntimeTest {
     }
 
     @Test
-    void primaryAudienceCanBeginEvacuationDuringWindow() {
+    void respondingAudienceCanBeginEvacuationDuringWindow() {
         WorldState state = emergencyState();
         DomainServices services = new DomainServices();
         services.settlementEmergencies().reconcile(state);
@@ -94,6 +94,27 @@ class SettlementEmergencyRuntimeTest {
     }
 
     @Test
+    void anyOnlineInformedAudienceAdvancesTheSharedWindow() {
+        WorldState state = emergencyState();
+        DomainServices services = new DomainServices();
+        StoryAudienceId other = new StoryAudienceId("pm:audience:other");
+        state.regionAccess(StoryAudienceId.globalTestAudience(), "test").orElseThrow()
+                .observe(AudienceRegionReachability.REMOTE, false, 0, "first-offline");
+        state.putRegionKnowledge(new AudienceRegionKnowledge(other, "test",
+                java.util.Set.of(KnownRegionalFeature.SETTLEMENT), -1));
+        state.putRegionAccess(new AudienceRegionAccess(other, "test",
+                AudienceRegionReachability.REGIONAL, true, 0, "other-online"));
+
+        services.settlementEmergencies().reconcile(state);
+        state.setSimulationStep(1);
+        services.settlementEmergencies().reconcile(state);
+
+        assertEquals(AudienceRegionReachability.REGIONAL,
+                state.emergencyWindow(COMMUNITY).orElseThrow().reachabilityAtOpen());
+        assertEquals(11, state.emergencyWindow(COMMUNITY).orElseThrow().remainingGraceSteps());
+    }
+
+    @Test
     void remoteAudienceReceivesAReachabilityAdjustedWindow() {
         WorldState state = emergencyState();
         state.regionAccess(StoryAudienceId.globalTestAudience(), "test").orElseThrow()
@@ -126,10 +147,16 @@ class SettlementEmergencyRuntimeTest {
         state.putFacility(mine);
         state.putLivingRegion(new LivingRegionState("test", COMMUNITY, PLACE, MINE,
                 new WorldObjectId("pale_mirror:alternate"), new WorldObjectId("pale_mirror:route"),
-                new WorldObjectId("pale_mirror:alternate_route"), 0, StoryAudienceId.globalTestAudience(),
-                RecognitionState.RECOGNIZED, 0));
+                new WorldObjectId("pale_mirror:alternate_route"), 0, false, 0, 0));
+        StoryAudienceId audience = StoryAudienceId.globalTestAudience();
+        state.putRegionKnowledge(new AudienceRegionKnowledge(audience, "test",
+                java.util.Set.of(KnownRegionalFeature.SETTLEMENT), -1));
         state.putRegionAccess(new AudienceRegionAccess(StoryAudienceId.globalTestAudience(), "test",
                 AudienceRegionReachability.LOCAL, true, 0, "initial"));
+        state.putScenario(new ScenarioInstance("pm:scenario:emergency", "pm:event:emergency", COMMUNITY,
+                audience, "pale_mirror:settlement_supply_crisis", "1", java.util.List.of("RESPOND"),
+                java.util.List.of(), "", "", ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS,
+                ScenarioStatus.RESPOND, null, ""));
         WorldObjectId fallback = new WorldObjectId("pale_mirror:zz_fallback");
         WorldObjectId origin = new WorldObjectId("pale_mirror:origin");
         state.putSite(new WorldSite(fallback, WorldSiteType.SHELTER, OperationalState.OPERATIONAL));

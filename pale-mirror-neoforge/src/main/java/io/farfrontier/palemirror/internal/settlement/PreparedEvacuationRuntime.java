@@ -71,7 +71,9 @@ public final class PreparedEvacuationRuntime {
             StoryAudienceId audience = audiences.apply(player);
             var region = data.worldState().livingRegions().stream().filter(value -> value.communityId().equals(community))
                     .findFirst().orElse(null);
-            if (region == null || !audience.equals(region.primaryAudience()) || data.worldState().emergencyWindow(community)
+            if (region == null || !data.worldState().hasRespondingScenario(audience, community,
+                    io.farfrontier.palemirror.domain.ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)
+                    || data.worldState().emergencyWindow(community)
                     .filter(window -> window.state() == io.farfrontier.palemirror.domain.EmergencyWindowState.OPEN).isEmpty()) {
                 return false;
             }

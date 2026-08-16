@@ -17,6 +17,8 @@ final class DevelopmentCommandRuntime {
         LivingRegionState region = state.livingRegions().stream()
                 .filter(value -> value.communityId().equals(command.communityId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown settlement region " + command.communityId()));
+        if (!state.hasRespondingScenario(command.audience(), command.communityId(),
+                ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)) return List.of();
         RouteContract route = state.routeContract(region.alternateRouteId()).orElseThrow(() ->
                 new IllegalArgumentException("Unknown alternate route " + region.alternateRouteId()));
         if (!route.originEndpoint().equals(command.dispatchSiteId())) return List.of();

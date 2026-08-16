@@ -134,9 +134,18 @@ public final class CoreRecoveryGameTests {
         player.setPos(anchor.getX() + 0.5, anchor.getY() + 2, anchor.getZ() + 0.5);
         tick(runtime, 2);
         CompoundTag persisted = PaleMirrorSavedData.get(level.getServer().overworld()).save(new CompoundTag(), level.registryAccess());
-        helper.assertValueEqual(persisted.getInt("schemaVersion"), 40,
-                "fresh-world visual-framework snapshot must record schema v40 before physical work continues");
+        helper.assertValueEqual(persisted.getInt("schemaVersion"), 41,
+                "fresh-world multi-audience snapshot must record schema v41 before physical work continues");
         PaleMirrorSavedData reloaded = PaleMirrorSavedData.load(persisted, level.registryAccess());
+        CompoundTag previousAudienceSchema = persisted.copy();
+        previousAudienceSchema.putInt("schemaVersion", 40);
+        try {
+            PaleMirrorSavedData.load(previousAudienceSchema, level.registryAccess());
+            throw new AssertionError("schema v40 must fail closed at the multi-audience boundary");
+        } catch (IllegalStateException expected) {
+            helper.assertTrue(expected.getMessage().contains("not compatible with schema 41"),
+                    "schema rejection must identify the multi-audience boundary");
+        }
         CompoundTag incompatible = persisted.copy();
         incompatible.putInt("schemaVersion", 19);
         try {

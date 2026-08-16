@@ -23,10 +23,8 @@ public final class SettlementEmergencyRuntime {
             if (window == null && objectiveEmergency) {
                 LivingRegionState region = state.livingRegions().stream()
                         .filter(value -> value.communityId().equals(community.id())).findFirst().orElse(null);
-                AudienceRegionAccess access = region == null || region.primaryAudience() == null ? null
-                        : state.regionAccess(region.primaryAudience(), region.id()).orElse(null);
-                AudienceRegionReachability reachability = access == null
-                        ? AudienceRegionReachability.LOCAL : access.reachability();
+                AudienceRegionReachability reachability = region == null ? AudienceRegionReachability.REMOTE
+                        : bestOnlineReachability(state, region.id());
                 long grace = adjustedGrace(policy.emergencyGraceSteps(), reachability);
                 window = new SettlementEmergencyWindow(community.id(), state.simulationStep(), grace, grace,
                         reachability, EmergencyWindowState.OPEN);
@@ -35,7 +33,7 @@ public final class SettlementEmergencyRuntime {
             } else if (window != null && window.state() == EmergencyWindowState.OPEN && !objectiveEmergency && window.close()) {
                 produced.add(event(state, DomainEventType.SETTLEMENT_EMERGENCY_WINDOW_CLOSED, community.id(), "policy:recovered"));
             } else if (window != null && window.state() == EmergencyWindowState.OPEN
-                    && window.elapse(audiencePresent(state, community.id()))) {
+                    && window.elapse(anyAudienceOnline(state, community.id()))) {
                 produced.addAll(beginEvacuation(state, community.id(), "policy:grace-expired"));
             }
             SettlementEmergencyWindow current = state.emergencyWindow(community.id()).orElse(null);
@@ -136,11 +134,30 @@ public final class SettlementEmergencyRuntime {
         };
     }
 
-    private static boolean audiencePresent(WorldState state, WorldObjectId communityId) {
+    private static boolean anyAudienceOnline(WorldState state, WorldObjectId communityId) {
         LivingRegionState region = state.livingRegions().stream()
                 .filter(value -> value.communityId().equals(communityId)).findFirst().orElse(null);
-        return region != null && region.primaryAudience() != null
-                && state.regionAccess(region.primaryAudience(), region.id()).map(AudienceRegionAccess::present).orElse(false);
+        return region != null && state.audiencesKnowing(region.id(), KnownRegionalFeature.SETTLEMENT).stream()
+                .anyMatch(audience -> state.regionAccess(audience, region.id())
+                        .map(AudienceRegionAccess::online).orElse(false));
+    }
+
+    private static AudienceRegionReachability bestOnlineReachability(WorldState state, String regionId) {
+        return state.audiencesKnowing(regionId, KnownRegionalFeature.SETTLEMENT).stream()
+                .map(audience -> state.regionAccess(audience, regionId).orElse(null))
+                .filter(java.util.Objects::nonNull).filter(AudienceRegionAccess::online)
+                .map(AudienceRegionAccess::reachability)
+                .min(Comparator.comparingInt(SettlementEmergencyRuntime::reachabilityRank))
+                .orElse(AudienceRegionReachability.REMOTE);
+    }
+
+    private static int reachabilityRank(AudienceRegionReachability reachability) {
+        return switch (reachability) {
+            case CONNECTED -> 0;
+            case LOCAL -> 1;
+            case REGIONAL -> 2;
+            case REMOTE -> 3;
+        };
     }
 
     private DomainEvent event(WorldState state, DomainEventType type, WorldObjectId subject, String causation) {

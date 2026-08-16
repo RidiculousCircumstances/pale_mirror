@@ -91,10 +91,18 @@ public final class DomainStateValidator {
                         "journey " + journey.id() + " destination differs from path");
             });
         });
-        state.regionKnowledge().forEach(knowledge -> required(errors, regions.contains(knowledge.regionId()),
-                "knowledge region " + knowledge.regionId()));
-        state.regionAccess().forEach(access -> required(errors, regions.contains(access.regionId()),
-                "access region " + access.regionId()));
+        state.regionKnowledge().forEach(knowledge -> {
+            required(errors, regions.contains(knowledge.regionId()), "knowledge region " + knowledge.regionId());
+            required(errors, knowledge.supplyChainDiscoveredAtStep() < 0 || knowledge.introductorySupplyChainKnown(),
+                    "knowledge supply-chain timestamp without complete introduction " + knowledge.regionId()
+                            + " audience=" + knowledge.audience());
+        });
+        state.regionAccess().forEach(access -> {
+            required(errors, regions.contains(access.regionId()), "access region " + access.regionId());
+            required(errors, state.regionKnowledge(access.audience(), access.regionId())
+                            .filter(value -> value.knows(KnownRegionalFeature.SETTLEMENT)).isPresent(),
+                    "access without settlement knowledge " + access.regionId() + " audience=" + access.audience());
+        });
         state.developmentIntents().forEach(intent -> {
             require(errors, communities, intent.communityId(), "development intent " + intent.id() + " community");
             if (intent.targetSiteId() != null) {

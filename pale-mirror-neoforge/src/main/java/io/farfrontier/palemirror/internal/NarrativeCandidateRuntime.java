@@ -13,6 +13,8 @@ import io.farfrontier.palemirror.domain.DomainEvent;
 import io.farfrontier.palemirror.domain.DevelopmentOpportunityEligibility;
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
+import io.farfrontier.palemirror.domain.KnownRegionalFeature;
+import io.farfrontier.palemirror.domain.LivingRegionState;
 import io.farfrontier.palemirror.domain.NarrativeCandidate;
 import io.farfrontier.palemirror.domain.NarrativeCandidateType;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
@@ -24,6 +26,7 @@ import io.farfrontier.palemirror.internal.content.EncounterDefinitions;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinition;
 import io.farfrontier.palemirror.internal.content.ScenarioDefinitions;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.PlayerAudienceEligibility;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -53,20 +56,22 @@ final class NarrativeCandidateRuntime {
                         data.testMines().get(event.subject()).primaryAudience(), event.subject(), NarrativeCandidateType.THREAT,
                         ScenarioArchetype.INVESTIGATION_RECOVERY, 88, 72, 90, 80);
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED) {
-                regionFor(event.subject()).ifPresent(region -> append(candidates, event, region.primaryAudience(),
-                        region.primaryFacilityId(), NarrativeCandidateType.SUPPLY_CRISIS,
-                        ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS, 96, 94, 100, 74));
+                regionFor(event.subject()).ifPresent(region -> appendForKnownAudiences(candidates, event, region,
+                        NarrativeCandidateType.SUPPLY_CRISIS, ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS,
+                        96, 94, 100, 74));
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED) {
                 regionFor(event.subject()).filter(region -> opportunityStillPending(event)
                         && DevelopmentOpportunityEligibility.isRecoveryOpportunity(data.worldState(), event))
-                        .ifPresent(region -> append(candidates, event, region.primaryAudience(),
-                        region.primaryFacilityId(), NarrativeCandidateType.DEVELOPMENT_OPPORTUNITY,
-                        ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, 50, 82, 88, 95));
+                        .ifPresent(region -> appendForKnownAudiences(candidates, event, region,
+                        NarrativeCandidateType.DEVELOPMENT_OPPORTUNITY, ScenarioArchetype.DEVELOPMENT_OPPORTUNITY,
+                        50, 82, 88, 95));
             } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_RETURN_PLANNED) {
-                regionFor(event.subject()).filter(region -> opportunityStillPending(event)).ifPresent(region -> append(candidates, event, region.primaryAudience(),
-                        region.primaryFacilityId(), NarrativeCandidateType.RESETTLEMENT_OPPORTUNITY,
-                        ScenarioArchetype.RESETTLEMENT_OPPORTUNITY, 58, 86, 96, 90));
-            } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.REGION_DISCOVERED) {
+                regionFor(event.subject()).filter(region -> opportunityStillPending(event))
+                        .ifPresent(region -> appendForKnownAudiences(candidates, event, region,
+                        NarrativeCandidateType.RESETTLEMENT_OPPORTUNITY, ScenarioArchetype.RESETTLEMENT_OPPORTUNITY,
+                        58, 86, 96, 90));
+            } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.REGION_DISCOVERED
+                    || event.type() == io.farfrontier.palemirror.domain.DomainEventType.REGIONAL_FEATURE_DISCOVERED) {
                 appendKnownCrisis(candidates, event.subject());
             }
         });
@@ -85,15 +90,14 @@ final class NarrativeCandidateRuntime {
                         || opportunityStillPending(event))
                 .forEach(event -> regionFor(event.subject()).ifPresent(region -> {
                     if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED) {
-                        append(candidates, event, region.primaryAudience(), region.primaryFacilityId(),
-                                NarrativeCandidateType.SUPPLY_CRISIS,
+                        if (!crisisActive(region)) return;
+                        appendForKnownAudiences(candidates, event, region, NarrativeCandidateType.SUPPLY_CRISIS,
                                 ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS, 96, 94, 100, 74);
                     } else if (event.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_DEVELOPMENT_PLANNED) {
                         if (!DevelopmentOpportunityEligibility.isRecoveryOpportunity(data.worldState(), event)) return;
-                        append(candidates, event, region.primaryAudience(), region.primaryFacilityId(),
-                                NarrativeCandidateType.DEVELOPMENT_OPPORTUNITY,
+                        appendForKnownAudiences(candidates, event, region, NarrativeCandidateType.DEVELOPMENT_OPPORTUNITY,
                                 ScenarioArchetype.DEVELOPMENT_OPPORTUNITY, 50, 82, 88, 95);
-                    } else append(candidates, event, region.primaryAudience(), region.primaryFacilityId(),
+                    } else appendForKnownAudiences(candidates, event, region,
                             NarrativeCandidateType.RESETTLEMENT_OPPORTUNITY,
                             ScenarioArchetype.RESETTLEMENT_OPPORTUNITY, 58, 86, 96, 90);
                 }));
@@ -137,9 +141,37 @@ final class NarrativeCandidateRuntime {
         data.worldState().history().stream()
                 .filter(candidate -> candidate.type() == io.farfrontier.palemirror.domain.DomainEventType.SETTLEMENT_CRISIS_DETECTED)
                 .filter(candidate -> candidate.subject().equals(communityId)).reduce((ignored, latest) -> latest)
-                .ifPresent(event -> regionFor(communityId).ifPresent(region -> append(candidates, event, region.primaryAudience(),
-                        region.primaryFacilityId(), NarrativeCandidateType.SUPPLY_CRISIS,
-                        ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS, 96, 94, 100, 74)));
+                .ifPresent(event -> regionFor(communityId).ifPresent(region -> {
+                    if (!crisisActive(region)) return;
+                    appendForKnownAudiences(candidates, event, region, NarrativeCandidateType.SUPPLY_CRISIS,
+                            ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS, 96, 94, 100, 74);
+                }));
+    }
+
+    private void appendForKnownAudiences(Map<StoryAudienceId, List<NarrativeCandidate>> candidates,
+                                         DomainEvent event, LivingRegionState region,
+                                         NarrativeCandidateType type, ScenarioArchetype archetype,
+                                         int urgency, int significance, int relevance, int novelty) {
+        for (StoryAudienceId audience : data.worldState().audiencesKnowing(region.id(), KnownRegionalFeature.SETTLEMENT)) {
+            append(candidates, event, audience, region.primaryFacilityId(), type, archetype,
+                    urgency, significance, relevance, novelty);
+        }
+    }
+
+    private boolean crisisActive(LivingRegionState region) {
+        if (region.incidentResolvedAtStep() >= 0) return false;
+        var iron = data.worldState().economy(region.communityId())
+                .map(value -> value.require(io.farfrontier.palemirror.domain.ResourceKind.IRON)).orElse(null);
+        if (iron == null || data.worldState().facility(region.primaryFacilityId())
+                .map(value -> value.status() == io.farfrontier.palemirror.domain.FacilityStatus.OPERATIONAL)
+                .orElse(false)) return false;
+        boolean alternateSupplies = data.worldState().routeContract(region.alternateRouteId())
+                .map(value -> value.transferableCapacity(data.worldState().simulationStep()) >= iron.effectiveConsumption())
+                .orElse(false);
+        boolean evacuated = data.worldState().populationGroups(region.communityId()).stream().allMatch(value ->
+                value.disposition() == io.farfrontier.palemirror.domain.PopulationDisposition.DISPLACED
+                        || value.disposition() == io.farfrontier.palemirror.domain.PopulationDisposition.RESETTLED);
+        return !alternateSupplies && !evacuated;
     }
 
     private void append(Map<StoryAudienceId, List<NarrativeCandidate>> candidates, DomainEvent event,
@@ -165,13 +197,16 @@ final class NarrativeCandidateRuntime {
 
     private void offer(Map<StoryAudienceId, List<NarrativeCandidate>> candidates) {
         candidates.forEach((audience, values) -> {
-            commands.execute(data.worldState(), new DomainCommand.EvaluateNarrativeCandidates(audience, values));
+            if (!commands.execute(data.worldState(),
+                    new DomainCommand.EvaluateNarrativeCandidates(audience, values)).isEmpty()) {
+                data.setDirty();
+            }
         });
     }
 
-    private java.util.Optional<io.farfrontier.palemirror.domain.LivingRegionState> regionFor(WorldObjectId communityId) {
+    private java.util.Optional<LivingRegionState> regionFor(WorldObjectId communityId) {
         return data.worldState().livingRegions().stream()
-                .filter(region -> region.communityId().equals(communityId) && region.primaryAudience() != null).findFirst();
+                .filter(region -> region.communityId().equals(communityId)).findFirst();
     }
 
     private ScenarioDefinitionRef pinned(ScenarioDefinition definition) {
@@ -192,7 +227,8 @@ final class NarrativeCandidateRuntime {
                 .map(region -> new TargetLocation(region.dimensionId(), region.settlementAnchor())).findFirst().orElse(null);
         if (target == null) return 50;
         final TargetLocation location = target;
-        int nearest = server.getPlayerList().getPlayers().stream().filter(player -> audiences.apply(player).equals(audience))
+        int nearest = server.getPlayerList().getPlayers().stream().filter(PlayerAudienceEligibility::participates)
+                .filter(player -> audiences.apply(player).equals(audience))
                 .filter(player -> player.serverLevel().dimension().location().toString().equals(location.dimensionId()))
                 .mapToInt(player -> (int) Math.min(100_000L, player.blockPosition().distManhattan(location.position())))
                 .min().orElse(100_000);
