@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.BiConsumer;
 
 import io.farfrontier.palemirror.api.PaleMirrorVisuals;
 import io.farfrontier.palemirror.api.VisualChunk;
@@ -24,11 +23,16 @@ import net.minecraft.server.level.ServerPlayer;
 public final class RegionalDiscoveryRuntime {
     private RegionalDiscoveryRuntime() { }
 
+    @FunctionalInterface
+    public interface DiscoverySink {
+        void accept(ServerPlayer player, String regionId, KnownRegionalFeature feature);
+    }
+
     public static void observePlayers(MinecraftServer server, PaleMirrorSavedData data,
                                       DomainCommandExecutor commands,
                                       Function<ServerPlayer, StoryAudienceId> audiences,
                                       Consumer<List<DomainEvent>> eventSink,
-                                      BiConsumer<ServerPlayer, String> discoverySink) {
+                                      DiscoverySink discoverySink) {
         data.worldState().livingRegions().forEach(region -> {
             data.worldRegistry().find(region.placeId()).ifPresent(settlement -> {
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -47,7 +51,9 @@ public final class RegionalDiscoveryRuntime {
                             data.setDirty();
                             eventSink.accept(events);
                         }
-                        if (!events.isEmpty() || granted) discoverySink.accept(player, region.id());
+                        if (!events.isEmpty() || granted) {
+                            discoverySink.accept(player, region.id(), KnownRegionalFeature.SETTLEMENT);
+                        }
                     }
                 }
             });
@@ -63,13 +69,16 @@ public final class RegionalDiscoveryRuntime {
                         .filter(value -> value.knows(KnownRegionalFeature.SETTLEMENT)).isEmpty()) continue;
                 VanillaMinecartRouteRecord route = data.vanillaMinecartRoutes().get(region.id());
                 if (route != null && route.closestCompletedRailDistanceSqr(player.blockPosition()) <= 24L * 24L) {
-                    discoverFeature(data, commands, player, audience, region.id(),
-                            KnownRegionalFeature.PRIMARY_ROUTE, "player:rail-proximity", eventSink);
+                    if (discoverFeature(data, commands, player, audience, region.id(),
+                            KnownRegionalFeature.PRIMARY_ROUTE, "player:rail-proximity", eventSink)) {
+                        discoverySink.accept(player, region.id(), KnownRegionalFeature.PRIMARY_ROUTE);
+                    }
                 }
-                if (physical.primaryMineAnchor() != null
-                        && physical.primaryMineAnchor().distSqr(player.blockPosition()) <= 48L * 48L) {
-                    discoverFeature(data, commands, player, audience, region.id(),
-                            KnownRegionalFeature.PRIMARY_MINE, "player:mine-proximity", eventSink);
+                if (reachedPrimaryMineDiscoveryChunk(server, region.id(), physical, player)) {
+                    if (discoverFeature(data, commands, player, audience, region.id(),
+                            KnownRegionalFeature.PRIMARY_MINE, "player:mine-footprint", eventSink)) {
+                        discoverySink.accept(player, region.id(), KnownRegionalFeature.PRIMARY_MINE);
+                    }
                 }
             }
             if (data.worldState().community(region.communityId()).map(value -> value.supplyRequested()).orElse(false)) {
@@ -99,16 +108,38 @@ public final class RegionalDiscoveryRuntime {
         return settlement.contains(player.blockPosition());
     }
 
+    private static boolean reachedPrimaryMineDiscoveryChunk(MinecraftServer server, String regionId,
+                                                              CampaignRegionRecord physical,
+                                                              ServerPlayer player) {
+        var provider = PaleMirrorVisuals.provider().orElse(null);
+        if (provider != null) {
+            var authored = provider.discoverAuthoredRegions(server.overworld()).stream()
+                    .filter(seed -> seed.planId().equals(regionId)).findFirst().orElse(null);
+            if (authored != null) {
+                var chunk = player.chunkPosition();
+                return authored.primaryMineSite().bounds().intersectsChunk(new VisualChunk(chunk.x, chunk.z));
+            }
+        }
+        // Exercise and compatibility profiles have no immutable authored MineSite footprint.
+        return physical.primaryMineAnchor() != null
+                && physical.primaryMineAnchor().distSqr(player.blockPosition()) <= 48L * 48L;
+    }
+
     public static void discoverDepot(PaleMirrorSavedData data, DomainCommandExecutor commands,
                                      ServerPlayer player, StoryAudienceId audience,
-                                     net.minecraft.core.BlockPos position, Consumer<List<DomainEvent>> eventSink) {
+                                     net.minecraft.core.BlockPos position, Consumer<List<DomainEvent>> eventSink,
+                                     DiscoverySink discoverySink) {
         data.settlementDepots().values().stream().filter(depot -> depot.dimensionId().equals(
                         player.serverLevel().dimension().location().toString())
                         && depot.interactionPosition().equals(position))
                 .findFirst().flatMap(depot -> data.worldState().livingRegions().stream()
                         .filter(region -> region.communityId().equals(depot.communityId())).findFirst())
-                .ifPresent(region -> discoverFeature(data, commands, player, audience, region.id(),
-                        KnownRegionalFeature.DEPOT, "player:depot-interaction", eventSink));
+                .ifPresent(region -> {
+                    if (discoverFeature(data, commands, player, audience, region.id(),
+                            KnownRegionalFeature.DEPOT, "player:depot-interaction", eventSink)) {
+                        discoverySink.accept(player, region.id(), KnownRegionalFeature.DEPOT);
+                    }
+                });
     }
 
     public static void observeAudienceAccess(MinecraftServer server, PaleMirrorSavedData data,
@@ -149,12 +180,13 @@ public final class RegionalDiscoveryRuntime {
         }
     }
 
-    private static void discoverFeature(PaleMirrorSavedData data, DomainCommandExecutor commands,
-                                        ServerPlayer player, StoryAudienceId audience, String regionId,
-                                        KnownRegionalFeature feature, String reason,
-                                        Consumer<List<DomainEvent>> eventSink) {
+    private static boolean discoverFeature(PaleMirrorSavedData data, DomainCommandExecutor commands,
+                                           ServerPlayer player, StoryAudienceId audience, String regionId,
+                                           KnownRegionalFeature feature, String reason,
+                                           Consumer<List<DomainEvent>> eventSink) {
         List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.DiscoverRegionalFeature(
                 regionId, audience, feature, reason + ":" + player.getUUID()));
         if (!events.isEmpty()) { data.setDirty(); eventSink.accept(events); }
+        return !events.isEmpty();
     }
 }

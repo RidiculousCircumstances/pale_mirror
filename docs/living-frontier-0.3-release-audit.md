@@ -20,9 +20,9 @@ disconnected loaded graph still blocks the contract immediately.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Pure domain and module tests | PASS | 157 JUnit tests, 0 failures, 0 errors |
-| Core server behavior | PASS | 47/47 required NeoForge GameTests |
-| Visual/materialization behavior | PASS | 29/29 required Visuals GameTests, including 216 public-realm combinations and grounded/readable mine infrastructure |
+| Pure domain and module tests | PASS | 162 JUnit tests, 0 failures, 0 errors |
+| Core server behavior | PASS | 51/51 required NeoForge GameTests, including authored-sized incremental infection, immediate feature synchronization, restart recovery of a disconnected accepted rail graph and prepared-camp lifecycle recovery |
+| Visual/materialization behavior | PASS | 30/30 required Visuals GameTests, including 216 public-realm combinations, grounded/readable mine infrastructure and deferred dynamic projections |
 | Build and architecture | PASS | `check`, architecture guardrails, Java style and source isolation |
 | Distribution | PASS | Core and Visuals production JAR verification |
 | Restart/crash safety | PASS | Packaged core restart/crash harness and two-start Visuals harness |
@@ -58,8 +58,11 @@ enjoyed the path.
 
 ### Discovery and understanding
 
-Natural proximity and interaction discovery exists for settlement, depot,
-baseline route, Mine17, Red Valley and refugee site. The first infection is
+Natural authored-chunk and interaction discovery exists for settlement, depot,
+baseline route, Mine17, Red Valley and refugee site. Mine17 uses every chunk
+intersecting its immutable authored footprint rather than a small radius around
+its technical controller anchor, and every new feature immediately refreshes Atlas.
+The first infection is
 knowledge-gated and delayed after any audience knows the settlement, depot and
 route. This arms one global clock exactly once; later audiences independently
 learn the region and receive private scenarios without postponing the world.

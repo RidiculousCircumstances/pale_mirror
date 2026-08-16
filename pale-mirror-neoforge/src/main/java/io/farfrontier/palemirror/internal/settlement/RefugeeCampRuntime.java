@@ -56,7 +56,18 @@ public final class RefugeeCampRuntime {
                 continue;
             }
             if (camp == null) continue;
+            if (camp.observe(group.disposition())) changed = true;
             MaterializationJob job = ensureJob(data, camp);
+            if (job.state() == JobState.COMPLETED) {
+                var site = data.worldState().site(camp.siteId()).orElse(null);
+                if (!camp.retired() && site != null && site.operationalState() == OperationalState.OFFLINE
+                        && !commands.execute(data.worldState(), new DomainCommand.SetWorldSiteOperational(
+                                camp.siteId(), OperationalState.OPERATIONAL,
+                                "materialization:" + job.jobId() + ":prepared-recovery")).isEmpty()) {
+                    changed = true;
+                }
+                continue;
+            }
             if (job.state() == JobState.PLANNED) { job.start(); changed = true; continue; }
             if (job.state() != JobState.RUNNING && job.state() != JobState.BLOCKED) continue;
             ServerLevel level = level(server, camp.dimensionId());
@@ -135,10 +146,8 @@ public final class RefugeeCampRuntime {
                                                 DomainCommandExecutor commands) {
         boolean changed = false;
         for (RefugeeCampRecord camp : data.refugeeCamps().values()) {
-            var group = data.worldState().populationGroup(camp.populationGroupId()).orElse(null);
             var site = data.worldState().site(camp.siteId()).orElse(null);
-            if (group != null && group.disposition() == PopulationDisposition.RESIDENT && site != null
-                    && site.operationalState() != OperationalState.OFFLINE) {
+            if (camp.retired() && site != null && site.operationalState() != OperationalState.OFFLINE) {
                 commands.execute(data.worldState(), new DomainCommand.SetWorldSiteOperational(camp.siteId(),
                         OperationalState.OFFLINE, "policy:population-returned"));
                 changed = true;

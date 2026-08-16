@@ -23,10 +23,11 @@ import net.minecraft.world.level.block.Blocks;
  * its physical postcondition before it is advanced in its job.
  */
 public final class TestMineMaterializer {
-    private static final int MAX_REGISTERED_BIOME_CELLS = 70;
+    /** Bounds neighbour updates while persisted MutableCell state acts as the crash-safe cursor. */
+    static final int MAX_OVERLAY_RECONCILIATIONS_PER_INVOCATION = 16;
+
     public boolean executeNext(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine,
                                FacilityState facility, MaterializationJob job) {
-        if (!level.hasChunkAt(mine.anchor())) return false;
         if (job.state() == JobState.COMPLETED || job.state() == JobState.BLOCKED) return job.state() == JobState.COMPLETED;
         if (job.state() == JobState.PLANNED) job.start();
         MaterializationOperation operation = job.nextOperation();
@@ -41,7 +42,7 @@ public final class TestMineMaterializer {
         if (operation.state() == OperationState.DEGRADED) {
             job.advanceOperation();
         } else if (operation.state() != OperationState.COMPLETED) {
-            operation.start();
+            if (operation.state() == OperationState.PENDING) operation.start();
             if (operation.type() == MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR) {
                 ActorOperationResult result = ensureSourceActor(level, mine, facility, job.jobId(), operation.target());
                 if (result.status() == ActorOperationResult.Status.MATERIALIZED) operation.complete();
@@ -86,10 +87,11 @@ public final class TestMineMaterializer {
                 if (job.nextOperation() == null) completeJob(mine, job);
                 return job.state() == JobState.COMPLETED;
             }
-            String error = execute(level, data, mine, facility, job, operation);
-            if (error != null) {
-                operation.block(error);
-                job.block(error);
+            ExecutionResult result = execute(level, data, mine, facility, job, operation);
+            if (result.status() == ExecutionStatus.DEFERRED) return false;
+            if (result.status() == ExecutionStatus.BLOCKED) {
+                operation.block(result.diagnostic());
+                job.block(result.diagnostic());
                 return false;
             }
             operation.complete();
@@ -101,8 +103,9 @@ public final class TestMineMaterializer {
         return job.state() == JobState.COMPLETED;
     }
 
-    private String execute(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine, FacilityState facility, MaterializationJob job,
-                           MaterializationOperation operation) {
+    private ExecutionResult execute(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine,
+                                    FacilityState facility, MaterializationJob job,
+                                    MaterializationOperation operation) {
         return switch (operation.type()) {
             case ENSURE_OVERLAY -> ensureOverlay(level, mine, facility, operation.target());
             case ENSURE_PM_ANCHOR -> ensureAnchor(level, data, mine, facility, job.jobId());
@@ -112,74 +115,127 @@ public final class TestMineMaterializer {
             case ENSURE_SOURCE_GATE_PART -> throw new IllegalStateException("Source gate operation must be handled by its adapter");
             case REMOVE_SOURCE_GATE_PART -> throw new IllegalStateException("Source gate cleanup must be handled by its adapter");
             case REMOVE_OVERLAY -> removeOverlay(level, mine);
-            default -> "Operation " + operation.type() + " is not supported by the test-mine executor";
+            default -> ExecutionResult.blocked(
+                    "Operation " + operation.type() + " is not supported by the test-mine executor");
         };
     }
 
-    private String ensureOverlay(ServerLevel level, TestMineRecord mine, FacilityState facility, String tierName) {
+    private ExecutionResult ensureOverlay(ServerLevel level, TestMineRecord mine, FacilityState facility,
+                                          String tierName) {
         ThreatTier tier;
         try {
             tier = ThreatTier.valueOf(tierName);
         } catch (IllegalArgumentException failure) {
-            return "Unknown infection biome tier " + tierName;
+            return ExecutionResult.blocked("Unknown infection biome tier " + tierName);
         }
-        if (tier == ThreatTier.DORMANT) return "Infection biome cannot materialize at DORMANT tier";
-        if (mine.mutableCells().size() > MAX_REGISTERED_BIOME_CELLS) {
-            return "Test mine biome exceeds the bounded registered-cell budget";
+        if (tier == ThreatTier.DORMANT) {
+            return ExecutionResult.blocked("Infection biome cannot materialize at DORMANT tier");
         }
+        boolean deferred = false;
+        int reconciled = 0;
         for (MutableCell cell : mine.biomeCells()) {
             String desired = AdapterRegistry.sourceAdapter(facility.infectionSource()).overlayPalette().desiredBlock(cell, tier);
-            boolean previouslyOwned = !cell.lastAppliedBlock().equals(cell.baselineBlock());
-            boolean mustApply = !desired.equals(cell.baselineBlock());
-            if (!previouslyOwned && !mustApply) continue;
-            if (cell.conflicted()) return "Mutable cell " + cell.position() + " is conflicted";
+            boolean activeOrOwned = !desired.equals(cell.baselineBlock())
+                    || !cell.lastAppliedBlock().equals(cell.baselineBlock());
+            if (!activeOrOwned) continue;
+            // A reconciled cell is durable ownership evidence. It does not need its chunk
+            // to remain loaded while another semantic slice is visited later.
+            if (cell.baselineObserved() && cell.lastAppliedBlock().equals(desired)) continue;
+            if (!level.hasChunkAt(cell.position())) {
+                deferred = true;
+                continue;
+            }
+            if (cell.conflicted()) {
+                return ExecutionResult.blocked("Mutable cell " + cell.position() + " is conflicted");
+            }
             String current = blockId(level, cell.position());
+            if (!cell.baselineObserved()) {
+                if (reconciled >= MAX_OVERLAY_RECONCILIATIONS_PER_INVOCATION) {
+                    return ExecutionResult.deferred();
+                }
+                cell.observeBaseline(current);
+                reconciled++;
+                desired = AdapterRegistry.sourceAdapter(facility.infectionSource())
+                        .overlayPalette().desiredBlock(cell, tier);
+                if (cell.lastAppliedBlock().equals(desired)) continue;
+            }
+            // A crash can persist the physical postcondition before SavedData.
+            // Adopt only the exact desired block; every other unknown change remains a conflict.
+            if (current.equals(desired)) {
+                if (!cell.lastAppliedBlock().equals(desired)) {
+                    if (reconciled >= MAX_OVERLAY_RECONCILIATIONS_PER_INVOCATION) {
+                        return ExecutionResult.deferred();
+                    }
+                    cell.markApplied(desired);
+                    reconciled++;
+                }
+                continue;
+            }
             if (!current.equals(cell.baselineBlock()) && !current.equals(cell.lastAppliedBlock())) {
                 cell.conflict();
-                return "Mutable cell " + cell.position() + " was changed outside Pale Mirror";
+                return ExecutionResult.blocked(
+                        "Mutable cell " + cell.position() + " was changed outside Pale Mirror");
+            }
+            if (reconciled >= MAX_OVERLAY_RECONCILIATIONS_PER_INVOCATION) {
+                return ExecutionResult.deferred();
             }
             String error = setBlock(level, cell.position(), desired);
-            if (error != null) return error;
+            if (error != null) return ExecutionResult.blocked(error);
             cell.markApplied(desired);
+            reconciled++;
         }
-        return overlaysMatch(level, mine, facility, tier) ? null : "Infection biome postcondition failed";
+        return deferred ? ExecutionResult.deferred() : ExecutionResult.applied();
     }
 
-    private String ensureAnchor(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine,
-                                FacilityState facility, String jobId) {
+    private ExecutionResult ensureAnchor(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine,
+                                         FacilityState facility, String jobId) {
+        if (!level.hasChunkAt(mine.anchor())) return ExecutionResult.deferred();
         if (io.farfrontier.palemirror.internal.world.ProductProfilePreflight.coreOnly()) {
-            if (!AdapterRegistry.vanillaAnchor().ensureAnchor(level, mine, jobId)) return "Could not create core-only PM anchor";
-            if (!AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)) return "Core-only PM anchor postcondition failed";
+            if (!AdapterRegistry.vanillaAnchor().ensureAnchor(level, mine, jobId)) {
+                return ExecutionResult.blocked("Could not create core-only PM anchor");
+            }
+            if (!AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)) {
+                return ExecutionResult.blocked("Core-only PM anchor postcondition failed");
+            }
         } else {
             var provider = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().orElse(null);
-            if (provider == null) return "Product profile has no visual threat-controller provider";
+            if (provider == null) {
+                return ExecutionResult.blocked("Product profile has no visual threat-controller provider");
+            }
             int stage = Math.max(1, Math.min(4, facility.threatTier().ordinal()));
             var projection = new io.farfrontier.palemirror.api.ThreatControllerProjection(mine.id().value(), jobId,
                     new io.farfrontier.palemirror.api.VisualPoint(mine.anchor().getX(), mine.anchor().getY(), mine.anchor().getZ()), stage);
             var result = provider.ensureThreatController(level, projection);
             if (result.status() != io.farfrontier.palemirror.api.ThreatControllerResult.Status.MATERIALIZED
-                    || result.entityId() == null) return result.diagnostic().isBlank() ? "Threat Heart materialization failed" : result.diagnostic();
+                    || result.entityId() == null) return ExecutionResult.blocked(result.diagnostic().isBlank()
+                    ? "Threat Heart materialization failed" : result.diagnostic());
             mine.setAnchorId(result.entityId());
             data.threatCombat().attachActor("pale_mirror", mine.id().value(), "controller", "heart",
                     "threat_heart_v1", result.entityId(), controllerHitPoints(facility.threatTier()));
         }
         mine.object().setLifecycle(WorldObjectLifecycle.ACTIVE);
-        return null;
+        return ExecutionResult.applied();
     }
 
-    private String removeAnchor(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine) {
+    private ExecutionResult removeAnchor(ServerLevel level, PaleMirrorSavedData data, TestMineRecord mine) {
+        if (!level.hasChunkAt(mine.anchor())) return ExecutionResult.deferred();
         if (io.farfrontier.palemirror.internal.world.ProductProfilePreflight.coreOnly()) {
             AdapterRegistry.vanillaAnchor().removeAnchor(level, mine);
             return mine.anchorId() == null && !AdapterRegistry.vanillaAnchor().hasAnchor(level, mine)
-                    ? null : "Core-only PM anchor removal postcondition failed";
+                    ? ExecutionResult.applied()
+                    : ExecutionResult.blocked("Core-only PM anchor removal postcondition failed");
         }
         var provider = io.farfrontier.palemirror.api.PaleMirrorVisuals.provider().orElse(null);
-        if (provider == null) return "Product profile has no visual threat-controller provider";
+        if (provider == null) {
+            return ExecutionResult.blocked("Product profile has no visual threat-controller provider");
+        }
         var result = provider.removeThreatController(level, mine.id().value());
-        if (result.status() == io.farfrontier.palemirror.api.ThreatControllerResult.Status.BLOCKED) return result.diagnostic();
+        if (result.status() == io.farfrontier.palemirror.api.ThreatControllerResult.Status.BLOCKED) {
+            return ExecutionResult.blocked(result.diagnostic());
+        }
         data.threatCombat().retireActor("pale_mirror", mine.id().value(), "controller", "heart");
         mine.setAnchorId(null);
-        return null;
+        return ExecutionResult.applied();
     }
 
     private static int controllerHitPoints(ThreatTier tier) {
@@ -225,34 +281,42 @@ public final class TestMineMaterializer {
                 ? WorldObjectLifecycle.ACTIVE : WorldObjectLifecycle.REPRESENTED);
     }
 
-    private String removeOverlay(ServerLevel level, TestMineRecord mine) {
+    private ExecutionResult removeOverlay(ServerLevel level, TestMineRecord mine) {
+        boolean deferred = false;
+        int reconciled = 0;
         for (MutableCell cell : mine.mutableCells()) {
+            if (!cell.baselineObserved()) continue;
             if (cell.lastAppliedBlock().equals(cell.baselineBlock())) continue;
-            if (cell.conflicted()) return "Mutable cell " + cell.position() + " is conflicted";
+            if (!level.hasChunkAt(cell.position())) {
+                deferred = true;
+                continue;
+            }
+            if (cell.conflicted()) {
+                return ExecutionResult.blocked("Mutable cell " + cell.position() + " is conflicted");
+            }
             String current = blockId(level, cell.position());
+            if (current.equals(cell.baselineBlock())) {
+                if (reconciled >= MAX_OVERLAY_RECONCILIATIONS_PER_INVOCATION) {
+                    return ExecutionResult.deferred();
+                }
+                cell.markApplied(cell.baselineBlock());
+                reconciled++;
+                continue;
+            }
             if (!current.equals(cell.lastAppliedBlock()) && !current.equals(cell.baselineBlock())) {
                 cell.conflict();
-                return "Mutable cell " + cell.position() + " was changed outside Pale Mirror";
+                return ExecutionResult.blocked(
+                        "Mutable cell " + cell.position() + " was changed outside Pale Mirror");
+            }
+            if (reconciled >= MAX_OVERLAY_RECONCILIATIONS_PER_INVOCATION) {
+                return ExecutionResult.deferred();
             }
             String error = setBlock(level, cell.position(), cell.baselineBlock());
-            if (error != null) return error;
+            if (error != null) return ExecutionResult.blocked(error);
             cell.markApplied(cell.baselineBlock());
+            reconciled++;
         }
-        return baselinesMatch(level, mine) ? null : "Overlay removal postcondition failed";
-    }
-
-    private static boolean overlaysMatch(ServerLevel level, TestMineRecord mine, FacilityState facility, ThreatTier tier) {
-        return mine.biomeCells().stream().allMatch(cell -> {
-            String desired = AdapterRegistry.sourceAdapter(facility.infectionSource()).overlayPalette().desiredBlock(cell, tier);
-            boolean previouslyOwned = !cell.lastAppliedBlock().equals(cell.baselineBlock());
-            boolean mustApply = !desired.equals(cell.baselineBlock());
-            return !previouslyOwned && !mustApply || blockId(level, cell.position()).equals(desired);
-        });
-    }
-
-    private static boolean baselinesMatch(ServerLevel level, TestMineRecord mine) {
-        return mine.mutableCells().stream().allMatch(cell -> cell.lastAppliedBlock().equals(cell.baselineBlock())
-                || blockId(level, cell.position()).equals(cell.baselineBlock()));
+        return deferred ? ExecutionResult.deferred() : ExecutionResult.applied();
     }
 
     private static String setBlock(ServerLevel level, BlockPos position, String blockId) {
@@ -264,5 +328,15 @@ public final class TestMineMaterializer {
 
     private static String blockId(ServerLevel level, BlockPos pos) {
         return BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock()).toString();
+    }
+
+    private enum ExecutionStatus { APPLIED, DEFERRED, BLOCKED }
+
+    private record ExecutionResult(ExecutionStatus status, String diagnostic) {
+        private static ExecutionResult applied() { return new ExecutionResult(ExecutionStatus.APPLIED, ""); }
+        private static ExecutionResult deferred() { return new ExecutionResult(ExecutionStatus.DEFERRED, ""); }
+        private static ExecutionResult blocked(String diagnostic) {
+            return new ExecutionResult(ExecutionStatus.BLOCKED, diagnostic);
+        }
     }
 }

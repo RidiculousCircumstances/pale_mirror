@@ -11,6 +11,9 @@ import io.farfrontier.palemirror.internal.materialization.MaterializationJob;
 import net.minecraft.core.BlockPos;
 
 public final class TestMineRecord {
+    /** Hard persistence bound shared by authored and exercise MineSites. */
+    public static final int MAX_MUTABLE_CELLS = 384;
+
     private final WorldObjectId id;
     private final WorldObjectRegistryEntry object;
     private final StoryAudienceId primaryAudience;
@@ -30,6 +33,9 @@ public final class TestMineRecord {
         this.id = object.id();
         this.object = object;
         this.primaryAudience = primaryAudience;
+        if (mutableCells.size() > MAX_MUTABLE_CELLS) {
+            throw new IllegalArgumentException("MineSite mutable-cell count exceeds " + MAX_MUTABLE_CELLS);
+        }
         this.mutableCells = new ArrayList<>(mutableCells);
         this.anchorId = anchorId;
         this.encounter = encounter == null ? EncounterRecord.none() : encounter;

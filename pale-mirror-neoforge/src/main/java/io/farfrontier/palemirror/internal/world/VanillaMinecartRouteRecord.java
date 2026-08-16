@@ -116,8 +116,7 @@ public final class VanillaMinecartRouteRecord {
             throw new IllegalArgumentException("Persisted accepted path references an unobserved rail node");
         if (!path.isEmpty() && (path.getFirst() != start.asLong() || path.getLast() != target.asLong()))
             throw new IllegalArgumentException("Persisted accepted path does not bind the route endpoints");
-        if (!path.isEmpty() && VanillaRailTopology.path(shapes, start, target).isEmpty())
-            throw new IllegalArgumentException("Persisted accepted rail graph is disconnected");
+        boolean disconnected = !path.isEmpty() && VanillaRailTopology.path(shapes, start, target).isEmpty();
         if (dirtyCells.stream().map(BlockPos::of).anyMatch(position -> !containsTopologyPosition(position)))
             throw new IllegalArgumentException("Persisted dirty topology cell outside route bounds");
         if (issue != null && !containsTopologyPosition(issue))
@@ -129,6 +128,12 @@ public final class VanillaMinecartRouteRecord {
         topologyVerificationCursor = Math.max(0, cursor);
         topologyRevision = Math.max(0L, revision);
         topologyIssue = issue == null ? null : issue.immutable();
+        if (disconnected) {
+            BlockPos restoredIssue = firstMissingAcceptedRail();
+            if (restoredIssue == null) restoredIssue = topologyIssue == null ? start : topologyIssue;
+            disconnectTopology(restoredIssue);
+            markAllTopologyChunksDirty();
+        }
         if (cartProgress > Math.max(0, travelPathSize() - 1)) cartProgress = 0D;
     }
 

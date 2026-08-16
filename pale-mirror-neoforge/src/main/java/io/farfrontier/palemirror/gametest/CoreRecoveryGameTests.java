@@ -279,19 +279,19 @@ public final class CoreRecoveryGameTests {
         String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted");
         player.setPos(anchor.getX() + 0.5D, anchor.getY() + 2.0D, anchor.getZ() + 0.5D);
-        tick(runtime, 3);
+        tick(runtime, 8);
         assertBiomeStage(helper, level, mine, ThreatTier.FOOTHOLD);
 
         runtime.advanceSimulation(12);
-        tick(runtime, 2);
+        tick(runtime, 12);
         assertBiomeStage(helper, level, mine, ThreatTier.INFESTED);
 
         runtime.advanceSimulation(24);
-        tick(runtime, 2);
+        tick(runtime, 16);
         assertBiomeStage(helper, level, mine, ThreatTier.SIEGE);
 
         runtime.advanceSimulation(36);
-        tick(runtime, 2);
+        tick(runtime, 24);
         assertBiomeStage(helper, level, mine, ThreatTier.APEX);
 
         helper.succeed();
@@ -316,14 +316,14 @@ public final class CoreRecoveryGameTests {
         String scenarioId = runtime.offered(runtime.audienceFor(player)).getFirst().id();
         helper.assertTrue(runtime.accept(scenarioId, runtime.audienceFor(player)), "scenario must be accepted");
         player.setPos(anchor.getX() + 0.5D, anchor.getY() + 2.0D, anchor.getZ() + 0.5D);
-        tick(runtime, 3);
+        tick(runtime, 8);
         assertBiomeStage(helper, level, mine, ThreatTier.FOOTHOLD);
         level.setBlock(futureCell.position(), Blocks.GOLD_BLOCK.defaultBlockState(), 3);
         helper.assertValueEqual(level.getBlockState(futureCell.position()).getBlock(), Blocks.GOLD_BLOCK,
                 "FOOTHOLD must not claim an inactive future cell");
 
         runtime.advanceSimulation(12);
-        tick(runtime, 2);
+        tick(runtime, 12);
         helper.assertTrue(futureCell.conflicted(), "PM must mark the future cell conflicted when INFESTED tries to own it");
         helper.assertValueEqual(level.getBlockState(futureCell.position()).getBlock(), Blocks.GOLD_BLOCK,
                 "PM must not overwrite an unknown/player-owned block");

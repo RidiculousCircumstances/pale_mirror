@@ -81,7 +81,7 @@ public final class AuthoredRegionRegistrar {
         return changed;
     }
 
-    /** Reconciles generated MineSites only after all of their owning chunks are present. */
+    /** Registers semantic MineSites immediately and observes their physical chunks incrementally. */
     public static boolean reconcilePhysical(MinecraftServer server, PaleMirrorSavedData data) {
         var provider = PaleMirrorVisuals.provider().orElse(null);
         if (provider == null || !provider.genesisReadiness().ready()) return false;
@@ -92,25 +92,25 @@ public final class AuthoredRegionRegistrar {
             if (provider.authoredMineSiteReady(server.overworld(), seed, seed.alternateMineSite())
                     && io.farfrontier.palemirror.internal.settlement.AuthoredBlueprintSlots.captureAvailable(
                     server.overworld(), data, provider, seed)) changed = true;
-            if (record.status() == CampaignRegionPresentationStatus.MATERIALIZED) continue;
             RegionBindings ids = RegionBindings.forAuthored(seed.planId());
             BlockPos primary = block(seed.primaryMineSite().portal());
             BlockPos alternate = block(seed.alternateMineSite().portal());
-            if (provider.authoredMineSiteReady(server.overworld(), seed, seed.primaryMineSite())
-                    && AuthoredMineSiteObserver.isAreaLoaded(server.overworld(), seed.primaryMineSite())
-                    && !data.testMines().containsKey(ids.primaryMineId())) {
-                data.registerTestMine(AuthoredMineSiteObserver.observe(server.overworld(), seed.primaryMineSite(),
+            if (!data.testMines().containsKey(ids.primaryMineId())) {
+                data.registerTestMine(AuthoredMineSiteObserver.plan(server.overworld(), seed.primaryMineSite(),
                         ids.primaryMineId(), io.farfrontier.palemirror.domain.StoryAudienceId.globalTestAudience()));
                 changed = true;
             }
-            if (provider.authoredMineSiteReady(server.overworld(), seed, seed.alternateMineSite())
-                    && AuthoredMineSiteObserver.isAreaLoaded(server.overworld(), seed.alternateMineSite())
-                    && !data.testMines().containsKey(ids.alternateMineId())) {
-                data.registerTestMine(AuthoredMineSiteObserver.observe(server.overworld(), seed.alternateMineSite(),
+            if (!data.testMines().containsKey(ids.alternateMineId())) {
+                data.registerTestMine(AuthoredMineSiteObserver.plan(server.overworld(), seed.alternateMineSite(),
                         ids.alternateMineId(), io.farfrontier.palemirror.domain.StoryAudienceId.globalTestAudience()));
                 changed = true;
             }
-            if (data.testMines().containsKey(ids.primaryMineId()) && data.testMines().containsKey(ids.alternateMineId())) {
+            boolean primaryReady = provider.authoredMineSiteReady(server.overworld(), seed, seed.primaryMineSite());
+            boolean alternateReady = provider.authoredMineSiteReady(server.overworld(), seed, seed.alternateMineSite());
+            if (record.status() != CampaignRegionPresentationStatus.MATERIALIZED
+                    && primaryReady && alternateReady
+                    && data.testMines().containsKey(ids.primaryMineId())
+                    && data.testMines().containsKey(ids.alternateMineId())) {
                 record.observeWorldgenMaterialized(primary, alternate);
                 changed = true;
             }

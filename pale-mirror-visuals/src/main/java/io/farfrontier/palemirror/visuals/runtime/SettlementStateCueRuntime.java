@@ -12,8 +12,9 @@ import net.minecraft.server.level.ServerLevel;
 
 /** Sparse diegetic cues at the receiving depot; Atlas remains the explanatory layer. */
 final class SettlementStateCueRuntime {
-    void reconcile(ServerLevel level, VisualStateProjection projection, Collection<AuthoredRegionSeed> regions) {
-        if (level.getGameTime() % 20L != 0L) return;
+    void reconcile(ServerLevel level, VisualStateProjection projection,
+                   Collection<AuthoredRegionSeed> regions, long cueTick) {
+        if (cueTick % 20L != 0L) return;
         AuthoredRegionSeed region = regions.stream().filter(seed ->
                 projection.objectId().equals(seed.planId() + "_mine")).findFirst().orElse(null);
         if (region == null) return;
@@ -33,7 +34,7 @@ final class SettlementStateCueRuntime {
         if (projection.crisis().equals("CRITICAL") || projection.economy().equals("UNAVAILABLE")) {
             level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, depot.getX() + 0.5, depot.getY(), depot.getZ() + 0.5,
                     3, 0.6, 0.25, 0.6, 0.01);
-            if (level.getGameTime() % 60L == 0L) level.sendParticles(ParticleTypes.ANGRY_VILLAGER,
+            if (cueTick % 60L == 0L) level.sendParticles(ParticleTypes.ANGRY_VILLAGER,
                     depot.getX() + 0.5, depot.getY() - 1, depot.getZ() + 0.5, 2, 1.5, 0.3, 1.5, 0.0);
             return;
         }
@@ -43,7 +44,7 @@ final class SettlementStateCueRuntime {
             return;
         }
         int prosperity = parse(projection.development());
-        if (prosperity >= 50 && level.getGameTime() % 40L == 0L) {
+        if (prosperity >= 50 && cueTick % 40L == 0L) {
             level.sendParticles(ParticleTypes.COMPOSTER, depot.getX() + 0.5, depot.getY() - 1,
                     depot.getZ() + 0.5, 2, 1.2, 0.3, 1.2, 0.0);
         }

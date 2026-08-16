@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
 /** Deterministically translates a mine's desired domain state into executor operations. */
 public final class TestMineMaterializationTranslator {
     public static final String POLICY_ID = "pale_mirror:pm_anchor";
-    public static final String POLICY_VERSION = "8";
+    public static final String POLICY_VERSION = "10";
 
     public MaterializationPlan translate(FacilityState facility) {
         return translate(facility, null, EncounterRecord.none(), GatePresentationRecord.none());
@@ -35,8 +35,6 @@ public final class TestMineMaterializationTranslator {
         long revision = facility.desiredRevision();
         if (facility.status() == FacilityStatus.INFECTED) {
             List<MaterializationOperation> operations = new ArrayList<>();
-            operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_OVERLAY,
-                    facility.threatTier().name()));
             operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_PM_ANCHOR, ""));
             // Once the scheduler has prepared the encounter, its SavedData
             // record is the pinned materialization intent.  In particular a
@@ -60,6 +58,10 @@ public final class TestMineMaterializationTranslator {
                     .forEach(part -> operations.add(operation(id, revision, operations.size(),
                             encounterEnabled ? MaterializationOperationType.ENSURE_SOURCE_GATE_PART
                                     : MaterializationOperationType.REMOVE_SOURCE_GATE_PART, part.slotId())));
+            // The visible encounter must not wait for every semantic overlay chunk to be visited.
+            // Sparse block presentation reconciles last and remains crash-safe/incremental.
+            operations.add(operation(id, revision, operations.size(), MaterializationOperationType.ENSURE_OVERLAY,
+                    facility.threatTier().name()));
             return new MaterializationPlan(POLICY_ID, POLICY_VERSION, revision, operations);
         }
         List<MaterializationOperation> operations = new ArrayList<>();

@@ -23,10 +23,10 @@ class TestMineMaterializationTranslatorTest {
         MaterializationPlan plan = new TestMineMaterializationTranslator().translate(facility);
 
         assertEquals(1, plan.desiredRevision());
-        assertEquals(MaterializationOperationType.ENSURE_OVERLAY, plan.operations().getFirst().type());
-        assertEquals(MaterializationOperationType.ENSURE_PM_ANCHOR, plan.operations().get(1).type());
-        assertEquals("FOOTHOLD", plan.operations().getFirst().target());
-        assertEquals("pale_mirror:test_mine:1:ensure_overlay:FOOTHOLD", plan.operations().getFirst().idempotencyKey());
+        assertEquals(MaterializationOperationType.ENSURE_PM_ANCHOR, plan.operations().getFirst().type());
+        assertEquals(MaterializationOperationType.ENSURE_OVERLAY, plan.operations().get(1).type());
+        assertEquals("FOOTHOLD", plan.operations().get(1).target());
+        assertEquals("pale_mirror:test_mine:1:ensure_overlay:FOOTHOLD", plan.operations().get(1).idempotencyKey());
     }
 
     @Test
@@ -39,9 +39,10 @@ class TestMineMaterializationTranslatorTest {
         MaterializationPlan plan = new TestMineMaterializationTranslator().translate(facility, profile, EncounterRecord.none());
 
         assertEquals(3, plan.operations().size());
-        assertEquals(MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR, plan.operations().get(2).type());
-        assertEquals("guard_1", plan.operations().get(2).target());
-        assertEquals("pale_mirror:test_mine:1:ensure_source_encounter_actor:guard_1", plan.operations().get(2).idempotencyKey());
+        assertEquals(MaterializationOperationType.ENSURE_SOURCE_ENCOUNTER_ACTOR, plan.operations().get(1).type());
+        assertEquals("guard_1", plan.operations().get(1).target());
+        assertEquals("pale_mirror:test_mine:1:ensure_source_encounter_actor:guard_1", plan.operations().get(1).idempotencyKey());
+        assertEquals(MaterializationOperationType.ENSURE_OVERLAY, plan.operations().get(2).type());
     }
 
     @Test
@@ -103,7 +104,7 @@ class TestMineMaterializationTranslatorTest {
 
         MaterializationPlan plan = new TestMineMaterializationTranslator().translate(facility);
 
-        assertEquals(MaterializationOperationType.ENSURE_OVERLAY, plan.operations().getFirst().type());
-        assertEquals(MaterializationOperationType.ENSURE_PM_ANCHOR, plan.operations().get(1).type());
+        assertEquals(MaterializationOperationType.ENSURE_PM_ANCHOR, plan.operations().getFirst().type());
+        assertEquals(MaterializationOperationType.ENSURE_OVERLAY, plan.operations().get(1).type());
     }
 }

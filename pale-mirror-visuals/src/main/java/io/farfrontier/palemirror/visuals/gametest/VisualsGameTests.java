@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.visuals.genesis.FrontierClimate;
 import io.farfrontier.palemirror.visuals.genesis.AuthoredModuleCompiler;
 import io.farfrontier.palemirror.visuals.genesis.FrontierRegionPlanner;
 import io.farfrontier.palemirror.visuals.genesis.FrontierGenesisCompiler;
-import io.farfrontier.palemirror.visuals.runtime.AuthoredVisualProvider;
 import io.farfrontier.palemirror.visuals.runtime.FrontierGenesisRuntime;
 import io.farfrontier.palemirror.visuals.runtime.AuthoredRegionSeedNbt;
 import io.farfrontier.palemirror.visuals.threat.ThreatHeartEntity;

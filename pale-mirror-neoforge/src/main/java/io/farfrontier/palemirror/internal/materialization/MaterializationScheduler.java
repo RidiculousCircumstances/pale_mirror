@@ -41,7 +41,7 @@ public final class MaterializationScheduler {
             FacilityState facility = data.worldState().facility(mine.id()).orElse(null);
             if (facility == null) continue;
             ServerLevel level = levelFor(server, mine);
-            if (level == null || !level.hasChunkAt(mine.anchor()) || !playerIsNearby(server, level, mine)) continue;
+            if (level == null || !playerIsNearby(server, level, mine)) continue;
 
             MaterializationJob job = data.materializationJobs().activeFor(mine.id().value(), "threat").orElse(null);
             ScenarioInstance scenario = selectedEncounterScenario(data, mine);
@@ -85,8 +85,9 @@ public final class MaterializationScheduler {
 
     private static boolean playerIsNearby(MinecraftServer server, ServerLevel level, TestMineRecord mine) {
         return server.getPlayerList().getPlayers().stream().anyMatch(player -> player.serverLevel() == level
-                && player.distanceToSqr(mine.anchor().getX() + 0.5D, mine.anchor().getY() + 0.5D,
-                mine.anchor().getZ() + 0.5D) <= ACTIVATION_RANGE_SQUARED);
+                && (mine.contains(player.blockPosition())
+                || player.distanceToSqr(mine.anchor().getX() + 0.5D, mine.anchor().getY() + 0.5D,
+                mine.anchor().getZ() + 0.5D) <= ACTIVATION_RANGE_SQUARED));
     }
 
     private static ScenarioInstance selectedEncounterScenario(PaleMirrorSavedData data, TestMineRecord mine) {

@@ -23,7 +23,10 @@ public final class DisplacementPresentationCodec {
             tag.putLong("anchor", camp.anchor().asLong());
             tag.putString("slotObject", camp.semanticSlot().objectId());
             tag.putString("slotModule", camp.semanticSlot().moduleId());
-            tag.putString("slotId", camp.semanticSlot().slotId()); values.add(tag);
+            tag.putString("slotId", camp.semanticSlot().slotId());
+            tag.putBoolean("populationDeparted", camp.populationDeparted());
+            tag.putBoolean("retired", camp.retired());
+            values.add(tag);
         });
         root.put("refugeeCamps", values);
         ListTag permitValues = new ListTag();
@@ -43,7 +46,8 @@ public final class DisplacementPresentationCodec {
             RefugeeCampRecord camp = new RefugeeCampRecord(tag.getString("group"),
                     new WorldObjectId(tag.getString("community")), new WorldObjectId(tag.getString("site")),
                     tag.getString("dimension"), BlockPos.of(tag.getLong("anchor")),
-                    new SemanticSlotKey(tag.getString("slotObject"), tag.getString("slotModule"), tag.getString("slotId")));
+                    new SemanticSlotKey(tag.getString("slotObject"), tag.getString("slotModule"), tag.getString("slotId")),
+                    tag.getBoolean("populationDeparted"), tag.getBoolean("retired"));
             values.put(camp.populationGroupId(), camp);
         }
         return values;

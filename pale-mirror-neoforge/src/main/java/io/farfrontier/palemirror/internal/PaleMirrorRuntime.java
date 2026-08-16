@@ -331,7 +331,9 @@ public final class PaleMirrorRuntime {
 
     public ResourceTransferRuntime.InteractionResult interactWithSupplyDepot(ServerPlayer player,
                                                                               net.minecraft.core.BlockPos position) {
-        RegionalDiscoveryRuntime.discoverDepot(data, commands, player, audienceFor(player), position, this::handleDomainEvents);
+        RegionalDiscoveryRuntime.discoverDepot(data, commands, player, audienceFor(player), position,
+                this::handleDomainEvents,
+                io.farfrontier.palemirror.internal.network.PaleMirrorNetwork::synchronizeDiscoveredFeature);
         ResourceTransferRuntime.InteractionResult result = ResourceTransferRuntime.prepare(data, commands, player,
                 position, audienceFor(player));
         if (result.handled() && result.success()) data.setDirty();
@@ -418,7 +420,7 @@ public final class PaleMirrorRuntime {
             }
         }
         RegionalDiscoveryRuntime.observePlayers(server, data, commands, this::audienceFor, this::handleDomainEvents,
-                io.farfrontier.palemirror.internal.network.PaleMirrorNetwork::synchronizeDiscoveredRegion);
+                io.farfrontier.palemirror.internal.network.PaleMirrorNetwork::synchronizeDiscoveredFeature);
     }
     private void reconcileMaterialization() {
         materializationScheduler.schedule(server, data).forEach(this::publish);

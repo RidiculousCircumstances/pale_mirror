@@ -11,20 +11,18 @@ import net.minecraft.server.level.ServerLevel;
 /** Executes controller capability requests and applies read-only visual stage updates. */
 public final class ThreatHeartRuntime {
     private final java.util.Map<String, java.util.UUID> identities = new java.util.HashMap<>();
-    public void reconcile(ServerLevel level, VisualStateProjection projection, Collection<AuthoredRegionSeed> regions) {
+    public void reconcile(ServerLevel level, VisualStateProjection projection,
+                          Collection<AuthoredRegionSeed> regions, long cueTick) {
         AuthoredRegionSeed region = regions.stream().filter(seed -> projection.objectId().equals(seed.planId() + "_mine"))
                 .findFirst().orElse(null);
         if (region == null) return;
-        BlockPos column = new BlockPos(region.primaryMine().x(), 0, region.primaryMine().z());
-        if (!level.hasChunkAt(column)) return;
-        ThreatHeartEntity existing = level.getEntities(VisualEntityTypes.THREAT_HEART.get(),
-                entity -> projection.objectId().equals(entity.facilityId())).stream().findFirst().orElse(null);
+        ThreatHeartEntity existing = find(level, projection.objectId());
         if (!projection.operation().equals("INFECTED")) return;
         int stage = switch (projection.threatStage()) {
             case "FOOTHOLD" -> 1; case "INFESTED" -> 2; case "SIEGE" -> 3; case "APEX" -> 4; default -> 1;
         };
         if (existing != null) existing.setStage(stage);
-        if (level.getGameTime() % 20L == 0L) {
+        if (cueTick % 20L == 0L) {
             BlockPos portal = new BlockPos(region.primaryMineSite().portal().x(),
                     region.primaryMineSite().portal().y() + 2, region.primaryMineSite().portal().z());
             BlockPos loading = new BlockPos(region.primaryMineSite().loadingEndpoint().x(),
@@ -40,7 +38,7 @@ public final class ThreatHeartRuntime {
             if (stage >= 2 && level.hasChunkAt(loading)) level.sendParticles(
                     net.minecraft.core.particles.ParticleTypes.ASH, loading.getX() + 0.5, loading.getY(),
                     loading.getZ() + 0.5, stage * 4, 2.5, 0.8, 2.5, 0.02);
-            if (level.getGameTime() % 100L == 0L && level.hasChunkAt(portal)) level.playSound(null, portal,
+            if (cueTick % 100L == 0L && level.hasChunkAt(portal)) level.playSound(null, portal,
                     net.minecraft.sounds.SoundEvents.AMBIENT_CAVE.value(), net.minecraft.sounds.SoundSource.AMBIENT,
                     0.8F, 0.65F + stage * 0.05F);
         }

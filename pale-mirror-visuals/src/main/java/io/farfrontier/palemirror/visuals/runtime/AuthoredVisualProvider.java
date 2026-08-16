@@ -23,6 +23,7 @@ public final class AuthoredVisualProvider implements VisualProvider {
     private final AuthoredRegionMarkerIndex markers = new AuthoredRegionMarkerIndex();
     private final ThreatHeartRuntime threatHearts = new ThreatHeartRuntime();
     private final SettlementStateCueRuntime settlementCues = new SettlementStateCueRuntime();
+    private final VisualProjectionLedger projections = new VisualProjectionLedger();
     private final JourneyProjectionRuntime journeys = new JourneyProjectionRuntime();
     private final io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine foundry =
             new io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine();
@@ -137,7 +138,6 @@ public final class AuthoredVisualProvider implements VisualProvider {
                                                     io.farfrontier.palemirror.api.AuthoredMineSitePlan mine) {
         java.util.Set<Long> chunks = new java.util.LinkedHashSet<>();
         mine.initialModules().forEach(module -> addChunks(chunks, module.footprint()));
-        mine.stagedModules().forEach(stage -> addChunks(chunks, stage.module().footprint()));
         mine.foundations().forEach(foundation -> addChunks(chunks, foundation.footprint()));
         mine.semanticVolumes().forEach(volume -> addChunks(chunks, volume.bounds()));
         for (long chunk : chunks) {
@@ -158,9 +158,21 @@ public final class AuthoredVisualProvider implements VisualProvider {
     }
 
     @Override public void applyProjection(ServerLevel level, VisualStateProjection projection) {
-        var regions = markers.discovered(level.dimension().location().toString());
-        threatHearts.reconcile(level, projection, regions);
-        settlementCues.reconcile(level, projection, regions);
+        projections.accept(level.dimension().location().toString(), projection);
+    }
+
+    /** Applies the retained latest desired state to loaded presentation only. */
+    public void tickVisuals(ServerLevel level) {
+        tickVisuals(level, level.getServer().getTickCount());
+    }
+
+    void tickVisuals(ServerLevel level, long cueTick) {
+        String dimension = level.dimension().location().toString();
+        var regions = markers.discovered(dimension);
+        for (VisualStateProjection projection : projections.projections(dimension)) {
+            threatHearts.reconcile(level, projection, regions, cueTick);
+            settlementCues.reconcile(level, projection, regions, cueTick);
+        }
     }
 
     @Override public synchronized Collection<ResidentDeathObservation> drainResidentDeaths(ServerLevel level) {
@@ -217,6 +229,7 @@ public final class AuthoredVisualProvider implements VisualProvider {
         deaths.clear();
         markers.clear();
         journeys.clear();
+        projections.clear();
         threatHearts.clear();
     }
 }

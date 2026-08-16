@@ -226,7 +226,9 @@ final class SettlementStreetNetworkPlanner {
         int[] heights = new int[connection + 1];
         for (int index = 0; index <= thresholdEnd; index++) heights[index] = thresholdY;
         for (int index = thresholdEnd + 1; index < connection; index++) {
-            int desired = snapshot.surfaceHeight(path.get(index).x(), path.get(index).z());
+            // Facade approaches are short and visually sensitive. A coarse 16-block sample
+            // can otherwise stretch one high imported threshold into a broad causeway.
+            int desired = snapshot.exactSurfaceHeight(path.get(index).x(), path.get(index).z());
             heights[index] = clamp(desired, heights[index - 1] - 1, heights[index - 1] + 1);
         }
         heights[connection] = publicY;

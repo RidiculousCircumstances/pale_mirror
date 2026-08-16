@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.network;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.domain.KnownRegionalFeature;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.api.distmarker.Dist;
@@ -37,15 +38,26 @@ public final class PaleMirrorNetwork {
     }
 
     /** Pushes newly canonical knowledge only when the negotiated client actually supports Atlas. */
-    public static void synchronizeDiscoveredRegion(ServerPlayer player, String regionId) {
+    public static void synchronizeDiscoveredFeature(ServerPlayer player, String regionId,
+                                                    KnownRegionalFeature feature) {
         PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
-        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                "Settlement added to the Pale Mirror Atlas. Press P to open it."));
+        String notice = discoveryNotice(feature);
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(notice + " Press P to open the Atlas."));
         if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(
                 player.connection, AtlasSnapshotPayload.TYPE.id())) {
-            PacketDistributor.sendToPlayer(player, runtime.atlasSnapshot(
-                    player, "Settlement added to the Atlas.", false));
+            PacketDistributor.sendToPlayer(player, runtime.atlasSnapshot(player, notice, false));
         }
+    }
+
+    private static String discoveryNotice(KnownRegionalFeature feature) {
+        return switch (feature) {
+            case SETTLEMENT -> "Settlement added to the Pale Mirror Atlas.";
+            case DEPOT -> "Settlement freight depot discovered.";
+            case PRIMARY_ROUTE -> "Primary freight route discovered.";
+            case PRIMARY_MINE -> "Mine17 discovered.";
+            case ALTERNATE_SOURCE -> "Alternative supply source discovered.";
+            case REFUGEE_SITE -> "Refugee site discovered.";
+        };
     }
 
     private static void receiveSnapshot(AtlasSnapshotPayload payload, IPayloadContext context) {
