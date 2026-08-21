@@ -3,8 +3,8 @@
 set -euo pipefail
 
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-pm_jar=${1:-/home/rd/proj/pale-mirror/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar}
-visuals_jar=${2:-/home/rd/proj/pale-mirror/pale-mirror-visuals/build/libs/pale_mirror_visuals-0.3.0-SNAPSHOT.jar}
+pm_jar=${1:-$repo_dir/pale-mirror/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar}
+visuals_jar=${2:-$repo_dir/pale-mirror/pale-mirror-visuals/build/libs/pale_mirror_visuals-0.3.0-SNAPSHOT.jar}
 railway_jar=${3:-/home/rd/proj/railways-untold-pm/build/libs/railwaysuntold-neoforge-1.2.1-pm.1.jar}
 hosted_dir="$repo_dir/hosted"
 
