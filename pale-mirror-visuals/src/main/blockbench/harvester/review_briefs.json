@@ -1,0 +1,82 @@
+{
+  "schema": "pale_mirror_visuals.harvester_reference_brief.v1",
+  "acceptance_authority": "The user-supplied base reference image is the sole likeness authority. A hi-fi Blockbench source is a construction guide only.",
+  "scorecard": {
+    "primary_silhouette_and_proportions": 35,
+    "primary_anatomical_landmarks": 30,
+    "diagnostic_view_volume": 15,
+    "limb_hierarchy_and_joints": 10,
+    "material_and_animation_readability": 10,
+    "acceptance_threshold": 85,
+    "excellent_threshold": 100
+  },
+  "required_neutral_views": [
+    "primary_reference",
+    "opposite_three_quarter",
+    "front",
+    "side",
+    "elevated_rear"
+  ],
+  "required_silhouette_frames": [
+    "silhouette_primary"
+  ],
+  "required_animation_frames": [
+    "idle_neutral",
+    "action_anticipation",
+    "action_peak",
+    "action_recovery"
+  ],
+  "creatures": {
+    "biomass_collector": {
+      "base_reference": "01_harvester_biomass_collector.jpg",
+      "primary_view": "low front-left three-quarter; match the low, broad stance before adding detail",
+      "camera_target": [-2, 14, 0],
+      "camera_distance": 78,
+      "orthographic_zoom": 0.28,
+      "action": {
+        "clip": "animation.biomass_collector.harvest",
+        "frames": [0.12, 0.42, 0.74]
+      },
+      "landmarks": [
+        "Six large overlapping dorsal shell sacs that read as separate masses rather than as surface noise.",
+        "A very low, broad body carried by thick, tapered, articulated legs.",
+        "A heavy draped front head and hanging feelers distinct from the dorsal silhouette.",
+        "A thinner trailing rear tail that stays subordinate to the body masses."
+      ]
+    },
+    "crusher_stalker": {
+      "base_reference": "02_crusher_stalker.jpg",
+      "primary_view": "low front-left three-quarter; preserve the forward crushing weight",
+      "camera_target": [-2, 13, 0],
+      "camera_distance": 72,
+      "orthographic_zoom": 0.30,
+      "action": {
+        "clip": "animation.crusher_stalker.crush",
+        "frames": [0.10, 0.36, 0.70]
+      },
+      "landmarks": [
+        "A low, corded humped torso with a clear front-to-rear mass gradient.",
+        "Oversized, armour-like crushing forequarters that lead the silhouette.",
+        "A compact, downward-facing front head rather than a separate generic block.",
+        "Hunched rear legs and narrow trailing tendrils that do not compete with the crusher arms."
+      ]
+    },
+    "scythe_stalker": {
+      "base_reference": "03_scythe_stalker.jpg",
+    "primary_view": "crouched near-side profile with a slight front offset; the horizontal body axis and hooked foreground scythes must remain unmistakable",
+      "camera_target": [-2, 13, 0],
+      "camera_distance": 74,
+    "orthographic_zoom": 0.38,
+      "action": {
+        "clip": "animation.scythe_stalker.slash",
+        "frames": [0.10, 0.42, 0.76]
+      },
+      "landmarks": [
+        "A compact crouched body under a distinct arched dorsal crest.",
+        "Two long, broad, downward-hooked scythe forelimbs with a readable inner curve.",
+        "Six spidery articulated legs that remain separate in the primary silhouette.",
+        "Fine trailing whips that frame the body without replacing the large silhouette."
+      ]
+    }
+  }
+}
