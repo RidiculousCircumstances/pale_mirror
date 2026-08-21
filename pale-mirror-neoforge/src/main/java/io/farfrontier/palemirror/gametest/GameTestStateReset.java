@@ -51,10 +51,16 @@ final class GameTestStateReset {
 
     static void registerMinimalRouteRegion(PaleMirrorSavedData data, String regionId, WorldObjectId routeId,
                                            RouteProvider primaryProvider) {
+        registerMinimalRouteRegion(data, regionId, routeId, primaryProvider,
+                new InfectionSourceId("pale_mirror:test"));
+    }
+
+    static void registerMinimalRouteRegion(PaleMirrorSavedData data, String regionId, WorldObjectId routeId,
+                                           RouteProvider primaryProvider, InfectionSourceId infectionSource) {
         String namespace = routeId.value().substring(0, routeId.value().indexOf(':'));
         String prefix = namespace + ":fixture_" + Integer.toUnsignedString(regionId.hashCode(), 36);
         registerMinimalRegion(data, new WorldObjectId(prefix + "_community"), prefix, regionId, routeId,
-                primaryProvider);
+                primaryProvider, infectionSource);
     }
 
     private static void registerMinimalRegion(PaleMirrorSavedData data, WorldObjectId communityId,
@@ -65,6 +71,13 @@ final class GameTestStateReset {
     private static void registerMinimalRegion(PaleMirrorSavedData data, WorldObjectId communityId,
                                               String prefix, String regionId, WorldObjectId primaryRouteId,
                                               RouteProvider primaryProvider) {
+        registerMinimalRegion(data, communityId, prefix, regionId, primaryRouteId, primaryProvider,
+                new InfectionSourceId("pale_mirror:test"));
+    }
+
+    private static void registerMinimalRegion(PaleMirrorSavedData data, WorldObjectId communityId,
+                                              String prefix, String regionId, WorldObjectId primaryRouteId,
+                                              RouteProvider primaryProvider, InfectionSourceId infectionSource) {
         WorldObjectId placeId = new WorldObjectId(prefix + "_place");
         WorldObjectId primaryFacilityId = new WorldObjectId(prefix + "_primary_mine");
         WorldObjectId alternateFacilityId = new WorldObjectId(prefix + "_alternate_mine");
@@ -95,8 +108,8 @@ final class GameTestStateReset {
                 primaryFacilityId, alternateFacilityId, primaryRouteId, alternateRouteId,
                 4, false);
         new DomainServices().commands().execute(data.worldState(), new DomainCommand.RegisterLivingRegion(region,
-                List.of(new FacilityState(primaryFacilityId, new InfectionSourceId("pale_mirror:test"), 8, 10, 0),
-                        new FacilityState(alternateFacilityId, new InfectionSourceId("pale_mirror:test"), 8, 10, 0)),
+                List.of(new FacilityState(primaryFacilityId, infectionSource, 8, 10, 0),
+                        new FacilityState(alternateFacilityId, infectionSource, 8, 10, 0)),
                 community, place, new CommunityPlaceBinding(communityId, placeId),
                 new SettlementEconomy(communityId, Map.of(ResourceKind.IRON, new ResourceAccount(64, 32, 0, 4, 2))),
                 new SettlementSecurity(communityId, 40, 40, 1,

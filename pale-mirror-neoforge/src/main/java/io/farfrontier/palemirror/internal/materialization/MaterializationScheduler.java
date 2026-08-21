@@ -5,6 +5,7 @@ import java.util.List;
 
 import io.farfrontier.palemirror.domain.FacilityState;
 import io.farfrontier.palemirror.domain.FacilityStatus;
+import io.farfrontier.palemirror.domain.KnownRegionalFeature;
 import io.farfrontier.palemirror.domain.ScenarioArchetype;
 import io.farfrontier.palemirror.domain.ScenarioStatus;
 import io.farfrontier.palemirror.domain.ScenarioInstance;
@@ -19,6 +20,8 @@ import io.farfrontier.palemirror.internal.world.EncounterRecord;
 import io.farfrontier.palemirror.internal.world.EncounterState;
 import io.farfrontier.palemirror.internal.observation.MaterializationPostconditionObserved;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.PlayerAudienceEligibility;
+import io.farfrontier.palemirror.internal.world.StoryAudienceResolver;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.GatePresentationRecord;
 import io.farfrontier.palemirror.internal.world.SourceGatePartRef;
@@ -44,7 +47,7 @@ public final class MaterializationScheduler {
             if (level == null || !playerIsNearby(server, level, mine)) continue;
 
             MaterializationJob job = data.materializationJobs().activeFor(mine.id().value(), "threat").orElse(null);
-            ScenarioInstance scenario = selectedEncounterScenario(data, mine);
+            ScenarioInstance scenario = selectedEncounterScenario(server, level, data, mine);
             EncounterProfile profile = encounterProfile(scenario);
             boolean encounterEnabled = scenario != null;
             MaterializationPlan plan = translator.translate(facility, profile, mine.encounter(), mine.gate(), encounterEnabled);
@@ -90,16 +93,50 @@ public final class MaterializationScheduler {
                 mine.anchor().getZ() + 0.5D) <= ACTIVATION_RANGE_SQUARED));
     }
 
-    private static ScenarioInstance selectedEncounterScenario(PaleMirrorSavedData data, TestMineRecord mine) {
-        return data.worldState().scenarios().stream().filter(value -> value.target().equals(mine.id())
-                && value.status() == ScenarioStatus.RECOVER).findFirst().orElseGet(() ->
-                data.worldState().scenarios().stream().filter(value ->
-                        value.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS
-                                && value.status() == ScenarioStatus.RESPOND
-                                && data.worldState().livingRegions().stream().anyMatch(region ->
-                                region.primaryFacilityId().equals(mine.id())
-                                        && region.communityId().equals(value.target())))
-                        .findFirst().orElse(null));
+    private static ScenarioInstance selectedEncounterScenario(MinecraftServer server, ServerLevel level,
+                                                              PaleMirrorSavedData data, TestMineRecord mine) {
+        ScenarioInstance directRecovery = data.worldState().scenarios().stream().filter(value -> value.target().equals(mine.id())
+                && value.status() == ScenarioStatus.RECOVER).findFirst().orElse(null);
+        if (directRecovery != null) return directRecovery;
+
+        var region = data.worldState().livingRegions().stream()
+                .filter(value -> value.primaryFacilityId().equals(mine.id())).findFirst().orElse(null);
+        if (region == null) return null;
+        List<ScenarioInstance> crisisScenarios = data.worldState().scenarios().stream()
+                .filter(value -> value.archetype() == ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)
+                .filter(value -> value.target().equals(region.communityId()))
+                .filter(value -> !value.encounterProfileId().isBlank())
+                .filter(value -> value.status() != ScenarioStatus.BLOCKED
+                        && value.status() != ScenarioStatus.FAILED
+                        && value.status() != ScenarioStatus.CANCELLED)
+                .sorted(java.util.Comparator.comparingInt(MaterializationScheduler::encounterScenarioPriority)
+                        .thenComparing(ScenarioInstance::id))
+                .toList();
+        if (crisisScenarios.isEmpty()) return null;
+
+        // Fighting is shared physical help, not a strategic command.  An
+        // informed audience entering the MineSite may therefore materialize
+        // the global encounter without accepting its private Atlas offer.
+        // Once materialized, the persisted roster remains a shared physical
+        // fact and may be reconciled for any later nearby player.
+        boolean alreadyActivated = !mine.encounter().profileId().isBlank();
+        boolean informedPlayerInside = server.getPlayerList().getPlayers().stream()
+                .filter(PlayerAudienceEligibility::participates)
+                .filter(player -> player.serverLevel() == level && mine.contains(player.blockPosition()))
+                .map(player -> StoryAudienceResolver.resolve(data, player))
+                .anyMatch(audience -> data.worldState().regionKnowledge(audience, region.id())
+                        .filter(knowledge -> knowledge.knows(KnownRegionalFeature.SETTLEMENT)).isPresent());
+        return alreadyActivated || informedPlayerInside ? crisisScenarios.getFirst() : null;
+    }
+
+    private static int encounterScenarioPriority(ScenarioInstance scenario) {
+        return switch (scenario.status()) {
+            case RESPOND -> 0;
+            case OFFERED, ASSESS -> 1;
+            case DECLINED, EXPIRED -> 2;
+            case RESOLVED -> 3;
+            default -> 4;
+        };
     }
 
     private static EncounterProfile encounterProfile(ScenarioInstance scenario) {

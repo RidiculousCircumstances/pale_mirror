@@ -27,7 +27,7 @@ class SettlementAuthorityProfileTest {
         services.settlementEmergencies().reconcile(state);
         assertTrue(state.emergencyWindow(COMMUNITY).isEmpty(), "native population cannot enter PM evacuation policy");
         assertTrue(services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
-                StoryAudienceId.globalTestAudience(), "player:test")).isEmpty());
+                StoryAudienceId.globalTestAudience(), new WorldObjectId("pale_mirror:shelter"), "player:test")).isEmpty());
         assertEquals(PopulationDisposition.RESIDENT, state.populationGroup("pale_mirror:native_residents").orElseThrow().disposition());
 
         services.commands().execute(state, new DomainCommand.ReconcileSettlementPopulation(COMMUNITY,

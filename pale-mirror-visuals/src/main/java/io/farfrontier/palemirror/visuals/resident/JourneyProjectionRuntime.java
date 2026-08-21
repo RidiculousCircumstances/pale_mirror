@@ -20,15 +20,41 @@ import net.minecraft.world.phys.Vec3;
 public final class JourneyProjectionRuntime {
     private static final double OBSERVATION_RADIUS = 96.0D;
     private final ResidentMaterializer residents = new ResidentMaterializer();
+    private final java.util.function.BiPredicate<ServerLevel, Vec3> observer;
     private final Map<String, JourneyProjection> projections = new LinkedHashMap<>();
     private final Map<String, JourneyObservation> observations = new LinkedHashMap<>();
 
+    public JourneyProjectionRuntime() {
+        this((level, focus) -> level.players().stream()
+                .anyMatch(player -> player.distanceToSqr(focus) <= square(OBSERVATION_RADIUS)));
+    }
+
+    /** Deterministic observation seam used by the physical GameTest harness. */
+    public JourneyProjectionRuntime(java.util.function.BiPredicate<ServerLevel, Vec3> observer) {
+        this.observer = java.util.Objects.requireNonNull(observer, "observer");
+    }
+
     public synchronized void reconcile(ServerLevel level, JourneyProjection projection, AuthoredRegionSeed region) {
         projections.put(projection.journeyId(), projection);
+        reconcileRetained(level, projection, region);
+    }
+
+    public synchronized int tick(ServerLevel level, Collection<AuthoredRegionSeed> regions) {
+        Map<String, AuthoredRegionSeed> byId = regions.stream().collect(
+                java.util.stream.Collectors.toMap(AuthoredRegionSeed::planId, value -> value));
+        int spawned = 0;
+        for (JourneyProjection projection : projections.values()) {
+            AuthoredRegionSeed region = byId.get(projection.regionId());
+            if (region != null) spawned += reconcileRetained(level, projection, region);
+        }
+        return spawned;
+    }
+
+    private int reconcileRetained(ServerLevel level, JourneyProjection projection, AuthoredRegionSeed region) {
         Map<String, ResidentSeed> roster = region.residents().stream()
                 .collect(java.util.stream.Collectors.toMap(ResidentSeed::residentId, value -> value));
         Vec3 focus = pointAlong(projection);
-        boolean observed = level.players().stream().anyMatch(player -> player.distanceToSqr(focus) <= square(OBSERVATION_RADIUS));
+        boolean observed = observer.test(level, focus);
         projection.retireAtOriginResidentIds().forEach(residentId -> {
             Entity original = level.getEntity(UUID.fromString(residentId));
             if (original != null && ManagedResident.isManaged(original)) original.discard();
@@ -69,6 +95,7 @@ public final class JourneyProjectionRuntime {
             }
         }
         observeCheckpoint(level, projection, focus);
+        return spawned;
     }
 
     private void release(ServerLevel level, JourneyProjection projection, ResidentSeed seed) {

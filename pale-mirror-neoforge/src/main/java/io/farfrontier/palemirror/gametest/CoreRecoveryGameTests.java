@@ -82,6 +82,7 @@ public final class CoreRecoveryGameTests {
                 "scenario activation must supersede the completed passive job with pinned encounter work");
         helper.succeed();
     }
+
     @GameTest(batch = "pm-development-persistence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void projectEscrowSurvivesRestartWithoutBecomingSettlementStock(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
@@ -369,7 +370,11 @@ public final class CoreRecoveryGameTests {
         }
         Mob rusher = (Mob) level.getEntity(mine.encounter().actor("rusher").orElseThrow().entityId());
         helper.assertValueEqual(rusher.getType(), EntityType.RAVAGER, "Rusher must use its audited Ravager local form");
-        player.setPos(anchor.getX() - 3.5D, rusher.getY(), anchor.getZ() - 3.5D);
+        Vec3 dashTarget = new Vec3(anchor.getX() - 3.5D, rusher.getY(), anchor.getZ() - 3.5D);
+        if (rusher.distanceToSqr(dashTarget) < 4.0D) {
+            dashTarget = new Vec3(anchor.getX() + 3.5D, rusher.getY(), anchor.getZ() + 3.5D);
+        }
+        player.setPos(dashTarget.x, dashTarget.y, dashTarget.z);
         rusher.setDeltaMovement(Vec3.ZERO);
         mine.encounter().scheduleRuntime("rusher", 0L);
         runtime.tick();

@@ -22,6 +22,7 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
         DomainCommand.TriggerFacilityInfection, DomainCommand.DepositResource,
         DomainCommand.WithdrawResource, DomainCommand.BeginSettlementEvacuation,
         DomainCommand.RegisterEvacuationShelter,
+        DomainCommand.ReconcilePreparedShelterDestination,
         DomainCommand.RegisterAutonomousRefugeeShelter, DomainCommand.SetWorldSiteOperational,
         DomainCommand.StartDevelopmentIntent, DomainCommand.CompleteDevelopmentIntent,
         DomainCommand.PlanAlternateDispatch,
@@ -315,10 +316,11 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
     }
 
     record BeginSettlementEvacuation(WorldObjectId communityId, StoryAudienceId audience,
-                                     String causationId) implements DomainCommand {
+                                     WorldObjectId shelterSiteId, String causationId) implements DomainCommand {
         public BeginSettlementEvacuation {
             Objects.requireNonNull(communityId, "communityId");
             Objects.requireNonNull(audience, "audience");
+            Objects.requireNonNull(shelterSiteId, "shelterSiteId");
             Objects.requireNonNull(causationId, "causationId");
         }
     }
@@ -333,6 +335,21 @@ public sealed interface DomainCommand permits DomainCommand.AdvanceSimulation,
             Objects.requireNonNull(shelter, "shelter");
             Objects.requireNonNull(capacity, "capacity");
             Objects.requireNonNull(path, "path");
+            Objects.requireNonNull(causationId, "causationId");
+        }
+    }
+
+    /** Repairs an already completed evacuation that was canonically routed away from its prepared shelter. */
+    record ReconcilePreparedShelterDestination(WorldObjectId communityId, String populationGroupId,
+                                                WorldObjectId shelterSiteId, String pathId,
+                                                String causationId) implements DomainCommand {
+        public ReconcilePreparedShelterDestination {
+            Objects.requireNonNull(communityId, "communityId");
+            if (populationGroupId == null || populationGroupId.isBlank()) {
+                throw new IllegalArgumentException("populationGroupId is required");
+            }
+            Objects.requireNonNull(shelterSiteId, "shelterSiteId");
+            if (pathId == null || pathId.isBlank()) throw new IllegalArgumentException("pathId is required");
             Objects.requireNonNull(causationId, "causationId");
         }
     }

@@ -34,7 +34,7 @@ public final class SettlementEmergencyRuntime {
                 produced.add(event(state, DomainEventType.SETTLEMENT_EMERGENCY_WINDOW_CLOSED, community.id(), "policy:recovered"));
             } else if (window != null && window.state() == EmergencyWindowState.OPEN
                     && window.elapse(anyAudienceOnline(state, community.id()))) {
-                produced.addAll(beginEvacuation(state, community.id(), "policy:grace-expired"));
+                produced.addAll(beginEvacuation(state, community.id(), null, "policy:grace-expired"));
             }
             SettlementEmergencyWindow current = state.emergencyWindow(community.id()).orElse(null);
             if (current != null && current.state() == EmergencyWindowState.EVACUATING) {
@@ -50,14 +50,16 @@ public final class SettlementEmergencyRuntime {
         return List.copyOf(produced);
     }
 
-    public List<DomainEvent> beginEvacuation(WorldState state, WorldObjectId communityId, String causationId) {
+    public List<DomainEvent> beginEvacuation(WorldState state, WorldObjectId communityId,
+                                             WorldObjectId selectedShelterId, String causationId) {
         if (state.settlementAuthorityProfile(communityId).map(profile -> !profile.relocationAllowed()).orElse(false)) {
             return List.of();
         }
         SettlementEmergencyWindow window = state.emergencyWindow(communityId).orElse(null);
         SettlementPolicy policy = state.settlementPolicy(communityId).orElseThrow();
         if (window == null || window.state() != EmergencyWindowState.OPEN) return List.of();
-        WorldObjectId destination = shelter(state, communityId, false);
+        WorldObjectId destination = selectedShelterId == null ? shelter(state, communityId, false)
+                : eligibleShelter(state, communityId, selectedShelterId, false) ? selectedShelterId : null;
         WorldPath path = destination == null ? null : state.worldPaths().stream()
                 .filter(candidate -> candidate.destinationSiteId().equals(destination)).sorted(Comparator.comparing(WorldPath::id))
                 .findFirst().orElse(null);
@@ -111,6 +113,18 @@ public final class SettlementEmergencyRuntime {
                 .filter(value -> state.siteAffiliations(value.siteId(), SiteAffiliationRole.RECIPIENT).stream()
                         .anyMatch(affiliation -> affiliation.objectId().equals(communityId)))
                 .map(SiteCapability::siteId).sorted().findFirst().orElse(null);
+    }
+
+    private static boolean eligibleShelter(WorldState state, WorldObjectId communityId,
+                                           WorldObjectId siteId, boolean operationalOnly) {
+        return state.siteCapabilities().stream().filter(value -> value.siteId().equals(siteId))
+                .filter(value -> value.type() == SiteCapabilityType.SHELTER)
+                .filter(value -> value.capacity() >= state.population(communityId))
+                .anyMatch(value -> state.site(siteId).map(site -> (operationalOnly
+                                ? site.operationalState() == OperationalState.OPERATIONAL
+                                : site.operationalState() != OperationalState.OFFLINE)
+                        && state.siteAffiliations(siteId, SiteAffiliationRole.RECIPIENT).stream()
+                        .anyMatch(affiliation -> affiliation.objectId().equals(communityId))).orElse(false));
     }
 
     private static long stableSeed(String value) {

@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.materialization;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.adapter.ActorOperationResult;
@@ -49,6 +50,8 @@ public final class TestMineMaterializer {
                 else {
                     operation.degrade(result.diagnostic());
                     mine.encounter().degrade(result.diagnostic());
+                    PaleMirrorMod.LOGGER.warn("PM encounter actor materialization degraded for {} slot {}: {}",
+                            mine.id().value(), operation.target(), result.diagnostic());
                 }
                 job.advanceOperation();
                 if (job.nextOperation() == null) completeJob(mine, job);
@@ -60,6 +63,8 @@ public final class TestMineMaterializer {
                 else {
                     operation.degrade(result.diagnostic());
                     mine.encounter().degrade(result.diagnostic());
+                    PaleMirrorMod.LOGGER.warn("PM encounter actor cleanup degraded for {} slot {}: {}",
+                            mine.id().value(), operation.target(), result.diagnostic());
                 }
                 job.advanceOperation();
                 if (job.nextOperation() == null) completeJob(mine, job);

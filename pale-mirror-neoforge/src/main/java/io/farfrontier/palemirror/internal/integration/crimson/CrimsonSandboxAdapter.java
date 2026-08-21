@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.internal.adapter.SourceGateLayout;
 import io.farfrontier.palemirror.internal.adapter.SourceOverlayPalette;
 import io.farfrontier.palemirror.internal.adapter.SourceThreatAdapter;
+import io.farfrontier.palemirror.internal.adapter.ThreatActorSpawnResolver;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.adapter.ActorOperationResult;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
@@ -196,11 +197,10 @@ public final class CrimsonSandboxAdapter implements SourceThreatAdapter {
         Mob actor = profile.create(level);
         if (actor == null) return ActorOperationResult.unavailable("Could not create Crimson actor base entity");
         int slotIndex = mine.encounter().slotIndex(slot.id());
-        int boundedIndex = Math.max(slotIndex, 0);
-        int xOffset = (boundedIndex % 4) - 1;
-        int zOffset = (boundedIndex / 4) - 1;
-        actor.moveTo(mine.anchor().getX() + 0.5D + xOffset, mine.anchor().getY() + 1.0D,
-                mine.anchor().getZ() + 0.5D + zOffset, 0.0F, 0.0F);
+        var spawn = ThreatActorSpawnResolver.resolve(level, mine, actor, Math.max(slotIndex, 0));
+        if (spawn.isEmpty()) return ActorOperationResult.unavailable(
+                "No loaded, supported and collision-free encounter slot near " + mine.anchor().toShortString());
+        actor.moveTo(spawn.get().x, spawn.get().y, spawn.get().z, 0.0F, 0.0F);
         actor.setPersistenceRequired();
         actor.getPersistentData().putString(OBJECT_ID_KEY, mine.id().value());
         actor.getPersistentData().putString(JOB_ID_KEY, jobId);

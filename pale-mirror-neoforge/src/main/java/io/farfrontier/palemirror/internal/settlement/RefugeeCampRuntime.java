@@ -57,6 +57,23 @@ public final class RefugeeCampRuntime {
             }
             if (camp == null) continue;
             if (camp.observe(group.disposition())) changed = true;
+            var preparedSiteId = camp.siteId();
+            boolean arrivedAtWrongSite = group.disposition() == PopulationDisposition.RESETTLED
+                    && group.hostSiteId() != null && !group.hostSiteId().equals(preparedSiteId);
+            boolean terminalJourneyAtWrongSite = group.disposition() == PopulationDisposition.IN_TRANSIT
+                    && group.journeyId() != null && data.worldState().journey(group.journeyId()).map(journey ->
+                            journey.state() == io.farfrontier.palemirror.domain.JourneyState.ARRIVED
+                                    && !journey.destinationSiteId().equals(preparedSiteId)).orElse(false);
+            if (camp.populationDeparted() && (arrivedAtWrongSite || terminalJourneyAtWrongSite)) {
+                String pathId = data.worldState().worldPaths().stream()
+                        .filter(path -> path.destinationSiteId().equals(preparedSiteId))
+                        .map(io.farfrontier.palemirror.domain.WorldPath::id).sorted().findFirst().orElse(null);
+                if (pathId != null && !commands.execute(data.worldState(),
+                        new DomainCommand.ReconcilePreparedShelterDestination(camp.communityId(), group.id(),
+                                camp.siteId(), pathId, "reconciliation:prepared-shelter-destination")).isEmpty()) {
+                    changed = true;
+                }
+            }
             MaterializationJob job = ensureJob(data, camp);
             if (job.state() == JobState.COMPLETED) {
                 var site = data.worldState().site(camp.siteId()).orElse(null);

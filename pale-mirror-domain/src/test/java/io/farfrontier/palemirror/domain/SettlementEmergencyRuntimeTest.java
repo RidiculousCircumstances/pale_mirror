@@ -33,9 +33,9 @@ class SettlementEmergencyRuntimeTest {
         services.settlementEmergencies().reconcile(state);
 
         assertTrue(!services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
-                StoryAudienceId.globalTestAudience(), "player:test")).isEmpty());
+                StoryAudienceId.globalTestAudience(), FALLBACK, "player:test")).isEmpty());
         assertTrue(services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
-                new StoryAudienceId("pm:audience:other"), "player:other")).isEmpty());
+                new StoryAudienceId("pm:audience:other"), FALLBACK, "player:other")).isEmpty());
     }
 
     @Test
@@ -53,12 +53,73 @@ class SettlementEmergencyRuntimeTest {
                         new WorldPathNode("shelter", "minecraft:overworld", 100, 64, 0, true))), "player:anchor")).stream()
                 .anyMatch(event -> event.type() == DomainEventType.REFUGEE_SHELTER_PREPARED));
         services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
-                StoryAudienceId.globalTestAudience(), "player:evacuate"));
+                StoryAudienceId.globalTestAudience(), shelter, "player:evacuate"));
+        assertEquals(shelter, state.journeys().iterator().next().destinationSiteId(),
+                "player-started evacuation must use the explicitly prepared shelter, not a sorted fallback");
         reconcileThrough(state, services, 10);
 
         assertEquals(PopulationDisposition.RESETTLED, state.populationGroups(COMMUNITY).getFirst().disposition());
         assertEquals(80, state.population(COMMUNITY), "the prepared camp hosts the existing group; it does not clone it");
         assertTrue(state.history().stream().anyMatch(event -> event.type() == DomainEventType.POPULATION_RESETTLED));
+    }
+
+    @Test
+    void completedLegacyMisrouteReconcilesToThePreparedShelterExactlyOnce() {
+        WorldState state = emergencyState();
+        DomainServices services = new DomainServices();
+        services.settlementEmergencies().reconcile(state);
+        WorldObjectId prepared = new WorldObjectId("pale_mirror:prepared_after_fallback");
+        WorldPath preparedPath = new WorldPath("pm:test:prepared-recovery", "1",
+                new WorldObjectId("pale_mirror:origin"), prepared, java.util.List.of(
+                new WorldPathNode("origin", "minecraft:overworld", 0, 64, 0, true),
+                new WorldPathNode("prepared", "minecraft:overworld", 120, 64, 0, true)));
+        services.commands().execute(state, new DomainCommand.RegisterEvacuationShelter(COMMUNITY,
+                StoryAudienceId.globalTestAudience(),
+                new WorldSite(prepared, WorldSiteType.SHELTER, OperationalState.OPERATIONAL),
+                new SiteCapability(prepared, SiteCapabilityType.SHELTER, null, 80), preparedPath, "player:anchor"));
+
+        services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
+                StoryAudienceId.globalTestAudience(), FALLBACK, "legacy:sorted-fallback"));
+        reconcileThrough(state, services, 10);
+        assertEquals(FALLBACK, state.populationGroups(COMMUNITY).getFirst().hostSiteId());
+
+        var repaired = services.commands().execute(state, new DomainCommand.ReconcilePreparedShelterDestination(
+                COMMUNITY, "pale_mirror:residents", prepared, preparedPath.id(), "reconciliation:test"));
+        assertTrue(repaired.stream().anyMatch(event -> event.type() == DomainEventType.POPULATION_RESETTLED));
+        assertEquals(prepared, state.populationGroups(COMMUNITY).getFirst().hostSiteId());
+        assertTrue(state.journeys().stream().anyMatch(journey -> journey.subjectGroupId().equals("pale_mirror:residents")
+                && journey.destinationSiteId().equals(prepared) && journey.state() == JourneyState.ARRIVED));
+        assertTrue(services.commands().execute(state, new DomainCommand.ReconcilePreparedShelterDestination(
+                COMMUNITY, "pale_mirror:residents", prepared, preparedPath.id(), "reconciliation:duplicate")).isEmpty(),
+                "an already corrected destination must not create another journey or event");
+    }
+
+    @Test
+    void arrivedLegacyJourneyCanReconcileBeforeEmergencyCompletionHostsTheGroup() {
+        WorldState state = emergencyState();
+        DomainServices services = new DomainServices();
+        services.settlementEmergencies().reconcile(state);
+        WorldObjectId prepared = new WorldObjectId("pale_mirror:prepared_before_completion");
+        WorldPath preparedPath = new WorldPath("pm:test:prepared-before-completion", "1",
+                new WorldObjectId("pale_mirror:origin"), prepared, java.util.List.of(
+                new WorldPathNode("origin", "minecraft:overworld", 0, 64, 0, true),
+                new WorldPathNode("prepared", "minecraft:overworld", 120, 64, 0, true)));
+        services.commands().execute(state, new DomainCommand.RegisterEvacuationShelter(COMMUNITY,
+                StoryAudienceId.globalTestAudience(),
+                new WorldSite(prepared, WorldSiteType.SHELTER, OperationalState.OPERATIONAL),
+                new SiteCapability(prepared, SiteCapabilityType.SHELTER, null, 80), preparedPath, "player:anchor"));
+        services.commands().execute(state, new DomainCommand.BeginSettlementEvacuation(COMMUNITY,
+                StoryAudienceId.globalTestAudience(), FALLBACK, "legacy:sorted-fallback"));
+        WorldJourney legacy = state.journeys().iterator().next();
+        while (!legacy.terminal()) legacy.advanceAbstractStep();
+        assertEquals(PopulationDisposition.IN_TRANSIT, state.populationGroups(COMMUNITY).getFirst().disposition());
+
+        var repaired = services.commands().execute(state, new DomainCommand.ReconcilePreparedShelterDestination(
+                COMMUNITY, "pale_mirror:residents", prepared, preparedPath.id(), "reconciliation:test"));
+
+        assertTrue(repaired.stream().anyMatch(event -> event.type() == DomainEventType.POPULATION_RESETTLED));
+        assertEquals(PopulationDisposition.RESETTLED, state.populationGroups(COMMUNITY).getFirst().disposition());
+        assertEquals(prepared, state.populationGroups(COMMUNITY).getFirst().hostSiteId());
     }
 
     @Test
@@ -130,6 +191,7 @@ class SettlementEmergencyRuntimeTest {
     private static final WorldObjectId COMMUNITY = new WorldObjectId("pale_mirror:community");
     private static final WorldObjectId PLACE = new WorldObjectId("pale_mirror:place");
     private static final WorldObjectId MINE = new WorldObjectId("pale_mirror:mine");
+    private static final WorldObjectId FALLBACK = new WorldObjectId("pale_mirror:zz_fallback");
 
     private static WorldState emergencyState() {
         WorldState state = new WorldState();
@@ -157,12 +219,11 @@ class SettlementEmergencyRuntimeTest {
                 audience, "pale_mirror:settlement_supply_crisis", "1", java.util.List.of("RESPOND"),
                 java.util.List.of(), "", "", ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS,
                 ScenarioStatus.RESPOND, null, ""));
-        WorldObjectId fallback = new WorldObjectId("pale_mirror:zz_fallback");
         WorldObjectId origin = new WorldObjectId("pale_mirror:origin");
-        state.putSite(new WorldSite(fallback, WorldSiteType.SHELTER, OperationalState.OPERATIONAL));
-        state.putSiteAffiliation(new SiteAffiliation(fallback, COMMUNITY, SiteAffiliationRole.RECIPIENT));
-        state.putSiteCapability(new SiteCapability(fallback, SiteCapabilityType.SHELTER, null, 80));
-        state.putWorldPath(new WorldPath("pm:test:fallback", "1", origin, fallback, java.util.List.of(
+        state.putSite(new WorldSite(FALLBACK, WorldSiteType.SHELTER, OperationalState.OPERATIONAL));
+        state.putSiteAffiliation(new SiteAffiliation(FALLBACK, COMMUNITY, SiteAffiliationRole.RECIPIENT));
+        state.putSiteCapability(new SiteCapability(FALLBACK, SiteCapabilityType.SHELTER, null, 80));
+        state.putWorldPath(new WorldPath("pm:test:fallback", "1", origin, FALLBACK, java.util.List.of(
                 new WorldPathNode("origin", "minecraft:overworld", 0, 64, 0, true),
                 new WorldPathNode("fallback", "minecraft:overworld", 100, 64, 0, true))));
         return state;

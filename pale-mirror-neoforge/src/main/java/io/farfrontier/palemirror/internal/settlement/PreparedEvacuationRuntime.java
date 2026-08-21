@@ -48,16 +48,14 @@ public final class PreparedEvacuationRuntime {
     public boolean begin(String communityId, StoryAudienceId audience, String causationId) {
         try {
             WorldObjectId community = new WorldObjectId(communityId);
-            boolean prepared = data.worldState().siteCapabilities().stream()
-                    .filter(value -> value.type() == SiteCapabilityType.SHELTER)
-                    .filter(value -> value.capacity() >= data.worldState().population(community))
-                    .filter(value -> data.worldState().siteAffiliations(value.siteId(), SiteAffiliationRole.RECIPIENT)
-                            .stream().anyMatch(affiliation -> affiliation.objectId().equals(community)))
-                    .anyMatch(value -> data.worldState().site(value.siteId()).map(site ->
-                            site.operationalState() != OperationalState.OFFLINE).orElse(false));
-            if (!prepared) return false;
+            RefugeeCampRecord camp = data.refugeeCamps().values().stream()
+                    .filter(value -> value.communityId().equals(community) && !value.retired())
+                    .filter(value -> data.worldState().site(value.siteId()).map(site ->
+                            site.operationalState() != OperationalState.OFFLINE).orElse(false))
+                    .findFirst().orElse(null);
+            if (camp == null) return false;
             List<DomainEvent> events = commands.execute(data.worldState(), new DomainCommand.BeginSettlementEvacuation(
-                    community, audience, causationId));
+                    community, audience, camp.siteId(), causationId));
             if (!events.isEmpty()) data.setDirty();
             return !events.isEmpty();
         } catch (IllegalArgumentException ignored) {

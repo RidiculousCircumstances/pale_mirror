@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.farfrontier.palemirror.api.VisualBounds;
 import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.api.VisualPortKind;
+import io.farfrontier.palemirror.api.AuthoredMineSitePlan;
+import io.farfrontier.palemirror.api.MineFoundationPlan;
 
 import org.junit.jupiter.api.Test;
 
@@ -69,6 +71,50 @@ class MineUndergroundLayoutTest {
             }
         }
         assertEquals(1L, routes.stream().filter(MineAccessGenesisCompiler.AccessRoute::minePortal).count());
+    }
+
+    @Test void surfaceAccessCompilesAcrossDeterministicLayoutsAndOrientations() {
+        for (int index = 0; index < 128; index++) {
+            var seed = new FrontierRegionPlanner().plan(1204015150661999743L + index * 7919L, index,
+                    new VisualPoint(index * 193, 64 + index % 27, -index * 211),
+                    FrontierClimate.values()[index % FrontierClimate.values().length]);
+            for (var mine : java.util.List.of(seed.primaryMineSite(), seed.alternateMineSite())) {
+                var routes = MineAccessGenesisCompiler.routes(mine);
+                assertEquals(MineSurfaceLayout.materializedFoundationIds(mine).size(), routes.size());
+                assertEquals(1L, routes.stream().filter(MineAccessGenesisCompiler.AccessRoute::minePortal).count());
+            }
+        }
+    }
+
+    @Test void portalApproachEscapesTheActualAuthoredFoundation() {
+        var original = new FrontierRegionPlanner().plan(621L, 0, new VisualPoint(0, 72, 0),
+                FrontierClimate.TEMPERATE).primaryMineSite();
+        int outward = Math.floorMod(original.inwardQuarterTurns() + 2, 4);
+        var foundations = original.foundations().stream().map(foundation -> {
+            if (!foundation.id().equals("portal")) return foundation;
+            VisualBounds bounds = foundation.footprint();
+            VisualPoint min = bounds.min();
+            VisualPoint max = bounds.max();
+            VisualBounds widened = switch (outward) {
+                case 0 -> new VisualBounds(min, new VisualPoint(max.x() + 8, max.y(), max.z()));
+                case 1 -> new VisualBounds(min, new VisualPoint(max.x(), max.y(), max.z() + 8));
+                case 2 -> new VisualBounds(new VisualPoint(min.x() - 8, min.y(), min.z()), max);
+                default -> new VisualBounds(new VisualPoint(min.x(), min.y(), min.z() - 8), max);
+            };
+            return new MineFoundationPlan(foundation.id(), widened, foundation.targetY(), foundation.apron(),
+                    foundation.maximumCut(), foundation.maximumFill());
+        }).toList();
+        var mine = new AuthoredMineSitePlan(original.siteId(), original.role(), original.portal(),
+                original.loadingEndpoint(), original.controllerAnchor(), original.bounds(),
+                original.inwardQuarterTurns(), original.surfaceBuildings(), original.undergroundModules(),
+                original.stagedModules(), foundations, original.environment(), original.semanticVolumes());
+
+        var portalRoute = MineAccessGenesisCompiler.routes(mine).stream()
+                .filter(MineAccessGenesisCompiler.AccessRoute::minePortal).findFirst().orElseThrow();
+
+        VisualPoint expected = outside(mine.portal(), outward);
+        assertEquals(expected.x(), portalRoute.points().getLast().x());
+        assertEquals(expected.z(), portalRoute.points().getLast().z());
     }
 
     private static boolean contains(VisualBounds bounds, VisualPoint point) {

@@ -173,6 +173,7 @@ public final class AuthoredVisualProvider implements VisualProvider {
             threatHearts.reconcile(level, projection, regions, cueTick);
             settlementCues.reconcile(level, projection, regions, cueTick);
         }
+        journeys.tick(level, regions);
     }
 
     @Override public synchronized Collection<ResidentDeathObservation> drainResidentDeaths(ServerLevel level) {

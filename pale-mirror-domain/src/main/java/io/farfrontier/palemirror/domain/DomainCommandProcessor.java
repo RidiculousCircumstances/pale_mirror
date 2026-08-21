@@ -20,6 +20,7 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
     private final LivingRegionRegistrationRuntime regionRegistration;
     private final RegionalAudienceCommandRuntime regionalAudienceCommands;
     private final DevelopmentCommandRuntime developmentCommands;
+    private final PreparedShelterReconciliationRuntime preparedShelterReconciliation;
 
     DomainCommandProcessor(SimulationEngine simulation, ResourceFlowSimulation resources,
                            SettlementDecisionEngine settlementDecisions,
@@ -42,6 +43,7 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
         this.regionRegistration = new LivingRegionRegistrationRuntime(events);
         this.regionalAudienceCommands = new RegionalAudienceCommandRuntime(events);
         this.developmentCommands = new DevelopmentCommandRuntime(events, scenarios);
+        this.preparedShelterReconciliation = new PreparedShelterReconciliationRuntime(events);
     }
 
     public List<DomainEvent> execute(WorldState state, DomainCommand command) {
@@ -78,6 +80,8 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
             case DomainCommand.WithdrawResource withdrawn -> withdrawResource(state, withdrawn);
             case DomainCommand.BeginSettlementEvacuation evacuation -> beginSettlementEvacuation(state, evacuation);
             case DomainCommand.RegisterEvacuationShelter shelter -> registerEvacuationShelter(state, shelter);
+            case DomainCommand.ReconcilePreparedShelterDestination shelter ->
+                    preparedShelterReconciliation.reconcile(state, shelter);
             case DomainCommand.RegisterAutonomousRefugeeShelter shelter -> registerAutonomousRefugeeShelter(state, shelter);
             case DomainCommand.SetWorldSiteOperational site -> setWorldSiteOperational(state, site);
             case DomainCommand.StartDevelopmentIntent intent -> developmentCommands.start(state, intent.intentId());
@@ -363,7 +367,8 @@ public final class DomainCommandProcessor implements DomainCommandExecutor {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown settlement region " + command.communityId()));
         if (!state.hasRespondingScenario(command.audience(), command.communityId(),
                 ScenarioArchetype.SETTLEMENT_SUPPLY_CRISIS)) return List.of();
-        List<DomainEvent> produced = settlementEmergencies.beginEvacuation(state, command.communityId(), command.causationId());
+        List<DomainEvent> produced = settlementEmergencies.beginEvacuation(state, command.communityId(),
+                command.shelterSiteId(), command.causationId());
         produced.forEach(state::addEvent);
         return produced;
     }

@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.domain.InfectionSourceId;
 import io.farfrontier.palemirror.internal.adapter.SourceOverlayPalette;
 import io.farfrontier.palemirror.internal.adapter.SourceThreatAdapter;
+import io.farfrontier.palemirror.internal.adapter.ThreatActorSpawnResolver;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.content.EncounterProfile;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
@@ -141,8 +142,10 @@ public final class SporeSandboxAdapter implements SourceThreatAdapter {
         if (!(candidate instanceof Mob actor)) return ActorOperationResult.unavailable(
                 "Spore profile " + profile.id() + " did not create a mob");
         int slotIndex = Math.max(site.encounter().slotIndex(slot.id()), 0);
-        actor.moveTo(site.anchor().getX() + 0.5D + (slotIndex % 4) - 1, site.anchor().getY() + 1.0D,
-                site.anchor().getZ() + 0.5D + (slotIndex / 4) - 1, 0.0F, 0.0F);
+        var spawn = ThreatActorSpawnResolver.resolve(level, site, actor, slotIndex);
+        if (spawn.isEmpty()) return ActorOperationResult.unavailable(
+                "No loaded, supported and collision-free encounter slot near " + site.anchor().toShortString());
+        actor.moveTo(spawn.get().x, spawn.get().y, spawn.get().z, 0.0F, 0.0F);
         actor.setPersistenceRequired();
         actor.setCustomName(Component.literal("Pale Mirror Spore " + profile.id().substring(profile.id().lastIndexOf(':') + 1)));
         actor.getPersistentData().putString(VanillaAnchorAdapter.OBJECT_ID_KEY, site.id().value());

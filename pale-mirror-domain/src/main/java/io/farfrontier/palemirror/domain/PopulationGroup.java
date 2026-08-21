@@ -100,6 +100,12 @@ public final class PopulationGroup {
         revision++;
         return true;
     }
+    boolean rehostAt(WorldObjectId siteId) {
+        if (disposition != PopulationDisposition.RESETTLED || Objects.equals(hostSiteId, siteId)) return false;
+        hostSiteId = Objects.requireNonNull(siteId, "siteId");
+        revision++;
+        return true;
+    }
     public boolean returnHome() {
         if (disposition != PopulationDisposition.DISPLACED && disposition != PopulationDisposition.RESETTLED) return false;
         disposition = PopulationDisposition.RESIDENT;
