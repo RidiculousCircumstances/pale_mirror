@@ -4,7 +4,7 @@ Discover and verify these values before every operation; they may drift.
 
 ## Repositories and runtime
 
-- Pale Mirror code: `/home/rd/proj/pale-mirror`
+- Pale Mirror code: `/home/rd/proj/minecraft/pale-mirror`
 - Far Frontier pack: `/home/rd/proj/minecraft` (`pack.toml` is the identity)
 - Disposable server runtime: `/home/rd/far-frontier-server`
 - Server service: user unit `far-frontier-server.service`

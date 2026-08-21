@@ -2,10 +2,20 @@
 
 ## Continuity
 
-`CONTINUITY.md` is the compact, canonical session brief. At the start of a
-non-trivial task, read it. Update it when the goal, a constraint, a decision,
-the `Done` / `Now` / `Next` state, or verification evidence changes. Keep it
-under 120 lines, factual, and free of chat transcripts or test logs.
+Maintain one compact Continuity Ledger in `CONTINUITY.md`. It is the canonical
+session brief that survives context compaction; do not rely on older chat
+messages unless their durable facts are reflected there.
+
+At the start of every assistant turn, read `CONTINUITY.md` before acting. Update
+it only when goals, constraints/assumptions, key decisions, progress state,
+important verification evidence, open questions or the active working set
+change. Keep it factual and at most 120 lines; never store dialogue summaries,
+long changelogs, raw test logs or stale file inventories in the active ledger.
+
+If history must be retained, archive the previous ledger under `docs/archive/`
+and reference that archive from the compact active ledger. If context is
+missing, reconstruct only supported facts, mark gaps `UNCONFIRMED`, ask targeted
+questions when necessary and continue without inventing state.
 
 Use these headings exactly:
 
@@ -20,6 +30,19 @@ Use these headings exactly:
 - Working set
 
 If a fact is missing, record `UNCONFIRMED`; do not invent it.
+
+`update_plan` is a short-cycle execution checklist. `CONTINUITY.md` is the
+long-lived intent and state anchor. Keep them synchronized at the goal/state
+level without copying plan micro-steps into the ledger.
+
+Start user-facing work updates with a short **Ledger Snapshot** containing:
+
+- Goal
+- Now / Next
+- Open questions
+
+Show the full ledger only when it changed or the user requests it. If unrelated
+architectural flaws or code smells are discovered, report them separately.
 
 ## Mandatory project skills
 

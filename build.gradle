@@ -80,6 +80,9 @@ def mandatoryProjectSkills = [
         'pm-product-review'
 ]
 def agentRulesFile = layout.projectDirectory.file('AGENTS.md').asFile
+def continuityLedgerFile = layout.projectDirectory.file('CONTINUITY.md').asFile
+def continuityLedgerValidator = layout.projectDirectory.file('tools/engineering/continuity_ledger.py').asFile
+def continuityLedgerTests = layout.projectDirectory.file('tools/engineering/test_continuity_ledger.py').asFile
 def mandatoryProjectSkillFiles = mandatoryProjectSkills.collectEntries { name -> [(name): [
         skill: layout.projectDirectory.file(".agents/skills/${name}/SKILL.md").asFile,
         metadata: layout.projectDirectory.file(".agents/skills/${name}/agents/openai.yaml").asFile
@@ -281,6 +284,20 @@ tasks.register('verifyProjectSkills') {
     }
 }
 
+tasks.register('testContinuityLedgerValidator', Exec) {
+    group = 'verification'
+    description = 'Runs the continuity-ledger contract tests.'
+    inputs.files(continuityLedgerValidator, continuityLedgerTests)
+    commandLine 'python3', continuityLedgerTests.absolutePath
+}
+
+tasks.register('verifyContinuityLedger', Exec) {
+    group = 'verification'
+    description = 'Validates the compact canonical continuity ledger.'
+    inputs.files(continuityLedgerFile, continuityLedgerValidator)
+    commandLine 'python3', continuityLedgerValidator.absolutePath
+}
+
 tasks.register('verifyLargeFiles') {
     group = 'verification'
     description = 'Applies the 500-line Java-file debt ratchet.'
@@ -299,7 +316,8 @@ tasks.register('guardrails') {
     dependsOn tasks.named('verifyJava21'), tasks.named('verifyArchitecture'),
             tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles'),
             tasks.named('verifySourceIsolation'), tasks.named('verifyJavaStyle'),
-            tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills')
+            tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills'),
+            tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger')
 }
 
 tasks.named('check') {
