@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -129,7 +129,7 @@ function cameraDefinitions(brief) {
 
 function buildReview({ creature, brief, referenceFile, modelFile, geoFile, animationFile, previous }) {
     return {
-        schema: 'pale_mirror_visuals.harvester_visual_review.v1',
+        schema: 'pale_mirror_visuals.harvester_visual_review.v2',
         status: 'PENDING_REVIEW',
         creature,
         reviewer: null,
@@ -138,7 +138,11 @@ function buildReview({ creature, brief, referenceFile, modelFile, geoFile, anima
             sole_likeness_authority: relativeToRoot(referenceFile),
             source_sha256: sha256(referenceFile),
             primary_view: brief.primary_view,
-            required_landmarks: brief.landmarks
+            required_landmarks: brief.landmarks,
+            contour_contract: briefs.contour_contract,
+            reference_subject_bounds_normalized: brief.reference_subject_bounds_normalized,
+            contour_alignment: brief.contour_alignment,
+            contour_landmarks: brief.contour_landmarks
         },
         inputs: {
             runtime_blockbench_model: relativeToRoot(modelFile),
@@ -154,15 +158,19 @@ function buildReview({ creature, brief, referenceFile, modelFile, geoFile, anima
             neutral_views: neutralViews,
             silhouette_frames: silhouetteViews,
             animation_frames: animationViews,
+            contour_comparison: true,
             display: 'normal Blockbench display; fixed orthographic scale; grid and selections hidden where the installed Blockbench version supports it'
         },
         evidence: {
-            frames: Object.fromEntries([...silhouetteViews, ...neutralViews, ...animationViews].map(name => [name, null]))
+            frames: Object.fromEntries([...silhouetteViews, ...neutralViews, ...animationViews].map(name => [name, null])),
+            contour_comparison: null,
+            contour_metadata: null
         },
         inspection_prompt: elementInspection(modelFile),
         defects: {
             uniform_surface_lattice: null,
             primary_reference_mismatch: null,
+            primary_contour_mismatch: null,
             critical_diagnostic_view_defect: null,
             critical_animation_defect: null
         },
@@ -183,14 +191,18 @@ function buildReview({ creature, brief, referenceFile, modelFile, geoFile, anima
 function scorecardMarkdown(review) {
     const score = briefs.scorecard;
     const landmarkList = review.baseline.required_landmarks.map(item => `- [ ] ${item}`).join('\n');
+    const contourList = review.baseline.contour_landmarks.map(item => `- [ ] ${item}`).join('\n');
     const frameList = [...silhouetteViews, ...neutralViews, ...animationViews].map(name => `- [ ] \`${name}\`: ${review.evidence.frames[name] ?? 'not captured'}`).join('\n');
     return `# ${review.creature} — visual review\n\n` +
         `Status: **${review.status}**  \n` +
         `Base reference (sole likeness authority): \`${review.baseline.sole_likeness_authority}\`  \n` +
         `Primary-view intent: ${review.baseline.primary_view}\n\n` +
         `## 1. Fixed reference and required landmarks\n\n${landmarkList}\n\n` +
-        `## 2–4. Construction gate before detail\n\n` +
-        `The runtime model must be built from deliberate, varied anatomical masses. \`silhouette_primary\` uses Blockbench solid mode to prove the large form before texture and micro-detail are considered. The hi-fi source is not scoring evidence.\n\n` +
+        `## 2. Direct reference-contour gate\n\n${contourList}\n\n` +
+        `Contour comparison: ${review.evidence.contour_comparison ?? 'not captured'}  \n` +
+        `Contour metadata: ${review.evidence.contour_metadata ?? 'not captured'}\n\n` +
+        `## 3–4. Construction gate before detail\n\n` +
+        `The runtime model must be built from deliberate, varied anatomical masses. \`silhouette_primary\` uses Blockbench solid mode to prove the large form before texture and micro-detail are considered. The hi-fi source is not scoring evidence. The normalized overlay is a visual alignment guide and never an automated likeness score.\n\n` +
         `## 5. Actual Blockbench evidence\n\n${frameList}\n\n` +
         `## 6. Independent visual review (after looking at the images side by side)\n\n` +
         `| Criterion | Maximum | Score | Evidence / mismatch |\n| --- | ---: | ---: | --- |\n` +
@@ -200,7 +212,7 @@ function scorecardMarkdown(review) {
         `| Limb hierarchy and joints | ${score.limb_hierarchy_and_joints} |  |  |\n` +
         `| Material and animation readability | ${score.material_and_animation_readability} |  |  |\n` +
         `| **Total** | **100** |  |  |\n\n` +
-        `Hard gates: a uniform surface lattice gives **0** for anatomical landmarks; any critical failure in a diagnostic or animation frame rejects the model; below ${score.acceptance_threshold}/100 is not accepted; ${score.excellent_threshold}/100 requires no material primary-view mismatch and no critical diagnostic or animation defect.\n\n` +
+        `Hard gates: a uniform surface lattice gives **0** for anatomical landmarks; a material mismatch against the pinned reference contour rejects the iteration; any critical failure in a diagnostic or animation frame rejects the model; below ${score.acceptance_threshold}/100 is not accepted; ${score.excellent_threshold}/100 requires no material primary-view mismatch and no critical diagnostic or animation defect.\n\n` +
         `## 7. Corrective delta\n\n` +
         `1. Largest mismatch: \n2. Second mismatch: \n3. Third mismatch: \n\n` +
         `One next modelling change (not a broad rewrite): \n\n` +
@@ -325,6 +337,7 @@ function editorScript(camera, animation, viewMode) {
                 mesh_position: group?.mesh?.position?.toArray?.() ?? null
             };
         });
+        const bounds = preview.canvas?.getBoundingClientRect?.();
         return {
             is_orthographic: Boolean(preview.isOrtho),
             camera: preview.camera.position.toArray(),
@@ -332,6 +345,7 @@ function editorScript(camera, animation, viewMode) {
             selected_animation: typeof Animation !== 'undefined' && Animation.selected ? Animation.selected.name : null,
             timeline_time: typeof Timeline !== 'undefined' ? Timeline.time : null,
             timeline_playing: typeof Timeline !== 'undefined' ? Boolean(Timeline.playing) : null,
+            preview_bounds: bounds ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null,
             animated_groups
         };
     })()`;
@@ -354,6 +368,7 @@ async function captureBlockbench({ modelFile, brief, outputDirectory, binary, re
     await client.connect();
     const cameras = cameraDefinitions(brief);
     const frames = {};
+    let contourSilhouette = null;
     const gridState = await client.call('Runtime.evaluate', {
         expression: `(() => typeof BarItems !== 'undefined' && BarItems.toggle_all_grids ? BarItems.toggle_all_grids.value : (typeof Settings !== 'undefined' && Settings.stored?.grids ? Settings.stored.grids.value : null))()`,
         returnByValue: true
@@ -387,6 +402,18 @@ async function captureBlockbench({ modelFile, brief, outputDirectory, binary, re
         fs.writeFileSync(file, Buffer.from(image.data, 'base64'));
         frames[name] = path.relative(outputDirectory, file).split(path.sep).join('/');
         captureStates[name] = state;
+        if (name === 'silhouette_primary') {
+            const bounds = state?.preview_bounds;
+            if (!bounds || bounds.width < 32 || bounds.height < 32) throw new Error('Blockbench preview bounds are unavailable for contour evidence');
+            const viewport = await client.call('Page.captureScreenshot', {
+                format: 'png',
+                fromSurface: true,
+                clip: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, scale: 1 }
+            });
+            const viewportFile = path.join(outputDirectory, 'frames', 'silhouette_primary_viewport.png');
+            fs.writeFileSync(viewportFile, Buffer.from(viewport.data, 'base64'));
+            contourSilhouette = path.relative(outputDirectory, viewportFile).split(path.sep).join('/');
+        }
     };
     const captureStates = {};
     fs.mkdirSync(path.join(outputDirectory, 'frames'), { recursive: true });
@@ -424,8 +451,49 @@ async function captureBlockbench({ modelFile, brief, outputDirectory, binary, re
     }
     return {
         frames,
+        contour_silhouette: contourSilhouette,
         frame_states: captureStates,
         blockbench: { pid: child.pid, port, executable: blockbench, normal_display: environment.DISPLAY }
+    };
+}
+
+function validateContourBrief(brief) {
+    const bounds = brief.reference_subject_bounds_normalized;
+    if (!Array.isArray(bounds) || bounds.length !== 4 || bounds.some(value => typeof value !== 'number')) {
+        throw new Error('review brief requires four numeric reference_subject_bounds_normalized values');
+    }
+    const [left, top, right, bottom] = bounds;
+    if (!(left >= 0 && top >= 0 && right <= 1 && bottom <= 1 && left < right && top < bottom)) {
+        throw new Error('reference_subject_bounds_normalized must be ordered inside 0..1');
+    }
+    if (!['bottom_center', 'center'].includes(brief.contour_alignment)) {
+        throw new Error('review brief contour_alignment must be bottom_center or center');
+    }
+    if (!Array.isArray(brief.contour_landmarks) || brief.contour_landmarks.length < 3 || brief.contour_landmarks.some(value => !String(value).trim())) {
+        throw new Error('review brief requires at least three contour_landmarks');
+    }
+}
+
+function buildContourEvidence({ referenceFile, capture, brief, outputDirectory }) {
+    validateContourBrief(brief);
+    if (!capture?.contour_silhouette) throw new Error('solid viewport capture is missing for contour evidence');
+    const comparison = path.join(outputDirectory, 'frames', 'primary_contour_comparison.png');
+    const metadata = path.join(outputDirectory, 'primary_contour_metadata.json');
+    const result = spawnSync('python3', [
+        path.join(root, 'tools', 'harvester_contour_overlay.py'),
+        '--reference', referenceFile,
+        '--silhouette', path.join(outputDirectory, capture.contour_silhouette),
+        '--subject-bounds', brief.reference_subject_bounds_normalized.join(','),
+        '--alignment', brief.contour_alignment,
+        '--output', comparison,
+        '--metadata', metadata
+    ], { encoding: 'utf8' });
+    if (result.status !== 0) {
+        throw new Error(`contour evidence failed: ${(result.stderr || result.stdout || `exit ${result.status}`).trim()}`);
+    }
+    return {
+        comparison: path.relative(outputDirectory, comparison).split(path.sep).join('/'),
+        metadata: path.relative(outputDirectory, metadata).split(path.sep).join('/')
     };
 }
 
@@ -441,6 +509,10 @@ function finalise(auditDirectory) {
     for (const [name, relative] of Object.entries(review.evidence?.frames ?? {})) {
         if (typeof relative !== 'string' || !fs.existsSync(path.join(directory, relative))) missing.push(`evidence.frames.${name}`);
     }
+    for (const name of ['contour_comparison', 'contour_metadata']) {
+        const relative = review.evidence?.[name];
+        if (typeof relative !== 'string' || !fs.existsSync(path.join(directory, relative))) missing.push(`evidence.${name}`);
+    }
     for (const key of scoreKeys) {
         const maximum = briefs.scorecard[key];
         const score = review.scores?.[key];
@@ -448,6 +520,7 @@ function finalise(auditDirectory) {
     }
     requireBoolean(review.defects?.uniform_surface_lattice, 'defects.uniform_surface_lattice', missing);
     requireBoolean(review.defects?.primary_reference_mismatch, 'defects.primary_reference_mismatch', missing);
+    requireBoolean(review.defects?.primary_contour_mismatch, 'defects.primary_contour_mismatch', missing);
     requireBoolean(review.defects?.critical_diagnostic_view_defect, 'defects.critical_diagnostic_view_defect', missing);
     requireBoolean(review.defects?.critical_animation_defect, 'defects.critical_animation_defect', missing);
     if (!Array.isArray(review.three_largest_visible_mismatches) || review.three_largest_visible_mismatches.some(value => !String(value).trim())) missing.push('three_largest_visible_mismatches');
@@ -459,7 +532,7 @@ function finalise(auditDirectory) {
         throw new Error(`Review is incomplete: ${missing.join(', ')}`);
     }
     const total = Object.values(review.scores).reduce((sum, value) => sum + value, 0);
-    const critical = review.defects.uniform_surface_lattice || review.defects.primary_reference_mismatch || review.defects.critical_diagnostic_view_defect || review.defects.critical_animation_defect;
+    const critical = review.defects.uniform_surface_lattice || review.defects.primary_reference_mismatch || review.defects.primary_contour_mismatch || review.defects.critical_diagnostic_view_defect || review.defects.critical_animation_defect;
     review.total = total;
     review.reviewed_at = new Date().toISOString();
     review.finalization_errors = [];
@@ -475,6 +548,7 @@ async function main() {
     if (options.finalize) return finalise(options.finalize);
     if (!supportedCreatures.includes(options.creature)) throw new Error(`--creature must be one of: ${supportedCreatures.join(', ')}`);
     const brief = briefs.creatures[options.creature];
+    validateContourBrief(brief);
     const referencesRoot = requireFile(options.referencesRoot, '--references-root directory not found');
     const referenceFile = requireFile(path.join(referencesRoot, brief.base_reference), 'Base reference image not found');
     const modelFile = requireFile(path.join(harvesterRoot, `${options.creature}.bbmodel`), 'Runtime Blockbench model not found');
@@ -491,6 +565,9 @@ async function main() {
     if (options.capture) {
         capture = await captureBlockbench({ modelFile, brief, outputDirectory: auditDirectory, binary: options.blockbenchBin, requestedPort: options.port, requestedDisplay: options.display });
         review.evidence.frames = capture.frames;
+        const contour = buildContourEvidence({ referenceFile, capture, brief, outputDirectory: auditDirectory });
+        review.evidence.contour_comparison = contour.comparison;
+        review.evidence.contour_metadata = contour.metadata;
     }
     const manifest = {
         schema: 'pale_mirror_visuals.harvester_visual_audit_manifest.v1',

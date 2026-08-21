@@ -83,6 +83,8 @@ def agentRulesFile = layout.projectDirectory.file('AGENTS.md').asFile
 def continuityLedgerFile = layout.projectDirectory.file('CONTINUITY.md').asFile
 def continuityLedgerValidator = layout.projectDirectory.file('tools/engineering/continuity_ledger.py').asFile
 def continuityLedgerTests = layout.projectDirectory.file('tools/engineering/test_continuity_ledger.py').asFile
+def harvesterContourTool = layout.projectDirectory.file('tools/harvester_contour_overlay.py').asFile
+def harvesterContourTests = layout.projectDirectory.file('tools/engineering/test_harvester_contour_overlay.py').asFile
 def mandatoryProjectSkillFiles = mandatoryProjectSkills.collectEntries { name -> [(name): [
         skill: layout.projectDirectory.file(".agents/skills/${name}/SKILL.md").asFile,
         metadata: layout.projectDirectory.file(".agents/skills/${name}/agents/openai.yaml").asFile
@@ -298,6 +300,13 @@ tasks.register('verifyContinuityLedger', Exec) {
     commandLine 'python3', continuityLedgerValidator.absolutePath
 }
 
+tasks.register('testHarvesterContourOverlay', Exec) {
+    group = 'verification'
+    description = 'Runs deterministic Harvester reference-contour evidence tests.'
+    inputs.files(harvesterContourTool, harvesterContourTests)
+    commandLine 'python3', harvesterContourTests.absolutePath
+}
+
 tasks.register('verifyLargeFiles') {
     group = 'verification'
     description = 'Applies the 500-line Java-file debt ratchet.'
@@ -317,7 +326,8 @@ tasks.register('guardrails') {
             tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles'),
             tasks.named('verifySourceIsolation'), tasks.named('verifyJavaStyle'),
             tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills'),
-            tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger')
+            tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger'),
+            tasks.named('testHarvesterContourOverlay')
 }
 
 tasks.named('check') {

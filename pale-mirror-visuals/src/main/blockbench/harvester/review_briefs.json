@@ -1,6 +1,12 @@
 {
-  "schema": "pale_mirror_visuals.harvester_reference_brief.v1",
+  "schema": "pale_mirror_visuals.harvester_reference_brief.v2",
   "acceptance_authority": "The user-supplied base reference image is the sole likeness authority. A hi-fi Blockbench source is a construction guide only.",
+  "contour_contract": {
+    "source": "The visible subject contour in the pinned base-reference pixels, never the hi-fi construction source.",
+    "construction": "Use deliberately varied anatomical cuboids whose primary-camera projection follows the reference envelope; dense pixel or surface voxel tracing is forbidden.",
+    "comparison": "Uniformly align the solid Blockbench projection to the pinned subject bounds and inspect the generated reference/model overlay.",
+    "hard_gate": "A material mismatch in aspect ratio, ground line, dorsal envelope, mass balance, dominant limb contour or silhouette negative space rejects the iteration."
+  },
   "scorecard": {
     "primary_silhouette_and_proportions": 35,
     "primary_anatomical_landmarks": 30,
@@ -30,6 +36,14 @@
     "biomass_collector": {
       "base_reference": "01_harvester_biomass_collector.jpg",
       "primary_view": "low front-left three-quarter; match the low, broad stance before adding detail",
+      "reference_subject_bounds_normalized": [0.105, 0.105, 0.995, 0.88],
+      "contour_alignment": "bottom_center",
+      "contour_landmarks": [
+        "Low leading drape from the front head to the ground.",
+        "Six separately readable dorsal sac arcs forming one descending back envelope.",
+        "A long low underbody with thick leg arches and clear ground contacts.",
+        "A narrow trailing tail whose contour stays subordinate to the shell masses."
+      ],
       "camera_target": [-2, 14, 0],
       "camera_distance": 78,
       "orthographic_zoom": 0.28,
@@ -47,6 +61,14 @@
     "crusher_stalker": {
       "base_reference": "02_crusher_stalker.jpg",
       "primary_view": "low front-left three-quarter; preserve the forward crushing weight",
+      "reference_subject_bounds_normalized": [0.035, 0.04, 0.985, 0.925],
+      "contour_alignment": "bottom_center",
+      "contour_landmarks": [
+        "One steep armoured front wedge descending into the compact head.",
+        "A continuous hunched dorsal arc tapering toward the rear.",
+        "Two oversized crushing forelimbs dominating the lower-front contour.",
+        "Bent rear legs and thin trailing tendrils remaining secondary to the forequarters."
+      ],
       "camera_target": [-2, 13, 0],
       "camera_distance": 72,
       "orthographic_zoom": 0.30,
@@ -63,10 +85,18 @@
     },
     "scythe_stalker": {
       "base_reference": "03_scythe_stalker.jpg",
-    "primary_view": "crouched near-side profile with a slight front offset; the horizontal body axis and hooked foreground scythes must remain unmistakable",
+      "primary_view": "crouched near-side profile with a slight front offset; the horizontal body axis and hooked foreground scythes must remain unmistakable",
+      "reference_subject_bounds_normalized": [0.27, 0.155, 0.985, 0.925],
+      "contour_alignment": "bottom_center",
+      "contour_landmarks": [
+        "A compact front-biased dorsal hump over a low horizontal thorax.",
+        "Two broad foreground scythes forming continuous downward and inward hooks.",
+        "Six separated angular walking legs with readable negative spaces.",
+        "A narrow rear body and fine trailing whips that do not enlarge the main mass."
+      ],
       "camera_target": [-2, 13, 0],
       "camera_distance": 74,
-    "orthographic_zoom": 0.38,
+      "orthographic_zoom": 0.38,
       "action": {
         "clip": "animation.scythe_stalker.slash",
         "frames": [0.10, 0.42, 0.76]

@@ -29,6 +29,34 @@ each `.bbmodel` so Blockbench opens it without a missing-texture prompt.
 sources used by the hi-fi Blockbench projects. The reproducible 256×256
 Minecraft sheets are made from them by `tools/build_harvester_texture_sheets.py`.
 
+## Reference-contour construction contract
+
+The outer contour in the pinned base-reference pixels is the first geometry
+constraint for the runtime model. Before modelling surface detail, project the
+untextured runtime model through the pinned primary camera and make its visible
+envelope follow the reference subject directly: overall aspect ratio, ground
+line, dorsal arc, front/rear mass balance, dominant limbs and the negative
+spaces between them. Do not redraw those proportions from memory and do not
+substitute the hi-fi construction source for the supplied image.
+
+This is contour-led anatomical construction, not literal voxel tracing. Use a
+small number of deliberately varied, overlapping anatomical cuboids whose
+projected outer edges follow the important reference curves. Never sample every
+pixel or high-poly surface into equal cubes, and do not reproduce background,
+floor texture, shadows or incidental strands which are not part of the primary
+readable silhouette. Diagnostic views still own depth, joint separation and
+collision quality; matching one projection may not create a flat cut-out.
+
+Each creature's `reference_subject_bounds_normalized`, alignment anchor and
+`contour_landmarks` are pinned in `review_briefs.json`. After every capture,
+`tools/harvester_contour_overlay.py` extracts the solid Blockbench projection,
+fits it uniformly into those reference bounds and creates a three-panel
+reference / model mask / overlay image. `tools/harvester_visual_audit.mjs` runs
+that step automatically. The overlay is mandatory evidence and a material
+primary-contour mismatch is a hard rejection gate, but the tool deliberately
+does not award a similarity score: a vision-capable reviewer decides whether
+the projected contour follows the actual creature rather than image noise.
+
 ## Reference-first review protocol
 
 Every modelling iteration is reviewed in normal Blockbench display before a
@@ -82,14 +110,16 @@ the immutable score weights. The editable runtime `.bbmodel` remains the one
 asset under review. It has eight deliberately separate steps:
 
 1. Read the pinned base reference and its landmark list.
-2. Plan the next anatomical change in a varied-cuboid model; do not sample a
-   hi-fi surface or use texture to conceal a bad mass.
+2. Read the pinned subject bounds and contour landmarks, then plan the next
+   anatomical change in a varied-cuboid model directly against that reference
+   contour; do not sample a hi-fi surface or use texture to conceal a bad mass.
 3. Prove the untextured large masses and silhouette before adding secondary
    detail.
 4. Add only landmark, limb, joint or material-separation detail that is visible
    from the reference camera.
 5. Capture the ten prescribed frames from normal Blockbench display, including
-   the texture-free solid silhouette before its textured views.
+   the texture-free solid silhouette before its textured views, and generate
+   the mandatory reference/model contour overlay.
 6. Invoke an independent vision-capable review subagent to score the images
    against the base reference, explicitly marking the hard defect gates. The
    user is not required to fill a scorecard.
