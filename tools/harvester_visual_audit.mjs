@@ -3,7 +3,7 @@
 // Reference-first visual evidence for the editable Harvester Blockbench assets.
 // This deliberately captures the normal desktop Blockbench display. It creates
 // evidence and an incomplete independent-review scorecard; it never tries to infer likeness
-// from cuboid count, JSON validity, or a hi-fi construction source.
+// from polygon count, JSON validity, or a previous candidate model.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -51,6 +51,7 @@ function parseArgs(argv) {
         const argument = argv[index];
         if (argument === '--capture') options.capture = true;
         else if (argument === '--creature') options.creature = argv[++index];
+        else if (argument === '--model-file') options.modelFile = argv[++index];
         else if (argument === '--iteration') options.iteration = argv[++index];
         else if (argument === '--references-root') options.referencesRoot = argv[++index];
         else if (argument === '--previous') options.previous = argv[++index];
@@ -67,11 +68,12 @@ function parseArgs(argv) {
 
 function usage() {
     return `Usage:
-  node tools/harvester_visual_audit.mjs --creature <${supportedCreatures.join('|')}> --iteration <label> --references-root <directory> [--capture] [--display <X11-display>] [--previous <audit-dir>]
+  node tools/harvester_visual_audit.mjs --creature <${supportedCreatures.join('|')}> --iteration <label> --references-root <directory> [--model-file <candidate.bbmodel>] [--capture] [--display <X11-display>] [--previous <audit-dir>]
   node tools/harvester_visual_audit.mjs --finalize <audit-dir>
 
-The first command creates a human-review package. --capture opens the runtime
-.bbmodel in normal Blockbench display and writes one solid-silhouette, five
+The first command creates a human-review package. --capture opens the canonical
+image-faithful .bbmodel from the review brief, or an explicitly supplied
+candidate Blockbench model, in normal Blockbench display and writes one solid-silhouette, five
 neutral, and four animation screenshots. The second command checks a
 independent-reviewer-completed review.json.`;
 }
@@ -145,14 +147,14 @@ function buildReview({ creature, brief, referenceFile, modelFile, geoFile, anima
             contour_landmarks: brief.contour_landmarks
         },
         inputs: {
-            runtime_blockbench_model: relativeToRoot(modelFile),
-            runtime_blockbench_sha256: sha256(modelFile),
-            runtime_geometry: relativeToRoot(geoFile),
-            runtime_geometry_sha256: sha256(geoFile),
-            runtime_animation: relativeToRoot(animationFile),
-            runtime_animation_sha256: sha256(animationFile),
+            canonical_image_model: relativeToRoot(modelFile),
+            canonical_image_model_sha256: sha256(modelFile),
+            legacy_runtime_geometry: relativeToRoot(geoFile),
+            legacy_runtime_geometry_sha256: sha256(geoFile),
+            legacy_runtime_animation: relativeToRoot(animationFile),
+            legacy_runtime_animation_sha256: sha256(animationFile),
             previous_audit: previous ?? null,
-            construction_source_is_not_an_acceptance_reference: true
+            legacy_runtime_geometry_is_not_visual_authority: true
         },
         required_evidence: {
             neutral_views: neutralViews,
@@ -202,7 +204,7 @@ function scorecardMarkdown(review) {
         `Contour comparison: ${review.evidence.contour_comparison ?? 'not captured'}  \n` +
         `Contour metadata: ${review.evidence.contour_metadata ?? 'not captured'}\n\n` +
         `## 3–4. Construction gate before detail\n\n` +
-        `The runtime model must be built from deliberate, varied anatomical masses. \`silhouette_primary\` uses Blockbench solid mode to prove the large form before texture and micro-detail are considered. The hi-fi source is not scoring evidence. The normalized overlay is a visual alignment guide and never an automated likeness score.\n\n` +
+        `The candidate model is judged directly from the pinned image reference. \`silhouette_primary\` uses Blockbench solid mode to prove its primary form before texture and micro-detail are considered. The normalized overlay is a visual alignment guide and never an automated likeness score.\n\n` +
         `## 5. Actual Blockbench evidence\n\n${frameList}\n\n` +
         `## 6. Independent visual review (after looking at the images side by side)\n\n` +
         `| Criterion | Maximum | Score | Evidence / mismatch |\n| --- | ---: | ---: | --- |\n` +
@@ -212,7 +214,7 @@ function scorecardMarkdown(review) {
         `| Limb hierarchy and joints | ${score.limb_hierarchy_and_joints} |  |  |\n` +
         `| Material and animation readability | ${score.material_and_animation_readability} |  |  |\n` +
         `| **Total** | **100** |  |  |\n\n` +
-        `Hard gates: a uniform surface lattice gives **0** for anatomical landmarks; a material mismatch against the pinned reference contour rejects the iteration; any critical failure in a diagnostic or animation frame rejects the model; below ${score.acceptance_threshold}/100 is not accepted; ${score.excellent_threshold}/100 requires no material primary-view mismatch and no critical diagnostic or animation defect.\n\n` +
+        `Hard gates: a generic low-detail replacement earns **0** for anatomical landmarks; a material mismatch against the pinned reference contour rejects the iteration; any critical failure in a diagnostic or animation frame rejects the model; below ${score.acceptance_threshold}/100 is not accepted; ${score.excellent_threshold}/100 requires no material primary-view mismatch and no critical diagnostic or animation defect.\n\n` +
         `## 7. Corrective delta\n\n` +
         `1. Largest mismatch: \n2. Second mismatch: \n3. Third mismatch: \n\n` +
         `One next modelling change (not a broad rewrite): \n\n` +
@@ -351,21 +353,73 @@ function editorScript(camera, animation, viewMode) {
     })()`;
 }
 
+function stopBlockbenchChild(child) {
+    try {
+        process.kill(-child.pid, 'SIGTERM');
+    } catch {
+        child.kill('SIGTERM');
+    }
+}
+
+function removeAuditProfile(auditProfile) {
+    // Electron can flush a final cache file immediately after SIGTERM. Node's
+    // recursive remover explicitly retries ENOTEMPTY/EBUSY, so keep evidence
+    // capture deterministic instead of failing a completed audit on cleanup.
+    fs.rmSync(auditProfile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+}
+
+function normaliseX11Window(display, modelFile) {
+    const resize = spawnSync('python3', [
+        path.join(root, 'tools', 'resize_x11_window.py'),
+        '--display', display,
+        '--title', path.basename(modelFile, path.extname(modelFile)),
+        '--width', '1920',
+        '--height', '1080'
+    ], { encoding: 'utf8' });
+    if (resize.status !== 0) {
+        throw new Error(`Could not normalise the Blockbench X11 window: ${(resize.stderr || resize.stdout || `exit ${resize.status}`).trim()}`);
+    }
+    return resize.stdout.trim();
+}
+
 async function captureBlockbench({ modelFile, brief, outputDirectory, binary, requestedPort, requestedDisplay }) {
     const display = discoverDisplay(requestedDisplay);
     if (!display) throw new Error('Blockbench capture requires a normal X11 display; pass --display when the graphical desktop is not inherited');
     const blockbench = requireFile(binary ?? path.join(os.homedir(), 'Applications', 'blockbench'), 'Blockbench executable not found');
     const port = requestedPort ?? 9700 + Math.floor(Math.random() * 200);
     const environment = { ...process.env, DISPLAY: display, XAUTHORITY: discoverXauthority() ?? process.env.XAUTHORITY };
-    const child = spawn('setsid', [blockbench, `--remote-debugging-port=${port}`, modelFile], {
+    // A disposable Electron profile prevents a persisted interactive window
+    // size (and a stale single-instance lock) from affecting reproducible
+    // audit evidence. It is removed after each capture.
+    const auditProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'pale-mirror-blockbench-audit-'));
+    // Electron's Browser window-management CDP domain is absent from the
+    // Blockbench build distributed here.  Launch flags are the portable way
+    // to override persisted interactive window geometry on Xvfb.
+    const child = spawn('setsid', [
+        blockbench,
+        `--remote-debugging-port=${port}`,
+        `--user-data-dir=${auditProfile}`,
+        '--window-size=1920,1080',
+        '--start-maximized',
+        modelFile
+    ], {
         detached: false,
         env: environment,
         stdio: 'ignore'
     });
     child.unref();
-    const page = await waitForPage(port);
-    const client = new CdpClient(page.webSocketDebuggerUrl);
-    await client.connect();
+    let client;
+    try {
+        const page = await waitForPage(port);
+        normaliseX11Window(display, modelFile);
+        await sleep(500);
+        client = new CdpClient(page.webSocketDebuggerUrl);
+        await client.connect();
+    } catch (error) {
+        stopBlockbenchChild(child);
+        removeAuditProfile(auditProfile);
+        throw error;
+    }
     const cameras = cameraDefinitions(brief);
     const frames = {};
     let contourSilhouette = null;
@@ -395,7 +449,20 @@ async function captureBlockbench({ modelFile, brief, outputDirectory, binary, re
         throw new Error(`Blockbench could not prepare ${name}: ${detail}`);
     };
     const capture = async (name, camera, animation, viewMode = 'textured') => {
-        const state = await prepareEditor(name, camera, animation, viewMode);
+        let state = await prepareEditor(name, camera, animation, viewMode);
+        const bounds = state?.preview_bounds;
+        if (!bounds || bounds.width < 900 || bounds.height < 700) {
+            // Electron can finish recalculating Blockbench's split panes one
+            // event loop after XMoveResizeWindow. Retry once instead of
+            // emitting a known-cropped audit package.
+            normaliseX11Window(display, modelFile);
+            await sleep(500);
+            state = await prepareEditor(name, camera, animation, viewMode);
+            const retriedBounds = state?.preview_bounds;
+            if (!retriedBounds || retriedBounds.width < 900 || retriedBounds.height < 700) {
+                throw new Error(`Blockbench preview is too small for an auditable ${name} frame after resize retry: ${retriedBounds?.width ?? '?'}x${retriedBounds?.height ?? '?'}`);
+            }
+        }
         await sleep(350);
         const image = await client.call('Page.captureScreenshot', { format: 'png', fromSurface: true });
         const file = path.join(outputDirectory, 'frames', `${name}.png`);
@@ -403,12 +470,12 @@ async function captureBlockbench({ modelFile, brief, outputDirectory, binary, re
         frames[name] = path.relative(outputDirectory, file).split(path.sep).join('/');
         captureStates[name] = state;
         if (name === 'silhouette_primary') {
-            const bounds = state?.preview_bounds;
-            if (!bounds || bounds.width < 32 || bounds.height < 32) throw new Error('Blockbench preview bounds are unavailable for contour evidence');
+            const viewportBounds = state?.preview_bounds;
+            if (!viewportBounds || viewportBounds.width < 32 || viewportBounds.height < 32) throw new Error('Blockbench preview bounds are unavailable for contour evidence');
             const viewport = await client.call('Page.captureScreenshot', {
                 format: 'png',
                 fromSurface: true,
-                clip: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, scale: 1 }
+                clip: { x: viewportBounds.x, y: viewportBounds.y, width: viewportBounds.width, height: viewportBounds.height, scale: 1 }
             });
             const viewportFile = path.join(outputDirectory, 'frames', 'silhouette_primary_viewport.png');
             fs.writeFileSync(viewportFile, Buffer.from(viewport.data, 'base64'));
@@ -443,21 +510,27 @@ async function captureBlockbench({ modelFile, brief, outputDirectory, binary, re
         // The capture opens a dedicated normal Blockbench process.  Do not
         // leave it holding the single-instance lock and accidentally make the
         // next audit inspect the already-open, stale project.
-        try {
-            process.kill(-child.pid, 'SIGTERM');
-        } catch {
-            child.kill('SIGTERM');
-        }
+        stopBlockbenchChild(child);
+        removeAuditProfile(auditProfile);
     }
     return {
         frames,
         contour_silhouette: contourSilhouette,
         frame_states: captureStates,
-        blockbench: { pid: child.pid, port, executable: blockbench, normal_display: environment.DISPLAY }
+        blockbench: {
+            pid: child.pid,
+            port,
+            executable: blockbench,
+            normal_display: environment.DISPLAY,
+            requested_window: { width: 1920, height: 1080, mode: 'maximized' }
+        }
     };
 }
 
 function validateContourBrief(brief) {
+    if (typeof brief.authoring_model !== 'string' || !brief.authoring_model.endsWith('.bbmodel')) {
+        throw new Error('review brief requires an image-faithful authoring_model .bbmodel path');
+    }
     const bounds = brief.reference_subject_bounds_normalized;
     if (!Array.isArray(bounds) || bounds.length !== 4 || bounds.some(value => typeof value !== 'number')) {
         throw new Error('review brief requires four numeric reference_subject_bounds_normalized values');
@@ -551,7 +624,9 @@ async function main() {
     validateContourBrief(brief);
     const referencesRoot = requireFile(options.referencesRoot, '--references-root directory not found');
     const referenceFile = requireFile(path.join(referencesRoot, brief.base_reference), 'Base reference image not found');
-    const modelFile = requireFile(path.join(harvesterRoot, `${options.creature}.bbmodel`), 'Runtime Blockbench model not found');
+    const modelFile = options.modelFile
+        ? requireFile(options.modelFile, '--model-file not found')
+        : requireFile(path.join(harvesterRoot, brief.authoring_model), 'Canonical image-faithful Blockbench model not found');
     const geoFile = requireFile(path.join(assetRoot, 'geo', 'harvester', `${options.creature}.geo.json`), 'Runtime geometry not found');
     const animationFile = requireFile(path.join(assetRoot, 'animations', 'harvester', `${options.creature}.animation.json`), 'Runtime animation not found');
     const auditDirectory = options.auditDir
@@ -560,7 +635,15 @@ async function main() {
     if (fs.existsSync(auditDirectory)) throw new Error(`Audit directory already exists: ${auditDirectory}`);
     if (options.previous) requireFile(options.previous, 'Previous audit directory not found');
     fs.mkdirSync(auditDirectory, { recursive: true });
-    const review = buildReview({ creature: options.creature, brief, referenceFile, modelFile, geoFile, animationFile, previous: options.previous ? path.resolve(options.previous) : null });
+    const review = buildReview({
+        creature: options.creature,
+        brief,
+        referenceFile,
+        modelFile,
+        geoFile,
+        animationFile,
+        previous: options.previous ? path.resolve(options.previous) : null
+    });
     let capture = null;
     if (options.capture) {
         capture = await captureBlockbench({ modelFile, brief, outputDirectory: auditDirectory, binary: options.blockbenchBin, requestedPort: options.port, requestedDisplay: options.display });

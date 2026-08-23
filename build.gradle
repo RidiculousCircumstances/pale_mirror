@@ -85,6 +85,19 @@ def continuityLedgerValidator = layout.projectDirectory.file('tools/engineering/
 def continuityLedgerTests = layout.projectDirectory.file('tools/engineering/test_continuity_ledger.py').asFile
 def harvesterContourTool = layout.projectDirectory.file('tools/harvester_contour_overlay.py').asFile
 def harvesterContourTests = layout.projectDirectory.file('tools/engineering/test_harvester_contour_overlay.py').asFile
+def harvesterAnatomicalModelTool = layout.projectDirectory.file('tools/rebuild_harvester_anatomical_models.mjs').asFile
+def harvesterAnatomicalModelTests = layout.projectDirectory.file('tools/engineering/test_harvester_anatomical_models.mjs').asFile
+def harvesterVolumeBakeoffTool = layout.projectDirectory.file('tools/harvester_volume_bakeoff.py').asFile
+def harvesterVolumeBakeoffTests = layout.projectDirectory.file('tools/engineering/test_harvester_volume_bakeoff.py').asFile
+def harvesterPrimaryModelOverlayTool = layout.projectDirectory.file('tools/harvester_primary_model_overlay.py').asFile
+def harvesterPrimaryModelOverlayTests = layout.projectDirectory.file('tools/engineering/test_harvester_primary_model_overlay.py').asFile
+def collectorSemanticCageTests = layout.projectDirectory.file('tools/engineering/test_collector_semantic_cage.py').asFile
+def collectorSculptProtocolTests = layout.projectDirectory.file('tools/engineering/test_collector_sculpt_protocol.py').asFile
+def harvesterBlindPairwiseTool = layout.projectDirectory.file('tools/harvester_blind_pairwise.py').asFile
+def harvesterBlindPairwiseTests = layout.projectDirectory.file('tools/engineering/test_harvester_blind_pairwise.py').asFile
+def harvesterBlindPairwiseProtocol = layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/blind_review_protocol_v01.json').asFile
+def hunyuan2mvPreparationTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_collector_multiview.py').asFile
+def hunyuan2mvPreparationTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_preparation.py').asFile
 def mandatoryProjectSkillFiles = mandatoryProjectSkills.collectEntries { name -> [(name): [
         skill: layout.projectDirectory.file(".agents/skills/${name}/SKILL.md").asFile,
         metadata: layout.projectDirectory.file(".agents/skills/${name}/agents/openai.yaml").asFile
@@ -307,6 +320,85 @@ tasks.register('testHarvesterContourOverlay', Exec) {
     commandLine 'python3', harvesterContourTests.absolutePath
 }
 
+tasks.register('testHarvesterAnatomicalModels', Exec) {
+    group = 'verification'
+    description = 'Checks reproducible image-faithful Harvester meshes, skeleton continuity and legacy animation targets.'
+    inputs.files(harvesterAnatomicalModelTool, harvesterAnatomicalModelTests,
+            fileTree('pale-mirror-visuals/src/main') {
+                include 'blockbench/harvester/*.bbmodel'
+                include 'resources/assets/pale_mirror_visuals/geo/harvester/*.geo.json'
+                include 'resources/assets/pale_mirror_visuals/animations/harvester/*.animation.json'
+            })
+    commandLine 'node', harvesterAnatomicalModelTests.absolutePath
+}
+
+tasks.register('testHarvesterVolumeBakeoff', Exec) {
+    group = 'verification'
+    description = 'Checks trace-authoritative Harvester volume-bake-off inputs.'
+    inputs.files(harvesterVolumeBakeoffTool, harvesterVolumeBakeoffTests,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/bakeoff/collector_volume_bakeoff_v02.json'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/traces/biomass_collector_primary_v03.json'))
+    commandLine 'python3', harvesterVolumeBakeoffTests.absolutePath
+}
+
+tasks.register('testHarvesterPrimaryModelOverlay', Exec) {
+    group = 'verification'
+    description = 'Checks direct locked-camera Harvester contour evidence without fitting.'
+    inputs.files(harvesterPrimaryModelOverlayTool, harvesterPrimaryModelOverlayTests)
+    commandLine 'python3', harvesterPrimaryModelOverlayTests.absolutePath
+}
+
+tasks.register('testCollectorSemanticCage', Exec) {
+    group = 'verification'
+    description = 'Checks the source-pixel, primitive-free Collector semantic cage contract.'
+    inputs.files(collectorSemanticCageTests,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/traces/biomass_collector_semantic_cage_v01.json'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/traces/biomass_collector_primary_v03.json'),
+            layout.projectDirectory.file('tools/blender/ops/build_collector_semantic_cage.py'),
+            layout.projectDirectory.file('tools/blender/blender_operation_client.py'))
+    commandLine 'python3', collectorSemanticCageTests.absolutePath
+}
+
+tasks.register('testCollectorSculptProtocol', Exec) {
+    group = 'verification'
+    description = 'Checks the immutable-v05, non-exportable direct Collector sculpt protocol.'
+    inputs.files(collectorSculptProtocolTests,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/sculpt_protocol/collector_v05_sculpt_v01.json'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/sculpt_protocol/collector_v05_sculpt_v02.json'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/sculpt_protocol/collector_v05_sculpt_v03_composition.json'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/sculpt_reviews/collector_v05_sculpt_v02_front_mantle_v02.json'),
+            layout.projectDirectory.file('tools/blender/ops/collector_sculpt_common.py'),
+            layout.projectDirectory.file('tools/blender/ops/create_collector_sculpt_branch.py'),
+            layout.projectDirectory.file('tools/blender/ops/capture_collector_sculpt_baseline.py'),
+            layout.projectDirectory.file('tools/blender/ops/apply_collector_sculpt_pass.py'),
+            layout.projectDirectory.file('tools/blender/ops/repair_collector_sculpt_branch_metadata.py'),
+            layout.projectDirectory.file('tools/blender/ops/render_collector_sculpt_audit.py'),
+            layout.projectDirectory.file('tools/blender/ops/validate_collector_sculpt_branch.py'),
+            layout.projectDirectory.file('tools/blender/blender_operation_client.py'),
+            layout.projectDirectory.file('tools/blender/pm_blender_cli.py'),
+            layout.projectDirectory.file('tools/blender/pm_blender_mcp.py'),
+            layout.projectDirectory.file('tools/blender/sync_windows_blender_workspace.py'),
+            layout.projectDirectory.file('tools/blender/collect_windows_blender_outputs.py'),
+            harvesterPrimaryModelOverlayTool)
+    commandLine 'python3', collectorSculptProtocolTests.absolutePath
+}
+
+tasks.register('testHarvesterBlindPairwise', Exec) {
+    group = 'verification'
+    description = 'Checks that Harvester comparison packages scrub provenance and enforce blind ordinal review.'
+    inputs.files(harvesterBlindPairwiseTool, harvesterBlindPairwiseTests, harvesterBlindPairwiseProtocol)
+    commandLine 'python3', harvesterBlindPairwiseTests.absolutePath
+}
+
+tasks.register('testHunyuan2mvPreparation', Exec) {
+    group = 'verification'
+    description = 'Checks the pinned four-view Hunyuan3D-2mv diagnostic input contract.'
+    inputs.files(hunyuan2mvPreparationTool, hunyuan2mvPreparationTests,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/references/biomass_collector_turntable_v01.png'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/bakeoff/collector_multiview_bakeoff_v01.json'))
+    commandLine 'python3', hunyuan2mvPreparationTests.absolutePath
+}
+
 tasks.register('verifyLargeFiles') {
     group = 'verification'
     description = 'Applies the 500-line Java-file debt ratchet.'
@@ -327,7 +419,9 @@ tasks.register('guardrails') {
             tasks.named('verifySourceIsolation'), tasks.named('verifyJavaStyle'),
             tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills'),
             tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger'),
-            tasks.named('testHarvesterContourOverlay')
+            tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
+            tasks.named('testHarvesterVolumeBakeoff'), tasks.named('testHarvesterPrimaryModelOverlay'), tasks.named('testCollectorSemanticCage'), tasks.named('testCollectorSculptProtocol'),
+            tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparation')
 }
 
 tasks.named('check') {

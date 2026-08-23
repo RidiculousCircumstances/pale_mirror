@@ -1,0 +1,42 @@
+{
+  "schema": "pale_mirror_visuals.collector_sculpt_review.v1",
+  "session_id": "collector_v05_sculpt_v03_composition",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "dorsal_rhythm_v03",
+  "verdict": "failed_declared_pass_goal",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or acceptance automation",
+    "baseline_primary_overlay": {
+      "path": "build/blender-audits/front_mantle_v03-biomass_collector-collector_v05_sculpt_v03_composition/primary_model_overlay.png",
+      "sha256": "cfe3f046b9113ae9d9130f50947c3ea5c80d1dfd08dca4477e723212716ac788"
+    },
+    "after_primary_overlay": {
+      "path": "build/blender-audits/dorsal_rhythm_v03-biomass_collector-collector_v05_sculpt_v03_composition/primary_model_overlay.png",
+      "sha256": "4e5d62732b16c66923ceef91967fbec715abdba3567a3a6eeec9c8e20b5c61dc",
+      "pixels": {
+        "model": 280263,
+        "overlap": 181276,
+        "trace_only": 107232,
+        "model_only": 98987
+      }
+    },
+    "diagnostic_elevated_rear": {
+      "path": "build/blender-audits/dorsal_rhythm_v03-biomass_collector-collector_v05_sculpt_v03_composition/elevated_rear.png",
+      "sha256": "d2b571b67193e2f131c28c89bec3a1fce23149eb0f086f85b6396e76d5db284c"
+    }
+  },
+  "independent_review": {
+    "scope": "only whether the v03 direct pass made six source-marked descending dorsal sac crests readable without a major diagnostic defect; not an overall likeness score",
+    "findings": [
+      "The primary view shows a low serrated strip rather than six broad overlapping source-marked sac arcs.",
+      "The same saw-toothed surface remains visible in the opposite and elevated-rear views, reading as a deformation seam rather than distinct organic volumes.",
+      "The pass therefore introduced a diagnostic defect while failing its named primary-view goal."
+    ],
+    "recommended_next_change": "In a new immutable session, form six separately checked broad domed sac masses with visible saddles between them, validating after each one or two sacs instead of deforming the shared roof as one strip."
+  },
+  "runtime_export_forbidden": true
+}

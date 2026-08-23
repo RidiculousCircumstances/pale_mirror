@@ -43,7 +43,7 @@ def subject_box(
 
 
 def solid_projection_mask(image: Image.Image) -> Image.Image:
-    """Extract the solid model from a clipped dark Blockbench viewport.
+    """Extract the solid model from a clipped dark audit render or viewport.
 
     The audit capture disables grids and uses solid mode. Checkerboard pixels
     remain dark while the model is neutral grey. Small fixed UI regions are
@@ -152,7 +152,7 @@ def build_comparison(
 
     panels = [
         labelled_panel(reference, "PINNED BASE REFERENCE"),
-        labelled_panel(model_panel, "NORMALIZED SOLID BLOCKBENCH PROJECTION"),
+        labelled_panel(model_panel, "NORMALIZED SOLID MODEL PROJECTION"),
         labelled_panel(overlay.convert("RGB"), "CONTOUR OVERLAY — VISUAL REVIEW REQUIRED"),
     ]
     comparison = Image.new(

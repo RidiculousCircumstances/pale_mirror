@@ -10,15 +10,20 @@ They intentionally include no entity, renderer or runtime registration.
 | Crusher Stalker | `geo/harvester/crusher_stalker.geo.json` | `animation.crusher_stalker.walk`, `animation.crusher_stalker.crush` |
 | Scythe Stalker | `geo/harvester/scythe_stalker.geo.json` | `animation.scythe_stalker.walk`, `animation.scythe_stalker.slash` |
 
-For visual authoring, open the matching `*_reference_hifi.bbmodel` project.
-These are project-owned high-polygon working sources built around the same named
-skeleton and animation clips. They are useful construction guides, but are not
-the acceptance target: the supplied base reference image for that creature is
-the only visual authority. The plain `<creature>.bbmodel` files are the
-256×256, cube-only GeckoLib counterparts that are already export-compatible
-with the Java/NeoForge asset paths above. Meshes are deliberately retained as
-editor sources only: standard GeckoLib runtime geometry remains cube-based
-until a custom mesh renderer is added.
+For visual authoring and acceptance, open the matching
+`*_reference_hifi.bbmodel` project. Despite the historical filename, it is the
+canonical image-faithful model: its silhouette and dominant visible volumes
+are reconstructed directly from the supplied reference image, with no
+Minecraft-style simplification. The image remains the sole likeness authority;
+the mesh is the editable three-dimensional realization of that authority.
+
+The plain `<creature>.bbmodel` and `geo/` files are a **legacy GeckoLib
+compatibility export**, not an acceptable creature model and not an input to
+visual acceptance. They remain only because standard GeckoLib geometry is
+cube-based. No future entity renderer may silently select them in preference to
+the image-faithful mesh. A runtime custom-mesh renderer is required before a
+Harvester is registered in gameplay; until then these are intentionally
+resource-only assets.
 
 When editing a `.bbmodel`, export the matching geometry and animation files to
 the resource paths above. Keep the texture at
@@ -29,23 +34,61 @@ each `.bbmodel` so Blockbench opens it without a missing-texture prompt.
 sources used by the hi-fi Blockbench projects. The reproducible 256×256
 Minecraft sheets are made from them by `tools/build_harvester_texture_sheets.py`.
 
-## Reference-contour construction contract
+## Legacy compatibility export
 
-The outer contour in the pinned base-reference pixels is the first geometry
-constraint for the runtime model. Before modelling surface detail, project the
-untextured runtime model through the pinned primary camera and make its visible
-envelope follow the reference subject directly: overall aspect ratio, ground
-line, dorsal arc, front/rear mass balance, dominant limbs and the negative
-spaces between them. Do not redraw those proportions from memory and do not
-substitute the hi-fi construction source for the supplied image.
+`tools/rebuild_harvester_anatomical_models.mjs` is the reproducible source for
+the committed legacy cube compatibility export. It preserves the named bones,
+hierarchy, texture and GeckoLib animation IDs for the future mesh renderer's
+animation bridge. It is not a likeness generator. Do not hand-patch only one
+of its outputs or re-run the rejected surface-sampling experiments.
 
-This is contour-led anatomical construction, not literal voxel tracing. Use a
-small number of deliberately varied, overlapping anatomical cuboids whose
-projected outer edges follow the important reference curves. Never sample every
-pixel or high-poly surface into equal cubes, and do not reproduce background,
-floor texture, shadows or incidental strands which are not part of the primary
-readable silhouette. Diagnostic views still own depth, joint separation and
-collision quality; matching one projection may not create a flat cut-out.
+```bash
+node tools/rebuild_harvester_anatomical_models.mjs
+node tools/rebuild_harvester_anatomical_models.mjs --check
+```
+
+The second command is non-mutating and verifies only compatibility output.
+
+The image-faithful source itself is reproducible separately:
+
+```bash
+node tools/build_harvester_hifi_blockbench_models.mjs
+node tools/build_harvester_hifi_blockbench_models.mjs --check
+```
+
+## Image-faithful construction contract
+
+The outer contour in the pinned base-reference pixels is a literal geometry
+constraint for the canonical mesh. Before adding unseen-side volume, project
+the untextured mesh through the pinned primary camera and trace the actual
+visible subject envelope: aspect ratio, ground line, dorsal sac arcs,
+front/rear mass balance, limb arches, negative spaces and trailing forms. Do
+not redraw proportions from memory, from an earlier Blockbench model or from a
+generic "Minecraft creature" convention.
+
+High-density mesh reconstruction is required wherever it materially improves
+this match. It may trace the visible silhouette and major anatomical boundaries
+at the reference image's pixel precision, but must not turn the photograph's
+background, cast shadows or noise into geometry. Diagnostic views own the
+unseen-side volume, joint separation and animation-safe depth; exact likeness
+in the primary image must never be achieved with a flat cut-out.
+
+### Non-negotiable primary trace workflow
+
+Every new or replacement canonical mesh begins from a versioned primary-image
+trace, not from an adjustable collection of generic primitives. The authoring
+scene must contain the pinned base image as a locked primary-camera plane, and
+the trace must retain literal source-pixel coordinates for the outer contour
+and the major visible anatomical boundaries. Before any volume, texture or
+diagnostic polish is accepted, the corresponding untextured mesh is rendered
+over that same primary image and its projected contour must agree with the
+trace.
+
+Spheres, tubes, procedural noise, previous failed candidates and generated
+turntables are forbidden as a primary-shape starting point. They may only add
+unseen-side depth or a local secondary form after the traced primary silhouette
+has passed review. The generated turntable is never a source of primary
+proportions, contour edits, scoring or acceptance.
 
 Each creature's `reference_subject_bounds_normalized`, alignment anchor and
 `contour_landmarks` are pinned in `review_briefs.json`. After every capture,
@@ -77,7 +120,8 @@ sets with the iteration notes and inspect them side by side; a render command,
 element count, valid JSON, or a successful animation export is never visual
 evidence.
 
-Score the runtime cube model out of 100, against the base reference only:
+For an individual candidate, record the following evidence against the base
+reference:
 
 | Criterion | Points | What is judged |
 | --- | ---: | --- |
@@ -89,43 +133,58 @@ Score the runtime cube model out of 100, against the base reference only:
 
 Two fail gates override the numerical total:
 
-- A uniform surface lattice of similarly sized cubes is a failed result. It
-  obscures the large anatomical masses and scores **0** for landmark likeness
-  until removed.
+- A generic low-detail cuboid substitute, or a mesh whose screen-space contour
+  is visibly hand-waved rather than traced from the image, is a failed result.
+  Technical compatibility geometry earns no likeness credit.
 - A model cannot be called acceptable below 85/100, nor called 10/10 unless
   there are no material mismatches in the primary comparison and no critical
   defect in any diagnostic or animation frame.
 
-Do not award points for cuboid count, technical validity, texture resolution,
-or resemblance to a hi-fi working source. Record the per-criterion score,
-three largest visible mismatches, and the exact next modelling change after
-each iteration. The existing surface-sampling approach below is retained only
-as a rejected experiment; it is not a valid final modelling method.
+Do not award points for polygon count, technical validity or texture
+resolution. Record the per-criterion evidence, three largest visible
+mismatches, and the exact next modelling change after each iteration. A scalar
+score may describe one reviewed candidate only; it is not calibrated across
+generated, trace-led or primitive candidate classes and cannot choose between
+them.
+
+Whenever a choice exists between two geometry candidates, run the mandatory
+blind pairwise protocol in
+`../../blender/harvester/blind_review_protocol_v01.json` first. Two fresh
+reviewers see only anonymized `amber`/`cobalt` images and make an ordinal
+primary-plus-diagnostic verdict before the operator reveals IDs or a contour
+overlay. The direct overlay remains a hard technical acceptance gate, but it
+does not become an automated likeness score or override a blind visual verdict.
+See `docs/harvester-blind-review.md` for the exact command and disclosure
+order.
 
 ## Reproducible LLM visual pipeline
 
 `review_briefs.json` turns the workflow into data: it pins the base-reference
-filename, primary camera intent, creature-specific landmarks, action frames and
-the immutable score weights. The editable runtime `.bbmodel` remains the one
-asset under review. It has eight deliberately separate steps:
+filename, canonical mesh project, primary camera intent, creature-specific
+landmarks, action frames and immutable score weights. It has eight deliberately
+separate steps:
 
 1. Read the pinned base reference and its landmark list.
-2. Read the pinned subject bounds and contour landmarks, then plan the next
-   anatomical change in a varied-cuboid model directly against that reference
-   contour; do not sample a hi-fi surface or use texture to conceal a bad mass.
-3. Prove the untextured large masses and silhouette before adding secondary
-   detail.
+2. Read the pinned subject bounds and contour landmarks, then make the next
+   image-derived mesh change directly against that reference contour. Trace
+   visible geometry precisely; do not use texture to conceal a bad mass.
+3. Prove the untextured large masses and silhouette before adding the smaller
+   reference-derived anatomy.
 4. Add only landmark, limb, joint or material-separation detail that is visible
    from the reference camera.
 5. Capture the ten prescribed frames from normal Blockbench display, including
    the texture-free solid silhouette before its textured views, and generate
    the mandatory reference/model contour overlay.
-6. Invoke an independent vision-capable review subagent to score the images
-   against the base reference, explicitly marking the hard defect gates. The
-   user is not required to fill a scorecard.
+6. For a comparative selection, invoke two independent fresh-context visual
+   reviewers through the blind pairwise package before showing them any
+   candidate history, score or overlay. For a single-candidate review, invoke
+   one independent vision-capable reviewer against the base reference and mark
+   the hard defect gates. The user is not required to fill a scorecard.
 7. Change only the three largest visible mismatches, then compare the next
    audit directory with this one.
-8. Finalise the review; a score below 85 or any hard gate blocks acceptance.
+8. Finalise the review; any hard gate blocks acceptance. An 85-point scalar
+   threshold applies only within a comparable audit class and never resolves a
+   cross-class comparison.
 
 Create an audit package with real screenshots after every modelling change:
 
@@ -137,13 +196,12 @@ node tools/harvester_visual_audit.mjs \
   --capture
 ```
 
-The command opens the ordinary desktop Blockbench application, pins its camera
-views and writes `manifest.json`, `scorecard.md`, `review.json`, and the image
-set under `build/harvester-visual-audits/`. It intentionally leaves Blockbench
-open so the reviewer can inspect the same normal display. Its static
-uniform-cuboid warning is only a prompt: visual rejection still requires an
-image review. On a headless shell connected to the desktop's XWayland session,
-pass `--display :0` explicitly.
+The command opens the canonical mesh project selected by the brief in ordinary
+desktop Blockbench, pins its camera views and writes `manifest.json`,
+`scorecard.md`, `review.json`, and the image set under
+`build/harvester-visual-audits/`. It intentionally leaves Blockbench open so
+the reviewer can inspect the same normal display. On a headless shell
+connected to the desktop's XWayland session, pass `--display :0` explicitly.
 
 After the independent visual subagent has looked at the images, the primary
 agent fills its findings into `review.json` and finalises it:
@@ -157,14 +215,13 @@ Finalisation fails closed if evidence, scores, defect decisions, three visible
 mismatches, or one precise next modelling change are absent. The CLI does not
 claim that a static automated score can replace the independent visual review.
 
-## Rejected cube-model rebuild
+## Rejected modelling shortcuts
 
-`tools/rebuild_harvester_srp_style.mjs` sampled each source surface into
-roughly one thousand small, overlapping cuboids per creature. That procedure
-produces an unwanted voxel lattice and is retained solely as a reproducible
-failed experiment. Do not use it for a final asset. The replacement runtime
-model must be assembled from a smaller number of deliberately varied,
-overlapping anatomical cuboids and pass the review protocol above.
+`tools/rebuild_harvester_srp_style.mjs` sampled an earlier source surface into
+roughly one thousand equal, overlapping cuboids per creature. That procedure
+produces a noisy voxel lattice and is retained solely as a reproducible failed
+experiment. Do not use it for a final asset. The approved replacement is the
+reference-driven organic mesh above, evaluated by the image-review protocol.
 
 The SRP JAR was inspected solely as a technical reference for this cuboid-chain
 approach. No SRP model, texture, code or other asset is included here.

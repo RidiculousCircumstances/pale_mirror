@@ -1,0 +1,36 @@
+{
+  "schema": "pale_mirror_visuals.harvester_blind_pairwise_review.v1",
+  "purpose": "Select the visually stronger candidate without allowing candidate history, model class, automated contour counts, or expected answer to bias the first human comparison.",
+  "scope": "Comparative selection only. The supplied primary reference remains the sole likeness authority and the direct primary-contour gate remains independently required for acceptance.",
+  "public_package": {
+    "contains": [
+      "one normalized reference image",
+      "two anonymized candidate view sets labelled amber and cobalt",
+      "a blind reviewer prompt and response template"
+    ],
+    "must_not_contain": [
+      "candidate IDs, labels, paths, histories, provenance, model class, scores, overlays, trace metrics, source manifests or expected result",
+      "image metadata that identifies a source artifact"
+    ],
+    "label_assignment": "The operator tool deterministically assigns amber and cobalt from each candidate's view-byte fingerprint and review ID. The private mapping is outside public/ and is never shown to a phase-A reviewer."
+  },
+  "review": {
+    "minimum_independent_reviewers": 2,
+    "required_context": "A fresh reviewer context receives only the public package and is instructed not to inspect its parent, repository, history, metadata, overlay or operator mapping.",
+    "phase_a": {
+      "evidence": ["reference.png", "amber/primary.png", "cobalt/primary.png"],
+      "decision": "Choose amber, cobalt or indistinguishable by literal primary-view likeness. Record confidence and three visible reasons. No scalar score is allowed."
+    },
+    "phase_b": {
+      "evidence": ["amber/front.png", "amber/side.png", "amber/opposite.png", "amber/elevated_rear.png", "cobalt/front.png", "cobalt/side.png", "cobalt/opposite.png", "cobalt/elevated_rear.png"],
+      "decision": "Confirm, reverse or mark indistinguishable after judging coherent volume, hidden defects and anatomy. Record only visible evidence."
+    },
+    "phase_c": {
+      "evidence": "Direct locked-camera contour overlay and its exact metadata are disclosed only after phases A and B are recorded.",
+      "decision": "The technical contour gate may block acceptance for a material mismatch. It never converts a blind ordinal verdict into a numeric likeness score or reverses that verdict."
+    },
+    "consensus": "A comparative winner exists only when at least two phase-B reviewers select the same label. Any disagreement or indistinguishable result is inconclusive and requires another focused iteration or additional reviewers.",
+    "acceptance": "A blind comparison never accepts a model on its own. Acceptance additionally requires the primary trace gate, normal-view defect review, relevant animation/material evidence and the project's explicit runtime/export gates."
+  },
+  "metric_policy": "Automated pixel counts are diagnostic evidence for the exact primary trace only. They are not a cross-class likeness score and cannot rank generated, trace-led or primitive candidates."
+}

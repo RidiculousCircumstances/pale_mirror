@@ -1,0 +1,70 @@
+{
+  "schema": "pale_mirror_visuals.collector_sculpt_session.v1",
+  "session_id": "collector_v05_sculpt_v02",
+  "asset_id": "biomass_collector",
+  "status": "shape_test_unaccepted",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "stage": "volume-proposal-unaccepted",
+    "file": "candidate.glb",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963",
+    "role": "immutable hidden-side volume and editable-topology starting point; never likeness authority"
+  },
+  "primary_trace": {
+    "id": "biomass_collector_primary_v03",
+    "sha256": "e3150d88594a8c712c22dfe60395c43f2da038c6dea7bc53601bff8c69692cf7",
+    "role": "sole primary-view likeness and contour authority"
+  },
+  "source": {
+    "blend": "assets/harvester/biomass_collector_sculpt_v02.blend",
+    "audit_root": "sculpt_sessions/collector_v05_sculpt_v02/audits",
+    "raw_collection": "PM_COLLECTOR_SCULPT_RAW_V05",
+    "working_collection": "PM_COLLECTOR_LOD0",
+    "backup_collection": "PM_COLLECTOR_SCULPT_BACKUPS"
+  },
+  "topology_policy": {
+    "initial": "retain the dominant raw v05 component plus every non-trivial component intersecting the literal primary trace; no voxel remesh, quadriflow or automatic retopology",
+    "allowed": ["local vertex deformation", "local smoothing", "semantic vertex groups", "backup mesh snapshots"],
+    "forbidden": ["primitive construction", "global 2d silhouette fitting", "runtime export", "rigging", "infection registration"]
+  },
+  "passes": [
+    {
+      "id": "raw_baseline",
+      "kind": "audit_only",
+      "regions": [],
+      "acceptance": "captures the unchanged dominant v05 component in the locked reference camera set"
+    },
+    {
+      "id": "front_mantle_v02",
+      "kind": "direct_mesh_deformation",
+      "regions": ["front_mantle_outer_drape"],
+      "primary_goal": "move only the traced outer leading-drape surface into a visibly wider, lower asymmetric mass without changing the rest of the raw v05 silhouette",
+      "diagnostic_goal": "add modest forward depth to the same connected local surface and preserve all ground contacts, components and non-mantle anatomy",
+      "requires_previous": "raw_baseline"
+    },
+    {
+      "id": "dorsal_rhythm_v01",
+      "kind": "direct_mesh_deformation",
+      "regions": ["dorsal_rhythm"],
+      "primary_goal": "restore six distinct descending dorsal sac arcs without a flat shared roof",
+      "requires_previous": "front_mantle_v02"
+    },
+    {
+      "id": "supports_and_tail_root_v01",
+      "kind": "direct_mesh_deformation",
+      "regions": ["supports", "tail_root"],
+      "primary_goal": "make thick support arches and ground contacts readable while keeping the tail subordinate",
+      "requires_previous": "dorsal_rhythm_v01"
+    }
+  ],
+  "shape_gate": {
+    "required_views": ["primary", "silhouette_primary", "primary_trace", "opposite", "front", "side", "elevated_rear"],
+    "required_review": "independent visual review after every deforming pass",
+    "rules": [
+      "primary silhouette must not materially regress",
+      "the named pass defect must be visibly reduced in the locked primary view",
+      "no diagnostic view may expose a new detached, floating or self-intersecting major form",
+      "the result remains unaccepted and non-exportable until the 85-point final contour gate"
+    ]
+  }
+}

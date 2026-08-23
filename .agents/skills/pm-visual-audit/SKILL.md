@@ -15,8 +15,9 @@ Logs and plans cannot prove visual quality.
    `docs/pale-mirror-visuals.md` and `docs/VISUAL_ASSET_PROVENANCE.md`.
 3. For Harvester creature geometry, textures, animation or acceptance, read
    `pale-mirror-visuals/src/main/blockbench/harvester/README.md` and
-   `review_briefs.json` completely. The base-reference contour is the first
-   geometry constraint; the hi-fi source is only a construction guide.
+   `review_briefs.json` completely. The base-reference image is the likeness
+   authority; the image-faithful mesh named by the brief is the candidate under
+   review, not an optional construction guide.
 4. Capture a deterministic before set with
    `scripts/capture-settlement-visuals.sh`. Include overview, entrances,
    streets, civic and industrial landmarks, perimeter, rail/depot, mine yard,
@@ -46,13 +47,45 @@ walkable transitions, terrain-native foundations, and intentional repetition
 over random detail. Validate all affected climate/archetype variants.
 
 For Harvester modelling, change the smallest set of dominant contour or
-anatomical mismatches. Use varied overlapping cuboids whose primary projection
-follows the pinned reference pixels. Dense pixel/high-poly voxel tracing,
-texture-concealed mass errors, and acceptance without the contour overlay are
-hard failures.
+anatomical mismatches. Reconstruct the visible geometry directly from the
+pinned reference pixels with an image-faithful mesh; do not simplify it to
+Minecraft-like cubes. Background/shadow geometry, texture-concealed mass
+errors and acceptance without the contour overlay are hard failures.
+
+### Primary-image trace gate
+
+Before authoring or replacing a Harvester's large masses, create a locked
+primary camera and an image plane using the pinned supplied reference. Trace
+the visible silhouette and major anatomical boundaries into a versioned
+primary-trace source in image-pixel coordinates; the resulting mesh must be
+shown over that same image before any diagnostic-view polish begins.
+
+Do **not** begin with generic spheres, tubes, primitives, noise, a generated
+turntable, or a previous failed candidate and iteratively move them until they
+seem similar. Those tools may supply unseen-side thickness or local secondary
+detail only after the literal primary trace has been proven. A generated
+turntable never changes the primary trace, silhouette score, or acceptance
+authority. If no trace-overlay evidence exists, stop rather than treating an
+audit render as evidence of likeness.
 
 ## Re-capture and report
 
 Capture the same views after the change and inspect them side by side. Report
 what materially improved, remaining visual debt, the exact screenshot set, and
 any product judgment that still needs a human playtest.
+
+### Mandatory blind comparison for Harvester candidate selection
+
+When the work chooses between two Harvester geometry candidates, create a
+package with `tools/harvester_blind_pairwise.py` and the versioned
+`blind_review_protocol_v01.json`. Give at least two independent fresh-context
+reviewers only that package's `public/` directory. They must first make an
+ordinal primary-image decision (`amber`, `cobalt` or `indistinguishable`) and
+then inspect diagnostic views; do not disclose IDs, prior reviews, provenance,
+scores, overlays or expected result before their records are fixed.
+
+Reveal the operator mapping and inspect the direct contour overlay only after
+those decisions. Automated counts are exact-trace diagnostics, not cross-class
+likeness scores; they cannot break a blind tie or override the visual verdict.
+The blind winner is still unaccepted until the literal trace, normal-view,
+animation/material and runtime/export gates all pass.

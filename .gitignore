@@ -35,6 +35,8 @@ bin/
 ### Python tooling ###
 __pycache__/
 *.py[cod]
+/tools/blender/.venv/
+/tools/blender/__pycache__/
 
 ### Minecraft Modding ###
 run/

@@ -1,0 +1,48 @@
+{
+  "schema": "pale_mirror_visuals.collector_sculpt_review.v1",
+  "session_id": "collector_v05_sculpt_v02",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "front_mantle_v02",
+  "verdict": "failed_declared_pass_goal",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or acceptance automation",
+    "baseline_primary_overlay": {
+      "path": "build/blender-audits/raw_baseline-biomass_collector-collector_v05_sculpt_v02/primary_model_overlay.png",
+      "sha256": "8ac596204589315d1139976dc8a3bacd0eb2ff917e760acbe7ca7b07c6bd5213",
+      "pixels": {
+        "model": 297788,
+        "overlap": 197527,
+        "trace_only": 90981,
+        "model_only": 100261
+      }
+    },
+    "after_primary_overlay": {
+      "path": "build/blender-audits/front_mantle_v02-biomass_collector-collector_v05_sculpt_v02/primary_model_overlay.png",
+      "sha256": "a75f650f6a7518ffa3f97923ba56e8bb67990a228f4e4dd33172f97c29a44753",
+      "pixels": {
+        "model": 298342,
+        "overlap": 198051,
+        "trace_only": 90457,
+        "model_only": 100291
+      }
+    },
+    "seven_view_before_after": {
+      "path": "build/blender-audits/front_mantle_v02-biomass_collector-collector_v05_sculpt_v02/before_after_by_view.png",
+      "sha256": "32e790adfba915e5efe4b3c2f74d9617cea4e97896da2d7f1d88fb0c5d05cb78"
+    }
+  },
+  "independent_review": {
+    "scope": "only whether the direct v02 pass visibly achieved its leading-drape goal without a new diagnostic defect; not an overall likeness score",
+    "findings": [
+      "The leading left drape remains a narrow, nearly vertical split ribbon rather than the broad low ground-reaching mass in the locked reference.",
+      "Continuous yellow missing contour remains along its outer and lower edge, while magenta excess remains near the inner contour.",
+      "No visible new diagnostic-view break was introduced, but the +524-pixel overlap change (about 0.18 percent of the trace) is not a material visual improvement."
+    ],
+    "recommended_next_change": "In a new immutable session, make one stronger trace-constrained direct pass only on the existing outer leading-drape surface: move it into the yellow outer and lower contour region to form one broad grounded flap; leave dorsal sacs, supports and tail untouched."
+  },
+  "runtime_export_forbidden": true
+}

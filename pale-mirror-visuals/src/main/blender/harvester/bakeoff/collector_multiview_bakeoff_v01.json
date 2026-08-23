@@ -1,0 +1,27 @@
+{
+  "schema": "pale_mirror.hunyuan2mv_bakeoff.v1",
+  "bakeoff_id": "collector_multiview_bakeoff_v01",
+  "asset_id": "biomass_collector",
+  "authority": "The supplied primary image remains the sole likeness authority. The generated turntable is secondary diagnostic evidence and may only condition an unaccepted hidden-volume proposal.",
+  "candidate": {
+    "id": "hunyuan2mv_v01",
+    "tool": "Hunyuan3D-2mv",
+    "repository": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2",
+    "repository_commit": "f8db63096c8282cb27354314d896feba5ba6ff8a",
+    "checkpoint": "tencent/Hunyuan3D-2mv",
+    "subfolder": "hunyuan3d-dit-v2-mv",
+    "input_slots": ["front", "left", "back", "right"],
+    "shape_only": true,
+    "low_vram_cpu_offload": true,
+    "inference_steps": 20,
+    "octree_resolution": 256,
+    "runtime_export_forbidden": true
+  },
+  "acceptance": {
+    "requires_primary_direct_overlay": true,
+    "requires_diagnostic_view_audit": true,
+    "forbids_primary_trace_mutation": true,
+    "forbids_runtime_export": true,
+    "final_visual_score_threshold": 85
+  }
+}

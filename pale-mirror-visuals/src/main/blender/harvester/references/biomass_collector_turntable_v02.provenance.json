@@ -1,0 +1,90 @@
+{
+  "schema": "pale_mirror_visuals.harvester_canonical_turntable.v1",
+  "asset_id": "biomass_collector",
+  "generated_at": "2026-08-23",
+  "authority": "The literal supplied source remains the sole authority for the source-local primary silhouette and visible anatomy. Following human review, the generated companions are canonical constraints only in their declared own cameras: they define hidden-side volume and must never mutate, outweigh, or replace the literal source trace.",
+  "source_primary": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa",
+    "trace": {
+      "file": "biomass_collector_primary_v03.json",
+      "sha256": "e3150d88594a8c712c22dfe60395c43f2da038c6dea7bc53601bff8c69692cf7"
+    }
+  },
+  "panels": [
+    {
+      "id": "source_local_0",
+      "source": "literal_primary",
+      "camera": "source-local broadside; draped head on image-left and tail on image-right",
+      "manual_only": false
+    },
+    {
+      "id": "tail_end_on_90",
+      "source": "generated",
+      "file": "biomass_collector_hunyuan_v05_tail_on_imagegen.png",
+      "sha256": "15938880dac9b8aaa23a1fd5ec26180c34b8f54633aace74962f685056490691",
+      "camera": "clockwise quarter-turn from source-local: tail end-on, head-drape hidden",
+      "manual_only": false
+    },
+    {
+      "id": "opposite_broadside_180",
+      "source": "generated",
+      "file": "biomass_collector_hunyuan_v05_opposite_broadside_imagegen.png",
+      "sha256": "1ef6a83a420c97ff62be5971637fa9f22335ae730c9b2a0b0ee0ce49e0888a98",
+      "camera": "opposite broadside: draped head on image-right and tail on image-left",
+      "manual_only": false
+    },
+    {
+      "id": "head_end_on_270",
+      "source": "generated",
+      "file": "biomass_collector_hunyuan_v05_head_on_imagegen.png",
+      "sha256": "e3189881f441f0e1f1102f1e08ea2d6b935696b483994691580df76288ed0f56",
+      "camera": "clockwise three-quarter-turn from source-local: head-drape end-on, tail hidden",
+      "manual_only": false
+    },
+    {
+      "id": "elevated_near_dorsal",
+      "source": "generated",
+      "file": "biomass_collector_turntable_v02_elevated_near_dorsal_imagegen.png",
+      "sha256": "f85a7b1093a45a698ea78913a80e4ec0a40dd9e67e625e2cc98e3ad3331873ea",
+      "camera": "elevated near-side dorsal diagnostic: six-sac top layout and tail-root depth",
+      "manual_only": true
+    },
+    {
+      "id": "low_opposite_front",
+      "source": "generated",
+      "file": "biomass_collector_turntable_v02_low_opposite_front_imagegen.png",
+      "sha256": "5dc027901decbf1da0f0cf247259f338677fe41dada5a54fa78e8a7122b65c8b",
+      "camera": "low opposite-front diagnostic: underbody width, far feet and head-drape attachment",
+      "manual_only": true
+    }
+  ],
+  "hunyuan_v05": {
+    "candidate_id": "hunyuan2mv_v05_canonical_turntable",
+    "slot_to_panel": {
+      "front": "source_local_0",
+      "left": "tail_end_on_90",
+      "back": "opposite_broadside_180",
+      "right": "head_end_on_270"
+    },
+    "runtime_export_forbidden": true
+  },
+  "derived_contact_sheet": {
+    "file": "biomass_collector_turntable_v02_canonical_contact_sheet.png",
+    "sha256": "80492b05984d710cf833ffdd527a60076bb034f4f4e07733a07183b46a21e54f",
+    "generator": "tools/harvester_turntable_contact_sheet.py",
+    "purpose": "normalized six-panel human-review evidence; never a Hunyuan crop source"
+  },
+  "review": {
+    "status": "provisional_accepted_for_shape_only_hunyuan_trial",
+    "accepted": [
+      "literal source-local primary",
+      "tail-on rear",
+      "opposite broadside",
+      "head-on front",
+      "elevated near-dorsal manual diagnostic",
+      "low opposite-front manual diagnostic"
+    ],
+    "known_limitation": "The generated head-on view makes the central hood more symmetric and massive than the source; it constrains hidden depth only and cannot alter the primary trace."
+  }
+}

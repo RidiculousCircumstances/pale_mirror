@@ -1,0 +1,17 @@
+[project]
+name = "pale-mirror-blender-tools"
+version = "0.1.0"
+description = "Controlled Blender authoring tools for Pale Mirror"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp==1.29.0",
+  "Pillow==11.3.0",
+]
+
+[project.scripts]
+pm-blender-mcp = "pm_blender_mcp:main"
+pm-blender-sync = "sync_windows_blender_workspace:main"
+pm-blender = "pm_blender_cli:main"
+
+[tool.uv]
+package = false

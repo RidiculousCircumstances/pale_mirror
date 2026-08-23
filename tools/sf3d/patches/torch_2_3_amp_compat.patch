@@ -1,0 +1,20 @@
+diff --git a/sf3d/models/network.py b/sf3d/models/network.py
+index 37e67eb..f6f747d 100644
+--- a/sf3d/models/network.py
++++ b/sf3d/models/network.py
+@@ -7,4 +7,14 @@ from einops import rearrange
+ from jaxtyping import Float
+ from torch import Tensor
+-from torch.amp import custom_bwd, custom_fwd
++try:
++    from torch.amp import custom_bwd, custom_fwd
++except ImportError:
++    # Torch 2.3 exposes the same CUDA decorators from torch.cuda.amp but
++    # does not accept the Torch 2.4 `device_type` keyword.
++    from torch.cuda.amp import custom_bwd
++    from torch.cuda.amp import custom_fwd as _custom_fwd
++
++    def custom_fwd(*args, **kwargs):
++        kwargs.pop("device_type", None)
++        return _custom_fwd(*args, **kwargs)
+ from torch.autograd import Function

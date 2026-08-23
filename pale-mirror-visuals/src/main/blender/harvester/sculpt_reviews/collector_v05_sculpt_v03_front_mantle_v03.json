@@ -1,0 +1,50 @@
+{
+  "schema": "pale_mirror_visuals.collector_sculpt_review.v1",
+  "session_id": "collector_v05_sculpt_v03_composition",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "front_mantle_v03",
+  "verdict": "failed_declared_pass_goal",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or acceptance automation",
+    "baseline_primary_overlay": {
+      "path": "build/blender-audits/raw_baseline-biomass_collector-collector_v05_sculpt_v03_composition/primary_model_overlay.png",
+      "sha256": "8ac596204589315d1139976dc8a3bacd0eb2ff917e760acbe7ca7b07c6bd5213",
+      "pixels": {
+        "model": 297788,
+        "overlap": 197527,
+        "trace_only": 90981,
+        "model_only": 100261
+      }
+    },
+    "after_primary_overlay": {
+      "path": "build/blender-audits/front_mantle_v03-biomass_collector-collector_v05_sculpt_v03_composition/primary_model_overlay.png",
+      "sha256": "cfe3f046b9113ae9d9130f50947c3ea5c80d1dfd08dca4477e723212716ac788",
+      "pixels": {
+        "model": 297327,
+        "overlap": 197238,
+        "trace_only": 91270,
+        "model_only": 100089
+      }
+    },
+    "diagnostic_views": [
+      "front",
+      "side",
+      "opposite",
+      "elevated_rear"
+    ]
+  },
+  "independent_review": {
+    "scope": "only whether the v03 direct pass visibly achieved the broad grounded leading-drape goal without a new diagnostic defect; not an overall likeness score",
+    "findings": [
+      "The direct pass changed a local form but did not make the broad low leading drape of the locked reference readable.",
+      "The remaining leading form is narrow, nearly vertical and broken rather than a continuous grounded outer mass.",
+      "No critical detached, self-intersecting or flat-cardboard defect was visible in the diagnostic views."
+    ],
+    "recommended_next_change": "In a new immutable session, create one broad, smoothly tapering and physically grounded outer mass from the front shell to the ground before adding separate strands or folds."
+  },
+  "runtime_export_forbidden": true
+}

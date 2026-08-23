@@ -1,0 +1,54 @@
+{
+  "schema": "pale_mirror_visuals.collector_sculpt_review.v1",
+  "session_id": "collector_v05_sculpt_v03_composition",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "full_composition_v03",
+  "verdict": "hard_rejected",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or acceptance automation",
+    "primary_overlay": {
+      "path": "build/blender-audits/full_composition_v03-biomass_collector-collector_v05_sculpt_v03_composition/primary_model_overlay.png",
+      "sha256": "c2e221fc4f577ffe4a40c72166b9a2ebb6f57027847422ca826bf2315a460767",
+      "pixels": {
+        "model": 280158,
+        "overlap": 180583,
+        "trace_only": 107925,
+        "model_only": 99575
+      }
+    },
+    "required_views": {
+      "primary": "bf5b4be4b22827193d886ccbf20bc43ffc9b036168fd46f3d24bbcab5eb4a9e7",
+      "front": "e2031ede44f1c32d785f2bcccfdc79d03872409b59043d1e1178f669e11f364f",
+      "side": "446579dcf257391cf649db719c04181bc456652c05630fc427589dc20350380a",
+      "opposite": "66e0ccb4bda46bb4825add6e701c6bd33b172102d659fc163fd0c4ff445e6d10",
+      "elevated_rear": "958af59d861000e41fe34e5ca6b9acb22799bd59764012dd569b7f88317ed40f"
+    }
+  },
+  "independent_reviews": [
+    {
+      "score": 42,
+      "hard_gate": "failed",
+      "findings": [
+        "The leading grounded drape remains narrow and nearly vertical.",
+        "The intended six descending sacs are a serrated noisy ridge rather than separate broad arcs.",
+        "Supports remain nearly equal legs and thin tangled strands remain incoherent in diagnostics."
+      ]
+    },
+    {
+      "score": 21,
+      "hard_gate": "failed",
+      "findings": [
+        "The low broad six-sac primary silhouette, mass balance and essential negative spaces materially miss the literal reference.",
+        "The dorsal row is fused and bumpy, while the large asymmetric mantle is a narrow ribbon.",
+        "Diagnostic views show blobbed masses, jagged ridge artifacts and boot-like supports rather than coherent anatomy."
+      ]
+    }
+  ],
+  "retention": "Retain only the immutable protocol, backups, receipts and audit evidence. Retain no v03 deformed geometry as a source, rigging, export or runtime candidate.",
+  "recommended_next_change": "In a fresh trace-authoritative session, build and review only one broad grounded leading mantle mass plus the individually traced dorsal sac arcs before using v05 solely as hidden-side depth and before modelling supports, tail, texture or animation.",
+  "runtime_export_forbidden": true
+}

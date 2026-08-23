@@ -1,9 +1,15 @@
 {
-  "schema": "pale_mirror_visuals.harvester_reference_brief.v2",
-  "acceptance_authority": "The user-supplied base reference image is the sole likeness authority. A hi-fi Blockbench source is a construction guide only.",
+  "schema": "pale_mirror_visuals.harvester_reference_brief.v4",
+  "acceptance_authority": "The user-supplied base reference image is the sole likeness authority. The named image-faithful Blockbench mesh is the canonical editable realization and must not be simplified for Minecraft.",
+  "comparative_selection": {
+    "required": "Use blind_review_protocol_v01.json before selecting between two geometry candidates.",
+    "blind_package": "../../blender/harvester/blind_review_protocol_v01.json",
+    "rule": "At least two fresh-context reviewers make an ordinal primary-plus-diagnostic verdict before candidate IDs, score, overlay or provenance are revealed.",
+    "metric_policy": "Exact primary-contour metrics diagnose an individual candidate only. They cannot rank candidate classes, break a blind tie or override an ordinal visual verdict."
+  },
   "contour_contract": {
-    "source": "The visible subject contour in the pinned base-reference pixels, never the hi-fi construction source.",
-    "construction": "Use deliberately varied anatomical cuboids whose primary-camera projection follows the reference envelope; dense pixel or surface voxel tracing is forbidden.",
+    "source": "The visible subject contour and major visible anatomical boundaries in the pinned base-reference pixels.",
+    "construction": "Trace the primary-camera envelope and major volumes directly into an organic mesh at image-appropriate precision; do not use a low-detail cuboid approximation or Minecraft-style simplification.",
     "comparison": "Uniformly align the solid Blockbench projection to the pinned subject bounds and inspect the generated reference/model overlay.",
     "hard_gate": "A material mismatch in aspect ratio, ground line, dorsal envelope, mass balance, dominant limb contour or silhouette negative space rejects the iteration."
   },
@@ -35,6 +41,7 @@
   "creatures": {
     "biomass_collector": {
       "base_reference": "01_harvester_biomass_collector.jpg",
+      "authoring_model": "biomass_collector_reference_hifi.bbmodel",
       "primary_view": "low front-left three-quarter; match the low, broad stance before adding detail",
       "reference_subject_bounds_normalized": [0.105, 0.105, 0.995, 0.88],
       "contour_alignment": "bottom_center",
@@ -60,6 +67,7 @@
     },
     "crusher_stalker": {
       "base_reference": "02_crusher_stalker.jpg",
+      "authoring_model": "crusher_stalker_reference_hifi.bbmodel",
       "primary_view": "low front-left three-quarter; preserve the forward crushing weight",
       "reference_subject_bounds_normalized": [0.035, 0.04, 0.985, 0.925],
       "contour_alignment": "bottom_center",
@@ -85,6 +93,7 @@
     },
     "scythe_stalker": {
       "base_reference": "03_scythe_stalker.jpg",
+      "authoring_model": "scythe_stalker_reference_hifi.bbmodel",
       "primary_view": "crouched near-side profile with a slight front offset; the horizontal body axis and hooked foreground scythes must remain unmistakable",
       "reference_subject_bounds_normalized": [0.27, 0.155, 0.985, 0.925],
       "contour_alignment": "bottom_center",

@@ -1,0 +1,49 @@
+{
+  "schema": "pale_mirror_visuals.harvester_volume_bakeoff.v1",
+  "bakeoff_id": "collector_volume_bakeoff_v01",
+  "asset_id": "biomass_collector",
+  "authority": "The supplied primary reference and source-pixel trace determine likeness. Candidate generators propose hidden-side volume only.",
+  "primary_input": {
+    "reference_file": "01_harvester_biomass_collector.jpg",
+    "reference_sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa",
+    "reference_size": [
+      1280,
+      720
+    ],
+    "trace_file": "biomass_collector_primary_v02.json",
+    "trace_sha256": "a9918478e39dd4c7eb9b415a5d9a56a2e155d346b052937753991eb083026719",
+    "camera_contract": "Locked 1280x720 orthographic primary-camera mapping from biomass_collector_primary_v02."
+  },
+  "candidates": [
+    {
+      "id": "sf3d_v01",
+      "tool": "Stable Fast 3D",
+      "role": "first hidden-side volume draft",
+      "minimum_vram_gib": 6,
+      "requires_author_account_access": true,
+      "allowed_outputs": [
+        "glb",
+        "obj"
+      ]
+    },
+    {
+      "id": "hunyuan3d_2_1_low_vram_v01",
+      "tool": "Hunyuan3D 2.1",
+      "role": "optional low-VRAM comparison",
+      "minimum_vram_gib": 10,
+      "requires_author_account_access": false,
+      "allowed_outputs": [
+        "glb",
+        "obj"
+      ]
+    }
+  ],
+  "acceptance": {
+    "stage": "volume-stage-only",
+    "requires_closed_volume": true,
+    "requires_locked_primary_audit": true,
+    "forbids_primary_trace_mutation": true,
+    "forbids_runtime_export": true,
+    "final_visual_score_threshold": 85
+  }
+}

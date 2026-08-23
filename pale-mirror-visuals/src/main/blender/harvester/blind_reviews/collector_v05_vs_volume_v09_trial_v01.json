@@ -1,0 +1,78 @@
+{
+  "schema": "pale_mirror_visuals.harvester_blind_pairwise_result.v1",
+  "review_id": "collector-v05-v09-trial-v01",
+  "protocol": {
+    "file": "../blind_review_protocol_v01.json",
+    "sha256": "5a7c4ee5fc47cfdca617902226c1faa2e546228d3dd3dda32377baf844e6cf29"
+  },
+  "reference": {
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa",
+    "role": "sole primary-view likeness authority"
+  },
+  "blind_phase": {
+    "package": "build/harvester-blind-reviews/collector-v05-v09-trial-v01/public",
+    "disclosure": "Two fresh-context reviewers inspected public/ only. Candidate identities, provenance, scores, overlay and contour metrics were revealed only after both phase-A/B records were returned.",
+    "reviewers": [
+      {
+        "id": "blind_reviewer_1",
+        "phase_a_primary_preference": "amber",
+        "phase_a_confidence": "medium",
+        "phase_a_visible_reasons": [
+          "Long low dorsal-mass row is closer to the reference.",
+          "Broad left mantle and elongated right taper are retained more clearly.",
+          "Ground supports have a clearer bulky rhythm."
+        ],
+        "phase_b_diagnostic_preference": "amber",
+        "final_preference": "amber"
+      },
+      {
+        "id": "blind_reviewer_2",
+        "phase_a_primary_preference": "amber",
+        "phase_a_confidence": "high",
+        "phase_a_visible_reasons": [
+          "Long low many-legged silhouette and rounded dorsal volumes are retained.",
+          "Bulbous back-segment sequence and thick supports are closer to the reference.",
+          "The other body collapses into discontinuous volume."
+        ],
+        "phase_b_diagnostic_preference": "amber",
+        "final_preference": "amber"
+      }
+    ],
+    "consensus": "amber"
+  },
+  "post_verdict_identity_reveal": {
+    "amber": {
+      "candidate": "hunyuan2mv_v05_canonical_turntable raw baseline",
+      "audit": "build/blender-audits/raw_baseline-biomass_collector-collector_v05_sculpt_v03_composition"
+    },
+    "cobalt": {
+      "candidate": "collector_volume_v09 trace-led volume",
+      "audit": "build/blender-audits/collector_volume_v09-biomass_collector"
+    }
+  },
+  "phase_c_direct_primary_contour_gate": {
+    "rule": "These exact locked-camera diagnostics are not likeness scores and do not reverse the blind ordinal result.",
+    "raw_v05": {
+      "trace": 288508,
+      "model": 297788,
+      "overlap": 197527,
+      "trace_only": 90981,
+      "model_only": 100261,
+      "result": "material primary-contour mismatch; blocks acceptance"
+    },
+    "volume_v09": {
+      "trace": 288508,
+      "model": 614131,
+      "overlap": 227113,
+      "trace_only": 61395,
+      "model_only": 387018,
+      "result": "material primary-contour mismatch and excessive primary silhouette; blocks acceptance"
+    }
+  },
+  "decision": {
+    "comparative_winner": "hunyuan2mv_v05_canonical_turntable raw baseline",
+    "acceptance": "neither candidate accepted or exportable",
+    "meaning": "The blind result validates the user's visual observation: v05 is a materially better spatial likeness than v09 despite incomparable legacy score history. It remains only a visual/depth prior until a literal trace-led mesh passes the separate contour and normal-view gates.",
+    "next_modelling_rule": "Use v05 only as hidden-side/depth evidence. Rebuild the literal primary-facing mantle, six separate descending sac arcs, low underbody and support roots from the pinned trace; do not copy v05's merged mass or tail debris."
+  }
+}

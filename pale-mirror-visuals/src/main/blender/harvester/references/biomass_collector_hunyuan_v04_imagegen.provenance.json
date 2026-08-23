@@ -1,0 +1,33 @@
+{
+  "schema": "pale_mirror_visuals.secondary_reference.v1",
+  "asset_id": "biomass_collector",
+  "source_primary": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa"
+  },
+  "generator": "OpenAI imagegen",
+  "purpose": "One bounded neutral-background secondary turntable comparison for the non-exportable Hunyuan2mv primary-front volume proposal.",
+  "files": {
+    "left": {
+      "file": "biomass_collector_hunyuan_v04_left_imagegen.png",
+      "sha256": "7b8421df380a11679f711c0a5fd92e71dc5186bbb180a0fbd559f554baf571c9"
+    },
+    "back": {
+      "file": "biomass_collector_hunyuan_v04_back_imagegen.png",
+      "sha256": "bbbf0b97c9b4e2e168a80bd9aada29222c3ebe081075b3358c8c5548f6a8c5f1"
+    },
+    "right": {
+      "file": "biomass_collector_hunyuan_v04_right_imagegen.png",
+      "sha256": "30a9338efaf71ce41696bd12faeb44a35674ac6f3e672ad0027850f2a513dd62"
+    }
+  },
+  "review": {
+    "single_subject_per_file": true,
+    "slot_order": "front remains the pinned source; left/back/right are clockwise secondary turntable proxies",
+    "neutral_background": true,
+    "back_tail_faces_camera": true,
+    "right_head_faces_image_right": true,
+    "large_anatomy_consistent": "six dorsal sacs, low underbody, heavy leg arches, draped head and narrow tail are present in every usable diagnostic view"
+  },
+  "authority": "The user-supplied primary image remains the sole likeness authority. These generated images cannot alter primary contour, likeness scoring or model acceptance."
+}

@@ -1,0 +1,31 @@
+{
+  "schema": "pale_mirror_visuals.secondary_reference.v1",
+  "asset_id": "biomass_collector",
+  "source_primary": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa"
+  },
+  "generator": "OpenAI imagegen",
+  "purpose": "Secondary clockwise turntable proxies for the non-exportable Hunyuan2mv primary-front volume proposal.",
+  "files": {
+    "left": {
+      "file": "biomass_collector_hunyuan_v03_left_imagegen.png",
+      "sha256": "cf216423c2be3938b77231a2dbed182e431f28324c043fdf55b82496cd4667ea"
+    },
+    "back": {
+      "file": "biomass_collector_hunyuan_v03_back_imagegen.png",
+      "sha256": "a46e2404d5fba96af0387e8fc75850f7b2b50d4abfc425e266d0d83f04610d3a"
+    },
+    "right": {
+      "file": "biomass_collector_hunyuan_v03_right_imagegen.png",
+      "sha256": "73846bf53027a4ce9ea76cdc07d38fa8a9b8e1a9978128740b247334e0f710f0"
+    }
+  },
+  "review": {
+    "single_subject_per_file": true,
+    "slot_order": "front is the pinned source; left/back/right are clockwise secondary proxies",
+    "back_tail_faces_camera": true,
+    "right_head_faces_image_right": true
+  },
+  "authority": "The user-supplied primary image remains the sole likeness authority. These generated images cannot alter primary contour, likeness scoring or model acceptance."
+}
