@@ -57,6 +57,11 @@ this file never substitutes for reading the selected skill.
 - Screenshots, coordinates, settlement/mine/rail aesthetics, terrain
   integration, Blockbench creature modelling, or visual acceptance:
   `.agents/skills/pm-visual-audit/SKILL.md`.
+- Creating or mutating an image-to-3D experiment, generated turntable,
+  pose/depth reconstruction, model-generated geometry, texture inference,
+  rigging proposal or Automodel adapter: `.agents/skills/pm-automodel/SKILL.md`.
+  Merely locating, copying or delivering an already generated artifact does
+  not activate this skill.
 - Chunk generation/loading, planner CPU, JFR, C2ME/DH, TPS, watchdogs, or
   performance changes: `.agents/skills/pm-worldgen-performance/SKILL.md`.
 - Build/package/release readiness, completion claims, or pre-commit gates:

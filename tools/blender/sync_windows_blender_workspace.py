@@ -46,13 +46,18 @@ SECONDARY_REFERENCE_FILES = (
 SECONDARY_REFERENCE_ROOT = Path("pale-mirror-visuals/src/main/blender/harvester/references")
 TRACE_FILES = (
     "biomass_collector_primary_v03.json",
-    "biomass_collector_semantic_cage_v01.json",
 )
 TRACE_ROOT = Path("pale-mirror-visuals/src/main/blender/harvester/traces")
 SCULPT_PROTOCOL_FILES = (
-    "collector_v05_sculpt_v01.json",
-    "collector_v05_sculpt_v02.json",
-    "collector_v05_sculpt_v03_composition.json",
+    "collector_direct_mesh_sessions_v01.json",
+    "collector_v05_direct_mesh_v01.json",
+    "collector_v05_direct_mesh_v02.json",
+    "collector_v05_direct_mesh_v03.json",
+    "collector_v05_production_master_v01.json",
+    "collector_v05_front_mantle_grounding_v02.json",
+    "collector_v05_primary_composition_v01.json",
+    "collector_v05_diagnostic_solidity_v01.json",
+    "collector_v05_tail_cleanup_v01.json",
 )
 SCULPT_PROTOCOL_ROOT = Path("pale-mirror-visuals/src/main/blender/harvester/sculpt_protocol")
 
@@ -83,7 +88,7 @@ def _source_files(reference_root: Path) -> dict[Path, Path]:
         source = ROOT / entry
         if source.is_dir():
             for child in source.rglob("*"):
-                if child.is_file() and "__pycache__" not in child.parts:
+                if child.is_file() and "__pycache__" not in child.parts and "historical" not in child.parts:
                     result[child] = child.relative_to(ROOT)
         elif source.is_file():
             result[source] = entry

@@ -15,6 +15,6 @@ def main(payload: dict[str, object]) -> dict[str, object]:
     asset_id(payload)
     ensure_directories()
     if not SOURCE_PATH.is_file():
-        raise FileNotFoundError("Collector source does not exist; run create_collector_base first.")
+        raise FileNotFoundError("Collector canonical source does not exist; open the active direct-v05 session instead.")
     bpy.ops.wm.open_mainfile(filepath=str(SOURCE_PATH))
     return {"asset_id": ASSET_ID, "source": SOURCE_PATH.as_posix(), "opened": True}

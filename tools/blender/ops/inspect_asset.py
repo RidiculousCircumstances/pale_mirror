@@ -15,7 +15,7 @@ from bpy_extras.object_utils import world_to_camera_view
 def main(payload: dict[str, object]) -> dict[str, object]:
     asset_id(payload)
     if not SOURCE_PATH.is_file():
-        raise FileNotFoundError("Collector source does not exist; run create_collector_base first.")
+        raise FileNotFoundError("Collector canonical source does not exist; inspect the active direct-v05 session instead.")
     if bpy.data.filepath != str(SOURCE_PATH):
         bpy.ops.wm.open_mainfile(filepath=str(SOURCE_PATH))
     primary_camera = ensure_audit_stage()["primary"]

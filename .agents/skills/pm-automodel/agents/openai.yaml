@@ -1,0 +1,6 @@
+interface:
+  display_name: "PM Automodel"
+  short_description: "Run evidence-bounded image-to-3D research"
+  default_prompt: "Use $pm-automodel to prepare a reproducible, non-canonical Pale Mirror creature reconstruction experiment."
+policy:
+  allow_implicit_invocation: true

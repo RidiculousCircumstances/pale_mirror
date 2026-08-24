@@ -17,7 +17,7 @@ def main(payload: dict[str, object]) -> dict[str, object]:
     asset_id(payload)
     ensure_directories()
     if not SOURCE_PATH.is_file():
-        raise FileNotFoundError("Collector source does not exist; run create_collector_base first.")
+        raise FileNotFoundError("Collector canonical source does not exist; an unaccepted direct-v05 session cannot export.")
     if bpy.data.filepath != str(SOURCE_PATH):
         bpy.ops.wm.open_mainfile(filepath=str(SOURCE_PATH))
     if bpy.context.scene.get("pm_authoring_phase") != "accepted":

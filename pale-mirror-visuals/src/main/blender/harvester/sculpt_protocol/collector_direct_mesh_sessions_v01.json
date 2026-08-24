@@ -1,0 +1,23 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_mesh_sessions.v1",
+  "asset_id": "biomass_collector",
+  "authority": "Only sessions named here may open a controlled Collector direct-mesh source. A session starts from its declared reviewed predecessor, retains the immutable raw-v05 mesh, and is permanently runtime-export forbidden until visual acceptance.",
+  "sessions": {
+    "collector_v05_direct_mesh_v01": {
+      "protocol": "sculpt_protocol/collector_v05_direct_mesh_v01.json",
+      "role": "audited initial direct-v05 correction cycle"
+    },
+    "collector_v05_direct_mesh_v02": {
+      "protocol": "sculpt_protocol/collector_v05_direct_mesh_v02.json",
+      "role": "reviewed continuation from v01 working mesh; never a primitive or replacement reconstruction"
+    },
+    "collector_v05_direct_mesh_v03": {
+      "protocol": "sculpt_protocol/collector_v05_direct_mesh_v03.json",
+      "role": "reviewed continuation from v02's exact recovered mesh; artist-prepared leading-mantle repair"
+    },
+    "collector_v05_production_master_v01": {
+      "protocol": "sculpt_protocol/collector_v05_production_master_v01.json",
+      "role": "approved coherent production reconstruction from the reviewed v02 recovery; raw v05 stays immutable and the working mesh stays non-exportable until full visual acceptance"
+    }
+  }
+}

@@ -34,71 +34,92 @@ def blender_open(asset_id: str) -> dict[str, Any]:
 
 
 @SERVER.tool()
-def blender_create_base(asset_id: str) -> dict[str, Any]:
-    """Create the approved baseline source scene for a canonical PM asset."""
-    return operation("create_collector_base", {"asset_id": _asset(asset_id)})
+def blender_create_collector_direct_session(asset_id: str) -> dict[str, Any]:
+    """Create the protected non-exportable working copy from pinned raw v05."""
+    return operation("create_collector_direct_session", {"asset_id": _asset(asset_id)})
 
 
 @SERVER.tool()
-def blender_build_trace_cage(asset_id: str) -> dict[str, Any]:
-    """Build the named trace-authoritative three-dimensional Collector cage."""
-    return operation("build_collector_trace_cage", {"asset_id": _asset(asset_id)})
+def blender_continue_collector_direct_session(
+    asset_id: str,
+    from_session: str = "collector_v05_direct_mesh_v01",
+    to_session: str = "collector_v05_direct_mesh_v02",
+) -> dict[str, Any]:
+    """Fork one checked-in reviewed direct session into its declared successor."""
+    return operation(
+        "continue_collector_direct_session",
+        {"asset_id": _asset(asset_id), "from_session": _direct_session(from_session), "to_session": _direct_session(to_session)},
+    )
 
 
 @SERVER.tool()
-def blender_build_semantic_cage(asset_id: str) -> dict[str, Any]:
-    """Build the primary-rail, primitive-free Collector semantic cage."""
-    return operation("build_collector_semantic_cage", {"asset_id": _asset(asset_id)})
+def blender_capture_collector_direct_baseline(asset_id: str, session_id: str = "collector_v05_direct_mesh_v01") -> dict[str, Any]:
+    """Capture raw-v05 working-copy evidence before any direct edit."""
+    return operation("capture_collector_direct_baseline", {"asset_id": _asset(asset_id), "session_id": _direct_session(session_id)})
 
 
 @SERVER.tool()
-def blender_create_collector_sculpt_branch(asset_id: str) -> dict[str, Any]:
-    """Create a separate, non-exportable editable branch from locked Hunyuan v05."""
-    return operation("create_collector_sculpt_branch", {"asset_id": _asset(asset_id)})
+def blender_begin_collector_direct_mesh_pass(asset_id: str, pass_id: str, session_id: str = "collector_v05_direct_mesh_v01") -> dict[str, Any]:
+    """Open one sequential direct-retopology pass with an exact backup."""
+    return operation("begin_collector_direct_mesh_pass", {"asset_id": _asset(asset_id), "pass_id": _direct_pass(pass_id), "session_id": _direct_session(session_id)})
 
 
 @SERVER.tool()
-def blender_capture_collector_sculpt_baseline(asset_id: str) -> dict[str, Any]:
-    """Capture the unchanged raw-v05 direct-sculpt baseline evidence."""
-    return operation("capture_collector_sculpt_baseline", {"asset_id": _asset(asset_id)})
+def blender_inspect_collector_artist_mantle_topology(asset_id: str) -> dict[str, Any]:
+    """Read-only topology report for the declared v03 leading-mantle artist region."""
+    return operation("inspect_collector_artist_mantle_topology", {"asset_id": _asset(asset_id), "session_id": "collector_v05_direct_mesh_v03"})
 
 
 @SERVER.tool()
-def blender_apply_collector_front_mantle_v03(asset_id: str) -> dict[str, Any]:
-    """Apply the v03 literal-stroke front-drape pass after baseline evidence."""
-    return operation("apply_collector_sculpt_pass", {"asset_id": _asset(asset_id), "pass_id": "front_mantle_v03"})
+def blender_prepare_collector_artist_leading_mantle(asset_id: str) -> dict[str, Any]:
+    """Create only v03 artist vertex groups and locked guides; it never deforms geometry."""
+    return operation("prepare_collector_artist_leading_mantle", {"asset_id": _asset(asset_id), "session_id": "collector_v05_direct_mesh_v03"})
 
 
 @SERVER.tool()
-def blender_apply_collector_dorsal_rhythm_v03(asset_id: str) -> dict[str, Any]:
-    """Apply the independent v03 six-crest dorsal rhythm pass."""
-    return operation("apply_collector_sculpt_pass", {"asset_id": _asset(asset_id), "pass_id": "dorsal_rhythm_v03"})
+def blender_prepare_collector_master_artist_session(asset_id: str) -> dict[str, Any]:
+    """Prepare only the protected Master form pass for visible Blender sculpting."""
+    return operation("prepare_collector_master_artist_session", {"asset_id": _asset(asset_id), "session_id": "collector_v05_production_master_v01"})
 
 
 @SERVER.tool()
-def blender_apply_collector_supports_v03(asset_id: str) -> dict[str, Any]:
-    """Apply the independent v03 six-support grounding pass."""
-    return operation("apply_collector_sculpt_pass", {"asset_id": _asset(asset_id), "pass_id": "supports_v03"})
+def blender_inspect_collector_master_sculpt_assets(asset_id: str) -> dict[str, Any]:
+    """Inspect only the isolated Blender profile's sculpt capabilities."""
+    return operation("inspect_collector_master_sculpt_assets", {"asset_id": _asset(asset_id), "session_id": "collector_v05_production_master_v01"})
 
 
 @SERVER.tool()
-def blender_repair_collector_sculpt_branch_metadata(asset_id: str) -> dict[str, Any]:
-    """Repair only the known inherited working-tag defect in the v05 backup."""
-    return operation("repair_collector_sculpt_branch_metadata", {"asset_id": _asset(asset_id)})
+def blender_complete_collector_direct_mesh_pass(asset_id: str, pass_id: str, session_id: str = "collector_v05_direct_mesh_v01") -> dict[str, Any]:
+    """Seal an edited direct pass and produce its mandatory audit package."""
+    return operation("complete_collector_direct_mesh_pass", {"asset_id": _asset(asset_id), "pass_id": _direct_pass(pass_id), "session_id": _direct_session(session_id)})
 
 
 @SERVER.tool()
-def blender_render_collector_sculpt_audit(asset_id: str, label: str) -> dict[str, Any]:
-    """Render the seven-view neutral-clay audit set for the active sculpt branch."""
+def blender_record_collector_direct_review(asset_id: str, pass_id: str, decision: str, session_id: str = "collector_v05_direct_mesh_v01") -> dict[str, Any]:
+    """Record the independent visual continue/rollback decision for one pass."""
+    if decision not in {"continue", "rollback"}:
+        raise ValueError("decision must be continue or rollback")
+    return operation("record_collector_direct_review", {"asset_id": _asset(asset_id), "pass_id": _direct_pass(pass_id), "decision": decision, "session_id": _direct_session(session_id)})
+
+
+@SERVER.tool()
+def blender_rollback_collector_direct_mesh_pass(asset_id: str, pass_id: str, session_id: str = "collector_v05_direct_mesh_v01") -> dict[str, Any]:
+    """Restore a rejected pass from its exact protected full-mesh backup."""
+    return operation("rollback_collector_direct_mesh_pass", {"asset_id": _asset(asset_id), "pass_id": _direct_pass(pass_id), "session_id": _direct_session(session_id)})
+
+
+@SERVER.tool()
+def blender_render_collector_direct_audit(asset_id: str, label: str, session_id: str = "collector_v05_direct_mesh_v01") -> dict[str, Any]:
+    """Render the seven-view neutral-clay audit set for active direct-v05 work."""
     if not label or len(label) > 80 or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for character in label):
         raise ValueError("label must use 1-80 lowercase letters, digits, underscores or dashes")
-    return operation("render_collector_sculpt_audit", {"asset_id": _asset(asset_id), "label": label})
+    return operation("render_collector_direct_audit", {"asset_id": _asset(asset_id), "label": label, "session_id": _direct_session(session_id)})
 
 
 @SERVER.tool()
-def blender_validate_collector_sculpt_branch(asset_id: str) -> dict[str, Any]:
-    """Validate raw-v05 protection and non-exportable v03 sculpt-branch structure."""
-    return operation("validate_collector_sculpt_branch", {"asset_id": _asset(asset_id)})
+def blender_validate_collector_direct_session(asset_id: str, session_id: str = "collector_v05_direct_mesh_v01") -> dict[str, Any]:
+    """Validate raw-v05 protection, direct working ownership and non-exportability."""
+    return operation("validate_collector_direct_session", {"asset_id": _asset(asset_id), "session_id": _direct_session(session_id)})
 
 
 @SERVER.tool()
@@ -113,44 +134,6 @@ def blender_render_audit(asset_id: str, label: str = "manual") -> dict[str, Any]
     if not label or len(label) > 80 or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for character in label):
         raise ValueError("label must use 1-80 lowercase letters, digits, underscores or dashes")
     return operation("render_audit", {"asset_id": _asset(asset_id), "label": label})
-
-
-@SERVER.tool()
-def blender_import_sf3d_candidate(asset_id: str) -> dict[str, Any]:
-    """Import only the pinned, non-exportable Collector SF3D volume proposal."""
-    return operation("import_sf3d_candidate", {"asset_id": _asset(asset_id), "candidate_id": "sf3d_v01"})
-
-
-@SERVER.tool()
-def blender_render_sf3d_candidate_audit(asset_id: str, label: str = "sf3d_v01") -> dict[str, Any]:
-    """Render the fixed SF3D proposal's review-only camera set."""
-    if not label or len(label) > 80 or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for character in label):
-        raise ValueError("label must use 1-80 lowercase letters, digits, underscores or dashes")
-    return operation(
-        "render_sf3d_candidate_audit",
-        {"asset_id": _asset(asset_id), "candidate_id": "sf3d_v01", "label": label},
-    )
-
-
-@SERVER.tool()
-def blender_import_hunyuan2mv_candidate(
-    asset_id: str, candidate_id: str = "hunyuan2mv_v03_primary_front"
-) -> dict[str, Any]:
-    """Import one fixed, non-exportable Collector Hunyuan2mv proposal."""
-    return operation("import_hunyuan2mv_candidate", {"asset_id": _asset(asset_id), "candidate_id": _hunyuan_candidate(candidate_id)})
-
-
-@SERVER.tool()
-def blender_render_hunyuan2mv_candidate_audit(
-    asset_id: str, candidate_id: str = "hunyuan2mv_v03_primary_front", label: str = "hunyuan2mv_v03_primary_front"
-) -> dict[str, Any]:
-    """Render one fixed Hunyuan2mv proposal's review-only camera set."""
-    if not label or len(label) > 80 or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for character in label):
-        raise ValueError("label must use 1-80 lowercase letters, digits, underscores or dashes")
-    return operation(
-        "render_hunyuan2mv_candidate_audit",
-        {"asset_id": _asset(asset_id), "candidate_id": _hunyuan_candidate(candidate_id), "label": label},
-    )
 
 
 @SERVER.tool()
@@ -181,15 +164,15 @@ def _asset(value: str) -> str:
     return canonical_asset(value)
 
 
-def _hunyuan_candidate(value: str) -> str:
-    if value not in {
-        "hunyuan2mv_v01",
-        "hunyuan2mv_v02_primary_anchored",
-        "hunyuan2mv_v03_primary_front",
-        "hunyuan2mv_v04_calibrated_secondary",
-        "hunyuan2mv_v05_canonical_turntable",
-    }:
-        raise ValueError("candidate_id must name a fixed Hunyuan2mv proposal")
+def _direct_pass(value: str) -> str:
+    if value not in {"primary_composition_v01", "diagnostic_solidity_v01", "tail_cleanup_v01", "front_mantle_grounding_v02", "dorsal_cascade_v02", "support_hierarchy_v02", "tail_fan_v02", "surface_coherence_v02", "leading_mantle_artist_v03", "production_master_form_v01", "production_master_surface_v01"}:
+        raise ValueError("pass_id must name a declared Collector direct-mesh pass")
+    return value
+
+
+def _direct_session(value: str) -> str:
+    if value not in {"collector_v05_direct_mesh_v01", "collector_v05_direct_mesh_v02", "collector_v05_direct_mesh_v03", "collector_v05_production_master_v01"}:
+        raise ValueError("session_id must name a checked-in Collector direct-mesh session")
     return value
 
 

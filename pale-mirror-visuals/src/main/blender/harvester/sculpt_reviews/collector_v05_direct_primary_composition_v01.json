@@ -1,0 +1,51 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_mesh_review.v1",
+  "session_id": "collector_v05_direct_mesh_v01",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "primary_composition_v01",
+  "decision": "continue",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or automated acceptance",
+    "baseline_primary_overlay": {
+      "path": "build/blender-audits/raw_baseline-biomass_collector-collector_v05_direct_mesh_v01/primary_model_overlay.png",
+      "sha256": "bd097fe0aad5e723663101df6ad83cad45468559557a0b121b49dcbbe4d881bc",
+      "pixels": {
+        "model": 297800,
+        "overlap": 197527,
+        "trace_only": 90981,
+        "model_only": 100273
+      }
+    },
+    "after_primary_overlay": {
+      "path": "build/blender-audits/primary_composition_v01-biomass_collector-collector_v05_direct_mesh_v01/primary_model_overlay.png",
+      "sha256": "730e7516a650287d8955c207e696271cccd3418f7fa6ee98f681a4332beed199",
+      "pixels": {
+        "model": 300097,
+        "overlap": 198891,
+        "trace_only": 89617,
+        "model_only": 101206
+      }
+    },
+    "diagnostic_views": [
+      "primary",
+      "opposite",
+      "front",
+      "side",
+      "elevated_rear"
+    ]
+  },
+  "independent_review": {
+    "scope": "whether the protected whole-body primary-composition pass remains a viable direct-v05 source for the next isolated repair; this is not a likeness acceptance score",
+    "findings": [
+      "The dorsal row still reads as an overly even common roof; the reference retains six large overlapping rounded masses, with a heavier leading rhythm.",
+      "The leading mantle is still an open C-shaped loop instead of a broad continuous grounded mass connected to the first dorsal chamber.",
+      "The support roots are too even and separate; they must emerge more gradually from a deep shared low belly."
+    ],
+    "required_next_change": "In diagnostic_solidity_v01, preserve the protected whole-body source but make the six dorsal volumes physically legible with broad individual domes and shallow saddles. Do not touch the mantle, belly or supports until that isolated diagnostic repair has been audited."
+  },
+  "runtime_export_forbidden": true
+}

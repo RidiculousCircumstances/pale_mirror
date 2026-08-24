@@ -9,6 +9,12 @@ known_hosts_file = "~/.config/pale-mirror/windows-blender-known_hosts"
 local_port = 19876
 remote_port = 9876
 
+# TightVNC binds only to Windows loopback. This local port is a separate,
+# SSH-forwarded artist-desktop channel and must not be exposed on the LAN.
+[vnc]
+local_port = 25900
+remote_port = 5900
+
 [windows]
 # An isolated workspace owned by the private Pale Mirror authoring setup.
 workspace = "E:\\PaleMirror\\workspace\\pale-mirror"

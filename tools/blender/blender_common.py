@@ -23,6 +23,8 @@ class BlenderSettings:
     known_hosts_file: Path
     local_port: int
     remote_port: int
+    vnc_local_port: int
+    vnc_remote_port: int
     windows_workspace: str
 
     @property
@@ -46,6 +48,7 @@ def load_settings(path: Path | None = None) -> BlenderSettings:
     with path.open("rb") as source:
         value = tomllib.load(source)
     connection = value.get("connection", {})
+    vnc = value.get("vnc", {})
     windows = value.get("windows", {})
     host = str(connection.get("host", "")).strip()
     user = str(connection.get("user", "")).strip()
@@ -69,6 +72,8 @@ def load_settings(path: Path | None = None) -> BlenderSettings:
         known_hosts_file=known_hosts,
         local_port=_port(connection.get("local_port", 19876), "local_port"),
         remote_port=_port(connection.get("remote_port", 9876), "remote_port"),
+        vnc_local_port=_port(vnc.get("local_port", 25900), "vnc.local_port"),
+        vnc_remote_port=_port(vnc.get("remote_port", 5900), "vnc.remote_port"),
         windows_workspace=workspace,
     )
 
@@ -90,14 +95,39 @@ def ssh_arguments(settings: BlenderSettings) -> list[str]:
 
 def ensure_loopback_tunnel(settings: BlenderSettings) -> None:
     """Open one authenticated local forward if no process already owns it."""
-    if _port_open(settings.local_port):
+    _ensure_loopback_forward(
+        settings,
+        local_port=settings.local_port,
+        remote_port=settings.remote_port,
+        purpose="Blender MCP",
+    )
+
+
+def ensure_vnc_tunnel(settings: BlenderSettings) -> None:
+    """Open one authenticated loopback-only VNC forward for the artist desktop."""
+    _ensure_loopback_forward(
+        settings,
+        local_port=settings.vnc_local_port,
+        remote_port=settings.vnc_remote_port,
+        purpose="Blender VNC",
+    )
+
+
+def _ensure_loopback_forward(
+    settings: BlenderSettings,
+    *,
+    local_port: int,
+    remote_port: int,
+    purpose: str,
+) -> None:
+    if _port_open(local_port):
         return
     process = subprocess.Popen(
         ssh_arguments(settings)
         + [
             "-o", "ExitOnForwardFailure=yes",
             "-N",
-            "-L", f"127.0.0.1:{settings.local_port}:127.0.0.1:{settings.remote_port}",
+            "-L", f"127.0.0.1:{local_port}:127.0.0.1:{remote_port}",
             settings.target,
         ],
         stdin=subprocess.DEVNULL,
@@ -108,14 +138,14 @@ def ensure_loopback_tunnel(settings: BlenderSettings) -> None:
     )
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
-        if _port_open(settings.local_port):
+        if _port_open(local_port):
             return
         if process.poll() is not None:
             detail = process.stderr.read().strip() if process.stderr else ""
-            raise BlenderConfigurationError(f"Could not start Blender SSH tunnel: {detail or process.returncode}")
+            raise BlenderConfigurationError(f"Could not start {purpose} SSH tunnel: {detail or process.returncode}")
         time.sleep(0.1)
     process.terminate()
-    raise BlenderConfigurationError("Blender SSH tunnel did not bind its local loopback port in time.")
+    raise BlenderConfigurationError(f"{purpose} SSH tunnel did not bind its local loopback port in time.")
 
 
 def _port(value: object, label: str) -> int:

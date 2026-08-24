@@ -33,7 +33,7 @@ def main(payload: dict[str, object]) -> dict[str, object]:
         raise ValueError("Audit label must contain only lowercase letters, digits, underscores or dashes.")
     ensure_directories()
     if not SOURCE_PATH.is_file():
-        raise FileNotFoundError("Collector source does not exist; run create_collector_base first.")
+        raise FileNotFoundError("Collector canonical source does not exist; render the active direct-v05 audit instead.")
     if bpy.data.filepath != str(SOURCE_PATH):
         bpy.ops.wm.open_mainfile(filepath=str(SOURCE_PATH))
     cameras = ensure_audit_stage()

@@ -75,20 +75,21 @@ in the primary image must never be achieved with a flat cut-out.
 
 ### Non-negotiable primary trace workflow
 
-Every new or replacement canonical mesh begins from a versioned primary-image
-trace, not from an adjustable collection of generic primitives. The authoring
-scene must contain the pinned base image as a locked primary-camera plane, and
-the trace must retain literal source-pixel coordinates for the outer contour
-and the major visible anatomical boundaries. Before any volume, texture or
-diagnostic polish is accepted, the corresponding untextured mesh is rendered
-over that same primary image and its projected contour must agree with the
-trace.
+Every new or replacement canonical mesh has a versioned primary-image trace.
+The authoring scene retains the pinned base image as a locked primary-camera
+plane and the trace retains literal source-pixel coordinates for the outer
+contour and major visible anatomical boundaries.  The trace is a construction
+constraint and an acceptance oracle, **not** a requirement to manufacture the
+initial topology from profile rails, cages or primitives. Before volume,
+texture or diagnostic polish is accepted, the untextured mesh is rendered over
+that same image and its projected contour must agree with the trace.
 
-Spheres, tubes, procedural noise, previous failed candidates and generated
-turntables are forbidden as a primary-shape starting point. They may only add
-unseen-side depth or a local secondary form after the traced primary silhouette
-has passed review. The generated turntable is never a source of primary
-proportions, contour edits, scoring or acceptance.
+For Collector, the hash-pinned raw v05 mesh is the sole allowed editable
+topology starting point. It is retained hidden and immutable beside a working
+copy. The copy may receive direct vertex edits and local retopology of its
+existing surface, but may not be replaced with generated capsules, tubes,
+trace rails, disconnected body objects or global 2D fitting. The generated
+mesh never changes the trace, score or acceptance authority.
 
 Each creature's `reference_subject_bounds_normalized`, alignment anchor and
 `contour_landmarks` are pinned in `review_briefs.json`. After every capture,
@@ -217,7 +218,7 @@ claim that a static automated score can replace the independent visual review.
 
 ## Rejected modelling shortcuts
 
-`tools/rebuild_harvester_srp_style.mjs` sampled an earlier source surface into
+`tools/historical/harvester_generators/rebuild_harvester_srp_style.mjs` sampled an earlier source surface into
 roughly one thousand equal, overlapping cuboids per creature. That procedure
 produces a noisy voxel lattice and is retained solely as a reproducible failed
 experiment. Do not use it for a final asset. The approved replacement is the

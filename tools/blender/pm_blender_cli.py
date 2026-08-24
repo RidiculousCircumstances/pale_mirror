@@ -12,34 +12,32 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "operation",
-        choices=("create_collector_base", "build_collector_volume", "build_collector_trace_cage", "build_collector_semantic_cage", "create_collector_sculpt_branch", "capture_collector_sculpt_baseline", "apply_collector_sculpt_pass", "repair_collector_sculpt_branch_metadata", "render_collector_sculpt_audit", "validate_collector_sculpt_branch", "open_asset", "inspect_asset", "save_asset", "render_audit", "validate_asset", "export_pmmesh", "import_sf3d_candidate", "render_sf3d_candidate_audit", "import_hunyuan2mv_candidate", "fit_hunyuan2mv_v03_trace_proxy", "build_hunyuan2mv_v03_trace_hull_proxy", "smooth_hunyuan2mv_v03_trace_hull_proxy", "render_hunyuan2mv_candidate_audit"),
+        choices=("create_collector_direct_session", "continue_collector_direct_session", "capture_collector_direct_baseline", "begin_collector_direct_mesh_pass", "inspect_collector_artist_mantle_topology", "prepare_collector_artist_leading_mantle", "prepare_collector_master_artist_session", "inspect_collector_master_sculpt_assets", "complete_collector_direct_mesh_pass", "record_collector_direct_review", "rollback_collector_direct_mesh_pass", "render_collector_direct_audit", "validate_collector_direct_session", "open_asset", "inspect_asset", "save_asset", "render_audit", "validate_asset", "export_pmmesh"),
     )
     parser.add_argument("--asset", default="biomass_collector")
     parser.add_argument("--label", default="manual")
     parser.add_argument(
-        "--sculpt-pass",
-        choices=("front_mantle_v03", "dorsal_rhythm_v03", "supports_v03"),
-        default="front_mantle_v03",
+        "--direct-pass",
+        choices=("primary_composition_v01", "diagnostic_solidity_v01", "tail_cleanup_v01", "front_mantle_grounding_v02", "dorsal_cascade_v02", "support_hierarchy_v02", "tail_fan_v02", "surface_coherence_v02", "leading_mantle_artist_v03", "production_master_form_v01", "production_master_surface_v01"),
+        default="primary_composition_v01",
     )
-    parser.add_argument(
-        "--candidate",
-        choices=(
-            "hunyuan2mv_v01",
-            "hunyuan2mv_v02_primary_anchored",
-            "hunyuan2mv_v03_primary_front",
-            "hunyuan2mv_v04_calibrated_secondary",
-            "hunyuan2mv_v05_canonical_turntable",
-        ),
-        help="Fixed non-canonical Hunyuan2mv proposal to review.",
-    )
+    parser.add_argument("--direct-session", choices=("collector_v05_direct_mesh_v01", "collector_v05_direct_mesh_v02", "collector_v05_direct_mesh_v03", "collector_v05_production_master_v01"), default="collector_v05_direct_mesh_v01")
+    parser.add_argument("--from-direct-session", choices=("collector_v05_direct_mesh_v01", "collector_v05_direct_mesh_v02"), default="collector_v05_direct_mesh_v01")
+    parser.add_argument("--to-direct-session", choices=("collector_v05_direct_mesh_v02", "collector_v05_direct_mesh_v03", "collector_v05_production_master_v01"), default="collector_v05_direct_mesh_v02")
+    parser.add_argument("--review-decision", choices=("continue", "rollback"))
     arguments = parser.parse_args()
     payload: dict[str, str] = {"asset_id": canonical_asset(arguments.asset)}
-    if arguments.operation in {"render_audit", "render_sf3d_candidate_audit", "render_hunyuan2mv_candidate_audit", "render_collector_sculpt_audit"}:
+    if arguments.operation == "continue_collector_direct_session":
+        payload["from_session"] = arguments.from_direct_session
+        payload["to_session"] = arguments.to_direct_session
+    if arguments.operation in {"capture_collector_direct_baseline", "begin_collector_direct_mesh_pass", "inspect_collector_artist_mantle_topology", "prepare_collector_artist_leading_mantle", "prepare_collector_master_artist_session", "inspect_collector_master_sculpt_assets", "complete_collector_direct_mesh_pass", "record_collector_direct_review", "rollback_collector_direct_mesh_pass", "render_collector_direct_audit", "validate_collector_direct_session"}:
+        payload["session_id"] = arguments.direct_session
+    if arguments.operation in {"render_audit", "render_collector_direct_audit"}:
         payload["label"] = arguments.label
-    if arguments.operation == "apply_collector_sculpt_pass":
-        payload["pass_id"] = arguments.sculpt_pass
-    if arguments.operation in {"import_hunyuan2mv_candidate", "fit_hunyuan2mv_v03_trace_proxy", "build_hunyuan2mv_v03_trace_hull_proxy", "smooth_hunyuan2mv_v03_trace_hull_proxy", "render_hunyuan2mv_candidate_audit"}:
-        payload["candidate_id"] = arguments.candidate or "hunyuan2mv_v03_primary_front"
+    if arguments.operation in {"begin_collector_direct_mesh_pass", "complete_collector_direct_mesh_pass", "record_collector_direct_review", "rollback_collector_direct_mesh_pass"}:
+        payload["pass_id"] = arguments.direct_pass
+    if arguments.operation == "record_collector_direct_review":
+        payload["decision"] = arguments.review_decision or "rollback"
     print(json.dumps(operation(arguments.operation, payload), indent=2, sort_keys=True))
 
 

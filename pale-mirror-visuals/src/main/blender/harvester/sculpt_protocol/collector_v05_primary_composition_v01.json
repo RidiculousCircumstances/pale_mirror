@@ -1,0 +1,51 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_primary_composition.v1",
+  "asset_id": "biomass_collector",
+  "session_id": "collector_v05_direct_mesh_v01",
+  "pass_id": "primary_composition_v01",
+  "authority": "The pinned literal primary reference defines these visible landmarks. The operation only deforms contiguous regions of the existing v05 working surface; it never creates anatomy, primitives, rails, cages or disconnected meshes.",
+  "reference": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa"
+  },
+  "targets": {
+    "dorsal_sacs": [
+      {"id": "leading_shell", "center_px": [303, 218], "radius_px": [102, 98], "front_push": 0.62, "crest_lift": 0.18},
+      {"id": "second_shell", "center_px": [458, 221], "radius_px": [106, 102], "front_push": 0.70, "crest_lift": 0.22},
+      {"id": "third_shell", "center_px": [621, 257], "radius_px": [98, 90], "front_push": 0.60, "crest_lift": 0.16},
+      {"id": "fourth_shell", "center_px": [776, 303], "radius_px": [88, 78], "front_push": 0.51, "crest_lift": 0.12},
+      {"id": "fifth_shell", "center_px": [900, 346], "radius_px": [76, 66], "front_push": 0.42, "crest_lift": 0.08},
+      {"id": "sixth_shell", "center_px": [1000, 382], "radius_px": [62, 54], "front_push": 0.31, "crest_lift": 0.04}
+    ],
+    "front_drape": {
+      "outer_edge_px": [[286, 164], [224, 206], [178, 270], [130, 346], [82, 430], [24, 516]],
+      "folds_px": [
+        [[288, 214], [250, 285], [217, 365], [188, 446], [167, 520]],
+        [[339, 251], [302, 326], [273, 405], [251, 476], [228, 530]],
+        [[379, 302], [353, 372], [329, 442], [310, 507]]
+      ],
+      "outer_push": 0.58,
+      "fold_push": 0.44,
+      "ground_pull": 0.22
+    },
+    "underbody": {
+      "center_px": [674, 416],
+      "radius_px": [360, 80],
+      "drop": 0.42
+    },
+    "support_roots": [
+      {"center_px": [382, 472], "radius_px": [42, 86], "thicken": 0.16},
+      {"center_px": [515, 482], "radius_px": [42, 82], "thicken": 0.17},
+      {"center_px": [648, 486], "radius_px": [40, 80], "thicken": 0.18},
+      {"center_px": [797, 491], "radius_px": [40, 78], "thicken": 0.17},
+      {"center_px": [934, 496], "radius_px": [38, 74], "thicken": 0.15},
+      {"center_px": [1058, 500], "radius_px": [34, 68], "thicken": 0.12}
+    ]
+  },
+  "review_focus": [
+    "The left/front drape reaches the ground as a broad heavy sheet rather than reading as a single tubular leg.",
+    "Six descending dorsal sacs read as a deliberate hierarchy in the primary view while remaining one coherent mesh in diagnostics.",
+    "The belly stays low and the roots feel planted without filling the intended leg gaps.",
+    "The rear tail remains unchanged during this pass and cannot compete with the primary shell masses."
+  ]
+}

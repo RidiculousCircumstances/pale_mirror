@@ -1,0 +1,93 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_mesh_session.v1",
+  "session_id": "collector_v05_production_master_v01",
+  "asset_id": "biomass_collector",
+  "status": "planned_unaccepted",
+  "parent_session": {
+    "id": "collector_v05_direct_mesh_v02",
+    "reviewed_working_mesh_sha256": "5dd9a79fb21685f95467bc307a6381dbf5648f3a01c9cf696106220af12ff38b",
+    "reason": "The v03 leading-mantle preparation was never artist-edited. Production therefore begins from the exact reviewed v02 recovery rather than pretending an unrun local pass is a master asset."
+  },
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "stage": "depth-topology-prior-unaccepted",
+    "file": "candidate.glb",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963",
+    "role": "hidden immutable raw topology and depth prior; never likeness authority, canonical source or runtime input"
+  },
+  "primary_trace": {
+    "id": "biomass_collector_primary_v03",
+    "sha256": "e3150d88594a8c712c22dfe60395c43f2da038c6dea7bc53601bff8c69692cf7",
+    "role": "sole primary-view likeness, silhouette and landmark authority"
+  },
+  "source": {
+    "blend": "assets/harvester/biomass_collector_v05_production_master_v01.blend",
+    "audit_root": "direct_mesh_sessions/collector_v05_production_master_v01/audits",
+    "raw_collection": "PM_COLLECTOR_DIRECT_RAW_V05",
+    "working_collection": "PM_COLLECTOR_LOD0",
+    "backup_collection": "PM_COLLECTOR_DIRECT_BACKUPS"
+  },
+  "baseline_receipt": "production_master_baseline_v01",
+  "production_brief": {
+    "intent": "Produce one coherent organic Collector, not a chain of isolated local repairs. The locked primary trace decides silhouette, six dorsal masses, ground contact and negative space; diagnostic views prevent flat cards, torn ribbons and accidental hidden geometry.",
+    "source_order": [
+      "primary gesture and low broad silhouette",
+      "one broad grounded leading mantle",
+      "six descending overlapping dorsal shell masses",
+      "long low underbody with thick articulated supports and real contacts",
+      "subordinate attached rear fibre fan",
+      "continuous organic surface cleanup"
+    ],
+    "forbidden": [
+      "primitive or capsule replacement anatomy",
+      "new disconnected body meshes",
+      "trace-card or global two-dimensional fitting",
+      "texture concealment of incorrect dominant masses",
+      "runtime export, rigging or infection registration before visual acceptance"
+    ]
+  },
+  "topology_policy": {
+    "starting_mesh": "the exact v02 recovered working mesh, hidden immutable v05 raw mesh and all historical evidence",
+    "allowed": [
+      "direct sculpt and vertex deformation on the existing working surface",
+      "local connected retopology, split, bridge, merge and delete on that same surface",
+      "protected whole-mesh backups and deterministic evidence capture",
+      "semantic vertex groups that guide an artist but never perform a field deformation"
+    ],
+    "forbidden": [
+      "primitive construction",
+      "replacement body meshes",
+      "disconnected anatomy",
+      "scripted broad vertex masks or pixel-curve field deformation",
+      "global two-dimensional silhouette fitting",
+      "runtime export",
+      "rigging",
+      "infection registration"
+    ]
+  },
+  "passes": [
+    {
+      "id": "production_master_form_v01",
+      "kind": "artist_direct_sculpt_and_connected_local_retopology",
+      "region": "the existing tagged working surface, addressed in the declared production-brief order during one protected coherent form session",
+      "primary_goal": "replace the C-loop mantle, fused dorsal ridge, blocky supports and hanging rear plate with one low broad Collector composition that follows the locked source-pixel trace",
+      "diagnostic_goal": "retain attached visible thickness, readable support separation, no cards, ribbons, holes, new components or hidden self-intersections",
+      "authoring_requirement": "A visible Blender artist uses the bounded Collector Master session only. Intermediate sculpture rounds are saved and captured, but no external acceptance decision occurs until the whole form pass is complete.",
+      "requires_review": "production_master_baseline_v01"
+    },
+    {
+      "id": "production_master_surface_v01",
+      "kind": "artist_surface_cleanup",
+      "region": "the accepted connected production-master form surface",
+      "primary_goal": "remove generator dents, accidental seams and shredded overlaps without changing the accepted large silhouette or losing material hierarchy",
+      "diagnostic_goal": "retain coherent organic continuity through the five neutral and four animation frames",
+      "authoring_requirement": "This pass opens only after independent review records a continue decision for production_master_form_v01.",
+      "requires_review": "production_master_form_v01"
+    }
+  ],
+  "review_gate": {
+    "before_each_pass": "the declared predecessor must have its deterministic audit receipt and recorded independent continue decision; the baseline is captured before the first mesh edit",
+    "after_each_pass": "capture primary, silhouette, trace, opposite, front, side and elevated-rear frames. The form pass also compares raw v05 and the master candidate through the blind pairwise protocol before raw identity or overlays are revealed.",
+    "acceptance": "literal primary overlay, normal visual review, animation/material review, blind comparison and the 85/100 contour contract are all mandatory. Scalar metrics diagnose only and cannot accept or rank the mesh."
+  }
+}

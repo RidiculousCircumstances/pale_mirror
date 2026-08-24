@@ -1,0 +1,45 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_mesh_review.v1",
+  "session_id": "collector_v05_direct_mesh_v02",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "front_mantle_grounding_v02",
+  "decision": "rollback",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or automated acceptance",
+    "before_primary_overlay": {
+      "path": "build/blender-audits/continuation_baseline_v02-biomass_collector-collector_v05_direct_mesh_v02/primary_model_overlay.png",
+      "sha256": "8b679c85d697e7a7d043c3f84ab37a83b87753c00902f3aa0766ccf4ac861bdc"
+    },
+    "after_primary_overlay": {
+      "path": "build/blender-audits/front_mantle_grounding_v02-biomass_collector-collector_v05_direct_mesh_v02/primary_model_overlay.png",
+      "sha256": "ac5a32c60cd76abd40af3b4ca7a93496b032c24660e78d39ca1a660c48cfcec3",
+      "pixels": {
+        "model": 305532,
+        "overlap": 199535,
+        "trace_only": 88973,
+        "model_only": 105997
+      }
+    },
+    "diagnostic_views": [
+      "primary",
+      "opposite",
+      "front",
+      "side",
+      "elevated_rear"
+    ]
+  },
+  "independent_review": {
+    "scope": "whether the first v02 mantle attempt preserves a single coherent image-faithful front mass. This is not a likeness acceptance score.",
+    "findings": [
+      "The front mantle reaches ground as several narrow separated ribbons instead of one broad, heavy continuous drape.",
+      "The front diagnostic view reveals torn, compressed, looping forms at the mantle base that break the intended volume and silhouette.",
+      "The upper body remains a single smooth ridge, with insufficiently distinct descending dorsal chambers."
+    ],
+    "required_next_change": "Restore the exact pre-pass backup. In a separately declared replacement pass, deform only the existing external front-mantle contour into one wide diagonal attached shell from the first dorsal mass to ground; do not create inner ribbons, new tears or new geometry."
+  },
+  "runtime_export_forbidden": true
+}

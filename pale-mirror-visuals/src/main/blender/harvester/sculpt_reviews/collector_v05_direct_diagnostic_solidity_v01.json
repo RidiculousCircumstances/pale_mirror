@@ -1,0 +1,45 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_mesh_review.v1",
+  "session_id": "collector_v05_direct_mesh_v01",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "diagnostic_solidity_v01",
+  "decision": "continue",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or automated acceptance",
+    "before_primary_overlay": {
+      "path": "build/blender-audits/primary_composition_v01-biomass_collector-collector_v05_direct_mesh_v01/primary_model_overlay.png",
+      "sha256": "730e7516a650287d8955c207e696271cccd3418f7fa6ee98f681a4332beed199"
+    },
+    "after_primary_overlay": {
+      "path": "build/blender-audits/diagnostic_solidity_v01-biomass_collector-collector_v05_direct_mesh_v01/primary_model_overlay.png",
+      "sha256": "d3cfff4a4c77f5cdd7a57b2c675317c66009ad063b80830c6b215a174fe9f26c",
+      "pixels": {
+        "model": 299657,
+        "overlap": 198621,
+        "trace_only": 89887,
+        "model_only": 101036
+      }
+    },
+    "diagnostic_views": [
+      "primary",
+      "opposite",
+      "front",
+      "side",
+      "elevated_rear"
+    ]
+  },
+  "independent_review": {
+    "scope": "whether the dorsal diagnostic-solidification pass preserved a viable coherent body for the final cleanup. This is not a likeness acceptance score.",
+    "findings": [
+      "The large dorsal volumes and six heavy supports still read as one stable body across the diagnostic views.",
+      "The long segmented back and narrowing ends remain anatomically compatible with the reference's broad organisation.",
+      "The left rear dorsal segment has visibly bumpy overlapping surface fragments and needs a later smoothing/unification repair."
+    ],
+    "required_next_change": "In tail_cleanup_v01, remove only disconnected generated debris outside the literal primary trace. Do not reshape accepted large dorsal, mantle, belly or support volumes in that final scoped cleanup."
+  },
+  "runtime_export_forbidden": true
+}

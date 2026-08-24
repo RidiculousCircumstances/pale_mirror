@@ -1,0 +1,75 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_mesh_session.v1",
+  "session_id": "collector_v05_direct_mesh_v01",
+  "asset_id": "biomass_collector",
+  "status": "active_unaccepted",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "stage": "volume-proposal-unaccepted",
+    "file": "candidate.glb",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963",
+    "role": "immutable topology and volume starting point; never likeness authority or direct runtime input"
+  },
+  "primary_trace": {
+    "id": "biomass_collector_primary_v03",
+    "sha256": "e3150d88594a8c712c22dfe60395c43f2da038c6dea7bc53601bff8c69692cf7",
+    "role": "sole primary-view likeness, silhouette and landmark authority"
+  },
+  "source": {
+    "blend": "assets/harvester/biomass_collector_v05_direct_mesh_v01.blend",
+    "audit_root": "direct_mesh_sessions/collector_v05_direct_mesh_v01/audits",
+    "raw_collection": "PM_COLLECTOR_DIRECT_RAW_V05",
+    "working_collection": "PM_COLLECTOR_LOD0",
+    "backup_collection": "PM_COLLECTOR_DIRECT_BACKUPS"
+  },
+  "topology_policy": {
+    "starting_mesh": "retain the dominant raw v05 component and every material primary-trace-intersecting component in one editable working copy",
+    "allowed": [
+      "direct vertex deformation",
+      "local face deletion, creation and merge on the existing working surface",
+      "local retopology of an existing semantic region",
+      "local smoothing and material reassignment",
+      "protected full-mesh backup snapshots"
+    ],
+    "forbidden": [
+      "primitive construction",
+      "trace or semantic cage construction",
+      "new disconnected body meshes",
+      "global two-dimensional silhouette fitting",
+      "runtime export",
+      "rigging",
+      "infection registration"
+    ]
+  },
+  "passes": [
+    {
+      "id": "primary_composition_v01",
+      "kind": "direct_mesh_retopology",
+      "region": "existing whole-body surface",
+      "primary_goal": "restore the broad grounded front drape, low underbody, six descending dorsal sac arcs and thick support contacts from the existing v05 topology",
+      "diagnostic_goal": "preserve one cohesive organic mass without a planar camera card or disconnected replacement volumes",
+      "requires_review": "raw_baseline"
+    },
+    {
+      "id": "diagnostic_solidity_v01",
+      "kind": "direct_mesh_retopology",
+      "region": "existing hidden-side and joint surface",
+      "primary_goal": "preserve the accepted primary composition while repairing visible thinness, collisions and detached forms",
+      "diagnostic_goal": "give all major masses coherent thickness and grounded contacts",
+      "requires_review": "primary_composition_v01"
+    },
+    {
+      "id": "tail_cleanup_v01",
+      "kind": "direct_mesh_retopology",
+      "region": "existing rear tail and filament surface",
+      "primary_goal": "keep the rear tail subordinate to shell masses and remove generated debris that competes with the primary silhouette",
+      "diagnostic_goal": "retain intentional trailing forms without floating fragments",
+      "requires_review": "diagnostic_solidity_v01"
+    }
+  ],
+  "review_gate": {
+    "before_each_pass": "the required predecessor must have an audit receipt and a recorded continue decision",
+    "after_each_pass": "capture primary, silhouette, trace, opposite, front, side and elevated-rear frames; an independent reviewer records continue or rollback before another pass",
+    "acceptance": "contour overlay and normal visual review are mandatory; scalar metrics diagnose only and cannot accept or rank the mesh"
+  }
+}

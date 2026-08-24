@@ -26,7 +26,7 @@ import bpy
 def main(payload: dict[str, object]) -> dict[str, object]:
     asset_id(payload)
     if not SOURCE_PATH.is_file():
-        raise FileNotFoundError("Collector source does not exist; run create_collector_base first.")
+        raise FileNotFoundError("Collector canonical source does not exist; an unaccepted direct-v05 session cannot export.")
     if bpy.data.filepath != str(SOURCE_PATH):
         bpy.ops.wm.open_mainfile(filepath=str(SOURCE_PATH))
     trace, trace_hash = load_primary_trace()
@@ -60,32 +60,8 @@ def main(payload: dict[str, object]) -> dict[str, object]:
     if bpy.data.objects.get(REFERENCE_PLANE_NAME) is None:
         problems.append("locked primary reference plane is missing")
     phase = bpy.context.scene.get("pm_authoring_phase")
-    volume = [object_ for object_ in lod0 if object_.get("pm_volume_behind_primary_trace")]
-    if isinstance(phase, str) and (phase.startswith("volume_iteration_v") or phase.startswith("trace_cage_v") or phase.startswith("semantic_cage_v")):
-        if not volume:
-            problems.append("volume iteration has no tagged hidden-side geometry")
-        for object_ in volume:
-            world_min_y = min((object_.matrix_world @ vertex.co).y for vertex in object_.data.vertices)
-            if world_min_y < 0.04:
-                problems.append(f"volume escapes in front of the primary trace: {object_.name} y={world_min_y:.3f}")
-    trace_base = next((object_ for object_ in lod0 if object_.get("pm_trace_role") == "literal_primary_silhouette"), None)
-    if trace_base is None:
-        problems.append("literal primary trace mesh is missing from LOD0")
-    if isinstance(phase, str) and (phase.startswith("trace_cage_v") or phase.startswith("semantic_cage_v")):
-        cage = [object_ for object_ in lod0 if object_.get("pm_trace_cage_geometry")]
-        if not cage:
-            problems.append("trace cage iteration has no tagged cage geometry")
-        for object_ in lod0:
-            if object_.get("pm_trace_role") in {"source_pixel_primary_relief_surface", "source_pixel_silhouette_volume"}:
-                problems.append(f"trace cage retains a forbidden source-pixel render substrate: {object_.name}")
-        if not trace_base.hide_render or not trace_base.get("pm_export_exclude"):
-            problems.append("trace cage must keep the literal primary trace as a hidden export-excluded guide")
-    if isinstance(phase, str) and phase.startswith("semantic_cage_v"):
-        semantic = [object_ for object_ in lod0 if object_.get("pm_semantic_cage_geometry")]
-        if len(semantic) != 1:
-            problems.append(f"semantic cage must contain exactly one editable mesh, found {len(semantic)}")
-        elif not semantic[0].get("pm_primitive_free"):
-            problems.append("semantic cage must explicitly declare primitive-free construction")
+    if phase != "accepted":
+        problems.append("canonical export requires an explicitly accepted visual source; use validate_collector_direct_session while v05 remains under review")
     if problems:
         raise ValueError("; ".join(problems))
     return {
@@ -96,23 +72,6 @@ def main(payload: dict[str, object]) -> dict[str, object]:
         "rig": RIG_NAME,
         "primary_trace": {"id": trace["trace_id"], "sha256": trace_hash},
         "authoring_phase": phase,
-        "volume": {
-            "objects": len(volume),
-            "triangles": triangle_count(volume),
-            "minimum_world_y": min(((object_.matrix_world @ vertex.co).y for object_ in volume for vertex in object_.data.vertices), default=None),
-        },
-        "trace_cage": {
-            "objects": len([object_ for object_ in lod0 if object_.get("pm_trace_cage_geometry")]),
-            "rendered_source_pixel_substrates": [
-                object_.name
-                for object_ in lod0
-                if object_.get("pm_trace_role") in {"source_pixel_primary_relief_surface", "source_pixel_silhouette_volume"}
-            ],
-        },
-        "semantic_cage": {
-            "objects": len([object_ for object_ in lod0 if object_.get("pm_semantic_cage_geometry")]),
-            "primitive_free": all(object_.get("pm_primitive_free") for object_ in lod0 if object_.get("pm_semantic_cage_geometry")),
-        },
         "export_ready": bpy.context.scene.get("pm_authoring_phase") == "accepted",
         "trace_stage": {
             "reference_hide_render": bpy.data.objects[REFERENCE_PLANE_NAME].hide_render,

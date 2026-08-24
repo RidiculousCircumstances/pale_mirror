@@ -55,18 +55,20 @@ errors and acceptance without the contour overlay are hard failures.
 ### Primary-image trace gate
 
 Before authoring or replacing a Harvester's large masses, create a locked
-primary camera and an image plane using the pinned supplied reference. Trace
-the visible silhouette and major anatomical boundaries into a versioned
-primary-trace source in image-pixel coordinates; the resulting mesh must be
-shown over that same image before any diagnostic-view polish begins.
+primary camera and image plane using the pinned supplied reference. Trace the
+visible silhouette and major anatomical boundaries into a versioned
+source-pixel trace; show the working mesh over that same image before any
+diagnostic-view polish begins. The trace constrains construction and decides
+acceptance; it does not require creating the mesh from trace rails.
 
-Do **not** begin with generic spheres, tubes, primitives, noise, a generated
-turntable, or a previous failed candidate and iteratively move them until they
-seem similar. Those tools may supply unseen-side thickness or local secondary
-detail only after the literal primary trace has been proven. A generated
-turntable never changes the primary trace, silhouette score, or acceptance
-authority. If no trace-overlay evidence exists, stop rather than treating an
-audit render as evidence of likeness.
+Do **not** begin with generic spheres, tubes, primitives, noise or a previous
+failed primitive/cage candidate. Collector starts from the protected editable
+copy of hash-pinned raw v05 geometry and may change that existing surface by
+direct deformation and local retopology. It may not create a replacement body,
+disconnected anatomy or global two-dimensional fitting. A generated turntable
+never changes the primary trace, silhouette score or acceptance authority. If
+no trace-overlay evidence exists, stop rather than treating an audit render as
+evidence of likeness.
 
 ## Re-capture and report
 

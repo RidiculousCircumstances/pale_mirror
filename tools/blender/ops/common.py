@@ -44,11 +44,13 @@ def ensure_directories() -> None:
 
 
 def load_primary_trace() -> tuple[dict[str, Any], str]:
-    """Load and validate the immutable source-pixel construction input.
+    """Load and validate the immutable source-pixel constraint input.
 
     The trace is deliberately not inferred from any current Blender mesh. A
     changed trace is a new versioned art decision, so the scene stores its
-    content hash and later validation fails closed on drift.
+    content hash and later validation fails closed on drift. The trace guides
+    and audits direct mesh work; it does not authorize reconstructing anatomy
+    from profile rails or primitive masses.
     """
     if not TRACE_PATH.is_file():
         raise FileNotFoundError(f"Primary trace is missing: {TRACE_PATH}")

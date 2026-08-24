@@ -1,4 +1,4 @@
-"""Collect only verified canonical Blender outputs from the private Windows host."""
+"""Collect verified active Blender audits from the private Windows host."""
 
 from __future__ import annotations
 
@@ -15,56 +15,42 @@ from blender_common import BlenderSettings, load_settings, ssh_arguments
 ROOT = Path(__file__).resolve().parents[2]
 ASSET = "biomass_collector"
 _LABEL = re.compile(r"^[a-z0-9_-]{1,80}$")
-_CANDIDATES = (
-    "sf3d_v01",
-    "hunyuan2mv_v01",
-    "hunyuan2mv_v02_primary_anchored",
-    "hunyuan2mv_v03_primary_front",
-    "hunyuan2mv_v04_calibrated_secondary",
-    "hunyuan2mv_v05_canonical_turntable",
-)
-_SCULPT_SESSIONS = (
-    "collector_v05_sculpt_v01",
-    "collector_v05_sculpt_v02",
-    "collector_v05_sculpt_v03_composition",
+_DIRECT_SESSIONS = (
+    "collector_v05_direct_mesh_v01",
+    "collector_v05_direct_mesh_v02",
+    "collector_v05_direct_mesh_v03",
+    "collector_v05_production_master_v01",
 )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--label", required=True, help="The allowlisted Blender audit label to collect")
-    parser.add_argument("--candidate", choices=_CANDIDATES, help="Collect only the named non-canonical candidate audit")
-    parser.add_argument("--sculpt-session", choices=_SCULPT_SESSIONS, help="Collect one non-exportable direct-sculpt session audit")
-    parser.add_argument("--reference-root", type=Path, help="Pinned supplied-reference directory; required for a sculpt-session contour overlay")
+    parser.add_argument("--direct-session", choices=_DIRECT_SESSIONS, help="Collect one non-exportable direct-v05 session audit")
+    parser.add_argument("--reference-root", type=Path, help="Pinned supplied-reference directory; required for a direct-session contour overlay")
     parser.add_argument("--source", action="store_true", help="Collect the canonical .blend source after audit review")
     parser.add_argument("--include-export", action="store_true", help="Collect PMMesh only after the source is explicitly export-ready")
     arguments = parser.parse_args()
     if not _LABEL.fullmatch(arguments.label):
         raise SystemExit("label must use 1-80 lowercase letters, digits, underscores or dashes")
     settings = load_settings()
-    if arguments.candidate and arguments.sculpt_session:
-        raise SystemExit("candidate and sculpt-session are mutually exclusive")
-    if arguments.sculpt_session and arguments.reference_root is None:
-        raise SystemExit("sculpt-session collection requires --reference-root so the direct primary overlay cannot be skipped")
-    if arguments.sculpt_session:
-        audit_local = ROOT / "build" / "blender-audits" / f"{arguments.label}-{ASSET}-{arguments.sculpt_session}"
-        audit_remote = f"sculpt_sessions/{arguments.sculpt_session}/audits/{arguments.label}"
-    elif arguments.candidate:
-        audit_local = ROOT / "build" / "blender-audits" / f"{arguments.label}-{ASSET}-{arguments.candidate}"
-        audit_remote = f"candidates/{ASSET}/{arguments.candidate}/audits/{arguments.label}"
+    if arguments.direct_session and arguments.reference_root is None:
+        raise SystemExit("direct-session collection requires --reference-root so the direct primary overlay cannot be skipped")
+    if arguments.direct_session:
+        audit_local = ROOT / "build" / "blender-audits" / f"{arguments.label}-{ASSET}-{arguments.direct_session}"
+        audit_remote = f"direct_mesh_sessions/{arguments.direct_session}/audits/{arguments.label}"
     else:
         audit_local = ROOT / "build" / "blender-audits" / f"{arguments.label}-{ASSET}"
         audit_remote = f"audits/{ASSET}/{arguments.label}"
     outputs: dict[str, str] = {}
     views = ("primary", "opposite", "front", "side", "elevated_rear", "silhouette_primary")
-    if arguments.sculpt_session or not arguments.candidate or arguments.candidate.startswith("hunyuan2mv_"):
-        views += ("primary_trace",)
+    views += ("primary_trace",)
     for view in views:
         relative = f"{audit_remote}/{view}.png"
         target = audit_local / f"{view}.png"
         _copy_verified(settings, relative, target)
         outputs[view] = str(target.relative_to(ROOT))
-    if arguments.sculpt_session:
+    if arguments.direct_session:
         reference = arguments.reference_root / "01_harvester_biomass_collector.jpg"
         overlay = audit_local / "primary_model_overlay.png"
         metadata = audit_local / "primary_model_overlay.json"
@@ -87,8 +73,8 @@ def main() -> None:
         )
         outputs["primary_model_overlay"] = str(overlay.relative_to(ROOT))
         outputs["primary_model_overlay_metadata"] = str(metadata.relative_to(ROOT))
-    if (arguments.candidate or arguments.sculpt_session) and (arguments.include_export or arguments.source):
-        raise SystemExit("Non-canonical proposal and sculpt-session audits cannot collect canonical source or PMMesh export")
+    if arguments.direct_session and (arguments.include_export or arguments.source):
+        raise SystemExit("Non-canonical direct-session audits cannot collect canonical source or PMMesh export")
     if arguments.include_export:
         export_target = audit_local / f"{ASSET}.pmmesh.json"
         _copy_verified(settings, f"exports/{ASSET}.pmmesh.json", export_target)
@@ -100,8 +86,7 @@ def main() -> None:
     manifest = {
         "schema": "pale_mirror.blender_collect.v1",
         "asset_id": ASSET,
-        "candidate_id": arguments.candidate,
-        "sculpt_session": arguments.sculpt_session,
+        "direct_session": arguments.direct_session,
         "label": arguments.label,
         "files": {name: _sha256(ROOT / relative) for name, relative in sorted(outputs.items())},
     }
