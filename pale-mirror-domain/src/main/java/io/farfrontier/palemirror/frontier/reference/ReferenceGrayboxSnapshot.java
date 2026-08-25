@@ -7,6 +7,7 @@ import java.util.Objects;
 public record ReferenceGrayboxSnapshot(
         int day,
         String profileId,
+        String stateRevision,
         ReferenceGrayboxLayout.Bounds bounds,
         List<Cell> cells,
         List<Settlement> settlements,
@@ -26,6 +27,8 @@ public record ReferenceGrayboxSnapshot(
     public ReferenceGrayboxSnapshot {
         if (day < 0) throw new IllegalArgumentException("graybox day must not be negative");
         profileId = required(profileId, "profileId");
+        stateRevision = required(stateRevision, "stateRevision");
+        if (!stateRevision.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("graybox state revision must be SHA-256 hex");
         bounds = Objects.requireNonNull(bounds, "bounds");
         cells = copied(cells, "cells");
         settlements = copied(settlements, "settlements");

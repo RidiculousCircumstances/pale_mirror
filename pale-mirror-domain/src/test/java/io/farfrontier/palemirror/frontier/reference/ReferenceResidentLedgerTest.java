@@ -153,4 +153,19 @@ class ReferenceResidentLedgerTest {
         assertEquals(4L, ledger.revision());
         ledger.assertValid();
     }
+
+    @Test
+    void exactCasualtiesPreserveTheDemographicRandomStream() {
+        ReferenceResidentLedger ledger = new ReferenceResidentLedger(13, 2);
+        PythonRandom actual = new PythonRandom(91);
+        PythonRandom expected = new PythonRandom(91);
+
+        assertEquals(true, ledger.woundExact("resident:13:1"));
+        assertEquals(expected.nextUInt32(), actual.nextUInt32());
+        assertEquals(false, ledger.woundExact("resident:13:1"));
+        assertEquals(true, ledger.killExact("resident:13:1"));
+        assertEquals(expected.nextUInt32(), actual.nextUInt32());
+        assertEquals(false, ledger.killExact("resident:13:1"));
+        ledger.assertValid();
+    }
 }

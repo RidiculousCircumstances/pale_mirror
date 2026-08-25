@@ -29,10 +29,24 @@ public final class ReferenceGrayboxProjection {
         Map<Integer, ReferenceGrayboxLayout.Point> postPositions = postPositions(required);
         Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas = sectorAreas(required.v2());
 
-        return new ReferenceGrayboxSnapshot(required.day(), required.profile().id(), ReferenceGrayboxLayout.bounds(),
-                cells(view), settlements(required, settlementAreas), facilities(required, settlementAreas), sites(required), routes(required),
-                organs(required), bioforms(required), residents(required, settlementAreas, operationPositions, postPositions), posts(required),
-                links(required), activities(required, sectorAreas), sectors(required, sectorAreas), chrysalises(required, sectorAreas), required.events());
+        List<ReferenceGrayboxSnapshot.Cell> cells = cells(view);
+        List<ReferenceGrayboxSnapshot.Settlement> settlements = settlements(required, settlementAreas);
+        List<ReferenceGrayboxSnapshot.Facility> facilities = facilities(required, settlementAreas);
+        List<ReferenceGrayboxSnapshot.ResourceSite> sites = sites(required);
+        List<ReferenceGrayboxSnapshot.Route> routes = routes(required);
+        List<ReferenceGrayboxSnapshot.HiveOrgan> organs = organs(required);
+        List<ReferenceGrayboxSnapshot.Bioform> bioforms = bioforms(required);
+        List<ReferenceGrayboxSnapshot.Resident> residents = residents(required, settlementAreas, operationPositions, postPositions);
+        List<ReferenceGrayboxSnapshot.FieldPost> posts = posts(required);
+        List<ReferenceGrayboxSnapshot.FieldLink> links = links(required);
+        List<ReferenceGrayboxSnapshot.Activity> activities = activities(required, sectorAreas);
+        List<ReferenceGrayboxSnapshot.Sector> sectors = sectors(required, sectorAreas);
+        List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises = chrysalises(required, sectorAreas);
+        List<String> events = required.events();
+        String stateRevision = stateRevision(required.day(), required.profile().id(), cells, settlements, facilities, sites, routes, organs,
+                bioforms, residents, posts, links, activities, sectors, chrysalises, events);
+        return new ReferenceGrayboxSnapshot(required.day(), required.profile().id(), stateRevision, ReferenceGrayboxLayout.bounds(), cells,
+                settlements, facilities, sites, routes, organs, bioforms, residents, posts, links, activities, sectors, chrysalises, events);
     }
 
     private static List<ReferenceGrayboxSnapshot.Cell> cells(ReferenceWorldView view) {
@@ -307,6 +321,23 @@ public final class ReferenceGrayboxProjection {
 
     private static String residentColour(ReferenceResident resident) {
         return resident.condition() == ReferenceResidentCondition.WOUNDED ? "resident.wounded" : "resident." + resident.occupation();
+    }
+
+    /**
+     * A materialization revision is an exact hash of the immutable graybox
+     * input, not a second mutable version ledger.  It works for the discrete
+     * profile even while the source-profile persistence codec deliberately
+     * rejects that separate state shape.
+     */
+    private static String stateRevision(int day, String profileId, List<?>... components) {
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("schema", "frontier_graybox_projection_v1");
+        state.put("day", day);
+        state.put("profile", profileId);
+        for (int index = 0; index < components.length; index++) {
+            state.put("component_" + index, components[index].stream().map(Object::toString).toList());
+        }
+        return ReferenceV2PublicSnapshot.sha256(state);
     }
 
     private static ReferenceGrayboxLayout.Point centre(ReferenceGrayboxLayout.Rectangle rectangle) {

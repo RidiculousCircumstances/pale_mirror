@@ -17,6 +17,7 @@ class ReferenceGrayboxProjectionTest {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(world);
 
         assertEquals("graybox_1_40", snapshot.profileId());
+        assertTrue(snapshot.stateRevision().matches("[0-9a-f]{64}"));
         assertEquals(1_024, snapshot.bounds().width());
         assertEquals(704, snapshot.bounds().depth());
         assertEquals(2_816, snapshot.cells().size());
@@ -71,6 +72,16 @@ class ReferenceGrayboxProjectionTest {
         ReferenceWorld source = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
 
         assertThrows(IllegalStateException.class, () -> ReferenceGrayboxProjection.from(source));
+    }
+
+    @Test
+    void stateRevisionChangesWhenTheCanonicalSourceStateChanges() {
+        ReferenceWorld world = grayboxWorld();
+        String before = ReferenceGrayboxProjection.from(world).stateRevision();
+
+        world.tick();
+
+        assertTrue(!before.equals(ReferenceGrayboxProjection.from(world).stateRevision()));
     }
 
     private static ReferenceWorld grayboxWorld() {

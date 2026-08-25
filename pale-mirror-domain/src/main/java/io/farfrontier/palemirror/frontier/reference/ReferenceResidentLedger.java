@@ -161,6 +161,15 @@ public final class ReferenceResidentLedger {
         return selected;
     }
 
+    /** Exact materialized death; unlike an expected casualty it never advances the demographic stream. */
+    public boolean killExact(String residentId) {
+        if (residents.remove(Objects.requireNonNull(residentId, "residentId")) == null) {
+            return false;
+        }
+        revision++;
+        return true;
+    }
+
     public List<String> woundExpected(double expected, PythonRandom rng) {
         return woundExpectedFrom(activeIds(), expected, rng);
     }
@@ -176,6 +185,17 @@ public final class ReferenceResidentLedger {
             revision++;
         }
         return selected;
+    }
+
+    /** Exact materialized wound; only an active person may become wounded. */
+    public boolean woundExact(String residentId) {
+        ReferenceResident resident = residents.get(Objects.requireNonNull(residentId, "residentId"));
+        if (resident == null || resident.condition() != ReferenceResidentCondition.ACTIVE) {
+            return false;
+        }
+        resident.wound();
+        revision++;
+        return true;
     }
 
     public List<String> recoverExpected(double expected, PythonRandom rng) {
