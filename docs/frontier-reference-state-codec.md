@@ -110,3 +110,21 @@ fail closed. The public `snapshot()` comparator and complete `World.view()`
 comparator are green through day 30 (`b5a787e`). Consequently the temporary
 graybox runtime remains non-authoritative until the separate persistence and
 materialization replacement is complete.
+
+## Graybox persistence extension
+
+`frontier_graybox_state_v1` layers the complete source-shaped state beneath
+`reference_state` and adds `bioform_identities`: the exact surviving body IDs
+for every discrete swarm. Individual resident ledgers already serialize in
+the settlement fields, including employer, condition, custody, next ordinal
+and revision. The source-pinned graybox trace covers the first 30 days and an
+explicit exact-zombie-death exercise, so an ordinal gap cannot be silently
+renumbered or repopulated.
+
+`ReferenceGrayboxStateDocument` is the bounded versioned binary carrier for
+that immutable value graph. It is suitable for a NeoForge byte-array SavedData
+field but deliberately does not use Java object serialization. It rejects an
+unknown magic/schema, non-finite numeric values, duplicate keys, excessive
+size/depth and trailing bytes. Hydration remains a separate all-or-nothing
+domain step; until it is implemented and round-trip tested, the document must
+not activate the source-parity runtime.

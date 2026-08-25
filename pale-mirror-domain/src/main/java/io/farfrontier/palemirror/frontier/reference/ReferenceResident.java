@@ -28,6 +28,18 @@ public final class ReferenceResident {
         this.economicClass = Objects.requireNonNull(economicClass, "economicClass");
     }
 
+    static ReferenceResident restore(ReferenceResidentLedger.ResidentState state) {
+        ReferenceResidentLedger.ResidentState required = Objects.requireNonNull(state, "state");
+        ReferenceResident resident = new ReferenceResident(required.id(), required.homeSettlementId(),
+                required.occupation(), required.economicClass());
+        resident.employerCompanyId = required.employerCompanyId();
+        resident.location = required.location();
+        resident.locationRef = required.locationRef();
+        resident.condition = required.condition();
+        resident.deploymentRole = required.deploymentRole();
+        return resident;
+    }
+
     public String id() {
         return id;
     }

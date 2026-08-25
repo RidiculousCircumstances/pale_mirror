@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.reference;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /** Mutable source-port of Python's {@code Swarm}; discrete profiles use whole counts. */
 public final class ReferenceSwarm {
@@ -57,6 +58,30 @@ public final class ReferenceSwarm {
         LinkedHashMap<ReferenceBioformKind, List<String>> copy = new LinkedHashMap<>();
         bioformIds.forEach((kind, ids) -> copy.put(kind, List.copyOf(ids)));
         return Map.copyOf(copy);
+    }
+
+    /** Restore the explicit discrete-body ledger after the aggregate swarm fields have been hydrated. */
+    void restoreBioformIds(Map<ReferenceBioformKind, List<String>> restored) {
+        Objects.requireNonNull(restored, "restored");
+        if (!restored.keySet().equals(composition.keySet())) {
+            throw new IllegalArgumentException("swarm " + id + " bioform identity kinds do not match its composition");
+        }
+        LinkedHashMap<ReferenceBioformKind, List<String>> replacement = new LinkedHashMap<>();
+        for (ReferenceBioformKind kind : ReferenceBioformKind.values()) {
+            List<String> ids = restored.get(kind);
+            if (ids == null) continue;
+            if (composition.get(kind) != ids.size()) {
+                throw new IllegalArgumentException("swarm " + id + " has stale " + kind.id() + " bioform identity count");
+            }
+            String prefix = "bioform:" + id + ":" + kind.id() + ":";
+            if (ids.stream().distinct().count() != ids.size() || ids.stream().anyMatch(value -> !validBioformId(value, prefix))) {
+                throw new IllegalArgumentException("swarm " + id + " has malformed " + kind.id() + " bioform identity");
+            }
+            replacement.put(kind, new java.util.ArrayList<>(ids));
+        }
+        bioformIds.clear();
+        bioformIds.putAll(replacement);
+        assertDiscreteBioformInvariants();
     }
     public Integer sourceOrganId() { return sourceOrganId; }
     public Integer targetX() { return targetX; }

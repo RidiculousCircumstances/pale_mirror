@@ -55,8 +55,66 @@ public final class ReferenceResidentLedger {
         return revision;
     }
 
+    /** Immutable exact roster payload for persistence hydration. */
+    public record State(int settlementId, int nextOrdinal, long revision, List<ResidentState> residents) {
+        public State {
+            if (nextOrdinal < 1) throw new IllegalArgumentException("resident next ordinal must be positive");
+            if (revision < 0L) throw new IllegalArgumentException("resident revision must be non-negative");
+            residents = List.copyOf(Objects.requireNonNull(residents, "residents"));
+        }
+    }
+
+    /** One exact resident record; no derived population or cohort ratio is stored here. */
+    public record ResidentState(
+            String id,
+            int homeSettlementId,
+            String occupation,
+            String economicClass,
+            Integer employerCompanyId,
+            ReferenceResidentLocation location,
+            Integer locationRef,
+            ReferenceResidentCondition condition,
+            String deploymentRole
+    ) {
+        public ResidentState {
+            if (id == null || id.isBlank()) throw new IllegalArgumentException("resident id is required");
+            if (occupation == null || occupation.isBlank()) throw new IllegalArgumentException("resident occupation is required");
+            if (economicClass == null || economicClass.isBlank()) throw new IllegalArgumentException("resident economic class is required");
+            location = Objects.requireNonNull(location, "location");
+            condition = Objects.requireNonNull(condition, "condition");
+        }
+    }
+
     public ReferenceResident resident(String residentId) {
         return residents.get(residentId);
+    }
+
+    /** Capture every mutable field needed to resume the same individual roster. */
+    public State state() {
+        List<ResidentState> saved = new ArrayList<>(residents.size());
+        for (String residentId : livingIds()) {
+            ReferenceResident resident = residents.get(residentId);
+            saved.add(new ResidentState(resident.id(), resident.homeSettlementId(), resident.occupation(), resident.economicClass(),
+                    resident.employerCompanyId(), resident.location(), resident.locationRef(), resident.condition(), resident.deploymentRole()));
+        }
+        return new State(settlementId, nextOrdinal, revision, saved);
+    }
+
+    /** Restore an exact roster without consuming a demographic RNG or manufacturing people. */
+    public static ReferenceResidentLedger restore(State state) {
+        State required = Objects.requireNonNull(state, "state");
+        ReferenceResidentLedger ledger = new ReferenceResidentLedger(required.settlementId(), 0);
+        ledger.nextOrdinal = required.nextOrdinal();
+        ledger.revision = required.revision();
+        for (ResidentState residentState : required.residents()) {
+            if (residentState.homeSettlementId() != required.settlementId()) {
+                throw new IllegalArgumentException("resident " + residentState.id() + " belongs to another settlement");
+            }
+            ReferenceResident previous = ledger.residents.putIfAbsent(residentState.id(), ReferenceResident.restore(residentState));
+            if (previous != null) throw new IllegalArgumentException("duplicate resident " + residentState.id());
+        }
+        ledger.assertValid();
+        return ledger;
     }
 
     public List<String> create(int count) {

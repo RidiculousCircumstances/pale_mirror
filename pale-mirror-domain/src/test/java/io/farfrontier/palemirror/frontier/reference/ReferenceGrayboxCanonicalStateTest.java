@@ -69,4 +69,20 @@ class ReferenceGrayboxCanonicalStateTest {
         assertEquals("graybox materialization requires the complete graybox_1_40 V2 source profile",
                 assertThrows(IllegalStateException.class, () -> ReferenceGrayboxCanonicalState.capture(source)).getMessage());
     }
+
+    @Test
+    void bioformIdentityRestorePreservesTheSurvivorGapAndRejectsAStaleCount() {
+        ReferenceSwarm restored = new ReferenceSwarm(901, 12.0d, 13.0d, 60.0d, -1, .9d,
+                ReferenceBioformKind.RAIDER, Map.of(ReferenceBioformKind.RAIDER, 1.0d, ReferenceBioformKind.BREAKER, 1.0d),
+                ReferenceFormationPhase.SCREEN, 1.0d, null, null, null, false);
+        restored.restoreBioformIds(Map.of(
+                ReferenceBioformKind.RAIDER, java.util.List.of("bioform:901:raider:2"),
+                ReferenceBioformKind.BREAKER, java.util.List.of("bioform:901:breaker:1")));
+
+        assertFalse(restored.hasExactBioform("bioform:901:raider:1"));
+        assertTrue(restored.hasExactBioform("bioform:901:raider:2"));
+        assertThrows(IllegalArgumentException.class, () -> restored.restoreBioformIds(Map.of(
+                ReferenceBioformKind.RAIDER, java.util.List.of("bioform:901:raider:2", "bioform:901:raider:3"),
+                ReferenceBioformKind.BREAKER, java.util.List.of("bioform:901:breaker:1"))));
+    }
 }

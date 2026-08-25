@@ -171,6 +171,38 @@ class ReferenceResidentLedgerTest {
     }
 
     @Test
+    void exactRosterStateRestoresCustodyRevisionAndOrdinalWithoutDemographicReplay() {
+        ReferenceResidentLedger ledger = new ReferenceResidentLedger(15, 4);
+        ledger.assignEmployment(8, List.of("resident:15:1"));
+        ledger.deploy(List.of("resident:15:1", "resident:15:2"), 19, Map.of("resident:15:1", "guard"));
+        assertEquals(true, ledger.woundExact("resident:15:1"));
+        ledger.assignFieldPost(List.of("resident:15:2"), 5);
+        assertEquals(true, ledger.killExact("resident:15:3"));
+
+        ReferenceResidentLedger.State state = ledger.state();
+        ReferenceResidentLedger restored = ReferenceResidentLedger.restore(state);
+
+        assertEquals(state, restored.state());
+        assertEquals(ReferenceResidentCondition.WOUNDED, restored.resident("resident:15:1").condition());
+        assertEquals(ReferenceResidentLocation.FIELD_POST, restored.resident("resident:15:2").location());
+        assertEquals(List.of("resident:15:5"), restored.create(1));
+        restored.assertValid();
+    }
+
+    @Test
+    void rejectsAResidentRestoreWithDuplicateOrForeignOwnership() {
+        ReferenceResidentLedger.ResidentState resident = new ReferenceResidentLedger.ResidentState(
+                "resident:16:1", 16, "farmer", "worker", null,
+                ReferenceResidentLocation.SETTLEMENT, null, ReferenceResidentCondition.ACTIVE, null);
+        assertThrows(IllegalArgumentException.class, () -> ReferenceResidentLedger.restore(
+                new ReferenceResidentLedger.State(16, 2, 1L, List.of(resident, resident))));
+        assertThrows(IllegalArgumentException.class, () -> ReferenceResidentLedger.restore(
+                new ReferenceResidentLedger.State(16, 2, 1L, List.of(new ReferenceResidentLedger.ResidentState(
+                        "resident:17:1", 17, "farmer", "worker", null,
+                        ReferenceResidentLocation.SETTLEMENT, null, ReferenceResidentCondition.ACTIVE, null)))));
+    }
+
+    @Test
     void exactCasualtiesPreserveTheDemographicRandomStream() {
         ReferenceResidentLedger ledger = new ReferenceResidentLedger(13, 2);
         PythonRandom actual = new PythonRandom(91);
