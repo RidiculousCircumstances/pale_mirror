@@ -54,7 +54,7 @@ hash = "96432136ee78d5ed53ee96e6a6ae742487f434f4593b4fc1f7a357fd0404e7ba"
 
 [[files]]
 file = "datapacks/README.md"
-hash = "f8be48f7ca9d009b6967f6abe51c1f203908a9ae4025a6babb6547a65115f64f"
+hash = "026394bfcebb1456dda40e96020a690ea34b6af4e560a33e8e571ab403674a65"
 
 [[files]]
 file = "datapacks/crimson-curse-raids-disabled/README.md"
@@ -367,6 +367,18 @@ hash = "e1f3b75883161659d706bb3d4e04bdafa6e2f7da420209481f1e067a9373fe45"
 [[files]]
 file = "datapacks/integrated-villages-optional-integration-quarantine/pack.mcmeta"
 hash = "ff63d669db22f75f9c9e0471f80948563d441390c54fca0b7a2da57f462a8482"
+
+[[files]]
+file = "datapacks/pale-mirror-graybox/README.md"
+hash = "326f6cab539b3864f500fadb203fa02b3e97b05e582bdcb3ee3478dec7144e59"
+
+[[files]]
+file = "datapacks/pale-mirror-graybox/data/pale_mirror/dimension/frontier_graybox.json"
+hash = "ab36743046bdb4f8e0fad6a96c0632a7ddf21757fc1769fd57fd0a9d42780f0d"
+
+[[files]]
+file = "datapacks/pale-mirror-graybox/pack.mcmeta"
+hash = "cc0bf362abfb97eb2f96829eeeedd86d7fe372544221cbfc508a3ea794aa00ce"
 
 [[files]]
 file = "defaultconfigs/README.md"
@@ -756,7 +768,7 @@ hash = "365e5724ce54bf3d4fd9ed0784363084e7bd3edde450db434ae38308b7f7813c"
 
 [[files]]
 file = "scripts/publish-client-artifacts.sh"
-hash = "ef35036b322f99c1c44de35909f8a29662df797639d80667fa80a6a52bf40af5"
+hash = "1701805a333229d1a384bf4d6c960d6b14436bce125cbc64948d7b27cd4992e1"
 
 [[files]]
 file = "scripts/run-server-java22.sh"
