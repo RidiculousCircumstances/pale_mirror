@@ -29,13 +29,18 @@ public final class SourceGrayboxMaterializerGameTests {
         prepareFlatFloor(helper, anchor, 18);
         ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
         String residentId = baseline.residents().getFirst().id();
-        ReferenceGrayboxSnapshot snapshot = fixture(anchor, baseline, residentId, 1.0d, "fixture");
+        ReferenceGrayboxSnapshot snapshot = withReadout(fixture(anchor, baseline, residentId, 1.0d, "fixture"),
+                new ReferenceGrayboxSnapshot.Readout("fixture:market", "MARKET", "cash=12.00 stock=food=4.00",
+                        new ReferenceGrayboxLayout.Point(anchor.getX() + 6, anchor.getZ() + 6), "readout.market"));
         SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
 
         SourceGrayboxMaterializer.Report first = materializer.apply(helper.getLevel(), snapshot);
         BlockPos facility = anchor.offset(2, 0, 2);
         helper.assertValueEqual(helper.getLevel().getBlockState(facility).getBlock(), Blocks.BLUE_WOOL,
                 "a source facility must become its readable colour-coded rectangle");
+        helper.assertTrue(helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(anchor.offset(6, 6, 6)).inflate(4, 32, 4), value ->
+                value.hasCustomName() && value.getCustomName().getString().startsWith("[MARKET] cash=12.00")).size() == 1,
+                "a source dashboard must retain its exact readable source text without becoming a second physical owner");
         ArmorStand facilityLabel = helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(facility).inflate(16, 32, 16), value ->
                 value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop")).stream().findFirst().orElseThrow();
         helper.assertTrue(facilityLabel.getY() >= ReferenceGrayboxLayout.GROUND_Y + 17,
@@ -333,6 +338,13 @@ public final class SourceGrayboxMaterializerGameTests {
                 List.of(new ReferenceGrayboxSnapshot.Interaction(fixtureId + ":workshop", "settlement:1:facility:workshop", "facility_damaged",
                         interactionWeight, 1, ReferenceGrayboxLayout.interactionSlots(facility, 4), "facility.workshop")),
                 List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot withReadout(ReferenceGrayboxSnapshot baseline, ReferenceGrayboxSnapshot.Readout readout) {
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                baseline.settlements(), baseline.facilities(), baseline.resourceSites(), baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(),
+                baseline.residents(), baseline.fieldPosts(), baseline.fieldLinks(), baseline.activities(), baseline.cargoes(), baseline.interactions(),
+                baseline.sectors(), baseline.chrysalises(), List.of(readout), baseline.events());
     }
 
     private static ReferenceGrayboxSnapshot coLocatedFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, boolean includeSite) {

@@ -45,12 +45,13 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, posts, links, cargoes);
         List<ReferenceGrayboxSnapshot.Sector> sectors = sectors(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises = chrysalises(required, sectorAreas);
+        List<ReferenceGrayboxSnapshot.Readout> readouts = ReferenceGrayboxReadouts.from(required, settlementAreas);
         List<String> events = required.events();
         String stateRevision = stateRevision(required.day(), required.profile().id(), cells, settlements, facilities, sites, routes, organs,
-                bioforms, residents, posts, links, activities, cargoes, interactions, sectors, chrysalises, events);
+                bioforms, residents, posts, links, activities, cargoes, interactions, sectors, chrysalises, readouts, events);
         return new ReferenceGrayboxSnapshot(required.day(), required.profile().id(), stateRevision, ReferenceGrayboxLayout.bounds(), cells,
                 settlements, facilities, sites, routes, organs, bioforms, residents, posts, links, activities, cargoes, interactions, sectors,
-                chrysalises, events);
+                chrysalises, readouts, events);
     }
 
     private static List<ReferenceGrayboxSnapshot.Cell> cells(ReferenceWorldView view) {
@@ -344,6 +345,7 @@ public final class ReferenceGrayboxProjection {
         }
         return List.copyOf(result);
     }
+
 
     private static Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas(ReferenceWorld world) {
         Map<Integer, ReferenceGrayboxLayout.Rectangle> result = new LinkedHashMap<>();

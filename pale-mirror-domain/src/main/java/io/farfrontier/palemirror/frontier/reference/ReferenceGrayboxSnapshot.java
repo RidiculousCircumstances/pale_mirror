@@ -24,6 +24,7 @@ public record ReferenceGrayboxSnapshot(
         List<Interaction> interactions,
         List<Sector> sectors,
         List<Chrysalis> chrysalises,
+        List<Readout> readouts,
         List<String> events
 ) {
     public ReferenceGrayboxSnapshot {
@@ -47,10 +48,23 @@ public record ReferenceGrayboxSnapshot(
         interactions = copied(interactions, "interactions");
         sectors = copied(sectors, "sectors");
         chrysalises = copied(chrysalises, "chrysalises");
+        readouts = copied(readouts, "readouts");
         events = copied(events, "events");
         if (cells.size() != ReferenceWorldConfig.SOURCE_WIDTH * ReferenceWorldConfig.SOURCE_HEIGHT) {
             throw new IllegalArgumentException("graybox snapshot must contain every logical cell");
         }
+    }
+
+    /** Compatibility constructor for physical fixtures predating informational readouts. */
+    public ReferenceGrayboxSnapshot(int day, String profileId, String stateRevision, ReferenceGrayboxLayout.Bounds bounds,
+                                    List<Cell> cells, List<Settlement> settlements, List<Facility> facilities,
+                                    List<ResourceSite> resourceSites, List<Route> routes, List<HiveOrgan> hiveOrgans,
+                                    List<Bioform> bioforms, List<Resident> residents, List<FieldPost> fieldPosts,
+                                    List<FieldLink> fieldLinks, List<Activity> activities, List<Cargo> cargoes,
+                                    List<Interaction> interactions, List<Sector> sectors, List<Chrysalis> chrysalises,
+                                    List<String> events) {
+        this(day, profileId, stateRevision, bounds, cells, settlements, facilities, resourceSites, routes, hiveOrgans, bioforms,
+                residents, fieldPosts, fieldLinks, activities, cargoes, interactions, sectors, chrysalises, List.of(), events);
     }
 
     public record Cell(int x, int y, ReferenceGrayboxLayout.Rectangle rectangle, double infection,
@@ -216,6 +230,18 @@ public record ReferenceGrayboxSnapshot(
             status = required(status, "status");
             rectangle = Objects.requireNonNull(rectangle, "rectangle");
             colour = required(colour, "colour");
+        }
+    }
+
+    /** A non-interactive, source-owned dashboard marker for a process without its own spatial body. */
+    public record Readout(String id, String category, String text, ReferenceGrayboxLayout.Point position, String colour) {
+        public Readout {
+            id = required(id, "id");
+            category = required(category, "category");
+            text = required(text, "text");
+            position = Objects.requireNonNull(position, "position");
+            colour = required(colour, "colour");
+            if (text.length() > 320) throw new IllegalArgumentException("graybox readout text is too long");
         }
     }
 

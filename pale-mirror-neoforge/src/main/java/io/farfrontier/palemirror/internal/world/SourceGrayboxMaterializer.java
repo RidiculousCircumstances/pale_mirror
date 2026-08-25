@@ -267,6 +267,8 @@ final class SourceGrayboxMaterializer {
         for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) label(level, active, labels, "chrysalis:" + chrysalis.organId(),
                 "[C] organ=" + chrysalis.organId() + " " + chrysalis.status() + " days=" + chrysalis.daysRemaining()
                         + " biomass=" + number(chrysalis.biomassCommitted()), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
+        for (ReferenceGrayboxSnapshot.Readout readout : snapshot.readouts()) label(level, active, labels, "readout:" + readout.id(),
+                "[" + readout.category() + "] " + readout.text(), readout.position().x(), readout.position().z());
         snapshot.cells().stream().filter(cell -> cell.infection() > 0.01d || cell.signal() > 0.01d)
                 .sorted(Comparator.comparingDouble((ReferenceGrayboxSnapshot.Cell cell) -> cell.infection() + cell.signal()).reversed()
                         .thenComparingInt(ReferenceGrayboxSnapshot.Cell::x).thenComparingInt(ReferenceGrayboxSnapshot.Cell::y)).limit(96)

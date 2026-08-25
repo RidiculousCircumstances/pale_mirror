@@ -136,6 +136,13 @@ public final class ReferenceGrayboxLayout {
         throw new IllegalStateException("activity presentation slot allocation was incomplete");
     }
 
+    /** A compact board slot inside a settlement; labels stay legible without relocating its logical identity. */
+    public static Point settlementReadout(Rectangle settlement, int ordinal) {
+        Objects.requireNonNull(settlement, "settlement");
+        if (ordinal < 0 || ordinal >= 64) throw new IllegalArgumentException("settlement readout ordinal must be in [0, 64)");
+        return new Point(settlement.x() + 4 + ordinal % 8 * 5, settlement.z() + 4 + ordinal / 8 * 5);
+    }
+
     /**
      * Deterministic physical interaction slots for one visible source object.
      *

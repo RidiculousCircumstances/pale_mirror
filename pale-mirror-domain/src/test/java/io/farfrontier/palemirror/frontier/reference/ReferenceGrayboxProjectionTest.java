@@ -50,6 +50,19 @@ class ReferenceGrayboxProjectionTest {
     }
 
     @Test
+    void nonSpatialMarketCivicAndHiveOwnersRemainReadableSourceDashboardFacts() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(grayboxWorld());
+
+        assertTrue(snapshot.readouts().stream().anyMatch(item -> item.category().equals("CIVIC") && item.text().contains("doctrine=")));
+        assertTrue(snapshot.readouts().stream().anyMatch(item -> item.category().equals("MARKET") && item.text().contains("stock=")));
+        assertTrue(snapshot.readouts().stream().anyMatch(item -> item.category().equals("COMPANY") && item.text().contains("sector=")));
+        assertTrue(snapshot.readouts().stream().anyMatch(item -> item.category().equals("HIVE") && item.text().contains("genome=")));
+        assertTrue(snapshot.readouts().stream().allMatch(item -> item.position().x() >= ReferenceGrayboxLayout.MIN_X
+                && item.position().x() < ReferenceGrayboxLayout.MAX_X_EXCLUSIVE && item.position().z() >= ReferenceGrayboxLayout.MIN_Z
+                && item.position().z() < ReferenceGrayboxLayout.MAX_Z_EXCLUSIVE));
+    }
+
+    @Test
     void discreteBioformDescriptorsHaveStableDerivedIdentityAndRejectFractionalCounts() {
         ReferenceWorld world = grayboxWorld();
         ReferenceHiveOrgan brood = world.infection().createOrgan(10, 10, 100.0d, null, null, ReferenceOrganKind.BROOD_SAC);
