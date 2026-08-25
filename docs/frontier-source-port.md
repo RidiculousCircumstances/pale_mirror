@@ -8,8 +8,8 @@ baseline by accumulation.
 
 All source fixtures and full traces are executed by `python3.11` (the pinned
 3.11 source semantics, not the workstation's generic `python3`). Trace tools
-fail closed on another major/minor interpreter, because operations such as
-floating-point `sum()` can otherwise change a final binary64 bit.
+fail closed on another major/minor interpreter, so an approved source update
+always has one reproducible producer.
 
 `docs/frontier-reference-balance-full.json` is the canonical complete export
 of `simulation.balance.BALANCE`; regenerate it only with
@@ -156,24 +156,31 @@ run that tool with `--check`. `ReferenceWorldView` matches the view's primitive
 shape exactly: 2,816 ecology/tissue/signal cells, settlements and facilities,
 sites, organs, bioforms, field posts/campaigns and territorial sectors. Its
 test hashes each complete view directly, and verifies the nested collections
-are immutable. Canonical JSON formats a binary64 exactly as CPython does
-(including fixed-versus-exponent spelling) and rejects non-finite values; a
-numeric representation difference therefore cannot conceal state drift. This
-view is the source-parity input boundary for a later materialization adapter,
-not that adapter itself.
+are immutable. Canonical JSON uses CPython-compatible binary64 spelling
+(including fixed-versus-exponent spelling) and rejects non-finite values. The
+public view remains an exact read-model gate because it deliberately rounds
+presentation values; the complete internal state gate separately permits the
+bounded tail-bit policy below. This view is the source-parity input boundary
+for a later materialization adapter, not that adapter itself.
 
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve
    settlements, two infection seeds, phase order, MT19937 stream and IEEE-754
-   binary64 arithmetic as the pinned Python source trace.
+   binary64 arithmetic as the pinned Python source trace. Java must be
+   deterministic for a seed; it does not emulate CPython's host math library.
 2. Every Python module is either ported, expressly unreachable under
    `source_v2`, or represented by a failing conformance test. “Close enough”
    branches, silent defaults and Java-only substitutes are forbidden.
-3. The port compares complete canonical day states against
-   `docs/frontier-reference-source.json`, then focused micro-traces for each
-   operation, economy, ecology and AI branch. A passing aggregate dashboard is
-   not parity evidence.
+3. The port compares complete canonical day states against the source-shaped
+   codec, then focused micro-traces for each operation, economy, ecology and
+   AI branch. IDs, enum/status values, integer values, collection ordering and
+   topology are exact. Each finite binary64 leaf is compared through a
+   deterministic 4096-ULP bucket (about 10⁻¹² relative precision), while
+   focused micro-traces retain direct numerical tolerances for their named
+   quantities. A different discrete decision or materially different number
+   fails conformance; a last-bit CPython/libm difference does not. A passing
+   aggregate dashboard is not parity evidence.
 4. Only after those gates pass is Python frozen and Java becomes canonical.
    `graybox_1_40` is then a separately tested scale profile of that Java
    domain, never an adapter that aggregates people or bioforms.

@@ -47,19 +47,31 @@ final class ReferenceWorldDiagnostics {
     void recordHistory(ReferenceWorld world) {
         world.infection().recordEconomySnapshot(world.day(), HISTORY_DAYS);
         List<ReferenceSettlement> alive = world.marketWorld().settlements().values().stream().filter(ReferenceSettlement::alive).toList();
-        double bioforms = world.infection().swarms().stream().mapToDouble(swarm -> swarm.composition().values().stream()
-                .mapToDouble(Double::doubleValue).sum()).sum();
+        double population = 0.0d;
+        double cash = 0.0d;
+        double privateCash = 0.0d;
+        for (ReferenceSettlement settlement : alive) {
+            population += settlement.population();
+            cash += settlement.cash();
+            ReferenceHouseholdLedger household = world.microeconomy().households().get(settlement.id());
+            privateCash += household == null ? 0.0d : household.cash();
+        }
+        double bioforms = 0.0d;
+        for (ReferenceSwarm swarm : world.infection().swarms()) {
+            double composition = 0.0d;
+            for (double count : swarm.composition().values()) composition += count;
+            bioforms += composition;
+        }
+        double hiveBiomass = 0.0d;
+        for (ReferenceHiveOrgan organ : world.infection().organs().values()) hiveBiomass += organ.biomass();
         int fieldCampaigns = (int) world.field().campaigns().values().stream().filter(campaign -> campaign.phase() != ReferenceCampaignPhase.COMPLETE
                 && campaign.phase() != ReferenceCampaignPhase.FAILED).count();
         int v2Chrysalises = world.v2Enabled() ? world.v2().chrysalises().size() : 0;
         int v2Emergencies = world.v2Enabled() ? (int) world.v2().civics().values().stream().filter(civic -> civic.state() == ReferenceCivicState.EMERGENCY
                 || civic.state() == ReferenceCivicState.SIEGE).count() : 0;
-        history.add(new ReferenceDailyWorldHistory(world.day(), alive.size(), alive.stream().mapToDouble(ReferenceSettlement::population).sum(),
-                alive.stream().mapToDouble(ReferenceSettlement::cash).sum(), alive.stream().mapToDouble(settlement -> {
-                    ReferenceHouseholdLedger household = world.microeconomy().households().get(settlement.id());
-                    return household == null ? 0.0d : household.cash();
-                }).sum(), world.infection().infectedFraction(), world.infection().swarms().size(), bioforms, world.infection().organs().size(),
-                world.infection().organs().values().stream().mapToDouble(ReferenceHiveOrgan::biomass).sum(), world.infection().harvestedBiomass(),
+        history.add(new ReferenceDailyWorldHistory(world.day(), alive.size(), population, cash, privateCash,
+                world.infection().infectedFraction(), world.infection().swarms().size(), bioforms, world.infection().organs().size(), hiveBiomass,
+                world.infection().harvestedBiomass(),
                 world.infection().ecosystem().totalOrganic(), world.infection().ecosystem().totalScar(), world.infection().feralFraction(),
                 world.operations().active().size(), world.field().activePosts().size(), fieldCampaigns, world.field().engagements().size(), 0, 0,
                 world.marketWorld().resourceSites().size(), (int) world.marketWorld().resourceSites().values().stream()

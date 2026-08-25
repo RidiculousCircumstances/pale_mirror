@@ -12,7 +12,7 @@ The codec is a semantic, source-shaped JSON document named
 `frontier_reference_state_v1`. It is not a Python heap dump and it must not
 invent Java implementation details. Python remains the producer of the
 fixture; Java independently projects the same canonical values and compares
-the canonical UTF-8 bytes.
+the exact discrete structure plus a bounded binary64 conformance fingerprint.
 
 ## Rules
 
@@ -27,6 +27,12 @@ the canonical UTF-8 bytes.
 - Field names are Python source names (snake case); enum values are source
   values. `null` is explicit. Finite binary64 values use CPython 3.11 JSON
   spelling; a non-finite value rejects projection.
+- The source fixture also records a numeric-conformance SHA-256. Before that
+  hash is calculated, each finite float is deterministically rounded to a
+  4096-ULP bucket; all non-floating values and the complete collection shape
+  remain exact. This permits a last-bit difference from CPython's platform
+  math implementation, but not a changed ID, event, ordering, status, integer
+  or material numeric result.
 - Each record has all schema fields even when their value is empty. No Java
   default, omission or compatibility fallback is permitted.
 - State-only helpers are excluded only when they have no mutable canonical
@@ -64,14 +70,15 @@ codec failure even if its latest rows match.
 `tools/frontier/generate_v2_canonical_state_trace.py` pins source V2 at days
 0, 1, 2, 3, 5, 10, 15, 20, 25 and 30 for a 64×44, twelve-settlement, two-seed,
 seed-42 world. It emits `docs/frontier-reference-v2-canonical-state.json`,
-which records the complete source-tree manifest and one SHA-256/byte count per
-state. It also pins owner-component hashes so the Java codec can be introduced
-without hiding a root/RNG mismatch inside the complete state hash.
+which records the complete source-tree manifest and one exact SHA-256/byte
+count plus one bounded numeric-conformance SHA-256 per state. It also pins
+owner-component hashes so the Java codec can be introduced without hiding a
+root/RNG mismatch inside the complete state hash.
 Regeneration and `--check` require CPython 3.11.
 The Java test constructs the same `ReferenceWorld`, advances it one day at a
-time, serializes `ReferenceCanonicalState`, and compares every checkpoint
-byte-for-byte. It also checks that legacy/V2-disabled worlds reject rather
-than project a partial state.
+time, serializes `ReferenceCanonicalState`, and compares every checkpoint's
+exact discrete shape and bounded numeric fingerprint. It also checks that
+legacy/V2-disabled worlds reject rather than project a partial state.
 
 Normal trajectory coverage is not enough for sparse state variants. The same
 codec is subsequently exercised by source-defined microtraces for active

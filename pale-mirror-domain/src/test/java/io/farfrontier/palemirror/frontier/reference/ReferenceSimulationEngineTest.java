@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.reference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -281,6 +282,38 @@ class ReferenceSimulationEngineTest {
     }
 
     @Test
+    void canonicalStateDiagnosticsMatchPythonStructureAndBoundedBinary64ValuesAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, String> expected = Map.of(
+                0, "9b25bdb968a209bc864e17316585ef9f7b8e2fd0faff079a54c67044bd4c2f96",
+                1, "7d506ba6041a206ef13197bd5f317f1c875058738b4a333eccfde173caa49d6a",
+                2, "b3e1d3cf1a3d7f63aa4c9d3b55e947210c743146f422023b31ded076d686c885",
+                3, "e2fcf59aea488a10de028dbd3ced4f685d3f1996cebd8263656f8da619ee978c",
+                5, "1855270d8a1e9da436c1fdf1435689fe5ee19e3e6ced80f11364faadcd02588b",
+                10, "e7f7c31aa9d5e4610ae29310ba5a95c70024416c1a21baf17423f1733e526ba7",
+                15, "1a5c4d6c689acf6ff3d3f05e2d0541de9d7854618782b3d13d1aa77ed0e97835",
+                20, "fbf45d0f932a4d89864a9e2346f00633bb55d58aae2faf525c01f6bf83143e31",
+                25, "19a47c365306f10ef74fd28ff566b08ac080ff7e60cdb1908b3e5d5ccab9d203",
+                30, "38dcd4c86446efdff375e227ea56263619e56ae3bcd9d5736ca5626a1c8a9505");
+
+        for (int day = 0; day <= 30; day++) {
+            String checkpoint = expected.get(day);
+            if (checkpoint != null) assertCanonicalConformance(checkpoint, ReferenceCanonicalStateDiagnostics.capture(world), "diagnostics", day);
+            if (day < 30) world.tick();
+        }
+    }
+
+    @Test
+    void canonicalStateDiagnosticsRejectV2DisabledWorld() {
+        ReferenceWorld legacy = new ReferenceWorld(new ReferenceWorldConfig(
+                64, 44, 12, 42L, 2, false, ReferenceSimulationProfile.SOURCE_V2));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> ReferenceCanonicalStateDiagnostics.capture(legacy));
+
+        assertEquals("canonical state requires V2-enabled reference world", error.getMessage());
+    }
+
+    @Test
     void canonicalStateMarketAndResourceSiteOwnersMatchPinnedPythonAtEveryCheckpoint() {
         ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
         Map<Integer, RootCheckpoint> expectedMarkets = Map.of(
@@ -369,6 +402,38 @@ class ReferenceSimulationEngineTest {
         assertEquals("canonical state requires V2-enabled reference world", error.getMessage());
     }
 
+    @Test
+    void canonicalStateTradeOwnerMatchesPythonStructureAndBoundedBinary64ValuesAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, String> expected = Map.of(
+                0, "debd86adc23ec378a6810092690a4ae695ea8e02c06fd02c2c99d2a38e528d5b",
+                1, "e9d24f3d0b4dcb58a854ab2e4bc555fb9e83b67e62bf33091c06555d051ac4be",
+                2, "1bb03e194ae2b5ab248ace75d2980f215f23f28edb5cc69ca1132e9aed83ede5",
+                3, "d54a9aa1902d33952a89d8c9eb0b86080e55ebf2d2d3a47b252a65fe3cf71daa",
+                5, "c9107ae2b939d47b3de8f8ee236a3586024ad61929381279266766ed0f9e2ef1",
+                10, "43613836ca38740d8b9b0d17c78dea73c6cd21f9c19cfa2e490623fa31447bd2",
+                15, "28f49a463439e0d5b0ca1fdb0535157645b6594576b8d5763bb15bfa6ea145b3",
+                20, "5c1878e5f15bafa8f7d2d53a67122facd28b0cb26753c3ae98d818b132585cfe",
+                25, "28d245bc057ee30b67a4284f269b45e3ab1e017dc7252b9ba85eefbb55fd4dc9",
+                30, "a676405a8785bc67e5f441187c83e1595d8dcf73b41c35fecdc4f20605f8b965");
+
+        for (int day = 0; day <= 30; day++) {
+            String checkpoint = expected.get(day);
+            if (checkpoint != null) assertCanonicalConformance(checkpoint, ReferenceCanonicalStateTrade.capture(world), "trade", day);
+            if (day < 30) world.tick();
+        }
+    }
+
+    @Test
+    void numericConformanceAllowsOnlyTailBitsAndNeverSemanticStateDrift() {
+        Map<String, Object> source = Map.of("id", 7, "status", "active", "amount", 0.4248090555885824d);
+        Map<String, Object> tailBitDifference = Map.of("id", 7, "status", "active", "amount", 0.4248090555885825d);
+        Map<String, Object> semanticDifference = Map.of("id", 7, "status", "failed", "amount", 0.4248090555885825d);
+
+        assertEquals(ReferenceCanonicalStateConformance.sha256(source), ReferenceCanonicalStateConformance.sha256(tailBitDifference));
+        assertNotEquals(ReferenceCanonicalStateConformance.sha256(source), ReferenceCanonicalStateConformance.sha256(semanticDifference));
+    }
+
     private static void assertCheckpoint(ReferenceWorld world, Checkpoint expected) {
         ReferenceDailyWorldHistory actual = world.history().getLast();
         assertClose(expected.population(), actual.population());
@@ -412,6 +477,10 @@ class ReferenceSimulationEngineTest {
         String json = ReferenceV2PublicSnapshot.canonicalJson(state);
         assertEquals(expected.bytes(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, owner + " bytes day " + day);
         assertEquals(expected.digest(), ReferenceV2PublicSnapshot.sha256(state), owner + " digest day " + day);
+    }
+
+    private static void assertCanonicalConformance(String expected, Map<String, Object> state, String owner, int day) {
+        assertEquals(expected, ReferenceCanonicalStateConformance.sha256(state), owner + " conformance day " + day);
     }
 
     private static void assertClose(double expected, double actual) {
