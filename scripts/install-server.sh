@@ -211,12 +211,31 @@ install_hosted_pale_mirror_visuals \
 install_hosted_railway_untold \
   "$target" "$railway_untold_url" "$railway_untold_sha512" "$cache_dir"
 
+resolve_world_datapacks_dir() {
+  local properties=$1 level_name
+  level_name=world
+  if [[ -f "$properties" ]]; then
+    level_name=$(awk -F= '$1 == "level-name" { print substr($0, index($0, "=") + 1); exit }' "$properties")
+    level_name=${level_name:-world}
+  fi
+  [[ "$level_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+    echo "server.properties level-name must be a simple relative directory name: $level_name" >&2
+    exit 2
+  }
+  printf '%s/%s/datapacks\n' "$target" "$level_name"
+}
+
+# A custom dimension must be present before Minecraft creates the selected
+# level. Do not assume the vanilla `world` default: deployments may choose a
+# distinct disposable level-name for a profile such as Frontier graybox.
+world_datapacks=$(resolve_world_datapacks_dir "$target/server.properties")
+
 # Crimson Curse's former no-Spore quarantine replaces the exact resources that
 # enable its optional Spore integration. It is therefore incompatible with the
 # now-pinned Spore profile. Move, rather than delete, that known managed pack so
 # an existing world remains recoverable and administrators' unrelated datapacks
 # are never touched.
-legacy_spore_quarantine="$target/world/datapacks/crimson-curse-spore-compat-quarantine"
+legacy_spore_quarantine="$world_datapacks/crimson-curse-spore-compat-quarantine"
 if compgen -G "$target/mods/spore*.jar" >/dev/null && [[ -d "$legacy_spore_quarantine" ]]; then
   backup_root="$cache_dir/datapack-backups"
   mkdir -p "$backup_root"
@@ -229,10 +248,10 @@ fi
 # Names present in this repository are managed pack assets and must follow pack
 # updates. Unrelated administrator datapacks remain untouched. If a managed name
 # already differs, archive it before installing the exact current version.
-mkdir -p "$target/world/datapacks"
+mkdir -p "$world_datapacks"
 for datapack in "$repo_root"/datapacks/*; do
   [[ -f "$datapack/pack.mcmeta" ]] || continue
-  destination="$target/world/datapacks/${datapack##*/}"
+  destination="$world_datapacks/${datapack##*/}"
   if [[ ! -e "$destination" ]]; then
     cp -a "$datapack" "$destination"
   elif diff -qr "$datapack" "$destination" >/dev/null; then
