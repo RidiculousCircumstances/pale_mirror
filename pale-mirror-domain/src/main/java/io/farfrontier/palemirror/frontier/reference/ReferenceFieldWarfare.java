@@ -11,10 +11,10 @@ import java.util.Set;
 /**
  * Source-owned temporary human infrastructure from Python {@code FieldWarfare}.
  *
- * <p>This initial field cut owns campaign, post, module and link identities,
- * construction admission and the route/support derivations. Operation arrival,
- * casualties and daily field execution remain with the not-yet-ported
- * {@code operations.py} owner; no synthetic execution path is introduced.</p>
+ * <p>This owner retains campaign, post, module and link identities,
+ * construction admission and route/support derivations. Operation arrivals,
+ * casualties and daily field execution are delegated to
+ * {@link ReferenceFieldExecution}, without a second compatibility path.</p>
  */
 public final class ReferenceFieldWarfare {
     private final LinkedHashMap<Integer, ReferenceFieldPost> posts = new LinkedHashMap<>();
