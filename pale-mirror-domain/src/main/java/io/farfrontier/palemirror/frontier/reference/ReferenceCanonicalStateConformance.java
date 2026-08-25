@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.reference;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +27,11 @@ final class ReferenceCanonicalStateConformance {
                 }
                 result.put(key, normalize(entry.getValue()));
             }
-            return Map.copyOf(result);
+            // Python's source codec deliberately retains null optional fields
+            // (for example a front campaign with no terminal outcome). Map.copyOf
+            // rejects null and would turn a valid source state into a hidden
+            // Java-only failure before it can be fingerprinted.
+            return Collections.unmodifiableMap(result);
         }
         if (value instanceof List<?> sequence) {
             ArrayList<Object> result = new ArrayList<>(sequence.size());

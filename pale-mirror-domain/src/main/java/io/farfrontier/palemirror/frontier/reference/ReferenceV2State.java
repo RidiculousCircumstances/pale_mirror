@@ -100,6 +100,9 @@ public final class ReferenceV2State {
     List<ReferenceSectorEngagement> mutableSectorEngagements() { return sectorEngagements; }
     Map<Integer, Integer> mutableFrontierCooldownUntil() { return frontierCooldownUntil; }
     int nextCharterIdAndIncrement() { return nextCharterId++; }
+    int nextProcurementId() { return nextProcurementId; }
+    int nextClaimId() { return nextClaimId; }
+    int nextCharterId() { return nextCharterId; }
     int nextFrontCampaignId() { return nextFrontCampaignId; }
     int nextFrontCampaignIdAndIncrement() { return nextFrontCampaignId++; }
 
@@ -307,12 +310,12 @@ public final class ReferenceV2State {
     /** Purchase local critical stock before the source's last-resort siege requisition path. */
     public void issueProcurement(ReferenceWorld world) {
         ReferenceV2WarEconomy.issueProcurement(world, civics, doctrines, procurements, compensation,
-                this::nextProcurementId, this::nextClaimId);
+                this::allocateProcurementId, this::allocateClaimId);
     }
 
     void requisition(ReferenceWorld world, ReferenceSettlement settlement, ReferenceCompany company,
                      ReferenceResource resource, double quantity, double price) {
-        ReferenceV2WarEconomy.requisition(world, civics, doctrines, compensation, this::nextClaimId,
+        ReferenceV2WarEconomy.requisition(world, civics, doctrines, compensation, this::allocateClaimId,
                 settlement, company, resource, quantity, price);
     }
 
@@ -369,8 +372,8 @@ public final class ReferenceV2State {
         }
     }
 
-    private int nextProcurementId() { return nextProcurementId++; }
-    private int nextClaimId() { return nextClaimId++; }
+    private int allocateProcurementId() { return nextProcurementId++; }
+    private int allocateClaimId() { return nextClaimId++; }
 
     private void advanceChrysalis(ReferenceWorld world, ReferenceHiveOrgan organ) {
         ReferenceNeuralChrysalis chrysalis = chrysalises.get(organ.id());

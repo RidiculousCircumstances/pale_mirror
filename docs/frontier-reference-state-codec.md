@@ -98,8 +98,11 @@ this same projection only after all state fixtures are green.
 
 Current status: the source writer and its fixture are pinned. Java maps the
 root config/profile/day, both MT19937 streams and events; diagnostics,
-settlements, resource sites, market, trade, infection, operations and field
-owners each have independent checkpoint coverage. The V2 owner and final
-complete-root composition remain. The public `snapshot()` comparator and
-complete `World.view()` comparator are green through day 30 (`b5a787e`).
-Consequently the temporary graybox runtime remains non-authoritative.
+settlements, resource sites, market, trade, infection, operations, field and
+the complete V2 owner each have independent checkpoint coverage. The composed
+`ReferenceCanonicalState` now also matches the complete source state at every
+fixture checkpoint with the bounded numerical contract; V2-disabled worlds
+fail closed. The public `snapshot()` comparator and complete `World.view()`
+comparator are green through day 30 (`b5a787e`). Consequently the temporary
+graybox runtime remains non-authoritative until the separate persistence and
+materialization replacement is complete.
