@@ -51,6 +51,9 @@ class ReferenceFieldWarfareTest {
         post.isolationDays(3);
         assertEquals(3.444d, field.postPower(post));
         assertEquals(1.22d, field.movementMultiplier(1.0d, 1.0d, 7.0d, 1.0d));
+        String canonical = ReferenceV2PublicSnapshot.canonicalJson(ReferenceCanonicalStateField.capture(world));
+        assertTrue(canonical.contains("simulation.field.FieldPost"));
+        assertTrue(canonical.contains("resident:1:3"));
         assertEquals("D0: field post 1 began depot module", world.events().getLast());
     }
 

@@ -13,9 +13,8 @@ import java.util.Map;
  *
  * <p>The manager remains the owner of the active list and operation custody;
  * this helper exists only to keep that owner below the project size limit.
- * Terminal full operation records are deliberately released after their final
- * event: they contain named-person custody and must never become an unbounded
- * second resident ledger.</p>
+ * Terminal records remain with the operation owner after personnel is
+ * released. They are source history, never a second resident-custody ledger.</p>
  */
 final class ReferenceOperationExecution {
     private static final int ABORT_AFTER_UNSUPPLIED_DAYS = 3;
@@ -62,7 +61,7 @@ final class ReferenceOperationExecution {
             }
             manager.consumeSupplies(operation);
             if (operation.unsuppliedDays() >= ABORT_AFTER_UNSUPPLIED_DAYS) {
-                finish(world, operation, ReferenceOperationStatus.ABORTED, "supply_exhausted");
+                finish(manager, world, operation, ReferenceOperationStatus.ABORTED, "supply_exhausted");
                 world.marketWorld().event("D" + world.day() + ": operation " + operation.id() + " aborted: supplies exhausted");
                 continue;
             }
@@ -70,7 +69,7 @@ final class ReferenceOperationExecution {
             if (operation.status() == ReferenceOperationStatus.EN_ROUTE) {
                 destination = ReferenceOperationManager.targetPosition(world, operation.target()).orElse(null);
                 if (destination == null) {
-                    finish(world, operation, ReferenceOperationStatus.ABORTED, "target_lost");
+                    finish(manager, world, operation, ReferenceOperationStatus.ABORTED, "target_lost");
                     continue;
                 }
             } else {
@@ -93,7 +92,7 @@ final class ReferenceOperationExecution {
                 operation.waypointIndex(0);
                 if ((operation.kind() == ReferenceOperationKind.WITHDRAW || operation.kind() == ReferenceOperationKind.EVACUATE_WOUNDED)
                         && operation.resolved()) {
-                    finish(world, operation, ReferenceOperationStatus.COMPLETED,
+                    finish(manager, world, operation, ReferenceOperationStatus.COMPLETED,
                             operation.outcome() == null ? "withdrawn" : operation.outcome());
                     world.marketWorld().event("D" + world.day() + ": operation " + operation.id()
                             + " completed (" + operation.outcome() + ")");
@@ -102,7 +101,7 @@ final class ReferenceOperationExecution {
                 survivors.add(operation);
                 continue;
             }
-            finish(world, operation, ReferenceOperationStatus.COMPLETED, operation.outcome() == null ? "returned" : operation.outcome());
+            finish(manager, world, operation, ReferenceOperationStatus.COMPLETED, operation.outcome() == null ? "returned" : operation.outcome());
             world.marketWorld().event("D" + world.day() + ": operation " + operation.id()
                     + " completed (" + operation.outcome() + ")");
         }
@@ -121,7 +120,7 @@ final class ReferenceOperationExecution {
             }
             ReferenceSwarm swarm = swarms.get(operation.linkedSwarmId());
             if (swarm == null) {
-                finish(world, operation, ReferenceOperationStatus.COMPLETED,
+                finish(manager, world, operation, ReferenceOperationStatus.COMPLETED,
                         operation.outcome() == null ? "swarm_resolved" : operation.outcome());
                 continue;
             }
@@ -250,11 +249,13 @@ final class ReferenceOperationExecution {
         operation.status(ReferenceOperationStatus.RETURNING);
     }
 
-    private static void finish(ReferenceWorld world, ReferenceOperation operation, ReferenceOperationStatus status, String outcome) {
+    private static void finish(ReferenceOperationManager manager, ReferenceWorld world, ReferenceOperation operation,
+                               ReferenceOperationStatus status, String outcome) {
         operation.status(status);
         operation.outcome(outcome);
         operation.finishedDay(world.day());
         releasePersonnel(world, operation);
+        manager.mutableCompleted().add(operation);
     }
 
     private static void releasePersonnel(ReferenceWorld world, ReferenceOperation operation) {

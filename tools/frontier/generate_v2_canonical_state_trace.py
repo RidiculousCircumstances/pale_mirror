@@ -195,6 +195,8 @@ def trace(root: Path) -> dict[str, object]:
                 encoder = StateEncoder()
                 root_payload = canonical_bytes(encoder.world_root(world))
                 diagnostics_payload = canonical_bytes(encoder.diagnostics(world))
+                operations_payload = canonical_bytes(encoder.encode(world.operations))
+                field_payload = canonical_bytes(encoder.encode(world.field))
                 infection_payload = canonical_bytes(encoder.encode(world.infection))
                 market_payload = canonical_bytes(encoder.encode(world.microeconomy))
                 resource_sites_payload = canonical_bytes(encoder.encode(world.resource_sites))
@@ -204,6 +206,8 @@ def trace(root: Path) -> dict[str, object]:
                 numeric_payloads = {
                     "world_root": canonical_bytes(numeric_conformance(encoder.world_root(world))),
                     "diagnostics": canonical_bytes(numeric_conformance(encoder.diagnostics(world))),
+                    "operations": canonical_bytes(numeric_conformance(encoder.encode(world.operations))),
+                    "field": canonical_bytes(numeric_conformance(encoder.encode(world.field))),
                     "infection": canonical_bytes(numeric_conformance(encoder.encode(world.infection))),
                     "market": canonical_bytes(numeric_conformance(encoder.encode(world.microeconomy))),
                     "resource_sites": canonical_bytes(numeric_conformance(encoder.encode(world.resource_sites))),
@@ -221,6 +225,10 @@ def trace(root: Path) -> dict[str, object]:
                                        "numeric_conformance_sha256": hashlib.sha256(numeric_payloads["world_root"]).hexdigest()},
                         "diagnostics": {"sha256": hashlib.sha256(diagnostics_payload).hexdigest(), "bytes": len(diagnostics_payload),
                                         "numeric_conformance_sha256": hashlib.sha256(numeric_payloads["diagnostics"]).hexdigest()},
+                        "operations": {"sha256": hashlib.sha256(operations_payload).hexdigest(), "bytes": len(operations_payload),
+                                       "numeric_conformance_sha256": hashlib.sha256(numeric_payloads["operations"]).hexdigest()},
+                        "field": {"sha256": hashlib.sha256(field_payload).hexdigest(), "bytes": len(field_payload),
+                                  "numeric_conformance_sha256": hashlib.sha256(numeric_payloads["field"]).hexdigest()},
                         "infection": {"sha256": hashlib.sha256(infection_payload).hexdigest(), "bytes": len(infection_payload),
                                       "numeric_conformance_sha256": hashlib.sha256(numeric_payloads["infection"]).hexdigest()},
                         "market": {"sha256": hashlib.sha256(market_payload).hexdigest(), "bytes": len(market_payload),

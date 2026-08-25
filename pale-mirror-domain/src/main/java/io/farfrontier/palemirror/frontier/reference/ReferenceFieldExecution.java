@@ -146,7 +146,10 @@ final class ReferenceFieldExecution {
                 if (engagement.kind() == ReferenceEngagementKind.POST_DEFENCE) resolvePostEngagement(field, world, engagement);
                 else resolveNestRaid(field, world, engagement);
             }
-            if (engagement.status() != ReferenceEngagementStatus.ACTIVE) field.mutableEngagements().remove(engagement.id());
+            if (engagement.status() != ReferenceEngagementStatus.ACTIVE) {
+                field.mutableCompletedEngagements().add(engagement);
+                field.mutableEngagements().remove(engagement.id());
+            }
         }
     }
 

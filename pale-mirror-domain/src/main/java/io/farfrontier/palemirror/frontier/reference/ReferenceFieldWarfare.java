@@ -21,6 +21,8 @@ public final class ReferenceFieldWarfare {
     private final LinkedHashMap<Integer, ReferenceFieldLink> links = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceFieldCampaign> campaigns = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceFieldEngagement> engagements = new LinkedHashMap<>();
+    private final java.util.ArrayList<ReferenceFieldCampaign> completedCampaigns = new java.util.ArrayList<>();
+    private final java.util.ArrayList<ReferenceFieldEngagement> completedEngagements = new java.util.ArrayList<>();
     private int nextPostId = 1;
     private int nextLinkId = 1;
     private int nextCampaignId = 1;
@@ -30,6 +32,8 @@ public final class ReferenceFieldWarfare {
     public Map<Integer, ReferenceFieldLink> links() { return immutableOrdered(links); }
     public Map<Integer, ReferenceFieldCampaign> campaigns() { return immutableOrdered(campaigns); }
     public Map<Integer, ReferenceFieldEngagement> engagements() { return immutableOrdered(engagements); }
+    public List<ReferenceFieldCampaign> completedCampaigns() { return List.copyOf(completedCampaigns); }
+    public List<ReferenceFieldEngagement> completedEngagements() { return List.copyOf(completedEngagements); }
     public int nextPostId() { return nextPostId; }
     public int nextLinkId() { return nextLinkId; }
     public int nextCampaignId() { return nextCampaignId; }
@@ -39,6 +43,8 @@ public final class ReferenceFieldWarfare {
     Map<Integer, ReferenceFieldLink> mutableLinks() { return links; }
     Map<Integer, ReferenceFieldCampaign> mutableCampaigns() { return campaigns; }
     Map<Integer, ReferenceFieldEngagement> mutableEngagements() { return engagements; }
+    List<ReferenceFieldCampaign> mutableCompletedCampaigns() { return completedCampaigns; }
+    List<ReferenceFieldEngagement> mutableCompletedEngagements() { return completedEngagements; }
     int nextEngagementIdAndIncrement() { return nextEngagementId++; }
 
     /** Resolve the field-only branch of an arrived human operation. */

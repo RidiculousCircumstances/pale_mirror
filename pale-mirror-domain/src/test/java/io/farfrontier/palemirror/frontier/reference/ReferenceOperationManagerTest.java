@@ -136,6 +136,11 @@ class ReferenceOperationManagerTest {
         assertEquals(0.0d, settlement.mobilizedPersonnel());
         assertEquals(31, settlement.residents().availableIds().size());
         assertEquals(0, world.operations().active().size());
+        assertEquals(List.of(operation), world.operations().completed());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> fields = (Map<String, Object>) ReferenceCanonicalStateOperations.capture(world).get("fields");
+        assertEquals(0, ((List<?>) ((Map<?, ?>) fields.get("active")).get("items")).size());
+        assertEquals(1, ((List<?>) ((Map<?, ?>) fields.get("completed")).get("items")).size());
         assertEquals("D32: operation 1 completed (intel_gathered)", world.events().getLast());
     }
 
@@ -170,6 +175,7 @@ class ReferenceOperationManagerTest {
         assertEquals(.8310037738584878d, operation.supplies().get(ReferenceResource.FOOD));
         assertEquals(.008864040254490542d, operation.supplies().get(ReferenceResource.MEDICINE));
         assertEquals(0, world.operations().active().size());
+        assertEquals(List.of(operation), world.operations().completed());
     }
 
     private static ReferenceWorld sourceWorld() {
