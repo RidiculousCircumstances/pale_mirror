@@ -461,7 +461,6 @@ public final class ReferenceMarketEconomy {
     }
 
     private record SiteProductionSpec(double yield, double toolsPerOutput, double energyPerOutput) { }
-
     ReferenceEconomyEngine economy() { return economy; }
     LinkedHashMap<Integer, ReferenceCompany> mutableCompanies() { return companies; }
     LinkedHashMap<Integer, ReferenceHouseholdLedger> mutableHouseholds() { return households; }
@@ -474,6 +473,11 @@ public final class ReferenceMarketEconomy {
     EnumMap<ReferenceResource, Double> mutablePublicInventory(int settlementId) {
         return publicInventory.computeIfAbsent(settlementId, ignored -> emptyStock());
     }
+    void restoreCounters(int company, int licence, int contract, int credit, int report, int project) {
+        if (company < 1 || licence < 1 || contract < 1 || credit < 1 || report < 1 || project < 1) throw new IllegalArgumentException("market counter must be positive");
+        nextCompanyId = company; nextLicenceId = licence; nextContractId = contract; nextCreditId = credit; nextReportId = report; nextProjectId = project;
+    }
+    void restoreHistory(List<ReferenceMarketHistoryEntry> restored) { history.clear(); history.addAll(List.copyOf(Objects.requireNonNull(restored, "restored"))); }
     int nextContractId() { return nextContractId++; }
     int nextCreditId() { return nextCreditId++; }
     int nextReportId() { return nextReportId++; }
