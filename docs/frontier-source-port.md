@@ -73,6 +73,11 @@ outbound/return movement and cargo accounting plus carrier delivery of a latent
 colony. Regenerate it only with
 `tools/frontier/generate_infection_bioform_movement_microtrace.py` using `python3.11`.
 
+`docs/frontier-reference-v2-war-economy.json` fixes the V2 company-state
+thresholds, local emergency purchase/credit path, siege-only documented
+requisition and pending-to-paid compensation lifecycle. Regenerate it only
+with `tools/frontier/generate_v2_war_economy_microtrace.py` using `python3.11`.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve

@@ -39,8 +39,12 @@ public final class ReferenceV2State {
     private final LinkedHashMap<Integer, ReferenceEmergencyRegime> emergencyRegimes = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceCoalitionCharter> charters = new LinkedHashMap<>();
     private final LinkedHashMap<ReferenceRouteKey, ReferenceRouteInsurance> routeInsurance = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceProcurementOrder> procurements = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceCompensationClaim> compensation = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceNeuralChrysalis> chrysalises = new LinkedHashMap<>();
     private final LinkedHashMap<String, ReferenceHiveLifecycle> hiveLifecycle = new LinkedHashMap<>();
+    private int nextProcurementId = 1;
+    private int nextClaimId = 1;
 
     ReferenceV2State(ReferenceWorld world) {
         ReferenceWorld required = Objects.requireNonNull(world, "world");
@@ -64,6 +68,8 @@ public final class ReferenceV2State {
     public Map<Integer, ReferenceEmergencyRegime> emergencyRegimes() { return immutableOrdered(emergencyRegimes); }
     public Map<Integer, ReferenceCoalitionCharter> charters() { return immutableOrdered(charters); }
     public Map<ReferenceRouteKey, ReferenceRouteInsurance> routeInsurance() { return immutableOrdered(routeInsurance); }
+    public Map<Integer, ReferenceProcurementOrder> procurements() { return immutableOrdered(procurements); }
+    public Map<Integer, ReferenceCompensationClaim> compensation() { return immutableOrdered(compensation); }
     public Map<Integer, ReferenceNeuralChrysalis> chrysalises() { return immutableOrdered(chrysalises); }
     public Map<String, ReferenceHiveLifecycle> hiveLifecycle() { return immutableOrdered(hiveLifecycle); }
 
@@ -258,6 +264,27 @@ public final class ReferenceV2State {
         ReferenceV2CivicPolicy.update(world, civics, doctrines, rationPlans, emergencyRegimes, charters, routeInsurance);
     }
 
+    /** Apply the source V2 firm-distress pass after the market's daily settlement. */
+    public void updateCompanyStates(ReferenceWorld world) {
+        ReferenceV2WarEconomy.updateCompanyStates(world);
+    }
+
+    /** Purchase local critical stock before the source's last-resort siege requisition path. */
+    public void issueProcurement(ReferenceWorld world) {
+        ReferenceV2WarEconomy.issueProcurement(world, civics, doctrines, procurements, compensation,
+                this::nextProcurementId, this::nextClaimId);
+    }
+
+    void requisition(ReferenceWorld world, ReferenceSettlement settlement, ReferenceCompany company,
+                     ReferenceResource resource, double quantity, double price) {
+        ReferenceV2WarEconomy.requisition(world, civics, doctrines, compensation, this::nextClaimId,
+                settlement, company, resource, quantity, price);
+    }
+
+    void settleCompensation(ReferenceWorld world) {
+        ReferenceV2WarEconomy.settleCompensation(world, compensation);
+    }
+
     /** Return the civic cap for civilian food issue; absent civic state is source-normal. */
     public double applyRations(ReferenceWorld world, int settlementId, double foodNeed) {
         Objects.requireNonNull(world, "world");
@@ -281,6 +308,9 @@ public final class ReferenceV2State {
             }
         }
     }
+
+    private int nextProcurementId() { return nextProcurementId++; }
+    private int nextClaimId() { return nextClaimId++; }
 
     private void advanceChrysalis(ReferenceWorld world, ReferenceHiveOrgan organ) {
         ReferenceNeuralChrysalis chrysalis = chrysalises.get(organ.id());

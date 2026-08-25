@@ -80,6 +80,11 @@ public final class ReferenceCompany {
         inventory.put(required, inventory.get(required) - actual);
         return actual;
     }
+    /** Exact source-policy debit; callers must establish availability before invoking it. */
+    void subtract(ReferenceResource resource, double amount) {
+        ReferenceResource required = Objects.requireNonNull(resource, "resource");
+        inventory.put(required, inventory.get(required) - amount);
+    }
     public Map<ReferenceResource, Double> inventory() { return Map.copyOf(inventory); }
 
     private static EnumMap<ReferenceResource, Double> emptyInventory() {

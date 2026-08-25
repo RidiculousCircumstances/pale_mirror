@@ -33,6 +33,14 @@ final class ReferenceV2Rules {
     static final double ROUTE_INSURANCE_RISK_MULTIPLIER = 3.0d;
     static final int ROUTE_INSURANCE_DAYS = 12;
     static final double CHARTER_BREACH_TRUST_LOSS = 0.12d;
+    static final double COMPANY_STRESS_CASH_DAYS = 4.0d;
+    static final double COMPANY_INSOLVENCY_CASH_DAYS = 10.0d;
+    static final double PROCUREMENT_FRACTION = 0.30d;
+    static final double EMERGENCY_PRICE_MULTIPLIER = 1.25d;
+    static final double SIEGE_PRICE_MULTIPLIER = 1.50d;
+    static final int SIEGE_RESERVE_DAYS = 16;
+    static final int COMPENSATION_DELAY_DAYS = 20;
+    static final double PROCUREMENT_MINIMUM_QUANTITY = 0.2d;
     static final int CHRYSALIS_DAYS = 18;
     static final double CHRYSALIS_MINIMUM_BIOMASS = 105.0d;
     static final double CHRYSALIS_MINIMUM_TISSUE = 0.46d;
