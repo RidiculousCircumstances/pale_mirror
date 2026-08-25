@@ -83,6 +83,18 @@ public final class ReferenceWorld {
         operations = new ReferenceOperationManager();
         field = new ReferenceFieldWarfare();
         marketWorld = new ReferenceMarketWorld(trade);
+        marketWorld.siteSurveyor(new ReferenceSiteSurveyor() {
+            @Override
+            public ReferenceSiteSurveyor.ReferenceSitePosition place(ReferenceSettlement host, ReferenceSiteKind kind) {
+                ReferenceGridPosition position = placeSitePosition(host, kind);
+                return new ReferenceSiteSurveyor.ReferenceSitePosition(position.x(), position.y());
+            }
+
+            @Override
+            public double quality(ReferenceSiteKind kind, int x, int y) {
+                return siteCellQuality(kind, x, y);
+            }
+        });
 
         generateSettlements();
         generateResourceSites();

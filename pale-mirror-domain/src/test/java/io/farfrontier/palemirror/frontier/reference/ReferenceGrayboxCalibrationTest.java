@@ -52,6 +52,18 @@ class ReferenceGrayboxCalibrationTest {
                 "the market must consume the current civic-ration issue, not an implicit full meal");
     }
 
+    @Test
+    void sourceWorldBindsExactSiteSurveyRulesBeforeMarketExpansion() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.graybox1To40(42L));
+        ReferenceSiteSurveyor surveyor = world.marketWorld().siteSurveyor();
+        ReferenceSiteSurveyor.ReferenceSitePosition position = surveyor.place(
+                world.settlements().get(1), ReferenceSiteKind.FARM);
+
+        assertTrue(position.x() > 0 && position.x() < world.config().width() - 1);
+        assertTrue(position.y() > 0 && position.y() < world.config().height() - 1);
+        assertTrue(surveyor.quality(ReferenceSiteKind.FARM, position.x(), position.y()) >= .20d);
+    }
+
     private static void assertInclusive(double actual, double minimum, double maximum, String subject) {
         assertTrue(actual >= minimum && actual <= maximum,
                 () -> subject + " expected within [" + minimum + ", " + maximum + "], got " + actual);
