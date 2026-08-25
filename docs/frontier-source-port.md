@@ -137,6 +137,16 @@ warehouse and housing retain their own coloured rectangles inside it. This is
 a presentation rule only; it cannot add a second construction owner or change
 the facility fact carried by interaction slots.
 
+The fixed graybox colour vocabulary is semantic rather than decorative: red is
+active hostile pressure, combat or a disrupted route; purple is hive signal,
+contamination or quarantine; blue is open logistics; cyan is human control,
+checkpoints and defensive lines; lime is food/harvest; white is medical or
+housing; brown is timber/storage; yellow is observation, energy or tools;
+orange is extraction, a trace or a contested sector; pink is brood/chrysalis;
+black is destroyed, abandoned or severe feral state; grey is neutral or purely
+descriptive. Source labels retain exact IDs and values, so colour never
+replaces the domain fact it represents.
+
 `docs/frontier-reference-v2-frontier.json` fixes V2 territorial
 recontamination, source Dijkstra supply values, supplied-cordon control and
 coordinate-targeted bioform counterattack resolution. Regenerate it only with

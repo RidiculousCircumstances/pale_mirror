@@ -13,17 +13,31 @@ final class SourceGrayboxPalette {
 
     static BlockState block(String colour) {
         String token = colour.toLowerCase(Locale.ROOT);
-        if (token.contains("collapsed") || token.contains("disabled") || token.contains("destroyed") || token.contains("feral_severe")) return Blocks.BLACK_WOOL.defaultBlockState();
-        if (token.contains("siege") || token.contains("core") || token.contains("severe")) return Blocks.RED_WOOL.defaultBlockState();
-        if (token.contains("emergency") || token.contains("mine") || token.contains("breaker") || token.contains("trace")) return Blocks.ORANGE_WOOL.defaultBlockState();
-        if (token.contains("watch") || token.contains("armory") || token.contains("power")) return Blocks.YELLOW_WOOL.defaultBlockState();
-        if (token.contains("recovery") || token.contains("farm") || token.contains("digestive") || token.contains("harvester")) return Blocks.LIME_WOOL.defaultBlockState();
-        if (token.contains("clinic") || token.contains("housing")) return Blocks.WHITE_WOOL.defaultBlockState();
-        if (token.contains("warehouse") || token.contains("forest") || token.contains("wood")) return Blocks.BROWN_WOOL.defaultBlockState();
-        if (token.contains("synapse") || token.contains("signal") || token.contains("quarantin") || token.contains("carrier")) return Blocks.PURPLE_WOOL.defaultBlockState();
+        if (token.contains("collapsed") || token.contains("disabled") || token.contains("destroyed") || token.contains("feral_severe")
+                || token.contains("abandoned") || token.contains("failed") || token.contains("aborted")) return Blocks.BLACK_WOOL.defaultBlockState();
+        if (token.contains("feral_active") || token.contains("route.disrupted") || token.contains("sector.hive")
+                || token.contains("siege") || token.contains("core") || token.contains("strongpoint") || token.contains("engage") || token.contains("intercepted")) {
+            return Blocks.RED_WOOL.defaultBlockState();
+        }
+        if (token.contains("emergency") || token.contains("mine") || token.contains("breaker") || token.contains("trace")
+                || token.contains("sector.contested") || token.contains("assessment") || token.contains("build_up")) {
+            return Blocks.ORANGE_WOOL.defaultBlockState();
+        }
+        if (token.contains("watch") || token.contains("armory") || token.contains("power") || token.contains("observation_post")
+                || token.contains("energy") || token.contains("tools") || token.contains("assembling")) return Blocks.YELLOW_WOOL.defaultBlockState();
+        if (token.contains("recovery") || token.contains("farm") || token.contains("digestive") || token.contains("harvester")
+                || token.contains("cargo.food") || token.contains("cargo.seeds")) return Blocks.LIME_WOOL.defaultBlockState();
+        if (token.contains("clinic") || token.contains("housing") || token.contains("medicine")) return Blocks.WHITE_WOOL.defaultBlockState();
+        if (token.contains("warehouse") || token.contains("forest") || token.contains("wood") || token.contains("timber")) return Blocks.BROWN_WOOL.defaultBlockState();
+        if (token.contains("synapse") || token.contains("signal") || token.contains("quarantin") || token.contains("carrier")
+                || token.contains("sporulator") || token.contains("contaminated")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("brood") || token.contains("chrysalis")) return Blocks.PINK_WOOL.defaultBlockState();
-        if (token.contains("workshop") || token.contains("sector") || token.contains("open") || token.contains("supply_corridor")) return Blocks.BLUE_WOOL.defaultBlockState();
-        if (token.contains("fortification") || token.contains("fortified_line") || token.contains("field") || token.contains("activity")) return Blocks.CYAN_WOOL.defaultBlockState();
+        if (token.contains("workshop") || token.contains("route.open") || token.contains("supply_corridor")
+                || token.contains("en_route") || token.contains("forward_base")) return Blocks.BLUE_WOOL.defaultBlockState();
+        if (token.contains("fortification") || token.contains("fortified_line") || token.contains("field") || token.contains("sector.human")
+                || token.contains("checkpoint") || token.contains("returning") || token.contains("withdraw")) return Blocks.CYAN_WOOL.defaultBlockState();
+        if (token.contains("cargo.weapons") || token.contains("cargo.ammo")) return Blocks.RED_WOOL.defaultBlockState();
+        if (token.contains("cargo.ore")) return Blocks.ORANGE_WOOL.defaultBlockState();
         return Blocks.LIGHT_GRAY_WOOL.defaultBlockState();
     }
 

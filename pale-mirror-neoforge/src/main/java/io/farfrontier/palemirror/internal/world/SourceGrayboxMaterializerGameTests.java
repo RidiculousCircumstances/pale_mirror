@@ -201,6 +201,29 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void paletteSeparatesTheSourceStatesThatDriveManualGrayboxReading(GameTestHelper helper) {
+        helper.assertValueEqual(SourceGrayboxPalette.block("cell.feral_active").getBlock(), Blocks.RED_WOOL,
+                "an active feral cell must not be visually indistinguishable from a neutral cell");
+        helper.assertValueEqual(SourceGrayboxPalette.block("cell.signal_active").getBlock(), Blocks.PURPLE_WOOL,
+                "a signal-led hive cell must remain visibly different from feral infection");
+        helper.assertValueEqual(SourceGrayboxPalette.block("route.disrupted").getBlock(), Blocks.RED_WOOL,
+                "a disrupted route must be distinguishable from an open blue route");
+        helper.assertValueEqual(SourceGrayboxPalette.block("route.open").getBlock(), Blocks.BLUE_WOOL,
+                "an open route must retain the logistics colour");
+        helper.assertValueEqual(SourceGrayboxPalette.block("cargo.medicine").getBlock(), Blocks.WHITE_WOOL,
+                "medical cargo must remain visibly separate from food and ammunition");
+        helper.assertValueEqual(SourceGrayboxPalette.block("cargo.ammo").getBlock(), Blocks.RED_WOOL,
+                "ammunition cargo must retain its combat colour");
+        helper.assertValueEqual(SourceGrayboxPalette.block("post.observation_post").getBlock(), Blocks.YELLOW_WOOL,
+                "an observation post must be distinguishable from a checkpoint or a strongpoint");
+        helper.assertValueEqual(SourceGrayboxPalette.block("post.strongpoint").getBlock(), Blocks.RED_WOOL,
+                "a strongpoint must retain its high-threat defensive colour");
+        helper.assertValueEqual(SourceGrayboxPalette.block("sector.human").getBlock(), Blocks.CYAN_WOOL,
+                "human territorial control must not collapse into the neutral sector colour");
+        helper.succeed();
+    }
+
     private static void prepareFlatFloor(GameTestHelper helper, BlockPos anchor, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
             helper.getLevel().setBlock(anchor.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
