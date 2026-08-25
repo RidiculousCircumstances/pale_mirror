@@ -169,6 +169,27 @@ public final class ReferenceFieldWarfare {
         return post;
     }
 
+    /** Apply one physical structural loss while retaining the field owner's custody rules. */
+    MaterializedPostDamage applyMaterializedPostDamage(ReferenceWorld world, int postId, double weight) {
+        ReferenceFieldPost post = posts.get(postId);
+        if (post == null) return new MaterializedPostDamage(false, "unknown field post", 0.0d);
+        if (post.status() != ReferenceFieldPostStatus.BUILDING && post.status() != ReferenceFieldPostStatus.ACTIVE
+                && post.status() != ReferenceFieldPostStatus.ISOLATED) {
+            return new MaterializedPostDamage(false, "field post is not damageable", 0.0d);
+        }
+        double before = post.integrity();
+        double after = Math.max(0.0d, before - weight);
+        double applied = before - after;
+        if (applied <= 0.0d) return new MaterializedPostDamage(false, "target has no remaining weight", 0.0d);
+        post.integrity(after);
+        if (after <= 0.0d) {
+            post.status(ReferenceFieldPostStatus.DISMANTLED);
+            post.destroyedDay(world.day());
+            ReferenceFieldExecution.evacuatePostGarrison(world, post);
+        }
+        return new MaterializedPostDamage(true, "applied", applied);
+    }
+
     public boolean startModule(ReferenceWorld world, int postId, ReferenceFieldModuleKind module) {
         ReferenceWorld required = Objects.requireNonNull(world, "world");
         ReferenceFieldPost post = posts.get(postId);
@@ -245,4 +266,6 @@ public final class ReferenceFieldWarfare {
     private static <K, V> Map<K, V> immutableOrdered(Map<K, V> values) {
         return Collections.unmodifiableMap(new LinkedHashMap<>(values));
     }
+
+    record MaterializedPostDamage(boolean applied, String reason, double appliedWeight) { }
 }

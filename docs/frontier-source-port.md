@@ -105,12 +105,14 @@ movement, arrival, return, exact-resident release and post-upkeep states used
 by the Java operation/field execution port. Regenerate it only with
 `tools/frontier/generate_operations_lifecycle_microtrace.py` using `python3.11`.
 
-`docs/frontier-reference-materialized-facts.json` fixes the six source-owned
+`docs/frontier-reference-materialized-facts.json` fixes the seven source-owned
 non-entity graybox facts: functional facility capacity, resource-site
 condition, route capacity, organ vitality/biomass, one named operation cargo
-resource, and one named field-post cargo resource. The transport adapter supplies
-version, event identity and freshness; the source fact supplies only exact
-subject ID and weight. Regenerate
+resource, one named field-post cargo resource, and field-post structural
+integrity. A zero-integrity physical post becomes `dismantled` and returns
+surviving residents through the existing custody owner; it never fabricates
+combat casualties. The transport adapter supplies version, event identity and
+freshness; the source fact supplies only exact subject ID and weight. Regenerate
 it only with `tools/frontier/generate_materialized_facts_microtrace.py` using
 `python3.11`.
 

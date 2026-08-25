@@ -81,6 +81,9 @@ def payload(root: Path) -> bytes:
             "trace:field-post-cargo", MaterializedFactKind.FIELD_POST_CARGO_LOST,
             f"field_post:{post.id}:cargo:food", field_post_food_weight,
         ))
+        field_post = world.apply_materialized_fact(MaterializedFact(
+            "trace:field-post", MaterializedFactKind.FIELD_POST_DAMAGED, f"field_post:{post.id}", post.integrity,
+        ))
         unsupported = world.apply_materialized_fact(MaterializedFact(
             "trace:housing", MaterializedFactKind.FACILITY_DAMAGED,
             "settlement:1:facility:housing", 1.0,
@@ -91,6 +94,7 @@ def payload(root: Path) -> bytes:
             "outcomes": {
                 "facility": outcome(facility), "site": outcome(site_outcome), "route": outcome(route_outcome),
                 "organ": outcome(organ_outcome), "cargo": outcome(cargo), "field_post_cargo": outcome(field_post_cargo),
+                "field_post": outcome(field_post),
                 "unsupported": outcome(unsupported),
             },
             "state": {
@@ -101,6 +105,7 @@ def payload(root: Path) -> bytes:
                 "combat_damage_memory": world.infection.damage_memory["combat"],
                 "cargo": {resource.value: amount for resource, amount in sorted(operation.cargo.items(), key=lambda item: item[0].value)},
                 "field_post_cargo": {resource.value: amount for resource, amount in sorted(post.stock.items(), key=lambda item: item[0].value)},
+                "field_post": {"integrity": post.integrity, "status": post.status.value, "garrison": post.garrison},
             },
         })
     finally:

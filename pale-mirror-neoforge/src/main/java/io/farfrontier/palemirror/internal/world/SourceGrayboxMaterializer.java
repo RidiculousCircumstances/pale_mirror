@@ -300,7 +300,7 @@ final class SourceGrayboxMaterializer {
                         + " infection=" + number(route.infection()) + (route.quarantined() ? " QUARANTINED" : route.disrupted() ? " DISRUPTED" : " OPEN"),
                 midpoint(route.start().x(), route.end().x()), midpoint(route.start().z(), route.end().z()));
         for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, "field-post:" + post.id(),
-                "[P] " + post.kind() + " " + post.status() + " garrison=" + post.garrison() + " wounded=" + post.wounded()
+                "[P] " + post.kind() + " " + post.status() + " integrity=" + number(post.integrity()) + " garrison=" + post.garrison() + " wounded=" + post.wounded()
                         + " modules=" + String.join(",", post.modules()), post.rectangle().centreX(), post.rectangle().centreZ());
         Map<Integer, ReferenceGrayboxSnapshot.FieldPost> posts = new HashMap<>();
         snapshot.fieldPosts().forEach(post -> posts.put(post.id(), post));

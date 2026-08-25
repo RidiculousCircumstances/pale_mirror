@@ -361,7 +361,7 @@ final class ReferenceFieldExecution {
         if (updatePersonnel) operation.personnel(Math.max(0.0d, operation.personnel() - bounded));
     }
 
-    private static void evacuatePostGarrison(ReferenceWorld world, ReferenceFieldPost post) {
+    static void evacuatePostGarrison(ReferenceWorld world, ReferenceFieldPost post) {
         for (Map.Entry<Integer, Double> entry : List.copyOf(post.garrisonBySettlement().entrySet())) {
             ReferenceSettlement settlement = world.settlements().get(entry.getKey());
             if (settlement == null) continue;

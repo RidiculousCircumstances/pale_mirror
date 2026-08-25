@@ -126,7 +126,8 @@ final class SourceGrayboxPresentationLedger extends SavedData {
             if (interactive != (Double.isFinite(interactionWeight) && interactionWeight > 0.0d)) {
                 throw new IllegalArgumentException("source graybox interaction metadata is invalid");
             }
-            if (interactive && !Set.of("facility_damaged", "site_damaged", "route_damaged", "organ_damaged", "operation_cargo_lost", "field_post_cargo_lost")
+            if (interactive && !Set.of("facility_damaged", "site_damaged", "route_damaged", "organ_damaged", "operation_cargo_lost",
+                    "field_post_cargo_lost", "field_post_damaged")
                     .contains(interactionKind)) {
                 throw new IllegalArgumentException("source graybox interaction kind is invalid");
             }

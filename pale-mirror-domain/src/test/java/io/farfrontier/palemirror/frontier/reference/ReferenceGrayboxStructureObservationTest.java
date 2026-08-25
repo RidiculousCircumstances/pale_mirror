@@ -122,6 +122,36 @@ class ReferenceGrayboxStructureObservationTest {
     }
 
     @Test
+    void destroyedFieldPostIsDismantledWithoutInventingCombatCasualties() {
+        ReferenceWorld world = grayboxWorld();
+        ReferenceSettlement settlement = world.settlements().get(1);
+        ReferenceFieldCampaign campaign = world.field().createCampaign(world, ReferenceCampaignKind.CONTAINMENT, settlement.id(), Set.of(),
+                "cell", null, 10, 10, "physical destruction");
+        assertTrue(campaign != null);
+        ReferenceFieldPost post = startPostWithFood(world, campaign, settlement);
+        double populationBefore = settlement.population();
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(world);
+        String subject = "field_post:" + post.id();
+        assertTrue(snapshot.interactions().stream().anyMatch(item -> item.subjectId().equals(subject)
+                && item.kind().equals("field_post_damaged") && item.totalWeight() == post.integrity()));
+
+        ReferenceGrayboxObservationOutcome outcome = world.observe(new ReferenceGrayboxStructureObservation(
+                1, "physical:field-post", snapshot.stateRevision(), ReferenceGrayboxStructureObservation.Kind.FIELD_POST_DAMAGED,
+                subject, post.integrity()));
+
+        assertTrue(outcome.applied());
+        assertEquals(ReferenceFieldPostStatus.DISMANTLED, post.status());
+        assertEquals(0.0d, post.integrity());
+        assertEquals(0.0d, post.garrison());
+        assertEquals(populationBefore, settlement.population());
+        ReferenceGrayboxObservationOutcome retry = world.observe(new ReferenceGrayboxStructureObservation(
+                1, "physical:field-post-retry", outcome.stateRevision(), ReferenceGrayboxStructureObservation.Kind.FIELD_POST_DAMAGED,
+                subject, 1.0d));
+        assertEquals(ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT, retry.status());
+        world.assertProfileInvariants();
+    }
+
+    @Test
     void staleOrNonfunctionalFactsDoNotInventAStateChange() {
         ReferenceWorld world = grayboxWorld();
         String revision = ReferenceGrayboxProjection.from(world).stateRevision();

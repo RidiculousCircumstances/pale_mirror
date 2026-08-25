@@ -84,6 +84,7 @@ final class ReferenceGrayboxObservationExecutor {
             case ORGAN_DAMAGED -> damageOrgan(required, event);
             case OPERATION_CARGO_LOST -> loseOperationCargo(required, event);
             case FIELD_POST_CARGO_LOST -> loseFieldPostCargo(required, event);
+            case FIELD_POST_DAMAGED -> damageFieldPost(required, event);
         };
         if (!mutation.applied()) return outcome(event, mutation.status(), mutation.reason(), before);
 
@@ -274,6 +275,14 @@ final class ReferenceGrayboxObservationExecutor {
         double after = Math.max(0.0d, before - event.weight());
         post.stock(resource, after);
         return applied(before - after);
+    }
+
+    private static StructureMutation damageFieldPost(ReferenceWorld world, ReferenceGrayboxStructureObservation event) {
+        Integer postId = numericSubject(event.subjectId(), "field_post");
+        if (postId == null) return unknown("invalid field post subject");
+        ReferenceFieldWarfare.MaterializedPostDamage result = world.field().applyMaterializedPostDamage(world, postId, event.weight());
+        if (result.applied()) return applied(result.appliedWeight());
+        return result.reason().equals("unknown field post") ? unknown(result.reason()) : conflict(result.reason());
     }
 
     private static Integer numericSubject(String subject, String prefix) {

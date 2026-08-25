@@ -42,7 +42,7 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.FieldLink> links = links(required);
         List<ReferenceGrayboxSnapshot.Activity> activities = activities(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Cargo> cargoes = cargoes(required, operationPositions, postPositions);
-        List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, cargoes);
+        List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, posts, cargoes);
         List<ReferenceGrayboxSnapshot.Sector> sectors = sectors(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises = chrysalises(required, sectorAreas);
         List<String> events = required.events();
@@ -246,6 +246,7 @@ public final class ReferenceGrayboxProjection {
             List<ReferenceGrayboxSnapshot.ResourceSite> sites,
             List<ReferenceGrayboxSnapshot.Route> routes,
             List<ReferenceGrayboxSnapshot.HiveOrgan> organs,
+            List<ReferenceGrayboxSnapshot.FieldPost> posts,
             List<ReferenceGrayboxSnapshot.Cargo> cargoes
     ) {
         List<ReferenceGrayboxSnapshot.Interaction> result = new ArrayList<>();
@@ -265,6 +266,11 @@ public final class ReferenceGrayboxProjection {
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : organs) if (organ.vitality() > 0.0d) {
             result.add(interaction("hive-organ:" + organ.id(), "organ:" + organ.id(), "organ_damaged", organ.vitality(), 2,
                     ReferenceGrayboxLayout.interactionSlots(organ.rectangle(), 16), organ.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.FieldPost post : posts) if (post.integrity() > 0.0d
+                && Set.of("building", "active", "isolated").contains(post.status())) {
+            result.add(interaction("field-post:" + post.id(), "field_post:" + post.id(), "field_post_damaged", post.integrity(), 4,
+                    ReferenceGrayboxLayout.interactionSlots(post.rectangle(), 16), post.colour()));
         }
         for (ReferenceGrayboxSnapshot.Cargo cargo : cargoes) {
             String factKind = cargo.ownerKind().equals("operation") ? "operation_cargo_lost" : "field_post_cargo_lost";

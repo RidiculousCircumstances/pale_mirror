@@ -37,7 +37,8 @@ public record ReferenceGrayboxStructureObservation(
         ROUTE_DAMAGED,
         ORGAN_DAMAGED,
         OPERATION_CARGO_LOST,
-        FIELD_POST_CARGO_LOST
+        FIELD_POST_CARGO_LOST,
+        FIELD_POST_DAMAGED
     }
 
     private static String required(String value, String name, int maximumLength) {
