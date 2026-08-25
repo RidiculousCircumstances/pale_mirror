@@ -64,7 +64,8 @@ frontier_reference_state_v1
 `diagnostics` contains the retained world, settlement, combat and containment
 histories. Java must preserve the source's retention semantics exactly: where
 the source has an explicit bound it must retain that bound, and where the
-source retains a log or terminal charter Java may not silently compact it.
+source retains a log, terminal charter or terminal campaign Java may not
+silently compact it.
 Retention changes are source-simulation changes and must be made in Python
 first, then ported and re-pinned.
 

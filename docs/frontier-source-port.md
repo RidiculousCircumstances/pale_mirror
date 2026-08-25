@@ -136,6 +136,14 @@ window. Regenerate it only with
 The Java trajectory test asserts its phase-sensitive aggregate and final-event
 read model; it is not an implied equivalence claim.
 
+`docs/frontier-reference-v2-multiseed-canonical-state.json` extends the full
+canonical-state fingerprint across independent generation/RNG paths: seeds 7,
+17, 41 and 73 at days 0, 1, 10, 30 and 60. It carries the same 4096-ULP
+numeric contract as the single-seed full-state trace while preserving every
+discrete branch exactly. Regenerate it only with
+`tools/frontier/generate_v2_multiseed_canonical_state_trace.py` using
+`python3.11`; the Java test compares all twenty checkpoints.
+
 `docs/frontier-reference-v2-public-snapshot.json` records the exact public
 `World.snapshot()` read-model at days 0, 1, 5, 10, 15, 20, 25 and 30 for the
 active 64×44, twelve-settlement, two-seed `source_v2` fixture. Regenerate it

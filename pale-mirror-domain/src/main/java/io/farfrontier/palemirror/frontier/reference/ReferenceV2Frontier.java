@@ -76,13 +76,11 @@ final class ReferenceV2Frontier {
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(world, "world");
         state.mutableSupplyLines().clear();
-        Iterator<ReferenceFrontCampaign> campaigns = state.mutableFrontCampaigns().values().iterator();
-        while (campaigns.hasNext()) {
-            ReferenceFrontCampaign campaign = campaigns.next();
-            if (campaign.phase().terminal()) {
-                campaigns.remove();
-                continue;
-            }
+        for (ReferenceFrontCampaign campaign : state.mutableFrontCampaigns().values()) {
+            // Source V2 retains terminal campaigns as historical domain state.
+            // They no longer receive supply or execution, but planners and
+            // read models can still inspect their terminal outcome.
+            if (campaign.phase().terminal()) continue;
             ReferenceSupplyLineStatus line = supplyLine(state, world, campaign);
             state.mutableSupplyLines().put(campaign.id(), line);
             campaign.risk(line.risk());
@@ -139,7 +137,6 @@ final class ReferenceV2Frontier {
                         campaign.statusReason().isEmpty() ? "force returned" : campaign.statusReason());
                 case COMPLETE, FAILED -> throw new IllegalStateException("terminal campaign was not pruned: " + campaign.id());
             }
-            if (campaign.phase().terminal()) campaigns.remove();
         }
         recontaminateUnheld(state, world);
         state.refreshTerritory(world);

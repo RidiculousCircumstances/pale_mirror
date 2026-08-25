@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.frontier.reference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -63,7 +62,7 @@ class ReferenceV2FrontierTest {
     }
 
     @Test
-    void failedUnsuppliedGrayboxCampaignReturnsEveryNamedResidentAndCleansItsOwnerRecord() {
+    void failedUnsuppliedGrayboxCampaignReturnsEveryNamedResidentAndRetainsItsTerminalOwnerRecord() {
         ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.graybox1To40(81L));
         ReferenceSettlement settlement = world.settlements().get(1);
         List<String> deployed = new ArrayList<>(settlement.deployPeople(1_000_001,
@@ -80,7 +79,11 @@ class ReferenceV2FrontierTest {
 
         world.v2().advanceFrontier(world);
 
-        assertFalse(world.v2().frontCampaigns().containsKey(campaign.id()));
+        ReferenceFrontCampaign terminal = world.v2().frontCampaigns().get(campaign.id());
+        assertEquals(ReferenceFrontPhase.FAILED, terminal.phase());
+        assertEquals(ReferenceFrontPhase.FAILED, terminal.terminalOutcome());
+        assertTrue(terminal.personnelBySettlement().isEmpty());
+        assertTrue(terminal.residentIdsBySettlement().isEmpty());
         assertEquals(0, settlement.mobilizedPersonnel());
         assertTrue(deployed.stream().allMatch(id -> settlement.residents().resident(id).available()));
         assertTrue(world.events().stream().anyMatch(event -> event.contains("front campaign 1 failed: cannot establish a supplied post")));
