@@ -337,6 +337,38 @@ class ReferenceSimulationEngineTest {
         }
     }
 
+    @Test
+    void canonicalStateInfectionOwnerMatchesPinnedPythonAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, RootCheckpoint> expected = Map.of(
+                0, new RootCheckpoint(884_466, "2a2cc17309850ad97aeac4c5ea1a897ffca3a21a276ee15eddab7deecde5cfd7"),
+                1, new RootCheckpoint(897_567, "921c0e9ba0ef5fc7b3efc4a6e7f8f3a0128428f9dee9213b9c90e8e7f1bbde7b"),
+                2, new RootCheckpoint(897_887, "aad42999e6adeac9552bf93b75a07d877e9d6e15af94be8f5319a7c7f8f528f6"),
+                3, new RootCheckpoint(898_445, "95067b3e31bf744fe3e0b348665cb69388ccaff2dece06b13268baf49c014805"),
+                5, new RootCheckpoint(900_087, "08fac13f6d562259540a1bc706d6d6f7b2ad8bcb9a7d0d5ec7af4b6195dac3d5"),
+                10, new RootCheckpoint(903_461, "f964c41f0c2b47f9f30f92a01d7c64597f39c4e7b28b0fc7cc65fe31f6197109"),
+                15, new RootCheckpoint(909_889, "8644791484ccb0b86d7056750e30073c4a05ff12d479759166a4065caa07142a"),
+                20, new RootCheckpoint(918_712, "04e454944c1c6ee4c3194bb2fb8af855d33e4abaa2ef5c7e640332dcc496d10e"),
+                25, new RootCheckpoint(944_824, "01bbb32490a52ac16fa2bf70841b66e0ef85b6eb287b9a476d36d789cfe4dc72"),
+                30, new RootCheckpoint(952_705, "d356c43df18f00c27088698459d28a1571af9a27c2b74fad7fe77f70809eb650"));
+
+        for (int day = 0; day <= 30; day++) {
+            RootCheckpoint checkpoint = expected.get(day);
+            if (checkpoint != null) assertCanonicalCheckpoint(checkpoint, ReferenceCanonicalStateInfection.capture(world), "infection", day);
+            if (day < 30) world.tick();
+        }
+    }
+
+    @Test
+    void canonicalStateInfectionRejectsV2DisabledWorld() {
+        ReferenceWorld legacy = new ReferenceWorld(new ReferenceWorldConfig(
+                64, 44, 12, 42L, 2, false, ReferenceSimulationProfile.SOURCE_V2));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> ReferenceCanonicalStateInfection.capture(legacy));
+
+        assertEquals("canonical state requires V2-enabled reference world", error.getMessage());
+    }
+
     private static void assertCheckpoint(ReferenceWorld world, Checkpoint expected) {
         ReferenceDailyWorldHistory actual = world.history().getLast();
         assertClose(expected.population(), actual.population());

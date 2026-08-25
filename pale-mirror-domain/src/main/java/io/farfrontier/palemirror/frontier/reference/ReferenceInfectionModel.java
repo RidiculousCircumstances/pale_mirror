@@ -17,7 +17,8 @@ public final class ReferenceInfectionModel {
     private static final double BIOME_COPY_CHANCE = 0.64d;
     private static final double NETWORK_THRESHOLD = 0.28d;
     private static final double INITIAL_BIOMASS = 115.0d;
-    private static final double INITIAL_SAMPLES = 3.0d;
+    private static final double INITIAL_SAMPLES = 3.0d, DEFAULT_SPAWN_THRESHOLD = 0.76d;
+    private static final int DEFAULT_MAX_SWARMS = 7;
     private static final double SIGNAL_MINIMUM = 0.01d;
     private static final double SIGNAL_RADIUS_PER_SYNAPSE = 13.0d;
     private static final double SIGNAL_FALLOFF = 0.075d;
@@ -44,6 +45,8 @@ public final class ReferenceInfectionModel {
     final List<ReferenceHiveEconomySnapshot> nestEconomyHistory = new ArrayList<>();
     final List<ReferenceLatentColony> latentColonies = new ArrayList<>();
     final List<ReferenceNestProject> nestProjects = new ArrayList<>();
+    /** Retained source-owned compatibility ledger; the active director does not populate it. */
+    final List<ReferenceHiveIntent> intents = new ArrayList<>();
     final List<ReferenceHiveHistoryEvent> projectHistory = new ArrayList<>();
     final LinkedHashMap<String, Double> damageMemory = new LinkedHashMap<>();
     final List<ReferenceExploitationSite> pendingExploitation = new ArrayList<>();
@@ -52,10 +55,11 @@ public final class ReferenceInfectionModel {
     double harvestedGeneticMaterial;
     private double growthRate = 0.027d;
     private double spreadRate = 0.034d;
+    private double spawnThreshold = DEFAULT_SPAWN_THRESHOLD;
+    private int maxSwarms = DEFAULT_MAX_SWARMS;
     private int nextOrganId = 1;
     private int nextSwarmId = 1;
     private Integer lastEconomySnapshotDay;
-
     public ReferenceInfectionModel(int width, int height, long seed, double combatScale, boolean discreteBioforms) {
         if (width < 1 || height < 1) throw new IllegalArgumentException("infection map dimensions must be positive");
         if (combatScale <= 0.0d) throw new IllegalArgumentException("combat scale must be positive");
@@ -68,7 +72,6 @@ public final class ReferenceInfectionModel {
         ecosystem = new ReferenceEcosystem(biomes, rng);
         level = new double[height][width];
     }
-
     public int width() { return width; }
     public int height() { return height; }
     public double combatScale() { return combatScale; }
@@ -80,6 +83,10 @@ public final class ReferenceInfectionModel {
     public void growthRate(double value) { growthRate = value; }
     public double spreadRate() { return spreadRate; }
     public void spreadRate(double value) { spreadRate = value; }
+    public double spawnThreshold() { return spawnThreshold; }
+    public void spawnThreshold(double value) { spawnThreshold = value; }
+    public int maxSwarms() { return maxSwarms; }
+    public void maxSwarms(int value) { if (value < 0) throw new IllegalArgumentException("max swarms cannot be negative"); maxSwarms = value; }
     public List<ReferenceNetworkFlow> networkFlows() { return List.copyOf(networkFlows); }
     public Map<Integer, ReferenceHiveEconomyEntry> nestEconomy() { return Collections.unmodifiableMap(new LinkedHashMap<>(nestEconomy)); }
     public List<ReferenceHiveEconomySnapshot> nestEconomyHistory() { return List.copyOf(nestEconomyHistory); }
@@ -87,6 +94,7 @@ public final class ReferenceInfectionModel {
     public double harvestedGeneticMaterial() { return harvestedGeneticMaterial; }
     public List<ReferenceLatentColony> latentColonies() { return List.copyOf(latentColonies); }
     public List<ReferenceNestProject> nestProjects() { return List.copyOf(nestProjects); }
+    public List<ReferenceHiveIntent> intents() { return List.copyOf(intents); }
     public List<ReferenceHiveHistoryEvent> projectHistory() { return List.copyOf(projectHistory); }
     public Map<String, Double> damageMemory() { return Map.copyOf(damageMemory); }
     public List<ReferenceExploitationSite> pendingExploitation() { return List.copyOf(pendingExploitation); }
@@ -97,7 +105,6 @@ public final class ReferenceInfectionModel {
     public ReferenceBiome biomeAt(int x, int y) { return biomes.get(clamp(y, height)).get(clamp(x, width)); }
     public double infectionAt(int x, int y) { return level[clamp(y, height)][clamp(x, width)]; }
     void infectionAt(int x, int y, double value) { level[y][x] = value; }
-
     public void seedInfection(int x, int y, double amount, int radius, boolean createOrgan) {
         for (int yy = Math.max(0, y - radius); yy < Math.min(height, y + radius + 1); yy++) {
             for (int xx = Math.max(0, x - radius); xx < Math.min(width, x + radius + 1); xx++) {
@@ -109,7 +116,6 @@ public final class ReferenceInfectionModel {
         }
         if (createOrgan && organs.values().stream().noneMatch(organ -> organ.x() == x && organ.y() == y)) createOrgan(x, y, null, null, null, ReferenceOrganKind.CORE);
     }
-
     public ReferenceHiveOrgan createOrgan(int x, int y, Double biomass, Double samples, Integer parentOrganId, ReferenceOrganKind kind) {
         int clampedX = clamp(x, width);
         int clampedY = clamp(y, height);
@@ -121,7 +127,6 @@ public final class ReferenceInfectionModel {
         organ.feral(isFeral(organ));
         return organ;
     }
-
     public double pressureAt(double x, double y) { return pressureAt(x, y, PRESSURE_RADIUS); }
 
     /**
@@ -148,7 +153,6 @@ public final class ReferenceInfectionModel {
         }
         return Math.min(1.0d, sum / values.size() * PRESSURE_AVERAGE_WEIGHT + maximum * PRESSURE_MAXIMUM_WEIGHT);
     }
-
     public double routeInfection(int x1, int y1, int x2, int y2) {
         double total = 0.0d;
         for (int index = 0; index <= ROUTE_SAMPLES; index++) {
@@ -159,7 +163,6 @@ public final class ReferenceInfectionModel {
         }
         return total / (ROUTE_SAMPLES + 1);
     }
-
     public NetworkComponents networkComponents() {
         LinkedHashMap<ReferenceGridPosition, Integer> components = new LinkedHashMap<>();
         List<List<ReferenceGridPosition>> cells = new ArrayList<>();
@@ -183,7 +186,6 @@ public final class ReferenceInfectionModel {
         }
         return new NetworkComponents(components, cells);
     }
-
     public Integer componentNear(NetworkComponents components, int x, int y) {
         Integer result = null;
         double highest = 0.0d;
@@ -199,7 +201,6 @@ public final class ReferenceInfectionModel {
         }
         return result;
     }
-
     public double organReadiness(ReferenceHiveOrgan organ) { return Math.max(0.0d, Math.min(1.0d, organ.vitality() / 100.0d)); }
 
     public Map<String, Object> organNetworkProfile(ReferenceHiveOrgan organ) {
@@ -213,7 +214,6 @@ public final class ReferenceInfectionModel {
         for (ReferenceHiveOrgan member : members) biomass += member.biomass();
         return Map.of("connected", connected, "component_organs", (double) members.size(), "component_biomass", biomass);
     }
-
     public double signalAt(int x, int y) { return signalAt(networkComponents(), x, y); }
 
     public List<List<Double>> signalMap() {
@@ -240,7 +240,6 @@ public final class ReferenceInfectionModel {
         }
         return List.copyOf(result);
     }
-
     public boolean isFeral(ReferenceHiveOrgan organ) { return signalAt(organ.x(), organ.y()) < 0.32d; }
     public void refreshFeralStatus() { for (ReferenceHiveOrgan organ : List.copyOf(organs.values())) organ.feral(isFeral(organ)); }
 
@@ -260,7 +259,6 @@ public final class ReferenceInfectionModel {
         }
         return infected == 0 ? 0.0d : (double) feral / infected;
     }
-
     public double adaptationMultiplier(String key) {
         double result = 1.0d;
         for (Map.Entry<String, Double> entry : genome.entrySet()) {
@@ -269,7 +267,6 @@ public final class ReferenceInfectionModel {
         }
         return result;
     }
-
     /** Advance only source-defined tissue growth/decay; ecology remains unchanged. */
     public void advanceTissue() { ReferenceInfectionMetabolism.spread(this); }
 
@@ -293,7 +290,6 @@ public final class ReferenceInfectionModel {
         refreshFeralStatus();
         decayDamageMemory();
     }
-
     /** Source compatibility hook; current hive income is ecology-only. */
     public void runNetworkEconomy(Iterable<ReferenceResourceSite> resourceSites, int day) {
         Objects.requireNonNull(resourceSites, "resourceSites");
@@ -409,6 +405,8 @@ public final class ReferenceInfectionModel {
         return ReferenceBioformMovement.advance(this, required.marketWorld().settlements(), required, required.day());
     }
 
+    int nextOrganId() { return nextOrganId; }
+    int nextSwarmSequence() { return nextSwarmId; }
     int nextSwarmId() { return nextSwarmId++; }
 
     private void updateSiteContamination(Iterable<ReferenceResourceSite> resourceSites) {

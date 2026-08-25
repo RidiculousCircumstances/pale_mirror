@@ -154,6 +154,7 @@ def trace(root: Path) -> dict[str, object]:
                 encoder = StateEncoder()
                 root_payload = canonical_bytes(encoder.world_root(world))
                 diagnostics_payload = canonical_bytes(encoder.diagnostics(world))
+                infection_payload = canonical_bytes(encoder.encode(world.infection))
                 market_payload = canonical_bytes(encoder.encode(world.microeconomy))
                 resource_sites_payload = canonical_bytes(encoder.encode(world.resource_sites))
                 settlements_payload = canonical_bytes(encoder.encode(world.settlements))
@@ -165,6 +166,7 @@ def trace(root: Path) -> dict[str, object]:
                     "components": {
                         "world_root": {"sha256": hashlib.sha256(root_payload).hexdigest(), "bytes": len(root_payload)},
                         "diagnostics": {"sha256": hashlib.sha256(diagnostics_payload).hexdigest(), "bytes": len(diagnostics_payload)},
+                        "infection": {"sha256": hashlib.sha256(infection_payload).hexdigest(), "bytes": len(infection_payload)},
                         "market": {"sha256": hashlib.sha256(market_payload).hexdigest(), "bytes": len(market_payload)},
                         "resource_sites": {"sha256": hashlib.sha256(resource_sites_payload).hexdigest(), "bytes": len(resource_sites_payload)},
                         "settlements": {"sha256": hashlib.sha256(settlements_payload).hexdigest(), "bytes": len(settlements_payload)},
