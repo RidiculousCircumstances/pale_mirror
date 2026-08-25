@@ -261,7 +261,10 @@ for a later materialization adapter, not that adapter itself.
    accepted. Small numerical deviations and their downstream *legal* choices
    are acceptable inside those bands; lost identities, impossible custody,
    missing domain events, invalid topology, non-deterministic Java runs or a
-   material change of world behaviour are not. A passing aggregate dashboard
+   material change of world behaviour are not. The active graybox fixture is
+   `docs/frontier-reference-graybox-calibration.json`: regenerate it with
+   `tools/frontier/generate_graybox_calibration_envelope.py` under Python 3.11
+   and then invoke the same tool with `--check`. A passing aggregate dashboard
    without focused source traces is therefore insufficient.
 5. Python is the semantic design laboratory until the full-domain port is
    accepted, but it is not a release pipeline that demands a separate Python

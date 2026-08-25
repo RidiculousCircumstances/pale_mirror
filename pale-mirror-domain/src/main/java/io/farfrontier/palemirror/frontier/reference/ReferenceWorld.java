@@ -91,6 +91,14 @@ public final class ReferenceWorld {
         initializeStocks();
         microeconomy.bootstrap(marketWorld);
         v2 = config.v2() ? new ReferenceV2State(this) : null;
+        // Python's MarketEconomy owns civilian consumption but asks the V2
+        // civic ledger to cap today's issue.  Keeping the callback on the
+        // market-facing child prevents a second food-consumption owner while
+        // making the authoritative civic ration observable by that phase.
+        if (v2 != null) {
+            marketWorld.rationAuthority((ignored, settlementId, foodNeed) ->
+                    v2.applyRations(this, settlementId, foodNeed));
+        }
         engine = new ReferenceSimulationEngine();
         diagnostics = new ReferenceWorldDiagnostics();
         recordHistory();
