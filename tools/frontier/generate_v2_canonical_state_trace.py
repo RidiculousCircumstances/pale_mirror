@@ -27,7 +27,7 @@ class StateEncoder:
     def __init__(self) -> None:
         self._active: set[int] = set()
 
-    def state(self, world: Any) -> dict[str, object]:
+    def world_root(self, world: Any) -> dict[str, object]:
         self._assert_stateless("commands", world.commands)
         self._assert_stateless("engine", world.engine)
         self._assert_stateless("hive", world.hive)
@@ -36,13 +36,18 @@ class StateEncoder:
         if world.v2 is None:
             raise ValueError("source_v2 must retain V2 state")
         return {
-            "codec": CODEC,
             "config": self.encode(world.config),
             "profile": self.encode(world.profile),
             "day": world.day,
             "rng": self.encode(world.rng),
             "population_rng": self.encode(world.population_rng),
             "events": self.encode(world.events),
+        }
+
+    def state(self, world: Any) -> dict[str, object]:
+        return {
+            "codec": CODEC,
+            **self.world_root(world),
             "diagnostics": {
                 "history": self.encode(world.history),
                 "settlement_history": self.encode(world.settlement_history),
@@ -143,8 +148,15 @@ def trace(root: Path) -> dict[str, object]:
         checkpoints: list[dict[str, object]] = []
         for day in range(CHECKPOINTS[-1] + 1):
             if day in CHECKPOINTS:
-                payload = canonical_bytes(StateEncoder().state(world))
-                checkpoints.append({"day": day, "sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload)})
+                encoder = StateEncoder()
+                root_payload = canonical_bytes(encoder.world_root(world))
+                payload = canonical_bytes(encoder.state(world))
+                checkpoints.append({
+                    "day": day,
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "bytes": len(payload),
+                    "components": {"world_root": {"sha256": hashlib.sha256(root_payload).hexdigest(), "bytes": len(root_payload)}},
+                })
             if day < CHECKPOINTS[-1]:
                 world.tick()
         return {

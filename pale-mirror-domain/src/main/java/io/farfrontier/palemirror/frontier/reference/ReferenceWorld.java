@@ -102,6 +102,8 @@ public final class ReferenceWorld {
     public void day(int value) { day = value; marketWorld.day(value); }
     /** Source world stream used only by source-defined operation fate arithmetic. */
     PythonRandom rng() { return rng; }
+    /** Isolated source demographic stream; its state is part of canonical conformance. */
+    PythonRandom populationRng() { return populationRng; }
     public ReferenceEconomyEngine economy() { return economy; }
     public ReferenceMarketEconomy microeconomy() { return microeconomy; }
     public ReferenceInfectionModel infection() { return infection; }

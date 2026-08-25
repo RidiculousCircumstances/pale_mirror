@@ -244,6 +244,42 @@ class ReferenceSimulationEngineTest {
         assertThrows(IllegalArgumentException.class, () -> ReferenceV2PublicSnapshot.pythonFloat(Double.NaN));
     }
 
+    @Test
+    void canonicalStateRootMatchesPinnedPythonOwnersAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, RootCheckpoint> expected = Map.of(
+                0, new RootCheckpoint(14_025, "6c903a78dae57e51af6bf32e7a7401c9132513016bca2ada99bd558b2678c8d6"),
+                1, new RootCheckpoint(26_019, "e803d83e449b4e430a5fa0a278ec9f28ce8befd553a55e82ed2b2bf8561566ef"),
+                2, new RootCheckpoint(26_100, "31c63f8a681383368d777b1f57d7089d9398e8cae4b6c3e7aedef53311291c7a"),
+                3, new RootCheckpoint(26_180, "1fd692fad6c12892d52cfb6c9f2a1cb2733fba992c8a837f19751700d4e87d8c"),
+                5, new RootCheckpoint(26_475, "94dc40393c6228d3ccd1a4128a828dc3c41b12ba95ac762ec70b38baef2205bd"),
+                10, new RootCheckpoint(29_360, "d06c52bcf117cec07cd1381d3092b34205c1762a775e54d01aab0fd7bf6bee25"),
+                15, new RootCheckpoint(32_354, "b97b06073465891feb748353f58333b1f81533e331072df40a783daa744c0a13"),
+                20, new RootCheckpoint(35_318, "82641b1e87a6b3fca1a8495d011fae3d8eac087dda045eacaaaefbc73ad1b928"),
+                25, new RootCheckpoint(38_797, "2303f8b5c342f5f86d4ccbca4361cece94cbaa6495dc4b109cf058b59b73da17"),
+                30, new RootCheckpoint(41_416, "afe32615b428ea3249f07dd5eac5cfe2cc1cdfcaff7d769dd4a235aada796c98"));
+
+        for (int day = 0; day <= 30; day++) {
+            RootCheckpoint checkpoint = expected.get(day);
+            if (checkpoint != null) {
+                String json = ReferenceV2PublicSnapshot.canonicalJson(ReferenceCanonicalStateRoot.capture(world));
+                assertEquals(checkpoint.bytes(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, "root bytes day " + day);
+                assertEquals(checkpoint.digest(), ReferenceV2PublicSnapshot.sha256(ReferenceCanonicalStateRoot.capture(world)), "root digest day " + day);
+            }
+            if (day < 30) world.tick();
+        }
+    }
+
+    @Test
+    void canonicalStateRootRejectsV2DisabledWorld() {
+        ReferenceWorld legacy = new ReferenceWorld(new ReferenceWorldConfig(
+                64, 44, 12, 42L, 2, false, ReferenceSimulationProfile.SOURCE_V2));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> ReferenceCanonicalStateRoot.capture(legacy));
+
+        assertEquals("canonical state requires V2-enabled reference world", error.getMessage());
+    }
+
     private static void assertCheckpoint(ReferenceWorld world, Checkpoint expected) {
         ReferenceDailyWorldHistory actual = world.history().getLast();
         assertClose(expected.population(), actual.population());
@@ -280,6 +316,8 @@ class ReferenceSimulationEngineTest {
             int activeContracts,
             double credit
     ) { }
+
+    private record RootCheckpoint(int bytes, String digest) { }
 
     private static void assertClose(double expected, double actual) {
         assertEquals(expected, actual, 1.0e-9d);

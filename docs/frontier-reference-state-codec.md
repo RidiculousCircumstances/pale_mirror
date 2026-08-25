@@ -65,7 +65,9 @@ codec failure even if its latest rows match.
 0, 1, 2, 3, 5, 10, 15, 20, 25 and 30 for a 64×44, twelve-settlement, two-seed,
 seed-42 world. It emits `docs/frontier-reference-v2-canonical-state.json`,
 which records the complete source-tree manifest and one SHA-256/byte count per
-state. Regeneration and `--check` require CPython 3.11.
+state. It also pins owner-component hashes so the Java codec can be introduced
+without hiding a root/RNG mismatch inside the complete state hash.
+Regeneration and `--check` require CPython 3.11.
 The Java test constructs the same `ReferenceWorld`, advances it one day at a
 time, serializes `ReferenceCanonicalState`, and compares every checkpoint
 byte-for-byte. It also checks that legacy/V2-disabled worlds reject rather
@@ -87,7 +89,9 @@ The shared canonical JSON writer is also used by the existing public snapshot
 and rejects non-finite values. The persistence/runtime boundary will consume
 this same projection only after all state fixtures are green.
 
-Current status: the source writer and its fixture are pinned; the Java
-projector/comparator is not implemented yet. The public `snapshot()` comparator
-and complete `World.view()` comparator are green through day 30 (`b5a787e`).
+Current status: the source writer and its fixture are pinned, and the Java
+root mapper proves config/profile/day, both MT19937 streams and events at all
+ten checkpoints. Diagnostics, settlements, market, infection, operations,
+field and V2 owner mappers remain. The public `snapshot()` comparator and
+complete `World.view()` comparator are green through day 30 (`b5a787e`).
 Consequently the temporary graybox runtime remains non-authoritative.
