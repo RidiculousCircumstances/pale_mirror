@@ -14,8 +14,8 @@ import java.util.Objects;
  *
  * <p>This is canonical domain state, not a Minecraft-world adapter. It owns
  * the three named random streams and composes the market-facing child world
- * without duplicating settlements, sites, routes, or events. Daily Engine and
- * V2 phases attach to this root in subsequent source-port cuts.</p>
+ * without duplicating settlements, sites, routes, or events. The V2 root owns
+ * its isolated territorial-cognition stream; daily phases attach later.</p>
  */
 public final class ReferenceWorld {
     private static final long INFECTION_SEED_OFFSET = 1_000L;
@@ -63,6 +63,7 @@ public final class ReferenceWorld {
     private final ReferenceInfectionModel infection;
     private final ReferenceTradeNetwork trade;
     private final ReferenceMarketWorld marketWorld;
+    private final ReferenceV2State v2;
     private int day;
 
     public ReferenceWorld(ReferenceWorldConfig config) {
@@ -83,6 +84,7 @@ public final class ReferenceWorld {
         seedInfection();
         initializeStocks();
         microeconomy.bootstrap(marketWorld);
+        v2 = config.v2() ? new ReferenceV2State(this) : null;
     }
 
     public ReferenceWorldConfig config() { return config; }
@@ -94,6 +96,11 @@ public final class ReferenceWorld {
     public ReferenceInfectionModel infection() { return infection; }
     public ReferenceTradeNetwork trade() { return trade; }
     public ReferenceMarketWorld marketWorld() { return marketWorld; }
+    public boolean v2Enabled() { return v2 != null; }
+    public ReferenceV2State v2() {
+        if (v2 == null) throw new IllegalStateException("V2 is disabled by this reference-world config");
+        return v2;
+    }
     public Map<Integer, ReferenceSettlement> settlements() { return Collections.unmodifiableMap(new LinkedHashMap<>(marketWorld.settlements())); }
     public Map<Integer, ReferenceResourceSite> resourceSites() { return Collections.unmodifiableMap(new LinkedHashMap<>(marketWorld.resourceSites())); }
     public List<String> events() { return marketWorld.events(); }
