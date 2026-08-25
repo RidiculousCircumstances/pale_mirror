@@ -1,11 +1,18 @@
 package io.farfrontier.palemirror.frontier.reference;
 
+import java.util.Map;
+
 /** Source-pinned V2 constants used by the initial territorial cognition cut. */
 final class ReferenceV2Rules {
     static final int SECTOR_SIZE = 4;
     static final double HUMAN_ACCESS_RADIUS = 7.0d;
     static final double HUMAN_OBSERVATION_RADIUS = 8.0d;
     static final double HIVE_OBSERVATION_THRESHOLD = 0.28d;
+    static final double OBSERVATION_POST_RADIUS = 12.0d;
+    static final double OTHER_POST_RADIUS = 8.0d;
+    static final double POST_CONFIDENCE = 0.94d;
+    static final double SCOUT_CONFIDENCE = 0.78d;
+    static final double ROUTE_CONFIDENCE = 0.58d;
     static final double ROUTE_VALUE = 0.40d;
     static final double SCAR_ACCESS_PENALTY = 0.35d;
     static final double HUMAN_DECAY_PER_DAY = 0.035d;
@@ -53,6 +60,48 @@ final class ReferenceV2Rules {
     static final double MATURE_CORE_VITALITY = 68.0d;
     static final double FEEDING_BIOMASS_MULTIPLIER = 2.0d;
     static final double DECAY_TISSUE_FRACTION = 0.40d;
+    static final int FRONTIER_PLANNING_INTERVAL = 4;
+    static final int FRONTIER_MAXIMUM_CAMPAIGNS_PER_SETTLEMENT = 1;
+    static final int FRONTIER_CAMPAIGN_COOLDOWN_DAYS = 14;
+    static final double FRONTIER_MINIMUM_KNOWN_INFECTION = 0.18d;
+    static final double FRONTIER_CLEAR_TARGET_INFECTION = 0.12d;
+    static final double FRONTIER_HIVE_CONTROL_INFECTION = 0.42d;
+    static final double FRONTIER_HUMAN_CONTROL_INFECTION = 0.18d;
+    static final double FRONTIER_SCARRED_THRESHOLD = 0.58d;
+    static final double FRONTIER_ABANDONED_ACCESS = 0.10d;
+    static final double FRONTIER_CORDON_INITIAL_STRENGTH = 0.44d;
+    static final double FRONTIER_CORDON_STRENGTH_PER_GARRISON = 0.016d;
+    static final double FRONTIER_CORDON_DECAY = 0.035d;
+    static final double FRONTIER_CORDON_BREAK_PER_BREAKER_POWER = 0.0055d;
+    static final double FRONTIER_CLEAR_INFECTION_PER_ASSAULT = 0.008d;
+    static final double FRONTIER_CLEAR_INFECTION_PER_ENGINEER = 0.005d;
+    static final double FRONTIER_CLEAR_SPORE_FRACTION = 0.34d;
+    static final double FRONTIER_CLEAR_AMMO_PER_PERSON = 0.16d;
+    static final double FRONTIER_CLEAR_FOOD_PER_PERSON = 0.05d;
+    static final int FRONTIER_HOLD_DAYS = 18;
+    static final int FRONTIER_RESTORE_DAYS = 8;
+    static final double FRONTIER_RECONTAMINATION_INFECTION = 0.14d;
+    static final double FRONTIER_RECONTAMINATION_PER_DAY = 0.018d;
+    static final double FRONTIER_MINIMUM_GARRISON = 8.0d;
+    static final double FRONTIER_GARRISON_POPULATION_FRACTION = 0.018d;
+    static final double FRONTIER_MINIMUM_SUPPLY_READINESS = 0.48d;
+    static final double FRONTIER_SUPPLY_MAX_INFECTION = 0.58d;
+    static final double FRONTIER_SUPPLY_HIVE_SECTOR_COST = 0.42d;
+    static final double FRONTIER_SUPPLY_CONTESTED_SECTOR_COST = 0.12d;
+    static final double FRONTIER_SUPPLY_ROUTE_SECTOR_BONUS = 0.12d;
+    static final double FRONTIER_SUPPLY_PATH_MAX_COST = 3.0d;
+    static final double FRONTIER_HIVE_COUNTERATTACK_INFECTION = 0.10d;
+    static final double FRONTIER_HIVE_COUNTERATTACK_PERSONNEL_LOSS = 0.025d;
+    static final double FRONTIER_ISOLATED_ORGAN_READINESS_LOSS = 0.12d;
+    static final double FRONTIER_ISOLATED_ORGAN_BIOMASS_LOSS = 0.055d;
+    static final Map<ReferenceHumanUnitKind, Double> FRONTIER_ROLE_MIX = Map.of(
+            ReferenceHumanUnitKind.SCOUT, 0.12d,
+            ReferenceHumanUnitKind.LINE, 0.34d,
+            ReferenceHumanUnitKind.ASSAULT, 0.28d,
+            ReferenceHumanUnitKind.ENGINEER, 0.16d,
+            ReferenceHumanUnitKind.MEDIC, 0.05d,
+            ReferenceHumanUnitKind.LOGISTICS, 0.05d
+    );
 
     private ReferenceV2Rules() { }
 

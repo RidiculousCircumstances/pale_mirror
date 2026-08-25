@@ -105,6 +105,11 @@ movement, arrival, return, exact-resident release and post-upkeep states used
 by the Java operation/field execution port. Regenerate it only with
 `tools/frontier/generate_operations_lifecycle_microtrace.py` using `python3.11`.
 
+`docs/frontier-reference-v2-frontier.json` fixes V2 territorial
+recontamination, source Dijkstra supply values, supplied-cordon control and
+coordinate-targeted bioform counterattack resolution. Regenerate it only with
+`tools/frontier/generate_v2_frontier_microtrace.py` using `python3.11`.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve

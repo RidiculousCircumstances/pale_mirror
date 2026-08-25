@@ -15,9 +15,18 @@ final class ReferenceBioformMovement {
     private ReferenceBioformMovement() { }
 
     static List<ReferenceAttackEvent> advance(ReferenceInfectionModel model, Map<Integer, ReferenceSettlement> settlements, int day) {
+        return advance(model, settlements, null, day);
+    }
+
+    static List<ReferenceAttackEvent> advance(ReferenceInfectionModel model, Map<Integer, ReferenceSettlement> settlements,
+                                              ReferenceWorld world, int day) {
         List<ReferenceAttackEvent> attacks = new ArrayList<>();
         List<ReferenceSwarm> survivors = new ArrayList<>();
         for (ReferenceSwarm swarm : model.swarms) {
+            if (world != null && world.field().isSwarmEngaged(swarm.id())) {
+                survivors.add(swarm);
+                continue;
+            }
             if (swarm.kind() == ReferenceBioformKind.HARVESTER) {
                 if (advanceHarvester(model, swarm, day)) survivors.add(swarm);
                 continue;
@@ -36,6 +45,8 @@ final class ReferenceBioformMovement {
                     swarm.phase(ReferenceFormationPhase.MAIN_ACTION);
                     attacks.add(new ReferenceAttackEvent(swarm.id(), settlement.id(), swarm.power(), swarm.sourceOrganId(), swarm.kind(),
                             swarm.composition(), swarm.phase()));
+                } else if (world != null && world.v2Enabled() && world.v2().resolveFrontierAttack(world, swarm)) {
+                    continue;
                 }
                 continue;
             }

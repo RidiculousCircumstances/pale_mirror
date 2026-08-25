@@ -67,6 +67,12 @@ public final class ReferenceFieldWarfare {
                 && campaign.phase() != ReferenceCampaignPhase.FAILED && campaign.contributors().contains(settlementId)).toList();
     }
 
+    /** A bioform claimed by an active field engagement cannot move or resolve twice. */
+    public boolean isSwarmEngaged(int swarmId) {
+        return engagements.values().stream().anyMatch(item -> item.status() == ReferenceEngagementStatus.ACTIVE
+                && item.swarmId() != null && item.swarmId() == swarmId);
+    }
+
     public ReferenceFieldPost postAt(double x, double y) { return postAt(x, y, ReferenceFieldRules.POST_INTERACTION_RADIUS); }
 
     public ReferenceFieldPost postAt(double x, double y, double radius) {

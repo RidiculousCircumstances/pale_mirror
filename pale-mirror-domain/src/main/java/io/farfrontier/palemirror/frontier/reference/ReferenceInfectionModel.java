@@ -401,8 +401,12 @@ public final class ReferenceInfectionModel {
         return ReferenceInfectionLegacy.launchSwarm(this, nest, settlements, targetId, day);
     }
 
-    public List<ReferenceAttackEvent> advanceBioforms(Map<Integer, ReferenceSettlement> settlements, int day) {
-        return ReferenceBioformMovement.advance(this, settlements, day);
+    public List<ReferenceAttackEvent> advanceBioforms(Map<Integer, ReferenceSettlement> settlements, int day) { return ReferenceBioformMovement.advance(this, settlements, day); }
+
+    /** Source daily overload: field and V2 cordons may consume coordinate-targeted bioforms. */
+    public List<ReferenceAttackEvent> advanceBioforms(ReferenceWorld world) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        return ReferenceBioformMovement.advance(this, required.marketWorld().settlements(), required, required.day());
     }
 
     int nextSwarmId() { return nextSwarmId++; }

@@ -15,11 +15,9 @@ import java.util.Set;
  * Initial source-port of Python {@code V2State}: bounded territorial truth and
  * local perception at {@code World.__init__}.
  *
- * <p>The field owner now exists at construction, but operations, daily field
- * execution, charters and campaigns decisions deliberately remain absent until
- * their source owners are ported. This cut is exact for initialized territory
- * and the independent hive lifecycle without pretending that the other V2
- * daily phases exist.</p>
+ * <p>It owns territorial cognition, civic ledgers and V2 frontier records.
+ * Execution helpers are package-private so the canonical state never escapes
+ * into a Minecraft adapter or an independent strategic side store.</p>
  */
 public final class ReferenceV2State {
     private static final long RANDOM_SEED_OFFSET = 2_000_003L;
@@ -46,8 +44,13 @@ public final class ReferenceV2State {
     private final LinkedHashMap<Integer, Integer> lastCivicWorkDay = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceNeuralChrysalis> chrysalises = new LinkedHashMap<>();
     private final LinkedHashMap<String, ReferenceHiveLifecycle> hiveLifecycle = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceFrontCampaign> frontCampaigns = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceSupplyLineStatus> supplyLines = new LinkedHashMap<>();
+    private final List<ReferenceSectorEngagement> sectorEngagements = new ArrayList<>();
+    private final LinkedHashMap<Integer, Integer> frontierCooldownUntil = new LinkedHashMap<>();
     private int nextProcurementId = 1;
     private int nextClaimId = 1;
+    private int nextFrontCampaignId = 1;
 
     ReferenceV2State(ReferenceWorld world) {
         ReferenceWorld required = Objects.requireNonNull(world, "world");
@@ -60,6 +63,8 @@ public final class ReferenceV2State {
     }
 
     public ReferenceSimulationProfile profile() { return profile; }
+    /** Isolated V2 stream; only source V2 decisions may consume it. */
+    PythonRandom rng() { return rng; }
     public Map<String, ReferenceV2OperationalSector> sectors() { return immutableOrdered(sectors); }
     public Map<String, ReferenceV2SectorControl> sectorControl() { return immutableOrdered(sectorControl); }
     public Map<Integer, ReferenceV2HumanPerception> humanPerceptions() { return immutableOrdered(humanPerceptions); }
@@ -77,6 +82,18 @@ public final class ReferenceV2State {
     public Map<Integer, Integer> lastCivicWorkDay() { return immutableOrdered(lastCivicWorkDay); }
     public Map<Integer, ReferenceNeuralChrysalis> chrysalises() { return immutableOrdered(chrysalises); }
     public Map<String, ReferenceHiveLifecycle> hiveLifecycle() { return immutableOrdered(hiveLifecycle); }
+    public Map<Integer, ReferenceFrontCampaign> frontCampaigns() { return immutableOrdered(frontCampaigns); }
+    public Map<Integer, ReferenceSupplyLineStatus> supplyLines() { return immutableOrdered(supplyLines); }
+    public List<ReferenceSectorEngagement> sectorEngagements() { return List.copyOf(sectorEngagements); }
+    public Map<Integer, Integer> frontierCooldownUntil() { return immutableOrdered(frontierCooldownUntil); }
+
+    Map<String, ReferenceV2OperationalSector> mutableSectors() { return sectors; }
+    Map<String, ReferenceV2SectorControl> mutableSectorControl() { return sectorControl; }
+    Map<Integer, ReferenceFrontCampaign> mutableFrontCampaigns() { return frontCampaigns; }
+    Map<Integer, ReferenceSupplyLineStatus> mutableSupplyLines() { return supplyLines; }
+    List<ReferenceSectorEngagement> mutableSectorEngagements() { return sectorEngagements; }
+    Map<Integer, Integer> mutableFrontierCooldownUntil() { return frontierCooldownUntil; }
+    int nextFrontCampaignIdAndIncrement() { return nextFrontCampaignId++; }
 
     public String sectorKeyAt(double x, double y) {
         return Math.max(0, (int) x / ReferenceV2Rules.SECTOR_SIZE) + ":"
@@ -267,6 +284,17 @@ public final class ReferenceV2State {
     /** Apply the complete source civic regime pass before market consumption. */
     public void updateCivics(ReferenceWorld world) {
         ReferenceV2CivicPolicy.update(world, civics, doctrines, rationPlans, emergencyRegimes, charters, routeInsurance);
+    }
+
+    /** Derive source frontier control from field posts and V2 campaign presence. */
+    public void updateSectorControl(ReferenceWorld world) { ReferenceV2Frontier.updateSectorControl(this, world); }
+
+    /** Advance already-authorised source V2 campaigns before new plans are considered. */
+    public void advanceFrontier(ReferenceWorld world) { ReferenceV2Frontier.advance(this, world); }
+
+    /** Resolve a bioform that reaches an actual frontier cordon rather than a settlement. */
+    public boolean resolveFrontierAttack(ReferenceWorld world, ReferenceSwarm swarm) {
+        return ReferenceV2Frontier.resolveAttack(this, world, swarm);
     }
 
     /** Apply the source V2 firm-distress pass after the market's daily settlement. */
