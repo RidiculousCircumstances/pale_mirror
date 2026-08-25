@@ -109,6 +109,8 @@ public final class ReferenceSettlement {
     public double illnessBurden() { return illnessBurden; }
     public void illnessBurden(double value) { illnessBurden = value; }
     public double mobilizedPersonnel() { return mobilizedPersonnel; }
+    /** Operation owner mutation; public read-model consumers cannot alter mobilisation. */
+    void mobilizedPersonnel(double value) { mobilizedPersonnel = Math.max(0.0d, value); }
     public double woundedPersonnel() { return woundedPersonnel; }
     public boolean discretePeople() { return residents != null; }
     public ReferenceResidentLedger residents() { return residents; }
