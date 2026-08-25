@@ -41,6 +41,7 @@ public final class ReferenceInfectionModel {
     private final LinkedHashMap<String, Double> genome = new LinkedHashMap<>();
     final List<ReferenceNetworkFlow> networkFlows = new ArrayList<>();
     final LinkedHashMap<Integer, ReferenceHiveEconomyEntry> nestEconomy = new LinkedHashMap<>();
+    final List<ReferenceHiveEconomySnapshot> nestEconomyHistory = new ArrayList<>();
     final List<ReferenceLatentColony> latentColonies = new ArrayList<>();
     final List<ReferenceNestProject> nestProjects = new ArrayList<>();
     final List<ReferenceHiveHistoryEvent> projectHistory = new ArrayList<>();
@@ -53,6 +54,7 @@ public final class ReferenceInfectionModel {
     private double spreadRate = 0.034d;
     private int nextOrganId = 1;
     private int nextSwarmId = 1;
+    private Integer lastEconomySnapshotDay;
 
     public ReferenceInfectionModel(int width, int height, long seed, double combatScale, boolean discreteBioforms) {
         if (width < 1 || height < 1) throw new IllegalArgumentException("infection map dimensions must be positive");
@@ -80,6 +82,7 @@ public final class ReferenceInfectionModel {
     public void spreadRate(double value) { spreadRate = value; }
     public List<ReferenceNetworkFlow> networkFlows() { return List.copyOf(networkFlows); }
     public Map<Integer, ReferenceHiveEconomyEntry> nestEconomy() { return Collections.unmodifiableMap(new LinkedHashMap<>(nestEconomy)); }
+    public List<ReferenceHiveEconomySnapshot> nestEconomyHistory() { return List.copyOf(nestEconomyHistory); }
     public double harvestedBiomass() { return harvestedBiomass; }
     public double harvestedGeneticMaterial() { return harvestedGeneticMaterial; }
     public List<ReferenceLatentColony> latentColonies() { return List.copyOf(latentColonies); }
@@ -117,14 +120,21 @@ public final class ReferenceInfectionModel {
         return organ;
     }
 
-    public double pressureAt(double x, double y) {
+    public double pressureAt(double x, double y) { return pressureAt(x, y, PRESSURE_RADIUS); }
+
+    /**
+     * Source-defined local tissue pressure. Site contamination deliberately
+     * samples radius one while settlement and route decisions use the default
+     * infection radius, so the radius is part of the canonical query.
+     */
+    public double pressureAt(double x, double y, int radius) {
         int centerX = (int) Math.rint(x);
         int centerY = (int) Math.rint(y);
         List<Double> values = new ArrayList<>();
-        for (int yy = Math.max(0, centerY - PRESSURE_RADIUS); yy < Math.min(height, centerY + PRESSURE_RADIUS + 1); yy++) {
-            for (int xx = Math.max(0, centerX - PRESSURE_RADIUS); xx < Math.min(width, centerX + PRESSURE_RADIUS + 1); xx++) {
+        for (int yy = Math.max(0, centerY - radius); yy < Math.min(height, centerY + radius + 1); yy++) {
+            for (int xx = Math.max(0, centerX - radius); xx < Math.min(width, centerX + radius + 1); xx++) {
                 double distance = Math.hypot(xx - centerX, yy - centerY);
-                if (distance <= PRESSURE_RADIUS) values.add(level[yy][xx] / (1.0d + distance));
+                if (distance <= radius) values.add(level[yy][xx] / (1.0d + distance));
             }
         }
         if (values.isEmpty()) return 0.0d;
@@ -264,6 +274,57 @@ public final class ReferenceInfectionModel {
     /** Digest this model's finite ecosystem and account for all organ flows. */
     public void digestEcology(int day) { ReferenceInfectionMetabolism.digest(this, day); }
 
+    /**
+     * Source {@code InfectionModel.ecology_step}: the only valid full daily
+     * infection order. The caller owns the day clock and resource-site
+     * collection; this model owns every mutation below.
+     */
+    public void ecologyStep(Iterable<ReferenceResourceSite> resourceSites, int day) {
+        Objects.requireNonNull(resourceSites, "resourceSites");
+        ecosystem.regenerate();
+        advanceLatentColonies();
+        advanceTissue();
+        updateSiteContamination(resourceSites);
+        digestEcology(day);
+        advanceMorphogenesis(day);
+        removeDestroyedOrgans();
+        refreshFeralStatus();
+        decayDamageMemory();
+    }
+
+    /** Source compatibility hook; current hive income is ecology-only. */
+    public void runNetworkEconomy(Iterable<ReferenceResourceSite> resourceSites, int day) {
+        Objects.requireNonNull(resourceSites, "resourceSites");
+        updateSiteContamination(resourceSites);
+        digestEcology(day);
+    }
+
+    /**
+     * Persist the source diagnostic rows when the World records its daily
+     * history. Retention is explicit because these rows never feed a rule;
+     * one call per strictly increasing simulation day keeps this record
+     * bounded by {@code retentionDays * width * height}.
+     */
+    public void recordEconomySnapshot(int day, int retentionDays) {
+        if (retentionDays < 1) throw new IllegalArgumentException("retentionDays must be positive");
+        if (lastEconomySnapshotDay != null && day <= lastEconomySnapshotDay) {
+            throw new IllegalStateException("economy snapshot day must increase strictly");
+        }
+        for (ReferenceHiveOrgan organ : organs.values()) {
+            ReferenceHiveEconomyEntry ledger = nestEconomy.get(organ.id());
+            nestEconomyHistory.add(new ReferenceHiveEconomySnapshot(day, organ.id(),
+                    ledger == null ? null : ledger.openingBiomass(),
+                    ledger == null ? null : ledger.substrateIn(),
+                    ledger == null ? null : ledger.biomassIncome(),
+                    ledger == null ? null : ledger.samplesIn(),
+                    ledger == null ? null : ledger.maintenance(),
+                    organ.biomass(), organ.samples(), organ.vitality()));
+        }
+        lastEconomySnapshotDay = day;
+        int oldestRetainedDay = day - retentionDays + 1;
+        nestEconomyHistory.removeIf(snapshot -> snapshot.day() < oldestRetainedDay);
+    }
+
     /** Begin a planner-approved organ project, preserving source preconditions. */
     public boolean startMorphogenesis(ReferenceHiveOrgan source, ReferenceOrganKind kind, int targetX, int targetY, int day) {
         return ReferenceInfectionLifecycle.startMorphogenesis(this, source, kind, targetX, targetY, day);
@@ -343,6 +404,22 @@ public final class ReferenceInfectionModel {
     }
 
     int nextSwarmId() { return nextSwarmId++; }
+
+    private void updateSiteContamination(Iterable<ReferenceResourceSite> resourceSites) {
+        for (ReferenceResourceSite site : resourceSites) {
+            if (site == null) throw new IllegalArgumentException("resourceSites cannot contain null");
+            double exposure = pressureAt(site.x(), site.y(), 1);
+            if (exposure > 0.18d) {
+                double target = (exposure - 0.18d) / (1.0d - 0.18d);
+                site.contamination(Math.min(1.0d, site.contamination() + (target - site.contamination()) * 0.20d));
+            } else {
+                site.contamination(Math.max(0.0d, site.contamination() - 0.08d));
+            }
+            // Retained only for the source's legacy inspection surface; it is
+            // never hive income in the active economy.
+            site.substrate(0.0d);
+        }
+    }
 
     private List<List<ReferenceBiome>> generateBiomes() {
         List<List<ReferenceBiome>> grid = new ArrayList<>();
