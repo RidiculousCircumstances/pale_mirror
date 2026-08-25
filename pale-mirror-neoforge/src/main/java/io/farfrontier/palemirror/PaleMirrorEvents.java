@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
+import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
@@ -124,6 +125,12 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
         if (event.getEntity().level().getServer() != null) {
+            SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(event.getEntity().level().getServer());
+            if (source.activated()) {
+                String actor = event.getSource().getEntity() == null ? "environment" : event.getSource().getEntity().getUUID().toString();
+                source.observeEntityDeath(event.getEntity(), actor);
+                return;
+            }
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
                     .recordSettlementDeath(event.getEntity(), event.getSource());
         }
@@ -169,6 +176,15 @@ public final class PaleMirrorEvents {
                                 new io.farfrontier.palemirror.domain.WorldObjectId(actorObjectId), adapter.source(), slotId,
                                 event.getEntity().getUUID()));
                     });
+        }
+    }
+
+    /** Unsupported source structural perturbations remain an explicit physical conflict. */
+    @SubscribeEvent
+    public static void onFrontierBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
+            if (source.activated()) source.observeBlockBreak(level, event.getPos());
         }
     }
 

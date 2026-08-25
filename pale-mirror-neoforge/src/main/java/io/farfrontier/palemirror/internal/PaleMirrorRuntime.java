@@ -45,6 +45,7 @@ import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.observation.GatePartDestroyed;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
+import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
 import io.farfrontier.palemirror.internal.world.RegionalDiscoveryRuntime;
 import io.farfrontier.palemirror.internal.world.ManagedRailwayRuntime;
 import io.farfrontier.palemirror.internal.world.VanillaMinecartRouteRuntime;
@@ -102,12 +103,13 @@ public final class PaleMirrorRuntime {
     }
     public static void stop(MinecraftServer server) {
         CampaignRegionBootstrapper.stop(server);
+        SourceGrayboxRuntime.stop(server);
         ManagedRailwayRuntime.stop(server);
         io.farfrontier.palemirror.internal.world.VisualProjectionPublisher.clear(server);
         PaleMirrorRuntime runtime = INSTANCES.remove(server);
         if (runtime != null) { runtime.distantHorizons.close(); runtime.debug.close(); }
     }
-    public void tick() { distantHorizons.tick(server); debug.tick();
+    public void tick() { distantHorizons.tick(server); debug.tick(); if (SourceGrayboxRuntime.forServer(server).tick()) return;
         work.beginTick();
         long gameTick = server.overworld().getGameTime();
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());

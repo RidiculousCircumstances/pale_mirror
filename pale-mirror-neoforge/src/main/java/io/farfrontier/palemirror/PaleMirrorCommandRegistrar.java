@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.debug.DebugCommandRegistrar;
 import io.farfrontier.palemirror.internal.presentation.ScenarioCommandPresentation;
+import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -45,6 +46,29 @@ final class PaleMirrorCommandRegistrar {
                             context.getSource().sendSuccess(() -> Component.literal("Advanced " + count + " simulation step(s); produced " + events + " event(s)."), true);
                             return events;
                 }))));
+        LiteralArgumentBuilder<CommandSourceStack> frontier = Commands.literal("frontier").requires(source -> source.hasPermission(2));
+        frontier.then(Commands.literal("status").executes(context -> {
+            context.getSource().sendSuccess(() -> Component.literal(SourceGrayboxRuntime.forServer(context.getSource().getServer()).status()), false);
+            return 1;
+        }));
+        frontier.then(Commands.literal("step").requires(source -> source.hasPermission(4))
+                .then(Commands.argument("days", IntegerArgumentType.integer(1, 72)).executes(context -> {
+                    int days = IntegerArgumentType.getInteger(context, "days");
+                    SourceGrayboxRuntime runtime = SourceGrayboxRuntime.forServer(context.getSource().getServer());
+                    if (!runtime.activated()) {
+                        context.getSource().sendFailure(Component.literal("Activate the source graybox before advancing it."));
+                        return 0;
+                    }
+                    runtime.advance(days);
+                    context.getSource().sendSuccess(() -> Component.literal("Advanced source Frontier " + days + " day(s)."), true);
+                    return days;
+                })));
+        frontier.then(Commands.literal("activate_graybox").requires(source -> source.hasPermission(4)).executes(context -> {
+            SourceGrayboxRuntime.forServer(context.getSource().getServer()).activate();
+            context.getSource().sendSuccess(() -> Component.literal("Source-parity Frontier graybox activated for this world."), true);
+            return 1;
+        }));
+        root.then(frontier);
         LiteralArgumentBuilder<CommandSourceStack> scenario = Commands.literal("scenario");
         scenario.then(Commands.literal("list").executes(context -> {
                             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(context.getSource().getServer());
