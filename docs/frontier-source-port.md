@@ -128,6 +128,15 @@ it only with `tools/frontier/generate_daily_engine_microtrace.py` using
 back to ecology and rejects a legacy daily tick until its separate strategist
 has been ported; neither concern may be replaced by a silent fallback.
 
+`docs/frontier-reference-v2-daily-trajectory.json` extends that contract through
+days 1, 2, 3, 5, 10, 15, 20, 25 and 30. It pins every settlement's current
+stocks/flows, global history, market and V2 summaries, plus the bounded event
+window. Regenerate it only with
+`tools/frontier/generate_v2_daily_trajectory_microtrace.py` using `python3.11`.
+The Java trajectory test asserts its phase-sensitive aggregate and final-event
+read model; the remaining full immutable projection comparator is a separate
+next port step, not an implied equivalence claim.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve
