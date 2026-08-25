@@ -207,6 +207,24 @@ public final class ReferenceGrayboxProjection {
                     campaign.phase().id(), new ReferenceGrayboxLayout.Point(sector.centreX(), sector.centreZ()), campaign.personnel(), campaign.risk(),
                     campaign.phase().terminal(), "activity.front_campaign." + campaign.phase().id()));
         }
+        return allocateActivitySlots(result);
+    }
+
+    /** Separates concurrent source activities without moving either one out of its canonical logical cell. */
+    private static List<ReferenceGrayboxSnapshot.Activity> allocateActivitySlots(List<ReferenceGrayboxSnapshot.Activity> activities) {
+        Map<ReferenceGrayboxLayout.Point, List<ReferenceGrayboxSnapshot.Activity>> grouped = new LinkedHashMap<>();
+        activities.forEach(activity -> grouped.computeIfAbsent(activity.position(), ignored -> new ArrayList<>()).add(activity));
+        List<ReferenceGrayboxSnapshot.Activity> result = new ArrayList<>(activities.size());
+        for (List<ReferenceGrayboxSnapshot.Activity> group : grouped.values()) {
+            group.sort(Comparator.comparing(ReferenceGrayboxSnapshot.Activity::id));
+            if (group.size() > 49) throw new IllegalStateException("graybox cell exceeds activity presentation slots");
+            for (int index = 0; index < group.size(); index++) {
+                ReferenceGrayboxSnapshot.Activity activity = group.get(index);
+                result.add(new ReferenceGrayboxSnapshot.Activity(activity.id(), activity.family(), activity.kind(), activity.phase(),
+                        ReferenceGrayboxLayout.activitySlot(activity.position(), index), activity.personnel(), activity.indicator(),
+                        activity.terminal(), activity.colour()));
+            }
+        }
         return List.copyOf(result);
     }
 

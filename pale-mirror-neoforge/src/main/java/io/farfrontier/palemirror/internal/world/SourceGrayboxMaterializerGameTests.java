@@ -224,6 +224,38 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void everySourceClaimRemainsSpatiallyDistinctThroughoutTheSeededFirstYear(GameTestHelper helper) {
+        ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(7L);
+
+        for (int day = 0; day <= 365; day++) {
+            SourceGrayboxMaterializer.validateProjection(simulation.snapshot());
+            if (day < 365) simulation.tick();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void overlappingCanonicalClaimsFailBeforeAnyMinecraftWrite(GameTestHelper helper) {
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxSnapshot.Cell cell = baseline.cells().getFirst();
+        ReferenceGrayboxLayout.Rectangle collision = new ReferenceGrayboxLayout.Rectangle(
+                cell.rectangle().x() + 1, cell.rectangle().z() + 1, 1, 1);
+        ReferenceGrayboxSnapshot conflicted = new ReferenceGrayboxSnapshot(
+                baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(), baseline.settlements(),
+                List.of(new ReferenceGrayboxSnapshot.Facility("fixture:collision", 1, "workshop", collision, 1.0d, "facility.workshop")),
+                baseline.resourceSites(), baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(), baseline.residents(),
+                baseline.fieldPosts(), baseline.fieldLinks(), baseline.activities(), baseline.cargoes(), baseline.interactions(),
+                baseline.sectors(), baseline.chrysalises(), baseline.events());
+
+        try {
+            SourceGrayboxMaterializer.validateProjection(conflicted);
+            helper.fail("source graybox must reject overlapping canonical claims before materialization");
+        } catch (IllegalStateException expected) {
+            helper.succeed();
+        }
+    }
+
     private static void prepareFlatFloor(GameTestHelper helper, BlockPos anchor, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
             helper.getLevel().setBlock(anchor.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);

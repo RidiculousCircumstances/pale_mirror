@@ -112,6 +112,31 @@ public final class ReferenceGrayboxLayout {
     }
 
     /**
+     * A bounded, deterministic presentation slot for concurrent processes in
+     * one logical cell.  The semantic activity remains in {@code anchor}'s
+     * cell; only its readable marker is separated from its peers.
+     */
+    public static Point activitySlot(Point anchor, int ordinal) {
+        Objects.requireNonNull(anchor, "anchor");
+        if (ordinal < 0 || ordinal >= 49) throw new IllegalArgumentException("activity ordinal must be in [0, 49)");
+        if (ordinal == 0) return anchor;
+
+        // Preserve the exact semantic point for the first visible process.
+        // Further concurrent processes occupy deterministic rings around it,
+        // still inside this source cell's 16x16 presentation budget.
+        int seen = 1;
+        for (int radius = 1; radius <= 3; radius++) {
+            for (int z = -radius; z <= radius; z++) {
+                for (int x = -radius; x <= radius; x++) {
+                    if (Math.max(Math.abs(x), Math.abs(z)) != radius) continue;
+                    if (seen++ == ordinal) return new Point(anchor.x() + x * 2, anchor.z() + z * 2);
+                }
+            }
+        }
+        throw new IllegalStateException("activity presentation slot allocation was incomplete");
+    }
+
+    /**
      * Deterministic physical interaction slots for one visible source object.
      *
      * <p>These points belong to the source projection rather than Minecraft.

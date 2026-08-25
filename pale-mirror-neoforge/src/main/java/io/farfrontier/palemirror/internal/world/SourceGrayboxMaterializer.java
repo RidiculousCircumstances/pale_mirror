@@ -44,18 +44,13 @@ final class SourceGrayboxMaterializer {
     private static final int SURFACE_Y = ReferenceGrayboxLayout.GROUND_Y;
     private static final int ENTITY_Y = SURFACE_Y + 1;
     private static final int LABEL_Y = SURFACE_Y + 4;
-
     Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) {
-        requireProfile(snapshot);
-        LinkedHashMap<String, Desired> desired = desired(snapshot);
-        if (desired.size() > SourceGrayboxPresentationLedger.MAX_CLAIMS) {
-            throw new IllegalStateException("source graybox projection exceeds its bounded claim ledger");
-        }
+        LinkedHashMap<String, SourceGrayboxPresentationPlan.Desired> desired = SourceGrayboxPresentationPlan.from(snapshot);
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
         rebalanceInteractionWeights(ledger, desired);
         int conflicts = retireAbsent(level, ledger, desired.keySet());
         int placed = 0;
-        for (Desired item : desired.values()) if (ensure(level, ledger, item)) placed++;
+        for (SourceGrayboxPresentationPlan.Desired item : desired.values()) if (ensure(level, ledger, item)) placed++;
 
         Set<String> activeEntities = new LinkedHashSet<>();
         materializeLabels(level, snapshot, activeEntities);
@@ -67,6 +62,18 @@ final class SourceGrayboxMaterializer {
         }
         retireEntities(level, snapshot.bounds(), activeEntities);
         return new Report(placed, desired.size(), conflicts, snapshot.stateRevision());
+    }
+
+    /**
+     * Validates the immutable source projection before it reaches Minecraft.
+     *
+     * <p>Two canonical facts must never compete for the same physical block.
+     * Treating the later fact as an ordinary failed placement would silently
+     * hide a part of the simulation, whereas a foreign player block remains a
+     * separately visible presentation conflict in the persisted ledger.</p>
+     */
+    static void validateProjection(ReferenceGrayboxSnapshot snapshot) {
+        SourceGrayboxPresentationPlan.validate(snapshot);
     }
 
     SourceGrayboxPresentationLedger.Claim claimAt(ServerLevel level, BlockPos position) {
@@ -93,111 +100,13 @@ final class SourceGrayboxMaterializer {
         return new ManagedEntity(id, kind, revision);
     }
 
-    private static LinkedHashMap<String, Desired> desired(ReferenceGrayboxSnapshot snapshot) {
-        LinkedHashMap<String, Desired> result = new LinkedHashMap<>();
-        for (ReferenceGrayboxSnapshot.Cell cell : snapshot.cells()) {
-            add(result, marker("cell:" + cell.x() + ":" + cell.y(), "cell:" + cell.x() + ":" + cell.y(), "CELL",
-                    snapshot.stateRevision(), cell.rectangle().x() + 1, cell.rectangle().z() + 1, cell.colour()));
-        }
-        for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) {
-            if (facility.kind().equals("fortification")) {
-                addFortification(result, snapshot.stateRevision(), facility);
-            } else {
-                add(result, rectangle("facility:" + facility.id(), facility.id(), "FACILITY", snapshot.stateRevision(), facility.rectangle(), 1,
-                        facility.colour()));
-            }
-        }
-        for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) {
-            add(result, rectangle("resource-site:" + site.id(), "site:" + site.id(), "RESOURCE_SITE", snapshot.stateRevision(), site.rectangle(), 1,
-                    site.colour()));
-        }
-        for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) {
-            add(result, rectangle("hive-organ:" + organ.id(), "organ:" + organ.id(), "HIVE_ORGAN", snapshot.stateRevision(), organ.rectangle(), 2,
-                    organ.colour()));
-        }
-        for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
-            add(result, rectangle("cargo-pallet:" + cargo.id(), cargo.id(), "CARGO", snapshot.stateRevision(), cargo.rectangle(), 1, cargo.colour()));
-        }
-        for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) {
-            add(result, rectangle("field-post:" + post.id(), "field-post:" + post.id(), "FIELD_POST", snapshot.stateRevision(), post.rectangle(), 1,
-                    post.colour()));
-        }
-        for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
-            for (int index = 0; index < link.slots().size(); index++) {
-                ReferenceGrayboxLayout.Point slot = link.slots().get(index);
-                add(result, new Desired("field-link:" + link.id() + ":segment:" + index, "field_link:" + link.id(), "FIELD_LINK",
-                        snapshot.stateRevision(), slot.x(), SURFACE_Y, slot.z(), 1, 1, 1, link.colour()));
-            }
-        }
-        for (ReferenceGrayboxSnapshot.Sector sector : snapshot.sectors()) {
-            add(result, marker("sector:" + sector.key(), "sector:" + sector.key(), "SECTOR", snapshot.stateRevision(),
-                    sector.rectangle().centreX(), sector.rectangle().centreZ(), sector.colour()));
-        }
-        for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) {
-            int x = chrysalis.rectangle().centreX() - 2;
-            int z = chrysalis.rectangle().centreZ() - 2;
-            add(result, new Desired("chrysalis:" + chrysalis.organId(), "chrysalis:" + chrysalis.organId(), "CHRYSALIS",
-                    snapshot.stateRevision(), x, SURFACE_Y, z, 4, 4, 2, chrysalis.colour()));
-        }
-        for (ReferenceGrayboxSnapshot.Interaction interaction : snapshot.interactions()) {
-            for (int index = 0; index < interaction.slots().size(); index++) {
-                ReferenceGrayboxLayout.Point slot = interaction.slots().get(index);
-                add(result, interactionSlot(interaction, index, snapshot.stateRevision(), slot));
-            }
-        }
-        for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) {
-            if (!activity.terminal()) add(result, marker("activity:" + activity.id(), activity.id(), "ACTIVITY", snapshot.stateRevision(),
-                    activity.position().x(), activity.position().z(), activity.colour()));
-        }
-        return result;
-    }
-
-    private static void add(Map<String, Desired> values, Desired item) {
-        if (values.putIfAbsent(item.id(), item) != null) throw new IllegalStateException("duplicate source graybox materialization ID: " + item.id());
-    }
-
-    private static Desired marker(String id, String subject, String kind, String revision, int x, int z, String colour) {
-        return new Desired(id, subject, kind, revision, x, SURFACE_Y, z, 1, 1, 1, colour);
-    }
-
-    private static Desired rectangle(String id, String subject, String kind, String revision, ReferenceGrayboxLayout.Rectangle area,
-                                     int height, String colour) {
-        return new Desired(id, subject, kind, revision, area.x(), SURFACE_Y, area.z(), area.width(), area.depth(), height, colour);
-    }
-
-    /**
-     * A fortification is a perimeter, not a filled foundation that hides the
-     * named buildings it protects.  The source owns a single facility; the
-     * four presentation segments deliberately retain that one semantic owner.
-     */
-    private static void addFortification(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Facility facility) {
-        ReferenceGrayboxLayout.Rectangle area = facility.rectangle();
-        String id = "facility:" + facility.id();
-        add(result, new Desired(id + ":north", facility.id(), "FACILITY_FORTIFICATION", revision,
-                area.x(), SURFACE_Y, area.z(), area.width(), 1, 1, facility.colour()));
-        add(result, new Desired(id + ":south", facility.id(), "FACILITY_FORTIFICATION", revision,
-                area.x(), SURFACE_Y, area.z() + area.depth() - 1, area.width(), 1, 1, facility.colour()));
-        if (area.depth() > 2) {
-            add(result, new Desired(id + ":west", facility.id(), "FACILITY_FORTIFICATION", revision,
-                    area.x(), SURFACE_Y, area.z() + 1, 1, area.depth() - 2, 1, facility.colour()));
-            add(result, new Desired(id + ":east", facility.id(), "FACILITY_FORTIFICATION", revision,
-                    area.x() + area.width() - 1, SURFACE_Y, area.z() + 1, 1, area.depth() - 2, 1, facility.colour()));
-        }
-    }
-
-    private static Desired interactionSlot(ReferenceGrayboxSnapshot.Interaction interaction, int index, String revision,
-                                           ReferenceGrayboxLayout.Point slot) {
-        return new Desired("interaction:" + interaction.id() + ":" + index, interaction.subjectId(), "INTERACTION", revision,
-                slot.x(), SURFACE_Y + interaction.yOffset(), slot.z(), 1, 1, 1, interaction.colour(), interaction.id(),
-                interaction.kind(), interaction.totalWeight());
-    }
-
-    private static void rebalanceInteractionWeights(SourceGrayboxPresentationLedger ledger, Map<String, Desired> desired) {
-        Map<String, List<Desired>> grouped = new LinkedHashMap<>();
+    private static void rebalanceInteractionWeights(SourceGrayboxPresentationLedger ledger,
+                                                    Map<String, SourceGrayboxPresentationPlan.Desired> desired) {
+        Map<String, List<SourceGrayboxPresentationPlan.Desired>> grouped = new LinkedHashMap<>();
         desired.values().stream().filter(item -> !item.interactionId().isEmpty()).forEach(item ->
                 grouped.computeIfAbsent(item.interactionId(), ignored -> new ArrayList<>()).add(item));
-        for (List<Desired> group : grouped.values()) {
-            List<Desired> active = group.stream().filter(item -> {
+        for (List<SourceGrayboxPresentationPlan.Desired> group : grouped.values()) {
+            List<SourceGrayboxPresentationPlan.Desired> active = group.stream().filter(item -> {
                 SourceGrayboxPresentationLedger.Claim prior = ledger.claim(item.id());
                 return prior == null || !prior.consumed();
             }).toList();
@@ -241,10 +150,10 @@ final class SourceGrayboxMaterializer {
         return conflicts;
     }
 
-    private static boolean ensure(ServerLevel level, SourceGrayboxPresentationLedger ledger, Desired item) {
+    private static boolean ensure(ServerLevel level, SourceGrayboxPresentationLedger ledger, SourceGrayboxPresentationPlan.Desired item) {
         SourceGrayboxPresentationLedger.Claim before = ledger.claim(item.id());
         if (before != null && (before.conflicted() || before.consumed() || !sameFootprint(before, item))) return false;
-        List<BlockPos> positions = positions(item);
+        List<BlockPos> positions = SourceGrayboxPresentationPlan.positions(item);
         if (!loaded(level, positions) || !flat(level, item)) return false;
         BlockState desired = SourceGrayboxPalette.block(item.colour());
         for (BlockPos position : positions) {
@@ -270,7 +179,7 @@ final class SourceGrayboxMaterializer {
         return true;
     }
 
-    private static boolean sameFootprint(SourceGrayboxPresentationLedger.Claim claim, Desired item) {
+    private static boolean sameFootprint(SourceGrayboxPresentationLedger.Claim claim, SourceGrayboxPresentationPlan.Desired item) {
         return claim.x() == item.x() && claim.y() == item.y() && claim.z() == item.z() && claim.width() == item.width()
                 && claim.depth() == item.depth() && claim.height() == item.height();
     }
@@ -283,7 +192,7 @@ final class SourceGrayboxMaterializer {
         return positions.stream().allMatch(level::hasChunkAt);
     }
 
-    private static boolean flat(ServerLevel level, Desired item) {
+    private static boolean flat(ServerLevel level, SourceGrayboxPresentationPlan.Desired item) {
         for (int x = item.x(); x < item.x() + item.width(); x++) for (int z = item.z(); z < item.z() + item.depth(); z++) {
             BlockPos ground = new BlockPos(x, SURFACE_Y - 1, z);
             if (level.getBlockState(ground).isAir() || !level.getFluidState(ground).isEmpty()) return false;
@@ -292,19 +201,7 @@ final class SourceGrayboxMaterializer {
     }
 
     private static List<BlockPos> positions(SourceGrayboxPresentationLedger.Claim claim) {
-        return positions(claim.x(), claim.y(), claim.z(), claim.width(), claim.depth(), claim.height());
-    }
-
-    private static List<BlockPos> positions(Desired item) {
-        return positions(item.x(), item.y(), item.z(), item.width(), item.depth(), item.height());
-    }
-
-    private static List<BlockPos> positions(int x, int y, int z, int width, int depth, int height) {
-        List<BlockPos> result = new ArrayList<>(width * depth * height);
-        for (int dx = 0; dx < width; dx++) for (int dz = 0; dz < depth; dz++) for (int dy = 0; dy < height; dy++) {
-            result.add(new BlockPos(x + dx, y + dy, z + dz));
-        }
-        return result;
+        return SourceGrayboxPresentationPlan.positions(claim);
     }
 
     private static void materializeLabels(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Set<String> active) {
@@ -459,26 +356,6 @@ final class SourceGrayboxMaterializer {
         return String.format(Locale.ROOT, "%.2f", value);
     }
 
-    private static void requireProfile(ReferenceGrayboxSnapshot snapshot) {
-        if (!snapshot.profileId().equals("graybox_1_40") || snapshot.bounds().groundY() != SURFACE_Y
-                || snapshot.bounds().width() != ReferenceGrayboxLayout.ARENA_BLOCKS_X
-                || snapshot.bounds().depth() != ReferenceGrayboxLayout.ARENA_BLOCKS_Z
-                || snapshot.bounds().blocksPerCell() != ReferenceGrayboxLayout.BLOCKS_PER_CELL) {
-            throw new IllegalStateException("source graybox materializer rejected an incompatible profile");
-        }
-    }
-
     record ManagedEntity(String id, String kind, String revision) { }
     record Report(int placed, int desired, int conflicts, String revision) { }
-    private record Desired(String id, String subjectId, String kind, String revision, int x, int y, int z, int width, int depth,
-                           int height, String colour, String interactionId, String interactionKind, double interactionWeight) {
-        private Desired(String id, String subjectId, String kind, String revision, int x, int y, int z, int width, int depth,
-                        int height, String colour) {
-            this(id, subjectId, kind, revision, x, y, z, width, depth, height, colour, "", "", 0.0d);
-        }
-
-        private Desired withInteractionWeight(double weight) {
-            return new Desired(id, subjectId, kind, revision, x, y, z, width, depth, height, colour, interactionId, interactionKind, weight);
-        }
-    }
 }

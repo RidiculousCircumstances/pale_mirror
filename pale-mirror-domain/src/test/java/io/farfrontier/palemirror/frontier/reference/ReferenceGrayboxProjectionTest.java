@@ -102,6 +102,20 @@ class ReferenceGrayboxProjectionTest {
         }
     }
 
+    @Test
+    void concurrentActivitySlotsKeepTheFirstProcessAtItsCanonicalPointAndSeparateTheRest() {
+        ReferenceGrayboxLayout.Point anchor = ReferenceGrayboxLayout.centre(10, 10);
+        ReferenceGrayboxLayout.Rectangle cell = ReferenceGrayboxLayout.cell(10, 10);
+
+        List<ReferenceGrayboxLayout.Point> slots = java.util.stream.IntStream.range(0, 49)
+                .mapToObj(ordinal -> ReferenceGrayboxLayout.activitySlot(anchor, ordinal)).toList();
+
+        assertEquals(anchor, slots.getFirst());
+        assertEquals(49, slots.stream().distinct().count());
+        assertTrue(slots.stream().allMatch(slot -> slot.x() >= cell.x() && slot.z() >= cell.z()
+                && slot.x() < cell.x() + cell.width() && slot.z() < cell.z() + cell.depth()));
+    }
+
     private static ReferenceWorld grayboxWorld() {
         return new ReferenceWorld(ReferenceWorldConfig.graybox1To40(7L));
     }
