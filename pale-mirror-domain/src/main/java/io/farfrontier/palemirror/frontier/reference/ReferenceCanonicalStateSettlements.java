@@ -18,9 +18,6 @@ final class ReferenceCanonicalStateSettlements {
         if (!required.v2Enabled()) throw new IllegalStateException("canonical state requires V2-enabled reference world");
         List<List<Object>> pairs = new ArrayList<>();
         for (Map.Entry<Integer, ReferenceSettlement> entry : required.marketWorld().settlements().entrySet()) {
-            if (entry.getValue().residents() != null) {
-                throw new IllegalStateException("source settlement codec does not yet encode individual resident ledger " + entry.getKey());
-            }
             pairs.add(pair(entry.getKey(), settlement(entry.getValue(), required.populationRng())));
         }
         return map(pairs);
@@ -31,12 +28,34 @@ final class ReferenceCanonicalStateSettlements {
                 "id", value.id(), "name", value.name(), "x", value.x(), "y", value.y(), "population", value.population(), "cash", value.cash(),
                 "natural", natural(value.natural()), "facilities", facilities(value.facilities()), "stock", resources(value.stock()),
                 "primary_capacity", primaryCapacity(value), "doctrine", value.doctrine(), "profile", profile(value.profile()),
-                "population_rng", random(populationRng), "residents", null, "alive", value.alive(), "integrity", value.integrity(),
+                "population_rng", random(populationRng), "residents", residentLedger(value.residents()), "alive", value.alive(), "integrity", value.integrity(),
                 "threat", value.threat(), "food_fulfillment", value.foodFulfillment(), "medicine_fulfillment", value.medicineFulfillment(),
                 "illness_burden", value.illnessBurden(), "last_investment_day", value.lastInvestmentDay(),
                 "last_strategy_day", value.lastStrategyDay(), "mobilized_personnel", value.mobilizedPersonnel(),
                 "wounded_personnel", value.woundedPersonnel(), "daily_production", resources(value.dailyProduction()),
                 "daily_consumption", resources(value.dailyConsumption())));
+    }
+
+    /** Matches the generic Python state encoder's non-dataclass ledger attributes. */
+    private static Map<String, Object> residentLedger(ReferenceResidentLedger ledger) {
+        if (ledger == null) return null;
+        List<List<Object>> pairs = new ArrayList<>();
+        for (String residentId : ledger.livingIds()) {
+            ReferenceResident resident = ledger.resident(residentId);
+            if (resident == null) throw new IllegalStateException("resident ledger lost " + residentId);
+            pairs.add(pair(residentId, resident(resident)));
+        }
+        return typed("simulation.population.ResidentLedger", "attributes", object(
+                "next_ordinal", ledger.nextOrdinal(), "residents", map(pairs), "revision", ledger.revision(),
+                "settlement_id", ledger.settlementId()));
+    }
+
+    private static Map<String, Object> resident(ReferenceResident value) {
+        return typed("simulation.population.Resident", "fields", object(
+                "id", value.id(), "home_settlement_id", value.homeSettlementId(), "occupation", value.occupation(),
+                "economic_class", value.economicClass(), "employer_company_id", value.employerCompanyId(),
+                "location", residentLocation(value.location()), "location_ref", value.locationRef(),
+                "condition", residentCondition(value.condition()), "deployment_role", value.deploymentRole()));
     }
 
     private static Map<String, Object> natural(ReferenceNaturalPotential value) {
@@ -79,6 +98,14 @@ final class ReferenceCanonicalStateSettlements {
 
     private static Map<String, Object> resource(ReferenceResource value) {
         return enumValue("simulation.economy.Resource", value.name().toLowerCase(Locale.ROOT));
+    }
+
+    private static Map<String, Object> residentLocation(ReferenceResidentLocation value) {
+        return enumValue("simulation.population.ResidentLocation", value.name().toLowerCase(Locale.ROOT));
+    }
+
+    private static Map<String, Object> residentCondition(ReferenceResidentCondition value) {
+        return enumValue("simulation.population.ResidentCondition", value.name().toLowerCase(Locale.ROOT));
     }
 
     private static Map<String, Object> enumValue(String type, String value) { return object("$enum", type, "value", value); }

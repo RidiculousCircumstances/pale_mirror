@@ -128,7 +128,13 @@ public final class ReferenceResidentLedger {
         revision++;
     }
 
-    /** Apply one complete market-day employment allocation with one visible revision. */
+    /**
+     * Apply the market-day allocation using Python's one-revision-per-company
+     * semantics. The final assignments are simultaneous in effect, but the
+     * persisted ledger revision must still match the source's repeated
+     * {@code assign_employment} calls and its initial employer-clear pass so
+     * physical observations cannot acquire a Java-only revision history.
+     */
     void replaceEmployment(Map<Integer, List<String>> assignments) {
         Objects.requireNonNull(assignments, "assignments");
         for (List<String> residentIds : assignments.values()) {
@@ -143,7 +149,7 @@ public final class ReferenceResidentLedger {
         for (Map.Entry<Integer, List<String>> entry : assignments.entrySet()) {
             for (String residentId : entry.getValue()) residents.get(residentId).assignEmployer(entry.getKey());
         }
-        revision++;
+        revision += assignments.size() + 1L;
     }
 
     public List<String> killExpected(double expected, PythonRandom rng) {

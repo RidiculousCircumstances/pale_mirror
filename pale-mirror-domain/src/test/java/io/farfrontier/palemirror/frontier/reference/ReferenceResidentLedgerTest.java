@@ -155,6 +155,22 @@ class ReferenceResidentLedgerTest {
     }
 
     @Test
+    void marketBatchRetainsTheSourceRevisionForEveryCompanyAssignment() {
+        ReferenceResidentLedger ledger = new ReferenceResidentLedger(14, 4);
+
+        ledger.replaceEmployment(Map.of(
+                1, List.of("resident:14:1"),
+                2, List.of("resident:14:2"),
+                3, List.of()));
+
+        assertEquals(5L, ledger.revision(), "initial creation, employer-clear pass and three source assignments");
+        assertEquals(1, ledger.resident("resident:14:1").employerCompanyId());
+        assertEquals(2, ledger.resident("resident:14:2").employerCompanyId());
+        assertNull(ledger.resident("resident:14:3").employerCompanyId());
+        ledger.assertValid();
+    }
+
+    @Test
     void exactCasualtiesPreserveTheDemographicRandomStream() {
         ReferenceResidentLedger ledger = new ReferenceResidentLedger(13, 2);
         PythonRandom actual = new PythonRandom(91);
