@@ -112,6 +112,8 @@ public final class ReferenceSettlement {
     public double woundedPersonnel() { return woundedPersonnel; }
     public boolean discretePeople() { return residents != null; }
     public ReferenceResidentLedger residents() { return residents; }
+    /** World-only named stream; standalone settlements retain their identity-derived fallback. */
+    void populationRng(PythonRandom value) { populationRng = Objects.requireNonNull(value, "populationRng"); }
     public String doctrine() { return doctrine; }
     public void doctrine(String value) { doctrine = Objects.requireNonNull(value, "doctrine"); }
     public int lastInvestmentDay() { return lastInvestmentDay; }
