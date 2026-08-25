@@ -192,10 +192,14 @@ read model; it is not an implied equivalence claim.
 `docs/frontier-reference-v2-multiseed-canonical-state.json` extends the full
 canonical-state fingerprint across independent generation/RNG paths: seeds 7,
 17, 41 and 73 at days 0, 1, 10, 30 and 60. It carries the same 4096-ULP
-numeric contract as the single-seed full-state trace while preserving every
-discrete branch exactly. Regenerate it only with
+numeric *canary* contract as the single-seed full-state trace while preserving
+every discrete branch exactly for this currently identical implementation.
+Regenerate it only with
 `tools/frontier/generate_v2_multiseed_canonical_state_trace.py` using
-`python3.11`; the Java test compares all twenty checkpoints.
+`python3.11`; the Java test compares all twenty checkpoints. It catches an
+accidental owner, ordering or RNG regression early; it is not a claim that a
+future calibrated Java profile must reproduce every long-running stochastic
+branch bit-for-bit.
 
 `docs/frontier-reference-v2-public-snapshot.json` records the exact public
 `World.snapshot()` read-model at days 0, 1, 5, 10, 15, 20, 25 and 30 for the
@@ -233,18 +237,40 @@ for a later materialization adapter, not that adapter itself.
 2. Every Python module is either ported, expressly unreachable under
    `source_v2`, or represented by a failing conformance test. “Close enough”
    branches, silent defaults and Java-only substitutes are forbidden.
-3. The port compares complete canonical day states against the source-shaped
-   codec, then focused micro-traces for each operation, economy, ecology and
-   AI branch. IDs, enum/status values, integer values, collection ordering and
-   topology are exact. Each finite binary64 leaf is compared through a
-   deterministic 4096-ULP bucket (about 10⁻¹² relative precision), while
-   focused micro-traces retain direct numerical tolerances for their named
-   quantities. A different discrete decision or materially different number
-   fails conformance; a last-bit CPython/libm difference does not. A passing
-   aggregate dashboard is not parity evidence.
-4. Only after those gates pass is Python frozen and Java becomes canonical.
-   `graybox_1_40` is then a separately tested scale profile of that Java
-   domain, never an adapter that aggregates people or bioforms.
+3. There are two deliberately different comparison levels.
+
+   - A focused source trace proves each new local rule: its inputs, ordering,
+     ownership changes, identity/custody, terminal result and named operation
+     branch are exact. Finite binary64 leaves use the deterministic 4096-ULP
+     bucket (about 10⁻¹² relative precision), while a named trace may declare
+     a clearer quantity-specific tolerance. A missing rule, a Java-only
+     shortcut or a broken two-way perturbation always fails here.
+   - A complete canonical state fingerprint is a high-sensitivity regression
+     canary while the two implementations still follow the same trajectory.
+     It is valuable evidence, but not the only acceptable long-term semantic
+     proof. Once a documented, bounded numerical difference legitimately
+     changes a later random choice or threshold crossing, the replacement
+     evidence is a versioned multi-seed calibration envelope, not a fabricated
+     matching hash.
+
+4. A calibration envelope runs the same named seeds and horizon in Python and
+   Java and compares the observable world behaviour: surviving settlements and
+   people, stock and trade continuity, ecological/tissue pressure, hive organs
+   and bioforms, operation/campaign outcomes, refugee/medical crises and
+   recovery. Its fixture declares the allowed bands before the Java change is
+   accepted. Small numerical deviations and their downstream *legal* choices
+   are acceptable inside those bands; lost identities, impossible custody,
+   missing domain events, invalid topology, non-deterministic Java runs or a
+   material change of world behaviour are not. A passing aggregate dashboard
+   without focused source traces is therefore insufficient.
+5. Python is the semantic design laboratory until the full-domain port is
+   accepted, but it is not a release pipeline that demands a separate Python
+   release before each Java edit. A domain change lands with its source trace
+   or calibration-envelope update and its Java implementation in one reviewed
+   change set. After the full-domain gates pass, Java becomes canonical and
+   Python remains the pinned historical oracle. `graybox_1_40` is a separately
+   tested scale profile of that Java domain, never an adapter that aggregates
+   people or bioforms.
 
 `docs/frontier-reference-state-codec.md` fixes the required complete internal
 state-codec boundary for Wave 4. The legacy raw Python heap trace remains a
