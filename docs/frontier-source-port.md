@@ -134,8 +134,20 @@ stocks/flows, global history, market and V2 summaries, plus the bounded event
 window. Regenerate it only with
 `tools/frontier/generate_v2_daily_trajectory_microtrace.py` using `python3.11`.
 The Java trajectory test asserts its phase-sensitive aggregate and final-event
-read model; the remaining full immutable projection comparator is a separate
-next port step, not an implied equivalence claim.
+read model; it is not an implied equivalence claim.
+
+`docs/frontier-reference-v2-public-snapshot.json` records the exact public
+`World.snapshot()` read-model at days 0, 1, 5, 10, 15, 20, 25 and 30 for the
+active 64×44, twelve-settlement, two-seed `source_v2` fixture. Regenerate it
+only with `tools/frontier/generate_v2_public_snapshot_trace.py` using
+`python3.11`, then run that tool with `--check`. `ReferenceV2PublicSnapshot`
+uses the same binary64-aware rounding and canonical JSON encoding, and its
+Java test compares the SHA-256 of every complete public checkpoint plus the
+day-zero economy, ecology, company, settlement and territorial subprojections.
+It rejects discrete residents, active operations, field state and swarms until
+their detailed public projection is ported; it never drops them to make a
+comparison pass. This is an exact public-read-model gate, not a substitute for
+the separate complete internal canonical-state trace required by Wave 4.
 
 ## Parity contract
 

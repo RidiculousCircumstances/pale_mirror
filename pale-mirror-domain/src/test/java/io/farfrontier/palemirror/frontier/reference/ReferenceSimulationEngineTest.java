@@ -143,6 +143,63 @@ class ReferenceSimulationEngineTest {
                 events.subList(events.size() - 12, events.size()));
     }
 
+    @Test
+    void publicV2SnapshotMatchesPinnedPythonReadModelAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, String> expectedDigests = Map.of(
+                0, "e83c55604acc10b1de850be6021554b26be4ce4f1c755d7dae98ad06838a55f6",
+                1, "6d0161e3fb9a0fe46c3216b431073089fe7e13c17baba16789e76c2a10ebc038",
+                5, "3d48cce7b68e4044d1ce9aca088d79887daac88f6f6c7fdb79f3f747fdf3ef8d",
+                10, "a4e35cbca132be953e922dee08128333a401caac34b80040f380e612e6b43131",
+                15, "266b97428ccd0c26b0b4da1ce2e1c509e95b6950bed6dddb264ade1b9e89e8ad",
+                20, "dfdf81df56dd8ac788b061ab3094aad956e609c074ad3e953ced6c87a3cdb5c8",
+                25, "b57f5ff548126159d3b2c3f0be30a39951b2a18a1cead7106feea8358f50addf",
+                30, "bda76a4944b03c5e8467bc6f96888669750b81b1cf96d630cac4104da1def61d");
+        Map<String, String> expectedDayZeroComponents = Map.ofEntries(
+                Map.entry("companies", "92f3bd9b096653c25bfa9684b34d1fa4da1e7f32d27dc3110685507e5779b0ce"),
+                Map.entry("economy", "0dbc3405a12cdb9ca1cbcdd2b7f8fbe8f9127e3a07e119e65ec3a45eaa57f19c"),
+                Map.entry("field", "e4df041bb6b634542507d545b74c3a2213eed1de1e923538c15f69725cbcf604"),
+                Map.entry("hive", "99addcaa2f0eee293ff5cbbecbe1b8589ecc028c5c800ab3bdfeaebd7e1490e8"),
+                Map.entry("infected_fraction", "eb796f33128a3d0a8e3ead887f0bf1354be07bf934bad9173c69983524bd69a0"),
+                Map.entry("nests", "479991fde170e3f8054aa49f890af515d3c832eb8fa65b1cdcc7090997382ab2"),
+                Map.entry("resource_sites", "fd292934ca1760cf45fd56c1d06e04f5c1e46f3b52239e6c1266364d0fa19cc1"),
+                Map.entry("settlements", "b39503a52fd816e4b797ddb539c5a4dfb566c9efb2eb722fd7a7e6d91d8756d4"));
+        Map<String, Object> dayZero = ReferenceV2PublicSnapshot.capture(world);
+        for (Map.Entry<String, String> expected : expectedDayZeroComponents.entrySet()) {
+            assertEquals(expected.getValue(), ReferenceV2PublicSnapshot.sha256(dayZero.get(expected.getKey())),
+                    "public snapshot day 0 component " + expected.getKey());
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> v2 = (Map<String, Object>) dayZero.get("v2");
+        Map<String, String> expectedDayZeroV2Components = Map.of(
+                "civics", "6861c0892b4c83e29b5031b2745717968d1d84a95f65ae0b9046748ff4446aca",
+                "doctrines", "bcef672161b8125cf17c2a1c4efb2af7f8d44b8225bff35f34b52c399d3c4b24",
+                "sector_control", "a9641169147f17782b461e45cd9f577544cb3d8dd8b4239604377efc52828d87",
+                "sectors", "4c31e651d941c5a25855a516633177131745d2ffd52f5a7ee82fe51dc65a9b75",
+                "summary", "4ed04a9cb4eb56400c86e6a3668e422c0bcb8a7c6e9b81697eaeaa9e7b86b644");
+        for (Map.Entry<String, String> expected : expectedDayZeroV2Components.entrySet()) {
+            assertEquals(expected.getValue(), ReferenceV2PublicSnapshot.sha256(v2.get(expected.getKey())),
+                    "public snapshot day 0 V2 component " + expected.getKey());
+        }
+        assertEquals("c8ab38b80c91373e50c334dfa3c98c244bc255317d07923fa3fef8280372929d",
+                ReferenceV2PublicSnapshot.sha256(v2), "public snapshot day 0 component v2");
+
+        for (int day = 0; day <= 30; day++) {
+            String expected = expectedDigests.get(day);
+            if (expected != null) assertEquals(expected, ReferenceV2PublicSnapshot.sha256(world), "public snapshot day " + day);
+            if (day < 30) world.tick();
+        }
+    }
+
+    @Test
+    void publicV2SnapshotRejectsAnUnportedDiscreteResidentProjection() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.graybox1To40(42L));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> ReferenceV2PublicSnapshot.capture(world));
+
+        assertEquals("graybox resident snapshot is not ported", error.getMessage());
+    }
+
     private static void assertCheckpoint(ReferenceWorld world, Checkpoint expected) {
         ReferenceDailyWorldHistory actual = world.history().getLast();
         assertClose(expected.population(), actual.population());
