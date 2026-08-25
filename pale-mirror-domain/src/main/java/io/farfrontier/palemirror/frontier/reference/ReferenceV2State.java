@@ -15,10 +15,11 @@ import java.util.Set;
  * Initial source-port of Python {@code V2State}: bounded territorial truth and
  * local perception at {@code World.__init__}.
  *
- * <p>Operations, posts, charters and campaigns deliberately remain absent
- * until their source owners are ported. They are empty at construction, so
- * this cut is exact for initialized territory and the independent hive
- * lifecycle without pretending that the other V2 daily phases exist.</p>
+ * <p>The field owner now exists at construction, but operations, daily field
+ * execution, charters and campaigns decisions deliberately remain absent until
+ * their source owners are ported. This cut is exact for initialized territory
+ * and the independent hive lifecycle without pretending that the other V2
+ * daily phases exist.</p>
  */
 public final class ReferenceV2State {
     private static final long RANDOM_SEED_OFFSET = 2_000_003L;

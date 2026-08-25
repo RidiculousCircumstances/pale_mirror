@@ -62,6 +62,7 @@ public final class ReferenceWorld {
     private final ReferenceMarketEconomy microeconomy;
     private final ReferenceInfectionModel infection;
     private final ReferenceTradeNetwork trade;
+    private final ReferenceFieldWarfare field;
     private final ReferenceMarketWorld marketWorld;
     private final ReferenceV2State v2;
     private int day;
@@ -76,6 +77,7 @@ public final class ReferenceWorld {
         infection = new ReferenceInfectionModel(config.width(), config.height(), config.seed() + INFECTION_SEED_OFFSET,
                 profile.personScale(), profile.discretePeople());
         trade = new ReferenceTradeNetwork(economy);
+        field = new ReferenceFieldWarfare();
         marketWorld = new ReferenceMarketWorld(trade);
 
         generateSettlements();
@@ -95,6 +97,7 @@ public final class ReferenceWorld {
     public ReferenceMarketEconomy microeconomy() { return microeconomy; }
     public ReferenceInfectionModel infection() { return infection; }
     public ReferenceTradeNetwork trade() { return trade; }
+    public ReferenceFieldWarfare field() { return field; }
     public ReferenceMarketWorld marketWorld() { return marketWorld; }
     public boolean v2Enabled() { return v2 != null; }
     public ReferenceV2State v2() {
