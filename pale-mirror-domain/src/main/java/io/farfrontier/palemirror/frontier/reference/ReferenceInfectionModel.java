@@ -45,6 +45,7 @@ public final class ReferenceInfectionModel {
     final List<ReferenceNestProject> nestProjects = new ArrayList<>();
     final List<ReferenceHiveHistoryEvent> projectHistory = new ArrayList<>();
     final LinkedHashMap<String, Double> damageMemory = new LinkedHashMap<>();
+    final List<ReferenceExploitationSite> pendingExploitation = new ArrayList<>();
     final List<ReferenceSwarm> swarms = new ArrayList<>();
     double harvestedBiomass;
     double harvestedGeneticMaterial;
@@ -85,6 +86,7 @@ public final class ReferenceInfectionModel {
     public List<ReferenceNestProject> nestProjects() { return List.copyOf(nestProjects); }
     public List<ReferenceHiveHistoryEvent> projectHistory() { return List.copyOf(projectHistory); }
     public Map<String, Double> damageMemory() { return Map.copyOf(damageMemory); }
+    public List<ReferenceExploitationSite> pendingExploitation() { return List.copyOf(pendingExploitation); }
     public List<ReferenceSwarm> swarms() { return List.copyOf(swarms); }
     public void genomeLevel(String adaptation, double level) { genome.put(Objects.requireNonNull(adaptation, "adaptation"), level); }
     public ReferenceBiome biomeAt(int x, int y) { return biomes.get(clamp(y, height)).get(clamp(x, width)); }
@@ -282,6 +284,38 @@ public final class ReferenceInfectionModel {
 
     public void recordDamage(String kind, double amount) { if (amount > 0.0d) damageMemory.merge(Objects.requireNonNull(kind, "kind"), amount, Double::sum); }
     public void decayDamageMemory() { ReferenceInfectionLifecycle.decayDamageMemory(this); }
+
+    /** Refresh signal-derived feral status and perform the source's scheduled adaptation attempt. */
+    public void prepareHiveOrders(int day) { ReferenceHivePreparation.prepare(this, day); }
+
+    public int afterTrade(Map<Integer, ReferenceSettlement> settlements, List<ReferenceTradeRecord> trades) {
+        return ReferenceInfectionInteraction.afterTrade(this, settlements, trades);
+    }
+    public void introduceRefugees(int x, int y, double illnessBurden, double people) {
+        ReferenceInfectionInteraction.introduceRefugees(this, x, y, illnessBurden, people);
+    }
+    public void settlementDestroyed(ReferenceSettlement settlement) { ReferenceInfectionInteraction.settlementDestroyed(this, settlement); }
+    public void recordAttackHarvest(ReferenceAttackEvent attack, ReferenceSettlement settlement, double populationLoss, boolean destroyed, int day) {
+        ReferenceInfectionInteraction.recordAttackHarvest(this, attack, settlement, populationLoss, destroyed, day);
+    }
+    public ReferenceGridPosition exploitationTarget(ReferenceHiveOrgan source, int day) {
+        return ReferenceInfectionInteraction.exploitationTarget(this, source, day);
+    }
+    public void resolveExploitation(int x, int y, ReferenceHiveOrgan source, ReferenceBioformKind kind) {
+        ReferenceInfectionInteraction.resolveExploitation(this, x, y, source, kind);
+    }
+    public double suppressArea(int x, int y, double radius, double strength, boolean damageOrgans) {
+        return ReferenceInfectionInteraction.suppressArea(this, x, y, radius, strength, damageOrgans);
+    }
+    public double suppressArea(int x, int y, double radius, double strength) { return suppressArea(x, y, radius, strength, true); }
+    public List<ReferenceInfectionHotspot> hotspots() {
+        return ReferenceInfectionInteraction.hotspots(this, ReferenceInfectionInteraction.hotspotCount(), ReferenceInfectionInteraction.hotspotMinimumDistance());
+    }
+    public List<ReferenceInfectionHotspot> hotspots(int count, double minimumDistance) {
+        return ReferenceInfectionInteraction.hotspots(this, count, minimumDistance);
+    }
+    public double infectedFraction() { return ReferenceInfectionInteraction.infectedFraction(this, ReferenceInfectionInteraction.infectedThreshold()); }
+    public double infectedFraction(double threshold) { return ReferenceInfectionInteraction.infectedFraction(this, threshold); }
 
     public ReferenceSwarm launchBioform(ReferenceHiveOrgan source, ReferenceBioformKind kind, int targetX, int targetY,
                                         int targetId, Map<ReferenceBioformKind, Double> composition) {
