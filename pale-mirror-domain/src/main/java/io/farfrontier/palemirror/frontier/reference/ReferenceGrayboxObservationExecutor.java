@@ -30,6 +30,10 @@ final class ReferenceGrayboxObservationExecutor {
         if (!applied) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
                 "resident custody no longer accepts this observation", before);
 
+        // The Python daily engine does this after combat/demography. A physical
+        // named death happens between days, so reconcile immediately before
+        // persisting an observable state with a company employee reference.
+        required.microeconomy().reconcileIndividualEmployment(required.marketWorld());
         required.marketWorld().event("D" + required.day() + ": physical resident " + event.kind().name().toLowerCase()
                 + " " + event.residentId() + " (" + event.eventId() + ")");
         required.assertProfileInvariants();
