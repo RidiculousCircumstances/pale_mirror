@@ -1,0 +1,337 @@
+package io.farfrontier.palemirror.frontier.reference;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+
+/**
+ * Builds the sole read-only input accepted by the source-parity graybox.
+ *
+ * <p>This boundary intentionally describes every domain process with semantic
+ * identities and colour tokens, but contains neither blocks nor entities. A
+ * presentation adapter may defer unloaded work; it may never replace, combine
+ * or invent the canonical records represented here.</p>
+ */
+public final class ReferenceGrayboxProjection {
+    private ReferenceGrayboxProjection() { }
+
+    public static ReferenceGrayboxSnapshot from(ReferenceWorld world) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        ReferenceGrayboxLayout.requireSupported(required);
+        ReferenceWorldView view = ReferenceWorldView.from(required);
+        Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas = settlementAreas(required);
+        Map<Integer, ReferenceGrayboxLayout.Point> operationPositions = operationPositions(required);
+        Map<Integer, ReferenceGrayboxLayout.Point> postPositions = postPositions(required);
+        Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas = sectorAreas(required.v2());
+
+        return new ReferenceGrayboxSnapshot(required.day(), required.profile().id(), ReferenceGrayboxLayout.bounds(),
+                cells(view), settlements(required, settlementAreas), facilities(required, settlementAreas), sites(required), routes(required),
+                organs(required), bioforms(required), residents(required, settlementAreas, operationPositions, postPositions), posts(required),
+                links(required), activities(required, sectorAreas), sectors(required, sectorAreas), chrysalises(required, sectorAreas), required.events());
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Cell> cells(ReferenceWorldView view) {
+        return view.cells().stream().map(cell -> new ReferenceGrayboxSnapshot.Cell(cell.x(), cell.y(),
+                ReferenceGrayboxLayout.cell(cell.x(), cell.y()), cell.infection(), cell.organicMass(), cell.moisture(), cell.signal(),
+                cellColour(cell.infection(), cell.signal()))).toList();
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Settlement> settlements(
+            ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Rectangle> areas
+    ) {
+        List<ReferenceGrayboxSnapshot.Settlement> result = new ArrayList<>();
+        for (ReferenceSettlement settlement : sorted(world.settlements().values(), ReferenceSettlement::id)) {
+            ReferenceCivicLedger civic = world.v2().civics().get(settlement.id());
+            if (civic == null) throw new IllegalStateException("settlement has no V2 civic ledger: " + settlement.id());
+            result.add(new ReferenceGrayboxSnapshot.Settlement(settlement.id(), settlement.name(), settlement.x(), settlement.y(),
+                    requiredArea(areas, settlement.id()), settlement.alive(), settlement.population(), settlement.integrity(), settlement.threat(),
+                    settlement.illnessBurden(), civic.state().id(), civic.foodReserveDays(), civic.rationFraction(),
+                    settlementColour(settlement, civic)));
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Facility> facilities(
+            ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Rectangle> areas
+    ) {
+        List<ReferenceGrayboxSnapshot.Facility> result = new ArrayList<>();
+        for (ReferenceSettlement settlement : sorted(world.settlements().values(), ReferenceSettlement::id)) {
+            ReferenceGrayboxLayout.Rectangle area = requiredArea(areas, settlement.id());
+            addFacility(result, settlement, area, "civic_hall", settlement.integrity());
+            addFacility(result, settlement, area, "workshop", settlement.facilities().workshop());
+            addFacility(result, settlement, area, "armory", settlement.facilities().armory());
+            addFacility(result, settlement, area, "clinic", settlement.facilities().clinic());
+            addFacility(result, settlement, area, "warehouse", stockTotal(settlement));
+            addFacility(result, settlement, area, "housing", settlement.population());
+            addFacility(result, settlement, area, "fortification", settlement.facilities().fortification());
+        }
+        return List.copyOf(result);
+    }
+
+    private static void addFacility(List<ReferenceGrayboxSnapshot.Facility> result, ReferenceSettlement settlement,
+                                    ReferenceGrayboxLayout.Rectangle area, String kind, double level) {
+        result.add(new ReferenceGrayboxSnapshot.Facility("settlement:" + settlement.id() + ":facility:" + kind, settlement.id(), kind,
+                ReferenceGrayboxLayout.facility(area, kind), level, "facility." + kind));
+    }
+
+    private static List<ReferenceGrayboxSnapshot.ResourceSite> sites(ReferenceWorld world) {
+        return sorted(world.resourceSites().values(), ReferenceResourceSite::id).stream().map(site -> new ReferenceGrayboxSnapshot.ResourceSite(
+                site.id(), site.kind().name().toLowerCase(java.util.Locale.ROOT), site.ownerId() == null ? -1 : site.ownerId(),
+                ReferenceGrayboxLayout.site(site.x(), site.y()), site.capacity(), site.condition(), site.contamination(), siteColour(site))).toList();
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Route> routes(ReferenceWorld world) {
+        List<ReferenceGrayboxSnapshot.Route> result = new ArrayList<>();
+        for (ReferenceRoute route : sorted(world.trade().routes(), item -> item.key().lowerSettlementId())) {
+            ReferenceSettlement a = world.settlements().get(route.a());
+            ReferenceSettlement b = world.settlements().get(route.b());
+            if (a == null || b == null) throw new IllegalStateException("route endpoint is absent: " + route.key());
+            boolean quarantined = world.day() <= route.quarantineUntil();
+            boolean disrupted = world.day() <= route.disruptionUntil();
+            result.add(new ReferenceGrayboxSnapshot.Route("route:" + route.key().lowerSettlementId() + ":" + route.key().upperSettlementId(),
+                    route.a(), route.b(), ReferenceGrayboxLayout.centre(a.x(), a.y()), ReferenceGrayboxLayout.centre(b.x(), b.y()),
+                    route.capacityOn(world.day()), route.risk(), route.infectionOn(world.day()), quarantined, disrupted,
+                    quarantined ? "route.quarantined" : disrupted ? "route.disrupted" : "route.open"));
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<ReferenceGrayboxSnapshot.HiveOrgan> organs(ReferenceWorld world) {
+        return sorted(world.infection().organs().values(), ReferenceHiveOrgan::id).stream().map(organ -> new ReferenceGrayboxSnapshot.HiveOrgan(
+                organ.id(), organ.kind().name().toLowerCase(java.util.Locale.ROOT), ReferenceGrayboxLayout.organ(organ.x(), organ.y()),
+                organ.biomass(), organ.vitality(), organ.feral(), organ.feral() ? "organ.feral" : "organ." + organ.kind().name().toLowerCase(java.util.Locale.ROOT))).toList();
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Bioform> bioforms(ReferenceWorld world) {
+        List<ReferenceGrayboxSnapshot.Bioform> result = new ArrayList<>();
+        for (ReferenceSwarm swarm : sorted(world.infection().swarms(), ReferenceSwarm::id)) {
+            ReferenceGrayboxLayout.Point anchor = ReferenceGrayboxLayout.position(swarm.x(), swarm.y());
+            int localOrdinal = 0;
+            for (Map.Entry<ReferenceBioformKind, Double> entry : swarm.composition().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(Comparator.comparing(ReferenceBioformKind::id))).toList()) {
+                int count = wholeBioforms(entry.getValue(), swarm.id(), entry.getKey());
+                for (int ordinal = 1; ordinal <= count; ordinal++) {
+                    result.add(new ReferenceGrayboxSnapshot.Bioform("bioform:" + swarm.id() + ":" + entry.getKey().id() + ":" + ordinal,
+                            swarm.id(), entry.getKey().id(), ReferenceGrayboxLayout.actorSlot(anchor, localOrdinal++), swarm.phase().id(),
+                            swarm.feral(), "bioform." + entry.getKey().id()));
+                }
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Resident> residents(
+            ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas,
+            Map<Integer, ReferenceGrayboxLayout.Point> operationPositions, Map<Integer, ReferenceGrayboxLayout.Point> postPositions
+    ) {
+        Map<String, List<ResidentDraft>> grouped = new TreeMap<>();
+        for (ReferenceSettlement settlement : sorted(world.settlements().values(), ReferenceSettlement::id)) {
+            ReferenceResidentLedger ledger = settlement.residents();
+            if (ledger == null) throw new IllegalStateException("graybox settlement has no resident ledger: " + settlement.id());
+            for (String residentId : ledger.livingIds()) {
+                ReferenceResident resident = ledger.resident(residentId);
+                ReferenceGrayboxLayout.Point anchor = residentAnchor(resident, settlementAreas, operationPositions, postPositions);
+                String owner = resident.location().name() + ":" + (resident.locationRef() == null ? resident.homeSettlementId() : resident.locationRef());
+                grouped.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(new ResidentDraft(resident, anchor));
+            }
+        }
+        List<ReferenceGrayboxSnapshot.Resident> result = new ArrayList<>();
+        for (List<ResidentDraft> group : grouped.values()) {
+            group.sort(Comparator.comparing(item -> item.resident().id()));
+            for (int index = 0; index < group.size(); index++) {
+                ReferenceResident resident = group.get(index).resident();
+                result.add(new ReferenceGrayboxSnapshot.Resident(resident.id(), resident.homeSettlementId(), resident.occupation(),
+                        resident.economicClass(), resident.location().name().toLowerCase(java.util.Locale.ROOT), resident.locationRef(),
+                        resident.condition().name().toLowerCase(java.util.Locale.ROOT), resident.deploymentRole(),
+                        ReferenceGrayboxLayout.actorSlot(group.get(index).anchor(), index), residentColour(resident)));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<ReferenceGrayboxSnapshot.FieldPost> posts(ReferenceWorld world) {
+        return sorted(world.field().posts().values(), ReferenceFieldPost::id).stream().map(post -> new ReferenceGrayboxSnapshot.FieldPost(post.id(),
+                post.campaignId(), post.kind().id(), post.status().id(), ReferenceGrayboxLayout.fieldPost(post.x(), post.y()), post.integrity(),
+                wholePeople(post.garrison(), "field post garrison", post.id()), wholePeople(post.wounded(), "field post wounded", post.id()),
+                post.modules().stream().map(ReferenceFieldModuleKind::id).sorted().toList(), "post." + post.kind().id())).toList();
+    }
+
+    private static List<ReferenceGrayboxSnapshot.FieldLink> links(ReferenceWorld world) {
+        return sorted(world.field().links().values(), ReferenceFieldLink::id).stream().map(link -> new ReferenceGrayboxSnapshot.FieldLink(link.id(),
+                link.campaignId(), link.kind().id(), link.aPostId(), link.bPostId(), link.status(), "link." + link.kind().id())).toList();
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Activity> activities(ReferenceWorld world,
+                                                                        Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas) {
+        List<ReferenceGrayboxSnapshot.Activity> result = new ArrayList<>();
+        for (ReferenceOperation operation : sorted(allOperations(world), ReferenceOperation::id)) result.add(operationActivity(operation));
+        for (ReferenceFieldCampaign campaign : sorted(world.field().campaigns().values(), ReferenceFieldCampaign::id)) {
+            result.add(new ReferenceGrayboxSnapshot.Activity("field-campaign:" + campaign.id(), "field_campaign", campaign.kind().id(),
+                    campaign.phase().id(), ReferenceGrayboxLayout.position(campaign.targetX(), campaign.targetY()), campaign.expectedPersonnel(),
+                    campaign.risk(), fieldCampaignTerminal(campaign.phase()), "activity.field_campaign." + campaign.phase().id()));
+        }
+        for (ReferenceFrontCampaign campaign : sorted(world.v2().frontCampaigns().values(), ReferenceFrontCampaign::id)) {
+            ReferenceGrayboxLayout.Rectangle sector = sectorAreas.get(campaign.targetSector());
+            if (sector == null) throw new IllegalStateException("front campaign has no target sector: " + campaign.id());
+            result.add(new ReferenceGrayboxSnapshot.Activity("front-campaign:" + campaign.id(), "front_campaign", campaign.kind().id(),
+                    campaign.phase().id(), new ReferenceGrayboxLayout.Point(sector.centreX(), sector.centreZ()), campaign.personnel(), campaign.risk(),
+                    campaign.phase().terminal(), "activity.front_campaign." + campaign.phase().id()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static ReferenceGrayboxSnapshot.Activity operationActivity(ReferenceOperation operation) {
+        boolean terminal = operation.status() == ReferenceOperationStatus.COMPLETED || operation.status() == ReferenceOperationStatus.ABORTED;
+        return new ReferenceGrayboxSnapshot.Activity("operation:" + operation.id(), "operation", operation.kind().id(), operation.status().id(),
+                ReferenceGrayboxLayout.position(operation.x(), operation.y()), operation.personnel(), operation.unsuppliedDays(), terminal,
+                "activity.operation." + operation.status().id());
+    }
+
+    private static boolean fieldCampaignTerminal(ReferenceCampaignPhase phase) {
+        return phase == ReferenceCampaignPhase.COMPLETE || phase == ReferenceCampaignPhase.FAILED;
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Sector> sectors(ReferenceWorld world,
+                                                                   Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas) {
+        List<ReferenceGrayboxSnapshot.Sector> result = new ArrayList<>();
+        for (ReferenceV2OperationalSector sector : sorted(world.v2().sectors().values(), item -> item.key())) {
+            ReferenceV2SectorControl control = world.v2().sectorControl().get(sector.key());
+            if (control == null) throw new IllegalStateException("sector has no control record: " + sector.key());
+            result.add(new ReferenceGrayboxSnapshot.Sector(sector.key(), requiredArea(sectorAreas, sector.key()), control.state().id(),
+                    sector.infection(), sector.sporeLoad(), sector.humanAccess(), sector.hiveInfluence(), control.supplied(),
+                    "sector." + control.state().id()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises(ReferenceWorld world,
+                                                                          Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas) {
+        List<ReferenceGrayboxSnapshot.Chrysalis> result = new ArrayList<>();
+        for (ReferenceNeuralChrysalis chrysalis : sorted(world.v2().chrysalises().values(), ReferenceNeuralChrysalis::organId)) {
+            ReferenceGrayboxLayout.Rectangle sector = requiredArea(sectorAreas, chrysalis.sectorKey());
+            result.add(new ReferenceGrayboxSnapshot.Chrysalis(chrysalis.organId(), chrysalis.sectorKey(), chrysalis.daysRemaining(),
+                    chrysalis.biomassCommitted(), chrysalis.status(), sector, "chrysalis." + chrysalis.status()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas(ReferenceWorld world) {
+        Map<Integer, ReferenceGrayboxLayout.Rectangle> result = new LinkedHashMap<>();
+        for (ReferenceSettlement settlement : sorted(world.settlements().values(), ReferenceSettlement::id)) {
+            result.put(settlement.id(), ReferenceGrayboxLayout.settlement(settlement.x(), settlement.y()));
+        }
+        return Map.copyOf(result);
+    }
+
+    private static Map<Integer, ReferenceGrayboxLayout.Point> operationPositions(ReferenceWorld world) {
+        Map<Integer, ReferenceGrayboxLayout.Point> result = new LinkedHashMap<>();
+        for (ReferenceOperation operation : allOperations(world)) result.put(operation.id(), ReferenceGrayboxLayout.position(operation.x(), operation.y()));
+        return Map.copyOf(result);
+    }
+
+    private static Map<Integer, ReferenceGrayboxLayout.Point> postPositions(ReferenceWorld world) {
+        Map<Integer, ReferenceGrayboxLayout.Point> result = new LinkedHashMap<>();
+        for (ReferenceFieldPost post : world.field().posts().values()) result.put(post.id(), ReferenceGrayboxLayout.centre(post.x(), post.y()));
+        return Map.copyOf(result);
+    }
+
+    private static Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas(ReferenceV2State v2) {
+        Map<String, ReferenceGrayboxLayout.Rectangle> result = new LinkedHashMap<>();
+        for (ReferenceV2OperationalSector sector : v2.sectors().values()) {
+            int minX = sector.cells().stream().mapToInt(ReferenceGridPosition::x).min().orElseThrow();
+            int maxX = sector.cells().stream().mapToInt(ReferenceGridPosition::x).max().orElseThrow();
+            int minY = sector.cells().stream().mapToInt(ReferenceGridPosition::y).min().orElseThrow();
+            int maxY = sector.cells().stream().mapToInt(ReferenceGridPosition::y).max().orElseThrow();
+            ReferenceGrayboxLayout.Rectangle first = ReferenceGrayboxLayout.cell(minX, minY);
+            result.put(sector.key(), new ReferenceGrayboxLayout.Rectangle(first.x(), first.z(),
+                    (maxX - minX + 1) * ReferenceGrayboxLayout.BLOCKS_PER_CELL,
+                    (maxY - minY + 1) * ReferenceGrayboxLayout.BLOCKS_PER_CELL));
+        }
+        return Map.copyOf(result);
+    }
+
+    private static ReferenceGrayboxLayout.Point residentAnchor(ReferenceResident resident,
+                                                                 Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas,
+                                                                 Map<Integer, ReferenceGrayboxLayout.Point> operations,
+                                                                 Map<Integer, ReferenceGrayboxLayout.Point> posts) {
+        return switch (resident.location()) {
+            case SETTLEMENT -> centre(requiredArea(settlementAreas, resident.homeSettlementId()));
+            case OPERATION -> requiredPoint(operations, resident.locationRef(), "operation", resident.id());
+            case FIELD_POST -> requiredPoint(posts, resident.locationRef(), "field post", resident.id());
+        };
+    }
+
+    private static List<ReferenceOperation> allOperations(ReferenceWorld world) {
+        List<ReferenceOperation> result = new ArrayList<>(world.operations().active());
+        result.addAll(world.operations().completed());
+        return result;
+    }
+
+    private static double stockTotal(ReferenceSettlement settlement) {
+        return settlement.stock().values().stream().mapToDouble(Double::doubleValue).sum();
+    }
+
+    private static int wholeBioforms(double value, int swarmId, ReferenceBioformKind kind) {
+        return whole(value, "swarm " + swarmId + " " + kind.id());
+    }
+
+    private static int wholePeople(double value, String owner, int id) {
+        return whole(value, owner + " " + id);
+    }
+
+    private static int whole(double value, String source) {
+        if (!Double.isFinite(value) || value < 0.0d || Math.abs(value - Math.rint(value)) > 1.0e-9d || value > Integer.MAX_VALUE) {
+            throw new IllegalStateException("graybox requires whole discrete entities for " + source + ": " + value);
+        }
+        return (int) Math.rint(value);
+    }
+
+    private static String cellColour(double infection, double signal) {
+        if (infection >= 0.70d) return signal > 0.01d ? "cell.signal_severe" : "cell.feral_severe";
+        if (infection >= 0.28d) return signal > 0.01d ? "cell.signal_active" : "cell.feral_active";
+        return infection > 0.01d ? "cell.trace" : "cell.neutral";
+    }
+
+    private static String settlementColour(ReferenceSettlement settlement, ReferenceCivicLedger civic) {
+        return !settlement.alive() ? "settlement.collapsed" : "settlement." + civic.state().id();
+    }
+
+    private static String siteColour(ReferenceResourceSite site) {
+        return site.condition() <= 0.02d ? "site.disabled" : site.contamination() >= 0.45d ? "site.contaminated" : "site." + site.kind().name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String residentColour(ReferenceResident resident) {
+        return resident.condition() == ReferenceResidentCondition.WOUNDED ? "resident.wounded" : "resident." + resident.occupation();
+    }
+
+    private static ReferenceGrayboxLayout.Point centre(ReferenceGrayboxLayout.Rectangle rectangle) {
+        return new ReferenceGrayboxLayout.Point(rectangle.centreX(), rectangle.centreZ());
+    }
+
+    private static <K> ReferenceGrayboxLayout.Rectangle requiredArea(Map<K, ReferenceGrayboxLayout.Rectangle> values, K key) {
+        ReferenceGrayboxLayout.Rectangle area = values.get(key);
+        if (area == null) throw new IllegalStateException("graybox area is missing for " + key);
+        return area;
+    }
+
+    private static ReferenceGrayboxLayout.Point requiredPoint(Map<Integer, ReferenceGrayboxLayout.Point> values, Integer key,
+                                                               String owner, String residentId) {
+        ReferenceGrayboxLayout.Point point = key == null ? null : values.get(key);
+        if (point == null) throw new IllegalStateException("resident " + residentId + " has no live " + owner + " owner");
+        return point;
+    }
+
+    private static <T, U extends Comparable<? super U>> List<T> sorted(Iterable<T> values, java.util.function.Function<T, U> key) {
+        List<T> result = new ArrayList<>();
+        values.forEach(result::add);
+        result.sort(Comparator.comparing(key));
+        return result;
+    }
+
+    private record ResidentDraft(ReferenceResident resident, ReferenceGrayboxLayout.Point anchor) { }
+}
