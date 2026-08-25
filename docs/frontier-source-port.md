@@ -178,6 +178,12 @@ not that adapter itself.
    `graybox_1_40` is then a separately tested scale profile of that Java
    domain, never an adapter that aggregates people or bioforms.
 
+`docs/frontier-reference-state-codec.md` fixes the required complete internal
+state-codec boundary for Wave 4. The legacy raw Python heap trace remains a
+source diagnostic, while this source-shaped codec is the cross-language proof:
+it contains every mutable domain value that can affect a later tick without
+depending on Python's process-local object IDs.
+
 ## Required source domains
 
 | Wave | Python owners | Java port responsibility |
