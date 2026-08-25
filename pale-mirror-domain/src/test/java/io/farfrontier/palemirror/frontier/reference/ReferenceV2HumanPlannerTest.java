@@ -50,7 +50,7 @@ class ReferenceV2HumanPlannerTest {
     }
 
     @Test
-    void expiredChartersAndDecisionAuditAreBoundedWithoutLeavingPoliticalAuthorityBehind() {
+    void expiredChartersAndDecisionAuditRemainInTheSourceV2Owner() {
         ReferenceWorld world = sourceWorld();
         ReferenceV2State v2 = world.v2();
         world.day(50);
@@ -67,13 +67,12 @@ class ReferenceV2HumanPlannerTest {
             v2.recordDecision(new ReferenceV2DecisionReceipt(day, 1, "recover", .0d, "test retention", "—"));
         }
 
-        assertTrue(v2.charters().isEmpty());
-        assertEquals(128, v2.terminalCharters().size());
-        assertEquals(3, v2.terminalCharters().getFirst().id());
-        assertEquals(130, v2.terminalCharters().getLast().id());
-        assertEquals("expired", v2.terminalCharters().getLast().status());
-        assertEquals(256, v2.decisionHistory().size());
-        assertEquals(2, v2.decisionHistory().getFirst().day());
+        assertEquals(130, v2.charters().size());
+        assertEquals(1, v2.charters().values().stream().toList().getFirst().id());
+        assertEquals(130, v2.charters().values().stream().toList().getLast().id());
+        assertEquals("expired", v2.charters().values().stream().toList().getLast().status());
+        assertEquals(257, v2.decisionHistory().size());
+        assertEquals(1, v2.decisionHistory().getFirst().day());
         assertEquals(257, v2.decisionHistory().getLast().day());
         assertFalse(v2.charters().values().stream().anyMatch(item -> item.status().equals("active")));
     }

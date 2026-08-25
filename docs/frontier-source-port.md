@@ -116,8 +116,8 @@ unknown terrain. Regenerate it only with
 `tools/frontier/generate_v2_perception_microtrace.py` using `python3.11`.
 
 `docs/frontier-reference-v2-human-planner.json` fixes V2 settlement decisions,
-the time-critical chrysalis charter and the supplied-front authorisation that
-follows it. Regenerate it only with
+the time-critical chrysalis charter, its source retention after expiry and the
+supplied-front authorisation that follows it. Regenerate it only with
 `tools/frontier/generate_v2_human_planner_microtrace.py` using `python3.11`.
 
 `docs/frontier-reference-daily-engine.json` fixes one complete V2 day: ecology,

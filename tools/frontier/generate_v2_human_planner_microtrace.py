@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pin Python V2 settlement decisions, a chrysalis charter and frontier authorisation."""
+"""Pin Python V2 civic decisions, charter retention and frontier authorisation."""
 
 from __future__ import annotations
 
@@ -62,6 +62,19 @@ def trace(root: Path) -> dict[str, object]:
         decision = next(item for item in reversed(world.v2.decision_history) if item["agent"] == f"settlement:{leader.id}")
         charter = next(iter(world.v2.charters.values()))
         campaign = next(iter(world.v2.front_campaigns.values()))
+        retention_world = source_world(world_module)
+        retention_world.day = 50
+        for identifier in range(1, 131):
+            retention_world.v2.charters[identifier] = v2.CoalitionCharter(
+                identifier, 1, (1, 7), "0:0", 1, 49, {1: 1.0, 7: 1.0}, {}, {}, "active", "test expiry",
+            )
+        retention_world.v2.update_civics(retention_world)
+        for day in range(1, 258):
+            retention_world.v2.decision_history.append({
+                "day": day, "agent": "settlement:1", "action": "recover", "risk": 0.0,
+                "reason": "test retention", "blockers": "—",
+            })
+        retained_charters = list(retention_world.v2.charters.values())
         return {
             "schema": 1,
             "source": {"tree_sha256": tree, "files": files},
@@ -79,6 +92,14 @@ def trace(root: Path) -> dict[str, object]:
                           for key, value in campaign.unit_composition_by_settlement.items()},
             },
             "events": world.events[-2:],
+            "retention": {
+                "charters": len(retained_charters), "first_charter": retained_charters[0].id,
+                "last_charter": retained_charters[-1].id, "last_status": retained_charters[-1].status,
+                "active_charters": sum(item.status == "active" for item in retained_charters),
+                "decisions": len(retention_world.v2.decision_history),
+                "first_decision_day": retention_world.v2.decision_history[0]["day"],
+                "last_decision_day": retention_world.v2.decision_history[-1]["day"],
+            },
         }
     finally:
         sys.path.remove(str(root))

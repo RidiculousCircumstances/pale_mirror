@@ -49,7 +49,6 @@ public final class ReferenceV2State {
     private final List<ReferenceSectorEngagement> sectorEngagements = new ArrayList<>();
     private final LinkedHashMap<Integer, Integer> frontierCooldownUntil = new LinkedHashMap<>();
     private final List<ReferenceV2DecisionReceipt> decisionHistory = new ArrayList<>();
-    private final List<ReferenceV2CharterReceipt> terminalCharters = new ArrayList<>();
     private int nextProcurementId = 1;
     private int nextClaimId = 1;
     private int nextCharterId = 1;
@@ -90,7 +89,6 @@ public final class ReferenceV2State {
     public List<ReferenceSectorEngagement> sectorEngagements() { return List.copyOf(sectorEngagements); }
     public Map<Integer, Integer> frontierCooldownUntil() { return immutableOrdered(frontierCooldownUntil); }
     public List<ReferenceV2DecisionReceipt> decisionHistory() { return List.copyOf(decisionHistory); }
-    public List<ReferenceV2CharterReceipt> terminalCharters() { return List.copyOf(terminalCharters); }
 
     Map<String, ReferenceV2OperationalSector> mutableSectors() { return sectors; }
     Map<String, ReferenceV2SectorControl> mutableSectorControl() { return sectorControl; }
@@ -108,7 +106,6 @@ public final class ReferenceV2State {
 
     void recordDecision(ReferenceV2DecisionReceipt receipt) {
         decisionHistory.add(Objects.requireNonNull(receipt, "receipt"));
-        if (decisionHistory.size() > 256) decisionHistory.removeFirst();
     }
 
     public String sectorKeyAt(double x, double y) {
@@ -285,7 +282,6 @@ public final class ReferenceV2State {
     /** Apply the complete source civic regime pass before market consumption. */
     public void updateCivics(ReferenceWorld world) {
         ReferenceV2CivicPolicy.update(world, civics, doctrines, rationPlans, emergencyRegimes, charters, routeInsurance);
-        compactTerminalCharters(Objects.requireNonNull(world, "world").day());
     }
 
     /** Execute source civic work, decisions, political agreements and new fronts in source order. */
@@ -335,18 +331,6 @@ public final class ReferenceV2State {
 
     void queueCivicSiteProject(ReferenceCivicSiteProject project) { civicSiteProjects.add(Objects.requireNonNull(project, "project")); }
     void advanceCivicSiteProjects(ReferenceWorld world) { ReferenceV2CivicWorks.advance(world, civicSiteProjects); }
-
-    private void compactTerminalCharters(int day) {
-        var iterator = charters.values().iterator();
-        while (iterator.hasNext()) {
-            ReferenceCoalitionCharter charter = iterator.next();
-            if (charter.status().equals("active") || charter.status().equals("offered")) continue;
-            terminalCharters.add(new ReferenceV2CharterReceipt(charter.id(), charter.leaderId(), charter.members(), charter.target(),
-                    charter.openedDay(), charter.expiresDay(), day, charter.status(), charter.reason()));
-            if (terminalCharters.size() > 128) terminalCharters.removeFirst();
-            iterator.remove();
-        }
-    }
 
     /** Return the civic cap for civilian food issue; absent civic state is source-normal. */
     public double applyRations(ReferenceWorld world, int settlementId, double foodNeed) {
