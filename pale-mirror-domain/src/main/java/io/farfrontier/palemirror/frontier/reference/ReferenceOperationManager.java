@@ -24,7 +24,7 @@ import java.util.Set;
 public final class ReferenceOperationManager {
     private final ArrayList<ReferenceOperation> active = new ArrayList<>();
     private final ArrayList<ReferenceOperation> completed = new ArrayList<>();
-    private int nextId = 1;
+    int nextId = 1;
 
     public List<ReferenceOperation> active() { return List.copyOf(active); }
     /** Source-owned terminal operation records; they are not a second custody ledger. */
