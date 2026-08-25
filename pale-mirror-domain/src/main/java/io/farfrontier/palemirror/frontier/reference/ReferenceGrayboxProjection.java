@@ -41,7 +41,7 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.FieldPost> posts = posts(required);
         List<ReferenceGrayboxSnapshot.FieldLink> links = links(required);
         List<ReferenceGrayboxSnapshot.Activity> activities = activities(required, sectorAreas);
-        List<ReferenceGrayboxSnapshot.Cargo> cargoes = cargoes(required, operationPositions);
+        List<ReferenceGrayboxSnapshot.Cargo> cargoes = cargoes(required, operationPositions, postPositions);
         List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, cargoes);
         List<ReferenceGrayboxSnapshot.Sector> sectors = sectors(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises = chrysalises(required, sectorAreas);
@@ -210,7 +210,8 @@ public final class ReferenceGrayboxProjection {
     }
 
     private static List<ReferenceGrayboxSnapshot.Cargo> cargoes(
-            ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Point> operationPositions
+            ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Point> operationPositions,
+            Map<Integer, ReferenceGrayboxLayout.Point> postPositions
     ) {
         List<ReferenceGrayboxSnapshot.Cargo> result = new ArrayList<>();
         Map<ReferenceGrayboxLayout.Point, Integer> usedSlots = new LinkedHashMap<>();
@@ -221,9 +222,21 @@ public final class ReferenceGrayboxProjection {
                 if (quantity <= 0.0d) continue;
                 String resourceId = resource.name().toLowerCase(java.util.Locale.ROOT);
                 int ordinal = usedSlots.merge(anchor, 1, Integer::sum) - 1;
-                result.add(new ReferenceGrayboxSnapshot.Cargo("operation:" + operation.id() + ":cargo:" + resourceId, operation.id(),
+                result.add(new ReferenceGrayboxSnapshot.Cargo("operation:" + operation.id() + ":cargo:" + resourceId, "operation", operation.id(),
                         resourceId, quantity, ReferenceGrayboxLayout.cargo(anchor, ordinal), "cargo." + resourceId));
             }
+        }
+        for (ReferenceFieldPost post : sorted(world.field().posts().values(), ReferenceFieldPost::id)) {
+            ReferenceGrayboxLayout.Point anchor = requiredPoint(postPositions, post.id(), "field post", "cargo");
+            int ordinal = 0;
+            for (ReferenceResource resource : ReferenceResource.values()) {
+                double quantity = post.stock(resource);
+                if (quantity <= 0.0d) continue;
+                String resourceId = resource.name().toLowerCase(java.util.Locale.ROOT);
+                result.add(new ReferenceGrayboxSnapshot.Cargo("field_post:" + post.id() + ":cargo:" + resourceId, "field_post", post.id(),
+                        resourceId, quantity, ReferenceGrayboxLayout.fieldPostCargo(post.x(), post.y(), ordinal++), "cargo." + resourceId));
+            }
+            if (ordinal > 16) throw new IllegalStateException("field post exceeds graybox cargo slots: " + post.id());
         }
         return List.copyOf(result);
     }
@@ -254,8 +267,10 @@ public final class ReferenceGrayboxProjection {
                     ReferenceGrayboxLayout.interactionSlots(organ.rectangle(), 16), organ.colour()));
         }
         for (ReferenceGrayboxSnapshot.Cargo cargo : cargoes) {
-            result.add(interaction("cargo:" + cargo.id(), cargo.id(), "operation_cargo_lost", cargo.quantity(), 1,
-                    ReferenceGrayboxLayout.interactionSlots(cargo.rectangle(), 4), cargo.colour()));
+            String factKind = cargo.ownerKind().equals("operation") ? "operation_cargo_lost" : "field_post_cargo_lost";
+            int slots = cargo.ownerKind().equals("operation") ? 4 : 1;
+            result.add(interaction("cargo:" + cargo.id(), cargo.id(), factKind, cargo.quantity(), 1,
+                    ReferenceGrayboxLayout.interactionSlots(cargo.rectangle(), slots), cargo.colour()));
         }
         return List.copyOf(result);
     }

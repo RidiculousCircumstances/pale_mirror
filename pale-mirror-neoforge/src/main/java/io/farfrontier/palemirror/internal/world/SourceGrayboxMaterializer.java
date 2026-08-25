@@ -293,7 +293,7 @@ final class SourceGrayboxMaterializer {
                 "[H] " + organ.kind() + " biomass=" + number(organ.biomass()) + " vitality=" + number(organ.vitality())
                         + (organ.feral() ? " FERAL" : ""), organ.rectangle().centreX(), organ.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) label(level, active, "cargo:" + cargo.id(),
-                "[CARGO] op=" + cargo.operationId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
+                "[CARGO] " + cargo.ownerKind() + "=" + cargo.ownerId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
                 cargo.rectangle().centreX(), cargo.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, "route:" + route.id(),
                 "[T] " + route.id() + " capacity=" + number(route.capacity()) + " risk=" + number(route.risk())

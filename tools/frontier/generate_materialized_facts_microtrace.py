@@ -22,6 +22,7 @@ def payload(root: Path) -> bytes:
     sys.path.insert(0, str(root))
     try:
         from simulation.economy import Resource
+        from simulation.field import CampaignKind, FieldPostKind
         from simulation.infection import OrganKind
         from simulation.operations import AgentKind, AgentRef, Operation, OperationKind, TargetKind, TargetRef
         from simulation.perturbations import MaterializedFact, MaterializedFactKind
@@ -63,6 +64,23 @@ def payload(root: Path) -> bytes:
             "trace:cargo", MaterializedFactKind.OPERATION_CARGO_LOST,
             "operation:991:cargo:food", 3.0,
         ))
+        campaign = world.field.create_campaign(
+            world, CampaignKind.CONTAINMENT, settlement.id, set(),
+            target_kind="cell", target_id=None, target_x=10, target_y=10, reason="trace",
+        )
+        if campaign is None:
+            raise RuntimeError("materialized-fact trace could not create field campaign")
+        post = world.field.start_post(
+            world, campaign.id, FieldPostKind.CHECKPOINT, 10, 10, settlement.id, {settlement.id},
+            {settlement.id: 1.0}, {Resource.FOOD: 8.0, Resource.MEDICINE: 2.0},
+        )
+        if post is None:
+            raise RuntimeError("materialized-fact trace could not create field post")
+        field_post_food_weight = post.stock[Resource.FOOD] / 2.0
+        field_post_cargo = world.apply_materialized_fact(MaterializedFact(
+            "trace:field-post-cargo", MaterializedFactKind.FIELD_POST_CARGO_LOST,
+            f"field_post:{post.id}:cargo:food", field_post_food_weight,
+        ))
         unsupported = world.apply_materialized_fact(MaterializedFact(
             "trace:housing", MaterializedFactKind.FACILITY_DAMAGED,
             "settlement:1:facility:housing", 1.0,
@@ -72,7 +90,8 @@ def payload(root: Path) -> bytes:
             "source": {"tree_sha256": tree_digest, "perturbations_sha256": files["simulation/perturbations.py"]},
             "outcomes": {
                 "facility": outcome(facility), "site": outcome(site_outcome), "route": outcome(route_outcome),
-                "organ": outcome(organ_outcome), "cargo": outcome(cargo), "unsupported": outcome(unsupported),
+                "organ": outcome(organ_outcome), "cargo": outcome(cargo), "field_post_cargo": outcome(field_post_cargo),
+                "unsupported": outcome(unsupported),
             },
             "state": {
                 "workshop": settlement.facilities.workshop,
@@ -81,6 +100,7 @@ def payload(root: Path) -> bytes:
                 "organ_present": organ.id in world.infection.nests,
                 "combat_damage_memory": world.infection.damage_memory["combat"],
                 "cargo": {resource.value: amount for resource, amount in sorted(operation.cargo.items(), key=lambda item: item[0].value)},
+                "field_post_cargo": {resource.value: amount for resource, amount in sorted(post.stock.items(), key=lambda item: item[0].value)},
             },
         })
     finally:

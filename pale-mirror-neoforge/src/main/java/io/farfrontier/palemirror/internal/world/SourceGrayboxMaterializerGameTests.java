@@ -106,6 +106,28 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void fieldPostPalletCarriesItsOwnTypedCargoFact(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        prepareFlatFloor(helper, anchor, 18);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxSnapshot snapshot = fieldPostCargoFixture(anchor, baseline);
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        materializer.apply(helper.getLevel(), snapshot);
+
+        ReferenceGrayboxSnapshot.Interaction interaction = snapshot.interactions().getFirst();
+        ReferenceGrayboxLayout.Point slot = interaction.slots().getFirst();
+        SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(helper.getLevel(),
+                new BlockPos(slot.x(), ReferenceGrayboxLayout.GROUND_Y + interaction.yOffset(), slot.z()));
+        helper.assertValueEqual(claim.subjectId(), "field_post:7:cargo:food",
+                "one field-post pallet must retain its exact canonical stock subject");
+        helper.assertValueEqual(claim.interactionKind(), "field_post_cargo_lost",
+                "a field-post pallet must not be mistaken for travelling operation cargo");
+        helper.assertValueEqual(claim.interactionWeight(), 1.7d,
+                "the one-slot post pallet must carry its full source stock quantity");
+        helper.succeed();
+    }
+
     private static void prepareFlatFloor(GameTestHelper helper, BlockPos anchor, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
             helper.getLevel().setBlock(anchor.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
@@ -126,6 +148,20 @@ public final class SourceGrayboxMaterializerGameTests {
                 List.of(), List.of(), List.of(), List.of(),
                 List.of(new ReferenceGrayboxSnapshot.Interaction(fixtureId + ":workshop", "settlement:1:facility:workshop", "facility_damaged",
                         interactionWeight, 1, ReferenceGrayboxLayout.interactionSlots(facility, 4), "facility.workshop")),
+                List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot fieldPostCargoFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
+        ReferenceGrayboxLayout.Rectangle post = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 12, 12);
+        ReferenceGrayboxLayout.Rectangle pallet = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 1, anchor.getZ(), 1, 1);
+        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("field_post:7:cargo:food", "field_post", 7,
+                "food", 1.7d, pallet, "cargo.food");
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(new ReferenceGrayboxSnapshot.FieldPost(7, 1, "checkpoint", "active", post, 10.0d, 1, 0,
+                        List.of(), "post.checkpoint")), List.of(), List.of(), List.of(cargo),
+                List.of(new ReferenceGrayboxSnapshot.Interaction("field-post-cargo", cargo.id(), "field_post_cargo_lost", 1.7d, 1,
+                        ReferenceGrayboxLayout.interactionSlots(pallet, 1), cargo.colour())),
                 List.of(), List.of(), List.of());
     }
 }

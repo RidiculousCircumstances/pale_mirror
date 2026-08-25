@@ -145,15 +145,26 @@ public record ReferenceGrayboxSnapshot(
         }
     }
 
-    /** One resource-specific, currently travelling operation pallet. */
-    public record Cargo(String id, int operationId, String resource, double quantity,
+    /** One resource-specific pallet owned by an exact source operation or field post. */
+    public record Cargo(String id, String ownerKind, int ownerId, String resource, double quantity,
                         ReferenceGrayboxLayout.Rectangle rectangle, String colour) {
         public Cargo {
             id = required(id, "id");
+            ownerKind = required(ownerKind, "ownerKind");
+            if (!(ownerKind.equals("operation") || ownerKind.equals("field_post"))) {
+                throw new IllegalArgumentException("graybox cargo owner kind is invalid");
+            }
+            if (ownerId < 1) throw new IllegalArgumentException("graybox cargo owner ID is invalid");
             resource = required(resource, "resource");
             if (!Double.isFinite(quantity) || quantity <= 0.0d) throw new IllegalArgumentException("cargo quantity must be positive and finite");
             rectangle = Objects.requireNonNull(rectangle, "rectangle");
             colour = required(colour, "colour");
+        }
+
+        /** Compatibility constructor for an operation-owned pallet. */
+        public Cargo(String id, int operationId, String resource, double quantity,
+                     ReferenceGrayboxLayout.Rectangle rectangle, String colour) {
+            this(id, "operation", operationId, resource, quantity, rectangle, colour);
         }
     }
 

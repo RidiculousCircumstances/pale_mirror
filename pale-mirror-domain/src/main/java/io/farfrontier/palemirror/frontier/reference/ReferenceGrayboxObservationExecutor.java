@@ -83,6 +83,7 @@ final class ReferenceGrayboxObservationExecutor {
             case ROUTE_DAMAGED -> damageRoute(required, event);
             case ORGAN_DAMAGED -> damageOrgan(required, event);
             case OPERATION_CARGO_LOST -> loseOperationCargo(required, event);
+            case FIELD_POST_CARGO_LOST -> loseFieldPostCargo(required, event);
         };
         if (!mutation.applied()) return outcome(event, mutation.status(), mutation.reason(), before);
 
@@ -253,6 +254,26 @@ final class ReferenceGrayboxObservationExecutor {
         cargo.put(resource, Math.max(0.0d, before - event.weight()));
         operation.cargo(cargo);
         return applied(before - cargo.get(resource));
+    }
+
+    private static StructureMutation loseFieldPostCargo(ReferenceWorld world, ReferenceGrayboxStructureObservation event) {
+        String[] parts = event.subjectId().split(":", -1);
+        if (parts.length != 4 || !parts[0].equals("field_post") || !parts[2].equals("cargo")) {
+            return unknown("invalid field post cargo subject");
+        }
+        Integer postId = integer(parts[1]);
+        ReferenceResource resource;
+        try {
+            resource = ReferenceResource.valueOf(parts[3].toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return unknown("invalid field post cargo subject");
+        }
+        ReferenceFieldPost post = postId == null ? null : world.field().posts().get(postId);
+        if (post == null) return unknown("unknown field post");
+        double before = post.stock(resource);
+        double after = Math.max(0.0d, before - event.weight());
+        post.stock(resource, after);
+        return applied(before - after);
     }
 
     private static Integer numericSubject(String subject, String prefix) {

@@ -99,6 +99,29 @@ class ReferenceGrayboxStructureObservationTest {
     }
 
     @Test
+    void fieldPostCargoFactIsProjectedAndRemovesOnlyThatPostStock() {
+        ReferenceWorld world = grayboxWorld();
+        ReferenceSettlement settlement = world.settlements().get(1);
+        ReferenceFieldCampaign campaign = world.field().createCampaign(world, ReferenceCampaignKind.CONTAINMENT, settlement.id(), Set.of(),
+                "cell", null, 10, 10, "physical stock");
+        assertTrue(campaign != null);
+        ReferenceFieldPost post = startPostWithFood(world, campaign, settlement);
+        double foodBefore = post.stock(ReferenceResource.FOOD);
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(world);
+        String subject = "field_post:" + post.id() + ":cargo:food";
+        assertTrue(snapshot.interactions().stream().anyMatch(item -> item.subjectId().equals(subject)
+                && item.kind().equals("field_post_cargo_lost") && item.totalWeight() == foodBefore));
+
+        ReferenceGrayboxObservationOutcome outcome = world.observe(new ReferenceGrayboxStructureObservation(
+                1, "physical:field-post-cargo", snapshot.stateRevision(), ReferenceGrayboxStructureObservation.Kind.FIELD_POST_CARGO_LOST,
+                subject, foodBefore / 2.0d));
+
+        assertTrue(outcome.applied());
+        assertEquals(foodBefore / 2.0d, post.stock(ReferenceResource.FOOD));
+        world.assertProfileInvariants();
+    }
+
+    @Test
     void staleOrNonfunctionalFactsDoNotInventAStateChange() {
         ReferenceWorld world = grayboxWorld();
         String revision = ReferenceGrayboxProjection.from(world).stateRevision();
@@ -117,5 +140,15 @@ class ReferenceGrayboxStructureObservationTest {
 
     private static ReferenceWorld grayboxWorld() {
         return new ReferenceWorld(ReferenceWorldConfig.graybox1To40(281L));
+    }
+
+    private static ReferenceFieldPost startPostWithFood(ReferenceWorld world, ReferenceFieldCampaign campaign,
+                                                          ReferenceSettlement settlement) {
+        for (int y = 1; y < world.config().height() - 1; y++) for (int x = 1; x < world.config().width() - 1; x++) {
+            ReferenceFieldPost post = world.field().startPost(world, campaign.id(), ReferenceFieldPostKind.CHECKPOINT, x, y,
+                    settlement.id(), Set.of(settlement.id()), Map.of(settlement.id(), 1.0d), Map.of(ReferenceResource.FOOD, 8.0d), Map.of());
+            if (post != null) return post;
+        }
+        throw new AssertionError("graybox test world has no buildable field-post location");
     }
 }

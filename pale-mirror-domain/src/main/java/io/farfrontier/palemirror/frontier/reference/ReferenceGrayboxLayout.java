@@ -80,6 +80,15 @@ public final class ReferenceGrayboxLayout {
         return new Rectangle(anchor.x() - 7 + column * 4, anchor.z() - 7 + row * 4, 2, 2);
     }
 
+    /** One readable stock pallet along a field post's reserved outer border. */
+    public static Rectangle fieldPostCargo(int x, int y, int ordinal) {
+        if (ordinal < 0 || ordinal >= 16) throw new IllegalArgumentException("field-post cargo ordinal must be in [0, 16)");
+        Rectangle cell = cell(x, y);
+        int column = ordinal % 8;
+        int row = ordinal / 8;
+        return new Rectangle(cell.x() + 1 + column * 2, cell.z() + (row == 0 ? 0 : BLOCKS_PER_CELL - 1), 1, 1);
+    }
+
     public static Point centre(int x, int y) {
         Rectangle cell = cell(x, y);
         return new Point(cell.x() + BLOCKS_PER_CELL / 2, cell.z() + BLOCKS_PER_CELL / 2);
