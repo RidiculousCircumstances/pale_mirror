@@ -191,16 +191,34 @@ source diagnostic, while this source-shaped codec is the cross-language proof:
 it contains every mutable domain value that can affect a later tick without
 depending on Python's process-local object IDs.
 
+`docs/frontier-reference-source-v2-reachability.json` pins the selected
+reference boundary itself. `source_v2` is the default Python profile, runs a
+64×44/12-settlement/two-seed world for thirty days, and proves that legacy
+`strategy` stays absent. It also fails if the stateless legacy command bridge,
+the two legacy human planners, or the unowned `ExpeditionManager` acquire an
+active V2 call site. Regenerate it only with
+`tools/frontier/generate_source_v2_reachability.py` using `python3.11`.
+
+This is deliberately a reachability decision, not an assertion that the legacy
+files do not contain useful historical rules. Under the agreed source profile,
+their code cannot alter a future tick and must not be reimplemented as a second
+Java AI. If Python connects any of these modules to `source_v2`, the fixture
+must fail first; that module then becomes a new mandatory source-port wave.
+
 ## Required source domains
 
 | Wave | Python owners | Java port responsibility |
 | --- | --- | --- |
 | 0 | `profiles`, `config`, `balance`, `engine`, RNG streams | exact numeric/RNG/config and day orchestration |
 | 1 | `population`, `settlement`, `economy`, `trade`, `microeconomy`, `sites` | people, facilities, households, companies, contracts, credit, routes and sites |
-| 2 | `ecology`, `infection`, `field`, `operations`, `formations`, `expedition` | tissue/ecology, organs, bioforms, all operation kinds, engagements, posts and supply lines |
-| 3 | `v2`, `ai/{v2,hive,human,field_campaigns}`, `intents`, `commands`, `views` | territorial beliefs/control, civics/doctrines/coalitions, lifecycle/adaptations and pure planners |
+| 2 | `ecology`, `infection`, `field`, `operations`, `formations` | tissue/ecology, organs, bioforms, all operation kinds, engagements, posts and supply lines |
+| 3 | `v2`, `ai/{v2,hive}`, `views` | territorial beliefs/control, civics/doctrines/coalitions, lifecycle/adaptations and pure planners |
 | 4 | `world`, `calibration`, snapshots/traces | complete state codec, day/micro trace runner, Python-to-Java comparison and profile calibration |
 | 5 | NeoForge/API/Visuals | replacement persistence, projection and two-way observations after Wave 4 parity |
+
+The current `source_v2`-unreachable set is `strategy`, `intents`, `commands`,
+`ai.human`, `ai.field_campaigns` and `expedition`; the pinned reachability
+fixture above is the authority for that list.
 
 No wave may erase unported state from a snapshot merely to obtain a smaller
 comparison surface. The Java source port lives in a clean `frontier.reference`
