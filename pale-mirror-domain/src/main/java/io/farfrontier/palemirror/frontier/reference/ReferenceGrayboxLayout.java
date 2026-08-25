@@ -148,6 +148,30 @@ public final class ReferenceGrayboxLayout {
         return List.copyOf(result);
     }
 
+    /** One visible point every four blocks of a bounded field line, outside both post footprints. */
+    public static List<Point> fieldLinkSlots(Point start, Point end) {
+        Objects.requireNonNull(start, "start");
+        Objects.requireNonNull(end, "end");
+        int dx = end.x() - start.x();
+        int dz = end.z() - start.z();
+        double distance = Math.hypot(dx, dz);
+        double perimeterClearance = 8.0d;
+        if (distance <= perimeterClearance * 2.0d) {
+            throw new IllegalArgumentException("field-link endpoints do not leave a visible corridor");
+        }
+        int steps = Math.min(64, (int) Math.floor((distance - perimeterClearance * 2.0d) / 4.0d) + 1);
+        List<Point> result = new ArrayList<>(steps);
+        for (int index = 0; index < steps; index++) {
+            double travelled = perimeterClearance + index * 4.0d;
+            double fraction = travelled / distance;
+            result.add(new Point((int) Math.round(start.x() + dx * fraction), (int) Math.round(start.z() + dz * fraction)));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalArgumentException("field-link slots must be distinct");
+        }
+        return List.copyOf(result);
+    }
+
     public static Rectangle facility(Rectangle settlement, String kind) {
         return switch (Objects.requireNonNull(kind, "kind")) {
             case "civic_hall" -> local(settlement, 20, 20, 8, 8);

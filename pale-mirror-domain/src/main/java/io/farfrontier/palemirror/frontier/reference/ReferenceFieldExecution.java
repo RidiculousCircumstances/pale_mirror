@@ -98,6 +98,7 @@ final class ReferenceFieldExecution {
             }
         }
         for (ReferenceFieldLink link : field.mutableLinks().values()) {
+            if (link.status().equals("destroyed")) continue;
             if (link.status().equals("building")) {
                 link.buildDaysRemaining(link.buildDaysRemaining() - 1);
                 if (link.buildDaysRemaining() <= 0) link.status("active");

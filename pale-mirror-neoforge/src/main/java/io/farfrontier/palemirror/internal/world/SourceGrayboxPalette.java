@@ -13,7 +13,7 @@ final class SourceGrayboxPalette {
 
     static BlockState block(String colour) {
         String token = colour.toLowerCase(Locale.ROOT);
-        if (token.contains("collapsed") || token.contains("disabled") || token.contains("feral_severe")) return Blocks.BLACK_WOOL.defaultBlockState();
+        if (token.contains("collapsed") || token.contains("disabled") || token.contains("destroyed") || token.contains("feral_severe")) return Blocks.BLACK_WOOL.defaultBlockState();
         if (token.contains("siege") || token.contains("core") || token.contains("severe")) return Blocks.RED_WOOL.defaultBlockState();
         if (token.contains("emergency") || token.contains("mine") || token.contains("breaker") || token.contains("trace")) return Blocks.ORANGE_WOOL.defaultBlockState();
         if (token.contains("watch") || token.contains("armory") || token.contains("power")) return Blocks.YELLOW_WOOL.defaultBlockState();
@@ -22,8 +22,8 @@ final class SourceGrayboxPalette {
         if (token.contains("warehouse") || token.contains("forest") || token.contains("wood")) return Blocks.BROWN_WOOL.defaultBlockState();
         if (token.contains("synapse") || token.contains("signal") || token.contains("quarantin") || token.contains("carrier")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("brood") || token.contains("chrysalis")) return Blocks.PINK_WOOL.defaultBlockState();
-        if (token.contains("workshop") || token.contains("sector") || token.contains("open")) return Blocks.BLUE_WOOL.defaultBlockState();
-        if (token.contains("fortification") || token.contains("field") || token.contains("activity")) return Blocks.CYAN_WOOL.defaultBlockState();
+        if (token.contains("workshop") || token.contains("sector") || token.contains("open") || token.contains("supply_corridor")) return Blocks.BLUE_WOOL.defaultBlockState();
+        if (token.contains("fortification") || token.contains("fortified_line") || token.contains("field") || token.contains("activity")) return Blocks.CYAN_WOOL.defaultBlockState();
         return Blocks.LIGHT_GRAY_WOOL.defaultBlockState();
     }
 

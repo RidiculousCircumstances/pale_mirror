@@ -42,7 +42,7 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.FieldLink> links = links(required);
         List<ReferenceGrayboxSnapshot.Activity> activities = activities(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Cargo> cargoes = cargoes(required, operationPositions, postPositions);
-        List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, posts, cargoes);
+        List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, posts, links, cargoes);
         List<ReferenceGrayboxSnapshot.Sector> sectors = sectors(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises = chrysalises(required, sectorAreas);
         List<String> events = required.events();
@@ -179,8 +179,16 @@ public final class ReferenceGrayboxProjection {
     }
 
     private static List<ReferenceGrayboxSnapshot.FieldLink> links(ReferenceWorld world) {
-        return sorted(world.field().links().values(), ReferenceFieldLink::id).stream().map(link -> new ReferenceGrayboxSnapshot.FieldLink(link.id(),
-                link.campaignId(), link.kind().id(), link.aPostId(), link.bPostId(), link.status(), "link." + link.kind().id())).toList();
+        List<ReferenceGrayboxSnapshot.FieldLink> result = new ArrayList<>();
+        for (ReferenceFieldLink link : sorted(world.field().links().values(), ReferenceFieldLink::id)) {
+            ReferenceFieldPost a = world.field().posts().get(link.aPostId());
+            ReferenceFieldPost b = world.field().posts().get(link.bPostId());
+            if (a == null || b == null) throw new IllegalStateException("field link endpoint is absent: " + link.id());
+            result.add(new ReferenceGrayboxSnapshot.FieldLink(link.id(), link.campaignId(), link.kind().id(), link.aPostId(), link.bPostId(),
+                    link.status(), link.integrity(), ReferenceGrayboxLayout.fieldLinkSlots(ReferenceGrayboxLayout.centre(a.x(), a.y()),
+                    ReferenceGrayboxLayout.centre(b.x(), b.y())), fieldLinkColour(link)));
+        }
+        return List.copyOf(result);
     }
 
     private static List<ReferenceGrayboxSnapshot.Activity> activities(ReferenceWorld world,
@@ -247,6 +255,7 @@ public final class ReferenceGrayboxProjection {
             List<ReferenceGrayboxSnapshot.Route> routes,
             List<ReferenceGrayboxSnapshot.HiveOrgan> organs,
             List<ReferenceGrayboxSnapshot.FieldPost> posts,
+            List<ReferenceGrayboxSnapshot.FieldLink> links,
             List<ReferenceGrayboxSnapshot.Cargo> cargoes
     ) {
         List<ReferenceGrayboxSnapshot.Interaction> result = new ArrayList<>();
@@ -271,6 +280,10 @@ public final class ReferenceGrayboxProjection {
                 && Set.of("building", "active", "isolated").contains(post.status())) {
             result.add(interaction("field-post:" + post.id(), "field_post:" + post.id(), "field_post_damaged", post.integrity(), 4,
                     ReferenceGrayboxLayout.interactionSlots(post.rectangle(), 16), post.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.FieldLink link : links) if (link.integrity() > 0.0d && !link.status().equals("destroyed")) {
+            result.add(interaction("field-link:" + link.id(), "field_link:" + link.id(), "field_link_damaged", link.integrity(), 2,
+                    link.slots(), link.colour()));
         }
         for (ReferenceGrayboxSnapshot.Cargo cargo : cargoes) {
             String factKind = cargo.ownerKind().equals("operation") ? "operation_cargo_lost" : "field_post_cargo_lost";
@@ -408,6 +421,10 @@ public final class ReferenceGrayboxProjection {
 
     private static String residentColour(ReferenceResident resident) {
         return resident.condition() == ReferenceResidentCondition.WOUNDED ? "resident.wounded" : "resident." + resident.occupation();
+    }
+
+    private static String fieldLinkColour(ReferenceFieldLink link) {
+        return "link." + link.kind().id() + "." + link.status();
     }
 
     /**

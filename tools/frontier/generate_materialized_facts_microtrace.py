@@ -22,7 +22,7 @@ def payload(root: Path) -> bytes:
     sys.path.insert(0, str(root))
     try:
         from simulation.economy import Resource
-        from simulation.field import CampaignKind, FieldPostKind
+        from simulation.field import CampaignKind, FieldLinkKind, FieldPostKind
         from simulation.infection import OrganKind
         from simulation.operations import AgentKind, AgentRef, Operation, OperationKind, TargetKind, TargetRef
         from simulation.perturbations import MaterializedFact, MaterializedFactKind
@@ -76,6 +76,15 @@ def payload(root: Path) -> bytes:
         )
         if post is None:
             raise RuntimeError("materialized-fact trace could not create field post")
+        second_post = world.field.start_post(
+            world, campaign.id, FieldPostKind.CHECKPOINT, 15, 10, settlement.id, {settlement.id},
+            {settlement.id: 1.0}, {Resource.FOOD: 8.0},
+        )
+        if second_post is None:
+            raise RuntimeError("materialized-fact trace could not create second field post")
+        link = world.field.start_link(world, campaign.id, FieldLinkKind.SUPPLY_CORRIDOR, post.id, second_post.id)
+        if link is None:
+            raise RuntimeError("materialized-fact trace could not create field link")
         field_post_food_weight = post.stock[Resource.FOOD] / 2.0
         field_post_cargo = world.apply_materialized_fact(MaterializedFact(
             "trace:field-post-cargo", MaterializedFactKind.FIELD_POST_CARGO_LOST,
@@ -83,6 +92,9 @@ def payload(root: Path) -> bytes:
         ))
         field_post = world.apply_materialized_fact(MaterializedFact(
             "trace:field-post", MaterializedFactKind.FIELD_POST_DAMAGED, f"field_post:{post.id}", post.integrity,
+        ))
+        field_link = world.apply_materialized_fact(MaterializedFact(
+            "trace:field-link", MaterializedFactKind.FIELD_LINK_DAMAGED, f"field_link:{link.id}", link.integrity,
         ))
         unsupported = world.apply_materialized_fact(MaterializedFact(
             "trace:housing", MaterializedFactKind.FACILITY_DAMAGED,
@@ -94,7 +106,7 @@ def payload(root: Path) -> bytes:
             "outcomes": {
                 "facility": outcome(facility), "site": outcome(site_outcome), "route": outcome(route_outcome),
                 "organ": outcome(organ_outcome), "cargo": outcome(cargo), "field_post_cargo": outcome(field_post_cargo),
-                "field_post": outcome(field_post),
+                "field_post": outcome(field_post), "field_link": outcome(field_link),
                 "unsupported": outcome(unsupported),
             },
             "state": {
@@ -106,6 +118,7 @@ def payload(root: Path) -> bytes:
                 "cargo": {resource.value: amount for resource, amount in sorted(operation.cargo.items(), key=lambda item: item[0].value)},
                 "field_post_cargo": {resource.value: amount for resource, amount in sorted(post.stock.items(), key=lambda item: item[0].value)},
                 "field_post": {"integrity": post.integrity, "status": post.status.value, "garrison": post.garrison},
+                "field_link": {"integrity": link.integrity, "status": link.status},
             },
         })
     finally:

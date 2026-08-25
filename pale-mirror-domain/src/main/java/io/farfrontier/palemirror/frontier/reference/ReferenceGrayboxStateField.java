@@ -82,10 +82,11 @@ final class ReferenceGrayboxStateField {
             if (a == b || !posts.containsKey(a) || !posts.containsKey(b) || !campaigns.containsKey(campaign)) throw new IllegalArgumentException("field link owner is unknown");
             ReferenceFieldLink link = new ReferenceFieldLink(ReferenceGrayboxStateReader.integer(fields.get("id"), "field link id"),
                     linkKind(fields.get("kind"), "field link kind"), a, b, campaign);
-            if (id != link.id() || id < 1 || result.putIfAbsent(id, link) != null
-                    || Double.doubleToLongBits(link.integrity()) != Double.doubleToLongBits(number(fields.get("integrity"), "field link integrity"))) {
+            double integrity = number(fields.get("integrity"), "field link integrity");
+            if (id != link.id() || id < 1 || integrity < 0.0d || result.putIfAbsent(id, link) != null) {
                 throw new IllegalArgumentException("field link is invalid");
             }
+            link.integrity(integrity);
             link.status(ReferenceGrayboxStateReader.string(fields.get("status"), "field link status"));
             link.buildDaysRemaining(ReferenceGrayboxStateReader.integer(fields.get("build_days_remaining"), "field link build days"));
         }

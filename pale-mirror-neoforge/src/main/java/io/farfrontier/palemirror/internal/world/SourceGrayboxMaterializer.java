@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -118,6 +117,13 @@ final class SourceGrayboxMaterializer {
         for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) {
             add(result, rectangle("field-post:" + post.id(), "field-post:" + post.id(), "FIELD_POST", snapshot.stateRevision(), post.rectangle(), 1,
                     post.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
+            for (int index = 0; index < link.slots().size(); index++) {
+                ReferenceGrayboxLayout.Point slot = link.slots().get(index);
+                add(result, new Desired("field-link:" + link.id() + ":segment:" + index, "field_link:" + link.id(), "FIELD_LINK",
+                        snapshot.stateRevision(), slot.x(), SURFACE_Y, slot.z(), 1, 1, 1, link.colour()));
+            }
         }
         for (ReferenceGrayboxSnapshot.Sector sector : snapshot.sectors()) {
             add(result, marker("sector:" + sector.key(), "sector:" + sector.key(), "SECTOR", snapshot.stateRevision(),
@@ -302,13 +308,10 @@ final class SourceGrayboxMaterializer {
         for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, "field-post:" + post.id(),
                 "[P] " + post.kind() + " " + post.status() + " integrity=" + number(post.integrity()) + " garrison=" + post.garrison() + " wounded=" + post.wounded()
                         + " modules=" + String.join(",", post.modules()), post.rectangle().centreX(), post.rectangle().centreZ());
-        Map<Integer, ReferenceGrayboxSnapshot.FieldPost> posts = new HashMap<>();
-        snapshot.fieldPosts().forEach(post -> posts.put(post.id(), post));
         for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
-            ReferenceGrayboxSnapshot.FieldPost a = posts.get(link.postA());
-            ReferenceGrayboxSnapshot.FieldPost b = posts.get(link.postB());
-            if (a != null && b != null) label(level, active, "field-link:" + link.id(), "[L] " + link.kind() + " " + link.status(),
-                    midpoint(a.rectangle().centreX(), b.rectangle().centreX()), midpoint(a.rectangle().centreZ(), b.rectangle().centreZ()));
+            ReferenceGrayboxLayout.Point label = link.slots().get(link.slots().size() / 2);
+            label(level, active, "field-link:" + link.id(), "[L] " + link.kind() + " " + link.status()
+                    + " integrity=" + number(link.integrity()), label.x(), label.z());
         }
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) if (!activity.terminal()) label(level, active,
                 "activity:" + activity.id(), "[A] " + activity.family() + " " + activity.kind() + " " + activity.phase()

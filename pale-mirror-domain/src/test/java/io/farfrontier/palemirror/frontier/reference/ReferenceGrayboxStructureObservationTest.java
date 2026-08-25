@@ -152,6 +152,38 @@ class ReferenceGrayboxStructureObservationTest {
     }
 
     @Test
+    void destroyedFieldLinkStaysDestroyedAndCannotRestoreItsBenefitOnTheNextDay() {
+        ReferenceWorld world = grayboxWorld();
+        ReferenceSettlement settlement = world.settlements().get(1);
+        ReferenceFieldCampaign campaign = world.field().createCampaign(world, ReferenceCampaignKind.CONTAINMENT, settlement.id(), Set.of(),
+                "cell", null, 10, 10, "physical line destruction");
+        assertTrue(campaign != null);
+        ReferenceFieldPost first = startPostWithFood(world, campaign, settlement);
+        ReferenceFieldPost second = startSecondPostWithFood(world, campaign, settlement, first);
+        ReferenceFieldLink link = world.field().startLink(world, campaign.id(), ReferenceFieldLinkKind.SUPPLY_CORRIDOR, first.id(), second.id());
+        assertTrue(link != null);
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(world);
+        String subject = "field_link:" + link.id();
+        assertTrue(snapshot.interactions().stream().anyMatch(item -> item.subjectId().equals(subject)
+                && item.kind().equals("field_link_damaged") && item.totalWeight() == link.integrity()));
+
+        ReferenceGrayboxObservationOutcome outcome = world.observe(new ReferenceGrayboxStructureObservation(
+                1, "physical:field-link", snapshot.stateRevision(), ReferenceGrayboxStructureObservation.Kind.FIELD_LINK_DAMAGED,
+                subject, link.integrity()));
+
+        assertTrue(outcome.applied());
+        assertEquals(0.0d, link.integrity());
+        assertEquals("destroyed", link.status());
+        world.field().step(world);
+        assertEquals("destroyed", link.status());
+        ReferenceGrayboxObservationOutcome retry = world.observe(new ReferenceGrayboxStructureObservation(
+                1, "physical:field-link-retry", outcome.stateRevision(), ReferenceGrayboxStructureObservation.Kind.FIELD_LINK_DAMAGED,
+                subject, 1.0d));
+        assertEquals(ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT, retry.status());
+        world.assertProfileInvariants();
+    }
+
+    @Test
     void staleOrNonfunctionalFactsDoNotInventAStateChange() {
         ReferenceWorld world = grayboxWorld();
         String revision = ReferenceGrayboxProjection.from(world).stateRevision();
@@ -180,5 +212,19 @@ class ReferenceGrayboxStructureObservationTest {
             if (post != null) return post;
         }
         throw new AssertionError("graybox test world has no buildable field-post location");
+    }
+
+    private static ReferenceFieldPost startSecondPostWithFood(ReferenceWorld world, ReferenceFieldCampaign campaign,
+                                                                ReferenceSettlement settlement, ReferenceFieldPost first) {
+        for (int y = 1; y < world.config().height() - 1; y++) for (int x = 1; x < world.config().width() - 1; x++) {
+            double distance = Math.hypot(first.x() - x, first.y() - y);
+            if (distance < ReferenceFieldRules.MINIMUM_POST_SPACING || distance > ReferenceFieldRules.linkMaximumLength(ReferenceFieldLinkKind.SUPPLY_CORRIDOR)) {
+                continue;
+            }
+            ReferenceFieldPost post = world.field().startPost(world, campaign.id(), ReferenceFieldPostKind.CHECKPOINT, x, y,
+                    settlement.id(), Set.of(settlement.id()), Map.of(settlement.id(), 1.0d), Map.of(ReferenceResource.FOOD, 8.0d), Map.of());
+            if (post != null) return post;
+        }
+        throw new AssertionError("graybox test world has no second field-post site for a supply line");
     }
 }

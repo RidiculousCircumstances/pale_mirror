@@ -190,6 +190,22 @@ public final class ReferenceFieldWarfare {
         return new MaterializedPostDamage(true, "applied", applied);
     }
 
+    /** Apply one physical line break while retaining field-link lifecycle ownership. */
+    MaterializedLinkDamage applyMaterializedLinkDamage(int linkId, double weight) {
+        ReferenceFieldLink link = links.get(linkId);
+        if (link == null) return new MaterializedLinkDamage(false, "unknown field link", 0.0d);
+        if (!Set.of("building", "active", "inactive").contains(link.status())) {
+            return new MaterializedLinkDamage(false, "field link is not damageable", 0.0d);
+        }
+        double before = link.integrity();
+        double after = Math.max(0.0d, before - weight);
+        double applied = before - after;
+        if (applied <= 0.0d) return new MaterializedLinkDamage(false, "target has no remaining weight", 0.0d);
+        link.integrity(after);
+        if (after <= 0.0d) link.status("destroyed");
+        return new MaterializedLinkDamage(true, "applied", applied);
+    }
+
     public boolean startModule(ReferenceWorld world, int postId, ReferenceFieldModuleKind module) {
         ReferenceWorld required = Objects.requireNonNull(world, "world");
         ReferenceFieldPost post = posts.get(postId);
@@ -268,4 +284,5 @@ public final class ReferenceFieldWarfare {
     }
 
     record MaterializedPostDamage(boolean applied, String reason, double appliedWeight) { }
+    record MaterializedLinkDamage(boolean applied, String reason, double appliedWeight) { }
 }

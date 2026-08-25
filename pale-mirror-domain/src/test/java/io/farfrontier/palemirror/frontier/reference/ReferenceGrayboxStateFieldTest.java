@@ -87,6 +87,29 @@ class ReferenceGrayboxStateFieldTest {
         assertEquals(ReferenceFieldPostStatus.ACTIVE, post.status());
     }
 
+    @Test
+    void restoresAPhysicallyDestroyedFieldLinkWithoutSilentlyRestoringItsIntegrity() {
+        ReferenceWorld source = new ReferenceWorld(ReferenceWorldConfig.graybox1To40(41L));
+        ReferenceFieldCampaign campaign = source.field().createCampaign(source, ReferenceCampaignKind.CONTAINMENT, 1, Set.of(),
+                "cell", null, 10, 10, "destroyed-line recovery");
+        ReferenceFieldPost first = source.field().startPost(source, campaign.id(), ReferenceFieldPostKind.CHECKPOINT, 10, 10, 1,
+                Set.of(1), Map.of(1, 1.0d), supplies(), Map.of());
+        ReferenceFieldPost second = source.field().startPost(source, campaign.id(), ReferenceFieldPostKind.CHECKPOINT, 15, 10, 1,
+                Set.of(1), Map.of(1, 1.0d), supplies(), Map.of());
+        ReferenceFieldLink link = source.field().startLink(source, campaign.id(), ReferenceFieldLinkKind.SUPPLY_CORRIDOR, first.id(), second.id());
+        link.integrity(0.0d);
+        link.status("destroyed");
+
+        ReferenceWorld restored = ReferenceGrayboxWorldHydrator.restore(
+                ReferenceGrayboxStateDocument.encode(ReferenceGrayboxCanonicalState.capture(source)));
+
+        ReferenceFieldLink restoredLink = restored.field().links().get(link.id());
+        assertEquals(0.0d, restoredLink.integrity());
+        assertEquals("destroyed", restoredLink.status());
+        assertEquals(ReferenceV2PublicSnapshot.canonicalJson(ReferenceCanonicalStateField.capture(source)),
+                ReferenceV2PublicSnapshot.canonicalJson(ReferenceCanonicalStateField.capture(restored)));
+    }
+
     private static Map<ReferenceResource, Double> supplies() {
         EnumMap<ReferenceResource, Double> values = new EnumMap<>(ReferenceResource.class);
         values.put(ReferenceResource.FOOD, 10.0d);

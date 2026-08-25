@@ -128,8 +128,19 @@ public record ReferenceGrayboxSnapshot(
         }
     }
 
-    public record FieldLink(int id, int campaignId, String kind, int postA, int postB, String status, String colour) {
-        public FieldLink { kind = required(kind, "kind"); status = required(status, "status"); colour = required(colour, "colour"); }
+    /** One physical corridor or fortified line with source-owned integrity slots. */
+    public record FieldLink(int id, int campaignId, String kind, int postA, int postB, String status, double integrity,
+                            List<ReferenceGrayboxLayout.Point> slots, String colour) {
+        public FieldLink {
+            kind = required(kind, "kind");
+            status = required(status, "status");
+            if (!Double.isFinite(integrity) || integrity < 0.0d) throw new IllegalArgumentException("field-link integrity is invalid");
+            slots = copied(slots, "slots");
+            if (slots.isEmpty() || slots.size() > 64 || slots.stream().distinct().count() != slots.size()) {
+                throw new IllegalArgumentException("field-link slots are invalid");
+            }
+            colour = required(colour, "colour");
+        }
     }
 
     /** Operation/campaign record used for readable labels and phase-coloured overlays. */

@@ -9,7 +9,7 @@ public final class ReferenceFieldLink {
     private final int aPostId;
     private final int bPostId;
     private final int campaignId;
-    private final double integrity;
+    private double integrity;
     private String status = "building";
     private int buildDaysRemaining;
 
@@ -29,6 +29,7 @@ public final class ReferenceFieldLink {
     public int bPostId() { return bPostId; }
     public int campaignId() { return campaignId; }
     public double integrity() { return integrity; }
+    void integrity(double value) { integrity = Math.max(0.0d, value); }
     public String status() { return status; }
     void status(String value) { status = Objects.requireNonNull(value, "status"); }
     public int buildDaysRemaining() { return buildDaysRemaining; }

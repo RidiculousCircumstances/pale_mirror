@@ -151,6 +151,31 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void fieldLinkCarriesReadableGeometryAndItsOwnDamageFact(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        prepareFlatFloor(helper, anchor, 44);
+        ReferenceGrayboxSnapshot snapshot = fieldLinkFixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot(), 703);
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        materializer.apply(helper.getLevel(), snapshot);
+
+        ReferenceGrayboxSnapshot.FieldLink link = snapshot.fieldLinks().getFirst();
+        ReferenceGrayboxLayout.Point slot = link.slots().getFirst();
+        SourceGrayboxPresentationLedger.Claim structure = materializer.claimAt(helper.getLevel(),
+                new BlockPos(slot.x(), ReferenceGrayboxLayout.GROUND_Y, slot.z()));
+        helper.assertValueEqual(structure.subjectId(), "field_link:703",
+                "a field link must be a visible managed graybox line, not only a label");
+        helper.assertValueEqual(structure.kind(), "FIELD_LINK", "the line geometry must retain its semantic owner");
+        ReferenceGrayboxSnapshot.Interaction interaction = snapshot.interactions().stream()
+                .filter(value -> value.kind().equals("field_link_damaged")).findFirst().orElseThrow();
+        SourceGrayboxPresentationLedger.Claim damage = materializer.claimAt(helper.getLevel(),
+                new BlockPos(slot.x(), ReferenceGrayboxLayout.GROUND_Y + interaction.yOffset(), slot.z()));
+        helper.assertValueEqual(damage.subjectId(), "field_link:703", "the line damage slot must retain its exact source identity");
+        helper.assertValueEqual(damage.interactionWeight(), 12.0d / link.slots().size(),
+                "visible line slots must divide integrity without a hidden multiplier");
+        helper.succeed();
+    }
+
     private static void prepareFlatFloor(GameTestHelper helper, BlockPos anchor, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
             helper.getLevel().setBlock(anchor.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
@@ -187,6 +212,26 @@ public final class SourceGrayboxMaterializerGameTests {
                         ReferenceGrayboxLayout.interactionSlots(pallet, 1), cargo.colour()),
                         new ReferenceGrayboxSnapshot.Interaction("field-post:" + postId, "field_post:" + postId, "field_post_damaged", 10.0d, 4,
                                 ReferenceGrayboxLayout.interactionSlots(post, 16), "post.checkpoint")),
+                List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot fieldLinkFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, int linkId) {
+        ReferenceGrayboxLayout.Rectangle first = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 12, 12);
+        ReferenceGrayboxLayout.Rectangle second = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 26, anchor.getZ() + 2, 12, 12);
+        List<ReferenceGrayboxLayout.Point> slots = ReferenceGrayboxLayout.fieldLinkSlots(
+                new ReferenceGrayboxLayout.Point(first.centreX(), first.centreZ()),
+                new ReferenceGrayboxLayout.Point(second.centreX(), second.centreZ()));
+        ReferenceGrayboxSnapshot.FieldLink link = new ReferenceGrayboxSnapshot.FieldLink(linkId, 1, "supply_corridor", 101, 102,
+                "active", 12.0d, slots, "link.supply_corridor.active");
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(new ReferenceGrayboxSnapshot.FieldPost(101, 1, "checkpoint", "active", first, 10.0d, 1, 0,
+                                List.of(), "post.checkpoint"),
+                        new ReferenceGrayboxSnapshot.FieldPost(102, 1, "checkpoint", "active", second, 10.0d, 1, 0,
+                                List.of(), "post.checkpoint")),
+                List.of(link), List.of(), List.of(),
+                List.of(new ReferenceGrayboxSnapshot.Interaction("field-link:" + linkId, "field_link:" + linkId, "field_link_damaged",
+                        link.integrity(), 2, slots, link.colour())),
                 List.of(), List.of(), List.of());
     }
 }
