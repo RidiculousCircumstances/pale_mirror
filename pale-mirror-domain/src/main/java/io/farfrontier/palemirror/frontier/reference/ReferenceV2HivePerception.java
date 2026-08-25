@@ -23,4 +23,5 @@ public final class ReferenceV2HivePerception {
 
     ReferenceV2Belief belief(String sectorKey) { return beliefs.get(sectorKey); }
     void belief(ReferenceV2Belief value) { beliefs.put(value.sectorKey(), value); }
+    Map<String, ReferenceV2Belief> mutableBeliefs() { return beliefs; }
 }

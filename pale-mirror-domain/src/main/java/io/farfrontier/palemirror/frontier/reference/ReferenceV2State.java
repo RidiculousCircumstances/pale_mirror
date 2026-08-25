@@ -92,17 +92,42 @@ public final class ReferenceV2State {
 
     Map<String, ReferenceV2OperationalSector> mutableSectors() { return sectors; }
     Map<String, ReferenceV2SectorControl> mutableSectorControl() { return sectorControl; }
+    Map<Integer, ReferenceV2HumanPerception> mutableHumanPerceptions() { return humanPerceptions; }
+    ReferenceV2HivePerception mutableHivePerception() { return hivePerception; }
+    Map<Integer, ReferenceSettlementDoctrine> mutableDoctrines() { return doctrines; }
+    Map<Integer, ReferenceCivicLedger> mutableCivics() { return civics; }
+    Map<Integer, ReferenceV2ReservePolicy> mutableReservePolicies() { return reservePolicies; }
+    Map<Integer, ReferenceV2RationPlan> mutableRationPlans() { return rationPlans; }
+    Map<Integer, ReferenceEmergencyRegime> mutableEmergencyRegimes() { return emergencyRegimes; }
     Map<Integer, ReferenceCoalitionCharter> mutableCharters() { return charters; }
+    Map<ReferenceRouteKey, ReferenceRouteInsurance> mutableRouteInsurance() { return routeInsurance; }
+    Map<Integer, ReferenceProcurementOrder> mutableProcurements() { return procurements; }
+    Map<Integer, ReferenceCompensationClaim> mutableCompensation() { return compensation; }
+    List<ReferenceCivicSiteProject> mutableCivicSiteProjects() { return civicSiteProjects; }
+    Map<Integer, Integer> mutableLastCivicWorkDay() { return lastCivicWorkDay; }
+    Map<Integer, ReferenceNeuralChrysalis> mutableChrysalises() { return chrysalises; }
+    Map<String, ReferenceHiveLifecycle> mutableHiveLifecycle() { return hiveLifecycle; }
     Map<Integer, ReferenceFrontCampaign> mutableFrontCampaigns() { return frontCampaigns; }
     Map<Integer, ReferenceSupplyLineStatus> mutableSupplyLines() { return supplyLines; }
     List<ReferenceSectorEngagement> mutableSectorEngagements() { return sectorEngagements; }
     Map<Integer, Integer> mutableFrontierCooldownUntil() { return frontierCooldownUntil; }
+    List<ReferenceV2DecisionReceipt> mutableDecisionHistory() { return decisionHistory; }
     int nextCharterIdAndIncrement() { return nextCharterId++; }
     int nextProcurementId() { return nextProcurementId; }
     int nextClaimId() { return nextClaimId; }
     int nextCharterId() { return nextCharterId; }
     int nextFrontCampaignId() { return nextFrontCampaignId; }
     int nextFrontCampaignIdAndIncrement() { return nextFrontCampaignId++; }
+
+    void restoreNextIds(int procurement, int claim, int charter, int frontCampaign) {
+        if (procurement < 1 || claim < 1 || charter < 1 || frontCampaign < 1) {
+            throw new IllegalArgumentException("V2 next identity must be positive");
+        }
+        nextProcurementId = procurement;
+        nextClaimId = claim;
+        nextCharterId = charter;
+        nextFrontCampaignId = frontCampaign;
+    }
 
     void recordDecision(ReferenceV2DecisionReceipt receipt) {
         decisionHistory.add(Objects.requireNonNull(receipt, "receipt"));
