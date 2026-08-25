@@ -322,6 +322,22 @@ public final class ReferenceInfectionModel {
         return ReferenceBioformExecutor.launch(this, source, kind, targetX, targetY, targetId, composition);
     }
 
+    public ReferenceGridPosition nestGrowthTarget(ReferenceHiveOrgan nest) { return ReferenceInfectionLegacy.nestGrowthTarget(this, nest); }
+    public ReferenceMutation chooseMutation(ReferenceHiveOrgan nest) { return ReferenceInfectionLegacy.chooseMutation(nest); }
+    public boolean launchMutation(ReferenceHiveOrgan nest, ReferenceMutation mutation, int day) {
+        return ReferenceInfectionLegacy.launchMutation(this, nest, mutation, day);
+    }
+    public boolean launchNestProject(ReferenceHiveOrgan nest, ReferenceGridPosition target, int day) {
+        Objects.requireNonNull(target, "target");
+        return startMorphogenesis(nest, ReferenceOrganKind.SYNAPSE, target.x(), target.y(), day);
+    }
+    public boolean launchLocalPropagation(ReferenceHiveOrgan nest, int day) {
+        return ReferenceInfectionLegacy.launchLocalPropagation(this, nest, day);
+    }
+    public ReferenceSwarm launchSwarm(ReferenceHiveOrgan nest, Map<Integer, ReferenceSettlement> settlements, int targetId, int day) {
+        return ReferenceInfectionLegacy.launchSwarm(this, nest, settlements, targetId, day);
+    }
+
     public List<ReferenceAttackEvent> advanceBioforms(Map<Integer, ReferenceSettlement> settlements, int day) {
         return ReferenceBioformMovement.advance(this, settlements, day);
     }
