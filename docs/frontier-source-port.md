@@ -83,6 +83,11 @@ selection, ecological cleanup, claim maturation and invalid claim disposal.
 Regenerate it only with `tools/frontier/generate_v2_civic_works_microtrace.py`
 using `python3.11`.
 
+`docs/frontier-reference-formations.json` fixes exact aggregate role arithmetic,
+stable display and literal largest-remainder allocation before operations and
+field warfare may assign named residents. Regenerate it only with
+`tools/frontier/generate_formations_microtrace.py` using `python3.11`.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve
