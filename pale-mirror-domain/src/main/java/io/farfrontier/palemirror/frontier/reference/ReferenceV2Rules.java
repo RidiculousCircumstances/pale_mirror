@@ -13,6 +13,15 @@ final class ReferenceV2Rules {
     static final double MINIMUM_ACTION_CONFIDENCE = 0.42d;
     static final double EMERGENCY_RESERVE_DAYS = 10.0d;
     static final double MEDICINE_RESERVE_DAYS = 6.0d;
+    static final int CHRYSALIS_DAYS = 18;
+    static final double CHRYSALIS_MINIMUM_BIOMASS = 105.0d;
+    static final double CHRYSALIS_MINIMUM_TISSUE = 0.46d;
+    static final double CHRYSALIS_MINIMUM_VITALITY = 0.62d;
+    static final double CHRYSALIS_DECAY_PER_DAY = 0.025d;
+    static final double MATURE_CORE_BIOMASS = 115.0d;
+    static final double MATURE_CORE_VITALITY = 68.0d;
+    static final double FEEDING_BIOMASS_MULTIPLIER = 2.0d;
+    static final double DECAY_TISSUE_FRACTION = 0.40d;
 
     private ReferenceV2Rules() { }
 

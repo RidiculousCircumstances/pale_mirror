@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -16,8 +17,8 @@ import java.util.Set;
  *
  * <p>Operations, posts, charters and campaigns deliberately remain absent
  * until their source owners are ported. They are empty at construction, so
- * this cut is exact for the initialized world without pretending that the
- * later V2 daily phases exist.</p>
+ * this cut is exact for initialized territory and the independent hive
+ * lifecycle without pretending that the other V2 daily phases exist.</p>
  */
 public final class ReferenceV2State {
     private static final long RANDOM_SEED_OFFSET = 2_000_003L;
@@ -35,6 +36,8 @@ public final class ReferenceV2State {
     private final LinkedHashMap<Integer, ReferenceCivicLedger> civics = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceV2ReservePolicy> reservePolicies = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceV2RationPlan> rationPlans = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceNeuralChrysalis> chrysalises = new LinkedHashMap<>();
+    private final LinkedHashMap<String, ReferenceHiveLifecycle> hiveLifecycle = new LinkedHashMap<>();
 
     ReferenceV2State(ReferenceWorld world) {
         ReferenceWorld required = Objects.requireNonNull(world, "world");
@@ -55,6 +58,8 @@ public final class ReferenceV2State {
     public Map<Integer, ReferenceCivicLedger> civics() { return immutableOrdered(civics); }
     public Map<Integer, ReferenceV2ReservePolicy> reservePolicies() { return immutableOrdered(reservePolicies); }
     public Map<Integer, ReferenceV2RationPlan> rationPlans() { return immutableOrdered(rationPlans); }
+    public Map<Integer, ReferenceNeuralChrysalis> chrysalises() { return immutableOrdered(chrysalises); }
+    public Map<String, ReferenceHiveLifecycle> hiveLifecycle() { return immutableOrdered(hiveLifecycle); }
 
     public String sectorKeyAt(double x, double y) {
         return Math.max(0, (int) x / ReferenceV2Rules.SECTOR_SIZE) + ":"
@@ -168,6 +173,80 @@ public final class ReferenceV2State {
         }
     }
 
+    /** Advance only the source's V2 organ reconstitution state machine. */
+    public void advanceHiveLifecycle(ReferenceWorld world) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        ReferenceInfectionModel infection = required.infection();
+        ReferenceInfectionModel.NetworkComponents components = infection.networkComponents();
+        LinkedHashMap<Integer, List<ReferenceHiveOrgan>> groups = new LinkedHashMap<>();
+        for (ReferenceHiveOrgan organ : infection.organs().values()) {
+            Integer component = infection.componentNear(components, organ.x(), organ.y());
+            if (component != null) groups.computeIfAbsent(component, ignored -> new ArrayList<>()).add(organ);
+        }
+        for (Map.Entry<Integer, List<ReferenceHiveOrgan>> entry : groups.entrySet()) {
+            List<ReferenceHiveOrgan> organs = entry.getValue();
+            String lifecycleKey = "component:" + entry.getKey();
+            boolean hasCore = organs.stream().anyMatch(item -> item.kind() == ReferenceOrganKind.CORE);
+            if (hasCore) {
+                double biomass = organs.stream().mapToDouble(ReferenceHiveOrgan::biomass).sum();
+                double tissue = organs.stream().mapToDouble(item -> sectorAt(item.x(), item.y()).infection()).sum() / organs.size();
+                if (organs.size() == 1 && biomass < ReferenceV2Rules.CHRYSALIS_MINIMUM_BIOMASS) {
+                    hiveLifecycle.put(lifecycleKey, ReferenceHiveLifecycle.SEED);
+                } else if (organs.stream().noneMatch(item -> item.kind() == ReferenceOrganKind.DIGESTIVE_POOL)) {
+                    hiveLifecycle.put(lifecycleKey, ReferenceHiveLifecycle.ROOTING);
+                } else if (biomass < ReferenceV2Rules.MATURE_CORE_BIOMASS * ReferenceV2Rules.FEEDING_BIOMASS_MULTIPLIER
+                        || tissue < ReferenceV2Rules.CHRYSALIS_MINIMUM_TISSUE) {
+                    hiveLifecycle.put(lifecycleKey, ReferenceHiveLifecycle.FEEDING);
+                } else if (organs.stream().anyMatch(item -> item.kind() == ReferenceOrganKind.BROOD_SAC)) {
+                    hiveLifecycle.put(lifecycleKey, organs.stream().anyMatch(item -> item.kind() == ReferenceOrganKind.SYNAPSE)
+                            ? ReferenceHiveLifecycle.PREDATION : ReferenceHiveLifecycle.SIEGE);
+                } else {
+                    hiveLifecycle.put(lifecycleKey, ReferenceHiveLifecycle.NETWORKED_EXPANSION);
+                }
+                Set<String> organSectors = new LinkedHashSet<>();
+                for (ReferenceHiveOrgan organ : organs) organSectors.add(sectorKeyAt(organ.x(), organ.y()));
+                var iterator = chrysalises.entrySet().iterator();
+                while (iterator.hasNext()) {
+                    ReferenceNeuralChrysalis chrysalis = iterator.next().getValue();
+                    if (organSectors.contains(chrysalis.sectorKey())) {
+                        chrysalis.status("cancelled");
+                        iterator.remove();
+                    }
+                }
+                continue;
+            }
+            List<ReferenceHiveOrgan> active = organs.stream().filter(item -> chrysalises.containsKey(item.id())).toList();
+            if (!active.isEmpty()) {
+                hiveLifecycle.put(lifecycleKey, ReferenceHiveLifecycle.RECONSTITUTION);
+                for (ReferenceHiveOrgan organ : active) advanceChrysalis(required, organ);
+                continue;
+            }
+            ReferenceHiveOrgan candidate = null;
+            double score = Double.NEGATIVE_INFINITY;
+            for (ReferenceHiveOrgan organ : organs) {
+                double candidateScore = organ.vitality() * organ.biomass();
+                if (candidate == null || candidateScore > score || (candidateScore == score && organ.id() < candidate.id())) {
+                    candidate = organ;
+                    score = candidateScore;
+                }
+            }
+            ReferenceV2OperationalSector sector = sectorAt(candidate.x(), candidate.y());
+            if (candidate.biomass() >= ReferenceV2Rules.CHRYSALIS_MINIMUM_BIOMASS
+                    && infection.organReadiness(candidate) >= ReferenceV2Rules.CHRYSALIS_MINIMUM_VITALITY
+                    && sector.infection() >= ReferenceV2Rules.CHRYSALIS_MINIMUM_TISSUE) {
+                candidate.lastProjectDay(required.day());
+                chrysalises.put(candidate.id(), new ReferenceNeuralChrysalis(candidate.id(), sector.key(), required.day(),
+                        ReferenceV2Rules.CHRYSALIS_DAYS, ReferenceV2Rules.CHRYSALIS_MINIMUM_BIOMASS));
+                hiveLifecycle.put(lifecycleKey, ReferenceHiveLifecycle.RECONSTITUTION);
+                required.marketWorld().event("D" + required.day() + ": feral " + kindId(candidate) + " " + candidate.id()
+                        + " began visible neural chrysalis");
+            } else {
+                hiveLifecycle.put(lifecycleKey, sector.infection() < ReferenceV2Rules.CHRYSALIS_MINIMUM_TISSUE
+                        * ReferenceV2Rules.DECAY_TISSUE_FRACTION ? ReferenceHiveLifecycle.DECAY : ReferenceHiveLifecycle.DECAPITATED);
+            }
+        }
+    }
+
     private void buildSectors(ReferenceWorld world) {
         for (int top = 0; top < world.config().height(); top += ReferenceV2Rules.SECTOR_SIZE) {
             for (int left = 0; left < world.config().width(); left += ReferenceV2Rules.SECTOR_SIZE) {
@@ -185,6 +264,30 @@ public final class ReferenceV2State {
         }
     }
 
+    private void advanceChrysalis(ReferenceWorld world, ReferenceHiveOrgan organ) {
+        ReferenceNeuralChrysalis chrysalis = chrysalises.get(organ.id());
+        if (chrysalis == null) return;
+        ReferenceV2OperationalSector sector = sectors.get(chrysalis.sectorKey());
+        if (sector == null || organ.biomass() < ReferenceV2Rules.CHRYSALIS_MINIMUM_BIOMASS * 0.65d
+                || sector.infection() < ReferenceV2Rules.CHRYSALIS_MINIMUM_TISSUE * 0.65d) {
+            chrysalis.status("failed");
+            chrysalises.remove(organ.id());
+            world.marketWorld().event("D" + world.day() + ": neural chrysalis at organ " + organ.id() + " withered");
+            return;
+        }
+        organ.biomass(Math.max(0.0d, organ.biomass() - ReferenceV2Rules.CHRYSALIS_DECAY_PER_DAY * chrysalis.biomassCommitted()));
+        chrysalis.daysRemaining(chrysalis.daysRemaining() - 1);
+        if (chrysalis.daysRemaining() > 0) return;
+        organ.kind(ReferenceOrganKind.CORE);
+        organ.role("core");
+        organ.vitality(Math.max(organ.vitality(), ReferenceV2Rules.MATURE_CORE_VITALITY));
+        organ.biomass(Math.max(organ.biomass(), ReferenceV2Rules.MATURE_CORE_BIOMASS));
+        organ.feral(false);
+        chrysalis.status("matured");
+        chrysalises.remove(organ.id());
+        world.marketWorld().event("D" + world.day() + ": neural chrysalis matured into core " + organ.id());
+    }
+
     private void seedCivics(ReferenceWorld world) {
         for (ReferenceSettlement settlement : world.settlements().values()) {
             ReferenceSettlementDoctrine doctrine = new ReferenceSettlementDoctrine(
@@ -199,24 +302,32 @@ public final class ReferenceV2State {
         }
     }
 
-    private static void record(ReferenceV2HumanPerception perception, ReferenceV2OperationalSector sector,
-                               int day, double confidence, ReferenceObservationSource source) {
+    private void record(ReferenceV2HumanPerception perception, ReferenceV2OperationalSector sector,
+                        int day, double confidence, ReferenceObservationSource source) {
         ReferenceV2Belief previous = perception.belief(sector.key());
         if (previous != null && previous.observedDay() == day && previous.confidence() > confidence) return;
         perception.belief(belief(sector, day, confidence, source));
     }
 
-    private static void record(ReferenceV2HivePerception perception, ReferenceV2OperationalSector sector,
-                               int day, double confidence, ReferenceObservationSource source) {
+    private void record(ReferenceV2HivePerception perception, ReferenceV2OperationalSector sector,
+                        int day, double confidence, ReferenceObservationSource source) {
         ReferenceV2Belief previous = perception.belief(sector.key());
         if (previous != null && previous.observedDay() == day && previous.confidence() > confidence) return;
         perception.belief(belief(sector, day, confidence, source));
     }
 
-    private static ReferenceV2Belief belief(ReferenceV2OperationalSector sector, int day, double confidence,
-                                             ReferenceObservationSource source) {
+    private ReferenceV2Belief belief(ReferenceV2OperationalSector sector, int day, double confidence,
+                                     ReferenceObservationSource source) {
         return new ReferenceV2Belief(sector.key(), day, confidence, source, sector.infection(), sector.organicMass(),
-                sector.hiveInfluence(), sector.infrastructureValue(), false);
+                sector.hiveInfluence(), sector.infrastructureValue(), sectorHasChrysalis(sector.key()));
+    }
+
+    private boolean sectorHasChrysalis(String sectorKey) {
+        return chrysalises.values().stream().anyMatch(item -> item.sectorKey().equals(sectorKey) && item.status().equals("forming"));
+    }
+
+    private static String kindId(ReferenceHiveOrgan organ) {
+        return organ.kind().name().toLowerCase(Locale.ROOT);
     }
 
     private static <K, V> Map<K, V> immutableOrdered(Map<K, V> source) {
