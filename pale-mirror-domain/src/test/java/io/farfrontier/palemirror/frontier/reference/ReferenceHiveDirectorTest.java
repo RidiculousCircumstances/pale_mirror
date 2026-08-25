@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class ReferenceHiveDirectorTest {
@@ -30,6 +31,23 @@ class ReferenceHiveDirectorTest {
         assertEquals(2, model.swarms().size());
         assertEquals(ReferenceBioformKind.HARVESTER, model.swarms().get(0).kind());
         assertEquals(ReferenceBioformKind.RAIDER, model.swarms().get(1).kind());
+    }
+
+    @Test
+    void v2ExploitationDoesNotTreatAnOrganOrCarrierPositionAsAConfirmedReport() {
+        ReferenceInfectionModel model = new ReferenceInfectionModel(7, 5, 17L, 1.0d, false);
+        model.seedInfection(2, 2, 0.85d, 2, true);
+        model.createOrgan(3, 2, 100.0d, 3.0d, 1, ReferenceOrganKind.BROOD_SAC);
+        ReferenceSettlement prey = settlement(9, 4, 2, 100.0d);
+        model.recordAttackHarvest(new ReferenceAttackEvent(4, prey.id(), 100.0d, 1, ReferenceBioformKind.RAIDER,
+                Map.of(ReferenceBioformKind.RAIDER, 1.0d), ReferenceFormationPhase.MAIN_ACTION), prey, 10.0d, false, 5);
+        model.prepareHiveOrders(6);
+
+        List<ReferenceHiveOrder> orders = new ReferenceHiveDirector().stepPerceived(model,
+                ReferenceHiveWorldView.from(model, List.of(prey), 6), Set.of());
+
+        assertTrue(orders.stream().noneMatch(item -> item.reason().contains("exploit a successful assault")));
+        assertEquals(1, model.pendingExploitation().size());
     }
 
     private static ReferenceSettlement settlement(int id, int x, int y, double population) {

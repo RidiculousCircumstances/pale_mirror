@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Source-port application boundary joining hive preparation, immutable
@@ -33,9 +34,9 @@ public final class ReferenceHiveDirector {
     public List<ReferenceHiveOrder> step(ReferenceInfectionModel infection, Collection<ReferenceSettlement> settlements, int day) {
         Objects.requireNonNull(infection, "infection");
         Objects.requireNonNull(settlements, "settlements");
-        if (day % PLANNING_INTERVAL_DAYS != 0) return List.of();
+        if (!planningDay(day)) return List.of();
         infection.prepareHiveOrders(day);
-        return execute(infection, ReferenceHiveWorldView.from(infection, settlements, day));
+        return execute(infection, ReferenceHiveWorldView.from(infection, settlements, day), null);
     }
 
     /**
@@ -45,16 +46,32 @@ public final class ReferenceHiveDirector {
     public List<ReferenceHiveOrder> stepPerceived(ReferenceInfectionModel infection, ReferenceHiveWorldView perceived) {
         Objects.requireNonNull(infection, "infection");
         Objects.requireNonNull(perceived, "perceived");
-        if (perceived.day() % PLANNING_INTERVAL_DAYS != 0) return List.of();
-        return execute(infection, perceived);
+        if (!planningDay(perceived.day())) return List.of();
+        return execute(infection, perceived, null);
     }
 
-    private List<ReferenceHiveOrder> execute(ReferenceInfectionModel infection, ReferenceHiveWorldView view) {
+    /**
+     * V2-only source branch: post-assault harvesting uses confirmed biological
+     * reports, not the broader view that includes every organ and carrier.
+     */
+    public List<ReferenceHiveOrder> stepPerceived(ReferenceInfectionModel infection, ReferenceHiveWorldView perceived,
+                                                   Set<String> exploitationSectors) {
+        Objects.requireNonNull(infection, "infection");
+        Objects.requireNonNull(perceived, "perceived");
+        Set<String> known = Set.copyOf(Objects.requireNonNull(exploitationSectors, "exploitationSectors"));
+        if (!planningDay(perceived.day())) return List.of();
+        return execute(infection, perceived, known);
+    }
+
+    static boolean planningDay(int day) { return day % PLANNING_INTERVAL_DAYS == 0; }
+
+    private List<ReferenceHiveOrder> execute(ReferenceInfectionModel infection, ReferenceHiveWorldView view,
+                                              Set<String> exploitationSectors) {
         List<ReferenceHiveOrder> orders = new ArrayList<>(planner.plan(view));
         for (ReferenceHiveOrgan source : infection.organs().values()) {
             if (source.feral() || source.kind() != ReferenceOrganKind.BROOD_SAC && source.kind() != ReferenceOrganKind.SPORULATOR) continue;
             ReferenceGridPosition target = infection.exploitationTarget(source, view.day());
-            if (target == null) continue;
+            if (target == null || exploitationSectors != null && !exploitationSectors.contains(sectorKey(target))) continue;
             ReferenceBioformKind kind = source.kind() == ReferenceOrganKind.BROOD_SAC ? ReferenceBioformKind.HARVESTER : ReferenceBioformKind.SPORE_CARRIER;
             orders.add(0, ReferenceHiveOrder.launch(source.id(), target.x(), target.y(), kind, Map.of(), -1,
                     "exploit a successful assault through a separate biological operation"));
@@ -68,4 +85,6 @@ public final class ReferenceHiveDirector {
         }
         return List.copyOf(orders);
     }
+
+    private static String sectorKey(ReferenceGridPosition position) { return position.x() / 4 + ":" + position.y() / 4; }
 }

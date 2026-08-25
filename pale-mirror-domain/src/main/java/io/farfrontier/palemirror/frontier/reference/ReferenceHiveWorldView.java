@@ -3,8 +3,10 @@ package io.farfrontier.palemirror.frontier.reference;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Read-only primitive snapshot consumed by the hive tactical planner.
@@ -33,7 +35,15 @@ public record ReferenceHiveWorldView(
         swarms = List.copyOf(Objects.requireNonNull(swarms, "swarms"));
         cells = List.copyOf(Objects.requireNonNull(cells, "cells"));
         sectors = List.copyOf(Objects.requireNonNull(sectors, "sectors"));
-        if (cells.size() != width * height) throw new IllegalArgumentException("hive view must contain one cell per coordinate");
+        Set<ReferenceGridPosition> coordinates = new HashSet<>();
+        for (Cell cell : cells) {
+            if (cell.x() < 0 || cell.x() >= width || cell.y() < 0 || cell.y() >= height) {
+                throw new IllegalArgumentException("hive-view cell is outside its declared dimensions");
+            }
+            if (!coordinates.add(new ReferenceGridPosition(cell.x(), cell.y()))) {
+                throw new IllegalArgumentException("hive view contains a duplicate cell coordinate");
+            }
+        }
     }
 
     /** Build the source view from the existing source-port entities in stable Python order. */
@@ -63,7 +73,7 @@ public record ReferenceHiveWorldView(
 
     public Cell cell(int x, int y) {
         if (x < 0 || x >= width || y < 0 || y >= height) return null;
-        return cells.get(y * width + x);
+        return cells.stream().filter(item -> item.x() == x && item.y() == y).findFirst().orElse(null);
     }
 
     public record Settlement(int id, int x, int y, boolean alive, double population, double integrity, double defence) { }

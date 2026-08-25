@@ -89,6 +89,7 @@ public final class ReferenceV2State {
 
     Map<String, ReferenceV2OperationalSector> mutableSectors() { return sectors; }
     Map<String, ReferenceV2SectorControl> mutableSectorControl() { return sectorControl; }
+    Map<Integer, ReferenceCoalitionCharter> mutableCharters() { return charters; }
     Map<Integer, ReferenceFrontCampaign> mutableFrontCampaigns() { return frontCampaigns; }
     Map<Integer, ReferenceSupplyLineStatus> mutableSupplyLines() { return supplyLines; }
     List<ReferenceSectorEngagement> mutableSectorEngagements() { return sectorEngagements; }
@@ -177,34 +178,19 @@ public final class ReferenceV2State {
         }
     }
 
-    /** Records only source observations available before operations/campaigns exist. */
-    public void observe(ReferenceWorld world) {
+    /** Record exactly the source's local human and biological observations. */
+    public void observe(ReferenceWorld world) { ReferenceV2Perception.observe(this, world); }
+
+    /** Build the source V2-filtered biological view without omniscient shortcuts. */
+    public ReferenceHiveWorldView perceivedHiveView(ReferenceWorld world) { return ReferenceV2Perception.hiveView(this, world); }
+
+    /** Execute the source V2 hive director with its narrower exploitation reports. */
+    public List<ReferenceHiveOrder> stepHive(ReferenceWorld world, ReferenceHiveDirector director) {
         ReferenceWorld required = Objects.requireNonNull(world, "world");
-        for (ReferenceSettlement settlement : required.settlements().values()) {
-            if (!settlement.alive()) continue;
-            ReferenceV2HumanPerception perception = humanPerceptions.get(settlement.id());
-            if (perception == null) throw new IllegalStateException("living settlement has no V2 perception: " + settlement.id());
-            for (ReferenceV2OperationalSector sector : sectors.values()) {
-                double centerX = (sector.x() + 0.5d) * ReferenceV2Rules.SECTOR_SIZE;
-                double centerY = (sector.y() + 0.5d) * ReferenceV2Rules.SECTOR_SIZE;
-                double distance = Math.hypot(centerX - settlement.x(), centerY - settlement.y());
-                if (distance <= ReferenceV2Rules.HUMAN_OBSERVATION_RADIUS) {
-                    record(perception, sector, required.day(), Math.max(0.50d,
-                            1.0d - distance / (ReferenceV2Rules.HUMAN_OBSERVATION_RADIUS * 1.25d)),
-                            ReferenceObservationSource.SETTLEMENT);
-                }
-            }
-        }
-        for (ReferenceV2OperationalSector sector : sectors.values()) {
-            if (sector.infection() >= ReferenceV2Rules.HIVE_OBSERVATION_THRESHOLD
-                    || sector.hiveInfluence() >= ReferenceV2Rules.HIVE_OBSERVATION_THRESHOLD) {
-                record(hivePerception, sector, required.day(), 0.88d, ReferenceObservationSource.TISSUE);
-            }
-        }
-        for (ReferenceHiveOrgan organ : required.infection().organs().values()) {
-            record(hivePerception, sectorAt(organ.x(), organ.y()), required.day(), 1.0d,
-                    organ.kind() == ReferenceOrganKind.SYNAPSE ? ReferenceObservationSource.SYNAPSE : ReferenceObservationSource.TISSUE);
-        }
+        ReferenceHiveDirector requiredDirector = Objects.requireNonNull(director, "director");
+        if (!ReferenceHiveDirector.planningDay(required.day())) return List.of();
+        required.infection().prepareHiveOrders(required.day());
+        return requiredDirector.stepPerceived(required.infection(), perceivedHiveView(required), hiveObservedSectors(required.day()));
     }
 
     /** Advance only the source's V2 organ reconstitution state machine. */
@@ -396,28 +382,14 @@ public final class ReferenceV2State {
         }
     }
 
-    private void record(ReferenceV2HumanPerception perception, ReferenceV2OperationalSector sector,
-                        int day, double confidence, ReferenceObservationSource source) {
-        ReferenceV2Belief previous = perception.belief(sector.key());
-        if (previous != null && previous.observedDay() == day && previous.confidence() > confidence) return;
-        perception.belief(belief(sector, day, confidence, source));
-    }
-
-    private void record(ReferenceV2HivePerception perception, ReferenceV2OperationalSector sector,
-                        int day, double confidence, ReferenceObservationSource source) {
-        ReferenceV2Belief previous = perception.belief(sector.key());
-        if (previous != null && previous.observedDay() == day && previous.confidence() > confidence) return;
-        perception.belief(belief(sector, day, confidence, source));
-    }
-
-    private ReferenceV2Belief belief(ReferenceV2OperationalSector sector, int day, double confidence,
-                                     ReferenceObservationSource source) {
-        return new ReferenceV2Belief(sector.key(), day, confidence, source, sector.infection(), sector.organicMass(),
-                sector.hiveInfluence(), sector.infrastructureValue(), sectorHasChrysalis(sector.key()));
-    }
-
-    private boolean sectorHasChrysalis(String sectorKey) {
+    boolean sectorHasChrysalis(String sectorKey) {
         return chrysalises.values().stream().anyMatch(item -> item.sectorKey().equals(sectorKey) && item.status().equals("forming"));
+    }
+
+    private Set<String> hiveObservedSectors(int day) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        for (ReferenceV2Belief belief : hivePerception.known(day)) result.add(belief.sectorKey());
+        return Set.copyOf(result);
     }
 
     private static String kindId(ReferenceHiveOrgan organ) {
