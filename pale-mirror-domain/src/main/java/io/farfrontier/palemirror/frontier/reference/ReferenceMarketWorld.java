@@ -40,6 +40,11 @@ public final class ReferenceMarketWorld {
     public Map<Integer, ReferenceResourceSite> resourceSites() { return resourceSites; }
     public List<String> events() { return List.copyOf(events); }
     public void event(String value) { events.add(Objects.requireNonNull(value, "value")); }
+    void restoreEvents(List<String> restored) {
+        List<String> required = List.copyOf(Objects.requireNonNull(restored, "restored"));
+        events.clear();
+        events.addAll(required);
+    }
     /** Read-only ecology projection; the later ecology owner refreshes this before market production. */
     public double siteOutputFactor(int siteId) { return siteOutputFactors.getOrDefault(siteId, 1.0d); }
     public void siteOutputFactor(int siteId, double value) { siteOutputFactors.put(siteId, value); }

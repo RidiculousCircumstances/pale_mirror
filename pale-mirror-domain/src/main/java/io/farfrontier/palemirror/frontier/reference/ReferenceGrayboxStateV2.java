@@ -99,12 +99,13 @@ final class ReferenceGrayboxStateV2 {
         void applyTo(ReferenceV2State target) {
             if (target.profile() != profile) throw new IllegalArgumentException("V2 target profile differs from state");
             validateTargetGeometry(target);
-            replace(target.mutableSectors(), sectors); replace(target.mutableSectorControl(), sectorControl);
-            replace(target.mutableHumanPerceptions(), humanPerceptions);
+            replaceExistingOrder(target.mutableSectors(), sectors); replaceExistingOrder(target.mutableSectorControl(), sectorControl);
+            replaceExistingOrder(target.mutableHumanPerceptions(), humanPerceptions);
             target.mutableHivePerception().mutableBeliefs().clear();
             target.mutableHivePerception().mutableBeliefs().putAll(hivePerception.beliefs());
-            replace(target.mutableDoctrines(), doctrines); replace(target.mutableCivics(), civics); replace(target.mutableReservePolicies(), reservePolicies);
-            replace(target.mutableRationPlans(), rationPlans); replace(target.mutableEmergencyRegimes(), emergencyRegimes); replace(target.mutableCharters(), charters);
+            replaceExistingOrder(target.mutableDoctrines(), doctrines); replaceExistingOrder(target.mutableCivics(), civics);
+            replaceExistingOrder(target.mutableReservePolicies(), reservePolicies); replaceExistingOrder(target.mutableRationPlans(), rationPlans);
+            replace(target.mutableEmergencyRegimes(), emergencyRegimes); replace(target.mutableCharters(), charters);
             replace(target.mutableRouteInsurance(), routeInsurance); replace(target.mutableProcurements(), procurements); replace(target.mutableCompensation(), compensation);
             replace(target.mutableLastCivicWorkDay(), lastCivicWorkDay); replace(target.mutableChrysalises(), chrysalises); replace(target.mutableHiveLifecycle(), hiveLifecycle);
             replace(target.mutableFrontCampaigns(), frontCampaigns); replace(target.mutableSupplyLines(), supplyLines); replace(target.mutableFrontierCooldownUntil(), frontierCooldownUntil);
@@ -170,6 +171,11 @@ final class ReferenceGrayboxStateV2 {
 
         private static <K, V> Map<K, V> immutable(Map<K, V> values) {
             return Collections.unmodifiableMap(new LinkedHashMap<>(values));
+        }
+
+        private static <K, V> void replaceExistingOrder(Map<K, V> target, Map<K, V> values) {
+            if (!target.keySet().equals(values.keySet())) throw new IllegalArgumentException("V2 target key set differs from state");
+            for (K key : List.copyOf(target.keySet())) target.put(key, values.get(key));
         }
 
         private static <T> void replace(Map<?, T> target, Map<?, T> values) {

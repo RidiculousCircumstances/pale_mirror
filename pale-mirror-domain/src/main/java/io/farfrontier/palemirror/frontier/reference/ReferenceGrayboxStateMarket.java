@@ -239,12 +239,17 @@ final class ReferenceGrayboxStateMarket {
                  LinkedHashMap<Integer, EnumMap<ReferenceResource, Double>> lastSynced, List<ReferenceMarketHistoryEntry> history,
                  int nextCompany, int nextLicence, int nextContract, int nextCredit, int nextReport, int nextProject) {
         void applyTo(ReferenceMarketEconomy market, Set<Integer> settlementIds) {
-            market.mutableCompanies().clear(); market.mutableCompanies().putAll(companies); market.mutableHouseholds().clear(); market.mutableHouseholds().putAll(households);
-            market.mutableContracts().clear(); market.mutableContracts().putAll(contracts); market.mutableCredits().clear(); market.mutableCredits().putAll(credits);
-            market.mutableLicences().clear(); market.mutableLicences().putAll(licences); market.mutableReports().clear(); market.mutableReports().putAll(reports);
-            market.mutableProjects().clear(); market.mutableProjects().putAll(projects); market.mutableLastSynced().clear(); market.mutableLastSynced().putAll(lastSynced);
+            replaceNumeric(market.mutableCompanies(), companies); replaceNumeric(market.mutableHouseholds(), households);
+            replaceNumeric(market.mutableContracts(), contracts); replaceNumeric(market.mutableCredits(), credits);
+            replaceNumeric(market.mutableLicences(), licences); replaceNumeric(market.mutableReports(), reports);
+            replaceNumeric(market.mutableProjects(), projects); replaceNumeric(market.mutableLastSynced(), lastSynced);
             for (Integer settlementId : settlementIds) { EnumMap<ReferenceResource, Double> target = market.mutablePublicInventory(settlementId); target.clear(); target.putAll(publicInventory.get(settlementId)); }
             market.restoreCounters(nextCompany, nextLicence, nextContract, nextCredit, nextReport, nextProject); market.restoreHistory(history);
+        }
+
+        private static <V> void replaceNumeric(Map<Integer, V> target, Map<Integer, V> source) {
+            target.clear();
+            source.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> target.put(entry.getKey(), entry.getValue()));
         }
     }
 }
