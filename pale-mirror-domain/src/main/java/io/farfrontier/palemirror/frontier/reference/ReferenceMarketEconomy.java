@@ -470,6 +470,7 @@ public final class ReferenceMarketEconomy {
     LinkedHashMap<Integer, ReferenceLicence> mutableLicences() { return licences; }
     LinkedHashMap<Integer, ReferenceExplorationReport> mutableReports() { return reports; }
     LinkedHashMap<Integer, ReferenceConstructionProject> mutableProjects() { return projects; }
+    LinkedHashMap<Integer, EnumMap<ReferenceResource, Double>> mutableLastSynced() { return lastSynced; }
     EnumMap<ReferenceResource, Double> mutablePublicInventory(int settlementId) {
         return publicInventory.computeIfAbsent(settlementId, ignored -> emptyStock());
     }
@@ -482,10 +483,12 @@ public final class ReferenceMarketEconomy {
         return newCompany(world, sector, settlementId, capacity, suffix);
     }
     void recordHistory(int day) {
+        boolean creditWasEmptySum = credits.values().stream().noneMatch(credit -> credit.status().equals("performing"));
         history.add(new ReferenceMarketHistoryEntry(day, season(day), companies.size(),
                 (int) contracts.values().stream().filter(contract -> contract.status().equals("active")).count(),
                 round2(credits.values().stream().filter(credit -> credit.status().equals("performing"))
                         .mapToDouble(ReferenceCreditPosition::principal).sum()),
+                creditWasEmptySum,
                 round2(companies.values().stream().mapToDouble(ReferenceCompany::employees).sum()),
                 (int) projects.values().stream().filter(project -> project.status().equals("building")).count()));
     }

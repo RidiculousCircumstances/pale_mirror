@@ -48,12 +48,7 @@ class StateEncoder:
         return {
             "codec": CODEC,
             **self.world_root(world),
-            "diagnostics": {
-                "history": self.encode(world.history),
-                "settlement_history": self.encode(world.settlement_history),
-                "combat_history": self.encode(world.combat_history),
-                "containment_history": self.encode(world.containment_history),
-            },
+            "diagnostics": self.diagnostics(world),
             "settlements": self.encode(world.settlements),
             "resource_sites": self.encode(world.resource_sites),
             "trade": self.encode(world.trade),
@@ -62,6 +57,14 @@ class StateEncoder:
             "operations": self.encode(world.operations),
             "field": self.encode(world.field),
             "v2": self.encode(world.v2),
+        }
+
+    def diagnostics(self, world: Any) -> dict[str, object]:
+        return {
+            "history": self.encode(world.history),
+            "settlement_history": self.encode(world.settlement_history),
+            "combat_history": self.encode(world.combat_history),
+            "containment_history": self.encode(world.containment_history),
         }
 
     def encode(self, value: Any) -> Any:
@@ -150,12 +153,22 @@ def trace(root: Path) -> dict[str, object]:
             if day in CHECKPOINTS:
                 encoder = StateEncoder()
                 root_payload = canonical_bytes(encoder.world_root(world))
+                diagnostics_payload = canonical_bytes(encoder.diagnostics(world))
+                market_payload = canonical_bytes(encoder.encode(world.microeconomy))
+                resource_sites_payload = canonical_bytes(encoder.encode(world.resource_sites))
+                settlements_payload = canonical_bytes(encoder.encode(world.settlements))
                 payload = canonical_bytes(encoder.state(world))
                 checkpoints.append({
                     "day": day,
                     "sha256": hashlib.sha256(payload).hexdigest(),
                     "bytes": len(payload),
-                    "components": {"world_root": {"sha256": hashlib.sha256(root_payload).hexdigest(), "bytes": len(root_payload)}},
+                    "components": {
+                        "world_root": {"sha256": hashlib.sha256(root_payload).hexdigest(), "bytes": len(root_payload)},
+                        "diagnostics": {"sha256": hashlib.sha256(diagnostics_payload).hexdigest(), "bytes": len(diagnostics_payload)},
+                        "market": {"sha256": hashlib.sha256(market_payload).hexdigest(), "bytes": len(market_payload)},
+                        "resource_sites": {"sha256": hashlib.sha256(resource_sites_payload).hexdigest(), "bytes": len(resource_sites_payload)},
+                        "settlements": {"sha256": hashlib.sha256(settlements_payload).hexdigest(), "bytes": len(settlements_payload)},
+                    },
                 })
             if day < CHECKPOINTS[-1]:
                 world.tick()

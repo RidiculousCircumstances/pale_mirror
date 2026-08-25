@@ -280,6 +280,63 @@ class ReferenceSimulationEngineTest {
         assertEquals("canonical state requires V2-enabled reference world", error.getMessage());
     }
 
+    @Test
+    void canonicalStateMarketAndResourceSiteOwnersMatchPinnedPythonAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, RootCheckpoint> expectedMarkets = Map.of(
+                0, new RootCheckpoint(109_599, "7a58339f9d450d636eaa019e0a04f207f7905735dce5d86ae209aebca68bd768"),
+                1, new RootCheckpoint(164_777, "b564fe70bf70f07e8cccf2512eea2d76038940adb072eba145027c525c4c300c"),
+                2, new RootCheckpoint(165_373, "ddbb9fbc636e9e0aa205e484fa012b109e2d3ffe83fc0aff7019662ba57ad1f1"),
+                3, new RootCheckpoint(165_633, "02d4f6b508d7005c018fafb583fa141b2f1a06a493a88e7954f6075447685051"),
+                5, new RootCheckpoint(166_138, "d718fecb3ee29eee7e8972ff10ba79750ea6de28c592930de00cdce246e5a853"),
+                10, new RootCheckpoint(166_781, "865848f30a20f9bb27c7df2439ae2e933f8fbd96217378c397709b6e547c8075"),
+                15, new RootCheckpoint(185_554, "37ef32e907c0f174b7ad1a5d97f93f02958baef30a47de248e85cd4dbef356d6"),
+                20, new RootCheckpoint(186_085, "765961d74abb6460b76b4b822842a6db5677cb46962ba11da059cdec776f9475"),
+                25, new RootCheckpoint(210_499, "0ed0b91384ac0a1864a8527c5987dbeb48fd9733855cc33ffd526c2757f9983b"),
+                30, new RootCheckpoint(211_203, "a5e5669f43361d98c0815216a80eae6bede0e2fdaa8a90a14eda90f53e4b0652"));
+        Map<Integer, RootCheckpoint> expectedSites = Map.of(
+                0, new RootCheckpoint(31_344, "f38839dd56e89faa2e6970e663a94d3560f2b00ed055536f71a3917fdbd248c1"),
+                1, new RootCheckpoint(31_826, "c925ae8ce65aa479cf91efbe96be8b7794011a7cc268c449c7c596e2a2c334a4"),
+                2, new RootCheckpoint(31_830, "8e029b9c9bbb37aeeff85b7f3afe48cd2c4939ef13fa8a2814f5c0fa4c145e3b"),
+                3, new RootCheckpoint(31_832, "5156efd674378e36f53974c24b9cddfe99fc2c7ae45fd2aa48beb71bb50cdaad"),
+                5, new RootCheckpoint(31_834, "359b12f6d69388386c79c35b9fa5747271e684a720559fb822700ef60fa7c265"),
+                10, new RootCheckpoint(31_835, "1c29436fa8b753177361da63b8db1aef692e7b0ef7b8a62a9fe5ea5a15b0032f"),
+                15, new RootCheckpoint(31_801, "f18a4130f37c6a2ec2229d150ff49811df177ea7ebf55eef21fb799a6284fbab"),
+                20, new RootCheckpoint(31_775, "29aa769c8267dbce306838f1d597e4fddb1ca4dbb2af389ba87e07f8b51ca9bd"),
+                25, new RootCheckpoint(31_742, "c24d8cdfd46856b8ac175322ef9531eb131618da938b92d86c5300a32ded95f0"),
+                30, new RootCheckpoint(31_754, "f65f1b87dfecc3f621992fa33ba64cf5d5f651f264259303eae66280630bfdb7"));
+
+        for (int day = 0; day <= 30; day++) {
+            RootCheckpoint market = expectedMarkets.get(day);
+            RootCheckpoint sites = expectedSites.get(day);
+            if (market != null) assertCanonicalCheckpoint(market, ReferenceCanonicalStateMarket.capture(world), "market", day);
+            if (sites != null) assertCanonicalCheckpoint(sites, ReferenceCanonicalStateResourceSites.capture(world), "resource sites", day);
+            if (day < 30) world.tick();
+        }
+    }
+
+    @Test
+    void canonicalStateSettlementOwnerMatchesPinnedPythonAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, RootCheckpoint> expected = Map.of(
+                0, new RootCheckpoint(118_089, "a6756a3cb4f8bf4de483c7436ad1165633597133d51839c05ca2bbd11308a24a"),
+                1, new RootCheckpoint(119_931, "279517e46aab333fd39e492e83738b1ca903b8ce26f6150dfb84fa47bcbd887d"),
+                2, new RootCheckpoint(119_983, "cc66344fa3e30d74e7eb6dd91e214b4602fbd31b8814c8e53eeb00eda125dbd2"),
+                3, new RootCheckpoint(119_998, "65f4bfe7594e291ce18daf4162aa7118faf263e23000c475ce3d915aef6c1eac"),
+                5, new RootCheckpoint(119_990, "a91deeb29e09b3000229b9423e8c967943f0c4648e185e1ea5c9ced9237f212e"),
+                10, new RootCheckpoint(119_986, "dd03f38f934fa3112bfa3b9a56135fa7ff557485548a2df3c263354621e58bc0"),
+                15, new RootCheckpoint(120_029, "7de8f93dab08cf1e5cab9eb0586490801357de0d2610ac0e25a31e0d135c482e"),
+                20, new RootCheckpoint(120_074, "12929d60d764997262fd0bb6dccf3abaa0e4a238b12e14e0bf9d2166340aba64"),
+                25, new RootCheckpoint(120_086, "0de99df0de902c63e7170b1bace5d14098f5f06e913fc50ad6615b74ac4bc869"),
+                30, new RootCheckpoint(120_071, "0b94bc73aefb5ed8c206164fe7efcb552816427947d5a6e529f891805e6e93ed"));
+
+        for (int day = 0; day <= 30; day++) {
+            RootCheckpoint checkpoint = expected.get(day);
+            if (checkpoint != null) assertCanonicalCheckpoint(checkpoint, ReferenceCanonicalStateSettlements.capture(world), "settlements", day);
+            if (day < 30) world.tick();
+        }
+    }
+
     private static void assertCheckpoint(ReferenceWorld world, Checkpoint expected) {
         ReferenceDailyWorldHistory actual = world.history().getLast();
         assertClose(expected.population(), actual.population());
@@ -318,6 +375,12 @@ class ReferenceSimulationEngineTest {
     ) { }
 
     private record RootCheckpoint(int bytes, String digest) { }
+
+    private static void assertCanonicalCheckpoint(RootCheckpoint expected, Map<String, Object> state, String owner, int day) {
+        String json = ReferenceV2PublicSnapshot.canonicalJson(state);
+        assertEquals(expected.bytes(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, owner + " bytes day " + day);
+        assertEquals(expected.digest(), ReferenceV2PublicSnapshot.sha256(state), owner + " digest day " + day);
+    }
 
     private static void assertClose(double expected, double actual) {
         assertEquals(expected, actual, 1.0e-9d);

@@ -7,6 +7,7 @@ public record ReferenceMarketHistoryEntry(
         int companies,
         int activeContracts,
         double credit,
+        boolean creditWasEmptySum,
         double employment,
         int projects
 ) { }

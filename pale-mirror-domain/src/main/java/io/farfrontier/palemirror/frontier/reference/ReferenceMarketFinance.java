@@ -109,7 +109,10 @@ final class ReferenceMarketFinance {
             if (profit > 0.0d) {
                 double tax = profit * PROFIT_TAX;
                 double dividend = (profit - tax) * PROFIT_DIVIDEND_SHARE;
-                company.cash(company.cash() - tax - dividend);
+                // Python's ``cash -= tax + dividend`` first rounds the two
+                // outflows together, then subtracts that result.  Preserving
+                // the grouping is part of the binary64 source contract.
+                company.cash(company.cash() - (tax + dividend));
                 settlement.cash(settlement.cash() + tax);
                 ReferenceHouseholdLedger household = market.mutableHouseholds().get(settlement.id());
                 household.cash(household.cash() + dividend);
