@@ -14,6 +14,31 @@ final class ReferenceFieldRules {
     static final double CHECKPOINT_ROUTE_RADIUS = 2.0d;
     static final double CHECKPOINT_INFECTION_MULTIPLIER = 0.68d;
     static final double CHECKPOINT_CAPACITY_MULTIPLIER = 0.84d;
+    static final int ABANDON_AFTER_ISOLATION_DAYS = 9;
+    static final double POST_FOOD_PER_PERSON_DAY = .055d;
+    static final double POST_MEDICINE_PER_PERSON_DAY = .001d;
+    static final double FIELD_HOSPITAL_TREATMENT_PER_DAY = 2.2d;
+    static final double FIRE_SUPPORT_POWER = 32.0d;
+    static final double FIRE_SUPPORT_RANGE = 7.0d;
+    static final double DECONTAMINATION_RADIUS = 2.0d;
+    static final double DECONTAMINATION_STRENGTH = .10d;
+    static final double FORTIFIED_LINE_INTERCEPTION_RADIUS = 1.5d;
+    static final double POST_ENGAGEMENT_RADIUS = 2.4d;
+    static final double POST_DAMAGE_PER_POWER = .16d;
+    static final double SWARM_DAMAGE_PER_POWER = .12d;
+    static final double POST_INTEGRITY_DAMAGE = .10d;
+    static final double PERSONNEL_DAMAGE = .022d;
+    static final double KILLED_FRACTION = .30d;
+    static final double MINIMUM_ENGAGEMENT_POWER = 8.0d;
+    static final double MINIMUM_GARRISON = 2.0d;
+    static final double AMMO_PER_DEFENDER = .34d;
+    static final double FIRE_SUPPORT_AMMO = 4.0d;
+    static final double RAID_TISSUE_DAMAGE = .14d;
+    static final double RAID_COUNTER_DAMAGE = .09d;
+    static final double RAID_VITALITY_FRACTION = .52d;
+    static final double MINIMUM_RAIDERS = 5.0d;
+    static final double RAID_WITHDRAW_RATIO = .28d;
+    static final int MAXIMUM_RAID_DAYS = 9;
 
     private ReferenceFieldRules() { }
 
@@ -82,6 +107,15 @@ final class ReferenceFieldRules {
     static double depotStorageMultiplier() { return 2.2d; }
 
     static double fortificationPower() { return 22.0d; }
+
+    static double observationRadius(ReferenceFieldPostKind kind) {
+        return switch (kind) {
+            case OBSERVATION -> 13.0d;
+            case CHECKPOINT -> 7.0d;
+            case STRONGPOINT -> 6.0d;
+            case FORWARD_BASE -> 9.0d;
+        };
+    }
 
     static double linkMaximumLength(ReferenceFieldLinkKind kind) {
         return kind == ReferenceFieldLinkKind.SUPPLY_CORRIDOR ? 10.0d : 7.0d;

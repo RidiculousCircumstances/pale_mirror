@@ -69,6 +69,78 @@ class ReferenceFieldWarfareTest {
         assertFalse(field.startModule(world, post.id(), ReferenceFieldModuleKind.DEPOT));
     }
 
+    @Test
+    void postConstructionAndSupplyFailureAdvanceThroughVisibleDailyStates() {
+        ReferenceWorld world = sourceWorld();
+        ReferenceFieldWarfare field = world.field();
+        ReferenceFieldCampaign campaign = field.createCampaign(world, ReferenceCampaignKind.CONTAINMENT, 1, Set.of(),
+                "cell", null, 10, 10, "daily-states");
+        assertNotNull(campaign);
+        ReferenceFieldPost post = field.startPost(world, campaign.id(), ReferenceFieldPostKind.CHECKPOINT, 1, 1, 1,
+                Set.of(1), Map.of(1, 4.0d), Map.of(), Map.of());
+        assertNotNull(post);
+
+        for (int day = 1; day <= 3; day++) {
+            world.day(day);
+            field.step(world);
+        }
+        assertEquals(ReferenceFieldPostStatus.ACTIVE, post.status());
+        assertEquals(0, post.buildDaysRemaining());
+        assertEquals("D3: field post 1 is operational", world.events().getLast());
+
+        world.day(4);
+        field.step(world);
+        assertEquals(ReferenceFieldPostStatus.ISOLATED, post.status());
+        assertEquals(1, post.isolationDays());
+        assertEquals(0.0d, post.stock(ReferenceResource.FOOD));
+        assertEquals(0.0d, post.stock(ReferenceResource.MEDICINE));
+    }
+
+    @Test
+    void activeStrongpointDetectsAndResolvesTheSourcePostDefenceEngagement() {
+        ReferenceWorld world = new ReferenceWorld(new ReferenceWorldConfig(64, 44, 2, 151L, 0, false,
+                ReferenceSimulationProfile.SOURCE_V2));
+        for (int y = 0; y < world.config().height(); y++) for (int x = 0; x < world.config().width(); x++) {
+            world.infection().infectionAt(x, y, 0.0d);
+        }
+        ReferenceFieldWarfare field = world.field();
+        ReferenceFieldCampaign campaign = field.createCampaign(world, ReferenceCampaignKind.CONTAINMENT, 1, Set.of(1),
+                "cell", null, 20, 20, "engagement");
+        assertNotNull(campaign);
+        ReferenceFieldPost post = field.startPost(world, campaign.id(), ReferenceFieldPostKind.STRONGPOINT, 15, 15, 1,
+                Set.of(1), Map.of(1, 30.0d), Map.of(ReferenceResource.FOOD, 100.0d, ReferenceResource.MEDICINE, 10.0d,
+                        ReferenceResource.WEAPONS, 20.0d, ReferenceResource.AMMO, 60.0d, ReferenceResource.TIMBER, 100.0d,
+                        ReferenceResource.ORE, 100.0d, ReferenceResource.TOOLS, 100.0d), Map.of());
+        assertNotNull(post);
+        for (int day = 1; day <= 6; day++) {
+            world.day(day);
+            field.step(world);
+        }
+        assertEquals(ReferenceFieldPostStatus.ACTIVE, post.status());
+        assertEquals(98.35d, post.stock(ReferenceResource.FOOD));
+
+        ReferenceSwarm swarm = new ReferenceSwarm(901, 16.0d, 15.0d, 120.0d, -1, .9d,
+                ReferenceBioformKind.RAIDER, Map.of(), ReferenceFormationPhase.SCREEN, 1.0d,
+                null, null, null, false);
+        world.infection().swarms.add(swarm);
+        field.detectSwarms(world);
+        assertEquals("D6: swarm 901 engaged field post 1", world.events().getLast());
+        assertEquals(1, field.engagements().size());
+
+        world.day(7);
+        field.step(world);
+        ReferenceFieldEngagement engagement = field.engagements().get(1);
+        assertNotNull(engagement);
+        assertEquals(114.336d, swarm.power());
+        assertEquals(133.56d, post.integrity());
+        assertEquals(29.6832d, post.garrison());
+        assertEquals(.22175999999999998d, post.wounded());
+        assertEquals(49.8d, post.stock(ReferenceResource.AMMO));
+        assertEquals(1, engagement.days());
+        assertEquals(35.026176d, engagement.defenderPower());
+        assertEquals(ReferenceEngagementStatus.ACTIVE, engagement.status());
+    }
+
     private static ReferenceWorld sourceWorld() {
         return new ReferenceWorld(new ReferenceWorldConfig(64, 44, 12, 41L, 0, true, ReferenceSimulationProfile.SOURCE_V2));
     }

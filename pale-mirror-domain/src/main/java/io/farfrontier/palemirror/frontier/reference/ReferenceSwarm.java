@@ -8,7 +8,7 @@ public final class ReferenceSwarm {
     private final int id;
     private double x;
     private double y;
-    private final double power;
+    private double power;
     private final int targetId;
     private final double speed;
     private final ReferenceBioformKind kind;
@@ -40,6 +40,7 @@ public final class ReferenceSwarm {
     public double y() { return y; }
     void y(double value) { y = value; }
     public double power() { return power; }
+    void power(double value) { power = value; }
     public int targetId() { return targetId; }
     public double speed() { return speed; }
     public ReferenceBioformKind kind() { return kind; }

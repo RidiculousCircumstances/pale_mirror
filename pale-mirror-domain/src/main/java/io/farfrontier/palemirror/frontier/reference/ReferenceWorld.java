@@ -95,6 +95,8 @@ public final class ReferenceWorld {
     public ReferenceSimulationProfile profile() { return profile; }
     public int day() { return day; }
     public void day(int value) { day = value; marketWorld.day(value); }
+    /** Source world stream used only by source-defined operation fate arithmetic. */
+    PythonRandom rng() { return rng; }
     public ReferenceEconomyEngine economy() { return economy; }
     public ReferenceMarketEconomy microeconomy() { return microeconomy; }
     public ReferenceInfectionModel infection() { return infection; }

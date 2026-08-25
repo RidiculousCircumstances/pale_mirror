@@ -20,16 +20,42 @@ public final class ReferenceFieldWarfare {
     private final LinkedHashMap<Integer, ReferenceFieldPost> posts = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceFieldLink> links = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceFieldCampaign> campaigns = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceFieldEngagement> engagements = new LinkedHashMap<>();
     private int nextPostId = 1;
     private int nextLinkId = 1;
     private int nextCampaignId = 1;
+    private int nextEngagementId = 1;
 
     public Map<Integer, ReferenceFieldPost> posts() { return immutableOrdered(posts); }
     public Map<Integer, ReferenceFieldLink> links() { return immutableOrdered(links); }
     public Map<Integer, ReferenceFieldCampaign> campaigns() { return immutableOrdered(campaigns); }
+    public Map<Integer, ReferenceFieldEngagement> engagements() { return immutableOrdered(engagements); }
     public int nextPostId() { return nextPostId; }
     public int nextLinkId() { return nextLinkId; }
     public int nextCampaignId() { return nextCampaignId; }
+    public int nextEngagementId() { return nextEngagementId; }
+
+    Map<Integer, ReferenceFieldPost> mutablePosts() { return posts; }
+    Map<Integer, ReferenceFieldLink> mutableLinks() { return links; }
+    Map<Integer, ReferenceFieldCampaign> mutableCampaigns() { return campaigns; }
+    Map<Integer, ReferenceFieldEngagement> mutableEngagements() { return engagements; }
+    int nextEngagementIdAndIncrement() { return nextEngagementId++; }
+
+    /** Resolve the field-only branch of an arrived human operation. */
+    boolean resolveOperation(ReferenceWorld world, ReferenceOperation operation) {
+        return ReferenceFieldExecution.resolveOperation(this, world, operation);
+    }
+
+    /** Create the field-owned engagement for a raid against a live nest. */
+    boolean startNestRaid(ReferenceWorld world, ReferenceOperation operation) {
+        return ReferenceFieldExecution.startNestRaid(this, world, operation);
+    }
+
+    /** Advance post upkeep, construction, observations and engagements for one day. */
+    public void step(ReferenceWorld world) { ReferenceFieldExecution.step(this, world); }
+
+    /** Field positions may claim a swarm for a post-defence engagement before it reaches its target. */
+    public void detectSwarms(ReferenceWorld world) { ReferenceFieldExecution.detectSwarms(this, world); }
 
     public List<ReferenceFieldPost> activePosts() {
         return posts.values().stream().filter(post -> post.status() == ReferenceFieldPostStatus.BUILDING

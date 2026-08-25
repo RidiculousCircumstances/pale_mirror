@@ -107,6 +107,71 @@ class ReferenceOperationManagerTest {
         assertEquals("post-launch", launched.details().get("test"));
     }
 
+    @Test
+    void grayboxReconMovesArrivesAndReturnsItsExactPeopleHome() {
+        ReferenceWorld world = grayboxWorld();
+        ReferenceSettlement settlement = world.settlements().get(1);
+        ReferenceOperation operation = world.operations().launchHuman(world, ReferenceOperationKind.RECON, 1, CELL_TEN_TEN);
+        assertNotNull(operation);
+        assertEquals(List.of("resident:1:20", "resident:1:21"), operation.residentIdsBySettlement().get(1));
+
+        for (int day = 1; day <= 16; day++) {
+            world.day(day);
+            world.operations().step(world);
+        }
+        assertEquals(ReferenceOperationStatus.RETURNING, operation.status());
+        assertEquals(ReferenceFormationPhase.MAIN_ACTION, operation.phase());
+        assertEquals("intel_gathered", operation.outcome());
+        assertEquals(new ReferencePoint(10, 10), new ReferencePoint(operation.x(), operation.y()));
+        assertEquals(2.1d, operation.supplies().get(ReferenceResource.FOOD));
+        assertEquals(2.0d, settlement.mobilizedPersonnel());
+
+        for (int day = 17; day <= 32; day++) {
+            world.day(day);
+            world.operations().step(world);
+        }
+        assertEquals(ReferenceOperationStatus.COMPLETED, operation.status());
+        assertEquals(32, operation.finishedDay());
+        assertEquals(new ReferencePoint(27, 24), new ReferencePoint(operation.x(), operation.y()));
+        assertEquals(0.0d, settlement.mobilizedPersonnel());
+        assertEquals(31, settlement.residents().availableIds().size());
+        assertEquals(0, world.operations().active().size());
+        assertEquals("D32: operation 1 completed (intel_gathered)", world.events().getLast());
+    }
+
+    @Test
+    void sourceReconDailyTracePreservesMovementConsumptionAndTerminalOutcome() {
+        ReferenceWorld world = sourceWorld();
+        ReferenceOperation operation = world.operations().launchHuman(world, ReferenceOperationKind.RECON, 1, CELL_TEN_TEN);
+        assertNotNull(operation);
+
+        world.day(1);
+        world.operations().step(world);
+        assertEquals(new ReferencePoint(24.42639391594944d, 25.10297403602167d), new ReferencePoint(operation.x(), operation.y()));
+        assertEquals(21.589403848077804d, operation.supplies().get(ReferenceResource.FOOD));
+        assertEquals(.23028697437949658d, operation.supplies().get(ReferenceResource.MEDICINE));
+
+        for (int day = 2; day <= 16; day++) {
+            world.day(day);
+            world.operations().step(world);
+        }
+        assertEquals(ReferenceOperationStatus.RETURNING, operation.status());
+        assertEquals(11.545016715391045d, operation.supplies().get(ReferenceResource.FOOD));
+        assertEquals(.12314684496417115d, operation.supplies().get(ReferenceResource.MEDICINE));
+
+        for (int day = 17; day <= 32; day++) {
+            world.day(day);
+            world.operations().step(world);
+        }
+        assertEquals(ReferenceOperationStatus.COMPLETED, operation.status());
+        assertEquals(32, operation.finishedDay());
+        assertEquals(ReferenceFormationPhase.RETURN, operation.phase());
+        assertEquals(ReferenceOperationStatus.COMPLETED, operation.status());
+        assertEquals(.8310037738584878d, operation.supplies().get(ReferenceResource.FOOD));
+        assertEquals(.008864040254490542d, operation.supplies().get(ReferenceResource.MEDICINE));
+        assertEquals(0, world.operations().active().size());
+    }
+
     private static ReferenceWorld sourceWorld() {
         return new ReferenceWorld(new ReferenceWorldConfig(64, 44, 12, 41L, 0, true, ReferenceSimulationProfile.SOURCE_V2));
     }

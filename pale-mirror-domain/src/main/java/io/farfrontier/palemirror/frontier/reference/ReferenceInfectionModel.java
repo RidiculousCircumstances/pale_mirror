@@ -91,6 +91,8 @@ public final class ReferenceInfectionModel {
     public Map<String, Double> damageMemory() { return Map.copyOf(damageMemory); }
     public List<ReferenceExploitationSite> pendingExploitation() { return List.copyOf(pendingExploitation); }
     public List<ReferenceSwarm> swarms() { return List.copyOf(swarms); }
+    /** Canonical infection-owner removal after an operation or field engagement destroys a swarm. */
+    void removeSwarm(ReferenceSwarm swarm) { swarms.remove(Objects.requireNonNull(swarm, "swarm")); }
     public void genomeLevel(String adaptation, double level) { genome.put(Objects.requireNonNull(adaptation, "adaptation"), level); }
     public ReferenceBiome biomeAt(int x, int y) { return biomes.get(clamp(y, height)).get(clamp(x, width)); }
     public double infectionAt(int x, int y) { return level[clamp(y, height)][clamp(x, width)]; }

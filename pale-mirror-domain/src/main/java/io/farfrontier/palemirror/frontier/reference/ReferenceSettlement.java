@@ -90,7 +90,7 @@ public final class ReferenceSettlement {
     public String name() { return name; }
     public int x() { return x; }
     public int y() { return y; }
-    public double population() { return population; }
+    public double population() { return population; } void population(double value) { population = Math.max(0.0d, value); }
     public double cash() { return cash; }
     public void cash(double value) { cash = value; }
     public ReferenceNaturalPotential natural() { return natural; }
@@ -111,7 +111,7 @@ public final class ReferenceSettlement {
     public double mobilizedPersonnel() { return mobilizedPersonnel; }
     /** Operation owner mutation; public read-model consumers cannot alter mobilisation. */
     void mobilizedPersonnel(double value) { mobilizedPersonnel = Math.max(0.0d, value); }
-    public double woundedPersonnel() { return woundedPersonnel; }
+    public double woundedPersonnel() { return woundedPersonnel; } void woundedPersonnel(double value) { woundedPersonnel = Math.max(0.0d, value); }
     public boolean discretePeople() { return residents != null; }
     public ReferenceResidentLedger residents() { return residents; }
     /** World-only named stream; standalone settlements retain their identity-derived fallback. */

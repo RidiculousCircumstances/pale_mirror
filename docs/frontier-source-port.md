@@ -100,6 +100,11 @@ composition, stock reservation, road path and rejection-without-custody-loss.
 Regenerate it only with
 `tools/frontier/generate_operations_launch_microtrace.py` using `python3.11`.
 
+`docs/frontier-reference-operations-lifecycle.json` fixes the source daily
+movement, arrival, return, exact-resident release and post-upkeep states used
+by the Java operation/field execution port. Regenerate it only with
+`tools/frontier/generate_operations_lifecycle_microtrace.py` using `python3.11`.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve

@@ -27,6 +27,21 @@ public final class ReferenceOperationManager {
 
     public List<ReferenceOperation> active() { return List.copyOf(active); }
     public int nextId() { return nextId; }
+    List<ReferenceOperation> mutableActive() { return active; }
+
+    /** Advance source operations after infection movement for the current simulation day. */
+    public void step(ReferenceWorld world) { ReferenceOperationExecution.step(this, world); }
+
+    /** Synchronise a strategic colony operation to its infection-owned swarm. */
+    public void syncInfectionSwarms(ReferenceWorld world) { ReferenceOperationExecution.syncInfectionSwarms(this, world); }
+
+    /** Apply patrol interception without granting patrols ownership of the swarm. */
+    public void detectAndIntercept(ReferenceWorld world) { ReferenceOperationExecution.detectAndIntercept(this, world); }
+
+    ReferenceCasualtyResult applyDiscreteCasualties(ReferenceWorld world, ReferenceOperation operation,
+                                                    double killed, double wounded, String cause) {
+        return ReferenceOperationExecution.applyDiscreteCasualties(world, operation, killed, wounded, cause);
+    }
 
     public List<ReferenceOperation> activeFor(ReferenceAgentRef agent) {
         ReferenceAgentRef required = Objects.requireNonNull(agent, "agent");
