@@ -142,12 +142,7 @@ public final class ReferenceSettlement {
     public Map<ReferenceResource, Double> stock() { return Map.copyOf(stock); }
     public Map<ReferenceResource, Double> dailyProduction() { return Map.copyOf(dailyProduction); }
     public Map<ReferenceResource, Double> dailyConsumption() { return Map.copyOf(dailyConsumption); }
-    void resetDailyFlows() {
-        for (ReferenceResource resource : ReferenceResource.values()) {
-            dailyProduction.put(resource, 0.0d);
-            dailyConsumption.put(resource, 0.0d);
-        }
-    }
+    void resetDailyFlows() { for (ReferenceResource resource : ReferenceResource.values()) { dailyProduction.put(resource, 0.0d); dailyConsumption.put(resource, 0.0d); } }
     void recordProduction(ReferenceResource resource, double amount) {
         dailyProduction.merge(resource, amount, Double::sum);
     }
@@ -161,6 +156,12 @@ public final class ReferenceSettlement {
         for (ReferenceResource resource : ReferenceResource.values()) {
             stock.put(resource, Math.max(0.0d, replacement.getOrDefault(resource, 0.0d)));
         }
+    }
+    void restoreResidents(ReferenceResidentLedger restored) {
+        if (residents == null) throw new IllegalStateException("continuous settlement has no individual resident ledger");
+        ReferenceResidentLedger required = Objects.requireNonNull(restored, "restored");
+        if (required.settlementId() != id) throw new IllegalArgumentException("resident ledger belongs to another settlement");
+        residents = required; syncResidentProjection();
     }
     public boolean canPay(double amount) { return cash + 1.0e-9d >= amount; }
     public double treasury() { return cash; }
@@ -491,8 +492,7 @@ public final class ReferenceSettlement {
     private static double nonNegative(double value) { return value > 0.0d ? value : 0.0d; }
     private static EnumMap<ReferenceResource, Double> emptyStock() {
         EnumMap<ReferenceResource, Double> result = new EnumMap<>(ReferenceResource.class);
-        for (ReferenceResource resource : ReferenceResource.values()) result.put(resource, 0.0d);
-        return result;
+        for (ReferenceResource resource : ReferenceResource.values()) result.put(resource, 0.0d); return result;
     }
     private static Map<String, Double> emptyPrimaryCapacity() {
         return new HashMap<>(Map.of("farm", 0.0d, "mine", 0.0d, "forest", 0.0d, "power", 0.0d));

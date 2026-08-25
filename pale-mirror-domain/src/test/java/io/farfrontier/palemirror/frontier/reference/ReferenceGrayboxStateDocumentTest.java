@@ -24,6 +24,11 @@ class ReferenceGrayboxStateDocumentTest {
     @Test
     void rejectsWrongRootAndCorruptOrTrailingWireData() {
         assertThrows(IllegalArgumentException.class, () -> ReferenceGrayboxStateDocument.encode(Map.of("codec", "wrong")));
+        assertThrows(IllegalArgumentException.class, () -> ReferenceGrayboxStateDocument.encode(Map.of(
+                "codec", ReferenceGrayboxCanonicalState.CODEC,
+                "reference_state", Map.of(),
+                "bioform_identities", Map.of("$map", java.util.List.of()),
+                "unknown", "field")));
         assertThrows(IllegalArgumentException.class, () -> ReferenceGrayboxStateDocument.decode(new byte[] {1, 2, 3}));
 
         byte[] valid = ReferenceGrayboxStateDocument.encode(ReferenceGrayboxCanonicalState.capture(

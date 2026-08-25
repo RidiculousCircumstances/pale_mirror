@@ -68,11 +68,7 @@ public final class ReferenceGrayboxStateDocument {
     }
 
     private static Map<String, Object> validateRoot(Map<String, Object> state) {
-        Map<String, Object> required = Objects.requireNonNull(state, "state");
-        if (!ReferenceGrayboxCanonicalState.CODEC.equals(required.get("codec"))) {
-            throw new IllegalArgumentException("graybox state document codec is invalid");
-        }
-        return required;
+        return ReferenceGrayboxStateReader.envelope(Objects.requireNonNull(state, "state"));
     }
 
     private static void writeValue(DataOutputStream output, Object value, int depth) throws IOException {
