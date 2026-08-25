@@ -22,6 +22,8 @@ final class SourceGrayboxPresentationPlan {
     private static final int LABEL_Y = SURFACE_Y + 4;
     private static final int OVERLAY_Y = LABEL_Y + 1;
     private static final int ACTIVITY_Y = OVERLAY_Y + 1;
+    /** Keep collision recovery compact and below the dedicated label plane. */
+    private static final int MAX_CLAIM_Y = SURFACE_Y + 15;
 
     private SourceGrayboxPresentationPlan() { }
 
@@ -82,6 +84,7 @@ final class SourceGrayboxPresentationPlan {
         if (result.size() > SourceGrayboxPresentationLedger.MAX_CLAIMS) {
             throw new IllegalStateException("source graybox projection exceeds its bounded claim ledger");
         }
+        separateCanonicalLayers(result);
         validateDistinctFootprints(result);
         return result;
     }
@@ -151,6 +154,32 @@ final class SourceGrayboxPresentationPlan {
         }
     }
 
+    /**
+     * The simulation may deliberately place several facts in one logical
+     * cell: for example, an infected resource site can also host a hive organ.
+     * Their x/z address remains canonical.  The presentation adapter gives
+     * later facts the first free vertical layer, so neither fact is hidden and
+     * no source-scale coordinate is changed.
+     */
+    private static void separateCanonicalLayers(LinkedHashMap<String, Desired> desired) {
+        Map<BlockPos, String> ownerByPosition = new LinkedHashMap<>();
+        for (Map.Entry<String, Desired> entry : desired.entrySet()) {
+            Desired resolved = entry.getValue();
+            while (overlaps(resolved, ownerByPosition)) {
+                if (resolved.y() + resolved.height() > MAX_CLAIM_Y) {
+                    throw new IllegalStateException("source graybox vertical presentation budget is exhausted by " + resolved.id());
+                }
+                resolved = resolved.atY(resolved.y() + 1);
+            }
+            entry.setValue(resolved);
+            for (BlockPos position : positions(resolved)) ownerByPosition.put(position, resolved.id());
+        }
+    }
+
+    private static boolean overlaps(Desired item, Map<BlockPos, String> ownerByPosition) {
+        return positions(item).stream().anyMatch(ownerByPosition::containsKey);
+    }
+
     private static List<BlockPos> positions(int x, int y, int z, int width, int depth, int height) {
         List<BlockPos> result = new ArrayList<>(width * depth * height);
         for (int dx = 0; dx < width; dx++) for (int dz = 0; dz < depth; dz++) for (int dy = 0; dy < height; dy++) {
@@ -177,6 +206,10 @@ final class SourceGrayboxPresentationPlan {
 
         Desired withInteractionWeight(double weight) {
             return new Desired(id, subjectId, kind, revision, x, y, z, width, depth, height, colour, interactionId, interactionKind, weight);
+        }
+
+        Desired atY(int value) {
+            return new Desired(id, subjectId, kind, revision, x, value, z, width, depth, height, colour, interactionId, interactionKind, interactionWeight);
         }
     }
 }

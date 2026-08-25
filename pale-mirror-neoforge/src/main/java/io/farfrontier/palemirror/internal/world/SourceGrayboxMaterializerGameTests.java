@@ -8,6 +8,7 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
@@ -35,6 +36,10 @@ public final class SourceGrayboxMaterializerGameTests {
         BlockPos facility = anchor.offset(2, 0, 2);
         helper.assertValueEqual(helper.getLevel().getBlockState(facility).getBlock(), Blocks.BLUE_WOOL,
                 "a source facility must become its readable colour-coded rectangle");
+        ArmorStand facilityLabel = helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(facility).inflate(16, 32, 16), value ->
+                value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop")).stream().findFirst().orElseThrow();
+        helper.assertTrue(facilityLabel.getY() >= ReferenceGrayboxLayout.GROUND_Y + 17,
+                "a readable source label must be above the compact presentation stack, not embedded in its blocks");
         Villager resident = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(16), value ->
                 value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
         Zombie bioform = helper.getLevel().getEntitiesOfClass(Zombie.class, new AABB(anchor).inflate(16), value ->
@@ -226,31 +231,82 @@ public final class SourceGrayboxMaterializerGameTests {
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void everySourceClaimRemainsSpatiallyDistinctThroughoutTheSeededFirstYear(GameTestHelper helper) {
-        ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(7L);
-
-        for (int day = 0; day <= 365; day++) {
-            SourceGrayboxMaterializer.validateProjection(simulation.snapshot());
-            if (day < 365) simulation.tick();
+        for (long seed : List.of(7L, 17L, 41L, 73L)) {
+            ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(seed);
+            for (int day = 0; day <= 365; day++) {
+                SourceGrayboxMaterializer.validateProjection(simulation.snapshot());
+                if (day < 365) simulation.tick();
+            }
         }
         helper.succeed();
     }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void overlappingCanonicalClaimsFailBeforeAnyMinecraftWrite(GameTestHelper helper) {
+    public static void coLocatedSourceFactsUseDistinctPhysicalLayers(GameTestHelper helper) {
         ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
         ReferenceGrayboxSnapshot.Cell cell = baseline.cells().getFirst();
-        ReferenceGrayboxLayout.Rectangle collision = new ReferenceGrayboxLayout.Rectangle(
-                cell.rectangle().x() + 1, cell.rectangle().z() + 1, 1, 1);
-        ReferenceGrayboxSnapshot conflicted = new ReferenceGrayboxSnapshot(
+        ReferenceGrayboxSnapshot coLocated = new ReferenceGrayboxSnapshot(
+                baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(), List.of(), List.of(),
+                List.of(new ReferenceGrayboxSnapshot.ResourceSite(1, "mine", -1,
+                        new ReferenceGrayboxLayout.Rectangle(cell.rectangle().x() + 2, cell.rectangle().z() + 2, 12, 12),
+                        1.0d, 1.0d, 0.0d, "site.mine")),
+                List.of(), List.of(new ReferenceGrayboxSnapshot.HiveOrgan(1, "core",
+                        new ReferenceGrayboxLayout.Rectangle(cell.rectangle().x() + 3, cell.rectangle().z() + 3, 10, 10),
+                        1.0d, 1.0d, false, "organ.core")),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+
+        var desired = SourceGrayboxPresentationPlan.from(coLocated);
+        SourceGrayboxPresentationPlan.Desired site = desired.get("resource-site:1");
+        SourceGrayboxPresentationPlan.Desired organ = desired.get("hive-organ:1");
+        helper.assertTrue(SourceGrayboxPresentationPlan.positions(site).stream().noneMatch(SourceGrayboxPresentationPlan.positions(organ)::contains),
+                "co-located source facts must remain two physical objects rather than hiding one another");
+        helper.assertTrue(organ.y() > site.y(), "a co-located hive organ must receive a deterministic layer above its resource site");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void newlyCoLocatedFactRelocatesOnlyThePriorManagedClaim(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        prepareFlatFloor(helper, anchor, 18);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        ReferenceGrayboxSnapshot organOnly = coLocatedFixture(anchor, baseline, false);
+        ReferenceGrayboxSnapshot coLocated = coLocatedFixture(anchor, baseline, true);
+        ReferenceGrayboxLayout.Rectangle organ = organOnly.hiveOrgans().getFirst().rectangle();
+        BlockPos probe = new BlockPos(organ.centreX(), ReferenceGrayboxLayout.GROUND_Y, organ.centreZ());
+
+        materializer.apply(helper.getLevel(), organOnly);
+        helper.assertValueEqual(helper.getLevel().getBlockState(probe).getBlock(), Blocks.RED_WOOL,
+                "an isolated core begins at the source ground layer");
+        materializer.apply(helper.getLevel(), coLocated);
+
+        helper.assertValueEqual(helper.getLevel().getBlockState(probe).getBlock(), Blocks.ORANGE_WOOL,
+                "a newly co-located resource site replaces only the old PM-owned lower core layer");
+        helper.assertValueEqual(helper.getLevel().getBlockState(probe.above()).getBlock(), Blocks.RED_WOOL,
+                "the core is retained on its deterministic layer rather than being silently dropped");
+        helper.assertValueEqual(materializer.claimAt(helper.getLevel(), probe).subjectId(), "site:1",
+                "the lower layer must belong to the new exact resource-site subject");
+        helper.assertValueEqual(materializer.claimAt(helper.getLevel(), probe.above()).subjectId(), "organ:1",
+                "the raised layer must retain the original exact hive-organ subject");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void duplicateCanonicalClaimsFailBeforeAnyMinecraftWrite(GameTestHelper helper) {
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxSnapshot.Cell cell = baseline.cells().getFirst();
+        ReferenceGrayboxSnapshot.Cargo duplicate = new ReferenceGrayboxSnapshot.Cargo("fixture:duplicate", "operation", 1, "food", 1.0d,
+                new ReferenceGrayboxLayout.Rectangle(cell.rectangle().x() + 2, cell.rectangle().z() + 2, 1, 1), "cargo.food");
+        ReferenceGrayboxSnapshot malformed = new ReferenceGrayboxSnapshot(
                 baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(), baseline.settlements(),
-                List.of(new ReferenceGrayboxSnapshot.Facility("fixture:collision", 1, "workshop", collision, 1.0d, "facility.workshop")),
+                baseline.facilities(),
                 baseline.resourceSites(), baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(), baseline.residents(),
-                baseline.fieldPosts(), baseline.fieldLinks(), baseline.activities(), baseline.cargoes(), baseline.interactions(),
+                baseline.fieldPosts(), baseline.fieldLinks(), baseline.activities(), List.of(duplicate, duplicate), baseline.interactions(),
                 baseline.sectors(), baseline.chrysalises(), baseline.events());
 
         try {
-            SourceGrayboxMaterializer.validateProjection(conflicted);
-            helper.fail("source graybox must reject overlapping canonical claims before materialization");
+            SourceGrayboxMaterializer.validateProjection(malformed);
+            helper.fail("source graybox must reject duplicate canonical claims before materialization");
         } catch (IllegalStateException expected) {
             helper.succeed();
         }
@@ -277,6 +333,16 @@ public final class SourceGrayboxMaterializerGameTests {
                 List.of(new ReferenceGrayboxSnapshot.Interaction(fixtureId + ":workshop", "settlement:1:facility:workshop", "facility_damaged",
                         interactionWeight, 1, ReferenceGrayboxLayout.interactionSlots(facility, 4), "facility.workshop")),
                 List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot coLocatedFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, boolean includeSite) {
+        ReferenceGrayboxLayout.Rectangle site = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 12, 12);
+        ReferenceGrayboxLayout.Rectangle organ = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 3, anchor.getZ() + 3, 10, 10);
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(), includeSite ? List.of(new ReferenceGrayboxSnapshot.ResourceSite(1, "mine", -1,
+                site, 1.0d, 1.0d, 0.0d, "site.mine")) : List.of(), List.of(),
+                List.of(new ReferenceGrayboxSnapshot.HiveOrgan(1, "core", organ, 1.0d, 1.0d, false, "organ.core")),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     private static ReferenceGrayboxSnapshot fieldPostCargoFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, int postId) {

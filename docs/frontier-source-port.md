@@ -137,6 +137,15 @@ warehouse and housing retain their own coloured rectangles inside it. This is
 a presentation rule only; it cannot add a second construction owner or change
 the facility fact carried by interaction slots.
 
+Several source facts may legitimately share one logical cell: an infected
+resource site may host an organ, for example. Their source X/Z address is never
+changed or merged. Before any Minecraft write, the projector assigns each
+overlapping claim the first free layer in the bounded Y=64–79 presentation
+stack; exact labels begin above that stack and separate coincident names by two
+blocks. A later snapshot may relocate only an unchanged PM-owned claim. A
+foreign or player-modified block remains a persisted visible conflict and is
+never overwritten to make room for a new layer.
+
 The fixed graybox colour vocabulary is semantic rather than decorative: red is
 active hostile pressure, combat or a disrupted route; purple is hive signal,
 contamination or quarantine; blue is open logistics; cyan is human control,
