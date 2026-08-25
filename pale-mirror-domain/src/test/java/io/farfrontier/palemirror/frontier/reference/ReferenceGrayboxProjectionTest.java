@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.reference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -127,6 +128,105 @@ class ReferenceGrayboxProjectionTest {
         assertEquals(49, slots.stream().distinct().count());
         assertTrue(slots.stream().allMatch(slot -> slot.x() >= cell.x() && slot.z() >= cell.z()
                 && slot.x() < cell.x() + cell.width() && slot.z() < cell.z() + cell.depth()));
+    }
+
+    @Test
+    void sourceOwnedOperationsAndCampaignsRemainReadableWithTheirExactPeopleAndPhysicalFacts() {
+        ReferenceWorld world = grayboxWorld();
+        ReferenceOperation operation = world.operations().launchHuman(world, ReferenceOperationKind.RECON, 1,
+                ReferenceTargetRef.cell(10, 10));
+        assertNotNull(operation);
+
+        ReferenceSettlement fieldLeader = world.settlements().get(2);
+        ReferenceFieldCampaign fieldCampaign = world.field().createCampaign(world, ReferenceCampaignKind.CONTAINMENT,
+                fieldLeader.id(), Set.of(), "cell", null, 12, 12, "projection coverage");
+        assertNotNull(fieldCampaign);
+        List<String> firstGarrison = List.copyOf(fieldLeader.residents().availableIds().subList(0, 2));
+        fieldLeader.assignPeopleToFieldPost(firstGarrison, world.field().nextPostId());
+        ReferenceFieldPost firstPost = startBuildablePost(world, fieldCampaign, fieldLeader, firstGarrison, null);
+
+        ReferenceSettlement fieldSupport = world.settlements().get(3);
+        List<String> secondGarrison = List.copyOf(fieldSupport.residents().availableIds().subList(0, 2));
+        fieldSupport.assignPeopleToFieldPost(secondGarrison, world.field().nextPostId());
+        ReferenceFieldPost secondPost = startBuildablePost(world, fieldCampaign, fieldSupport, secondGarrison, firstPost);
+        ReferenceFieldLink fieldLink = world.field().startLink(world, fieldCampaign.id(), ReferenceFieldLinkKind.SUPPLY_CORRIDOR,
+                firstPost.id(), secondPost.id());
+        assertNotNull(fieldLink);
+
+        ReferenceSettlement frontLeader = world.settlements().get(4);
+        List<String> frontPeople = frontLeader.deployPeople(1_000_001,
+                Map.of(ReferenceHumanUnitKind.LINE.id(), 3)).get(ReferenceHumanUnitKind.LINE.id());
+        String sector = world.v2().sectors().keySet().iterator().next();
+        ReferenceFrontCampaign frontCampaign = new ReferenceFrontCampaign(1, ReferenceFrontCampaignKind.CORDON, frontLeader.id(),
+                List.of(frontLeader.id()), sector, world.day(), ReferenceFrontPhase.CORDON,
+                Map.of(frontLeader.id(), 3.0d), Map.of(frontLeader.id(), frontPeople),
+                Map.of(frontLeader.id(), Map.of(ReferenceHumanUnitKind.LINE, 3.0d)), "projection coverage");
+        frontCampaign.risk(.4d);
+        world.v2().mutableFrontCampaigns().put(frontCampaign.id(), frontCampaign);
+        world.assertProfileInvariants();
+
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(world);
+        Map<String, ReferenceGrayboxSnapshot.Activity> activities = snapshot.activities().stream()
+                .collect(java.util.stream.Collectors.toMap(ReferenceGrayboxSnapshot.Activity::id, item -> item));
+
+        assertActivity(activities.get("operation:" + operation.id()), "operation", operation.kind().id(), operation.status().id(),
+                operation.personnel(), "activity.operation." + operation.status().id());
+        assertActivity(activities.get("field-campaign:" + fieldCampaign.id()), "field_campaign", fieldCampaign.kind().id(),
+                fieldCampaign.phase().id(), fieldCampaign.expectedPersonnel(), "activity.field_campaign." + fieldCampaign.phase().id());
+        assertActivity(activities.get("front-campaign:" + frontCampaign.id()), "front_campaign", frontCampaign.kind().id(),
+                frontCampaign.phase().id(), frontCampaign.personnel(), "activity.front_campaign." + frontCampaign.phase().id());
+
+        assertEquals(Set.of(firstPost.id(), secondPost.id()), snapshot.fieldPosts().stream()
+                .filter(post -> post.campaignId() == fieldCampaign.id()).map(ReferenceGrayboxSnapshot.FieldPost::id)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertTrue(snapshot.fieldLinks().stream().anyMatch(link -> link.id() == fieldLink.id()
+                && link.campaignId() == fieldCampaign.id() && link.postA() == firstPost.id() && link.postB() == secondPost.id()
+                && link.kind().equals(ReferenceFieldLinkKind.SUPPLY_CORRIDOR.id())));
+        assertTrue(snapshot.cargoes().stream().anyMatch(cargo -> cargo.id().equals("field_post:" + firstPost.id() + ":cargo:food")
+                && cargo.quantity() == firstPost.stock(ReferenceResource.FOOD)));
+        assertTrue(snapshot.interactions().stream().anyMatch(item -> item.subjectId().equals("field_post:" + firstPost.id())
+                && item.kind().equals("field_post_damaged")));
+        assertTrue(snapshot.interactions().stream().anyMatch(item -> item.subjectId().equals("field_link:" + fieldLink.id())
+                && item.kind().equals("field_link_damaged")));
+
+        assertResidentsAt(snapshot, operation.residentIdsBySettlement().get(1), "operation", operation.id());
+        assertResidentsAt(snapshot, firstGarrison, "field_post", firstPost.id());
+        assertResidentsAt(snapshot, secondGarrison, "field_post", secondPost.id());
+        assertResidentsAt(snapshot, frontPeople, "operation", 1_000_000 + frontCampaign.id());
+    }
+
+    private static void assertActivity(ReferenceGrayboxSnapshot.Activity activity, String family, String kind, String phase,
+                                       double personnel, String colour) {
+        assertNotNull(activity);
+        assertEquals(family, activity.family());
+        assertEquals(kind, activity.kind());
+        assertEquals(phase, activity.phase());
+        assertEquals(personnel, activity.personnel());
+        assertEquals(colour, activity.colour());
+    }
+
+    private static void assertResidentsAt(ReferenceGrayboxSnapshot snapshot, List<String> residentIds, String location, int locationId) {
+        for (String residentId : residentIds) {
+            assertTrue(snapshot.residents().stream().anyMatch(resident -> resident.id().equals(residentId)
+                    && resident.location().equals(location) && Integer.valueOf(locationId).equals(resident.locationId())), residentId);
+        }
+    }
+
+    private static ReferenceFieldPost startBuildablePost(ReferenceWorld world, ReferenceFieldCampaign campaign,
+                                                          ReferenceSettlement settlement, List<String> garrison,
+                                                          ReferenceFieldPost firstPost) {
+        for (int y = 1; y < world.config().height() - 1; y++) for (int x = 1; x < world.config().width() - 1; x++) {
+            if (firstPost != null) {
+                double distance = Math.hypot(firstPost.x() - x, firstPost.y() - y);
+                if (distance < ReferenceFieldRules.MINIMUM_POST_SPACING
+                        || distance > ReferenceFieldRules.linkMaximumLength(ReferenceFieldLinkKind.SUPPLY_CORRIDOR)) continue;
+            }
+            ReferenceFieldPost post = world.field().startPost(world, campaign.id(), ReferenceFieldPostKind.CHECKPOINT, x, y,
+                    settlement.id(), Set.of(settlement.id()), Map.of(settlement.id(), (double) garrison.size()),
+                    Map.of(ReferenceResource.FOOD, 2.0d), Map.of(settlement.id(), garrison));
+            if (post != null) return post;
+        }
+        throw new AssertionError("graybox test world has no buildable field-post location");
     }
 
     private static ReferenceWorld grayboxWorld() {
