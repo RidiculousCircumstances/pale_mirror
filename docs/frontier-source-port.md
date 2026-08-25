@@ -130,6 +130,13 @@ stale or rejected slot are retained as visible conflicts and never inferred as
 a source fact. Warehouse and housing rectangles remain descriptive because the
 Python model has no construction-damage owner for them.
 
+Each source trade route also projects as a sampled, colour-coded ground line
+between its canonical settlement centres. Those ordinary `ROUTE` segments carry
+the route ID and revision only: they make open, quarantined and disrupted
+logistics readable at a distance, but are never themselves a damage authority.
+The elevated `route_damaged` slots remain the sole typed physical input for
+changing canonical route capacity.
+
 A settlement fortification is projected as a coloured perimeter, never as a
 solid slab over the settlement footprint. The perimeter retains the one
 `fortification` source subject, while civic hall, workshop, armory, clinic,

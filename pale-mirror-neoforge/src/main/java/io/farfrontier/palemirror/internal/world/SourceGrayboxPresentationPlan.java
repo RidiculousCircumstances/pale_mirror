@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import net.minecraft.core.BlockPos;
 
 /**
  * Immutable block-claim plan derived from one source-graybox snapshot.
@@ -24,6 +23,8 @@ final class SourceGrayboxPresentationPlan {
     private static final int ACTIVITY_Y = OVERLAY_Y + 1;
     /** Keep collision recovery compact and below the dedicated label plane. */
     private static final int MAX_CLAIM_Y = SURFACE_Y + 15;
+    /** Shared plan/ledger limit; every claim has already been validated before Minecraft receives it. */
+    static final int MAX_CLAIMS = 10_240;
 
     private SourceGrayboxPresentationPlan() { }
 
@@ -42,6 +43,14 @@ final class SourceGrayboxPresentationPlan {
         for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) {
             add(result, rectangle("resource-site:" + site.id(), "site:" + site.id(), "RESOURCE_SITE", snapshot.stateRevision(), site.rectangle(), 1,
                     site.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) {
+            List<ReferenceGrayboxLayout.Point> slots = ReferenceGrayboxLayout.routeSlots(route.start(), route.end());
+            for (int index = 0; index < slots.size(); index++) {
+                ReferenceGrayboxLayout.Point slot = slots.get(index);
+                add(result, new Desired("route-segment:" + route.id() + ":" + index, route.id(), "ROUTE", snapshot.stateRevision(),
+                        slot.x(), SURFACE_Y, slot.z(), 1, 1, 1, route.colour()));
+            }
         }
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) {
             add(result, rectangle("hive-organ:" + organ.id(), "organ:" + organ.id(), "HIVE_ORGAN", snapshot.stateRevision(), organ.rectangle(), 2,
@@ -81,7 +90,7 @@ final class SourceGrayboxPresentationPlan {
             if (!activity.terminal()) add(result, marker("activity:" + activity.id(), activity.id(), "ACTIVITY", snapshot.stateRevision(),
                     activity.position().x(), ACTIVITY_Y, activity.position().z(), activity.colour()));
         }
-        if (result.size() > SourceGrayboxPresentationLedger.MAX_CLAIMS) {
+        if (result.size() > MAX_CLAIMS) {
             throw new IllegalStateException("source graybox projection exceeds its bounded claim ledger");
         }
         separateCanonicalLayers(result);
@@ -92,11 +101,7 @@ final class SourceGrayboxPresentationPlan {
         from(snapshot);
     }
 
-    static List<BlockPos> positions(SourceGrayboxPresentationLedger.Claim claim) {
-        return positions(claim.x(), claim.y(), claim.z(), claim.width(), claim.depth(), claim.height());
-    }
-
-    static List<BlockPos> positions(Desired item) {
+    static List<Position> positions(Desired item) {
         return positions(item.x(), item.y(), item.z(), item.width(), item.depth(), item.height());
     }
 
@@ -148,7 +153,7 @@ final class SourceGrayboxPresentationPlan {
      * no source-scale coordinate is changed.
      */
     private static void separateCanonicalLayers(LinkedHashMap<String, Desired> desired) {
-        Map<BlockPos, String> ownerByPosition = new LinkedHashMap<>();
+        Map<Position, String> ownerByPosition = new LinkedHashMap<>();
         for (Map.Entry<String, Desired> entry : desired.entrySet()) {
             Desired resolved = entry.getValue();
             while (overlaps(resolved, ownerByPosition)) {
@@ -161,18 +166,18 @@ final class SourceGrayboxPresentationPlan {
             // Every position was checked against every earlier claim before it
             // is reserved here, so this map is the complete pre-write proof of
             // distinct physical ownership; a second full traversal is redundant.
-            for (BlockPos position : positions(resolved)) ownerByPosition.put(position, resolved.id());
+            for (Position position : positions(resolved)) ownerByPosition.put(position, resolved.id());
         }
     }
 
-    private static boolean overlaps(Desired item, Map<BlockPos, String> ownerByPosition) {
+    private static boolean overlaps(Desired item, Map<Position, String> ownerByPosition) {
         return positions(item).stream().anyMatch(ownerByPosition::containsKey);
     }
 
-    private static List<BlockPos> positions(int x, int y, int z, int width, int depth, int height) {
-        List<BlockPos> result = new ArrayList<>(width * depth * height);
+    private static List<Position> positions(int x, int y, int z, int width, int depth, int height) {
+        List<Position> result = new ArrayList<>(width * depth * height);
         for (int dx = 0; dx < width; dx++) for (int dz = 0; dz < depth; dz++) for (int dy = 0; dy < height; dy++) {
-            result.add(new BlockPos(x + dx, y + dy, z + dz));
+            result.add(new Position(x + dx, y + dy, z + dz));
         }
         return result;
     }
@@ -201,4 +206,6 @@ final class SourceGrayboxPresentationPlan {
             return new Desired(id, subjectId, kind, revision, x, value, z, width, depth, height, colour, interactionId, interactionKind, interactionWeight);
         }
     }
+
+    record Position(int x, int y, int z) { }
 }

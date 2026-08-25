@@ -135,7 +135,9 @@ descriptive state grey. Labels expose exact identities and values, so colour
 does not replace a domain fact. Functional settlement rectangles,
 resource-sites, organs, cargo, field posts/links, operations, territorial
 sectors, chrysalises, current events and actor roles are all separate readable
-claims or labels.
+claims or labels. Trade routes additionally have sampled colour-coded ground
+segments between their source endpoints; their elevated interaction slots remain
+the sole route-damage authority.
 
 Automated acceptance requires the source fixture checks, pure-domain
 normal/negative/recovery tests, complete-state persistence tests, the annual

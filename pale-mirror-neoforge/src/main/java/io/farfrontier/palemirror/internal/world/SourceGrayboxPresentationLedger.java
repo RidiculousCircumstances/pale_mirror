@@ -26,7 +26,6 @@ import net.minecraft.world.level.saveddata.SavedData;
 final class SourceGrayboxPresentationLedger extends SavedData {
     private static final String DATA_NAME = "pale_mirror_source_graybox_presentation";
     private static final int FORMAT = 2;
-    static final int MAX_CLAIMS = 10_240;
     private final LinkedHashMap<String, Claim> claims;
 
     private SourceGrayboxPresentationLedger() {
@@ -52,7 +51,7 @@ final class SourceGrayboxPresentationLedger extends SavedData {
 
     void put(Claim claim) {
         Claim required = Objects.requireNonNull(claim, "claim");
-        if (!claims.containsKey(required.id()) && claims.size() >= MAX_CLAIMS) {
+        if (!claims.containsKey(required.id()) && claims.size() >= SourceGrayboxPresentationPlan.MAX_CLAIMS) {
             throw new IllegalStateException("source graybox claim limit reached");
         }
         claims.put(required.id(), required);
@@ -86,7 +85,9 @@ final class SourceGrayboxPresentationLedger extends SavedData {
     static SourceGrayboxPresentationLedger load(CompoundTag tag, HolderLookup.Provider registries) {
         if (tag.getInt("format") != FORMAT) throw new IllegalStateException("unsupported source graybox presentation ledger format");
         ListTag encoded = tag.getList("claims", Tag.TAG_COMPOUND);
-        if (encoded.size() > MAX_CLAIMS) throw new IllegalStateException("source graybox claim ledger exceeds its bound");
+        if (encoded.size() > SourceGrayboxPresentationPlan.MAX_CLAIMS) {
+            throw new IllegalStateException("source graybox claim ledger exceeds its bound");
+        }
         LinkedHashMap<String, Claim> claims = new LinkedHashMap<>();
         for (Tag raw : encoded) {
             CompoundTag value = (CompoundTag) raw;

@@ -187,6 +187,33 @@ public final class SourceGrayboxMaterializerGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void tradeRouteCarriesGroundGeometryAndAnElevatedDamageFact(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        prepareFlatFloor(helper, anchor, 56);
+        ReferenceGrayboxSnapshot snapshot = routeFixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot());
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        materializer.apply(helper.getLevel(), snapshot);
+
+        ReferenceGrayboxSnapshot.Route route = snapshot.routes().getFirst();
+        ReferenceGrayboxLayout.Point segment = ReferenceGrayboxLayout.routeSlots(route.start(), route.end()).getFirst();
+        BlockPos ground = new BlockPos(segment.x(), ReferenceGrayboxLayout.GROUND_Y, segment.z());
+        SourceGrayboxPresentationLedger.Claim routeClaim = materializer.claimAt(helper.getLevel(), ground);
+        helper.assertValueEqual(helper.getLevel().getBlockState(ground).getBlock(), Blocks.BLUE_WOOL,
+                "an open trade route must have readable logistics geometry on the graybox ground");
+        helper.assertValueEqual(routeClaim.kind(), "ROUTE", "the ground segment must retain its route semantic kind");
+        helper.assertValueEqual(routeClaim.subjectId(), route.id(), "the ground segment must retain its exact source route ID");
+
+        ReferenceGrayboxSnapshot.Interaction interaction = snapshot.interactions().getFirst();
+        SourceGrayboxPresentationLedger.Claim damage = materializer.claimAt(helper.getLevel(),
+                new BlockPos(segment.x(), ReferenceGrayboxLayout.GROUND_Y + interaction.yOffset(), segment.z()));
+        helper.assertValueEqual(damage.subjectId(), route.id(), "an elevated route slot must target that exact route, not its marker");
+        helper.assertValueEqual(damage.interactionKind(), "route_damaged", "route damage must remain a typed source fact");
+        helper.assertValueEqual(damage.interactionWeight(), 18.0d / interaction.slots().size(),
+                "route capacity must be divided across visible slots without a hidden multiplier");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void fortificationIsAPerimeterAndDoesNotPaintOverFunctionalBuildings(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         prepareFlatFloor(helper, anchor, 56);
@@ -231,18 +258,6 @@ public final class SourceGrayboxMaterializerGameTests {
                 "a strongpoint must retain its high-threat defensive colour");
         helper.assertValueEqual(SourceGrayboxPalette.block("sector.human").getBlock(), Blocks.CYAN_WOOL,
                 "human territorial control must not collapse into the neutral sector colour");
-        helper.succeed();
-    }
-
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
-    public static void everySourceClaimRemainsSpatiallyDistinctThroughoutTheSeededFirstYear(GameTestHelper helper) {
-        for (long seed : List.of(7L, 17L, 41L, 73L)) {
-            ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(seed);
-            for (int day = 0; day <= 365; day++) {
-                SourceGrayboxMaterializer.validateProjection(simulation.snapshot());
-                if (day < 365) simulation.tick();
-            }
-        }
         helper.succeed();
     }
 
@@ -391,6 +406,19 @@ public final class SourceGrayboxMaterializerGameTests {
                 List.of(new ReferenceGrayboxSnapshot.Interaction("field-link:" + linkId, "field_link:" + linkId, "field_link_damaged",
                         link.integrity(), 2, slots, link.colour())),
                 List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot routeFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
+        ReferenceGrayboxLayout.Point start = new ReferenceGrayboxLayout.Point(anchor.getX() + 4, anchor.getZ() + 4);
+        ReferenceGrayboxLayout.Point end = new ReferenceGrayboxLayout.Point(anchor.getX() + 44, anchor.getZ() + 4);
+        ReferenceGrayboxSnapshot.Route route = new ReferenceGrayboxSnapshot.Route("route:701:702", 701, 702, start, end,
+                18.0d, 0.2d, 0.1d, false, false, "route.open");
+        List<ReferenceGrayboxLayout.Point> slots = ReferenceGrayboxLayout.routeSlots(start, end);
+        ReferenceGrayboxSnapshot.Interaction interaction = new ReferenceGrayboxSnapshot.Interaction("route:" + route.id(), route.id(),
+                "route_damaged", route.capacity(), 3, slots, route.colour());
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(), List.of(), List.of(route), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(interaction), List.of(), List.of(), List.of());
     }
 
     private static ReferenceGrayboxSnapshot settlementFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {

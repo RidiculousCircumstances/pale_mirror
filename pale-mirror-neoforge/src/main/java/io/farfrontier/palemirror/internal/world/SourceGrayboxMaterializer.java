@@ -174,7 +174,7 @@ final class SourceGrayboxMaterializer {
     private static boolean ensure(ServerLevel level, SourceGrayboxPresentationLedger ledger, SourceGrayboxPresentationPlan.Desired item) {
         SourceGrayboxPresentationLedger.Claim before = ledger.claim(item.id());
         if (before != null && (before.conflicted() || before.consumed() || !sameFootprint(before, item))) return false;
-        List<BlockPos> positions = SourceGrayboxPresentationPlan.positions(item);
+        List<BlockPos> positions = positions(item);
         if (!loaded(level, positions) || !flat(level, item)) return false;
         BlockState desired = SourceGrayboxPalette.block(item.colour());
         for (BlockPos position : positions) {
@@ -222,7 +222,20 @@ final class SourceGrayboxMaterializer {
     }
 
     private static List<BlockPos> positions(SourceGrayboxPresentationLedger.Claim claim) {
-        return SourceGrayboxPresentationPlan.positions(claim);
+        return positions(claim.x(), claim.y(), claim.z(), claim.width(), claim.depth(), claim.height());
+    }
+
+    private static List<BlockPos> positions(SourceGrayboxPresentationPlan.Desired item) {
+        return SourceGrayboxPresentationPlan.positions(item).stream()
+                .map(position -> new BlockPos(position.x(), position.y(), position.z())).toList();
+    }
+
+    private static List<BlockPos> positions(int x, int y, int z, int width, int depth, int height) {
+        List<BlockPos> result = new ArrayList<>(width * depth * height);
+        for (int dx = 0; dx < width; dx++) for (int dz = 0; dz < depth; dz++) for (int dy = 0; dy < height; dy++) {
+            result.add(new BlockPos(x + dx, y + dy, z + dz));
+        }
+        return result;
     }
 
     private static void materializeLabels(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Set<String> active) {
