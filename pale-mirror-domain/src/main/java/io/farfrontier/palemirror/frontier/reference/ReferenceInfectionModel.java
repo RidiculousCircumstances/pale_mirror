@@ -39,7 +39,7 @@ public final class ReferenceInfectionModel {
     final ReferenceEcosystem ecosystem;
     double[][] level;
     final LinkedHashMap<Integer, ReferenceHiveOrgan> organs = new LinkedHashMap<>();
-    private final LinkedHashMap<String, Double> genome = new LinkedHashMap<>();
+    final LinkedHashMap<String, Double> genome = new LinkedHashMap<>();
     final List<ReferenceNetworkFlow> networkFlows = new ArrayList<>();
     final LinkedHashMap<Integer, ReferenceHiveEconomyEntry> nestEconomy = new LinkedHashMap<>();
     final List<ReferenceHiveEconomySnapshot> nestEconomyHistory = new ArrayList<>();
@@ -53,13 +53,13 @@ public final class ReferenceInfectionModel {
     final List<ReferenceSwarm> swarms = new ArrayList<>();
     double harvestedBiomass;
     double harvestedGeneticMaterial;
-    private double growthRate = 0.027d;
-    private double spreadRate = 0.034d;
-    private double spawnThreshold = DEFAULT_SPAWN_THRESHOLD;
-    private int maxSwarms = DEFAULT_MAX_SWARMS;
-    private int nextOrganId = 1;
-    private int nextSwarmId = 1;
-    private Integer lastEconomySnapshotDay;
+    double growthRate = 0.027d;
+    double spreadRate = 0.034d;
+    double spawnThreshold = DEFAULT_SPAWN_THRESHOLD;
+    int maxSwarms = DEFAULT_MAX_SWARMS;
+    int nextOrganId = 1;
+    int nextSwarmId = 1;
+    Integer lastEconomySnapshotDay;
     public ReferenceInfectionModel(int width, int height, long seed, double combatScale, boolean discreteBioforms) {
         if (width < 1 || height < 1) throw new IllegalArgumentException("infection map dimensions must be positive");
         if (combatScale <= 0.0d) throw new IllegalArgumentException("combat scale must be positive");

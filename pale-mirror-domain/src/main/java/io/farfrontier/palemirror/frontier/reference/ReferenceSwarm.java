@@ -83,6 +83,9 @@ public final class ReferenceSwarm {
         bioformIds.putAll(replacement);
         assertDiscreteBioformInvariants();
     }
+    void restoreLosses(Map<ReferenceBioformKind, Double> restored) {
+        losses.clear(); losses.putAll(Objects.requireNonNull(restored, "restored"));
+    }
     public Integer sourceOrganId() { return sourceOrganId; }
     public Integer targetX() { return targetX; }
     void targetX(Integer value) { targetX = value; }

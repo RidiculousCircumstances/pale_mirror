@@ -11,9 +11,13 @@ public final class ReferenceHiveEconomyEntry {
     private double maintenance;
 
     ReferenceHiveEconomyEntry(int day, ReferenceHiveOrgan organ) {
+        this(day, organ.id(), organ.biomass());
+    }
+
+    ReferenceHiveEconomyEntry(int day, int organId, double openingBiomass) {
         this.day = day;
-        organId = organ.id();
-        openingBiomass = organ.biomass();
+        this.organId = organId;
+        this.openingBiomass = openingBiomass;
     }
 
     public int day() { return day; }
