@@ -51,6 +51,23 @@ public final class ReferenceTradeNetwork {
         history.addAll(List.copyOf(Objects.requireNonNull(records, "records")));
     }
 
+    /** Replaces both persisted mutable ledgers only after an owner reader validated their identities. */
+    void restoreState(List<ReferenceRoute> restoredRoutes, List<ReferenceTradeRecord> restoredHistory) {
+        List<ReferenceRoute> routesRequired = List.copyOf(Objects.requireNonNull(restoredRoutes, "restoredRoutes"));
+        List<ReferenceTradeRecord> historyRequired = List.copyOf(Objects.requireNonNull(restoredHistory, "restoredHistory"));
+        Map<ReferenceRouteKey, ReferenceRoute> unique = new LinkedHashMap<>();
+        for (ReferenceRoute route : routesRequired) {
+            ReferenceRoute required = Objects.requireNonNull(route, "restored route");
+            if (required.a() == required.b() || unique.putIfAbsent(required.key(), required) != null) {
+                throw new IllegalArgumentException("restored routes are not unique");
+            }
+        }
+        routes.clear();
+        history.clear();
+        routes.addAll(routesRequired);
+        history.addAll(historyRequired);
+    }
+
     public void addRoute(ReferenceRoute route) {
         ReferenceRoute required = Objects.requireNonNull(route, "route");
         if (required.a() == required.b() || routes.stream().anyMatch(item -> item.key().equals(required.key()))) return;

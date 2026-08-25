@@ -11,6 +11,8 @@ import java.util.Set;
 
 /** Strict source-shaped value reader shared by graybox hydration owners. */
 final class ReferenceGrayboxStateReader {
+    static final String REFERENCE_CODEC = "frontier_reference_state_v1";
+
     private ReferenceGrayboxStateReader() { }
 
     static Map<String, Object> envelope(Map<String, Object> state) {
@@ -22,6 +24,16 @@ final class ReferenceGrayboxStateReader {
         object(required.get("reference_state"), "graybox reference state");
         mapEntries(required.get("bioform_identities"), "graybox bioform identities");
         return required;
+    }
+
+    static Map<String, Object> referenceState(Object value) {
+        Map<String, Object> state = object(value, "graybox reference state");
+        exactKeys(state, "graybox reference state", "codec", "config", "profile", "day", "rng", "population_rng", "events",
+                "diagnostics", "settlements", "resource_sites", "trade", "market", "infection", "operations", "field", "v2");
+        if (!REFERENCE_CODEC.equals(string(state.get("codec"), "reference state codec"))) {
+            throw new IllegalArgumentException("graybox reference state codec is invalid");
+        }
+        return state;
     }
 
     static Map<String, Object> typed(Object value, String type, String member) {
@@ -104,6 +116,20 @@ final class ReferenceGrayboxStateReader {
             result.add(new Entry(values.get(0), values.get(1)));
         }
         return List.copyOf(result);
+    }
+
+    static PythonRandom.State randomState(Object encoded, String label) {
+        Map<String, Object> random = object(encoded, label);
+        exactKeys(random, label, "$random_mt19937");
+        Map<String, Object> fields = object(random.get("$random_mt19937"), label + " fields");
+        exactKeys(fields, label + " fields", "version", "state", "gaussian_cache");
+        if (integer(fields.get("version"), label + " version") != 3 || fields.get("gaussian_cache") != null) {
+            throw new IllegalArgumentException(label + " is unsupported");
+        }
+        List<Object> words = list(fields.get("state"), label + " state");
+        long[] values = new long[words.size()];
+        for (int index = 0; index < values.length; index++) values[index] = longValue(words.get(index), label + " word");
+        return new PythonRandom.State(values);
     }
 
     static String enumValue(Object value, String type, String label) {

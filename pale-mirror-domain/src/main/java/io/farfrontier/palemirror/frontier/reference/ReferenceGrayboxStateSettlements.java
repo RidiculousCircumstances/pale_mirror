@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.frontier.reference;
 
-import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,7 +38,8 @@ final class ReferenceGrayboxStateSettlements {
                 "medicine_fulfillment", "illness_burden", "last_investment_day", "last_strategy_day", "mobilized_personnel",
                 "wounded_personnel", "daily_production", "daily_consumption");
         requireProfile(fields.get("profile"), expectedProfile);
-        if (!Arrays.equals(populationRng.state().words(), randomState(fields.get("population_rng"), "settlement population RNG").words())) {
+        if (!java.util.Arrays.equals(populationRng.state().words(), ReferenceGrayboxStateReader.randomState(
+                fields.get("population_rng"), "settlement population RNG").words())) {
             throw new IllegalArgumentException("settlement population RNG differs from the world stream");
         }
         int id = ReferenceGrayboxStateReader.integer(fields.get("id"), "settlement id");
@@ -108,20 +108,6 @@ final class ReferenceGrayboxStateSettlements {
                 || expected.minimumSurvivingSettlement() != ReferenceGrayboxStateReader.integer(fields.get("minimum_surviving_settlement"), "settlement survival minimum")) {
             throw new IllegalArgumentException("settlement profile differs from the world profile");
         }
-    }
-
-    private static PythonRandom.State randomState(Object encoded, String label) {
-        Map<String, Object> random = ReferenceGrayboxStateReader.object(encoded, label);
-        ReferenceGrayboxStateReader.exactKeys(random, label, "$random_mt19937");
-        Map<String, Object> fields = ReferenceGrayboxStateReader.object(random.get("$random_mt19937"), label + " fields");
-        ReferenceGrayboxStateReader.exactKeys(fields, label + " fields", "version", "state", "gaussian_cache");
-        if (ReferenceGrayboxStateReader.integer(fields.get("version"), label + " version") != 3 || fields.get("gaussian_cache") != null) {
-            throw new IllegalArgumentException(label + " is unsupported");
-        }
-        List<Object> words = ReferenceGrayboxStateReader.list(fields.get("state"), label + " state");
-        long[] values = new long[words.size()];
-        for (int index = 0; index < values.length; index++) values[index] = ReferenceGrayboxStateReader.longValue(words.get(index), label + " word");
-        return new PythonRandom.State(values);
     }
 
     private static ReferenceResidentLedger residents(Object encoded, int settlementId) {
