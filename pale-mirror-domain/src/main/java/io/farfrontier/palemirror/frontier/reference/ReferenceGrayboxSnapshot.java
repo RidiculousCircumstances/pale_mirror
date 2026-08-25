@@ -20,6 +20,8 @@ public record ReferenceGrayboxSnapshot(
         List<FieldPost> fieldPosts,
         List<FieldLink> fieldLinks,
         List<Activity> activities,
+        List<Cargo> cargoes,
+        List<Interaction> interactions,
         List<Sector> sectors,
         List<Chrysalis> chrysalises,
         List<String> events
@@ -41,6 +43,8 @@ public record ReferenceGrayboxSnapshot(
         fieldPosts = copied(fieldPosts, "fieldPosts");
         fieldLinks = copied(fieldLinks, "fieldLinks");
         activities = copied(activities, "activities");
+        cargoes = copied(cargoes, "cargoes");
+        interactions = copied(interactions, "interactions");
         sectors = copied(sectors, "sectors");
         chrysalises = copied(chrysalises, "chrysalises");
         events = copied(events, "events");
@@ -137,6 +141,43 @@ public record ReferenceGrayboxSnapshot(
             kind = required(kind, "kind");
             phase = required(phase, "phase");
             position = Objects.requireNonNull(position, "position");
+            colour = required(colour, "colour");
+        }
+    }
+
+    /** One resource-specific, currently travelling operation pallet. */
+    public record Cargo(String id, int operationId, String resource, double quantity,
+                        ReferenceGrayboxLayout.Rectangle rectangle, String colour) {
+        public Cargo {
+            id = required(id, "id");
+            resource = required(resource, "resource");
+            if (!Double.isFinite(quantity) || quantity <= 0.0d) throw new IllegalArgumentException("cargo quantity must be positive and finite");
+            rectangle = Objects.requireNonNull(rectangle, "rectangle");
+            colour = required(colour, "colour");
+        }
+    }
+
+    /**
+     * Exact source fact distributed across visible physical slots.
+     *
+     * <p>Slots are part of this immutable projection, so NeoForge has no
+     * latitude to choose a different weight, semantic owner, or interaction
+     * geometry for an ordinary graybox block break.</p>
+     */
+    public record Interaction(String id, String subjectId, String kind, double totalWeight, int yOffset,
+                              List<ReferenceGrayboxLayout.Point> slots, String colour) {
+        public Interaction {
+            id = required(id, "id");
+            subjectId = required(subjectId, "subjectId");
+            kind = required(kind, "kind");
+            if (!Double.isFinite(totalWeight) || totalWeight <= 0.0d) {
+                throw new IllegalArgumentException("interaction total weight must be positive and finite");
+            }
+            if (yOffset < 0 || yOffset > 4) throw new IllegalArgumentException("interaction y offset is invalid");
+            slots = copied(slots, "slots");
+            if (slots.isEmpty() || slots.size() > 64 || slots.stream().distinct().count() != slots.size()) {
+                throw new IllegalArgumentException("interaction slots are invalid");
+            }
             colour = required(colour, "colour");
         }
     }

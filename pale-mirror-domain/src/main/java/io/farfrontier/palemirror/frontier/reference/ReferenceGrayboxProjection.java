@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -40,13 +41,16 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.FieldPost> posts = posts(required);
         List<ReferenceGrayboxSnapshot.FieldLink> links = links(required);
         List<ReferenceGrayboxSnapshot.Activity> activities = activities(required, sectorAreas);
+        List<ReferenceGrayboxSnapshot.Cargo> cargoes = cargoes(required, operationPositions);
+        List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, cargoes);
         List<ReferenceGrayboxSnapshot.Sector> sectors = sectors(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises = chrysalises(required, sectorAreas);
         List<String> events = required.events();
         String stateRevision = stateRevision(required.day(), required.profile().id(), cells, settlements, facilities, sites, routes, organs,
-                bioforms, residents, posts, links, activities, sectors, chrysalises, events);
+                bioforms, residents, posts, links, activities, cargoes, interactions, sectors, chrysalises, events);
         return new ReferenceGrayboxSnapshot(required.day(), required.profile().id(), stateRevision, ReferenceGrayboxLayout.bounds(), cells,
-                settlements, facilities, sites, routes, organs, bioforms, residents, posts, links, activities, sectors, chrysalises, events);
+                settlements, facilities, sites, routes, organs, bioforms, residents, posts, links, activities, cargoes, interactions, sectors,
+                chrysalises, events);
     }
 
     private static List<ReferenceGrayboxSnapshot.Cell> cells(ReferenceWorldView view) {
@@ -203,6 +207,62 @@ public final class ReferenceGrayboxProjection {
         return new ReferenceGrayboxSnapshot.Activity("operation:" + operation.id(), "operation", operation.kind().id(), operation.status().id(),
                 ReferenceGrayboxLayout.position(operation.x(), operation.y()), operation.personnel(), operation.unsuppliedDays(), terminal,
                 "activity.operation." + operation.status().id());
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Cargo> cargoes(
+            ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Point> operationPositions
+    ) {
+        List<ReferenceGrayboxSnapshot.Cargo> result = new ArrayList<>();
+        Map<ReferenceGrayboxLayout.Point, Integer> usedSlots = new LinkedHashMap<>();
+        for (ReferenceOperation operation : sorted(world.operations().active(), ReferenceOperation::id)) {
+            ReferenceGrayboxLayout.Point anchor = requiredPoint(operationPositions, operation.id(), "operation", "cargo");
+            for (ReferenceResource resource : ReferenceResource.values()) {
+                double quantity = operation.cargo().getOrDefault(resource, 0.0d);
+                if (quantity <= 0.0d) continue;
+                String resourceId = resource.name().toLowerCase(java.util.Locale.ROOT);
+                int ordinal = usedSlots.merge(anchor, 1, Integer::sum) - 1;
+                result.add(new ReferenceGrayboxSnapshot.Cargo("operation:" + operation.id() + ":cargo:" + resourceId, operation.id(),
+                        resourceId, quantity, ReferenceGrayboxLayout.cargo(anchor, ordinal), "cargo." + resourceId));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<ReferenceGrayboxSnapshot.Interaction> interactions(
+            List<ReferenceGrayboxSnapshot.Facility> facilities,
+            List<ReferenceGrayboxSnapshot.ResourceSite> sites,
+            List<ReferenceGrayboxSnapshot.Route> routes,
+            List<ReferenceGrayboxSnapshot.HiveOrgan> organs,
+            List<ReferenceGrayboxSnapshot.Cargo> cargoes
+    ) {
+        List<ReferenceGrayboxSnapshot.Interaction> result = new ArrayList<>();
+        for (ReferenceGrayboxSnapshot.Facility facility : facilities) {
+            if (facility.level() <= 0.0d || !Set.of("civic_hall", "workshop", "armory", "clinic", "fortification").contains(facility.kind())) continue;
+            result.add(interaction("facility:" + facility.id(), facility.id(), "facility_damaged", facility.level(), 1,
+                    ReferenceGrayboxLayout.interactionSlots(facility.rectangle(), 16), facility.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.ResourceSite site : sites) if (site.condition() > 0.0d) {
+            result.add(interaction("resource-site:" + site.id(), "site:" + site.id(), "site_damaged", site.condition(), 1,
+                    ReferenceGrayboxLayout.interactionSlots(site.rectangle(), 8), site.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.Route route : routes) if (route.capacity() > 0.0d) {
+            result.add(interaction("route:" + route.id(), route.id(), "route_damaged", route.capacity(), 3,
+                    ReferenceGrayboxLayout.routeSlots(route.start(), route.end()), route.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.HiveOrgan organ : organs) if (organ.vitality() > 0.0d) {
+            result.add(interaction("hive-organ:" + organ.id(), "organ:" + organ.id(), "organ_damaged", organ.vitality(), 2,
+                    ReferenceGrayboxLayout.interactionSlots(organ.rectangle(), 16), organ.colour()));
+        }
+        for (ReferenceGrayboxSnapshot.Cargo cargo : cargoes) {
+            result.add(interaction("cargo:" + cargo.id(), cargo.id(), "operation_cargo_lost", cargo.quantity(), 1,
+                    ReferenceGrayboxLayout.interactionSlots(cargo.rectangle(), 4), cargo.colour()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static ReferenceGrayboxSnapshot.Interaction interaction(String id, String subjectId, String kind, double weight, int yOffset,
+                                                                      List<ReferenceGrayboxLayout.Point> slots, String colour) {
+        return new ReferenceGrayboxSnapshot.Interaction(id, subjectId, kind, weight, yOffset, slots, colour);
     }
 
     private static boolean fieldCampaignTerminal(ReferenceCampaignPhase phase) {

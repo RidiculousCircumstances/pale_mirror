@@ -105,6 +105,25 @@ movement, arrival, return, exact-resident release and post-upkeep states used
 by the Java operation/field execution port. Regenerate it only with
 `tools/frontier/generate_operations_lifecycle_microtrace.py` using `python3.11`.
 
+`docs/frontier-reference-materialized-facts.json` fixes the five source-owned
+non-entity graybox facts: functional facility capacity, resource-site
+condition, route capacity, organ vitality/biomass, and one named operation
+cargo resource. The transport adapter supplies version, event identity and
+freshness; the source fact supplies only exact subject ID and weight. Regenerate
+it only with `tools/frontier/generate_materialized_facts_microtrace.py` using
+`python3.11`.
+
+The physical graybox may emit those facts only through a `Snapshot.Interaction`
+slot. A slot has the projected source subject, fact kind, revision and an exact
+share of the still-existing owner. Its coloured cube is deliberately above the
+ordinary graybox geometry, so a player can distinguish an interactable facility,
+site, route, organ or cargo pallet from descriptive construction blocks. A
+successful break consumes that slot permanently; the surviving slots are
+rebalanced against the new canonical quantity. An ordinary block break and a
+stale or rejected slot are retained as visible conflicts and never inferred as
+a source fact. Warehouse and housing rectangles remain descriptive because the
+Python model has no construction-damage owner for them.
+
 `docs/frontier-reference-v2-frontier.json` fixes V2 territorial
 recontamination, source Dijkstra supply values, supplied-cordon control and
 coordinate-targeted bioform counterattack resolution. Regenerate it only with

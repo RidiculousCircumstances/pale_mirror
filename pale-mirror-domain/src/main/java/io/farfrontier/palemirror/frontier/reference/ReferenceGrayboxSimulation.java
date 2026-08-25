@@ -51,4 +51,8 @@ public final class ReferenceGrayboxSimulation {
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxBioformObservation observation) {
         return world.observe(observation);
     }
+
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
+        return world.observe(observation);
+    }
 }

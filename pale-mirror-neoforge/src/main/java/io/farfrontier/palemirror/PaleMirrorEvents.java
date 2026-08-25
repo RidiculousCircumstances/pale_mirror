@@ -179,12 +179,12 @@ public final class PaleMirrorEvents {
         }
     }
 
-    /** Unsupported source structural perturbations remain an explicit physical conflict. */
-    @SubscribeEvent
+    /** A declared graybox interaction slot contributes its exact source fact before Minecraft removes the cube. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onFrontierBlockBreak(BlockEvent.BreakEvent event) {
-        if (event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+        if (!event.isCanceled() && event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
             SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
-            if (source.activated()) source.observeBlockBreak(level, event.getPos());
+            if (source.activated()) source.observeBlockBreak(level, event.getPos(), "player:" + player.getUUID());
         }
     }
 

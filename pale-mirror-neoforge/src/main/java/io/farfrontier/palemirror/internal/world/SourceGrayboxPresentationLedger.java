@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -24,7 +25,7 @@ import net.minecraft.world.level.saveddata.SavedData;
  */
 final class SourceGrayboxPresentationLedger extends SavedData {
     private static final String DATA_NAME = "pale_mirror_source_graybox_presentation";
-    private static final int FORMAT = 1;
+    private static final int FORMAT = 2;
     static final int MAX_CLAIMS = 10_240;
     private final LinkedHashMap<String, Claim> claims;
 
@@ -64,8 +65,16 @@ final class SourceGrayboxPresentationLedger extends SavedData {
 
     void conflict(String id) {
         Claim claim = claims.get(id);
-        if (claim == null || claim.conflicted()) return;
+        if (claim == null || claim.conflicted() || claim.consumed()) return;
         claims.put(id, claim.withConflict());
+        setDirty();
+    }
+
+    /** Records an accepted typed player fact without allowing a later refresh to recreate its slot. */
+    void consume(String id) {
+        Claim claim = claims.get(id);
+        if (claim == null || claim.consumed() || claim.conflicted() || claim.interactionKind().isEmpty()) return;
+        claims.put(id, claim.withConsumed());
         setDirty();
     }
 
@@ -83,7 +92,8 @@ final class SourceGrayboxPresentationLedger extends SavedData {
             CompoundTag value = (CompoundTag) raw;
             Claim claim = new Claim(value.getString("id"), value.getString("subject"), value.getString("kind"),
                     value.getString("revision"), value.getInt("x"), value.getInt("y"), value.getInt("z"),
-                    value.getInt("width"), value.getInt("depth"), value.getInt("height"), value.getBoolean("conflicted"));
+                    value.getInt("width"), value.getInt("depth"), value.getInt("height"), value.getBoolean("conflicted"),
+                    value.getString("interactionKind"), value.getDouble("interactionWeight"), value.getBoolean("consumed"));
             if (claims.putIfAbsent(claim.id(), claim) != null) {
                 throw new IllegalStateException("duplicate source graybox presentation claim: " + claim.id());
             }
@@ -101,7 +111,8 @@ final class SourceGrayboxPresentationLedger extends SavedData {
     }
 
     record Claim(String id, String subjectId, String kind, String revision, int x, int y, int z,
-                 int width, int depth, int height, boolean conflicted) {
+                 int width, int depth, int height, boolean conflicted, String interactionKind, double interactionWeight,
+                 boolean consumed) {
         Claim {
             required(id, "claim ID", 192);
             required(subjectId, "claim subject", 192);
@@ -110,6 +121,16 @@ final class SourceGrayboxPresentationLedger extends SavedData {
             if (width < 1 || width > 64 || depth < 1 || depth > 64 || height < 1 || height > 16) {
                 throw new IllegalArgumentException("source graybox claim dimensions are invalid");
             }
+            interactionKind = interactionKind == null ? "" : interactionKind;
+            boolean interactive = !interactionKind.isEmpty();
+            if (interactive != (Double.isFinite(interactionWeight) && interactionWeight > 0.0d)) {
+                throw new IllegalArgumentException("source graybox interaction metadata is invalid");
+            }
+            if (interactive && !Set.of("facility_damaged", "site_damaged", "route_damaged", "organ_damaged", "operation_cargo_lost")
+                    .contains(interactionKind)) {
+                throw new IllegalArgumentException("source graybox interaction kind is invalid");
+            }
+            if (consumed && !interactive) throw new IllegalArgumentException("only an interaction claim can be consumed");
         }
 
         boolean contains(BlockPos position) {
@@ -119,7 +140,11 @@ final class SourceGrayboxPresentationLedger extends SavedData {
         }
 
         Claim withConflict() {
-            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, true);
+            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, true, interactionKind, interactionWeight, false);
+        }
+
+        Claim withConsumed() {
+            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, false, interactionKind, interactionWeight, true);
         }
 
         CompoundTag save() {
@@ -135,6 +160,9 @@ final class SourceGrayboxPresentationLedger extends SavedData {
             tag.putInt("depth", depth);
             tag.putInt("height", height);
             tag.putBoolean("conflicted", conflicted);
+            tag.putString("interactionKind", interactionKind);
+            tag.putDouble("interactionWeight", interactionWeight);
+            tag.putBoolean("consumed", consumed);
             return tag;
         }
 

@@ -4,7 +4,9 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObser
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.Map;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -78,6 +80,12 @@ public final class SourceGrayboxRuntime {
         return outcome;
     }
 
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
+        ReferenceGrayboxObservationOutcome outcome = data.observe(observation);
+        if (data.activated()) publish(server.overworld());
+        return outcome;
+    }
+
     /** Reconciles one exact managed entity death in the same server event. */
     public boolean observeEntityDeath(Entity entity, String causationId) {
         SourceGrayboxMaterializer.ManagedEntity managed = SourceGrayboxMaterializer.managed(entity);
@@ -92,11 +100,22 @@ public final class SourceGrayboxRuntime {
         return outcome.applied();
     }
 
-    /** A structural change is retained as an explicit conflict until its typed source fact exists. */
-    public boolean observeBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position) {
+    /** Turns a declared physical interaction slot into the exact source fact it carries. */
+    public boolean observeBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position, String causationId) {
         SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(level, position);
         if (claim == null) return false;
-        materializer.recordBlockConflict(level, position);
+        if (claim.interactionKind().isEmpty()) {
+            materializer.recordBlockConflict(level, position);
+            return true;
+        }
+        String eventId = "source-graybox:physical-break:" + causationId + ":" + claim.id();
+        ReferenceGrayboxStructureObservation.Kind kind = ReferenceGrayboxStructureObservation.Kind.valueOf(
+                claim.interactionKind().toUpperCase(Locale.ROOT));
+        ReferenceGrayboxObservationOutcome outcome = data.observe(new ReferenceGrayboxStructureObservation(
+                ReferenceGrayboxStructureObservation.VERSION, eventId, claim.revision(), kind, claim.subjectId(), claim.interactionWeight()));
+        if (outcome.applied()) materializer.consumeBlockClaim(level, position);
+        else materializer.recordBlockConflict(level, position);
+        if (data.activated()) publish(server.overworld());
         return true;
     }
 

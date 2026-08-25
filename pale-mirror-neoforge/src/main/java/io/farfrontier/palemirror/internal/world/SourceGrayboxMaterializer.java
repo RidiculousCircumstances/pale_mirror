@@ -53,6 +53,7 @@ final class SourceGrayboxMaterializer {
             throw new IllegalStateException("source graybox projection exceeds its bounded claim ledger");
         }
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
+        rebalanceInteractionWeights(ledger, desired);
         int conflicts = retireAbsent(level, ledger, desired.keySet());
         int placed = 0;
         for (Desired item : desired.values()) if (ensure(level, ledger, item)) placed++;
@@ -76,6 +77,11 @@ final class SourceGrayboxMaterializer {
     void recordBlockConflict(ServerLevel level, BlockPos position) {
         SourceGrayboxPresentationLedger.Claim claim = claimAt(level, position);
         if (claim != null) SourceGrayboxPresentationLedger.get(level).conflict(claim.id());
+    }
+
+    void consumeBlockClaim(ServerLevel level, BlockPos position) {
+        SourceGrayboxPresentationLedger.Claim claim = claimAt(level, position);
+        if (claim != null) SourceGrayboxPresentationLedger.get(level).consume(claim.id());
     }
 
     static ManagedEntity managed(Entity entity) {
@@ -106,6 +112,9 @@ final class SourceGrayboxMaterializer {
             add(result, rectangle("hive-organ:" + organ.id(), "organ:" + organ.id(), "HIVE_ORGAN", snapshot.stateRevision(), organ.rectangle(), 2,
                     organ.colour()));
         }
+        for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
+            add(result, rectangle("cargo-pallet:" + cargo.id(), cargo.id(), "CARGO", snapshot.stateRevision(), cargo.rectangle(), 1, cargo.colour()));
+        }
         for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) {
             add(result, rectangle("field-post:" + post.id(), "field-post:" + post.id(), "FIELD_POST", snapshot.stateRevision(), post.rectangle(), 1,
                     post.colour()));
@@ -120,24 +129,17 @@ final class SourceGrayboxMaterializer {
             add(result, new Desired("chrysalis:" + chrysalis.organId(), "chrysalis:" + chrysalis.organId(), "CHRYSALIS",
                     snapshot.stateRevision(), x, SURFACE_Y, z, 4, 4, 2, chrysalis.colour()));
         }
-        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) addRouteMarkers(result, snapshot.stateRevision(), route);
+        for (ReferenceGrayboxSnapshot.Interaction interaction : snapshot.interactions()) {
+            for (int index = 0; index < interaction.slots().size(); index++) {
+                ReferenceGrayboxLayout.Point slot = interaction.slots().get(index);
+                add(result, interactionSlot(interaction, index, snapshot.stateRevision(), slot));
+            }
+        }
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) {
             if (!activity.terminal()) add(result, marker("activity:" + activity.id(), activity.id(), "ACTIVITY", snapshot.stateRevision(),
                     activity.position().x(), activity.position().z(), activity.colour()));
         }
         return result;
-    }
-
-    private static void addRouteMarkers(Map<String, Desired> desired, String revision, ReferenceGrayboxSnapshot.Route route) {
-        int dx = route.end().x() - route.start().x();
-        int dz = route.end().z() - route.start().z();
-        int steps = Math.max(1, (int) Math.ceil(Math.hypot(dx, dz) / 32.0d));
-        for (int index = 0; index <= steps; index++) {
-            double fraction = (double) index / steps;
-            int x = (int) Math.round(route.start().x() + dx * fraction);
-            int z = (int) Math.round(route.start().z() + dz * fraction);
-            add(desired, marker("route:" + route.id() + ":" + index, route.id(), "ROUTE", revision, x, z, route.colour()));
-        }
     }
 
     private static void add(Map<String, Desired> values, Desired item) {
@@ -153,9 +155,35 @@ final class SourceGrayboxMaterializer {
         return new Desired(id, subject, kind, revision, area.x(), SURFACE_Y, area.z(), area.width(), area.depth(), height, colour);
     }
 
+    private static Desired interactionSlot(ReferenceGrayboxSnapshot.Interaction interaction, int index, String revision,
+                                           ReferenceGrayboxLayout.Point slot) {
+        return new Desired("interaction:" + interaction.id() + ":" + index, interaction.subjectId(), "INTERACTION", revision,
+                slot.x(), SURFACE_Y + interaction.yOffset(), slot.z(), 1, 1, 1, interaction.colour(), interaction.id(),
+                interaction.kind(), interaction.totalWeight());
+    }
+
+    private static void rebalanceInteractionWeights(SourceGrayboxPresentationLedger ledger, Map<String, Desired> desired) {
+        Map<String, List<Desired>> grouped = new LinkedHashMap<>();
+        desired.values().stream().filter(item -> !item.interactionId().isEmpty()).forEach(item ->
+                grouped.computeIfAbsent(item.interactionId(), ignored -> new ArrayList<>()).add(item));
+        for (List<Desired> group : grouped.values()) {
+            List<Desired> active = group.stream().filter(item -> {
+                SourceGrayboxPresentationLedger.Claim prior = ledger.claim(item.id());
+                return prior == null || !prior.consumed();
+            }).toList();
+            if (active.isEmpty()) continue;
+            double weight = active.getFirst().interactionWeight() / active.size();
+            active.forEach(item -> desired.put(item.id(), item.withInteractionWeight(weight)));
+        }
+    }
+
     private static int retireAbsent(ServerLevel level, SourceGrayboxPresentationLedger ledger, Set<String> desired) {
         int conflicts = 0;
         for (SourceGrayboxPresentationLedger.Claim claim : ledger.claims()) {
+            if (claim.consumed() && !desired.contains(claim.id())) {
+                ledger.remove(claim.id());
+                continue;
+            }
             if (desired.contains(claim.id()) || claim.conflicted() || !loaded(level, claim)) continue;
             if (positions(claim).stream().anyMatch(position -> !level.getBlockState(position).isAir()
                     && !SourceGrayboxPalette.managed(level.getBlockState(position).getBlock()))) {
@@ -185,7 +213,7 @@ final class SourceGrayboxMaterializer {
 
     private static boolean ensure(ServerLevel level, SourceGrayboxPresentationLedger ledger, Desired item) {
         SourceGrayboxPresentationLedger.Claim before = ledger.claim(item.id());
-        if (before != null && (before.conflicted() || !sameFootprint(before, item))) return false;
+        if (before != null && (before.conflicted() || before.consumed() || !sameFootprint(before, item))) return false;
         List<BlockPos> positions = positions(item);
         if (!loaded(level, positions) || !flat(level, item)) return false;
         BlockState desired = SourceGrayboxPalette.block(item.colour());
@@ -208,7 +236,7 @@ final class SourceGrayboxMaterializer {
             return false;
         }
         ledger.put(new SourceGrayboxPresentationLedger.Claim(item.id(), item.subjectId(), item.kind(), item.revision(), item.x(), item.y(),
-                item.z(), item.width(), item.depth(), item.height(), false));
+                item.z(), item.width(), item.depth(), item.height(), false, item.interactionKind(), item.interactionWeight(), false));
         return true;
     }
 
@@ -264,6 +292,9 @@ final class SourceGrayboxMaterializer {
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) label(level, active, "organ:" + organ.id(),
                 "[H] " + organ.kind() + " biomass=" + number(organ.biomass()) + " vitality=" + number(organ.vitality())
                         + (organ.feral() ? " FERAL" : ""), organ.rectangle().centreX(), organ.rectangle().centreZ());
+        for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) label(level, active, "cargo:" + cargo.id(),
+                "[CARGO] op=" + cargo.operationId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
+                cargo.rectangle().centreX(), cargo.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, "route:" + route.id(),
                 "[T] " + route.id() + " capacity=" + number(route.capacity()) + " risk=" + number(route.risk())
                         + " infection=" + number(route.infection()) + (route.quarantined() ? " QUARANTINED" : route.disrupted() ? " DISRUPTED" : " OPEN"),
@@ -413,5 +444,14 @@ final class SourceGrayboxMaterializer {
     record ManagedEntity(String id, String kind, String revision) { }
     record Report(int placed, int desired, int conflicts, String revision) { }
     private record Desired(String id, String subjectId, String kind, String revision, int x, int y, int z, int width, int depth,
-                           int height, String colour) { }
+                           int height, String colour, String interactionId, String interactionKind, double interactionWeight) {
+        private Desired(String id, String subjectId, String kind, String revision, int x, int y, int z, int width, int depth,
+                        int height, String colour) {
+            this(id, subjectId, kind, revision, x, y, z, width, depth, height, colour, "", "", 0.0d);
+        }
+
+        private Desired withInteractionWeight(double weight) {
+            return new Desired(id, subjectId, kind, revision, x, y, z, width, depth, height, colour, interactionId, interactionKind, weight);
+        }
+    }
 }

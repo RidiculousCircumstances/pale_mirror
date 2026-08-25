@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationO
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
 import java.util.LinkedHashSet;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -81,6 +82,10 @@ final class SourceGrayboxSavedData extends SavedData {
     }
 
     ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxBioformObservation observation) {
+        return observe(observation.eventId(), () -> simulation.observe(observation));
+    }
+
+    ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
         return observe(observation.eventId(), () -> simulation.observe(observation));
     }
 

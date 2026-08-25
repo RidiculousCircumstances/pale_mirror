@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.reference;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -70,6 +72,14 @@ public final class ReferenceGrayboxLayout {
         return new Rectangle(cell.x() + 2, cell.z() + 2, 12, 12);
     }
 
+    /** A compact visibly separate cargo pallet near a source operation marker. */
+    public static Rectangle cargo(Point anchor, int ordinal) {
+        if (ordinal < 0 || ordinal >= 16) throw new IllegalArgumentException("cargo ordinal must be in [0, 16)");
+        int column = ordinal % 4;
+        int row = ordinal / 4;
+        return new Rectangle(anchor.x() - 7 + column * 4, anchor.z() - 7 + row * 4, 2, 2);
+    }
+
     public static Point centre(int x, int y) {
         Rectangle cell = cell(x, y);
         return new Point(cell.x() + BLOCKS_PER_CELL / 2, cell.z() + BLOCKS_PER_CELL / 2);
@@ -87,6 +97,46 @@ public final class ReferenceGrayboxLayout {
         int column = ordinal % 15;
         int row = ordinal / 15;
         return new Point(anchor.x() - 14 + column * 2, anchor.z() - 14 + row * 2);
+    }
+
+    /**
+     * Deterministic physical interaction slots for one visible source object.
+     *
+     * <p>These points belong to the source projection rather than Minecraft.
+     * The NeoForge layer merely turns each one into a coloured cube carrying a
+     * fixed share of the observation's total weight.</p>
+     */
+    public static List<Point> interactionSlots(Rectangle area, int count) {
+        if (count < 1 || count > 64) throw new IllegalArgumentException("interaction slot count is invalid");
+        int columns = (int) Math.ceil(Math.sqrt(count));
+        int rows = (int) Math.ceil((double) count / columns);
+        List<Point> result = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            int column = index % columns;
+            int row = index / columns;
+            int x = area.x() + distributed(column, columns, area.width());
+            int z = area.z() + distributed(row, rows, area.depth());
+            result.add(new Point(x, z));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalArgumentException("interaction slots do not fit their source rectangle");
+        }
+        return List.copyOf(result);
+    }
+
+    /** Readable sampled route nodes, shared by its marker and physical fact slots. */
+    public static List<Point> routeSlots(Point start, Point end) {
+        Objects.requireNonNull(start, "start");
+        Objects.requireNonNull(end, "end");
+        int dx = end.x() - start.x();
+        int dz = end.z() - start.z();
+        int steps = Math.max(1, (int) Math.ceil(Math.hypot(dx, dz) / 32.0d));
+        List<Point> result = new ArrayList<>(steps);
+        for (int index = 1; index <= steps; index++) {
+            double fraction = (double) index / (steps + 1);
+            result.add(new Point((int) Math.round(start.x() + dx * fraction), (int) Math.round(start.z() + dz * fraction)));
+        }
+        return List.copyOf(result);
     }
 
     public static Rectangle facility(Rectangle settlement, String kind) {
@@ -114,6 +164,11 @@ public final class ReferenceGrayboxLayout {
 
     private static int clamp(int value, int minimum, int maximum) {
         return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private static int distributed(int index, int total, int dimension) {
+        if (total == 1) return dimension / 2;
+        return (int) Math.round((double) index * (dimension - 1) / (total - 1));
     }
 
     public record Bounds(int minX, int minZ, int width, int depth, int groundY, int blocksPerCell) {

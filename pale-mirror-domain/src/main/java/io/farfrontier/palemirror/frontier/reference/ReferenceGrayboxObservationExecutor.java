@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.reference;
 
+import java.util.EnumMap;
+import java.util.Locale;
 import java.util.Objects;
 
 /** Applies graybox facts through the one owner that currently holds a named resident. */
@@ -64,6 +66,34 @@ final class ReferenceGrayboxObservationExecutor {
         return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical bioform custody updated", after);
     }
 
+    static ReferenceGrayboxObservationOutcome apply(
+            ReferenceWorld world,
+            ReferenceGrayboxStructureObservation observation
+    ) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        ReferenceGrayboxStructureObservation event = Objects.requireNonNull(observation, "observation");
+        ReferenceGrayboxLayout.requireSupported(required);
+        String before = ReferenceGrayboxProjection.from(required).stateRevision();
+        if (!before.equals(event.observedStateRevision())) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_STALE,
+                "observation was made against an older graybox state", before);
+
+        StructureMutation mutation = switch (event.kind()) {
+            case FACILITY_DAMAGED -> damageFacility(required, event);
+            case SITE_DAMAGED -> damageSite(required, event);
+            case ROUTE_DAMAGED -> damageRoute(required, event);
+            case ORGAN_DAMAGED -> damageOrgan(required, event);
+            case OPERATION_CARGO_LOST -> loseOperationCargo(required, event);
+        };
+        if (!mutation.applied()) return outcome(event, mutation.status(), mutation.reason(), before);
+
+        required.marketWorld().event("D" + required.day() + ": physical " + event.kind().name().toLowerCase(Locale.ROOT)
+                + " " + event.subjectId() + " weight=" + String.format(Locale.ROOT, "%.6f", mutation.appliedWeight())
+                + " (" + event.eventId() + ")");
+        required.assertProfileInvariants();
+        String after = ReferenceGrayboxProjection.from(required).stateRevision();
+        return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical structure owner updated", after);
+    }
+
     private static boolean applySettlement(ResidentOwner owner, ReferenceGrayboxResidentObservation.Kind kind) {
         return ReferenceResidentObservationMutation.apply(owner.settlement(), owner.resident().id(), kind);
     }
@@ -116,5 +146,141 @@ final class ReferenceGrayboxObservationExecutor {
         return new ReferenceGrayboxObservationOutcome(event.eventId(), status, reason, revision);
     }
 
+    private static ReferenceGrayboxObservationOutcome outcome(
+            ReferenceGrayboxStructureObservation event,
+            ReferenceGrayboxObservationOutcome.Status status,
+            String reason,
+            String revision
+    ) {
+        return new ReferenceGrayboxObservationOutcome(event.eventId(), status, reason, revision);
+    }
+
+    private static StructureMutation damageFacility(ReferenceWorld world, ReferenceGrayboxStructureObservation event) {
+        String[] parts = event.subjectId().split(":", -1);
+        if (parts.length != 4 || !parts[0].equals("settlement") || !parts[2].equals("facility")) return unknown("invalid facility subject");
+        Integer settlementId = integer(parts[1]);
+        ReferenceSettlement settlement = settlementId == null ? null : world.settlements().get(settlementId);
+        if (settlement == null) return unknown("unknown facility");
+        double before;
+        double after;
+        switch (parts[3]) {
+            case "civic_hall" -> {
+                before = settlement.integrity();
+                after = Math.max(0.0d, before - event.weight());
+                settlement.integrity(after);
+            }
+            case "workshop" -> {
+                before = settlement.facilities().workshop();
+                after = Math.max(0.0d, before - event.weight());
+                settlement.facilities().workshop(after);
+            }
+            case "armory" -> {
+                before = settlement.facilities().armory();
+                after = Math.max(0.0d, before - event.weight());
+                settlement.facilities().armory(after);
+            }
+            case "clinic" -> {
+                before = settlement.facilities().clinic();
+                after = Math.max(0.0d, before - event.weight());
+                settlement.facilities().clinic(after);
+            }
+            case "fortification" -> {
+                before = settlement.facilities().fortification();
+                after = Math.max(0.0d, before - event.weight());
+                settlement.facilities().fortification(after);
+            }
+            default -> {
+                return conflict("facility has no canonical damage owner");
+            }
+        }
+        return applied(before - after);
+    }
+
+    private static StructureMutation damageSite(ReferenceWorld world, ReferenceGrayboxStructureObservation event) {
+        Integer siteId = numericSubject(event.subjectId(), "site");
+        ReferenceResourceSite site = siteId == null ? null : world.resourceSites().get(siteId);
+        if (site == null) return unknown("unknown site");
+        double before = site.condition();
+        site.condition(Math.max(0.0d, before - event.weight()));
+        world.refreshPrimaryCapacity();
+        return applied(before - site.condition());
+    }
+
+    private static StructureMutation damageRoute(ReferenceWorld world, ReferenceGrayboxStructureObservation event) {
+        String[] parts = event.subjectId().split(":", -1);
+        if (parts.length != 3 || !parts[0].equals("route")) return unknown("invalid route subject");
+        Integer first = integer(parts[1]);
+        Integer second = integer(parts[2]);
+        if (first == null || second == null) return unknown("invalid route subject");
+        ReferenceRouteKey key = ReferenceRouteKey.between(first, second);
+        ReferenceRoute route = world.trade().routes().stream().filter(item -> item.key().equals(key)).findFirst().orElse(null);
+        if (route == null) return unknown("unknown route");
+        double before = route.capacity();
+        route.capacity(Math.max(0.0d, before - event.weight()));
+        return applied(before - route.capacity());
+    }
+
+    private static StructureMutation damageOrgan(ReferenceWorld world, ReferenceGrayboxStructureObservation event) {
+        Integer organId = numericSubject(event.subjectId(), "organ");
+        ReferenceHiveOrgan organ = organId == null ? null : world.infection().organs().get(organId);
+        if (organ == null) return unknown("unknown organ");
+        double applied = Math.min(organ.vitality(), event.weight());
+        organ.vitality(Math.max(0.0d, organ.vitality() - event.weight()));
+        organ.biomass(Math.max(0.0d, organ.biomass() - applied * .32d));
+        world.infection().recordDamage("combat", applied);
+        world.infection().removeDestroyedOrgans();
+        return applied(applied);
+    }
+
+    private static StructureMutation loseOperationCargo(ReferenceWorld world, ReferenceGrayboxStructureObservation event) {
+        String[] parts = event.subjectId().split(":", -1);
+        if (parts.length != 4 || !parts[0].equals("operation") || !parts[2].equals("cargo")) {
+            return unknown("invalid operation cargo subject");
+        }
+        Integer operationId = integer(parts[1]);
+        ReferenceResource resource;
+        try {
+            resource = ReferenceResource.valueOf(parts[3].toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return unknown("invalid operation cargo subject");
+        }
+        ReferenceOperation operation = operationId == null ? null : world.operations().active().stream()
+                .filter(item -> item.id() == operationId).findFirst().orElse(null);
+        if (operation == null) return unknown("unknown active operation");
+        EnumMap<ReferenceResource, Double> cargo = new EnumMap<>(ReferenceResource.class);
+        cargo.putAll(operation.cargo());
+        double before = cargo.getOrDefault(resource, 0.0d);
+        cargo.put(resource, Math.max(0.0d, before - event.weight()));
+        operation.cargo(cargo);
+        return applied(before - cargo.get(resource));
+    }
+
+    private static Integer numericSubject(String subject, String prefix) {
+        String[] parts = subject.split(":", -1);
+        return parts.length == 2 && parts[0].equals(prefix) ? integer(parts[1]) : null;
+    }
+
+    private static Integer integer(String value) {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static StructureMutation applied(double weight) {
+        return weight > 0.0d ? new StructureMutation(true, ReferenceGrayboxObservationOutcome.Status.APPLIED, "applied", weight)
+                : conflict("target has no remaining weight");
+    }
+
+    private static StructureMutation unknown(String reason) {
+        return new StructureMutation(false, ReferenceGrayboxObservationOutcome.Status.REJECTED_UNKNOWN, reason, 0.0d);
+    }
+
+    private static StructureMutation conflict(String reason) {
+        return new StructureMutation(false, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT, reason, 0.0d);
+    }
+
     private record ResidentOwner(ReferenceSettlement settlement, ReferenceResident resident) { }
+    private record StructureMutation(boolean applied, ReferenceGrayboxObservationOutcome.Status status, String reason, double appliedWeight) { }
 }
