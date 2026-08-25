@@ -149,6 +149,19 @@ their detailed public projection is ported; it never drops them to make a
 comparison pass. This is an exact public-read-model gate, not a substitute for
 the separate complete internal canonical-state trace required by Wave 4.
 
+`docs/frontier-reference-v2-world-view.json` pins Python's complete immutable
+`World.view()` at the same eight source V2 checkpoints. Regenerate it only
+with `tools/frontier/generate_v2_world_view_trace.py` using `python3.11`, then
+run that tool with `--check`. `ReferenceWorldView` matches the view's primitive
+shape exactly: 2,816 ecology/tissue/signal cells, settlements and facilities,
+sites, organs, bioforms, field posts/campaigns and territorial sectors. Its
+test hashes each complete view directly, and verifies the nested collections
+are immutable. Canonical JSON formats a binary64 exactly as CPython does
+(including fixed-versus-exponent spelling) and rejects non-finite values; a
+numeric representation difference therefore cannot conceal state drift. This
+view is the source-parity input boundary for a later materialization adapter,
+not that adapter itself.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve

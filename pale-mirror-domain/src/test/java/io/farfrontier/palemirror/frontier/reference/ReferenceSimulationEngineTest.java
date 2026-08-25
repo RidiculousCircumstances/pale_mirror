@@ -200,6 +200,50 @@ class ReferenceSimulationEngineTest {
         assertEquals("graybox resident snapshot is not ported", error.getMessage());
     }
 
+    @Test
+    void immutableV2WorldViewMatchesPinnedPythonSystemViewAtEveryCheckpoint() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.sourceV2());
+        Map<Integer, String> expectedDigests = Map.of(
+                0, "c14db2317465917e701e1459f587e0e5c02698b6b0e6f870ac9c9d9fa86964cc",
+                1, "33d1c22ff05b8db0793a960a1f4fd99315c3f19592331e89c3579dfaea39c7da",
+                5, "5215611702bd616f3a81d7e5d83dd3f9769f06e162f52bb7e7ad0bc36e1114c7",
+                10, "9d97fd6db925ce8a0697070832003ebf1ddf60e09e742ae93aba96296fc90d36",
+                15, "6c13be1f37f31e5ae2770c17d98b7380d690eef10df720a6afa5bc1f87b8e86f",
+                20, "5ff198ca6fd4a8b4d769a8edbc3ae0a185fb52cacc612eee2d1e9776080b5083",
+                25, "8fa5b772b13bb2efe18c88bdb51213f225fe6d24a3afa7e7c6611d0b2676fceb",
+                30, "c0b0b2785ca7d3d63972bcd281f03a82856ab75663cfc9311d14aae32c6c6153");
+
+        for (int day = 0; day <= 30; day++) {
+            String expected = expectedDigests.get(day);
+            if (expected != null) {
+                ReferenceWorldView view = ReferenceWorldView.from(world);
+                assertEquals(expected, ReferenceV2PublicSnapshot.sha256(view.canonicalProjection()), "WorldView day " + day);
+                assertThrows(UnsupportedOperationException.class, () -> view.cells().add(view.cells().getFirst()));
+            }
+            if (day < 30) world.tick();
+        }
+    }
+
+    @Test
+    void immutableV2WorldViewRejectsLegacyWorldWithoutTerritorialState() {
+        ReferenceWorld world = new ReferenceWorld(new ReferenceWorldConfig(
+                64, 44, 12, 42L, 2, false, ReferenceSimulationProfile.SOURCE_V2));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> ReferenceWorldView.from(world));
+
+        assertEquals("V2 is disabled by this reference-world config", error.getMessage());
+    }
+
+    @Test
+    void canonicalJsonUsesPythonBinary64SpellingAndRejectsNonFiniteValues() {
+        assertEquals("0.0001", ReferenceV2PublicSnapshot.pythonFloat(1.0e-4d));
+        assertEquals("1e-05", ReferenceV2PublicSnapshot.pythonFloat(1.0e-5d));
+        assertEquals("10000000.0", ReferenceV2PublicSnapshot.pythonFloat(1.0e7d));
+        assertEquals("1e+16", ReferenceV2PublicSnapshot.pythonFloat(1.0e16d));
+        assertEquals("-0.0", ReferenceV2PublicSnapshot.pythonFloat(-0.0d));
+        assertThrows(IllegalArgumentException.class, () -> ReferenceV2PublicSnapshot.pythonFloat(Double.NaN));
+    }
+
     private static void assertCheckpoint(ReferenceWorld world, Checkpoint expected) {
         ReferenceDailyWorldHistory actual = world.history().getLast();
         assertClose(expected.population(), actual.population());

@@ -309,7 +309,7 @@ public final class ReferenceV2PublicSnapshot {
         if (value == null) { target.append("null"); return; }
         if (value instanceof String string) { appendString(target, string); return; }
         if (value instanceof Boolean || value instanceof Integer || value instanceof Long) { target.append(value); return; }
-        if (value instanceof Double number) { target.append(Double.toString(number)); return; }
+        if (value instanceof Double number) { target.append(pythonFloat(number)); return; }
         if (value instanceof Map<?, ?> map) {
             target.append('{'); boolean first = true;
             List<String> keys = new ArrayList<>();
@@ -340,5 +340,36 @@ public final class ReferenceV2PublicSnapshot {
             }
         }
         target.append('"');
+    }
+
+    /** Exact CPython 3.11 {@code repr(float)} spelling used by {@code json.dumps}. */
+    static String pythonFloat(double value) {
+        if (!Double.isFinite(value)) throw new IllegalArgumentException("canonical JSON rejects non-finite double");
+        String raw = Double.toString(value);
+        int exponentMarker = raw.indexOf('E');
+        if (exponentMarker < 0) return raw;
+        boolean negative = raw.charAt(0) == '-';
+        String mantissa = negative ? raw.substring(1, exponentMarker) : raw.substring(0, exponentMarker);
+        int exponent = Integer.parseInt(raw.substring(exponentMarker + 1));
+        String digits = mantissa.replace(".", "");
+        if (exponent >= -4 && exponent < 16) {
+            int decimal = exponent + 1;
+            String fixed;
+            if (decimal <= 0) fixed = trimFraction("0." + "0".repeat(-decimal) + digits);
+            else if (decimal >= digits.length()) fixed = digits + "0".repeat(decimal - digits.length()) + ".0";
+            else fixed = trimFraction(digits.substring(0, decimal) + "." + digits.substring(decimal));
+            return negative ? "-" + fixed : fixed;
+        }
+        while (digits.length() > 1 && digits.endsWith("0")) digits = digits.substring(0, digits.length() - 1);
+        String result = digits.length() == 1 ? digits : digits.charAt(0) + "." + digits.substring(1);
+        return (negative ? "-" : "") + result + "e" + (exponent >= 0 ? "+" : "-")
+                + String.format(Locale.ROOT, "%02d", Math.abs(exponent));
+    }
+
+    private static String trimFraction(String value) {
+        int decimal = value.indexOf('.');
+        int end = value.length();
+        while (end > decimal + 1 && value.charAt(end - 1) == '0') end--;
+        return value.substring(0, end);
     }
 }

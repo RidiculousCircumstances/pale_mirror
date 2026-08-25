@@ -5,7 +5,6 @@ import java.util.Map;
 
 /** Source-port launch preconditions and costs; movement is a separate lifecycle. */
 final class ReferenceBioformExecutor {
-    private static final int MAX_SWARMS = 7;
     private static final int MAX_ACTIVE_SPORE_CARRIERS = 1;
     private static final double LAUNCH_POWER_FLOOR = 0.30d;
 
@@ -29,7 +28,7 @@ final class ReferenceBioformExecutor {
         if (readiness < minimumReadiness(source.kind())) return null;
         double cost = 0.0d;
         for (Map.Entry<ReferenceBioformKind, Double> entry : composition.entrySet()) cost += biomass(entry.getKey()) * entry.getValue();
-        if (source.biomass() < cost || model.swarms.size() >= MAX_SWARMS) return null;
+        if (source.biomass() < cost || model.swarms.size() >= ReferenceInfectionLimits.MAXIMUM_SWARMS) return null;
         if (kind == ReferenceBioformKind.SPORE_CARRIER && model.swarms.stream().filter(item -> item.kind() == ReferenceBioformKind.SPORE_CARRIER).count() >= MAX_ACTIVE_SPORE_CARRIERS) return null;
         source.biomass(source.biomass() - cost);
         double power = composition.keySet().stream().mapToDouble(ReferenceBioformExecutor::power).max().orElseThrow();

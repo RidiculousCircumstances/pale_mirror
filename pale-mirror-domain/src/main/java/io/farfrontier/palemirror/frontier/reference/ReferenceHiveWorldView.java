@@ -68,7 +68,8 @@ public record ReferenceHiveWorldView(
             ReferenceEcosystemCell ecosystem = infection.ecosystem().cell(x, y);
             cells.add(new Cell(x, y, infection.infectionAt(x, y), ecosystem.organicMass(), ecosystem.moisture(), signal.get(y).get(x)));
         }
-        return new ReferenceHiveWorldView(day, infection.width(), infection.height(), settlementViews, nestViews, swarmViews, cells, List.of(), 7);
+        return new ReferenceHiveWorldView(day, infection.width(), infection.height(), settlementViews, nestViews, swarmViews, cells,
+                List.of(), ReferenceInfectionLimits.MAXIMUM_SWARMS);
     }
 
     public Cell cell(int x, int y) {
