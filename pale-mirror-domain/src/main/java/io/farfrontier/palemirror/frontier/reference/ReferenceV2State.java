@@ -36,6 +36,9 @@ public final class ReferenceV2State {
     private final LinkedHashMap<Integer, ReferenceCivicLedger> civics = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceV2ReservePolicy> reservePolicies = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceV2RationPlan> rationPlans = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceEmergencyRegime> emergencyRegimes = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceCoalitionCharter> charters = new LinkedHashMap<>();
+    private final LinkedHashMap<ReferenceRouteKey, ReferenceRouteInsurance> routeInsurance = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceNeuralChrysalis> chrysalises = new LinkedHashMap<>();
     private final LinkedHashMap<String, ReferenceHiveLifecycle> hiveLifecycle = new LinkedHashMap<>();
 
@@ -58,6 +61,9 @@ public final class ReferenceV2State {
     public Map<Integer, ReferenceCivicLedger> civics() { return immutableOrdered(civics); }
     public Map<Integer, ReferenceV2ReservePolicy> reservePolicies() { return immutableOrdered(reservePolicies); }
     public Map<Integer, ReferenceV2RationPlan> rationPlans() { return immutableOrdered(rationPlans); }
+    public Map<Integer, ReferenceEmergencyRegime> emergencyRegimes() { return immutableOrdered(emergencyRegimes); }
+    public Map<Integer, ReferenceCoalitionCharter> charters() { return immutableOrdered(charters); }
+    public Map<ReferenceRouteKey, ReferenceRouteInsurance> routeInsurance() { return immutableOrdered(routeInsurance); }
     public Map<Integer, ReferenceNeuralChrysalis> chrysalises() { return immutableOrdered(chrysalises); }
     public Map<String, ReferenceHiveLifecycle> hiveLifecycle() { return immutableOrdered(hiveLifecycle); }
 
@@ -245,6 +251,18 @@ public final class ReferenceV2State {
                         * ReferenceV2Rules.DECAY_TISSUE_FRACTION ? ReferenceHiveLifecycle.DECAY : ReferenceHiveLifecycle.DECAPITATED);
             }
         }
+    }
+
+    /** Apply the complete source civic regime pass before market consumption. */
+    public void updateCivics(ReferenceWorld world) {
+        ReferenceV2CivicPolicy.update(world, civics, doctrines, rationPlans, emergencyRegimes, charters, routeInsurance);
+    }
+
+    /** Return the civic cap for civilian food issue; absent civic state is source-normal. */
+    public double applyRations(ReferenceWorld world, int settlementId, double foodNeed) {
+        Objects.requireNonNull(world, "world");
+        ReferenceCivicLedger civic = civics.get(settlementId);
+        return foodNeed * (civic == null ? 1.0d : civic.rationFraction());
     }
 
     private void buildSectors(ReferenceWorld world) {

@@ -56,6 +56,10 @@ public final class ReferenceEconomyEngine {
         return profile;
     }
 
+    public double foodPerPerson() {
+        return FOOD_PER_PERSON;
+    }
+
     public double humanAmount(double sourceAmount) {
         return profile.humanAmountFromSource(sourceAmount);
     }
