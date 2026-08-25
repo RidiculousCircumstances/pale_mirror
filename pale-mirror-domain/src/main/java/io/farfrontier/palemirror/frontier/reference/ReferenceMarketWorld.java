@@ -50,6 +50,16 @@ public final class ReferenceMarketWorld {
         if (amount > 0.0d) extractedBySite.merge(siteId, amount, Double::sum);
     }
     public double extractedAtSite(int siteId) { return extractedBySite.getOrDefault(siteId, 0.0d); }
+    /**
+     * Transfers this market phase's physical harvest back to the ecology owner.
+     * The pending values are not a second stock ledger and must be drained once
+     * by the source-order world engine before the next market day.
+     */
+    Map<Integer, Double> drainHumanExtractions() {
+        Map<Integer, Double> result = Map.copyOf(extractedBySite);
+        extractedBySite.clear();
+        return result;
+    }
 
     public void addSettlement(ReferenceSettlement settlement) {
         ReferenceSettlement required = Objects.requireNonNull(settlement, "settlement");

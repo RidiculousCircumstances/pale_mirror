@@ -15,7 +15,8 @@ import java.util.Objects;
  * <p>This is canonical domain state, not a Minecraft-world adapter. It owns
  * the three named random streams and composes the market-facing child world
  * without duplicating settlements, sites, routes, or events. The V2 root owns
- * its isolated territorial-cognition stream; daily phases attach later.</p>
+ * its isolated territorial-cognition stream. Its application-owned engine is
+ * the only legal source-order daily transition.</p>
  */
 public final class ReferenceWorld {
     private static final long INFECTION_SEED_OFFSET = 1_000L;
@@ -53,7 +54,6 @@ public final class ReferenceWorld {
             "Green", "Iron", "River", "Stone", "Pine", "North", "Ash", "Red", "High", "Lake", "East", "Old", "Silver", "Black"
     };
     private static final String[] SETTLEMENT_SUFFIXES = {"field", "hill", "ford", "haven", "gate", "watch", "reach", "stead"};
-
     private final ReferenceWorldConfig config;
     private final ReferenceSimulationProfile profile;
     private final PythonRandom rng;
@@ -66,6 +66,8 @@ public final class ReferenceWorld {
     private final ReferenceFieldWarfare field;
     private final ReferenceMarketWorld marketWorld;
     private final ReferenceV2State v2;
+    private final ReferenceSimulationEngine engine;
+    private final ReferenceWorldDiagnostics diagnostics;
     private int day;
 
     public ReferenceWorld(ReferenceWorldConfig config) {
@@ -89,6 +91,9 @@ public final class ReferenceWorld {
         initializeStocks();
         microeconomy.bootstrap(marketWorld);
         v2 = config.v2() ? new ReferenceV2State(this) : null;
+        engine = new ReferenceSimulationEngine();
+        diagnostics = new ReferenceWorldDiagnostics();
+        recordHistory();
     }
 
     public ReferenceWorldConfig config() { return config; }
@@ -112,6 +117,50 @@ public final class ReferenceWorld {
     public Map<Integer, ReferenceSettlement> settlements() { return Collections.unmodifiableMap(new LinkedHashMap<>(marketWorld.settlements())); }
     public Map<Integer, ReferenceResourceSite> resourceSites() { return Collections.unmodifiableMap(new LinkedHashMap<>(marketWorld.resourceSites())); }
     public List<String> events() { return marketWorld.events(); }
+    public List<ReferenceDailyWorldHistory> history() { return diagnostics.history(); }
+    public Map<Integer, List<ReferenceDailySettlementHistory>> settlementHistory() { return diagnostics.settlementHistory(); }
+    public List<ReferenceCombatReceipt> combatHistory() { return diagnostics.combatHistory(); }
+    public List<ReferenceContainmentReceipt> containmentHistory() { return diagnostics.containmentHistory(); }
+
+    /** Advance the canonical source-profile state by exactly one simulation day. */
+    public void tick() { engine.tick(this); }
+
+    /** Compatibility entry point for callers that already name the source phase transition. */
+    public void runPhases() { engine.runPhases(this); }
+
+    /** Stop at the first all-settlement collapse just as Python {@code World.run} does. */
+    public void run(int days) {
+        if (days < 0) throw new IllegalArgumentException("days must be non-negative");
+        for (int index = 0; index < days; index++) {
+            tick();
+            if (marketWorld.settlements().values().stream().noneMatch(ReferenceSettlement::alive)) break;
+        }
+    }
+
+    void recordCombat(ReferenceCombatReceipt receipt) {
+        diagnostics.recordCombat(receipt);
+    }
+
+    void recordContainment(ReferenceContainmentReceipt receipt) {
+        diagnostics.recordContainment(receipt);
+    }
+
+    /** Source diagnostic history written after all daily irreversible changes. */
+    void recordHistory() {
+        diagnostics.recordHistory(this);
+    }
+
+    /**
+     * Exact graybox custody invariant from Python {@code World}.
+     *
+     * <p>A person may be in their settlement, one active operation, one field
+     * post, or one V2 campaign, but never a pair of those owners. This is the
+     * prerequisite for accepting a physical Villager observation as a precise
+     * domain perturbation rather than guessing at a cohort.</p>
+     */
+    void assertProfileInvariants() {
+        ReferenceProfileInvariants.assertValid(this);
+    }
 
     private void generateSettlements() {
         List<ReferenceGridPosition> existing = new ArrayList<>();

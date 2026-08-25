@@ -120,6 +120,14 @@ the time-critical chrysalis charter and the supplied-front authorisation that
 follows it. Regenerate it only with
 `tools/frontier/generate_v2_human_planner_microtrace.py` using `python3.11`.
 
+`docs/frontier-reference-daily-engine.json` fixes one complete V2 day: ecology,
+already-issued movement, territory/perception/civics, company market, trade
+infection, new human/hive plans, demography and the final diagnostics. Regenerate
+it only with `tools/frontier/generate_daily_engine_microtrace.py` using
+`python3.11`. The Java coordinator also transfers per-day farm/forest extraction
+back to ecology and rejects a legacy daily tick until its separate strategist
+has been ported; neither concern may be replaced by a silent fallback.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve

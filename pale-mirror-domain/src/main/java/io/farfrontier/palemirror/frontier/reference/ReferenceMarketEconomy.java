@@ -367,8 +367,13 @@ public final class ReferenceMarketEconomy {
         settlement.recordProduction(output, amount);
     }
 
-    private static EnumMap<ReferenceResource, Double> inputs(Object... values) {
-        EnumMap<ReferenceResource, Double> result = new EnumMap<>(ReferenceResource.class);
+    /**
+     * Preserve Python recipe declaration order: withdrawals mutate shared local
+     * inventories, so an enum's natural order would change a later input's
+     * availability and therefore the deterministic market outcome.
+     */
+    private static Map<ReferenceResource, Double> inputs(Object... values) {
+        LinkedHashMap<ReferenceResource, Double> result = new LinkedHashMap<>();
         for (int index = 0; index < values.length; index += 2) result.put((ReferenceResource) values[index], (Double) values[index + 1]);
         return result;
     }
