@@ -176,6 +176,31 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void fortificationIsAPerimeterAndDoesNotPaintOverFunctionalBuildings(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        prepareFlatFloor(helper, anchor, 56);
+        ReferenceGrayboxSnapshot snapshot = settlementFixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot());
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        materializer.apply(helper.getLevel(), snapshot);
+
+        ReferenceGrayboxSnapshot.Facility workshop = snapshot.facilities().stream()
+                .filter(value -> value.kind().equals("workshop")).findFirst().orElseThrow();
+        ReferenceGrayboxSnapshot.Facility fortification = snapshot.facilities().stream()
+                .filter(value -> value.kind().equals("fortification")).findFirst().orElseThrow();
+        BlockPos workshopBlock = new BlockPos(workshop.rectangle().centreX(), ReferenceGrayboxLayout.GROUND_Y, workshop.rectangle().centreZ());
+        BlockPos wallBlock = new BlockPos(fortification.rectangle().x(), ReferenceGrayboxLayout.GROUND_Y, fortification.rectangle().z());
+        helper.assertValueEqual(helper.getLevel().getBlockState(workshopBlock).getBlock(), Blocks.BLUE_WOOL,
+                "a functional workshop must retain its own readable colour inside a fortified settlement");
+        helper.assertValueEqual(helper.getLevel().getBlockState(wallBlock).getBlock(), Blocks.CYAN_WOOL,
+                "fortification must be a visible perimeter rather than a filled overlay");
+        helper.assertValueEqual(materializer.claimAt(helper.getLevel(), workshopBlock).subjectId(), workshop.id(),
+                "a building's physical block must resolve to the functional facility, not to fortification");
+        helper.assertValueEqual(materializer.claimAt(helper.getLevel(), wallBlock).subjectId(), fortification.id(),
+                "a perimeter block must retain the fortification source identity");
+        helper.succeed();
+    }
+
     private static void prepareFlatFloor(GameTestHelper helper, BlockPos anchor, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
             helper.getLevel().setBlock(anchor.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
@@ -233,5 +258,17 @@ public final class SourceGrayboxMaterializerGameTests {
                 List.of(new ReferenceGrayboxSnapshot.Interaction("field-link:" + linkId, "field_link:" + linkId, "field_link_damaged",
                         link.integrity(), 2, slots, link.colour())),
                 List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot settlementFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
+        ReferenceGrayboxLayout.Rectangle settlement = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 48, 48);
+        ReferenceGrayboxLayout.Rectangle workshop = ReferenceGrayboxLayout.facility(settlement, "workshop");
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(new ReferenceGrayboxSnapshot.Facility("fixture:settlement:workshop", 1, "workshop", workshop, 1.0d,
+                                "facility.workshop"),
+                        new ReferenceGrayboxSnapshot.Facility("fixture:settlement:fortification", 1, "fortification", settlement, 1.0d,
+                                "facility.fortification")),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
     }
 }

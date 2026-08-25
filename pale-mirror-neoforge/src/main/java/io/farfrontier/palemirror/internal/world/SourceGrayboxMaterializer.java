@@ -100,8 +100,12 @@ final class SourceGrayboxMaterializer {
                     snapshot.stateRevision(), cell.rectangle().x() + 1, cell.rectangle().z() + 1, cell.colour()));
         }
         for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) {
-            add(result, rectangle("facility:" + facility.id(), facility.id(), "FACILITY", snapshot.stateRevision(), facility.rectangle(), 1,
-                    facility.colour()));
+            if (facility.kind().equals("fortification")) {
+                addFortification(result, snapshot.stateRevision(), facility);
+            } else {
+                add(result, rectangle("facility:" + facility.id(), facility.id(), "FACILITY", snapshot.stateRevision(), facility.rectangle(), 1,
+                        facility.colour()));
+            }
         }
         for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) {
             add(result, rectangle("resource-site:" + site.id(), "site:" + site.id(), "RESOURCE_SITE", snapshot.stateRevision(), site.rectangle(), 1,
@@ -159,6 +163,26 @@ final class SourceGrayboxMaterializer {
     private static Desired rectangle(String id, String subject, String kind, String revision, ReferenceGrayboxLayout.Rectangle area,
                                      int height, String colour) {
         return new Desired(id, subject, kind, revision, area.x(), SURFACE_Y, area.z(), area.width(), area.depth(), height, colour);
+    }
+
+    /**
+     * A fortification is a perimeter, not a filled foundation that hides the
+     * named buildings it protects.  The source owns a single facility; the
+     * four presentation segments deliberately retain that one semantic owner.
+     */
+    private static void addFortification(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Facility facility) {
+        ReferenceGrayboxLayout.Rectangle area = facility.rectangle();
+        String id = "facility:" + facility.id();
+        add(result, new Desired(id + ":north", facility.id(), "FACILITY_FORTIFICATION", revision,
+                area.x(), SURFACE_Y, area.z(), area.width(), 1, 1, facility.colour()));
+        add(result, new Desired(id + ":south", facility.id(), "FACILITY_FORTIFICATION", revision,
+                area.x(), SURFACE_Y, area.z() + area.depth() - 1, area.width(), 1, 1, facility.colour()));
+        if (area.depth() > 2) {
+            add(result, new Desired(id + ":west", facility.id(), "FACILITY_FORTIFICATION", revision,
+                    area.x(), SURFACE_Y, area.z() + 1, 1, area.depth() - 2, 1, facility.colour()));
+            add(result, new Desired(id + ":east", facility.id(), "FACILITY_FORTIFICATION", revision,
+                    area.x() + area.width() - 1, SURFACE_Y, area.z() + 1, 1, area.depth() - 2, 1, facility.colour()));
+        }
     }
 
     private static Desired interactionSlot(ReferenceGrayboxSnapshot.Interaction interaction, int index, String revision,

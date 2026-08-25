@@ -130,6 +130,13 @@ stale or rejected slot are retained as visible conflicts and never inferred as
 a source fact. Warehouse and housing rectangles remain descriptive because the
 Python model has no construction-damage owner for them.
 
+A settlement fortification is projected as a coloured perimeter, never as a
+solid slab over the settlement footprint. The perimeter retains the one
+`fortification` source subject, while civic hall, workshop, armory, clinic,
+warehouse and housing retain their own coloured rectangles inside it. This is
+a presentation rule only; it cannot add a second construction owner or change
+the facility fact carried by interaction slots.
+
 `docs/frontier-reference-v2-frontier.json` fixes V2 territorial
 recontamination, source Dijkstra supply values, supplied-cordon control and
 coordinate-targeted bioform counterattack resolution. Regenerate it only with
