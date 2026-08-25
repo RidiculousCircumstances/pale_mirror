@@ -130,6 +130,11 @@ public final class ReferenceWorld {
     /** Compatibility entry point for callers that already name the source phase transition. */
     public void runPhases() { engine.runPhases(this); }
 
+    /** Apply one typed, revision-checked materialized Villager fact to its canonical owner. */
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxResidentObservation observation) {
+        return ReferenceGrayboxObservationExecutor.apply(this, observation);
+    }
+
     /** Stop at the first all-settlement collapse just as Python {@code World.run} does. */
     public void run(int days) {
         if (days < 0) throw new IllegalArgumentException("days must be non-negative");

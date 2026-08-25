@@ -193,6 +193,24 @@ final class ReferenceV2Frontier {
         return true;
     }
 
+    /** Frontier campaigns have no wounded-custody lane, so only an exact death is legal here. */
+    static boolean applyExactResidentObservation(
+            ReferenceFrontCampaign campaign,
+            ReferenceSettlement settlement,
+            String residentId,
+            ReferenceGrayboxResidentObservation.Kind kind
+    ) {
+        if (kind != ReferenceGrayboxResidentObservation.Kind.KILLED) return false;
+        List<String> residents = new ArrayList<>(campaign.mutableResidentIdsBySettlement().getOrDefault(settlement.id(), List.of()));
+        if (!residents.contains(residentId)
+                || !ReferenceResidentObservationMutation.apply(settlement, residentId, kind)) return false;
+        residents.remove(residentId);
+        campaign.mutableResidentIdsBySettlement().put(settlement.id(), residents);
+        campaign.mutablePersonnelBySettlement().put(settlement.id(), (double) residents.size());
+        campaign.mutableUnitCompositionBySettlement().put(settlement.id(), composition(settlement, residents));
+        return true;
+    }
+
     static ReferenceSupplyLineStatus supplyLine(ReferenceV2State state, ReferenceWorld world, ReferenceFrontCampaign campaign) {
         ReferenceSettlement leader = world.settlements().get(campaign.leaderId());
         if (leader == null) throw new IllegalStateException("front campaign leader is absent: " + campaign.leaderId());

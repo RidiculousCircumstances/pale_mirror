@@ -25,9 +25,9 @@ public final class ReferenceGrayboxProjection {
         ReferenceGrayboxLayout.requireSupported(required);
         ReferenceWorldView view = ReferenceWorldView.from(required);
         Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas = settlementAreas(required);
-        Map<Integer, ReferenceGrayboxLayout.Point> operationPositions = operationPositions(required);
-        Map<Integer, ReferenceGrayboxLayout.Point> postPositions = postPositions(required);
         Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas = sectorAreas(required.v2());
+        Map<Integer, ReferenceGrayboxLayout.Point> operationPositions = operationPositions(required, sectorAreas);
+        Map<Integer, ReferenceGrayboxLayout.Point> postPositions = postPositions(required);
 
         List<ReferenceGrayboxSnapshot.Cell> cells = cells(view);
         List<ReferenceGrayboxSnapshot.Settlement> settlements = settlements(required, settlementAreas);
@@ -242,9 +242,16 @@ public final class ReferenceGrayboxProjection {
         return Map.copyOf(result);
     }
 
-    private static Map<Integer, ReferenceGrayboxLayout.Point> operationPositions(ReferenceWorld world) {
+    private static Map<Integer, ReferenceGrayboxLayout.Point> operationPositions(
+            ReferenceWorld world, Map<String, ReferenceGrayboxLayout.Rectangle> sectorAreas
+    ) {
         Map<Integer, ReferenceGrayboxLayout.Point> result = new LinkedHashMap<>();
         for (ReferenceOperation operation : allOperations(world)) result.put(operation.id(), ReferenceGrayboxLayout.position(operation.x(), operation.y()));
+        for (ReferenceFrontCampaign campaign : world.v2().frontCampaigns().values()) {
+            if (campaign.residentIdsBySettlement().isEmpty()) continue;
+            ReferenceGrayboxLayout.Rectangle sector = requiredArea(sectorAreas, campaign.targetSector());
+            result.put(1_000_000 + campaign.id(), centre(sector));
+        }
         return Map.copyOf(result);
     }
 

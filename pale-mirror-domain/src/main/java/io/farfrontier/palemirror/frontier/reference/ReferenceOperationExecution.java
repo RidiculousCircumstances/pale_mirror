@@ -199,6 +199,45 @@ final class ReferenceOperationExecution {
         return new ReferenceCasualtyResult(actualKilled, actualWounded);
     }
 
+    /** Apply one validated materialized resident event without resampling any other person. */
+    static boolean applyExactResidentObservation(
+            ReferenceWorld world,
+            ReferenceOperation operation,
+            ReferenceSettlement settlement,
+            String residentId,
+            ReferenceGrayboxResidentObservation.Kind kind
+    ) {
+        List<String> active = new ArrayList<>(operation.mutableResidentIdsBySettlement()
+                .getOrDefault(settlement.id(), List.of()));
+        List<String> wounded = new ArrayList<>(operation.mutableWoundedResidentIdsBySettlement()
+                .getOrDefault(settlement.id(), List.of()));
+        boolean isActive = active.contains(residentId);
+        boolean isWounded = wounded.contains(residentId);
+        if (!isActive && !isWounded) return false;
+        ReferenceResident resident = settlement.residents().resident(residentId);
+        if (resident == null) return false;
+        ReferenceHumanUnitKind role = roleFor(resident.deploymentRole());
+
+        if (kind == ReferenceGrayboxResidentObservation.Kind.KILLED) {
+            if (!ReferenceResidentObservationMutation.apply(settlement, residentId, kind)) return false;
+            active.remove(residentId);
+            wounded.remove(residentId);
+            if (isActive) operation.mutableUnitLosses().merge(role, 1.0d, Double::sum);
+        } else {
+            if (!isActive || !ReferenceResidentObservationMutation.apply(settlement, residentId, kind)) return false;
+            active.remove(residentId);
+            wounded.add(residentId);
+            wounded.sort(String::compareTo);
+            operation.mutableUnitLosses().merge(role, 1.0d, Double::sum);
+        }
+        operation.mutableResidentIdsBySettlement().put(settlement.id(), active);
+        operation.mutableWoundedResidentIdsBySettlement().put(settlement.id(), unique(wounded));
+        operation.mutableEvacuatedWoundedBySettlement().put(settlement.id(),
+                (double) operation.mutableWoundedResidentIdsBySettlement().get(settlement.id()).size());
+        syncDiscreteContributor(world, operation, settlement.id());
+        return true;
+    }
+
     private static void resolveHumanArrival(ReferenceOperationManager manager, ReferenceWorld world, ReferenceOperation operation) {
         operation.phase(ReferenceFormationPhase.MAIN_ACTION);
         ReferenceOperationManager.targetPosition(world, operation.target()).ifPresent(position -> {

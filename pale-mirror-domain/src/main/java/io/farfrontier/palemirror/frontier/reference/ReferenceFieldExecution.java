@@ -299,6 +299,35 @@ final class ReferenceFieldExecution {
         }
     }
 
+    /** Apply one validated materialized resident event to its exact field-post custody. */
+    static boolean applyExactResidentObservation(
+            ReferenceFieldPost post,
+            ReferenceSettlement settlement,
+            String residentId,
+            ReferenceGrayboxResidentObservation.Kind kind
+    ) {
+        List<String> active = new ArrayList<>(post.mutableResidentIdsBySettlement().getOrDefault(settlement.id(), List.of()));
+        List<String> wounded = new ArrayList<>(post.mutableWoundedResidentIdsBySettlement().getOrDefault(settlement.id(), List.of()));
+        boolean isActive = active.contains(residentId);
+        boolean isWounded = wounded.contains(residentId);
+        if (!isActive && !isWounded) return false;
+        boolean changed = kind == ReferenceGrayboxResidentObservation.Kind.KILLED
+                ? ReferenceResidentObservationMutation.apply(settlement, residentId, kind)
+                : isActive && ReferenceResidentObservationMutation.apply(settlement, residentId, kind);
+        if (!changed) return false;
+        active.remove(residentId);
+        wounded.remove(residentId);
+        if (kind == ReferenceGrayboxResidentObservation.Kind.WOUNDED) {
+            wounded.add(residentId);
+            wounded.sort(String::compareTo);
+        }
+        post.mutableResidentIdsBySettlement().put(settlement.id(), active);
+        post.mutableWoundedResidentIdsBySettlement().put(settlement.id(), merge(List.of(), wounded));
+        post.mutableGarrisonBySettlement().put(settlement.id(), (double) active.size());
+        post.mutableWoundedBySettlement().put(settlement.id(), (double) wounded.size());
+        return true;
+    }
+
     private static void applyOperationLosses(ReferenceWorld world, ReferenceOperation operation, double killed, double wounded) {
         double total = Math.max(1.0e-9d, operation.personnelBySettlement().values().stream().mapToDouble(Double::doubleValue).sum());
         for (Map.Entry<Integer, Double> entry : List.copyOf(operation.personnelBySettlement().entrySet())) {

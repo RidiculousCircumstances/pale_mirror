@@ -280,6 +280,7 @@ public final class ReferenceSettlement {
         syncResidentProjection();
         return wounded.size();
     }
+
     public ReferenceCasualtyResult applyExposedCasualties(
             Iterable<String> ids,
             double killedExpected,
@@ -466,7 +467,7 @@ public final class ReferenceSettlement {
         values.forEach(result::add);
         return result;
     }
-    private void syncResidentProjection() {
+    void syncResidentProjection() {
         residents.assertValid();
         population = residents.size();
         woundedPersonnel = residents.woundedIds().size();
