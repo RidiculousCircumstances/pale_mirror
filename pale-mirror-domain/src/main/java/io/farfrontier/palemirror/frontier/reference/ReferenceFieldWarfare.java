@@ -23,10 +23,10 @@ public final class ReferenceFieldWarfare {
     private final LinkedHashMap<Integer, ReferenceFieldEngagement> engagements = new LinkedHashMap<>();
     private final java.util.ArrayList<ReferenceFieldCampaign> completedCampaigns = new java.util.ArrayList<>();
     private final java.util.ArrayList<ReferenceFieldEngagement> completedEngagements = new java.util.ArrayList<>();
-    private int nextPostId = 1;
-    private int nextLinkId = 1;
-    private int nextCampaignId = 1;
-    private int nextEngagementId = 1;
+    int nextPostId = 1;
+    int nextLinkId = 1;
+    int nextCampaignId = 1;
+    int nextEngagementId = 1;
 
     public Map<Integer, ReferenceFieldPost> posts() { return immutableOrdered(posts); }
     public Map<Integer, ReferenceFieldLink> links() { return immutableOrdered(links); }
