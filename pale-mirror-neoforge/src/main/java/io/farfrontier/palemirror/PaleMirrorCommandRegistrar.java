@@ -65,7 +65,16 @@ final class PaleMirrorCommandRegistrar {
                 })));
         frontier.then(Commands.literal("activate_graybox").requires(source -> source.hasPermission(4)).executes(context -> {
             SourceGrayboxRuntime.forServer(context.getSource().getServer()).activate();
-            context.getSource().sendSuccess(() -> Component.literal("Source-parity Frontier graybox activated for this world."), true);
+            context.getSource().sendSuccess(() -> Component.literal("Source-parity Frontier graybox activated in pale_mirror:frontier_graybox."), true);
+            return 1;
+        }));
+        frontier.then(Commands.literal("enter_graybox").executes(context -> {
+            if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
+                context.getSource().sendFailure(Component.literal("Only a player can enter the source graybox."));
+                return 0;
+            }
+            SourceGrayboxRuntime.forServer(context.getSource().getServer()).enter(player);
+            context.getSource().sendSuccess(() -> Component.literal("Entered pale_mirror:frontier_graybox."), false);
             return 1;
         }));
         root.then(frontier);

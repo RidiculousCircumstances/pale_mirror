@@ -147,6 +147,17 @@ black is destroyed, abandoned or severe feral state; grey is neutral or purely
 descriptive. Source labels retain exact IDs and values, so colour never
 replaces the domain fact it represents.
 
+The physical profile lives only in the disposable data-driven
+`pale_mirror:frontier_graybox` dimension. The Far Frontier deployment owns its
+world datapack because level stems have to exist before a world is created; it
+supplies an unfeatured light-grey flat surface ending at Y=63, so the immutable
+layout's first-air materialization datum remains Y=64. `/pale_mirror frontier
+activate_graybox` sets the 1024-block border in that dimension only; it must
+fail rather than flatten, force-load or claim the ordinary overworld.
+`/pale_mirror frontier enter_graybox` is the explicit operator transport for
+manual testing. A world made before that datapack was installed is intentionally
+incompatible with this disposable profile and must be recreated.
+
 `docs/frontier-reference-v2-frontier.json` fixes V2 territorial
 recontamination, source Dijkstra supply values, supplied-cordon control and
 coordinate-targeted bioform counterattack resolution. Regenerate it only with

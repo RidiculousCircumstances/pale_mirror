@@ -28,4 +28,17 @@ public final class SourceGrayboxWorldBoundaryGameTests {
                 "source graybox activation must restore the 1024-block arena");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-source-graybox-boundary", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void missingDedicatedDimensionFailsClosedRatherThanUsingTheTestOverworld(GameTestHelper helper) {
+        boolean rejected = false;
+        try {
+            SourceGrayboxWorldBoundary.level(helper.getLevel().getServer());
+        } catch (IllegalStateException expected) {
+            rejected = expected.getMessage().equals("source graybox dimension is unavailable");
+        }
+        helper.assertTrue(rejected,
+                "a missing dedicated graybox level must reject activation rather than claiming the ordinary test overworld");
+        helper.succeed();
+    }
 }

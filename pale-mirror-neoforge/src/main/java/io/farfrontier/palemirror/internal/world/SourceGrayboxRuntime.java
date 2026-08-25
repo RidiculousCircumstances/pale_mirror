@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
@@ -10,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 
 /** Server-thread scheduler and SavedData owner for the source-parity graybox. */
@@ -39,25 +41,25 @@ public final class SourceGrayboxRuntime {
     /** Returns true only after the source graybox has become the active campaign clock. */
     public boolean tick() {
         if (!data.activated()) return false;
-        ServerLevel overworld = server.overworld();
-        long gameTime = overworld.getGameTime();
+        ServerLevel graybox = grayboxLevel();
+        long gameTime = graybox.getGameTime();
         int advanced = data.advanceDueDays(gameTime, DAY_INTERVAL_TICKS, MAXIMUM_CATCH_UP_DAYS);
-        if (advanced > 0 || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) publish(overworld);
+        if (advanced > 0 || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) publish(graybox);
         return true;
     }
 
     /** Explicit activation prevents a legacy campaign clock and source clock from running together. */
     public ReferenceGrayboxSnapshot activate() {
-        ServerLevel overworld = server.overworld();
-        SourceGrayboxWorldBoundary.enforce(overworld);
-        data.activate(overworld.getGameTime());
-        publish(overworld);
+        ServerLevel graybox = grayboxLevel();
+        SourceGrayboxWorldBoundary.enforce(graybox);
+        data.activate(graybox.getGameTime());
+        publish(graybox);
         return data.snapshot();
     }
 
     public void advance(int days) {
         data.advance(days);
-        if (data.activated()) publish(server.overworld());
+        if (data.activated()) publish(grayboxLevel());
     }
 
     public ReferenceGrayboxSnapshot snapshot() {
@@ -70,24 +72,25 @@ public final class SourceGrayboxRuntime {
 
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxResidentObservation observation) {
         ReferenceGrayboxObservationOutcome outcome = data.observe(observation);
-        if (data.activated()) publish(server.overworld());
+        if (data.activated()) publish(grayboxLevel());
         return outcome;
     }
 
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxBioformObservation observation) {
         ReferenceGrayboxObservationOutcome outcome = data.observe(observation);
-        if (data.activated()) publish(server.overworld());
+        if (data.activated()) publish(grayboxLevel());
         return outcome;
     }
 
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
         ReferenceGrayboxObservationOutcome outcome = data.observe(observation);
-        if (data.activated()) publish(server.overworld());
+        if (data.activated()) publish(grayboxLevel());
         return outcome;
     }
 
     /** Reconciles one exact managed entity death in the same server event. */
     public boolean observeEntityDeath(Entity entity, String causationId) {
+        if (!data.activated() || entity.level() != grayboxLevel()) return false;
         SourceGrayboxMaterializer.ManagedEntity managed = SourceGrayboxMaterializer.managed(entity);
         if (managed == null) return false;
         String eventId = "source-graybox:physical-death:" + causationId + ":" + entity.getUUID();
@@ -96,12 +99,13 @@ public final class SourceGrayboxRuntime {
             case "BIOFORM" -> data.observe(ReferenceGrayboxBioformObservation.killed(eventId, managed.revision(), managed.id()));
             default -> throw new IllegalStateException("unreachable managed entity kind");
         };
-        if (data.activated()) publish(server.overworld());
+        publish(grayboxLevel());
         return outcome.applied();
     }
 
     /** Turns a declared physical interaction slot into the exact source fact it carries. */
     public boolean observeBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position, String causationId) {
+        if (!data.activated() || level != grayboxLevel()) return false;
         SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(level, position);
         if (claim == null) return false;
         if (claim.interactionKind().isEmpty()) {
@@ -115,15 +119,26 @@ public final class SourceGrayboxRuntime {
                 ReferenceGrayboxStructureObservation.VERSION, eventId, claim.revision(), kind, claim.subjectId(), claim.interactionWeight()));
         if (outcome.applied()) materializer.consumeBlockClaim(level, position);
         else materializer.recordBlockConflict(level, position);
-        if (data.activated()) publish(server.overworld());
+        publish(grayboxLevel());
         return true;
+    }
+
+    /** Explicit operator transport makes the disposable arena discoverable without touching the overworld. */
+    public void enter(ServerPlayer player) {
+        ServerLevel graybox = grayboxLevel();
+        player.teleportTo(graybox, 0.5d, ReferenceGrayboxLayout.GROUND_Y + 1.0d, 0.5d, player.getYRot(), player.getXRot());
     }
 
     public String status() {
         ReferenceGrayboxSnapshot snapshot = data.snapshot();
         return "profile=" + snapshot.profileId() + ", day=" + snapshot.day() + ", settlements=" + snapshot.settlements().size()
                 + ", residents=" + snapshot.residents().size() + ", organs=" + snapshot.hiveOrgans().size()
-                + ", bioforms=" + snapshot.bioforms().size() + ", materialization=" + (data.activated() ? "ACTIVE" : "DISABLED");
+                + ", bioforms=" + snapshot.bioforms().size() + ", dimension=" + SourceGrayboxWorldBoundary.DIMENSION.location()
+                + ", materialization=" + (data.activated() ? "ACTIVE" : "DISABLED");
+    }
+
+    private ServerLevel grayboxLevel() {
+        return SourceGrayboxWorldBoundary.level(server);
     }
 
     private void publish(ServerLevel level) {
