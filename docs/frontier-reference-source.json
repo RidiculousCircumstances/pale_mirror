@@ -3,11 +3,11 @@
   "source": {
     "project": "pale_mirror_ai",
     "active_root": "/home/rd/proj/pale_mirror_ai",
-    "tree_sha256": "bf7eb88497f9e48ad39186b1dfd7a59668ad6182e3acb414f0d16f3935d4ad03",
+    "tree_sha256": "6e60c43b37295d4aabc1e573662dae659f0b937526221abe218b52d28b0d6299",
     "required_files": {
       "simulation/balance.py": "ca747a49bf43e23120dd3bcc1ec259b123e91c5b2f7bcdc4d6fffc6f5f4ef6f2",
       "simulation/v2.py": "82224fbbf6fd0292c7d8f9c438af48a60e83eedb3a550b1f55acecbe4c2b864f",
-      "simulation/world.py": "90e0c3c0112ea0695651e05a3ae9d09e709f4049dcb24393782b4af1c1b51610"
+      "simulation/world.py": "a81254770170cba9d075ec1b1449641cdb962a1b38f6c4a8352a4ae1fda973b3"
     }
   },
   "runtime": {
