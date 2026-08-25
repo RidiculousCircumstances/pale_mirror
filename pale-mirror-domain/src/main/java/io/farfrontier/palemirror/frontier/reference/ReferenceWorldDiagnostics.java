@@ -34,6 +34,30 @@ final class ReferenceWorldDiagnostics {
     List<ReferenceCombatReceipt> combatHistory() { return List.copyOf(combatHistory); }
     List<ReferenceContainmentReceipt> containmentHistory() { return List.copyOf(containmentHistory); }
 
+    void restoreState(
+            List<ReferenceDailyWorldHistory> restoredHistory,
+            Map<Integer, List<ReferenceDailySettlementHistory>> restoredSettlementHistory,
+            List<ReferenceCombatReceipt> restoredCombatHistory,
+            List<ReferenceContainmentReceipt> restoredContainmentHistory
+    ) {
+        List<ReferenceDailyWorldHistory> historyRequired = List.copyOf(Objects.requireNonNull(restoredHistory, "restoredHistory"));
+        Map<Integer, List<ReferenceDailySettlementHistory>> settlementsRequired = Map.copyOf(Objects.requireNonNull(restoredSettlementHistory, "restoredSettlementHistory"));
+        List<ReferenceCombatReceipt> combatRequired = List.copyOf(Objects.requireNonNull(restoredCombatHistory, "restoredCombatHistory"));
+        List<ReferenceContainmentReceipt> containmentRequired = List.copyOf(Objects.requireNonNull(restoredContainmentHistory, "restoredContainmentHistory"));
+        if (historyRequired.size() > HISTORY_DAYS || combatRequired.size() > HISTORY_DAYS || containmentRequired.size() > HISTORY_DAYS) {
+            throw new IllegalArgumentException("diagnostic history exceeds retention");
+        }
+        for (Map.Entry<Integer, List<ReferenceDailySettlementHistory>> entry : settlementsRequired.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().size() > HISTORY_DAYS) {
+                throw new IllegalArgumentException("settlement diagnostic history exceeds retention");
+            }
+        }
+        history.clear(); history.addAll(historyRequired);
+        settlementHistory.clear(); settlementsRequired.forEach((id, rows) -> settlementHistory.put(id, new ArrayList<>(rows)));
+        combatHistory.clear(); combatHistory.addAll(combatRequired);
+        containmentHistory.clear(); containmentHistory.addAll(containmentRequired);
+    }
+
     void recordCombat(ReferenceCombatReceipt receipt) {
         combatHistory.add(Objects.requireNonNull(receipt, "receipt"));
         trim(combatHistory);

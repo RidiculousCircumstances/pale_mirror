@@ -123,6 +123,7 @@ public final class ReferenceWorld {
     public Map<Integer, List<ReferenceDailySettlementHistory>> settlementHistory() { return diagnostics.settlementHistory(); }
     public List<ReferenceCombatReceipt> combatHistory() { return diagnostics.combatHistory(); }
     public List<ReferenceContainmentReceipt> containmentHistory() { return diagnostics.containmentHistory(); }
+    ReferenceWorldDiagnostics diagnostics() { return diagnostics; }
 
     /** Advance the canonical source-profile state by exactly one simulation day. */
     public void tick() { engine.tick(this); }

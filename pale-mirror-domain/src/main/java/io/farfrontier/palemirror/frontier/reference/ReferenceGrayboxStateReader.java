@@ -118,6 +118,15 @@ final class ReferenceGrayboxStateReader {
         return List.copyOf(result);
     }
 
+    static Map<String, Object> stringMap(Object value, String label) {
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        for (Entry entry : mapEntries(value, label)) {
+            String key = string(entry.key(), label + " key");
+            if (result.putIfAbsent(key, entry.value()) != null) throw new IllegalArgumentException(label + " has duplicate " + key);
+        }
+        return result;
+    }
+
     static PythonRandom.State randomState(Object encoded, String label) {
         Map<String, Object> random = object(encoded, label);
         exactKeys(random, label, "$random_mt19937");
