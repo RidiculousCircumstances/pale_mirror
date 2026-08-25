@@ -48,8 +48,11 @@ public final class ReferenceV2State {
     private final LinkedHashMap<Integer, ReferenceSupplyLineStatus> supplyLines = new LinkedHashMap<>();
     private final List<ReferenceSectorEngagement> sectorEngagements = new ArrayList<>();
     private final LinkedHashMap<Integer, Integer> frontierCooldownUntil = new LinkedHashMap<>();
+    private final List<ReferenceV2DecisionReceipt> decisionHistory = new ArrayList<>();
+    private final List<ReferenceV2CharterReceipt> terminalCharters = new ArrayList<>();
     private int nextProcurementId = 1;
     private int nextClaimId = 1;
+    private int nextCharterId = 1;
     private int nextFrontCampaignId = 1;
 
     ReferenceV2State(ReferenceWorld world) {
@@ -86,6 +89,8 @@ public final class ReferenceV2State {
     public Map<Integer, ReferenceSupplyLineStatus> supplyLines() { return immutableOrdered(supplyLines); }
     public List<ReferenceSectorEngagement> sectorEngagements() { return List.copyOf(sectorEngagements); }
     public Map<Integer, Integer> frontierCooldownUntil() { return immutableOrdered(frontierCooldownUntil); }
+    public List<ReferenceV2DecisionReceipt> decisionHistory() { return List.copyOf(decisionHistory); }
+    public List<ReferenceV2CharterReceipt> terminalCharters() { return List.copyOf(terminalCharters); }
 
     Map<String, ReferenceV2OperationalSector> mutableSectors() { return sectors; }
     Map<String, ReferenceV2SectorControl> mutableSectorControl() { return sectorControl; }
@@ -94,7 +99,14 @@ public final class ReferenceV2State {
     Map<Integer, ReferenceSupplyLineStatus> mutableSupplyLines() { return supplyLines; }
     List<ReferenceSectorEngagement> mutableSectorEngagements() { return sectorEngagements; }
     Map<Integer, Integer> mutableFrontierCooldownUntil() { return frontierCooldownUntil; }
+    int nextCharterIdAndIncrement() { return nextCharterId++; }
+    int nextFrontCampaignId() { return nextFrontCampaignId; }
     int nextFrontCampaignIdAndIncrement() { return nextFrontCampaignId++; }
+
+    void recordDecision(ReferenceV2DecisionReceipt receipt) {
+        decisionHistory.add(Objects.requireNonNull(receipt, "receipt"));
+        if (decisionHistory.size() > 256) decisionHistory.removeFirst();
+    }
 
     public String sectorKeyAt(double x, double y) {
         return Math.max(0, (int) x / ReferenceV2Rules.SECTOR_SIZE) + ":"
@@ -270,7 +282,11 @@ public final class ReferenceV2State {
     /** Apply the complete source civic regime pass before market consumption. */
     public void updateCivics(ReferenceWorld world) {
         ReferenceV2CivicPolicy.update(world, civics, doctrines, rationPlans, emergencyRegimes, charters, routeInsurance);
+        compactTerminalCharters(Objects.requireNonNull(world, "world").day());
     }
+
+    /** Execute source civic work, decisions, political agreements and new fronts in source order. */
+    public void planHumans(ReferenceWorld world) { ReferenceV2HumanPlanner.plan(this, world); }
 
     /** Derive source frontier control from field posts and V2 campaign presence. */
     public void updateSectorControl(ReferenceWorld world) { ReferenceV2Frontier.updateSectorControl(this, world); }
@@ -316,6 +332,18 @@ public final class ReferenceV2State {
 
     void queueCivicSiteProject(ReferenceCivicSiteProject project) { civicSiteProjects.add(Objects.requireNonNull(project, "project")); }
     void advanceCivicSiteProjects(ReferenceWorld world) { ReferenceV2CivicWorks.advance(world, civicSiteProjects); }
+
+    private void compactTerminalCharters(int day) {
+        var iterator = charters.values().iterator();
+        while (iterator.hasNext()) {
+            ReferenceCoalitionCharter charter = iterator.next();
+            if (charter.status().equals("active") || charter.status().equals("offered")) continue;
+            terminalCharters.add(new ReferenceV2CharterReceipt(charter.id(), charter.leaderId(), charter.members(), charter.target(),
+                    charter.openedDay(), charter.expiresDay(), day, charter.status(), charter.reason()));
+            if (terminalCharters.size() > 128) terminalCharters.removeFirst();
+            iterator.remove();
+        }
+    }
 
     /** Return the civic cap for civilian food issue; absent civic state is source-normal. */
     public double applyRations(ReferenceWorld world, int settlementId, double foodNeed) {

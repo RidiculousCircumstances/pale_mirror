@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.reference;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Source-pinned V2 constants used by the initial territorial cognition cut. */
@@ -27,6 +29,7 @@ final class ReferenceV2Rules {
     static final double SIEGE_INTEGRITY = 42.0d;
     static final double MEDICAL_EMERGENCY_BURDEN = 0.24d;
     static final double MINIMUM_LEGITIMACY = 0.12d;
+    static final int SETTLEMENT_PLANNING_INTERVAL = 3;
     static final int QUARANTINE_DAYS = 8;
     static final double QUARANTINE_MINIMUM_WILLINGNESS = 0.45d;
     static final double NORMAL_LEGITIMACY_RECOVERY = 0.004d;
@@ -40,6 +43,16 @@ final class ReferenceV2Rules {
     static final double ROUTE_INSURANCE_RISK_MULTIPLIER = 3.0d;
     static final int ROUTE_INSURANCE_DAYS = 12;
     static final double CHARTER_BREACH_TRUST_LOSS = 0.12d;
+    static final double COALITION_TRUST_TO_SIGN = 0.42d;
+    static final int COALITION_MAX_CONTRIBUTORS = 3;
+    static final int COALITION_DEFAULT_DAYS = 24;
+    static final double COALITION_RISK_LIMIT = 0.68d;
+    static final double COALITION_COMPENSATION_PER_PERSON = 2.2d;
+    static final double COALITION_CONTRIBUTION_POPULATION_FRACTION = 0.018d;
+    static final double COALITION_RESERVE_CONTRIBUTION_FRACTION = 0.35d;
+    static final double COALITION_CANDIDATE_RADIUS = 22.0d;
+    static final double COALITION_CANDIDATE_MIN_POPULATION = 80.0d;
+    static final double COALITION_CANDIDATE_MIN_ARMORY = 0.20d;
     static final double COMPANY_STRESS_CASH_DAYS = 4.0d;
     static final double COMPANY_INSOLVENCY_CASH_DAYS = 10.0d;
     static final double PROCUREMENT_FRACTION = 0.30d;
@@ -94,16 +107,20 @@ final class ReferenceV2Rules {
     static final double FRONTIER_HIVE_COUNTERATTACK_PERSONNEL_LOSS = 0.025d;
     static final double FRONTIER_ISOLATED_ORGAN_READINESS_LOSS = 0.12d;
     static final double FRONTIER_ISOLATED_ORGAN_BIOMASS_LOSS = 0.055d;
-    static final Map<ReferenceHumanUnitKind, Double> FRONTIER_ROLE_MIX = Map.of(
-            ReferenceHumanUnitKind.SCOUT, 0.12d,
-            ReferenceHumanUnitKind.LINE, 0.34d,
-            ReferenceHumanUnitKind.ASSAULT, 0.28d,
-            ReferenceHumanUnitKind.ENGINEER, 0.16d,
-            ReferenceHumanUnitKind.MEDIC, 0.05d,
-            ReferenceHumanUnitKind.LOGISTICS, 0.05d
-    );
+    static final Map<ReferenceHumanUnitKind, Double> FRONTIER_ROLE_MIX = frontierRoleMix();
 
     private ReferenceV2Rules() { }
+
+    private static Map<ReferenceHumanUnitKind, Double> frontierRoleMix() {
+        LinkedHashMap<ReferenceHumanUnitKind, Double> result = new LinkedHashMap<>();
+        result.put(ReferenceHumanUnitKind.SCOUT, .12d);
+        result.put(ReferenceHumanUnitKind.LINE, .34d);
+        result.put(ReferenceHumanUnitKind.ASSAULT, .28d);
+        result.put(ReferenceHumanUnitKind.ENGINEER, .16d);
+        result.put(ReferenceHumanUnitKind.MEDIC, .05d);
+        result.put(ReferenceHumanUnitKind.LOGISTICS, .05d);
+        return Collections.unmodifiableMap(result);
+    }
 
     static double siteValue(ReferenceSiteKind kind) {
         return switch (kind) {
