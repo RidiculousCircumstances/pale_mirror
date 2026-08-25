@@ -8,9 +8,11 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -214,6 +216,47 @@ public final class SourceGrayboxMaterializerGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void activeRaidKeepsItsMarkerLabelAndOneToOneParticipantsLegible(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        prepareFlatFloor(helper, anchor, 24);
+        ReferenceGrayboxSnapshot snapshot = activeRaidFixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot());
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        materializer.apply(helper.getLevel(), snapshot);
+
+        ReferenceGrayboxSnapshot.Activity raid = snapshot.activities().getFirst();
+        BlockPos marker = new BlockPos(raid.position().x(), ReferenceGrayboxLayout.GROUND_Y + 6, raid.position().z());
+        SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(helper.getLevel(), marker);
+        helper.assertValueEqual(helper.getLevel().getBlockState(marker).getBlock(), Blocks.RED_WOOL,
+                "an engaging raid must project a red operation marker instead of an ambiguous generic block");
+        helper.assertValueEqual(claim.subjectId(), raid.id(), "the raid marker must retain its exact source activity ID");
+        helper.assertValueEqual(claim.kind(), "ACTIVITY", "the raid marker must retain its operation semantic kind");
+        helper.assertTrue(helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(marker).inflate(3, 24, 3), value ->
+                        value.hasCustomName() && value.getCustomName().getString().equals("[A] operation raid engaging personnel=2.00 indicator=0.50")).size() == 1,
+                "an active raid must expose its family, kind, phase, personnel and risk in a readable label");
+
+        Villager guard = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->
+                value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals("resident:raid:guard")).stream().findFirst().orElseThrow();
+        Villager engineer = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->
+                value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals("resident:raid:engineer")).stream().findFirst().orElseThrow();
+        helper.assertValueEqual(guard.getItemBySlot(EquipmentSlot.HEAD).getItem(), Items.RED_WOOL,
+                "one deployed guard must remain one red-hatted Villager, not an aggregated operation counter");
+        helper.assertValueEqual(engineer.getItemBySlot(EquipmentSlot.HEAD).getItem(), Items.YELLOW_WOOL,
+                "a deployed engineer must remain visibly distinct while still being one exact Villager");
+
+        Zombie raider = helper.getLevel().getEntitiesOfClass(Zombie.class, new AABB(anchor).inflate(24), value ->
+                value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals("bioform:raid:raider")).stream().findFirst().orElseThrow();
+        Zombie breaker = helper.getLevel().getEntitiesOfClass(Zombie.class, new AABB(anchor).inflate(24), value ->
+                value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals("bioform:raid:breaker")).stream().findFirst().orElseThrow();
+        helper.assertValueEqual(raider.getItemBySlot(EquipmentSlot.HEAD).getItem(), Items.RED_WOOL,
+                "one attacking raider must remain one red-hatted Zombie");
+        helper.assertValueEqual(breaker.getItemBySlot(EquipmentSlot.HEAD).getItem(), Items.ORANGE_WOOL,
+                "one attacking breaker must remain one orange-hatted Zombie");
+        helper.assertTrue(raider.getCustomName().getString().equals("raider | engaging") && raider.isCustomNameVisible(),
+                "the hostile actor must expose its exact type and phase to a manual graybox reader");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void fortificationIsAPerimeterAndDoesNotPaintOverFunctionalBuildings(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         prepareFlatFloor(helper, anchor, 56);
@@ -258,6 +301,8 @@ public final class SourceGrayboxMaterializerGameTests {
                 "a strongpoint must retain its high-threat defensive colour");
         helper.assertValueEqual(SourceGrayboxPalette.block("sector.human").getBlock(), Blocks.CYAN_WOOL,
                 "human territorial control must not collapse into the neutral sector colour");
+        helper.assertValueEqual(SourceGrayboxPalette.block("activity.operation.engaging").getBlock(), Blocks.RED_WOOL,
+                "an engaging operation must retain its combat colour rather than becoming a neutral marker");
         helper.succeed();
     }
 
@@ -419,6 +464,22 @@ public final class SourceGrayboxMaterializerGameTests {
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
                 List.of(), List.of(), List.of(), List.of(route), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of(interaction), List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot activeRaidFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
+        ReferenceGrayboxLayout.Point marker = new ReferenceGrayboxLayout.Point(anchor.getX() + 12, anchor.getZ() + 12);
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(new ReferenceGrayboxSnapshot.Bioform("bioform:raid:raider", 701, "raider",
+                                new ReferenceGrayboxLayout.Point(anchor.getX() + 14, anchor.getZ() + 11), "engaging", false, "bioform.raider"),
+                        new ReferenceGrayboxSnapshot.Bioform("bioform:raid:breaker", 701, "breaker",
+                                new ReferenceGrayboxLayout.Point(anchor.getX() + 15, anchor.getZ() + 13), "engaging", false, "bioform.breaker")),
+                List.of(new ReferenceGrayboxSnapshot.Resident("resident:raid:guard", 1, "guard", "worker", "operation", 47,
+                                "healthy", "assault", new ReferenceGrayboxLayout.Point(anchor.getX() + 9, anchor.getZ() + 11), "resident.guard"),
+                        new ReferenceGrayboxSnapshot.Resident("resident:raid:engineer", 1, "engineer", "worker", "operation", 47,
+                                "healthy", "support", new ReferenceGrayboxLayout.Point(anchor.getX() + 9, anchor.getZ() + 13), "resident.engineer")),
+                List.of(), List.of(), List.of(new ReferenceGrayboxSnapshot.Activity("operation:47", "operation", "raid", "engaging", marker,
+                2.0d, 0.5d, false, "activity.operation.engaging")), List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     private static ReferenceGrayboxSnapshot settlementFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {

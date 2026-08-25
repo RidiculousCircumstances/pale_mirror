@@ -16,7 +16,8 @@ final class SourceGrayboxPalette {
         if (token.contains("collapsed") || token.contains("disabled") || token.contains("destroyed") || token.contains("feral_severe")
                 || token.contains("abandoned") || token.contains("failed") || token.contains("aborted")) return Blocks.BLACK_WOOL.defaultBlockState();
         if (token.contains("feral_active") || token.contains("route.disrupted") || token.contains("sector.hive")
-                || token.contains("siege") || token.contains("core") || token.contains("strongpoint") || token.contains("engage") || token.contains("intercepted")) {
+                || token.contains("siege") || token.contains("core") || token.contains("strongpoint") || token.contains("engage")
+                || token.contains("engaging") || token.contains("intercepted")) {
             return Blocks.RED_WOOL.defaultBlockState();
         }
         if (token.contains("emergency") || token.contains("mine") || token.contains("breaker") || token.contains("trace")
