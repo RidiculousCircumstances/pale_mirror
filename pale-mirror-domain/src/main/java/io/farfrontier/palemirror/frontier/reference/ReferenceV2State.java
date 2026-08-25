@@ -41,6 +41,8 @@ public final class ReferenceV2State {
     private final LinkedHashMap<ReferenceRouteKey, ReferenceRouteInsurance> routeInsurance = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceProcurementOrder> procurements = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceCompensationClaim> compensation = new LinkedHashMap<>();
+    private final List<ReferenceCivicSiteProject> civicSiteProjects = new ArrayList<>();
+    private final LinkedHashMap<Integer, Integer> lastCivicWorkDay = new LinkedHashMap<>();
     private final LinkedHashMap<Integer, ReferenceNeuralChrysalis> chrysalises = new LinkedHashMap<>();
     private final LinkedHashMap<String, ReferenceHiveLifecycle> hiveLifecycle = new LinkedHashMap<>();
     private int nextProcurementId = 1;
@@ -70,6 +72,8 @@ public final class ReferenceV2State {
     public Map<ReferenceRouteKey, ReferenceRouteInsurance> routeInsurance() { return immutableOrdered(routeInsurance); }
     public Map<Integer, ReferenceProcurementOrder> procurements() { return immutableOrdered(procurements); }
     public Map<Integer, ReferenceCompensationClaim> compensation() { return immutableOrdered(compensation); }
+    public List<ReferenceCivicSiteProject> civicSiteProjects() { return List.copyOf(civicSiteProjects); }
+    public Map<Integer, Integer> lastCivicWorkDay() { return immutableOrdered(lastCivicWorkDay); }
     public Map<Integer, ReferenceNeuralChrysalis> chrysalises() { return immutableOrdered(chrysalises); }
     public Map<String, ReferenceHiveLifecycle> hiveLifecycle() { return immutableOrdered(hiveLifecycle); }
 
@@ -284,6 +288,19 @@ public final class ReferenceV2State {
     void settleCompensation(ReferenceWorld world) {
         ReferenceV2WarEconomy.settleCompensation(world, compensation);
     }
+
+    /** Source planner's civilian work phase: mature claims, then choose at most one work per town. */
+    public void maintainCivicSites(ReferenceWorld world) {
+        advanceCivicSiteProjects(world);
+        ReferenceV2CivicWorks.maintain(world, doctrines, humanPerceptions, civicSiteProjects, lastCivicWorkDay);
+    }
+
+    ReferenceV2CivicWorks.Work civicSiteDecision(ReferenceWorld world, int settlementId) {
+        return ReferenceV2CivicWorks.decide(world, settlementId, doctrines, humanPerceptions, civicSiteProjects);
+    }
+
+    void queueCivicSiteProject(ReferenceCivicSiteProject project) { civicSiteProjects.add(Objects.requireNonNull(project, "project")); }
+    void advanceCivicSiteProjects(ReferenceWorld world) { ReferenceV2CivicWorks.advance(world, civicSiteProjects); }
 
     /** Return the civic cap for civilian food issue; absent civic state is source-normal. */
     public double applyRations(ReferenceWorld world, int settlementId, double foodNeed) {

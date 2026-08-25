@@ -41,6 +41,9 @@ final class ReferenceV2Rules {
     static final int SIEGE_RESERVE_DAYS = 16;
     static final int COMPENSATION_DELAY_DAYS = 20;
     static final double PROCUREMENT_MINIMUM_QUANTITY = 0.2d;
+    static final int CIVIC_PROJECT_COOLDOWN_DAYS = 10;
+    static final int CIVIC_CLAIM_DAYS = 8;
+    static final double CIVIC_CLAIM_DISTANCE = 18.0d;
     static final int CHRYSALIS_DAYS = 18;
     static final double CHRYSALIS_MINIMUM_BIOMASS = 105.0d;
     static final double CHRYSALIS_MINIMUM_TISSUE = 0.46d;

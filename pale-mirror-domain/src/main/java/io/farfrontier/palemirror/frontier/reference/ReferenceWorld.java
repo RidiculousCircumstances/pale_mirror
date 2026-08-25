@@ -278,7 +278,7 @@ public final class ReferenceWorld {
         return Math.max(SITE_SURVEY_MINIMUM_QUALITY, base * factor);
     }
 
-    private void refreshPrimaryCapacity() {
+    void refreshPrimaryCapacity() {
         for (ReferenceSettlement settlement : marketWorld.settlements().values()) {
             for (ReferenceSiteKind kind : ReferenceSiteKind.values()) settlement.primaryCapacity(kind.name().toLowerCase(), 0.0d);
         }

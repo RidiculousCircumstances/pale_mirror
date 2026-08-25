@@ -78,6 +78,11 @@ thresholds, local emergency purchase/credit path, siege-only documented
 requisition and pending-to-paid compensation lifecycle. Regenerate it only
 with `tools/frontier/generate_v2_war_economy_microtrace.py` using `python3.11`.
 
+`docs/frontier-reference-v2-civic-works.json` fixes autonomous observed-site
+selection, ecological cleanup, claim maturation and invalid claim disposal.
+Regenerate it only with `tools/frontier/generate_v2_civic_works_microtrace.py`
+using `python3.11`.
+
 ## Parity contract
 
 1. Java ports `source_v2` first, with the same 64×44 world, twelve
