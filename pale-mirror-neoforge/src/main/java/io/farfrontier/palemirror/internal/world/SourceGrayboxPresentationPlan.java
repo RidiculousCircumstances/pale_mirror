@@ -85,7 +85,6 @@ final class SourceGrayboxPresentationPlan {
             throw new IllegalStateException("source graybox projection exceeds its bounded claim ledger");
         }
         separateCanonicalLayers(result);
-        validateDistinctFootprints(result);
         return result;
     }
 
@@ -141,19 +140,6 @@ final class SourceGrayboxPresentationPlan {
                 interaction.kind(), interaction.totalWeight());
     }
 
-    private static void validateDistinctFootprints(Map<String, Desired> desired) {
-        Map<BlockPos, String> ownerByPosition = new LinkedHashMap<>();
-        for (Desired item : desired.values()) {
-            for (BlockPos position : positions(item)) {
-                String prior = ownerByPosition.putIfAbsent(position, item.id());
-                if (prior != null && !prior.equals(item.id())) {
-                    throw new IllegalStateException("source graybox projection has overlapping claims at " + position
-                            + ": " + prior + " and " + item.id());
-                }
-            }
-        }
-    }
-
     /**
      * The simulation may deliberately place several facts in one logical
      * cell: for example, an infected resource site can also host a hive organ.
@@ -172,6 +158,9 @@ final class SourceGrayboxPresentationPlan {
                 resolved = resolved.atY(resolved.y() + 1);
             }
             entry.setValue(resolved);
+            // Every position was checked against every earlier claim before it
+            // is reserved here, so this map is the complete pre-write proof of
+            // distinct physical ownership; a second full traversal is redundant.
             for (BlockPos position : positions(resolved)) ownerByPosition.put(position, resolved.id());
         }
     }
