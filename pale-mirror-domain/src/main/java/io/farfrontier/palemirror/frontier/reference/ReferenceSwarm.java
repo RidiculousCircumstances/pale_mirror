@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.reference;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Mutable source-port of Python's {@code Swarm}; discrete profiles use whole counts. */
@@ -16,6 +17,7 @@ public final class ReferenceSwarm {
     private ReferenceFormationPhase phase;
     private final double readiness;
     private final Map<ReferenceBioformKind, Double> losses = new LinkedHashMap<>();
+    private final Map<ReferenceBioformKind, List<String>> bioformIds = new LinkedHashMap<>();
     private final Integer sourceOrganId;
     private Integer targetX;
     private Integer targetY;
@@ -32,6 +34,7 @@ public final class ReferenceSwarm {
         this.id = id; this.x = x; this.y = y; this.power = power; this.targetId = targetId; this.speed = speed;
         this.kind = kind; this.composition = new LinkedHashMap<>(composition); this.phase = phase; this.readiness = readiness;
         this.sourceOrganId = sourceOrganId; this.targetX = targetX; this.targetY = targetY; this.feral = feral;
+        initializeBioformIds();
     }
 
     public int id() { return id; }
@@ -49,6 +52,12 @@ public final class ReferenceSwarm {
     void phase(ReferenceFormationPhase value) { phase = value; }
     public double readiness() { return readiness; }
     public Map<ReferenceBioformKind, Double> losses() { return Map.copyOf(losses); }
+    /** Stable one-body IDs for the discrete graybox; source composition remains the public tactical view. */
+    public Map<ReferenceBioformKind, List<String>> bioformIds() {
+        LinkedHashMap<ReferenceBioformKind, List<String>> copy = new LinkedHashMap<>();
+        bioformIds.forEach((kind, ids) -> copy.put(kind, List.copyOf(ids)));
+        return Map.copyOf(copy);
+    }
     public Integer sourceOrganId() { return sourceOrganId; }
     public Integer targetX() { return targetX; }
     void targetX(Integer value) { targetX = value; }
@@ -65,4 +74,61 @@ public final class ReferenceSwarm {
     public Integer forageY() { return forageY; }
     void forageY(Integer value) { forageY = value; }
     public boolean feral() { return feral; }
+
+    boolean hasExactBioform(String bioformId) {
+        return bioformIds.values().stream().anyMatch(ids -> ids.contains(bioformId));
+    }
+
+    /**
+     * Remove one observed body without sampling another. Aggregate source power
+     * is divided equally over the active discrete bodies, because source launch
+     * power is not a per-role sum.
+     */
+    boolean killExactBioform(String bioformId) {
+        int before = bioformIds.values().stream().mapToInt(List::size).sum();
+        if (before == 0) return false;
+        for (ReferenceBioformKind candidate : ReferenceBioformKind.values()) {
+            List<String> ids = bioformIds.get(candidate);
+            if (ids == null || !ids.remove(bioformId)) continue;
+            if (ids.isEmpty()) {
+                bioformIds.remove(candidate);
+                composition.remove(candidate);
+            } else composition.put(candidate, (double) ids.size());
+            losses.merge(candidate, 1.0d, Double::sum);
+            power = Math.max(0.0d, power * (before - 1) / before);
+            return true;
+        }
+        return false;
+    }
+
+    void assertDiscreteBioformInvariants() {
+        if (!bioformIds.keySet().equals(composition.keySet())) {
+            throw new IllegalStateException("swarm " + id + " bioform identities do not match its composition");
+        }
+        for (Map.Entry<ReferenceBioformKind, Double> entry : composition.entrySet()) {
+            List<String> ids = bioformIds.get(entry.getKey());
+            String prefix = "bioform:" + id + ":" + entry.getKey().id() + ":";
+            if (ids == null || entry.getValue() != ids.size() || ids.stream().distinct().count() != ids.size()
+                    || ids.stream().anyMatch(value -> !validBioformId(value, prefix))) {
+                throw new IllegalStateException("swarm " + id + " has malformed " + entry.getKey().id() + " bioform identity");
+            }
+        }
+    }
+
+    private void initializeBioformIds() {
+        if (!bioformIds.isEmpty() || composition.values().stream().anyMatch(value -> value <= 0.0d || value != Math.rint(value))) return;
+        for (ReferenceBioformKind candidate : ReferenceBioformKind.values()) {
+            int count = composition.getOrDefault(candidate, 0.0d).intValue();
+            if (count == 0) continue;
+            java.util.ArrayList<String> ids = new java.util.ArrayList<>(count);
+            for (int ordinal = 1; ordinal <= count; ordinal++) ids.add("bioform:" + id + ":" + candidate.id() + ":" + ordinal);
+            bioformIds.put(candidate, ids);
+        }
+    }
+
+    private static boolean validBioformId(String value, String prefix) {
+        if (!value.startsWith(prefix)) return false;
+        try { return Integer.parseInt(value.substring(prefix.length())) > 0; }
+        catch (NumberFormatException ignored) { return false; }
+    }
 }

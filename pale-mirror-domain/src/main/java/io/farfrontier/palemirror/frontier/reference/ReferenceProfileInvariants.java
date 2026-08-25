@@ -123,6 +123,7 @@ final class ReferenceProfileInvariants {
             if (swarm.composition().values().stream().anyMatch(amount -> amount <= 0.0d || amount != Math.rint(amount))) {
                 throw new IllegalStateException("swarm " + swarm.id() + " contains a fractional biological entity");
             }
+            swarm.assertDiscreteBioformInvariants();
         }
     }
 

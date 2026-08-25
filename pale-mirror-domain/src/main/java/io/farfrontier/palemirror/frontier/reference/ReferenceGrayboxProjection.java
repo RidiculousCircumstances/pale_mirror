@@ -126,11 +126,10 @@ public final class ReferenceGrayboxProjection {
         for (ReferenceSwarm swarm : sorted(world.infection().swarms(), ReferenceSwarm::id)) {
             ReferenceGrayboxLayout.Point anchor = ReferenceGrayboxLayout.position(swarm.x(), swarm.y());
             int localOrdinal = 0;
-            for (Map.Entry<ReferenceBioformKind, Double> entry : swarm.composition().entrySet().stream()
+            for (Map.Entry<ReferenceBioformKind, List<String>> entry : swarm.bioformIds().entrySet().stream()
                     .sorted(Map.Entry.comparingByKey(Comparator.comparing(ReferenceBioformKind::id))).toList()) {
-                int count = wholeBioforms(entry.getValue(), swarm.id(), entry.getKey());
-                for (int ordinal = 1; ordinal <= count; ordinal++) {
-                    result.add(new ReferenceGrayboxSnapshot.Bioform("bioform:" + swarm.id() + ":" + entry.getKey().id() + ":" + ordinal,
+                for (String bioformId : entry.getValue()) {
+                    result.add(new ReferenceGrayboxSnapshot.Bioform(bioformId,
                             swarm.id(), entry.getKey().id(), ReferenceGrayboxLayout.actorSlot(anchor, localOrdinal++), swarm.phase().id(),
                             swarm.feral(), "bioform." + entry.getKey().id()));
                 }

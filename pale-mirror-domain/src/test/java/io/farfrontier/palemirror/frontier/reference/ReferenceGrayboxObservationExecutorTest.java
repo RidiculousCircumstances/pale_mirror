@@ -111,6 +111,32 @@ class ReferenceGrayboxObservationExecutorTest {
         world.assertProfileInvariants();
     }
 
+    @Test
+    void exactBioformDeathRetainsTheOtherZombieIdsAndRescalesOnlyThatSwarm() {
+        ReferenceWorld world = grayboxWorld();
+        ReferenceSwarm swarm = new ReferenceSwarm(901, 12.0d, 13.0d, 90.0d, -1, .9d,
+                ReferenceBioformKind.RAIDER, Map.of(ReferenceBioformKind.RAIDER, 2.0d, ReferenceBioformKind.BREAKER, 1.0d),
+                ReferenceFormationPhase.SCREEN, 1.0d, null, null, null, false);
+        world.infection().swarms.add(swarm);
+        String bioformId = "bioform:901:raider:1";
+        String revision = ReferenceGrayboxProjection.from(world).stateRevision();
+
+        ReferenceGrayboxObservationOutcome outcome = world.observe(
+                ReferenceGrayboxBioformObservation.killed("physical:bioform:death", revision, bioformId));
+
+        assertTrue(outcome.applied());
+        assertFalse(swarm.hasExactBioform(bioformId));
+        assertEquals(60.0d, swarm.power());
+        assertEquals(Map.of(ReferenceBioformKind.RAIDER, 1.0d, ReferenceBioformKind.BREAKER, 1.0d), swarm.composition());
+        assertFalse(ReferenceGrayboxProjection.from(world).bioforms().stream().map(ReferenceGrayboxSnapshot.Bioform::id).toList()
+                .contains(bioformId));
+        assertTrue(ReferenceGrayboxProjection.from(world).bioforms().stream().map(ReferenceGrayboxSnapshot.Bioform::id).toList()
+                .contains("bioform:901:raider:2"));
+        assertEquals(ReferenceGrayboxObservationOutcome.Status.REJECTED_STALE,
+                world.observe(ReferenceGrayboxBioformObservation.killed("physical:bioform:death", revision, bioformId)).status());
+        world.assertProfileInvariants();
+    }
+
     private static ReferenceWorld grayboxWorld() {
         return new ReferenceWorld(ReferenceWorldConfig.graybox1To40(7L));
     }

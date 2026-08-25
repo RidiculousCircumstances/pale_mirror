@@ -37,6 +37,29 @@ final class ReferenceGrayboxObservationExecutor {
         return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical resident custody updated", after);
     }
 
+    static ReferenceGrayboxObservationOutcome apply(
+            ReferenceWorld world,
+            ReferenceGrayboxBioformObservation observation
+    ) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        ReferenceGrayboxBioformObservation event = Objects.requireNonNull(observation, "observation");
+        ReferenceGrayboxLayout.requireSupported(required);
+        String before = ReferenceGrayboxProjection.from(required).stateRevision();
+        if (!before.equals(event.observedStateRevision())) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_STALE,
+                "observation was made against an older graybox state", before);
+        boolean known = required.infection().swarms().stream().anyMatch(swarm -> swarm.hasExactBioform(event.bioformId()));
+        if (!known) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_UNKNOWN,
+                "bioform no longer exists in canonical state", before);
+        if (!ReferenceBioformObservationMutation.killExact(required.infection(), event.bioformId())) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
+                "bioform custody no longer accepts this observation", before);
+
+        required.operations().syncInfectionSwarms(required);
+        required.marketWorld().event("D" + required.day() + ": physical bioform killed " + event.bioformId() + " (" + event.eventId() + ")");
+        required.assertProfileInvariants();
+        String after = ReferenceGrayboxProjection.from(required).stateRevision();
+        return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical bioform custody updated", after);
+    }
+
     private static boolean applySettlement(ResidentOwner owner, ReferenceGrayboxResidentObservation.Kind kind) {
         return ReferenceResidentObservationMutation.apply(owner.settlement(), owner.resident().id(), kind);
     }
@@ -73,6 +96,15 @@ final class ReferenceGrayboxObservationExecutor {
 
     private static ReferenceGrayboxObservationOutcome outcome(
             ReferenceGrayboxResidentObservation event,
+            ReferenceGrayboxObservationOutcome.Status status,
+            String reason,
+            String revision
+    ) {
+        return new ReferenceGrayboxObservationOutcome(event.eventId(), status, reason, revision);
+    }
+
+    private static ReferenceGrayboxObservationOutcome outcome(
+            ReferenceGrayboxBioformObservation event,
             ReferenceGrayboxObservationOutcome.Status status,
             String reason,
             String revision
