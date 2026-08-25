@@ -229,7 +229,9 @@ tasks.register('verifySourceIsolation') {
     description = 'Rejects source-specific integrations leaking into domain or generic NeoForge layers.'
     inputs.files(domainJavaSources, genericNeoForgeJavaSources)
     doLast {
-        def forbiddenDomainTokens = ['Crimson', 'Spore', 'Millenaire', 'Millénaire', 'crimson', 'spore', 'millenaire']
+        // Lower-case biological language belongs to the source-neutral Frontier
+        // model; only the proper source-adapter identity itself is forbidden.
+        def forbiddenDomainTokens = ['Crimson', 'Spore', 'Millenaire', 'Millénaire', 'crimson', 'millenaire']
         domainJavaSources.files.each { source ->
             String text = source.getText('UTF-8')
             forbiddenDomainTokens.each { token ->

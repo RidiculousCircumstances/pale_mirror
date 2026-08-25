@@ -1,0 +1,57 @@
+{
+  "source": {
+    "project": "pale_mirror_ai",
+    "path": "simulation/balance.py",
+    "sha256": "ca747a49bf43e23120dd3bcc1ec259b123e91c5b2f7bcdc4d6fffc6f5f4ef6f2"
+  },
+  "world": {
+    "width": 64,
+    "height": 44,
+    "settlement_count": 12,
+    "infection_seeds": 2
+  },
+  "operations": {
+    "human_speed_offroad": 1.55,
+    "infection_speed": 0.65,
+    "defend": {
+      "minimum_personnel": 12.0,
+      "population_ratio": 0.018,
+      "food": 24.0,
+      "medicine": 0.6,
+      "weapons": 7.0,
+      "ammo": 32.0
+    }
+  },
+  "campaign": {
+    "phases": [
+      "RECON",
+      "ASSEMBLE",
+      "ESTABLISH",
+      "CORDON",
+      "CLEAR",
+      "HOLD",
+      "RESTORE",
+      "WITHDRAW",
+      "COMPLETE",
+      "FAILED"
+    ],
+    "raid_nest": {
+      "minimum_personnel": 18.0,
+      "food": 42.0,
+      "medicine": 1.2,
+      "weapons": 14.0,
+      "ammo": 54.0
+    },
+    "frontier": {
+      "planning_interval": 4,
+      "minimum_supply_readiness": 0.48,
+      "hold_days": 18,
+      "restore_days": 8,
+      "clear_target_infection": 0.12,
+      "supply_max_infection": 0.58,
+      "supply_hive_sector_cost": 0.42,
+      "supply_contested_sector_cost": 0.12,
+      "supply_path_max_cost": 3.0
+    }
+  }
+}
