@@ -77,7 +77,10 @@ public final class ReferenceGrayboxLayout {
         if (ordinal < 0 || ordinal >= 16) throw new IllegalArgumentException("cargo ordinal must be in [0, 16)");
         int column = ordinal % 4;
         int row = ordinal / 4;
-        return new Rectangle(anchor.x() - 7 + column * 4, anchor.z() - 7 + row * 4, 2, 2);
+        // Keep every pallet clear of the cell's north-west terrain marker
+        // (centre - 7) while still fitting the full 4×4 resource vocabulary
+        // inside the same 16×16 logical cell.
+        return new Rectangle(anchor.x() - 6 + column * 3, anchor.z() - 6 + row * 3, 2, 2);
     }
 
     /** One readable stock pallet along a field post's reserved outer border. */

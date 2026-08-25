@@ -84,6 +84,24 @@ class ReferenceGrayboxProjectionTest {
         assertTrue(!before.equals(ReferenceGrayboxProjection.from(world).stateRevision()));
     }
 
+    @Test
+    void operationCargoSlotsStayInsideTheirCellAndClearItsTerrainMarker() {
+        ReferenceGrayboxLayout.Point anchor = ReferenceGrayboxLayout.centre(10, 10);
+        ReferenceGrayboxLayout.Rectangle cell = ReferenceGrayboxLayout.cell(10, 10);
+        int terrainMarkerX = cell.x() + 1;
+        int terrainMarkerZ = cell.z() + 1;
+
+        for (int ordinal = 0; ordinal < 16; ordinal++) {
+            ReferenceGrayboxLayout.Rectangle pallet = ReferenceGrayboxLayout.cargo(anchor, ordinal);
+            assertTrue(pallet.x() >= cell.x() && pallet.z() >= cell.z()
+                    && pallet.x() + pallet.width() <= cell.x() + cell.width()
+                    && pallet.z() + pallet.depth() <= cell.z() + cell.depth(), "cargo pallet " + ordinal + " fits its cell");
+            assertTrue(terrainMarkerX < pallet.x() || terrainMarkerX >= pallet.x() + pallet.width()
+                    || terrainMarkerZ < pallet.z() || terrainMarkerZ >= pallet.z() + pallet.depth(),
+                    "cargo pallet " + ordinal + " must not claim the terrain marker");
+        }
+    }
+
     private static ReferenceWorld grayboxWorld() {
         return new ReferenceWorld(ReferenceWorldConfig.graybox1To40(7L));
     }
