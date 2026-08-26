@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceResource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -10,6 +11,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -173,6 +175,69 @@ public final class SourceGrayboxCargoGameTests {
                 "an empty PM container may retire after its canonical operation cargo disappears");
         helper.assertTrue(data.cargoLedger().binding(id) == null,
                 "controlled retirement must compact the durable hand-off instead of retaining a stale conflict forever");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void v26OperationBarrelConvertsOnlyThroughItsExactFormerCustodyAndKeepsMixedPlayerItems(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        BlockPos position = anchor.offset(2, 1, 2);
+        helper.getLevel().setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("operation:991:cargo:food", "operation", 991,
+                "food", 1.0d, new ReferenceGrayboxLayout.Rectangle(position.getX(), position.getZ(), 1, 1), "#ffffff");
+        String legacyId = "cargo-container:" + cargo.id();
+        BarrelBlockEntity barrel = SourceGrayboxWarehouseRuntime.ensureContainer(helper.getLevel(), position, legacyId, ReferenceResource.FOOD);
+        helper.assertTrue(barrel != null, "the retained v26 operation custody must begin as one exact tagged barrel");
+        helper.assertValueEqual(SourceGrayboxWarehouseRuntime.insert(barrel, SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD), 64), 64,
+                "the legacy barrel must carry its exact source stack before conversion");
+        barrel.setItem(4, new ItemStack(Items.COAL, 3));
+
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxCargoLedger.Binding legacy = new SourceGrayboxCargoLedger.Binding(legacyId, cargo.id(), "operation", 991,
+                ReferenceResource.FOOD, position.getX(), position.getY(), position.getZ(), 64, SourceGrayboxCargoLedger.State.ACTIVE);
+        helper.assertTrue(data.cargoLedger().put(legacy), "v26 must retain the exact old cargo-barrel binding until inspection");
+
+        helper.assertTrue(SourceGrayboxOperationCargoCarrierRuntime.ensureBinding(helper.getLevel(), data, cargo),
+                "conversion must find the historical cargo-container identity instead of inventing a second custody point");
+        SourceGrayboxOperationCargoCarrierLedger.Binding carrier = data.operationCarrierLedger().binding("operation-carrier:" + cargo.id());
+        helper.assertTrue(carrier != null && carrier.mode() == SourceGrayboxOperationCargoCarrierLedger.Mode.COLD,
+                "a converted operation must start COLD and never spawn a cart just for migration");
+        helper.assertValueEqual(carrier.observedItems(), 64,
+                "the carrier ledger must retain the exact old owned stack count without recreating source cargo");
+        helper.assertTrue(data.cargoLedger().binding(legacyId) == null,
+                "after a safe conversion the old barrel ledger must no longer claim a duplicate custody point");
+        BarrelBlockEntity released = (BarrelBlockEntity) helper.getLevel().getBlockEntity(position);
+        helper.assertValueEqual(released.getItem(4).getItem(), Items.COAL,
+                "mixed player cargo must remain in the released old barrel during migration");
+        helper.assertValueEqual(SourceGrayboxWarehouseRuntime.count(released, SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD)), 0,
+                "migration may remove only the source-owned matching resource from its old barrel");
+        helper.assertTrue(!SourceGrayboxWarehouseRuntime.matches(released, legacyId, ReferenceResource.FOOD),
+                "a mixed legacy barrel must be released rather than silently re-adopted after conversion");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void coldOperationCarrierNeverDeletesMixedPlayerItems(GameTestHelper helper) {
+        BlockPos position = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y + 1).offset(2, 0, 2);
+        SourceGrayboxOperationCargoCarrierLedger.Binding binding = new SourceGrayboxOperationCargoCarrierLedger.Binding(
+                "operation-carrier:operation:991:cargo:food", "operation:991:cargo:food", 991, ReferenceResource.FOOD, 64,
+                position.getX() * 16 + 8, position.getZ() * 16 + 8, SourceGrayboxOperationCargoCarrierLedger.Mode.HOT);
+        MinecartChest carrier = new MinecartChest(helper.getLevel(), position.getX() + 0.5d, position.getY(), position.getZ() + 0.5d);
+        carrier.getPersistentData().putString(SourceGrayboxOperationCargoCarrierRuntime.ENTITY_ID, binding.id());
+        carrier.getPersistentData().putString(SourceGrayboxOperationCargoCarrierRuntime.ENTITY_RESOURCE, binding.resource().name());
+        carrier.setItem(0, new ItemStack(SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD), 64));
+        carrier.setItem(1, new ItemStack(Items.COAL, 3));
+        helper.assertTrue(helper.getLevel().addFreshEntity(carrier), "the real chest minecart must be materialized before COLD hand-off");
+
+        SourceGrayboxOperationCargoCarrierRuntime.drainForCold(carrier, binding);
+
+        helper.assertTrue(!carrier.isRemoved(), "a mixed carrier must remain for the player instead of deleting a foreign stack");
+        helper.assertValueEqual(carrier.getItem(0).isEmpty(), true,
+                "only the PM-owned resource leaves the physical cart for the COLD source hand-off");
+        helper.assertValueEqual(carrier.getItem(1).getItem(), Items.COAL,
+                "the player-owned stack remains in the released ordinary chest minecart");
+        helper.assertValueEqual(carrier.getPersistentData().getString(SourceGrayboxOperationCargoCarrierRuntime.ENTITY_ID), "",
+                "a retained mixed cart must lose PM ownership before another operation may materialize nearby");
         helper.succeed();
     }
 }

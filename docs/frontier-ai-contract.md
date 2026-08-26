@@ -138,14 +138,16 @@ without waiting for the next source day.
 
 `FAST_GRAYBOX` keeps the 1,200-tick source day and explicit complete-day
 fast-forward for source-parity, calibration and manual testing. A fresh world
-persists `GAMEPLAY`; schema v26 explicitly stores `clockProfile` alongside the
-last source-day boundary. Retained v23-v25 worlds migrate to
-`FAST_GRAYBOX`, because that is the pace those worlds actually experienced.
+persists `GAMEPLAY`; schema v27 explicitly stores `clockProfile` alongside the
+last source-day boundary and its operation-carrier ledger. Retained v23-v25
+worlds migrate to `FAST_GRAYBOX`, because that is the pace those worlds
+actually experienced; a v26 world retains its already explicit profile.
 `/pale_mirror frontier clock gameplay|fast_graybox` is operator-only and,
 when it changes a live profile, rebases the next boundary to the current game
 tick. It therefore never turns elapsed ticks under one profile into an
-instantaneous source-day catch-up under another. Missing or unknown v26 clock
-profiles fail startup rather than guessing or silently rescaling a campaign.
+instantaneous source-day catch-up under another. Missing or unknown current
+clock profiles or carrier ledger fail startup rather than guessing or silently
+rescaling a campaign.
 
 The profile lives only in the disposable data-driven
 `pale_mirror:frontier_graybox` level. The Far Frontier deployment owns the
@@ -166,7 +168,8 @@ ReferenceGrayboxSimulation
   -> SourceGrayboxMaterializer (loaded chunks only)
   -> coloured structures, growing/retreating infection tissue, readable boards,
      resource-specific PM-owned barrel shelves, Villagers/Zombies and current
-     source-day effect markers
+     source-day effect markers, field-post cargo barrels and operation chest
+     minecarts when their source target is HOT
 ```
 
 `SourceGrayboxPresentationLedger` is only the durable physical-ownership
@@ -192,12 +195,19 @@ managed Villager/Zombie death or declared interaction-slot break
 Resident death, bioform death and the eight non-entity facts are closed over
 their exact source subject: facility, resource-site, route and organ damage;
 operation cargo loss; field-post cargo loss and structural damage; and
-field-link damage. Cargo is represented by a named controlled pallet, so its
-intentional graybox interaction is a typed cargo-loss fact rather than an
-unbounded interpretation of arbitrary player inventory changes. A successful
-slot break is consumed and its remaining sibling slots are rebalanced from the
-new canonical quantity. A rejected, stale or foreign change remains a conflict
-and changes no source state.
+field-link damage. Field-post cargo is represented by a named controlled
+pallet. Operation cargo is one deterministic chest-minecart only while its
+source target is in a naturally loaded player-HOT zone; its durable COLD
+carrier ledger retains identity, last accepted stack count and fixed-point
+position, never a second economy. A matching item delta, including the loss of
+a loaded cart, is a typed cargo receipt. The loss is submitted before the
+carrier remains visibly blocked, so Minecraft cannot erase a source resource
+silently. PM removes only its own resource when an operation carrier turns
+COLD or retires; a mixed cart is released with player items intact. A v26
+operation barrel converts only after the exact naturally loaded custody barrel
+is count-matching and released; otherwise it remains the sole custody point.
+A rejected, stale or foreign change remains a conflict and changes no source
+state.
 
 Each settlement also has one snapshot `Warehouse` whose nine typed stockpiles
 are exposed through fixed resource-specific barrel shelves. One matching

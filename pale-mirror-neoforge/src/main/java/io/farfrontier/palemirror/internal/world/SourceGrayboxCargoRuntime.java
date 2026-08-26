@@ -30,6 +30,7 @@ final class SourceGrayboxCargoRuntime {
         Map<String, ReferenceGrayboxSnapshot.Cargo> cargoes = byId(data.snapshot());
         boolean changed = false;
         for (SourceGrayboxCargoLedger.Binding binding : data.cargoLedger().bindings()) {
+            if (binding.ownerKind().equals("operation") && data.operationCarrierLedger().binding("operation-carrier:" + binding.cargoId()) != null) continue;
             ReferenceGrayboxSnapshot.Cargo cargo = cargoes.get(binding.cargoId());
             // A source day can consume or retire a cargo descriptor after the
             // inbound pass that made the preceding player change canonical.
@@ -71,6 +72,7 @@ final class SourceGrayboxCargoRuntime {
         Set<String> activeCargoIds = new HashSet<>();
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
             activeCargoIds.add(cargo.id());
+            if (cargo.ownerKind().equals("operation") && data.operationCarrierLedger().binding("operation-carrier:" + cargo.id()) != null) continue;
             materialize(level, data, materializer, cargo, snapshot.stateRevision());
         }
         retireAbsent(level, data, materializer, activeCargoIds, snapshot.stateRevision());
@@ -219,6 +221,7 @@ final class SourceGrayboxCargoRuntime {
     private static void retireAbsent(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
                                      Set<String> activeCargoIds, String revision) {
         for (SourceGrayboxCargoLedger.Binding binding : data.cargoLedger().bindings()) {
+            if (binding.ownerKind().equals("operation") && data.operationCarrierLedger().binding("operation-carrier:" + binding.cargoId()) != null) continue;
             if (activeCargoIds.contains(binding.cargoId()) || binding.state() == SourceGrayboxCargoLedger.State.BLOCKED
                     || !level.hasChunkAt(position(binding))) continue;
             BlockEntity entity = level.getBlockEntity(position(binding));

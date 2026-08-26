@@ -261,12 +261,13 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void v23ThroughV25MigrationsPreserveTheirHistoricalFastClock(GameTestHelper helper) {
+    public static void v23ThroughV26MigrationsPreserveTheirHistoricalClockAndCreateAnEmptyCarrierLedger(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
-        for (int legacySchema : List.of(23, 24, 25)) {
+        for (int legacySchema : List.of(23, 24, 25, 26)) {
             CompoundTag legacy = source.save(new CompoundTag(), null);
             legacy.putInt("schemaVersion", legacySchema);
-            legacy.remove("clockProfile");
+            legacy.remove("operationCarrierLedger");
+            if (legacySchema < 26) legacy.remove("clockProfile");
             CompoundTag execution = legacy.getCompound("actorExecution");
             if (legacySchema < 25) {
                 execution.putInt("format", SourceGrayboxActorExecutionNbt.LEGACY_GLOBAL_REVISION_FORMAT);
@@ -278,15 +279,19 @@ public final class SourceGrayboxStateNbtGameTests {
             String actor = restored.actorExecution().actors().getFirst().id();
             helper.assertValueEqual(restored.actorExecution().actors().getFirst().sourceRevision(), actorRevision(restored.snapshot(), actor),
                     "a v" + legacySchema + " migration may rebind only after the retained source actor identity was inspected");
-            helper.assertValueEqual(restored.clockProfile(), SourceGrayboxClockProfile.FAST_GRAYBOX,
-                    "a v" + legacySchema + " world must preserve the real historical 1,200-tick pacing instead of silently rescaling time");
+            helper.assertValueEqual(restored.clockProfile(), legacySchema < 26 ? SourceGrayboxClockProfile.FAST_GRAYBOX : SourceGrayboxClockProfile.GAMEPLAY,
+                    "a migration must preserve its persisted historical clock instead of silently rescaling time");
+            helper.assertTrue(restored.operationCarrierLedger().bindings().isEmpty(),
+                    "a pre-v27 migration must begin with no invented physical cargo carrier");
             helper.assertTrue(restored.isDirty(),
                     "a successful v" + legacySchema + " migration must request a world save even when no later simulation event happens");
             CompoundTag upgraded = restored.save(new CompoundTag(), null);
-            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 26,
-                    "a successful legacy migration must durably record the strict v26 envelope");
-            helper.assertValueEqual(upgraded.getString("clockProfile"), "fast_graybox",
+            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 27,
+                    "a successful legacy migration must durably record the strict v27 envelope");
+            helper.assertValueEqual(upgraded.getString("clockProfile"), legacySchema < 26 ? "fast_graybox" : "gameplay",
                     "the upgraded document must make its preserved historical pacing explicit");
+            helper.assertTrue(upgraded.contains("operationCarrierLedger", net.minecraft.nbt.Tag.TAG_LIST),
+                    "the upgraded document must persist an explicit empty carrier ledger rather than infer physical vehicles later");
             helper.assertValueEqual(upgraded.getCompound("actorExecution").getInt("format"), SourceGrayboxActorExecutionNbt.FORMAT,
                     "the migrated execution ledger must no longer retain the global-revision envelope");
             SourceGrayboxSavedData.load(upgraded, null);
@@ -332,6 +337,22 @@ public final class SourceGrayboxStateNbtGameTests {
         }
         helper.assertTrue(invalidRejected,
                 "an unknown persisted clock profile must stop startup before it can rescale canonical time");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void currentSchemaRejectsAMissingOperationCarrierLedger(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag incomplete = source.save(new CompoundTag(), null);
+        incomplete.remove("operationCarrierLedger");
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(incomplete, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "a v27 source document without its exact operation-carrier hand-off must fail closed instead of guessing physical custody");
         helper.succeed();
     }
 
