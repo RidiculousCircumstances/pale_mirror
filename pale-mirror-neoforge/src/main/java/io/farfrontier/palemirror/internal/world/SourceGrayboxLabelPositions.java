@@ -12,7 +12,9 @@ import java.util.Map;
  * source fact.</p>
  */
 final class SourceGrayboxLabelPositions {
-    private static final int CLEARANCE = 2;
+    // One extra block clears a player's eye line over low one-block claims,
+    // while keeping the label tied to its local object rather than a sky plane.
+    private static final int CLEARANCE = 3;
     private static final int STACK_GAP = 2;
     private final SourceGrayboxPresentationLedger ledger;
     private final Map<Column, Integer> nextByColumn = new LinkedHashMap<>();

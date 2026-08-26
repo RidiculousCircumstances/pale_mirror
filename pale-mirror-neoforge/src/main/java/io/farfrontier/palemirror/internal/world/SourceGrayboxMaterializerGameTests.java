@@ -45,10 +45,18 @@ public final class SourceGrayboxMaterializerGameTests {
                 "dense source dashboards must not turn every row into an overlapping map nameplate");
         Display.TextDisplay facilityLabel = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(facility).inflate(16, 32, 16), value ->
                 value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop")).stream().findFirst().orElseThrow();
-        helper.assertValueEqual(facilityLabel.blockPosition().getY(), ReferenceGrayboxLayout.GROUND_Y + 2,
-                "a low one-block graybox structure must keep its label two blocks above the structure, not on a detached global sky plane");
+        helper.assertValueEqual(facilityLabel.blockPosition().getY(), ReferenceGrayboxLayout.GROUND_Y + 3,
+                "a low one-block graybox structure must keep its label just above the player eye line, not on the object or a detached sky plane");
         helper.assertTrue(facilityLabel.isCurrentlyGlowing(),
                 "a source label must be bright enough to distinguish from the graybox floor at map scale");
+        helper.assertValueEqual(facilityLabel.saveWithoutId(new net.minecraft.nbt.CompoundTag()).getFloat("view_range"), 1.25f,
+                "a detailed facility label must cull before it turns a distant map overview into technical-text noise");
+        helper.assertTrue(SourceGrayboxLabelPresentation.scale("settlement:fixture")
+                        > SourceGrayboxLabelPresentation.scale("facility:fixture")
+                        && SourceGrayboxLabelPresentation.scale("settlement:fixture") <= 1.0f
+                        && SourceGrayboxLabelPresentation.viewRange("settlement:fixture")
+                        > SourceGrayboxLabelPresentation.viewRange("facility:fixture"),
+                "a settlement landmark must stay readable farther away while detailed labels remain compact and local");
         Villager resident = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(16), value ->
                 value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
         Zombie bioform = helper.getLevel().getEntitiesOfClass(Zombie.class, new AABB(anchor).inflate(16), value ->

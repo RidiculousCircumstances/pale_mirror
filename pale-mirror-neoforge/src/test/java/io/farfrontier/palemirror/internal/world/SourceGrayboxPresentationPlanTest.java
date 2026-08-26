@@ -20,6 +20,14 @@ class SourceGrayboxPresentationPlanTest {
                 "an infected sector must own a visible infection metric tower");
         assertTrue(desired.keySet().stream().anyMatch(id -> id.startsWith("sector-metric:") && id.endsWith(":human_access")),
                 "human access must be physically distinct from infection and hive control");
+        snapshot.hiveOrgans().forEach(organ -> {
+            SourceGrayboxPresentationPlan.Desired crown = desired.get("hive-organ:" + organ.id() + ":crown");
+            SourceGrayboxPresentationPlan.Desired spire = desired.get("hive-organ:" + organ.id() + ":spire");
+            assertTrue(crown != null && crown.width() == 5 && crown.depth() == 5 && crown.height() == 1,
+                    "each hive organ must retain a broad, bounded distant-recognition crown");
+            assertTrue(spire != null && crown.y() > spire.y(),
+                    "the hive crown must be materially above its spire, never hidden inside its base");
+        });
         assertTrue(SourceGrayboxLabelLayout.labelledSectors(snapshot).size() <= 24,
                 "a dense V2 map must never create an unbounded cloud of nameplates");
         assertEquals(SourceGrayboxLabelLayout.labelledSectors(snapshot), SourceGrayboxLabelLayout.labelledSectors(snapshot),

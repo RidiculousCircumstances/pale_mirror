@@ -27,6 +27,7 @@ final class SourceGrayboxPresentationPlan {
     /** Shared plan/ledger limit; every claim has already been validated before Minecraft receives it. */
     static final int MAX_CLAIMS = 65_536;
     private static final int ROUTE_WAYPOINT_INTERVAL = 24;
+    private static final int HIVE_CROWN_WIDTH = 5;
 
     private SourceGrayboxPresentationPlan() { }
 
@@ -65,6 +66,11 @@ final class SourceGrayboxPresentationPlan {
             add(result, new Desired("hive-organ:" + organ.id() + ":spire", "organ:" + organ.id(), "HIVE_ORGAN_LANDMARK",
                     snapshot.stateRevision(), organ.rectangle().centreX(), SURFACE_Y, organ.rectangle().centreZ(), 1, 1, spireHeight,
                     organ.colour()));
+            // A broad cap makes the organ read as hive infrastructure at a
+            // distance, rather than as one of the thin territorial metric towers.
+            add(result, new Desired("hive-organ:" + organ.id() + ":crown", "organ:" + organ.id(), "HIVE_ORGAN_LANDMARK",
+                    snapshot.stateRevision(), organ.rectangle().centreX() - HIVE_CROWN_WIDTH / 2, SURFACE_Y,
+                    organ.rectangle().centreZ() - HIVE_CROWN_WIDTH / 2, HIVE_CROWN_WIDTH, HIVE_CROWN_WIDTH, 1, organ.colour()));
         }
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
             add(result, rectangle("cargo-pallet:" + cargo.id(), cargo.id(), "CARGO", snapshot.stateRevision(), cargo.rectangle(), 1, cargo.colour()));

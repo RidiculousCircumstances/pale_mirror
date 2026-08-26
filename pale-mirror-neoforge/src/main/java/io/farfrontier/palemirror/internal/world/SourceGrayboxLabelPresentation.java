@@ -30,7 +30,7 @@ final class SourceGrayboxLabelPresentation {
         data.putBoolean("shadow", true);
         data.putBoolean("see_through", true);
         data.putString("alignment", "center");
-        data.putFloat("view_range", 4.0f);
+        data.putFloat("view_range", viewRange(id));
         data.putFloat("width", 24.0f);
         data.putFloat("height", 3.0f);
         data.putInt("glow_color_override", glowColour(id));
@@ -73,7 +73,24 @@ final class SourceGrayboxLabelPresentation {
         };
     }
 
-    private static float scale(String id) {
-        return id.startsWith("settlement:") || id.startsWith("organ:") || id.startsWith("route:") ? 1.45f : 1.25f;
+    /**
+     * Map landmarks should orient a distant player; exact local facts should
+     * appear only once their associated greybox object is close enough to be
+     * inspected.  Otherwise twelve settlements' worth of state turns the
+     * whole horizon into overlapping text.
+     */
+    static float viewRange(String id) {
+        if (id.startsWith("settlement:") || id.startsWith("organ:")) return 3.0f;
+        if (id.startsWith("route:") || id.startsWith("field-link:") || id.startsWith("legend:")) return 1.75f;
+        return 1.25f;
+    }
+
+    /**
+     * TextDisplays use block-scale glyphs, so values greater than one obscure
+     * the source object at ordinary player distance.  Landmark names remain
+     * deliberately larger than detailed labels without becoming a billboard.
+     */
+    static float scale(String id) {
+        return id.startsWith("settlement:") || id.startsWith("organ:") ? 0.85f : 0.70f;
     }
 }
