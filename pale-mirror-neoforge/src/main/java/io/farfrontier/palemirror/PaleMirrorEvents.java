@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
+import io.farfrontier.palemirror.internal.world.SourceGrayboxEntityAdmission;
 import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
@@ -111,6 +112,11 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                && SourceGrayboxEntityAdmission.rejects(level, event.getEntity())) {
+            event.setCanceled(true);
+            return;
+        }
         if (AdapterRegistry.rejectsUnmanagedEntity(event.getEntity())) {
             event.setCanceled(true);
             return;
