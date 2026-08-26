@@ -327,13 +327,19 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         SourceGrayboxPhysicalScarLedger physicalScars = SourceGrayboxPhysicalScarLedger.load(tag.getList("physicalScars", Tag.TAG_COMPOUND));
-        if (schema == PREVIOUS_SCHEMA) {
+        boolean migrated = schema == PREVIOUS_SCHEMA;
+        if (migrated) {
             rebindV23ActorExecutionRevision(actorExecution, simulation.snapshot());
         } else {
             assertActorExecutionMatchesSource(actorExecution, simulation.snapshot());
         }
-        return new SourceGrayboxSavedData(simulation, actorExecution, effectLeases, warehouseLedger, cargoLedger, physicalScars,
+        SourceGrayboxSavedData restored = new SourceGrayboxSavedData(simulation, actorExecution, effectLeases, warehouseLedger, cargoLedger, physicalScars,
                 tag.getBoolean("activated"), tag.getLong("lastClockGameTime"), processed);
+        // SavedData is otherwise written only after a later world mutation.
+        // A successful versioned migration must be durable even when the
+        // player enters and immediately stops the server.
+        if (migrated) restored.setDirty();
+        return restored;
     }
 
     @Override

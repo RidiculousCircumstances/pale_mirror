@@ -237,6 +237,8 @@ public final class SourceGrayboxStateNbtGameTests {
         SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(v23, null);
         helper.assertValueEqual(restored.actorExecution().actors().getFirst().sourceRevision(), restored.snapshot().stateRevision(),
                 "a v23 migration may rebind a derived projection digest only after the retained source actor identity was inspected");
+        helper.assertTrue(restored.isDirty(),
+                "a successful v23 migration must request a world save even when no later simulation event happens");
         helper.assertValueEqual(restored.save(new CompoundTag(), null).getInt("schemaVersion"), 24,
                 "a successful v23 migration must durably record the new strict execution envelope");
 
