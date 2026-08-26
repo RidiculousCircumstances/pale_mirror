@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 
 /**
  * Builds the sole read-only input accepted by the source-parity graybox.
@@ -36,8 +35,9 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.ResourceSite> sites = sites(required);
         List<ReferenceGrayboxSnapshot.Route> routes = routes(required);
         List<ReferenceGrayboxSnapshot.HiveOrgan> organs = organs(required);
-        List<ReferenceGrayboxSnapshot.Bioform> bioforms = bioforms(required);
-        List<ReferenceGrayboxSnapshot.Resident> residents = residents(required, settlementAreas, operationPositions, postPositions);
+        List<ReferenceGrayboxSnapshot.Bioform> bioforms = ReferenceGrayboxActorProjection.bioforms(required);
+        List<ReferenceGrayboxSnapshot.Resident> residents = ReferenceGrayboxActorProjection.residents(
+                required, settlementAreas, operationPositions, postPositions);
         List<ReferenceGrayboxSnapshot.FieldPost> posts = posts(required);
         List<ReferenceGrayboxSnapshot.FieldLink> links = links(required);
         List<ReferenceGrayboxSnapshot.Activity> activities = activities(required, sectorAreas);
@@ -132,52 +132,6 @@ public final class ReferenceGrayboxProjection {
         return sorted(world.infection().organs().values(), ReferenceHiveOrgan::id).stream().map(organ -> new ReferenceGrayboxSnapshot.HiveOrgan(
                 organ.id(), organ.kind().name().toLowerCase(java.util.Locale.ROOT), ReferenceGrayboxLayout.organ(organ.x(), organ.y()),
                 organ.biomass(), organ.vitality(), organ.feral(), organ.feral() ? "organ.feral" : "organ." + organ.kind().name().toLowerCase(java.util.Locale.ROOT))).toList();
-    }
-
-    private static List<ReferenceGrayboxSnapshot.Bioform> bioforms(ReferenceWorld world) {
-        List<ReferenceGrayboxSnapshot.Bioform> result = new ArrayList<>();
-        for (ReferenceSwarm swarm : sorted(world.infection().swarms(), ReferenceSwarm::id)) {
-            ReferenceGrayboxLayout.Point anchor = ReferenceGrayboxLayout.position(swarm.x(), swarm.y());
-            int localOrdinal = 0;
-            for (Map.Entry<ReferenceBioformKind, List<String>> entry : swarm.bioformIds().entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey(Comparator.comparing(ReferenceBioformKind::id))).toList()) {
-                for (String bioformId : entry.getValue()) {
-                    result.add(new ReferenceGrayboxSnapshot.Bioform(bioformId,
-                            swarm.id(), entry.getKey().id(), ReferenceGrayboxLayout.actorSlot(anchor, localOrdinal++), swarm.phase().id(),
-                            swarm.feral(), "bioform." + entry.getKey().id()));
-                }
-            }
-        }
-        return List.copyOf(result);
-    }
-
-    private static List<ReferenceGrayboxSnapshot.Resident> residents(
-            ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas,
-            Map<Integer, ReferenceGrayboxLayout.Point> operationPositions, Map<Integer, ReferenceGrayboxLayout.Point> postPositions
-    ) {
-        Map<String, List<ResidentDraft>> grouped = new TreeMap<>();
-        for (ReferenceSettlement settlement : sorted(world.settlements().values(), ReferenceSettlement::id)) {
-            ReferenceResidentLedger ledger = settlement.residents();
-            if (ledger == null) throw new IllegalStateException("graybox settlement has no resident ledger: " + settlement.id());
-            for (String residentId : ledger.livingIds()) {
-                ReferenceResident resident = ledger.resident(residentId);
-                ReferenceGrayboxLayout.Point anchor = residentAnchor(resident, settlementAreas, operationPositions, postPositions);
-                String owner = resident.location().name() + ":" + (resident.locationRef() == null ? resident.homeSettlementId() : resident.locationRef());
-                grouped.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(new ResidentDraft(resident, anchor));
-            }
-        }
-        List<ReferenceGrayboxSnapshot.Resident> result = new ArrayList<>();
-        for (List<ResidentDraft> group : grouped.values()) {
-            group.sort(Comparator.comparing(item -> item.resident().id()));
-            for (int index = 0; index < group.size(); index++) {
-                ReferenceResident resident = group.get(index).resident();
-                result.add(new ReferenceGrayboxSnapshot.Resident(resident.id(), resident.homeSettlementId(), resident.occupation(),
-                        resident.economicClass(), resident.location().name().toLowerCase(java.util.Locale.ROOT), resident.locationRef(),
-                        resident.condition().name().toLowerCase(java.util.Locale.ROOT), resident.deploymentRole(),
-                        ReferenceGrayboxLayout.actorSlot(group.get(index).anchor(), index), residentColour(resident)));
-            }
-        }
-        return List.copyOf(result);
     }
 
     private static List<ReferenceGrayboxSnapshot.FieldPost> posts(ReferenceWorld world) {
@@ -397,17 +351,6 @@ public final class ReferenceGrayboxProjection {
         return Map.copyOf(result);
     }
 
-    private static ReferenceGrayboxLayout.Point residentAnchor(ReferenceResident resident,
-                                                                 Map<Integer, ReferenceGrayboxLayout.Rectangle> settlementAreas,
-                                                                 Map<Integer, ReferenceGrayboxLayout.Point> operations,
-                                                                 Map<Integer, ReferenceGrayboxLayout.Point> posts) {
-        return switch (resident.location()) {
-            case SETTLEMENT -> centre(requiredArea(settlementAreas, resident.homeSettlementId()));
-            case OPERATION -> requiredPoint(operations, resident.locationRef(), "operation", resident.id());
-            case FIELD_POST -> requiredPoint(posts, resident.locationRef(), "field post", resident.id());
-        };
-    }
-
     private static List<ReferenceOperation> allOperations(ReferenceWorld world) {
         List<ReferenceOperation> result = new ArrayList<>(world.operations().active());
         result.addAll(world.operations().completed());
@@ -445,10 +388,6 @@ public final class ReferenceGrayboxProjection {
 
     private static String siteColour(ReferenceResourceSite site) {
         return site.condition() <= 0.02d ? "site.disabled" : site.contamination() >= 0.45d ? "site.contaminated" : "site." + site.kind().name().toLowerCase(java.util.Locale.ROOT);
-    }
-
-    private static String residentColour(ReferenceResident resident) {
-        return resident.condition() == ReferenceResidentCondition.WOUNDED ? "resident.wounded" : "resident." + resident.occupation();
     }
 
     private static String fieldLinkColour(ReferenceFieldLink link) {
@@ -496,5 +435,4 @@ public final class ReferenceGrayboxProjection {
         return result;
     }
 
-    private record ResidentDraft(ReferenceResident resident, ReferenceGrayboxLayout.Point anchor) { }
 }

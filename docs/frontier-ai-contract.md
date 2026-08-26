@@ -58,6 +58,20 @@ Y=64. It creates twelve settlements and two infection seeds.
 choose a second scale, merge co-located source objects, relocate their logical
 X/Z identity, or remove canonical people to meet a presentation budget.
 
+Exact actors also have source-owned physical admission slots: settlement
+residents begin on deterministic open street cells, while swarm, operation and
+post actors begin on a clear cell apron rather than in the central organ/tissue
+or a functional building. A `COLD -> PREPARING` body may use only its source
+slot or a bounded deterministic collision-free neighbour in an already loaded
+chunk; it never clears a block, creates a ticket or treats a player structure
+as disposable. The chosen coordinate is captured into the actor ledger in the
+same admission turn. The same check protects a pre-existing `HOT` body when a
+new source scene appears around it. If no legal body cell exists, Minecraft
+gets no body (or the existing body is removed before it can tick embedded), the
+lease returns to `COLD` with its exact hand-off retained, and a readable
+`SOURCE_ACTOR_OBSTRUCTION` claim explains the deferred materialization. This
+is an executor recovery fact, not a source casualty or a second position model.
+
 ## Runtime authority and persistence
 
 `SourceGrayboxSavedData` persists the complete
@@ -72,9 +86,12 @@ The v23/v24-to-v25 persistence migration accepts only the format-3 legacy
 global-projection envelope, then may replace it with per-actor semantic
 revisions only after proving the complete exact actor-ID and actor-kind set
 against the retained canonical source document; it never creates, drops or
-substitutes a body. A current v25 revision or envelope mismatch still stops
+substitutes a body. Schema v28 alone also accepts the retained v27 admission-slot
+layout after the same complete ID/kind proof: it refreshes the source revision
+and anchor, while retaining a leased body's captured actual hand-off for normal
+restart recovery. A current v28 revision or envelope mismatch still stops
 startup, and a successful migration marks SavedData dirty so the first ordinary
-world save writes v25/format-4. A restart moves unfinished leases to `RECOVERING`; only an inspected entity with
+world save writes v28/format-4. A restart moves unfinished leases to `RECOVERING`; only an inspected entity with
 the exact old lease can return to `HOT`, while a missing/stale body settles
 `COLD` without a blind duplicate. Both documents restore all-or-nothing; an
 incompatible or incomplete document is a visible startup failure for the
@@ -138,7 +155,7 @@ without waiting for the next source day.
 
 `FAST_GRAYBOX` keeps the 1,200-tick source day and explicit complete-day
 fast-forward for source-parity, calibration and manual testing. A fresh world
-persists `GAMEPLAY`; schema v27 explicitly stores `clockProfile` alongside the
+persists `GAMEPLAY`; schema v28 explicitly stores `clockProfile` alongside the
 last source-day boundary and its operation-carrier ledger. Retained v23-v25
 worlds migrate to `FAST_GRAYBOX`, because that is the pace those worlds
 actually experienced; a v26 world retains its already explicit profile.

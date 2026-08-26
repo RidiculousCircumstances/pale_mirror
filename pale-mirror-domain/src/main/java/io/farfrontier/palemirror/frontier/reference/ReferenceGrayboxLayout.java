@@ -23,6 +23,13 @@ public final class ReferenceGrayboxLayout {
     public static final int MAX_X_EXCLUSIVE = MIN_X + ARENA_BLOCKS_X;
     public static final int MAX_Z_EXCLUSIVE = MIN_Z + ARENA_BLOCKS_Z;
     public static final int SETTLEMENT_BLOCKS = 48;
+    /**
+     * A cell actor apron deliberately leaves its central 10x10 hive-organ and
+     * tissue area clear.  The source profile bounds one swarm well below this
+     * capacity; exceeding it is a source-layout error, not permission to stack
+     * multiple exact bioforms into one physical body.
+     */
+    private static final List<Point> CELL_ACTOR_APRON = cellActorApron();
 
     private ReferenceGrayboxLayout() { }
 
@@ -103,12 +110,63 @@ public final class ReferenceGrayboxLayout {
         return centre(cellX, cellY);
     }
 
-    /** Slots are deterministic and visibly separate individual actors without a population multiplier. */
+    /**
+     * Compatibility entry point for actors based in one logical cell.
+     *
+     * <p>New projection code should name its semantic space explicitly.  A
+     * cell apron is suitable for hive swarms and small operation/post parties,
+     * but settlement residents use {@link #settlementActorSlot(Rectangle, int)}
+     * so they do not stand on functional buildings.</p>
+     */
     public static Point actorSlot(Point anchor, int ordinal) {
+        return cellActorSlot(anchor, ordinal);
+    }
+
+    /**
+     * Deterministic two-block-spaced actor positions around a cell's outer
+     * apron.  This stays clear of the cell-centred infection tissue and a
+     * possible 10x10 hive organ, while retaining one Minecraft body per source
+     * bioform rather than a cohort marker.
+     */
+    public static Point cellActorSlot(Point anchor, int ordinal) {
+        Objects.requireNonNull(anchor, "anchor");
         if (ordinal < 0) throw new IllegalArgumentException("actor ordinal must be non-negative");
-        int column = ordinal % 15;
-        int row = ordinal / 15;
-        return new Point(anchor.x() - 14 + column * 2, anchor.z() - 14 + row * 2);
+        if (ordinal >= CELL_ACTOR_APRON.size()) {
+            throw new IllegalStateException("source cell actor apron is exhausted: " + ordinal);
+        }
+        Point offset = CELL_ACTOR_APRON.get(ordinal);
+        return new Point(anchor.x() + offset.x(), anchor.z() + offset.z());
+    }
+
+    /**
+     * Deterministic pedestrian slots in the explicitly open parts of a 48x48
+     * settlement.  Functional rectangles and the fortification perimeter are
+     * not an actor staging area: a source resident may walk there later, but a
+     * newly COLD-to-HOT body must never be born inside its own graybox building.
+     */
+    public static Point settlementActorSlot(Rectangle settlement, int ordinal) {
+        Objects.requireNonNull(settlement, "settlement");
+        if (ordinal < 0) throw new IllegalArgumentException("settlement actor ordinal must be non-negative");
+        List<Rectangle> buildings = List.of(
+                facility(settlement, "civic_hall"), facility(settlement, "workshop"), facility(settlement, "armory"),
+                facility(settlement, "clinic"), facility(settlement, "warehouse"), facility(settlement, "housing"));
+        List<Point> open = new ArrayList<>();
+        for (int z = settlement.z() + 2; z <= settlement.z() + settlement.depth() - 3; z += 2) {
+            for (int x = settlement.x() + 2; x <= settlement.x() + settlement.width() - 3; x += 2) {
+                boolean clear = true;
+                for (Rectangle building : buildings) if (actorClearanceIntersects(building, x, z)) {
+                    clear = false;
+                    break;
+                }
+                if (clear) {
+                    open.add(new Point(x, z));
+                }
+            }
+        }
+        if (ordinal >= open.size()) {
+            throw new IllegalStateException("source settlement actor apron is exhausted: " + ordinal);
+        }
+        return open.get(ordinal);
     }
 
     /**
@@ -246,6 +304,21 @@ public final class ReferenceGrayboxLayout {
 
     private static Rectangle local(Rectangle outer, int x, int z, int width, int depth) {
         return new Rectangle(outer.x() + x, outer.z() + z, width, depth);
+    }
+
+    private static boolean actorClearanceIntersects(Rectangle building, int x, int z) {
+        return x >= building.x() - 1 && x <= building.x() + building.width()
+                && z >= building.z() - 1 && z <= building.z() + building.depth();
+    }
+
+    private static List<Point> cellActorApron() {
+        List<Point> result = new ArrayList<>();
+        for (int z = -7; z <= 7; z += 2) {
+            for (int x = -7; x <= 7; x += 2) {
+                if (Math.abs(x) == 7 || Math.abs(z) == 7) result.add(new Point(x, z));
+            }
+        }
+        return List.copyOf(result);
     }
 
     private static void requireCell(int x, int y) {

@@ -48,16 +48,33 @@ final class SourceGrayboxActorExecutionRuntime {
                              Map<String, Entity> admittedEntities) {
         long gameTick = data.actorExecutionGameTime(level.getGameTime());
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(level);
+        SourceGrayboxPresentationLedger presentation = SourceGrayboxPresentationLedger.get(level);
         boolean changed = false;
         for (ReferenceGrayboxActorExecutionState.ActorState actor : data.actorExecution().actors()) {
             BlockPos position = position(actor);
             Entity entity = materializer.actorEntity(level, admittedEntities, actor);
+            boolean recoveredThisPublication = materializer.actorRecoveries().consume(actor.id(), actor.kind().name());
             switch (actor.mode()) {
                 case PREPARING -> {
-                    if (entity != null) changed |= data.activateActor(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    if (entity != null && data.activateActor(actor.id(), actor.leaseId(), HOLDER, gameTick)) {
+                        // The spawn resolver may have selected a deterministic
+                        // legal neighbour of a blocked source point. Persist
+                        // that physical hand-off in the same admission turn;
+                        // it is not a transient NeoForge-only fallback.
+                        changed = true;
+                        changed |= data.captureActor(actor.id(), actor.leaseId(), HOLDER, sixteenths(entity.getX()),
+                                sixteenths(entity.getZ()), gameTick);
+                    }
                 }
                 case HOT -> {
-                    if (entity != null && gameTick % CAPTURE_INTERVAL_TICKS == 0L) {
+                    if (entity == null && SourceGrayboxActorMaterializer.isActorObstructed(presentation, actor)) {
+                        // The materializer removed the body in the same server
+                        // turn in which it found no collision-free recovery
+                        // cell.  Release this lease explicitly; the retained
+                        // obstruction is the only reason a later HOT demand
+                        // may retry, never a duplicate body.
+                        changed |= data.deferBlockedHotActor(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    } else if (entity != null && (recoveredThisPublication || gameTick % CAPTURE_INTERVAL_TICKS == 0L)) {
                         changed |= data.captureActor(actor.id(), actor.leaseId(), HOLDER, sixteenths(entity.getX()),
                                 sixteenths(entity.getZ()), gameTick);
                     }

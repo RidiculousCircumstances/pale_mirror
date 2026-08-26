@@ -13,9 +13,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -59,6 +63,135 @@ public final class SourceGrayboxActorMaterializerGameTests {
         materializer.apply(helper.getLevel(), snapshot, execution, admitted);
         helper.assertValueEqual(resident.getX(), anchor.getX() + 15.5d, "a HOT resident must retain live X instead of snapshot reset");
         helper.assertValueEqual(resident.getZ(), anchor.getZ() + 15.5d, "a HOT resident must retain live Z instead of snapshot reset");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-actor-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void preparedActorUsesDeterministicFreeApronInsteadOfEnteringAPmWall(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        String residentId = "resident:actor-admission:free";
+        ReferenceGrayboxSnapshot snapshot = SourceGrayboxMaterializerGameTests.fixture(anchor, baseline, residentId, 1.0d, "safe-admission");
+        ReferenceGrayboxSnapshot.Resident resident = snapshot.residents().getFirst();
+        BlockPos blocked = new BlockPos(resident.position().x(), ReferenceGrayboxLayout.GROUND_Y + 1, resident.position().z());
+        helper.getLevel().setBlock(blocked, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(blocked.above(), Blocks.STONE.defaultBlockState(), 3);
+
+        AdmissionBorder border = AdmissionBorder.openAround(helper.getLevel().getWorldBorder(), resident.position());
+        try {
+            // The stable first apron candidate for this identity is deliberately
+            // empty.  Check the resolver against the raw physical world before
+            // the wider materializer publishes labels/claims, so a failure tells
+            // us whether admission or publication introduced the obstruction.
+            Villager probe = new Villager(EntityType.VILLAGER, helper.getLevel());
+            Vec3 desired = new Vec3(resident.position().x() + 0.5d, ReferenceGrayboxLayout.GROUND_Y + 1,
+                    resident.position().z() + 0.5d);
+            Vec3 expectedApron = desired.add(3.0d, 0.0d, -3.0d);
+            probe.moveTo(expectedApron.x, expectedApron.y, expectedApron.z, 0.0F, 0.0F);
+            helper.assertTrue(helper.getLevel().noCollision(probe, probe.getBoundingBox()),
+                    "the raw deterministic apron must be physically clear before source presentation writes");
+            helper.assertTrue(SourceGrayboxActorSpawnResolver.resolve(helper.getLevel(), probe, desired, residentId).isPresent(),
+                    "the raw deterministic apron must be accepted before source presentation writes");
+
+            ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+            helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", 1L), "the exact source resident must hold the one preparation lease");
+            SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+            Map<String, Entity> admitted = new LinkedHashMap<>();
+            materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+
+            SourceGrayboxPresentationLedger.Claim admissionConflict = SourceGrayboxPresentationLedger.get(helper.getLevel())
+                    .claim("actor-obstruction:RESIDENT:" + residentId);
+            helper.assertTrue(admitted.containsKey(SourceGrayboxMaterializer.entityKey(residentId, "RESIDENT")),
+                    "a blocked source point with a free local apron must admit one physical resident body; conflict=" + admissionConflict);
+            Villager body = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->
+                    value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
+            helper.assertTrue(helper.getLevel().noCollision(body, body.getBoundingBox()),
+                    "a PM actor must never be admitted with its body intersecting a physical wall");
+            helper.assertTrue(body.blockPosition().getX() != blocked.getX() || body.blockPosition().getZ() != blocked.getZ(),
+                    "a blocked source point must use a deterministic nearby open point rather than suffocating in place");
+            helper.assertTrue(SourceGrayboxPresentationLedger.get(helper.getLevel())
+                            .claim("actor-obstruction:RESIDENT:" + residentId) == null,
+                    "a recovered local collision must not leave a false persistent obstruction warning");
+        } finally {
+            border.restore();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-actor-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void fullyBlockedPreparationDefersAndExplainsInsteadOfCreatingASuffocatingActor(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        String residentId = "resident:actor-admission:blocked";
+        ReferenceGrayboxSnapshot snapshot = SourceGrayboxMaterializerGameTests.fixture(anchor, baseline, residentId, 1.0d, "blocked-admission");
+        ReferenceGrayboxSnapshot.Resident resident = snapshot.residents().getFirst();
+        for (int x = -7; x <= 7; x++) for (int z = -7; z <= 7; z++) {
+            BlockPos obstruction = new BlockPos(resident.position().x() + x, ReferenceGrayboxLayout.GROUND_Y + 1, resident.position().z() + z);
+            helper.getLevel().setBlock(obstruction, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(obstruction.above(), Blocks.STONE.defaultBlockState(), 3);
+        }
+
+        AdmissionBorder border = AdmissionBorder.openAround(helper.getLevel().getWorldBorder(), resident.position());
+        try {
+            ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+            helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", 1L), "the exact source resident must hold the one preparation lease");
+            SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+            materializer.apply(helper.getLevel(), snapshot, execution, new LinkedHashMap<>());
+
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->
+                            value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).isEmpty(),
+                    "no free physical body means a retained preparation, never an embedded Villager");
+            SourceGrayboxPresentationLedger.Claim obstruction = SourceGrayboxPresentationLedger.get(helper.getLevel())
+                    .claim("actor-obstruction:RESIDENT:" + residentId);
+            helper.assertTrue(obstruction != null && obstruction.conflicted() && !obstruction.installed(),
+                    "an unmaterialized source actor must retain a visible non-owning obstruction fact for recovery");
+        } finally {
+            border.restore();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-actor-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotActorEscapesNewSourceGeometryBeforeTheWorldCanSuffocateIt(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        String residentId = "resident:actor-admission:hot";
+        ReferenceGrayboxSnapshot snapshot = SourceGrayboxMaterializerGameTests.fixture(anchor, baseline, residentId, 1.0d, "hot-admission");
+        ReferenceGrayboxSnapshot.Resident resident = snapshot.residents().getFirst();
+        AdmissionBorder border = AdmissionBorder.openAround(helper.getLevel().getWorldBorder(), resident.position());
+        try {
+            ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+            helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", 1L), "the exact source resident must reserve its lease");
+            String lease = execution.actor(residentId).orElseThrow().leaseId();
+            SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+            Map<String, Entity> admitted = new LinkedHashMap<>();
+            materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+            helper.assertTrue(execution.activate(residentId, lease, "gametest:actor-runtime", 2L), "the test body must become HOT");
+            Villager body = (Villager) admitted.get(SourceGrayboxMaterializer.entityKey(residentId, "RESIDENT"));
+            BlockPos embedded = body.blockPosition();
+            helper.getLevel().setBlock(embedded, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(embedded.above(), Blocks.STONE.defaultBlockState(), 3);
+
+            materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+
+            helper.assertTrue(!body.isRemoved(), "a live source actor must be recovered instead of being left to suffocate");
+            helper.assertTrue(helper.getLevel().noCollision(body, body.getBoundingBox()),
+                    "a source scene introduced around a HOT body must be resolved before the entity tick");
+            helper.assertTrue(body.blockPosition().getX() != embedded.getX() || body.blockPosition().getZ() != embedded.getZ(),
+                    "HOT recovery must retain continuity by moving only to a deterministic nearby free body cell");
+            helper.assertTrue(materializer.actorRecoveries().hasAny(),
+                    "a recovered HOT body must request an immediate exact hand-off capture, not wait for the normal cadence");
+            helper.assertTrue(materializer.actorRecoveries().consume(residentId, "RESIDENT"),
+                    "the recovery marker must identify only the one source-owned actor whose physical position changed");
+            helper.assertTrue(SourceGrayboxPresentationLedger.get(helper.getLevel())
+                            .claim("actor-obstruction:RESIDENT:" + residentId) == null,
+                    "a successful HOT recovery must not retain a stale obstruction warning");
+        } finally {
+            border.restore();
+        }
         helper.succeed();
     }
 
@@ -212,6 +345,20 @@ public final class SourceGrayboxActorMaterializerGameTests {
                         new ReferenceGrayboxLayout.Point(anchor.getX() + 10, anchor.getZ() + 4), "engaging", false, "bioform.harvester")),
                 fixture.residents(), fixture.fieldPosts(), fixture.fieldLinks(), fixture.activities(), fixture.cargoes(), fixture.interactions(),
                 fixture.sectors(), fixture.chrysalises(), fixture.events());
+    }
+
+    private record AdmissionBorder(WorldBorder border, double centerX, double centerZ, double size) {
+        static AdmissionBorder openAround(WorldBorder border, ReferenceGrayboxLayout.Point point) {
+            AdmissionBorder previous = new AdmissionBorder(border, border.getCenterX(), border.getCenterZ(), border.getSize());
+            border.setCenter(point.x() + 0.5d, point.z() + 0.5d);
+            border.setSize(64.0d);
+            return previous;
+        }
+
+        void restore() {
+            border.setCenter(centerX, centerZ);
+            border.setSize(size);
+        }
     }
 
     private static ReferenceGrayboxSnapshot withoutResidents(ReferenceGrayboxSnapshot present) {

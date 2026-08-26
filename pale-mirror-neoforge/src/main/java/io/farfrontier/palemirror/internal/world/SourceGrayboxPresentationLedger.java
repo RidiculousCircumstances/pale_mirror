@@ -104,6 +104,12 @@ final class SourceGrayboxPresentationLedger extends SavedData {
         setDirty();
     }
 
+    /** Releases only a discarded PREPARING body so the same one-source lease may retry safely. */
+    void releaseEntity(String key) {
+        requireEntityKey(key);
+        if (entityClaims.remove(key)) setDirty();
+    }
+
     void releaseEntitiesExcept(Set<String> active) {
         if (!entityClaims.removeIf(key -> !active.contains(key))) return;
         setDirty();

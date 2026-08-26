@@ -286,8 +286,8 @@ public final class SourceGrayboxStateNbtGameTests {
             helper.assertTrue(restored.isDirty(),
                     "a successful v" + legacySchema + " migration must request a world save even when no later simulation event happens");
             CompoundTag upgraded = restored.save(new CompoundTag(), null);
-            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 27,
-                    "a successful legacy migration must durably record the strict v27 envelope");
+            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 28,
+                    "a successful legacy migration must durably record the strict v28 envelope");
             helper.assertValueEqual(upgraded.getString("clockProfile"), legacySchema < 26 ? "fast_graybox" : "gameplay",
                     "the upgraded document must make its preserved historical pacing explicit");
             helper.assertTrue(upgraded.contains("operationCarrierLedger", net.minecraft.nbt.Tag.TAG_LIST),
@@ -352,7 +352,48 @@ public final class SourceGrayboxStateNbtGameTests {
             rejected = true;
         }
         helper.assertTrue(rejected,
-                "a v27 source document without its exact operation-carrier hand-off must fail closed instead of guessing physical custody");
+                "a current source document without its exact operation-carrier hand-off must fail closed instead of guessing physical custody");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void v27ActorAdmissionMigrationPreservesHotHandoffAndRejectsMissingActor(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        String actor = source.snapshot().residents().getFirst().id();
+        helper.assertTrue(source.prepareActor(actor, "gametest:chunk:0_0", 20L), "the retained resident must get a durable lease");
+        String lease = source.actorExecution().actor(actor).orElseThrow().leaseId();
+        helper.assertTrue(source.activateActor(actor, lease, "gametest:chunk:0_0", 21L), "the retained resident must become HOT");
+        helper.assertTrue(source.captureActor(actor, lease, "gametest:chunk:0_0", 4_321, -876, 22L),
+                "the test must retain an observed physical hand-off distinct from its source slot");
+
+        CompoundTag legacy = source.save(new CompoundTag(), null);
+        legacy.putInt("schemaVersion", 27);
+        for (net.minecraft.nbt.Tag raw : legacy.getCompound("actorExecution").getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            ((CompoundTag) raw).putString("revision", "0".repeat(64));
+        }
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(legacy, null);
+        var retained = restored.actorExecution().actor(actor).orElseThrow();
+        helper.assertValueEqual(retained.sourceRevision(), actorRevision(restored.snapshot(), actor),
+                "v27 may refresh only the source revision/anchor after exact identity and kind proof");
+        helper.assertValueEqual(retained.actualXSixteenths(), 4_321,
+                "a v27 migration must preserve the observed HOT x hand-off instead of teleporting a body to the new slot");
+        helper.assertValueEqual(retained.actualZSixteenths(), -876,
+                "a v27 migration must preserve the observed HOT z hand-off instead of teleporting a body to the new slot");
+        helper.assertTrue(restored.isDirty(), "the v27 admission migration must persist its v28 result before a later source day");
+        helper.assertValueEqual(restored.save(new CompoundTag(), null).getInt("schemaVersion"), 28,
+                "the upgraded document must not re-enter the one-time v27 migration path");
+
+        CompoundTag missing = source.save(new CompoundTag(), null);
+        missing.putInt("schemaVersion", 27);
+        missing.getCompound("actorExecution").put("actors", new net.minecraft.nbt.ListTag());
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(missing, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "v27 admission migration must fail closed when an exact source actor is absent from the retained ledger");
         helper.succeed();
     }
 

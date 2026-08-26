@@ -9,6 +9,10 @@ final class SourceGrayboxConflictPresentation {
             return "[!] cargo relocation pending target=" + claim.subjectId()
                     + " outcome=old-custody-not-loaded source=retained";
         }
+        if (claim.kind().equals("SOURCE_ACTOR_OBSTRUCTION")) {
+            return "[!] actor materialization blocked target=" + claim.subjectId()
+                    + " outcome=no-collision-free-body source=retained";
+        }
         String outcome = claim.consumed() ? "replayed-event"
                 : !claim.installed() ? "foreign-obstruction"
                 : "foreign-or-stale-change";

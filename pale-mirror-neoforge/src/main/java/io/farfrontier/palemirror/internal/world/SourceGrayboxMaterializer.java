@@ -51,6 +51,7 @@ final class SourceGrayboxMaterializer {
      * disconnected from its text when viewed from the observation deck.
      */
     private static final int MAX_LABEL_Y = SURFACE_Y + 81;
+    private final SourceGrayboxActorRecoveryCapture actorRecoveries = new SourceGrayboxActorRecoveryCapture();
     Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) { return apply(level, snapshot, null, new LinkedHashMap<>()); }
 
     Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Map<String, Entity> admittedEntities) {
@@ -67,6 +68,7 @@ final class SourceGrayboxMaterializer {
     Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxActorExecutionState actorExecution,
                  Map<String, Entity> admittedEntities) {
         Objects.requireNonNull(admittedEntities, "admitted entities");
+        actorRecoveries.beginPublication();
         LinkedHashMap<String, SourceGrayboxPresentationPlan.Desired> desired = SourceGrayboxPresentationPlan.from(snapshot);
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
         rebalanceInteractionWeights(ledger, desired);
@@ -88,7 +90,8 @@ final class SourceGrayboxMaterializer {
                 }
             }
         }
-        SourceGrayboxActorMaterializer.materialize(level, ledger, snapshot, actorExecution, activeEntities, admittedEntities);
+        SourceGrayboxActorMaterializer.materialize(level, ledger, snapshot, actorExecution, activeEntities, admittedEntities,
+                actorRecoveries);
         retireEntities(level, snapshot.bounds(), activeEntities, admittedEntities);
         ledger.releaseEntitiesExcept(activeEntities);
         return new Report(placed, desired.size(), conflicts, snapshot.stateRevision());
@@ -114,6 +117,8 @@ final class SourceGrayboxMaterializer {
                        ReferenceGrayboxActorExecutionState.ActorState actor) {
         return SourceGrayboxActorMaterializer.actorEntity(level, admittedEntities, actor);
     }
+
+    SourceGrayboxActorRecoveryCapture actorRecoveries() { return actorRecoveries; }
 
     void recordBlockConflict(ServerLevel level, BlockPos position) {
         SourceGrayboxPresentationLedger.Claim claim = claimAt(level, position);

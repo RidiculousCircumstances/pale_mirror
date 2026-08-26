@@ -81,7 +81,7 @@ public final class SourceGrayboxRuntime {
         int advanced = dueBoundaries.size();
         if (advanced > 0 || executionChanged || warehouseChanged || cargoChanged || carrierChanged || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) {
             publish(graybox);
-            if (actorDue) actorExecution.afterPublication(graybox, data, materializer, admittedEntities);
+            if (actorDue || materializer.actorRecoveries().hasAny()) actorExecution.afterPublication(graybox, data, materializer, admittedEntities);
         }
         // The just-published plan is the observed world against which a real
         // source-day consequence lands.  The executor decides HOT/COLD only

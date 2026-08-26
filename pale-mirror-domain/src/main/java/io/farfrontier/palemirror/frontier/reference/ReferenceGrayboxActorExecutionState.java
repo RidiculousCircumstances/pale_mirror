@@ -130,6 +130,17 @@ public final class ReferenceGrayboxActorExecutionState {
         return true;
     }
 
+    /**
+     * Releases a live executor whose physical body was rejected by an observed
+     * collision, retaining its exact captured hand-off for a later lease.
+     */
+    public boolean deferBlockedHotActor(String id, String leaseId, String holder, long gameTick) {
+        ActorState prior = require(id);
+        if (prior.mode() != Mode.HOT || !prior.leaseId().equals(leaseId) || !prior.holder().equals(holder)) return false;
+        actors.put(id, prior.cold(gameTick));
+        return true;
+    }
+
     /** Begins a hand-off; source code must capture the actual position before settling COLD. */
     public boolean beginDrain(String id, String leaseId, String holder, long gameTick) {
         ActorState prior = require(id);

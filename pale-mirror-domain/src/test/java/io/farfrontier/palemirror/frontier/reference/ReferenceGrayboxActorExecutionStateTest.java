@@ -60,6 +60,26 @@ class ReferenceGrayboxActorExecutionStateTest {
     }
 
     @Test
+    void physicallyBlockedHotBodyReleasesOneLeaseWithoutLosingItsExactHandoff() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        String actor = snapshot.residents().getFirst().id();
+        assertTrue(state.prepare(actor, "materializer:chunk:0_0", 1L));
+        String lease = state.actor(actor).orElseThrow().leaseId();
+        assertTrue(state.activate(actor, lease, "materializer:chunk:0_0", 2L));
+        assertTrue(state.capture(actor, lease, "materializer:chunk:0_0", 321, -77, 3L));
+
+        assertFalse(state.deferBlockedHotActor(actor, lease, "materializer:other", 4L),
+                "a foreign executor may not release a live actor after an obstruction");
+        assertTrue(state.deferBlockedHotActor(actor, lease, "materializer:chunk:0_0", 4L));
+        var deferred = state.actor(actor).orElseThrow();
+        assertEquals(ReferenceGrayboxActorExecutionState.Mode.COLD, deferred.mode());
+        assertEquals(321, deferred.actualXSixteenths());
+        assertEquals(-77, deferred.actualZSixteenths());
+        assertTrue(deferred.leaseId().isEmpty(), "the rejected body must not retain a live executor claim");
+    }
+
+    @Test
     void combatActionHasOneDurableEpochAndCannotBypassItsCooldownOrLease() {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
         ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);

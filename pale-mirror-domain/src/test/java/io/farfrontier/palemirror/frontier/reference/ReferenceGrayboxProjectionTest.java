@@ -51,6 +51,27 @@ class ReferenceGrayboxProjectionTest {
     }
 
     @Test
+    void sourceActorSlotsReserveOpenSettlementStreetsAndHiveCellAprons() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(grayboxWorld());
+        for (ReferenceGrayboxSnapshot.Resident resident : snapshot.residents()) {
+            if (!resident.location().equals("settlement")) continue;
+            assertTrue(snapshot.facilities().stream().filter(facility -> facility.settlementId() == resident.homeSettlementId())
+                    .filter(facility -> !facility.kind().equals("fortification"))
+                    .noneMatch(facility -> contains(facility.rectangle(), resident.position())),
+                    "a settlement resident must start on an open source street, not in " + resident.id());
+        }
+
+        ReferenceGrayboxLayout.Point cell = ReferenceGrayboxLayout.centre(10, 10);
+        List<ReferenceGrayboxLayout.Point> apron = java.util.stream.IntStream.range(0, 28)
+                .mapToObj(index -> ReferenceGrayboxLayout.cellActorSlot(cell, index)).toList();
+        assertEquals(28, apron.stream().distinct().count(), "one cell actor apron must preserve one physical slot per source actor");
+        assertTrue(apron.stream().allMatch(point -> Math.abs(point.x() - cell.x()) == 7 || Math.abs(point.z() - cell.z()) == 7),
+                "cell actors must reserve the clear outer apron rather than the central hive/tissue silhouette");
+        assertThrows(IllegalStateException.class, () -> ReferenceGrayboxLayout.cellActorSlot(cell, 28),
+                "a source overflow must fail closed instead of silently stacking exact bodies into one unsafe location");
+    }
+
+    @Test
     void everySettlementPublishesOneTypedWarehouseWithAllCanonicalResources() {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(grayboxWorld());
 
@@ -277,6 +298,11 @@ class ReferenceGrayboxProjectionTest {
             assertTrue(snapshot.residents().stream().anyMatch(resident -> resident.id().equals(residentId)
                     && resident.location().equals(location) && Integer.valueOf(locationId).equals(resident.locationId())), residentId);
         }
+    }
+
+    private static boolean contains(ReferenceGrayboxLayout.Rectangle area, ReferenceGrayboxLayout.Point point) {
+        return point.x() >= area.x() && point.x() < area.x() + area.width()
+                && point.z() >= area.z() && point.z() < area.z() + area.depth();
     }
 
     private static ReferenceFieldPost startBuildablePost(ReferenceWorld world, ReferenceFieldCampaign campaign,

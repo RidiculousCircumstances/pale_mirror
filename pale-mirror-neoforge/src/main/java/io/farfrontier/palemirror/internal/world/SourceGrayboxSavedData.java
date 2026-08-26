@@ -27,6 +27,9 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** Durable canonical owner for one source-parity graybox world. */
 final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCombatOwner {
     static final String DATA_NAME = "pale_mirror_frontier";
+    // v28 recalibrates the immutable source-owned resident/cell admission slots.
+    // It may rebind a retained v27 actor revision only after exact actor ID/kind
+    // proof, while preserving the captured hand-off of every non-cold executor.
     // v27 persists a separate HOT/COLD execution ledger for real operation
     // cargo carriers. v26 persists the source-day clock profile. Earlier documents really did
     // run at the then-hard-coded 1,200 ticks/day, so their migration must
@@ -36,11 +39,12 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     // retained v23 and v24 documents used the format-3 global binding. v22
     // remains unsafe because it lacks the old and target positions for durable
     // cargo relocation.
-    private static final int SCHEMA = 27;
+    private static final int SCHEMA = 28;
     private static final int LEGACY_SCHEMA_V23 = 23;
     private static final int LEGACY_SCHEMA_V24 = 24;
     private static final int LEGACY_SCHEMA_V25 = 25;
     private static final int LEGACY_SCHEMA_V26 = 26;
+    private static final int LEGACY_SCHEMA_V27 = 27;
     private static final int MAX_PROCESSED_OBSERVATIONS = 4_096;
     private static final int MAX_EFFECT_LEASES = ReferenceGrayboxActorExecutionState.MAX_ACTORS + 512;
     private final ReferenceGrayboxSimulation simulation;
@@ -158,6 +162,12 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
 
     boolean cancelActorPreparation(String id, String leaseId, String holder, long gameTick) {
         boolean changed = actorExecution.cancelPreparation(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean deferBlockedHotActor(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.deferBlockedHotActor(id, leaseId, holder, gameTick);
         if (changed) setDirty();
         return changed;
     }
@@ -322,7 +332,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         boolean legacyGlobalRevision = schema == LEGACY_SCHEMA_V23 || schema == LEGACY_SCHEMA_V24;
         boolean legacyClockProfile = legacyGlobalRevision || schema == LEGACY_SCHEMA_V25;
         boolean legacyOperationCarriers = legacyClockProfile || schema == LEGACY_SCHEMA_V26;
-        if ((!legacyOperationCarriers && schema != SCHEMA) || !tag.contains("sourceState", Tag.TAG_COMPOUND)) {
+        boolean legacyActorAdmissionSlots = schema == LEGACY_SCHEMA_V27;
+        if ((!legacyOperationCarriers && !legacyActorAdmissionSlots && schema != SCHEMA) || !tag.contains("sourceState", Tag.TAG_COMPOUND)) {
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         LinkedHashSet<String> processed = readProcessed(tag.getList("processedObservationIds", Tag.TAG_STRING));
@@ -386,16 +397,18 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
             throw new IllegalStateException("source graybox clock profile is invalid", invalid);
         }
         if (legacyGlobalRevision) {
-            rebindLegacyActorExecutionRevision(actorExecution, simulation.snapshot(), schema);
+            SourceGrayboxActorExecutionMigration.rebindLegacyRevision(actorExecution, simulation.snapshot(), schema);
+        } else if (legacyActorAdmissionSlots) {
+            SourceGrayboxActorExecutionMigration.rebindV27AdmissionSlots(actorExecution, simulation.snapshot());
         } else {
-            assertActorExecutionMatchesSource(actorExecution, simulation.snapshot());
+            SourceGrayboxActorExecutionMigration.assertMatchesSource(actorExecution, simulation.snapshot());
         }
         SourceGrayboxSavedData restored = new SourceGrayboxSavedData(simulation, actorExecution, effectLeases, warehouseLedger, cargoLedger, operationCarrierLedger, physicalScars,
                 tag.getBoolean("activated"), tag.getLong("lastClockGameTime"), clockProfile, processed);
         // SavedData is otherwise written only after a later world mutation.
         // A successful versioned migration must be durable even when the
         // player enters and immediately stops the server.
-        if (legacyOperationCarriers) restored.setDirty();
+        if (legacyOperationCarriers || legacyActorAdmissionSlots) restored.setDirty();
         return restored;
     }
 
@@ -434,57 +447,4 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         if (actorExecution.reconcile(simulation.snapshot())) setDirty();
     }
 
-    /** A bad execution ledger is not allowed to fabricate/forget a source body during SavedData load. */
-    private static void assertActorExecutionMatchesSource(ReferenceGrayboxActorExecutionState execution,
-                                                          ReferenceGrayboxSnapshot snapshot) {
-        java.util.Map<String, ReferenceGrayboxActorExecutionState.ActorDescriptor> expected = new java.util.LinkedHashMap<>();
-        for (ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor : ReferenceGrayboxActorExecutionState.descriptors(snapshot)) {
-            expected.put(descriptor.id(), descriptor);
-        }
-        for (ReferenceGrayboxActorExecutionState.ActorState actor : execution.actors()) {
-            ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor = expected.remove(actor.id());
-            if (descriptor == null) {
-                if (actor.mode() != ReferenceGrayboxActorExecutionState.Mode.RETIRED) {
-                    throw new IllegalStateException("source graybox execution has a non-retired actor absent from source: " + actor.id());
-                }
-                continue;
-            }
-            if (actor.mode() == ReferenceGrayboxActorExecutionState.Mode.RETIRED || actor.kind() != descriptor.kind()
-                    || !actor.sourceRevision().equals(descriptor.sourceRevision())) {
-                throw new IllegalStateException("source graybox actor execution disagrees with source: " + actor.id());
-            }
-        }
-        if (!expected.isEmpty()) {
-            throw new IllegalStateException("source graybox actor execution is missing source actors: " + expected.keySet().iterator().next());
-        }
-    }
-
-    /**
-     * Retained v23/v24 records store a complete source-projection digest in
-     * each physical lease. That global digest is deliberately not the semantic
-     * revision of this exact source body, so migration proves the stronger
-     * durable facts first: every exact actor ID and kind must still be present,
-     * and no resident/bioform may be silently invented, forgotten or retired.
-     * Only then may the pure-domain ledger refresh its source-specific digest
-     * and anchor from the retained source document.
-     */
-    private static void rebindLegacyActorExecutionRevision(ReferenceGrayboxActorExecutionState execution,
-                                                            ReferenceGrayboxSnapshot snapshot, int legacySchema) {
-        java.util.Map<String, ReferenceGrayboxActorExecutionState.ActorDescriptor> expected = new java.util.LinkedHashMap<>();
-        for (ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor : ReferenceGrayboxActorExecutionState.descriptors(snapshot)) {
-            expected.put(descriptor.id(), descriptor);
-        }
-        for (ReferenceGrayboxActorExecutionState.ActorState actor : execution.actors()) {
-            ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor = expected.remove(actor.id());
-            if (descriptor == null || actor.mode() == ReferenceGrayboxActorExecutionState.Mode.RETIRED
-                    || actor.kind() != descriptor.kind()) {
-                throw new IllegalStateException("v" + legacySchema + " source graybox actor execution cannot be safely rebound: " + actor.id());
-            }
-        }
-        if (!expected.isEmpty()) {
-            throw new IllegalStateException("v" + legacySchema + " source graybox actor execution is missing source actors: " + expected.keySet().iterator().next());
-        }
-        execution.reconcile(snapshot);
-        assertActorExecutionMatchesSource(execution, snapshot);
-    }
 }
