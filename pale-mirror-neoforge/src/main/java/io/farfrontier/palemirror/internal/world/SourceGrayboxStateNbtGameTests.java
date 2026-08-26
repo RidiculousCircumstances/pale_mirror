@@ -227,6 +227,51 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void v23ExecutionRevisionRebindsOnlyAfterExactActorIdentityProof(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag v23 = source.save(new CompoundTag(), null);
+        v23.putInt("schemaVersion", 23);
+        CompoundTag firstActor = v23.getCompound("actorExecution").getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        firstActor.putString("revision", "0".repeat(64));
+
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(v23, null);
+        helper.assertValueEqual(restored.actorExecution().actors().getFirst().sourceRevision(), restored.snapshot().stateRevision(),
+                "a v23 migration may rebind a derived projection digest only after the retained source actor identity was inspected");
+        helper.assertValueEqual(restored.save(new CompoundTag(), null).getInt("schemaVersion"), 24,
+                "a successful v23 migration must durably record the new strict execution envelope");
+
+        CompoundTag missingActor = source.save(new CompoundTag(), null);
+        missingActor.putInt("schemaVersion", 23);
+        missingActor.getCompound("actorExecution").put("actors", new net.minecraft.nbt.ListTag());
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(missingActor, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "a v23 migration must reject a missing exact source person rather than recreating an execution ledger");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void currentExecutionRevisionMismatchStillFailsClosed(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag corrupt = source.save(new CompoundTag(), null);
+        corrupt.getCompound("actorExecution").getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0)
+                .putString("revision", "f".repeat(64));
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(corrupt, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "only the explicit v23 migration may rebind a projection revision; a corrupted current execution ledger still stops startup");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void interruptedSourceMeleeRemainsUnknownAfterRestartAndCannotReplay(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
         String actor = source.snapshot().residents().getFirst().id();

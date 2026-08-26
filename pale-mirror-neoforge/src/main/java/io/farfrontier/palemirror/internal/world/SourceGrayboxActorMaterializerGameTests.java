@@ -145,6 +145,11 @@ public final class SourceGrayboxActorMaterializerGameTests {
         Zombie bioform = (Zombie) materializer.actorEntity(helper.getLevel(), admitted, execution.actor(bioformId).orElseThrow());
         lineBody.setPos(anchor.getX() + 8.5d, ReferenceGrayboxLayout.GROUND_Y + 1, anchor.getZ() + 4.5d);
         bioform.setPos(anchor.getX() + 9.7d, ReferenceGrayboxLayout.GROUND_Y + 1, anchor.getZ() + 4.5d);
+        // This test applies a controlled hit in the same server turn in which
+        // the synthetic Zombie was materialized. Clear native spawn immunity
+        // so the assertion isolates the source role gate rather than vanilla
+        // post-spawn timing.
+        bioform.invulnerableTime = 0;
         float before = bioform.getHealth();
 
         new SourceGrayboxActorCombatRuntime().tick(helper.getLevel(), new FixtureCombatOwner(snapshot, execution), materializer, admitted, 5L);

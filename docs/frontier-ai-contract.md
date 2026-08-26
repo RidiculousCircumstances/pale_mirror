@@ -67,8 +67,11 @@ and a bounded accepted-observation history. The execution ledger has one
 record for every exact resident/bioform: its latest source anchor and revision,
 fixed sixteenth-block physical position, one `COLD -> PREPARING -> HOT ->
 DRAINING -> COLD` lease lifecycle, and monotonic local combat epoch/cooldown.
-A
-restart moves unfinished leases to `RECOVERING`; only an inspected entity with
+A one-time v23-to-v24 persistence migration may rebind the actor ledger's
+derived projection revision only after proving the complete exact actor-ID and
+actor-kind set against that retained canonical source document; it never
+creates, drops or substitutes a body. Current-format revision mismatches still
+stop startup. A restart moves unfinished leases to `RECOVERING`; only an inspected entity with
 the exact old lease can return to `HOT`, while a missing/stale body settles
 `COLD` without a blind duplicate. Both documents restore all-or-nothing; an
 incompatible or incomplete document is a visible startup failure for the
