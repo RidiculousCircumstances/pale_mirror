@@ -71,7 +71,12 @@ final class ReferenceGrayboxStateInfectionRecords {
                     "state", "forage_x", "forage_y", "feral");
             int id = ReferenceGrayboxStateReader.integer(fields.get("id"), "swarm id");
             Integer source = ReferenceGrayboxStateReader.nullableInteger(fields.get("source_nest_id"), "swarm source organ");
-            if (id < 1 || result.containsKey(id) || (source != null && !organs.containsKey(source))) throw new IllegalArgumentException("swarm identity is invalid");
+            // A swarm retains its originating nest identity after that nest is
+            // destroyed.  This is source behaviour: a returning harvester
+            // without a live origin falls back to the nearest viable receiver.
+            // The ID is therefore historical provenance, not a live ownership
+            // reference, and must survive hydration even when its organ is gone.
+            if (id < 1 || result.containsKey(id)) throw new IllegalArgumentException("swarm identity is invalid");
             ReferenceSwarm swarm = new ReferenceSwarm(id, number(fields.get("x"), "swarm x"), number(fields.get("y"), "swarm y"),
                     number(fields.get("power"), "swarm power"), ReferenceGrayboxStateReader.integer(fields.get("target_id"), "swarm target id"),
                     number(fields.get("speed"), "swarm speed"), bioformKind(fields.get("kind"), "swarm kind"),

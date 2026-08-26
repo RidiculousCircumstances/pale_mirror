@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObse
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -42,6 +43,21 @@ final class SourceGrayboxSavedData extends SavedData {
 
     static SourceGrayboxSavedData fresh(long seed) {
         return new SourceGrayboxSavedData(ReferenceGrayboxSimulation.create(seed), false, 0L, new LinkedHashSet<>());
+    }
+
+    /**
+     * DimensionDataStorage turns a loader failure into a fresh record.  The
+     * source graybox must instead stop before storage sees an unhydratable
+     * canonical document, otherwise the old clock could silently disappear.
+     */
+    static void assertCompatibleData(Path worldRoot) {
+        PaleMirrorSavedDataCompatibility.assertHydratable(worldRoot, DATA_NAME,
+                SourceGrayboxSavedData::assertHydratable, "source graybox canonical state");
+    }
+
+    /** Package-visible only so the Minecraft GameTest boundary can prove the preflight rejection. */
+    static void assertHydratable(CompoundTag tag) {
+        load(tag, null);
     }
 
     ReferenceGrayboxSnapshot snapshot() { return simulation.snapshot(); }

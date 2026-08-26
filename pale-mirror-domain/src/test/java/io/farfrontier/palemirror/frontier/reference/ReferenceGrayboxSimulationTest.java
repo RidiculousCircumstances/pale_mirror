@@ -22,6 +22,19 @@ class ReferenceGrayboxSimulationTest {
     }
 
     @Test
+    void restoresASeparatedHarvesterAfterItsOriginOrganWasDestroyed() {
+        ReferenceGrayboxSimulation source = ReferenceGrayboxSimulation.create(9_031_746_258_841_137_206L);
+        for (int day = 0; day < 239; day++) source.tick();
+
+        byte[] document = source.save();
+        ReferenceGrayboxSimulation restored = ReferenceGrayboxSimulation.restore(document);
+
+        assertArrayEquals(document, restored.save(),
+                "a live swarm's historical origin must not become a dangling-reference persistence failure");
+        assertEquals(source.snapshot(), restored.snapshot());
+    }
+
+    @Test
     void exposesTypedPhysicalFactsWithoutLettingNeoForgeMutateOwners() {
         ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(42L);
         simulation.tick();

@@ -67,6 +67,7 @@ public final class PaleMirrorEvents {
     public static void onServerAboutToStart(ServerAboutToStartEvent event) {
         io.farfrontier.palemirror.internal.world.ProductProfilePreflight.verify();
         PaleMirrorSavedData.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
+        SourceGrayboxRuntime.assertCompatibleData(event.getServer().getWorldPath(LevelResource.ROOT));
     }
 
     @SubscribeEvent

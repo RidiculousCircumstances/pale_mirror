@@ -46,6 +46,22 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void savedDataPreflightRejectsAnUnhydratableCanonicalRecord(GameTestHelper helper) {
+        CompoundTag corrupt = new CompoundTag();
+        corrupt.putInt("schemaVersion", 16);
+        corrupt.put("sourceState", new CompoundTag());
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.assertHydratable(corrupt);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "startup preflight must reject bad source data before DimensionDataStorage can replace it with a fresh world");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void savedDataRestoresTheClockAndDeduplicatesPhysicalFacts(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
         source.activate(1_200L);

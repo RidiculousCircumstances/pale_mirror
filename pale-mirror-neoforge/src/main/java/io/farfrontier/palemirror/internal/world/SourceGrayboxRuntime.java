@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationO
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
+import java.nio.file.Path;
 import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -35,6 +36,11 @@ public final class SourceGrayboxRuntime {
 
     public static void stop(MinecraftServer server) {
         INSTANCES.remove(server);
+    }
+
+    /** Verify durable source state before Minecraft can substitute a fresh SavedData instance. */
+    public static void assertCompatibleData(Path worldRoot) {
+        SourceGrayboxSavedData.assertCompatibleData(worldRoot);
     }
 
     /** Returns true only after the source graybox has become the active campaign clock. */
