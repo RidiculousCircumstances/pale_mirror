@@ -217,6 +217,28 @@ accidental owner, ordering or RNG regression early; it is not a claim that a
 future calibrated Java profile must reproduce every long-running stochastic
 branch bit-for-bit.
 
+The source-fixture tools require both the external Python checkout and the
+fixture output explicitly. From the Pale Mirror checkout, a reproducible
+verification is, for example:
+
+```sh
+REFERENCE_ROOT=/home/rd/proj/pale_mirror_ai
+python3.11 tools/frontier/generate_source_v2_reachability.py \
+  --reference-root "$REFERENCE_ROOT" \
+  --output docs/frontier-reference-source-v2-reachability.json --check
+python3.11 tools/frontier/generate_v2_canonical_state_trace.py \
+  --reference-root "$REFERENCE_ROOT" \
+  --output docs/frontier-reference-v2-canonical-state.json --check
+python3.11 tools/frontier/generate_v2_multiseed_canonical_state_trace.py \
+  --reference-root "$REFERENCE_ROOT" \
+  --output docs/frontier-reference-v2-multiseed-canonical-state.json --check
+```
+
+`ReferenceSourceFixtureConformanceTest` then reads the two canonical fixtures
+directly and compares every Java checkpoint. It fails closed for a missing,
+fingerprint-less, duplicate or shape-incomplete fixture, so copied digest
+literals cannot hide a source fixture update that has not reached Java.
+
 `docs/frontier-reference-v2-public-snapshot.json` records the exact public
 `World.snapshot()` read-model at days 0, 1, 5, 10, 15, 20, 25 and 30 for the
 active 64×44, twelve-settlement, two-seed `source_v2` fixture. Regenerate it
