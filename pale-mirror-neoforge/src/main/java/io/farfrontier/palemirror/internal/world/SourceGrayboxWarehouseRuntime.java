@@ -257,6 +257,21 @@ final class SourceGrayboxWarehouseRuntime {
                 && resource.name().equals(barrel.getPersistentData().getString(RESOURCE_KEY));
     }
 
+    /**
+     * Gives a mixed former PM barrel back to the world without touching its
+     * remaining player items.  A relocating cargo must call this only after
+     * the exact PM resource was observed and removed; otherwise a later
+     * ordinary barrel at the old coordinates could be mistaken for custody
+     * that has already moved.
+     */
+    static boolean releaseContainer(BarrelBlockEntity barrel, String id, ReferenceResource resource) {
+        if (!matches(barrel, id, resource)) return false;
+        barrel.getPersistentData().remove(BINDING_KEY);
+        barrel.getPersistentData().remove(RESOURCE_KEY);
+        barrel.setChanged();
+        return true;
+    }
+
     static int count(BarrelBlockEntity barrel, Item item) {
         int total = 0;
         for (int slot = 0; slot < barrel.getContainerSize(); slot++) {

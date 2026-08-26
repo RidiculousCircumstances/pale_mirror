@@ -100,6 +100,17 @@ each source change. `PaleMirrorRuntime.tick()` returns before the historical
 Frontier clock once this source runtime is active, so two autonomous campaign
 owners cannot run together.
 
+An operation or field-post cargo barrel is a persisted physical custody
+handoff, not a second stock counter. A stable cargo ID is normally `ACTIVE` at
+one exact tagged barrel. When a source operation changes cell, schema v23
+records the old custody position and its new source target as `RELOCATING`.
+It observes the old barrel first, removes only the tracked PM resource, and
+then creates the target barrel only when both endpoints are naturally loaded.
+A mixed former barrel is released to the player with its remaining items
+unchanged. An unavailable former chunk produces a visible pending-custody
+board at the target and never causes a ticket, a force-load, or a duplicate
+container; missing or foreign custody remains a retained `BLOCKED` conflict.
+
 The future living-world runtime uses a durable layered clock. In the normal
 `GAMEPLAY` profile, one complete Python-shaped source day is 24,000 Minecraft
 game ticks, or twenty real minutes at 20 TPS. The daily source order remains

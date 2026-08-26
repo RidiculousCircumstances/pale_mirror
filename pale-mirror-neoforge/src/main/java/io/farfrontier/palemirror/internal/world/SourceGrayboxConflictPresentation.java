@@ -5,6 +5,10 @@ final class SourceGrayboxConflictPresentation {
     private SourceGrayboxConflictPresentation() { }
 
     static String labelText(SourceGrayboxPresentationLedger.Claim claim) {
+        if (claim.kind().equals("SOURCE_CONTAINER_RELOCATING")) {
+            return "[!] cargo relocation pending target=" + claim.subjectId()
+                    + " outcome=old-custody-not-loaded source=retained";
+        }
         String outcome = claim.consumed() ? "replayed-event"
                 : !claim.installed() ? "foreign-obstruction"
                 : "foreign-or-stale-change";

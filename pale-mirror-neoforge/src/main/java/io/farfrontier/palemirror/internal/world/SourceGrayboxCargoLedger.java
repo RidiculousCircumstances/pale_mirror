@@ -66,10 +66,16 @@ final class SourceGrayboxCargoLedger {
         return new SourceGrayboxCargoLedger(bindings);
     }
 
-    enum State { ACTIVE, BLOCKED }
+    /**
+     * {@code RELOCATING} retains the old physical custody point and the new
+     * source target independently.  It is the only legal state while an
+     * operation has moved in canonical space but the old barrel cannot yet be
+     * inspected and retired in a naturally loaded chunk.
+     */
+    enum State { ACTIVE, RELOCATING, BLOCKED }
 
     record Binding(String id, String cargoId, String ownerKind, int ownerId, ReferenceResource resource,
-                   int x, int y, int z, int observedItems, State state) {
+                   int x, int y, int z, int targetX, int targetY, int targetZ, int observedItems, State state) {
         Binding {
             required(id, "ID");
             required(cargoId, "cargo ID");
@@ -82,14 +88,44 @@ final class SourceGrayboxCargoLedger {
                 throw new IllegalArgumentException("cargo binding observed item count is invalid");
             }
             state = Objects.requireNonNull(state, "state");
+            if (state != State.RELOCATING && (x != targetX || y != targetY || z != targetZ)) {
+                throw new IllegalArgumentException("settled cargo binding target differs from its physical position");
+            }
+        }
+
+        /** Compatibility constructor for a non-moving source cargo binding. */
+        Binding(String id, String cargoId, String ownerKind, int ownerId, ReferenceResource resource,
+                int x, int y, int z, int observedItems, State state) {
+            this(id, cargoId, ownerKind, ownerId, resource, x, y, z, x, y, z, observedItems, state);
         }
 
         Binding withObservedItems(int value) {
-            return new Binding(id, cargoId, ownerKind, ownerId, resource, x, y, z, value, state);
+            return new Binding(id, cargoId, ownerKind, ownerId, resource, x, y, z, targetX, targetY, targetZ, value, state);
         }
 
         Binding blocked() {
-            return new Binding(id, cargoId, ownerKind, ownerId, resource, x, y, z, observedItems, State.BLOCKED);
+            // A blocked relocation must retain the old physical point: that
+            // is where an uninspected or foreign barrel still exists.  Moving
+            // the ledger to the desired target here would forget that world
+            // evidence and make a duplicate safe-looking container possible.
+            return new Binding(id, cargoId, ownerKind, ownerId, resource, x, y, z,
+                    x, y, z, observedItems, State.BLOCKED);
+        }
+
+        Binding relocating(int nextX, int nextY, int nextZ) {
+            return new Binding(id, cargoId, ownerKind, ownerId, resource, x, y, z, nextX, nextY, nextZ,
+                    observedItems, State.RELOCATING);
+        }
+
+        Binding retarget(int nextX, int nextY, int nextZ) {
+            if (state != State.RELOCATING) throw new IllegalStateException("only moving cargo can change relocation target");
+            return relocating(nextX, nextY, nextZ);
+        }
+
+        Binding arrived() {
+            if (state != State.RELOCATING) throw new IllegalStateException("only moving cargo can arrive");
+            return new Binding(id, cargoId, ownerKind, ownerId, resource, targetX, targetY, targetZ,
+                    targetX, targetY, targetZ, 0, State.ACTIVE);
         }
 
         CompoundTag save() {
@@ -102,6 +138,9 @@ final class SourceGrayboxCargoLedger {
             result.putInt("x", x);
             result.putInt("y", y);
             result.putInt("z", z);
+            result.putInt("targetX", targetX);
+            result.putInt("targetY", targetY);
+            result.putInt("targetZ", targetZ);
             result.putInt("observedItems", observedItems);
             result.putString("state", state.name());
             return result;
@@ -109,11 +148,16 @@ final class SourceGrayboxCargoLedger {
 
         static Binding load(CompoundTag encoded) {
             try {
+                if (!encoded.contains("targetX", Tag.TAG_INT) || !encoded.contains("targetY", Tag.TAG_INT)
+                        || !encoded.contains("targetZ", Tag.TAG_INT)) {
+                    throw new IllegalStateException("source graybox cargo relocation target is absent");
+                }
                 return new Binding(encoded.getString("id"), encoded.getString("cargo"), encoded.getString("ownerKind"),
                         encoded.getInt("owner"), ReferenceResource.valueOf(encoded.getString("resource")), encoded.getInt("x"),
-                        encoded.getInt("y"), encoded.getInt("z"), encoded.getInt("observedItems"),
+                        encoded.getInt("y"), encoded.getInt("z"), encoded.getInt("targetX"), encoded.getInt("targetY"),
+                        encoded.getInt("targetZ"), encoded.getInt("observedItems"),
                         State.valueOf(encoded.getString("state")));
-            } catch (IllegalArgumentException invalid) {
+            } catch (IllegalArgumentException | IllegalStateException invalid) {
                 throw new IllegalStateException("source graybox cargo binding is invalid", invalid);
             }
         }

@@ -27,7 +27,10 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** Durable canonical owner for one source-parity graybox world. */
 final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCombatOwner {
     static final String DATA_NAME = "pale_mirror_frontier";
-    private static final int SCHEMA = 22;
+    // v23 adds the old and target positions for a durable cargo relocation;
+    // accepting v22 would lose uninspected physical custody after an operation
+    // moved, so the disposable graybox deliberately fails closed instead.
+    private static final int SCHEMA = 23;
     private static final int MAX_PROCESSED_OBSERVATIONS = 4_096;
     private static final int MAX_EFFECT_LEASES = ReferenceGrayboxActorExecutionState.MAX_ACTORS + 512;
     private final ReferenceGrayboxSimulation simulation;

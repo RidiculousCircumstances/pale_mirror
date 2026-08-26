@@ -130,6 +130,16 @@ stale or rejected slot are retained as visible conflicts and never inferred as
 a source fact. Warehouse and housing rectangles remain descriptive because the
 Python model has no construction-damage owner for them.
 
+An operation cargo pallet can change logical cell as its source operation
+moves. Its ordinary tagged barrel is not copied with the marker: the durable
+graybox custody ledger first retains the old world position and new source
+target as `RELOCATING`, receives any player item delta at the old barrel, then
+releases only its PM resource and materializes one target barrel when both
+chunks are already loaded. A mixed old barrel keeps its player contents and is
+released from PM ownership. If the old or target chunk is unavailable, the
+target shows a retained pending-custody board; no chunk is force-loaded and no
+second physical cargo is created.
+
 Each source trade route also projects as a sampled, colour-coded ground line
 between its canonical settlement centres. Those ordinary `ROUTE` segments carry
 the route ID and revision only: they make open, quarantined and disrupted

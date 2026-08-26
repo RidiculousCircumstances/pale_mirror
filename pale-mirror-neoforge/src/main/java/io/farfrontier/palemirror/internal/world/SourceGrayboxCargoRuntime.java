@@ -30,7 +30,6 @@ final class SourceGrayboxCargoRuntime {
         Map<String, ReferenceGrayboxSnapshot.Cargo> cargoes = byId(data.snapshot());
         boolean changed = false;
         for (SourceGrayboxCargoLedger.Binding binding : data.cargoLedger().bindings()) {
-            if (binding.state() != SourceGrayboxCargoLedger.State.ACTIVE || !level.hasChunkAt(position(binding))) continue;
             ReferenceGrayboxSnapshot.Cargo cargo = cargoes.get(binding.cargoId());
             // A source day can consume or retire a cargo descriptor after the
             // inbound pass that made the preceding player change canonical.
@@ -38,11 +37,22 @@ final class SourceGrayboxCargoRuntime {
             // controlled retirement below, where it can retain mixed player
             // contents instead of permanently blocking an otherwise empty
             // PM barrel.
-            if (cargo == null) continue;
-            if (!sameBinding(binding, cargo, position(binding))) {
-                changed |= block(level, data, materializer, binding, "cargo-retired-or-layout-mismatch");
+            if (cargo == null || binding.state() == SourceGrayboxCargoLedger.State.BLOCKED) continue;
+            if (!sameCargo(binding, cargo)) {
+                changed |= block(level, data, materializer, binding, "cargo-owner-or-resource-mismatch");
                 continue;
             }
+            BlockPos target = position(cargo);
+            if (binding.state() == SourceGrayboxCargoLedger.State.ACTIVE && !atTarget(binding, target)) {
+                binding = relocate(data, binding, target);
+                changed = true;
+                recordRelocationPending(level, materializer, binding, data.snapshot().stateRevision());
+            } else if (binding.state() == SourceGrayboxCargoLedger.State.RELOCATING && !atTarget(binding, target)) {
+                binding = retarget(data, binding, target);
+                changed = true;
+                recordRelocationPending(level, materializer, binding, data.snapshot().stateRevision());
+            }
+            if (!level.hasChunkAt(position(binding))) continue;
             BlockEntity entity = level.getBlockEntity(position(binding));
             if (!(entity instanceof BarrelBlockEntity barrel) || !SourceGrayboxWarehouseRuntime.matches(barrel, binding.id(), binding.resource())) {
                 changed |= lossOrConflict(level, data, materializer, binding, 0, "container-missing-or-foreign");
@@ -68,16 +78,41 @@ final class SourceGrayboxCargoRuntime {
 
     private static void materialize(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
                                     ReferenceGrayboxSnapshot.Cargo cargo, String revision) {
-        BlockPos position = position(cargo);
-        if (!level.hasChunkAt(position)) return;
+        BlockPos target = position(cargo);
         String id = bindingId(cargo);
         SourceGrayboxCargoLedger.Binding binding = data.cargoLedger().binding(id);
-        if (binding != null && !sameBinding(binding, cargo, position)) {
-            throw new IllegalStateException("source graybox cargo binding disagrees with its source layout: " + id);
+        if (binding != null && !sameCargo(binding, cargo)) {
+            block(level, data, materializer, binding, "cargo-owner-or-resource-mismatch");
+            return;
         }
         if (binding != null && binding.state() == SourceGrayboxCargoLedger.State.BLOCKED) {
             recordConflict(level, materializer, binding, revision, false, "retained-foreign-obstruction");
             return;
+        }
+        if (binding != null && binding.state() == SourceGrayboxCargoLedger.State.ACTIVE && !atTarget(binding, target)) {
+            binding = relocate(data, binding, target);
+            recordRelocationPending(level, materializer, binding, revision);
+        } else if (binding != null && binding.state() == SourceGrayboxCargoLedger.State.RELOCATING && !atTarget(binding, target)) {
+            binding = retarget(data, binding, target);
+            recordRelocationPending(level, materializer, binding, revision);
+        }
+        if (binding != null && binding.state() == SourceGrayboxCargoLedger.State.RELOCATING) {
+            binding = completeRelocation(level, data, materializer, binding, revision);
+            if (binding == null) return;
+        }
+        if (binding != null) materializer.clearContainerRelocationPending(level, relocationPendingId(binding));
+        materializeAtTarget(level, data, materializer, cargo, revision, binding);
+    }
+
+    /** Installs/reconciles a barrel only after it is the sole retained physical custody point. */
+    private static void materializeAtTarget(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
+                                            ReferenceGrayboxSnapshot.Cargo cargo, String revision,
+                                            SourceGrayboxCargoLedger.Binding binding) {
+        BlockPos position = position(cargo);
+        if (!level.hasChunkAt(position)) return;
+        String id = bindingId(cargo);
+        if (binding != null && !atTarget(binding, position)) {
+            throw new IllegalStateException("settled source graybox cargo binding has not reached its target: " + id);
         }
         BarrelBlockEntity barrel = SourceGrayboxWarehouseRuntime.ensureContainer(level, position, id, resource(cargo));
         if (barrel == null) {
@@ -90,12 +125,78 @@ final class SourceGrayboxCargoRuntime {
         int actual = SourceGrayboxWarehouseRuntime.count(barrel, SourceGrayboxWarehouseRuntime.item(resource(cargo)));
         SourceGrayboxCargoLedger.Binding active = binding == null ? binding(id, cargo, position, actual, SourceGrayboxCargoLedger.State.ACTIVE) : binding;
         if (binding == null && data.cargoLedger().put(active)) data.markCargoLedgerDirty();
-        int target = expectedItems(cargo);
-        if (target > SourceGrayboxWarehouseRuntime.BARREL_CAPACITY) {
-            target = SourceGrayboxWarehouseRuntime.BARREL_CAPACITY;
+        int expected = expectedItems(cargo);
+        if (expected > SourceGrayboxWarehouseRuntime.BARREL_CAPACITY) {
+            expected = SourceGrayboxWarehouseRuntime.BARREL_CAPACITY;
             recordConflict(level, materializer, active, revision, true, "capacity-exhausted");
         }
-        reconcileProjectedItems(level, data, materializer, active, target, revision);
+        reconcileProjectedItems(level, data, materializer, active, expected, revision);
+    }
+
+    /**
+     * Moves custody, never just its map marker.  Both endpoints must already
+     * be loaded: no ticket is acquired for an operation's former position, and
+     * no second barrel is created while its exact old contents could still be
+     * opened by a player.
+     */
+    static SourceGrayboxCargoLedger.Binding completeRelocation(
+            ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
+            SourceGrayboxCargoLedger.Binding binding, String revision
+    ) {
+        BlockPos oldPosition = position(binding);
+        BlockPos target = targetPosition(binding);
+        if (oldPosition.equals(target)) {
+            SourceGrayboxCargoLedger.Binding arrived = binding.arrived();
+            if (data.cargoLedger().replace(arrived)) data.markCargoLedgerDirty();
+            materializer.clearContainerRelocationPending(level, relocationPendingId(binding));
+            return arrived;
+        }
+        if (!level.hasChunkAt(oldPosition) || !level.hasChunkAt(target)) {
+            recordRelocationPending(level, materializer, binding, revision);
+            return null;
+        }
+        BlockEntity entity = level.getBlockEntity(oldPosition);
+        if (!(entity instanceof BarrelBlockEntity barrel) || !SourceGrayboxWarehouseRuntime.matches(barrel, binding.id(), binding.resource())) {
+            lossOrConflict(level, data, materializer, binding, 0, "relocation-source-missing-or-foreign");
+            return null;
+        }
+        int carried = SourceGrayboxWarehouseRuntime.count(barrel, SourceGrayboxWarehouseRuntime.item(binding.resource()));
+        if (carried != binding.observedItems()) {
+            // The accepted source receipt may alter the cargo projection or
+            // retire it outright. Publish that new immutable source frame
+            // before attempting a physical move rather than moving a stale
+            // quantity to the new position.
+            applyDelta(level, data, materializer, binding, carried, "relocation-source-item-change");
+            return null;
+        }
+        if (!releaseOldCustody(level, materializer, binding, barrel, carried, revision)) return null;
+        SourceGrayboxCargoLedger.Binding arrived = binding.arrived();
+        if (data.cargoLedger().replace(arrived)) data.markCargoLedgerDirty();
+        materializer.clearContainerRelocationPending(level, relocationPendingId(binding));
+        return arrived;
+    }
+
+    /** Removes only the tracked resource; a mixed barrel becomes an ordinary player barrel in place. */
+    private static boolean releaseOldCustody(ServerLevel level, SourceGrayboxMaterializer materializer,
+                                             SourceGrayboxCargoLedger.Binding binding, BarrelBlockEntity barrel,
+                                             int carried, String revision) {
+        if (carried > 0 && SourceGrayboxWarehouseRuntime.remove(barrel, SourceGrayboxWarehouseRuntime.item(binding.resource()), carried) != carried) {
+            recordConflict(level, materializer, binding, revision, true, "relocation-source-write-failure");
+            return false;
+        }
+        BlockPos oldPosition = position(binding);
+        if (barrel.isEmpty()) {
+            if (level.setBlock(oldPosition, Blocks.AIR.defaultBlockState(), 3)) return true;
+            if (carried > 0 && SourceGrayboxWarehouseRuntime.insert(barrel, SourceGrayboxWarehouseRuntime.item(binding.resource()), carried) != carried) {
+                throw new IllegalStateException("source graybox cargo could not restore failed relocation custody");
+            }
+            recordConflict(level, materializer, binding, revision, true, "relocation-source-clear-failure");
+            return false;
+        }
+        if (!SourceGrayboxWarehouseRuntime.releaseContainer(barrel, binding.id(), binding.resource())) {
+            throw new IllegalStateException("source graybox cargo lost ownership while relocating: " + binding.id());
+        }
+        return true;
     }
 
     private static void reconcileProjectedItems(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
@@ -135,6 +236,7 @@ final class SourceGrayboxCargoRuntime {
                 continue;
             }
             if (data.cargoLedger().remove(binding.id())) data.markCargoLedgerDirty();
+            materializer.clearContainerRelocationPending(level, relocationPendingId(binding));
         }
     }
 
@@ -169,6 +271,7 @@ final class SourceGrayboxCargoRuntime {
         SourceGrayboxCargoLedger.Binding blocked = binding.blocked();
         boolean changed = data.cargoLedger().replace(blocked);
         if (changed) data.markCargoLedgerDirty();
+        materializer.clearContainerRelocationPending(level, relocationPendingId(binding));
         recordConflict(level, materializer, blocked, data.snapshot().stateRevision(), true, reason);
         return changed;
     }
@@ -177,6 +280,16 @@ final class SourceGrayboxCargoRuntime {
                                        String revision, boolean installed, String reason) {
         materializer.recordContainerConflict(level, "cargo-conflict:" + binding.id() + ":" + reason, binding.cargoId(), revision,
                 position(binding), installed);
+    }
+
+    private static void recordRelocationPending(ServerLevel level, SourceGrayboxMaterializer materializer,
+                                                SourceGrayboxCargoLedger.Binding binding, String revision) {
+        materializer.recordContainerRelocationPending(level, "cargo-relocation:" + binding.id(), binding.cargoId(), revision,
+                targetPosition(binding));
+    }
+
+    private static String relocationPendingId(SourceGrayboxCargoLedger.Binding binding) {
+        return "cargo-relocation:" + binding.id();
     }
 
     private static Map<String, ReferenceGrayboxSnapshot.Cargo> byId(ReferenceGrayboxSnapshot snapshot) {
@@ -193,10 +306,27 @@ final class SourceGrayboxCargoRuntime {
                 position.getX(), position.getY(), position.getZ(), observedItems, state);
     }
 
-    private static boolean sameBinding(SourceGrayboxCargoLedger.Binding binding, ReferenceGrayboxSnapshot.Cargo cargo, BlockPos position) {
+    private static SourceGrayboxCargoLedger.Binding relocate(SourceGrayboxSavedData data, SourceGrayboxCargoLedger.Binding binding,
+                                                              BlockPos target) {
+        SourceGrayboxCargoLedger.Binding relocating = binding.relocating(target.getX(), target.getY(), target.getZ());
+        if (data.cargoLedger().replace(relocating)) data.markCargoLedgerDirty();
+        return relocating;
+    }
+
+    private static SourceGrayboxCargoLedger.Binding retarget(SourceGrayboxSavedData data, SourceGrayboxCargoLedger.Binding binding,
+                                                              BlockPos target) {
+        SourceGrayboxCargoLedger.Binding relocating = binding.retarget(target.getX(), target.getY(), target.getZ());
+        if (data.cargoLedger().replace(relocating)) data.markCargoLedgerDirty();
+        return relocating;
+    }
+
+    private static boolean sameCargo(SourceGrayboxCargoLedger.Binding binding, ReferenceGrayboxSnapshot.Cargo cargo) {
         return binding.cargoId().equals(cargo.id()) && binding.ownerKind().equals(cargo.ownerKind()) && binding.ownerId() == cargo.ownerId()
-                && binding.resource() == resource(cargo) && binding.x() == position.getX() && binding.y() == position.getY()
-                && binding.z() == position.getZ();
+                && binding.resource() == resource(cargo);
+    }
+
+    private static boolean atTarget(SourceGrayboxCargoLedger.Binding binding, BlockPos position) {
+        return binding.targetX() == position.getX() && binding.targetY() == position.getY() && binding.targetZ() == position.getZ();
     }
 
     private static int expectedItems(ReferenceGrayboxSnapshot.Cargo cargo) {
@@ -221,6 +351,10 @@ final class SourceGrayboxCargoRuntime {
 
     private static BlockPos position(SourceGrayboxCargoLedger.Binding binding) {
         return new BlockPos(binding.x(), binding.y(), binding.z());
+    }
+
+    private static BlockPos targetPosition(SourceGrayboxCargoLedger.Binding binding) {
+        return new BlockPos(binding.targetX(), binding.targetY(), binding.targetZ());
     }
 
     private static BlockPos position(ReferenceGrayboxSnapshot.Cargo cargo) {

@@ -137,6 +137,29 @@ final class SourceGrayboxMaterializer {
         ledger.conflict(id);
     }
 
+    /**
+     * Makes deferred cargo custody explicit at its new source location.  The
+     * old PM barrel remains the only physical copy until its naturally loaded
+     * chunk can be reconciled, so this is a status board rather than authority
+     * to create a second container.
+     */
+    void recordContainerRelocationPending(ServerLevel level, String id, String subjectId, String revision, BlockPos position) {
+        SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
+        SourceGrayboxPresentationLedger.Claim pending = new SourceGrayboxPresentationLedger.Claim(id, subjectId,
+                "SOURCE_CONTAINER_RELOCATING", revision, position.getX(), position.getY(), position.getZ(), 1, 1, 1,
+                false, "", 0.0d, false, false);
+        SourceGrayboxPresentationLedger.Claim previous = ledger.claim(id);
+        if (!pending.equals(previous)) ledger.put(pending);
+        ledger.conflict(id);
+    }
+
+    /** The transient relocation board has no physical claim once custody has arrived or failed at its old point. */
+    void clearContainerRelocationPending(ServerLevel level, String id) {
+        SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
+        SourceGrayboxPresentationLedger.Claim claim = ledger.claim(id);
+        if (claim != null && claim.kind().equals("SOURCE_CONTAINER_RELOCATING")) ledger.remove(id);
+    }
+
     static ManagedEntity managed(Entity entity) {
         String id = entity.getPersistentData().getString(ENTITY_ID);
         String kind = entity.getPersistentData().getString(ENTITY_KIND);

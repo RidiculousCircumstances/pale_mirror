@@ -182,6 +182,34 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void relocatingCargoCustodySurvivesRoundTripAndMissingTargetFailsClosed(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxCargoLedger.Binding moving = new SourceGrayboxCargoLedger.Binding("cargo-container:operation:991:cargo:food",
+                "operation:991:cargo:food", "operation", 991, io.farfrontier.palemirror.frontier.reference.ReferenceResource.FOOD,
+                10, 65, 12, 26, 65, 12, 47, SourceGrayboxCargoLedger.State.RELOCATING);
+        helper.assertTrue(source.cargoLedger().put(moving), "a moving cargo hand-off must retain both custody coordinates");
+        source.markCargoLedgerDirty();
+
+        CompoundTag persisted = source.save(new CompoundTag(), null);
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(persisted.copy(), null);
+        helper.assertValueEqual(restored.cargoLedger().binding(moving.id()), moving,
+                "restart must preserve the old container and the unmaterialized target instead of inventing a second cargo copy");
+
+        CompoundTag corrupt = persisted.copy();
+        CompoundTag encoded = corrupt.getList("cargoLedger", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        encoded.remove("targetX");
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(corrupt, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "a saved relocation without an exact target must fail startup rather than forget old physical custody");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void actorExecutionLeaseSurvivesSavedDataRoundTripAndRejectsStaleRecovery(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
         String actor = source.snapshot().residents().getFirst().id();

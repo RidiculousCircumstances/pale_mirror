@@ -20,6 +20,80 @@ public final class SourceGrayboxCargoGameTests {
     private SourceGrayboxCargoGameTests() { }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void relocatingCargoMovesOnlyAfterOldCustodyIsReleasedAndLeavesMixedPlayerItems(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        BlockPos oldPosition = anchor.offset(2, 1, 2);
+        BlockPos targetPosition = anchor.offset(6, 1, 2);
+        helper.getLevel().setBlock(oldPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(targetPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        String id = "cargo-container:operation:991:cargo:food";
+        BarrelBlockEntity old = SourceGrayboxWarehouseRuntime.ensureContainer(helper.getLevel(), oldPosition, id, ReferenceResource.FOOD);
+        helper.assertTrue(old != null, "the old operation pallet must begin with one PM-owned physical custody barrel");
+        helper.assertValueEqual(SourceGrayboxWarehouseRuntime.insert(old, SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD), 64), 64,
+                "the exact source stack must be present before a move");
+        old.setItem(4, new ItemStack(Items.COAL, 3));
+        old.setChanged();
+
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxCargoLedger.Binding moving = new SourceGrayboxCargoLedger.Binding(id, "operation:991:cargo:food", "operation", 991,
+                ReferenceResource.FOOD, oldPosition.getX(), oldPosition.getY(), oldPosition.getZ(), targetPosition.getX(),
+                targetPosition.getY(), targetPosition.getZ(), 64, SourceGrayboxCargoLedger.State.RELOCATING);
+        helper.assertTrue(data.cargoLedger().put(moving), "the move must retain both old physical custody and the source target");
+
+        SourceGrayboxCargoLedger.Binding arrived = SourceGrayboxCargoRuntime.completeRelocation(helper.getLevel(), data,
+                new SourceGrayboxMaterializer(), moving, "0".repeat(64));
+        helper.assertTrue(arrived != null && arrived.state() == SourceGrayboxCargoLedger.State.ACTIVE,
+                "the ledger may arrive only after the old PM barrel was inspected and released");
+        helper.assertValueEqual(arrived.x(), targetPosition.getX(), "arrival must make the source target the only future custody point");
+        helper.assertValueEqual(arrived.z(), targetPosition.getZ(), "arrival must retain the exact target z coordinate");
+        helper.assertValueEqual(helper.getLevel().getBlockState(oldPosition).getBlock(), Blocks.BARREL,
+                "a mixed old barrel must stay in the world for the player instead of being deleted during relocation");
+        BarrelBlockEntity released = (BarrelBlockEntity) helper.getLevel().getBlockEntity(oldPosition);
+        helper.assertValueEqual(SourceGrayboxWarehouseRuntime.count(released, SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD)), 0,
+                "only the tracked PM resource leaves the old mixed container");
+        helper.assertValueEqual(released.getItem(4).getItem(), Items.COAL,
+                "a player item must remain in its original mixed container after the source cargo departs");
+        helper.assertTrue(SourceGrayboxWarehouseRuntime.ensureContainer(helper.getLevel(), oldPosition, id, ReferenceResource.FOOD) == null,
+                "the released old barrel must become foreign rather than being silently adopted again");
+        helper.assertTrue(helper.getLevel().getBlockState(targetPosition).isAir(),
+                "relocation itself must not create a second barrel before normal target materialization owns that step");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void relocatingCargoNeverLoadsOrDuplicatesAnUnavailableOldCustodyChunk(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        BlockPos oldPosition = anchor.offset(2, 1, 2);
+        // The GameTest platform is only a few chunks wide. This deliberately
+        // lies outside it, so a correct relocation must defer rather than
+        // ticketing the target or inventing a second barrel there.
+        BlockPos targetPosition = oldPosition.offset(16 * 64, 0, 0);
+        helper.getLevel().setBlock(oldPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        String id = "cargo-container:operation:992:cargo:food";
+        BarrelBlockEntity old = SourceGrayboxWarehouseRuntime.ensureContainer(helper.getLevel(), oldPosition, id, ReferenceResource.FOOD);
+        helper.assertTrue(old != null, "the available former location must retain its exact PM custody barrel");
+        helper.assertValueEqual(SourceGrayboxWarehouseRuntime.insert(old, SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD), 64), 64,
+                "the old physical cargo must be populated before an unavailable move");
+        helper.assertTrue(!helper.getLevel().hasChunkAt(targetPosition), "the test target must begin naturally unloaded");
+
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxCargoLedger.Binding moving = new SourceGrayboxCargoLedger.Binding(id, "operation:992:cargo:food", "operation", 992,
+                ReferenceResource.FOOD, oldPosition.getX(), oldPosition.getY(), oldPosition.getZ(), targetPosition.getX(),
+                targetPosition.getY(), targetPosition.getZ(), 64, SourceGrayboxCargoLedger.State.RELOCATING);
+        helper.assertTrue(data.cargoLedger().put(moving), "the pending move must be durable before chunk availability changes");
+
+        SourceGrayboxCargoLedger.Binding result = SourceGrayboxCargoRuntime.completeRelocation(helper.getLevel(), data,
+                new SourceGrayboxMaterializer(), moving, "0".repeat(64));
+        helper.assertTrue(result == null, "a move with an unavailable target must remain pending instead of silently completing");
+        helper.assertTrue(!helper.getLevel().hasChunkAt(targetPosition), "the cargo runtime must never ticket or force-load its target chunk");
+        helper.assertValueEqual(data.cargoLedger().binding(id), moving,
+                "the persisted hand-off must still point to the one old custody barrel while relocation is pending");
+        helper.assertValueEqual(SourceGrayboxWarehouseRuntime.count(old, SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD)), 64,
+                "the old visible cargo must remain until the target and former custody are both naturally available");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void sourceCargoUsesOneTaggedRealBarrelAndNeverAdoptsAForeignContainer(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         BlockPos sourcePosition = anchor.offset(2, 1, 2);
