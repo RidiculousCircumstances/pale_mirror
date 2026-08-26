@@ -22,17 +22,21 @@ final class SourceGrayboxLabelPresentation {
 
     static void configure(Display.TextDisplay display, String id, String text) {
         CompoundTag data = display.saveWithoutId(new CompoundTag());
-        Component content = Component.literal(text).withStyle(colour(id), ChatFormatting.BOLD);
+        // A TextDisplay background is the board itself. Native signs are too
+        // small and directional to serve as map-facing test instrumentation.
+        // Keep one compact board per source object, instead of a detached row
+        // of technical text floating over the whole map.
+        Component content = Component.literal(SourceGrayboxLabelBoard.text(text)).withStyle(colour(id), ChatFormatting.BOLD);
         data.putString(Display.TextDisplay.TAG_TEXT, Component.Serializer.toJson(content, display.registryAccess()));
-        data.putInt("line_width", 512);
+        data.putInt("line_width", 256);
         data.putByte("text_opacity", (byte) 0xFF);
-        data.putInt("background", 0xB0000000);
+        data.putInt("background", 0xE0000000);
         data.putBoolean("shadow", true);
         data.putBoolean("see_through", true);
         data.putString("alignment", "center");
         data.putFloat("view_range", viewRange(id));
-        data.putFloat("width", 24.0f);
-        data.putFloat("height", 3.0f);
+        data.putFloat("width", 16.0f);
+        data.putFloat("height", 4.0f);
         data.putInt("glow_color_override", glowColour(id));
         data.putBoolean("Glowing", true);
         Transformation.EXTENDED_CODEC.encodeStart(NbtOps.INSTANCE, new Transformation(new Vector3f(), new Quaternionf(),
@@ -91,6 +95,7 @@ final class SourceGrayboxLabelPresentation {
      * deliberately larger than detailed labels without becoming a billboard.
      */
     static float scale(String id) {
-        return id.startsWith("settlement:") || id.startsWith("organ:") ? 0.85f : 0.70f;
+        return id.startsWith("settlement:") || id.startsWith("organ:") ? 0.95f : 0.80f;
     }
+
 }

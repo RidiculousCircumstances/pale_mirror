@@ -23,10 +23,15 @@ class SourceGrayboxPresentationPlanTest {
         snapshot.hiveOrgans().forEach(organ -> {
             SourceGrayboxPresentationPlan.Desired crown = desired.get("hive-organ:" + organ.id() + ":crown");
             SourceGrayboxPresentationPlan.Desired spire = desired.get("hive-organ:" + organ.id() + ":spire");
-            assertTrue(crown != null && crown.width() == 5 && crown.depth() == 5 && crown.height() == 1,
+            SourceGrayboxPresentationPlan.Desired signal = desired.get("hive-organ:" + organ.id() + ":signal");
+            assertTrue(crown != null && crown.width() == 9 && crown.depth() == 9 && crown.height() == 1,
                     "each hive organ must retain a broad, bounded distant-recognition crown");
-            assertTrue(spire != null && crown.y() > spire.y(),
-                    "the hive crown must be materially above its spire, never hidden inside its base");
+            assertTrue(spire != null && spire.width() == 3 && spire.depth() == 3,
+                    "each hive landmark must have a thick enough mast to differ from a one-block metric tower");
+            assertTrue(signal != null && signal.height() == 2 && signal.y() == spire.y() + spire.height(),
+                    "each hive mast must carry a bounded night-visible signal immediately above its coloured body");
+            assertTrue(crown.y() == signal.y() + signal.height(),
+                    "the hive crown must sit above its visible signal, never hidden inside its base");
         });
         assertTrue(SourceGrayboxLabelLayout.labelledSectors(snapshot).size() <= 24,
                 "a dense V2 map must never create an unbounded cloud of nameplates");

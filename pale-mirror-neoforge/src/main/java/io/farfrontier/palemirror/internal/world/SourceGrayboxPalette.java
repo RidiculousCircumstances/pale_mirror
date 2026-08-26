@@ -17,6 +17,7 @@ final class SourceGrayboxPalette {
         if (token.contains("metric.spores")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("metric.human_access")) return Blocks.CYAN_WOOL.defaultBlockState();
         if (token.contains("metric.hive_influence")) return Blocks.LIME_WOOL.defaultBlockState();
+        if (token.contains("hive.signal")) return Blocks.SEA_LANTERN.defaultBlockState();
         if (token.contains("organ.core")) return Blocks.RED_WOOL.defaultBlockState();
         if (token.contains("organ.sporulator")) return Blocks.MAGENTA_WOOL.defaultBlockState();
         if (token.contains("organ.brood")) return Blocks.PINK_WOOL.defaultBlockState();
@@ -82,6 +83,6 @@ final class SourceGrayboxPalette {
                 || block == Blocks.PINK_WOOL || block == Blocks.GRAY_WOOL || block == Blocks.LIGHT_GRAY_WOOL
                 || block == Blocks.CYAN_WOOL || block == Blocks.PURPLE_WOOL || block == Blocks.BLUE_WOOL
                 || block == Blocks.BROWN_WOOL || block == Blocks.GREEN_WOOL || block == Blocks.RED_WOOL
-                || block == Blocks.BLACK_WOOL;
+                || block == Blocks.BLACK_WOOL || block == Blocks.SEA_LANTERN;
     }
 }

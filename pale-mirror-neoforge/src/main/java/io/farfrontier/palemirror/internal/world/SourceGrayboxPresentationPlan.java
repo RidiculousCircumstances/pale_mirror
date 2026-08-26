@@ -22,12 +22,17 @@ final class SourceGrayboxPresentationPlan {
     private static final int OVERLAY_Y = LABEL_Y + 1;
     private static final int ACTIVITY_Y = OVERLAY_Y + 1;
     private static final int SECTOR_METRIC_MAX_HEIGHT = 10;
-    /** Keep collision recovery below the bounded label-retirement volume. */
-    private static final int MAX_CLAIM_Y = SURFACE_Y + 15;
+    /** Keep collision recovery below the bounded local-label volume, including a hive signal and cap. */
+    private static final int MAX_CLAIM_Y = SURFACE_Y + 24;
     /** Shared plan/ledger limit; every claim has already been validated before Minecraft receives it. */
     static final int MAX_CLAIMS = 65_536;
     private static final int ROUTE_WAYPOINT_INTERVAL = 24;
-    private static final int HIVE_CROWN_WIDTH = 5;
+    /** A three-block mast reads as infrastructure, not as a sector-value column. */
+    private static final int HIVE_SPIRE_WIDTH = 3;
+    /** The cap projects a deliberately broad, type-coloured hive silhouette. */
+    private static final int HIVE_CROWN_WIDTH = 9;
+    /** Neutral lamps make an organ legible through the flat world's night cycle. */
+    private static final int HIVE_SIGNAL_HEIGHT = 2;
 
     private SourceGrayboxPresentationPlan() { }
 
@@ -63,14 +68,23 @@ final class SourceGrayboxPresentationPlan {
             add(result, rectangle("hive-organ:" + organ.id(), "organ:" + organ.id(), "HIVE_ORGAN", snapshot.stateRevision(), organ.rectangle(), 2,
                     organ.colour()));
             int spireHeight = hiveSpireHeight(organ.kind());
+            int spireX = organ.rectangle().centreX() - HIVE_SPIRE_WIDTH / 2;
+            int spireZ = organ.rectangle().centreZ() - HIVE_SPIRE_WIDTH / 2;
             add(result, new Desired("hive-organ:" + organ.id() + ":spire", "organ:" + organ.id(), "HIVE_ORGAN_LANDMARK",
-                    snapshot.stateRevision(), organ.rectangle().centreX(), SURFACE_Y, organ.rectangle().centreZ(), 1, 1, spireHeight,
+                    snapshot.stateRevision(), spireX, SURFACE_Y + 2, spireZ, HIVE_SPIRE_WIDTH, HIVE_SPIRE_WIDTH, spireHeight,
                     organ.colour()));
-            // A broad cap makes the organ read as hive infrastructure at a
-            // distance, rather than as one of the thin territorial metric towers.
+            // The lamps do not encode a new simulation quantity: they only
+            // keep the coloured organ silhouette visible in the night cycle.
+            add(result, new Desired("hive-organ:" + organ.id() + ":signal", "organ:" + organ.id(), "HIVE_ORGAN_SIGNAL",
+                    snapshot.stateRevision(), spireX, SURFACE_Y + 2 + spireHeight, spireZ, HIVE_SPIRE_WIDTH, HIVE_SPIRE_WIDTH,
+                    HIVE_SIGNAL_HEIGHT, "hive.signal"));
+            // A broad cap plus a thick mast makes the organ read as hive
+            // infrastructure at a distance, rather than as a territorial
+            // metric tower. Its colour remains the organ kind's colour.
             add(result, new Desired("hive-organ:" + organ.id() + ":crown", "organ:" + organ.id(), "HIVE_ORGAN_LANDMARK",
-                    snapshot.stateRevision(), organ.rectangle().centreX() - HIVE_CROWN_WIDTH / 2, SURFACE_Y,
-                    organ.rectangle().centreZ() - HIVE_CROWN_WIDTH / 2, HIVE_CROWN_WIDTH, HIVE_CROWN_WIDTH, 1, organ.colour()));
+                    snapshot.stateRevision(), organ.rectangle().centreX() - HIVE_CROWN_WIDTH / 2,
+                    SURFACE_Y + 2 + spireHeight + HIVE_SIGNAL_HEIGHT, organ.rectangle().centreZ() - HIVE_CROWN_WIDTH / 2,
+                    HIVE_CROWN_WIDTH, HIVE_CROWN_WIDTH, 1, organ.colour()));
         }
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
             add(result, rectangle("cargo-pallet:" + cargo.id(), cargo.id(), "CARGO", snapshot.stateRevision(), cargo.rectangle(), 1, cargo.colour()));
