@@ -107,9 +107,9 @@ the complete V2 owner each have independent checkpoint coverage. The composed
 `ReferenceCanonicalState` now also matches the complete source state at every
 fixture checkpoint with the bounded numerical contract; V2-disabled worlds
 fail closed. The public `snapshot()` comparator and complete `World.view()`
-comparator are green through day 30 (`b5a787e`). Consequently the temporary
-graybox runtime remains non-authoritative until the separate persistence and
-materialization replacement is complete.
+comparator are green through day 30 (`b5a787e`). The source-parity runtime is
+now the activated graybox campaign clock; the historical runtime returns before
+its own simulation work while that clock is active.
 
 ## Graybox persistence extension
 
@@ -125,6 +125,12 @@ renumbered or repopulated.
 that immutable value graph. It is suitable for a NeoForge byte-array SavedData
 field but deliberately does not use Java object serialization. It rejects an
 unknown magic/schema, non-finite numeric values, duplicate keys, excessive
-size/depth and trailing bytes. Hydration remains a separate all-or-nothing
-domain step; until it is implemented and round-trip tested, the document must
-not activate the source-parity runtime.
+size/depth and trailing bytes. `ReferenceGrayboxWorldHydrator` performs the
+separate all-or-nothing domain reconstruction and validates cross-owner
+references before a replacement world becomes visible. Its recovery coverage
+restores pinned checkpoints, continues simulation after restore, rejects an
+incomplete owner without touching the running world, and preserves a
+between-day organ casualty until normal cleanup. `SourceGrayboxStateNbt` and
+`SourceGrayboxSavedData` persist that same document; startup preflight rejects
+an unhydratable record instead of allowing Minecraft to substitute fresh
+genesis state.
