@@ -21,6 +21,12 @@ final class SourceGrayboxPresentationPlan {
     private static final int LABEL_Y = SURFACE_Y + 4;
     private static final int OVERLAY_Y = LABEL_Y + 1;
     private static final int ACTIVITY_Y = OVERLAY_Y + 1;
+    /**
+     * Activities are transient source facts, but a single floating marker did
+     * not read as a real operation on the ground.  These compact silhouettes
+     * remain symbolic: the source still owns every phase, person and outcome.
+     */
+    private static final int ACTIVITY_SCENE_Y = SURFACE_Y + 1;
     private static final int SECTOR_METRIC_MAX_HEIGHT = 10;
     /** Keep collision recovery below the bounded local-label volume, including a hive signal and cap. */
     private static final int MAX_CLAIM_Y = SURFACE_Y + 24;
@@ -95,10 +101,7 @@ final class SourceGrayboxPresentationPlan {
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
             add(result, rectangle("cargo-pallet:" + cargo.id(), cargo.id(), "CARGO", snapshot.stateRevision(), cargo.rectangle(), 1, cargo.colour()));
         }
-        for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) {
-            add(result, rectangle("field-post:" + post.id(), "field-post:" + post.id(), "FIELD_POST", snapshot.stateRevision(), post.rectangle(), 1,
-                    post.colour()));
-        }
+        for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) addFieldPost(result, snapshot.stateRevision(), post);
         for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
             for (int index = 0; index < link.slots().size(); index++) {
                 ReferenceGrayboxLayout.Point slot = link.slots().get(index);
@@ -131,8 +134,7 @@ final class SourceGrayboxPresentationPlan {
             }
         }
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) {
-            if (!activity.terminal()) add(result, marker("activity:" + activity.id(), activity.id(), "ACTIVITY", snapshot.stateRevision(),
-                    activity.position().x(), ACTIVITY_Y, activity.position().z(), activity.colour()));
+            if (!activity.terminal()) addActivityScene(result, snapshot.stateRevision(), activity);
         }
         for (ReferenceGrayboxSnapshot.Effect effect : snapshot.effects()) {
             add(result, marker("effect:" + effect.id(), effect.subjectId(), "SOURCE_EFFECT", snapshot.stateRevision(),
@@ -170,6 +172,107 @@ final class SourceGrayboxPresentationPlan {
                                      int height, String colour) {
         return new Desired(id, subject, kind, revision, area.x(), SURFACE_Y, area.z(), area.width(), area.depth(), height, colour);
     }
+
+    /**
+     * A field post has a durable source identity, lifecycle and module set.
+     * The ground plate is its exact interaction footprint; the raised shapes
+     * below are legibility-only fixtures carrying that same subject identity.
+     * They deliberately introduce no writable module state in Minecraft.
+     */
+    private static void addFieldPost(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.FieldPost post) {
+        String subject = "field-post:" + post.id();
+        add(result, rectangle(subject, subject, "FIELD_POST", revision, post.rectangle(), 1, post.colour()));
+        PostShape landmark = postLandmark(post);
+        add(result, new Desired(subject + ":landmark", subject, "FIELD_POST_LANDMARK", revision,
+                post.rectangle().x() + landmark.localX(), ACTIVITY_SCENE_Y, post.rectangle().z() + landmark.localZ(),
+                landmark.width(), landmark.depth(), landmark.height(), post.colour()));
+        for (String module : post.modules()) {
+            PostShape shape = moduleShape(module);
+            add(result, new Desired(subject + ":module:" + module, subject, "FIELD_POST_MODULE", revision,
+                    post.rectangle().x() + shape.localX(), ACTIVITY_SCENE_Y, post.rectangle().z() + shape.localZ(),
+                    shape.width(), shape.depth(), shape.height(), moduleColour(post, module)));
+        }
+    }
+
+    /**
+     * A low silhouette makes operations visible before a player can read the
+     * board: travelling units form a column, a campaign forms a camp, and a
+     * V2 front campaign presents a short line.  The high phase marker remains
+     * so the scene is still readable from the overview deck.
+     */
+    private static void addActivityScene(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Activity activity) {
+        String prefix = "activity:" + activity.id();
+        int x = activity.position().x();
+        int z = activity.position().z();
+        switch (activity.family()) {
+            case "operation" -> {
+                // Leave the centre open for the beacon: layer packing is a
+                // collision recovery mechanism, not the way this source
+                // silhouette is meant to acquire its shape.
+                add(result, new Desired(prefix + ":scene:column-west", activity.id(), "ACTIVITY_OPERATION_COLUMN", revision,
+                        x - 2, ACTIVITY_SCENE_Y, z, 2, 1, 1, activity.colour()));
+                add(result, new Desired(prefix + ":scene:column-east", activity.id(), "ACTIVITY_OPERATION_COLUMN", revision,
+                        x + 1, ACTIVITY_SCENE_Y, z, 2, 1, 1, activity.colour()));
+                add(result, new Desired(prefix + ":scene:beacon", activity.id(), "ACTIVITY_BEACON", revision,
+                        x, ACTIVITY_SCENE_Y, z, 1, 1, 5, activity.colour()));
+            }
+            case "field_campaign" -> {
+                addActivityCampCorner(result, revision, activity, "north-west", x - 2, z - 2);
+                addActivityCampCorner(result, revision, activity, "north-east", x + 2, z - 2);
+                addActivityCampCorner(result, revision, activity, "south-west", x - 2, z + 2);
+                addActivityCampCorner(result, revision, activity, "south-east", x + 2, z + 2);
+                add(result, new Desired(prefix + ":scene:beacon", activity.id(), "ACTIVITY_BEACON", revision,
+                        x, ACTIVITY_SCENE_Y, z, 1, 1, 4, activity.colour()));
+            }
+            case "front_campaign" -> {
+                add(result, new Desired(prefix + ":scene:front-north", activity.id(), "ACTIVITY_FRONT_LINE", revision,
+                        x, ACTIVITY_SCENE_Y, z - 2, 1, 2, 2, activity.colour()));
+                add(result, new Desired(prefix + ":scene:front-south", activity.id(), "ACTIVITY_FRONT_LINE", revision,
+                        x, ACTIVITY_SCENE_Y, z + 1, 1, 2, 2, activity.colour()));
+                add(result, new Desired(prefix + ":scene:beacon", activity.id(), "ACTIVITY_BEACON", revision,
+                        x, ACTIVITY_SCENE_Y, z, 1, 1, 5, activity.colour()));
+            }
+            default -> throw new IllegalStateException("unknown source graybox activity family: " + activity.family());
+        }
+        add(result, marker(prefix, activity.id(), "ACTIVITY", revision, x, ACTIVITY_Y, z, activity.colour()));
+    }
+
+    private static void addActivityCampCorner(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Activity activity,
+                                               String corner, int x, int z) {
+        add(result, new Desired("activity:" + activity.id() + ":scene:" + corner, activity.id(), "ACTIVITY_CAMPAIGN_CAMP", revision,
+                x, ACTIVITY_SCENE_Y, z, 1, 1, 2, activity.colour()));
+    }
+
+    /** Shapes have a fixed slot budget inside the authoritative 12×12 post footprint. */
+    private static PostShape postLandmark(ReferenceGrayboxSnapshot.FieldPost post) {
+        return switch (post.kind()) {
+            case "observation_post" -> new PostShape(5, 5, 2, 2, 5);
+            case "checkpoint" -> new PostShape(3, 5, 6, 2, 2);
+            case "strongpoint" -> new PostShape(4, 4, 4, 4, 3);
+            case "forward_base" -> new PostShape(3, 5, 6, 3, 2);
+            default -> throw new IllegalStateException("unknown source graybox field-post kind: " + post.kind());
+        };
+    }
+
+    private static PostShape moduleShape(String module) {
+        return switch (module) {
+            case "depot" -> new PostShape(1, 1, 2, 2, 2);
+            case "field_hospital" -> new PostShape(9, 1, 2, 2, 2);
+            case "fire_support" -> new PostShape(9, 9, 2, 2, 4);
+            case "decontamination" -> new PostShape(1, 9, 2, 2, 2);
+            case "fortification" -> new PostShape(5, 1, 2, 2, 3);
+            default -> throw new IllegalStateException("unknown source graybox field-post module: " + module);
+        };
+    }
+
+    private static String moduleColour(ReferenceGrayboxSnapshot.FieldPost post, String module) {
+        return switch (post.status()) {
+            case "abandoned", "overrun", "dismantled" -> "post." + post.status();
+            default -> "post.module." + module;
+        };
+    }
+
+    private record PostShape(int localX, int localZ, int width, int depth, int height) { }
 
     /** A fortification is a perimeter, not a filled foundation that hides its named buildings. */
     private static void addFortification(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Facility facility) {

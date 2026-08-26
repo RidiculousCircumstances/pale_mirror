@@ -7,9 +7,27 @@ final class SourceGrayboxLiveBriefing {
     private SourceGrayboxLiveBriefing() { }
 
     static String activityLabel(ReferenceGrayboxSnapshot.Activity activity) {
-        return "[OPERATION] " + words(activity.kind()) + " — " + title(activity.phase())
+        return "[" + activityFamily(activity) + "] " + words(activity.kind()) + " — " + title(activity.phase())
                 + "\nPeople committed: " + number(activity.personnel())
-                + "\nRight-click: purpose and current risk.";
+                + "\n" + activityIndicator(activity)
+                + "\nRight-click: purpose, phase and consequences.";
+    }
+
+    static String activityFamily(ReferenceGrayboxSnapshot.Activity activity) {
+        return switch (activity.family()) {
+            case "operation" -> "OPERATION";
+            case "field_campaign" -> "FIELD CAMPAIGN";
+            case "front_campaign" -> "FRONT CAMPAIGN";
+            default -> throw new IllegalStateException("unknown source graybox activity family: " + activity.family());
+        };
+    }
+
+    static String activityIndicator(ReferenceGrayboxSnapshot.Activity activity) {
+        return switch (activity.family()) {
+            case "operation" -> "Supply shortfall: " + number(activity.indicator()) + " day(s)";
+            case "field_campaign", "front_campaign" -> "Current risk: " + number(activity.indicator());
+            default -> throw new IllegalStateException("unknown source graybox activity family: " + activity.family());
+        };
     }
 
     static String effectLabel(ReferenceGrayboxSnapshot.Effect effect) {

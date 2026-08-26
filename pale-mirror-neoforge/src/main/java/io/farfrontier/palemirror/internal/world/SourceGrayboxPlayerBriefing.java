@@ -47,7 +47,7 @@ final class SourceGrayboxPlayerBriefing {
 
     static String fieldPostLabel(ReferenceGrayboxSnapshot.FieldPost post) {
         return "[FIELD POST] " + words(post.kind()) + " — " + title(post.status())
-                + "\nIntegrity: " + number(post.integrity()) + " | garrison: " + post.garrison()
+                + "\nIntegrity: " + number(post.integrity()) + " | modules: " + moduleList(post)
                 + "\nRight-click: role and risk.";
     }
 
@@ -240,6 +240,7 @@ final class SourceGrayboxPlayerBriefing {
     private static String fieldPostBrief(ReferenceGrayboxSnapshot.FieldPost post) {
         return words(post.kind()) + " field post #" + post.id() + " — " + title(post.status())
                 + "\nState: integrity " + number(post.integrity()) + "; garrison " + post.garrison() + "; wounded " + post.wounded() + "."
+                + "\nModules: " + moduleList(post) + "."
                 + "\nRole: " + fieldPostRole(post.kind())
                 + "\nRisk: loss weakens the connected campaign."
                 + "\nNext: inspect nearby field lines and supply pallets.";
@@ -254,34 +255,35 @@ final class SourceGrayboxPlayerBriefing {
     }
 
     private static String activityBrief(ReferenceGrayboxSnapshot.Activity activity) {
-        return words(activity.kind()) + " operation — " + title(activity.phase())
-                + "\nState: " + number(activity.personnel()) + " people committed; indicator " + number(activity.indicator()) + "."
+        return SourceGrayboxLiveBriefing.activityFamily(activity) + ": " + words(activity.kind()) + " — " + title(activity.phase())
+                + "\nState: " + number(activity.personnel()) + " people committed; " + SourceGrayboxLiveBriefing.activityIndicator(activity) + "."
                 + "\nPurpose: " + activityPurpose(activity.kind())
                 + "\nRisk: the operation continues according to the source world, including supply and enemy pressure."
                 + "\nNext: inspect its posts, links and cargo.";
     }
-
+    private static String moduleList(ReferenceGrayboxSnapshot.FieldPost post) {
+        if (post.modules().isEmpty()) return "none";
+        return post.modules().stream().sorted().map(SourceGrayboxPlayerBriefing::words)
+                .reduce((left, right) -> left + ", " + right).orElseThrow();
+    }
     private static String cargoBrief(ReferenceGrayboxSnapshot.Cargo cargo) {
         return words(cargo.resource()) + " supplies for " + words(cargo.ownerKind()) + " #" + cargo.ownerId()
                 + "\nState: " + number(cargo.quantity()) + " units ready."
                 + "\nRisk: loss makes the owner less able to continue."
                 + "\nNext: marked blocks are the exact physical cargo-loss points.";
     }
-
     private static String chrysalisBrief(ReferenceGrayboxSnapshot.Chrysalis chrysalis) {
         return "Hive chrysalis at organ #" + chrysalis.organId() + " — " + title(chrysalis.status())
                 + "\nState: " + chrysalis.daysRemaining() + " day(s) to resolution; biomass committed " + number(chrysalis.biomassCommitted()) + "."
                 + "\nRisk: a mature chrysalis strengthens the hive."
                 + "\nNext: destroy the linked organ's marked tissue to change its future.";
     }
-
     private static String interactionBrief(ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxSnapshot.Interaction interaction) {
         return actionTitle(interaction.kind())
                 + "\nEffect: " + actionEffect(snapshot, interaction, interaction.totalWeight() / Math.max(1, interaction.slots().size()))
                 + "\nAction: break one marked block to apply this exact effect once."
                 + "\nResult: you receive an immediate receipt; the world then continues from its new canonical state.";
     }
-
     private static String residentBrief(ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxSnapshot.Resident resident) {
         return "Resident of " + settlementName(snapshot, resident.homeSettlementId())
                 + "\nRole: " + words(resident.occupation()) + "; condition " + words(resident.condition()) + "."

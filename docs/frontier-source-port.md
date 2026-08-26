@@ -154,6 +154,18 @@ warehouse and housing retain their own coloured rectangles inside it. This is
 a presentation rule only; it cannot add a second construction owner or change
 the facility fact carried by interaction slots.
 
+The same discipline applies to source field warfare. A `FieldPost` retains one
+exact post subject and its typed structural interaction slots, then derives a
+small kind-specific graybox landmark (observation tower, checkpoint gate,
+strongpoint or forward base) plus one separately claimed visible fixture for
+each declared source module: depot, field hospital, fire support,
+decontamination and fortification. An active source operation uses a short
+column and beacon; a field campaign uses a compact camp; a V2 front campaign
+uses a short line and beacon. These shapes encode no new strategy, stock,
+damage or pathfinding state. Their blocks remain descriptive and a player
+change is a retained conflict; only the existing source interaction slots,
+actor deaths and cargo receipts can mutate the source world.
+
 Several source facts may legitimately share one logical cell: an infected
 resource site may host an organ, for example. Their source X/Z address is never
 changed or merged. Before any Minecraft write, the projector assigns each

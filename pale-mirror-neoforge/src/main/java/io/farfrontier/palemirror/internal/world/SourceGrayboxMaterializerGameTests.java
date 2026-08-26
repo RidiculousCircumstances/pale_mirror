@@ -223,6 +223,13 @@ public final class SourceGrayboxMaterializerGameTests {
                 "an engaging raid must project a red operation marker instead of an ambiguous generic block");
         helper.assertValueEqual(claim.subjectId(), raid.id(), "the raid marker must retain its exact source activity ID");
         helper.assertValueEqual(claim.kind(), "ACTIVITY", "the raid marker must retain its operation semantic kind");
+        BlockPos beacon = marker.below();
+        SourceGrayboxPresentationLedger.Claim beaconClaim = materializer.claimAt(helper.getLevel(), beacon);
+        helper.assertValueEqual(helper.getLevel().getBlockState(beacon).getBlock(), Blocks.RED_WOOL,
+                "an engaging operation must have a compact ground-level beacon, not only a detached marker");
+        helper.assertValueEqual(beaconClaim.kind(), "ACTIVITY_BEACON",
+                "the operation beacon must remain a source-derived activity scene, not a generic structure");
+        helper.assertValueEqual(beaconClaim.subjectId(), raid.id(), "the operation beacon must retain the exact source activity ID");
         helper.assertTrue(helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(marker).inflate(3, 24, 3), value ->
                         value.hasCustomName() && value.getCustomName().getString().equals(SourceGrayboxLiveBriefing.activityLabel(raid))).size() == 1,
                 "an active raid must expose its purpose, current phase and committed people in a readable player label");
@@ -292,6 +299,10 @@ public final class SourceGrayboxMaterializerGameTests {
                 "an observation post must be distinguishable from a checkpoint or a strongpoint");
         helper.assertValueEqual(SourceGrayboxPalette.block("post.strongpoint").getBlock(), Blocks.RED_WOOL,
                 "a strongpoint must retain its high-threat defensive colour");
+        helper.assertValueEqual(SourceGrayboxPalette.block("post.module.field_hospital").getBlock(), Blocks.WHITE_WOOL,
+                "a field-hospital module must stay distinct from its host post and depot");
+        helper.assertValueEqual(SourceGrayboxPalette.block("post.module.decontamination").getBlock(), Blocks.PURPLE_WOOL,
+                "a decontamination module must remain readable as infection-facing infrastructure");
         helper.assertValueEqual(SourceGrayboxPalette.block("sector.human").getBlock(), Blocks.CYAN_WOOL,
                 "human territorial control must not collapse into the neutral sector colour");
         helper.assertValueEqual(SourceGrayboxPalette.block("activity.operation.engaging").getBlock(), Blocks.RED_WOOL,
@@ -376,7 +387,6 @@ public final class SourceGrayboxMaterializerGameTests {
             for (int y = 0; y <= 5; y++) helper.getLevel().setBlock(anchor.offset(x, y, z), Blocks.AIR.defaultBlockState(), 3);
         }
     }
-
     static ReferenceGrayboxSnapshot fixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, String residentId, double interactionWeight,
                                             String fixtureId) {
         ReferenceGrayboxLayout.Rectangle facility = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 4, 4);
@@ -392,20 +402,17 @@ public final class SourceGrayboxMaterializerGameTests {
                         interactionWeight, 1, ReferenceGrayboxLayout.interactionSlots(facility, 4), "facility.workshop")),
                 List.of(), List.of(), List.of());
     }
-
     private static ReferenceGrayboxSnapshot withReadout(ReferenceGrayboxSnapshot baseline, ReferenceGrayboxSnapshot.Readout readout) {
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
                 baseline.settlements(), baseline.facilities(), baseline.resourceSites(), baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(),
                 baseline.residents(), baseline.fieldPosts(), baseline.fieldLinks(), baseline.activities(), baseline.cargoes(), baseline.interactions(),
                 baseline.sectors(), baseline.chrysalises(), List.of(readout), baseline.events());
     }
-
     static ReferenceGrayboxSnapshot withoutPresentationRecords(ReferenceGrayboxSnapshot baseline) {
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of(), List.of(), List.of());
     }
-
     private static ReferenceGrayboxSnapshot coLocatedFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, boolean includeSite) {
         ReferenceGrayboxLayout.Rectangle site = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 12, 12);
         ReferenceGrayboxLayout.Rectangle organ = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 3, anchor.getZ() + 3, 10, 10);
@@ -415,7 +422,6 @@ public final class SourceGrayboxMaterializerGameTests {
                 List.of(new ReferenceGrayboxSnapshot.HiveOrgan(1, "core", organ, 1.0d, 1.0d, false, "organ.core")),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
     }
-
     private static ReferenceGrayboxSnapshot fieldPostCargoFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, int postId) {
         ReferenceGrayboxLayout.Rectangle post = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 12, 12);
         ReferenceGrayboxLayout.Rectangle pallet = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 1, anchor.getZ(), 1, 1);
@@ -431,7 +437,6 @@ public final class SourceGrayboxMaterializerGameTests {
                                 ReferenceGrayboxLayout.interactionSlots(post, 16), "post.checkpoint")),
                 List.of(), List.of(), List.of());
     }
-
     private static ReferenceGrayboxSnapshot fieldLinkFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, int linkId) {
         ReferenceGrayboxLayout.Rectangle first = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 12, 12);
         ReferenceGrayboxLayout.Rectangle second = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 26, anchor.getZ() + 2, 12, 12);

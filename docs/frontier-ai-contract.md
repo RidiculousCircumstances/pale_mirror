@@ -194,6 +194,20 @@ owner: it remains untouched physical state plus a visible retained conflict.
 The adapter does not force-load a shelf and does not invent a Minecraft-side
 economy counter.
 
+Field infrastructure is a source-owned scene, not a generic military overlay.
+The projected `FieldPost` base retains the exact post identity and structural
+interaction slots. Its source kind selects a compact observation tower,
+checkpoint gate, strongpoint or forward-base silhouette; each declared source
+module adds one separately claimed depot, field-hospital, fire-support,
+decontamination or fortification fixture. They are descriptive blocks carrying
+the same post subject, never a second module state or damage path. Active
+operations form a short column and beacon, field campaigns a compact camp, and
+V2 front campaigns a line and beacon. Their source family, phase, personnel
+and either supply shortfall (operation) or risk (campaign) are labelled from
+the immutable snapshot. A player/world change to such a descriptive fixture is
+a visible conflict; only the existing typed actor deaths and interaction slots
+may alter canonical field state.
+
 The immutable plan validates all source claims before writing. Legitimately
 co-located facts keep their canonical X/Z and receive distinct deterministic
 layers in the compact Y=64–79 stack; labels begin above that stack. The
@@ -294,6 +308,12 @@ by the source resolver is not rendered as a reversible cart after the fact.
 Cell tissue is intentionally more legible than a metric tower alone: its
 contiguous extent shows local infection growth and retreat, while the existing
 red/purple/cyan/lime sector towers retain the exact territorial comparison.
+
+These post modules and activity silhouettes are deliberately compact and
+source-derived: they make a moving unit, temporary camp and held front readable
+at game scale without pretending that a player may damage an arbitrary block to
+invent a source outcome. Exact post, link and cargo interventions remain the
+marked elevated action slots and the normal item/actor receipt paths.
 
 The player-facing layer is read-only and derived from the same snapshot. A
 landmark board gives a short named state, while right-clicking its labelled

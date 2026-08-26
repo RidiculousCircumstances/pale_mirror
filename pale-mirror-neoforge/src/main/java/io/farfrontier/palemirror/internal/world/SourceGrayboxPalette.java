@@ -33,6 +33,14 @@ final class SourceGrayboxPalette {
         if (token.contains("organ.synapse")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("organ.digestive")) return Blocks.LIME_WOOL.defaultBlockState();
         if (token.contains("organ.harvester")) return Blocks.GREEN_WOOL.defaultBlockState();
+        // Field-post modules are canonical source capabilities, not generic
+        // decoration.  Their small raised graybox silhouettes need a stable
+        // vocabulary even when the post itself shares another type colour.
+        if (token.contains("post.module.depot")) return Blocks.BROWN_WOOL.defaultBlockState();
+        if (token.contains("post.module.field_hospital")) return Blocks.WHITE_WOOL.defaultBlockState();
+        if (token.contains("post.module.fire_support")) return Blocks.RED_WOOL.defaultBlockState();
+        if (token.contains("post.module.decontamination")) return Blocks.PURPLE_WOOL.defaultBlockState();
+        if (token.contains("post.module.fortification")) return Blocks.CYAN_WOOL.defaultBlockState();
         if (token.contains("collapsed") || token.contains("disabled") || token.contains("destroyed") || token.contains("feral_severe")
                 || token.contains("abandoned") || token.contains("failed") || token.contains("aborted")) return Blocks.BLACK_WOOL.defaultBlockState();
         if (token.contains("feral_active") || token.contains("route.disrupted") || token.contains("sector.hive")
