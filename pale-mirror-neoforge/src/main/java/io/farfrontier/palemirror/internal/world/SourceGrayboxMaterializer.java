@@ -38,7 +38,10 @@ import net.minecraft.world.phys.Vec3;
 final class SourceGrayboxMaterializer {
     static final String ENTITY_ID = "pale_mirror_source_graybox_id";
     static final String ENTITY_KIND = "pale_mirror_source_graybox_kind";
+    /** Complete-frame revision for a typed physical observation. */
     static final String ENTITY_REVISION = "pale_mirror_source_graybox_revision";
+    /** Exact-body semantic revision used only to validate the physical executor lease. */
+    static final String ENTITY_ACTOR_REVISION = "pale_mirror_source_graybox_actor_revision";
     static final String LABEL_KIND = "LABEL_DISPLAY";
     private static final int SURFACE_Y = ReferenceGrayboxLayout.GROUND_Y;
     private static final int ENTITY_Y = SURFACE_Y + 1;

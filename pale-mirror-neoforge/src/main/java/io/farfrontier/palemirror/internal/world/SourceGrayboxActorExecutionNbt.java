@@ -10,7 +10,8 @@ import net.minecraft.nbt.Tag;
 
 /** NeoForge NBT carrier for the pure-domain graybox actor execution ledger. */
 final class SourceGrayboxActorExecutionNbt {
-    private static final int FORMAT = 3;
+    static final int FORMAT = 4;
+    static final int LEGACY_GLOBAL_REVISION_FORMAT = 3;
 
     private SourceGrayboxActorExecutionNbt() { }
 
@@ -42,9 +43,10 @@ final class SourceGrayboxActorExecutionNbt {
         return tag;
     }
 
-    static ReferenceGrayboxActorExecutionState read(CompoundTag tag) {
+    static ReferenceGrayboxActorExecutionState read(CompoundTag tag, boolean legacyGlobalRevision) {
         CompoundTag required = Objects.requireNonNull(tag, "tag");
-        if (required.getInt("format") != FORMAT || !required.contains("actors", Tag.TAG_LIST)) {
+        int expectedFormat = legacyGlobalRevision ? LEGACY_GLOBAL_REVISION_FORMAT : FORMAT;
+        if (required.getInt("format") != expectedFormat || !required.contains("actors", Tag.TAG_LIST)) {
             throw new IllegalStateException("incompatible source graybox actor execution envelope");
         }
         ListTag actors = required.getList("actors", Tag.TAG_COMPOUND);

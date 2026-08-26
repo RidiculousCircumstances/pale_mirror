@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ReferenceGrayboxActorExecutionStateTest {
@@ -26,13 +28,14 @@ class ReferenceGrayboxActorExecutionStateTest {
         assertTrue(state.touchDemand(actor, prepared.leaseId(), "materializer:chunk:0_0", 35L));
 
         simulation.tick();
-        assertTrue(state.reconcile(simulation.snapshot()));
+        assertFalse(state.reconcile(simulation.snapshot()),
+                "an unchanged exact body must not be rewritten merely because another source process advanced the day");
         var hot = state.actor(actor).orElseThrow();
         assertEquals(ReferenceGrayboxActorExecutionState.Mode.HOT, hot.mode());
         assertEquals(321, hot.actualXSixteenths());
         assertEquals(-77, hot.actualZSixteenths());
         assertEquals(35L, hot.demandedAtGameTick());
-        assertEquals(simulation.snapshot().stateRevision(), hot.sourceRevision());
+        assertEquals(actorRevision(simulation.snapshot(), actor), hot.sourceRevision());
     }
 
     @Test
@@ -87,7 +90,60 @@ class ReferenceGrayboxActorExecutionStateTest {
         assertThrows(IllegalArgumentException.class, () -> state.activate(actor, prepared.leaseId(), "materializer:chunk:0_0", 9L));
         assertThrows(IllegalArgumentException.class, () -> new ReferenceGrayboxActorExecutionState.ActorState(
                 "resident:bad", ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT,
-                ReferenceGrayboxActorExecutionState.Mode.HOT, snapshot.stateRevision(), 0, 0, 0, 0,
+                ReferenceGrayboxActorExecutionState.Mode.HOT, actorRevision(snapshot, actor), 0, 0, 0, 0,
                 0L, "", "", 0L, 0L, 0L, 0L));
+    }
+
+    @Test
+    void globalProjectionRevisionDoesNotInvalidateUnchangedActorLeases() {
+        ReferenceGrayboxSnapshot original = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxSnapshot presentationRefresh = copyOf(original, "a".repeat(64), original.residents());
+        ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(original);
+
+        assertFalse(original.stateRevision().equals(presentationRefresh.stateRevision()));
+        assertEquals(ReferenceGrayboxActorExecutionState.descriptors(original),
+                ReferenceGrayboxActorExecutionState.descriptors(presentationRefresh),
+                "a changed complete-frame revision alone must not stale every individual physical actor");
+        assertFalse(state.reconcile(presentationRefresh),
+                "an unchanged actor ledger must not churn simply because an unrelated projection field changed");
+    }
+
+    @Test
+    void changedResidentSemanticsRefreshOnlyThatActorRevision() {
+        ReferenceGrayboxSnapshot original = ReferenceGrayboxSimulation.create(42L).snapshot();
+        String changedId = original.residents().getFirst().id();
+        List<ReferenceGrayboxSnapshot.Resident> changedResidents = new ArrayList<>(original.residents());
+        ReferenceGrayboxSnapshot.Resident prior = changedResidents.getFirst();
+        changedResidents.set(0, new ReferenceGrayboxSnapshot.Resident(prior.id(), prior.homeSettlementId(), prior.occupation(),
+                prior.economicClass(), prior.location(), prior.locationId(), "wounded", prior.deploymentRole(),
+                prior.position(), prior.colour()));
+        ReferenceGrayboxSnapshot changed = copyOf(original, "b".repeat(64), changedResidents);
+        ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(original);
+
+        assertFalse(actorRevision(original, changedId).equals(actorRevision(changed, changedId)),
+                "a changed source condition must refresh the physical body's semantic revision");
+        String untouched = original.residents().get(1).id();
+        assertEquals(actorRevision(original, untouched), actorRevision(changed, untouched),
+                "an unrelated resident must retain its own stable source revision");
+        assertTrue(execution.reconcile(changed), "the execution ledger must refresh when its exact actor semantics change");
+        assertEquals(actorRevision(changed, changedId), execution.actor(changedId).orElseThrow().sourceRevision());
+        assertEquals(actorRevision(original, untouched), execution.actor(untouched).orElseThrow().sourceRevision());
+    }
+
+    private static String actorRevision(ReferenceGrayboxSnapshot snapshot, String actorId) {
+        return ReferenceGrayboxActorExecutionState.descriptors(snapshot).stream()
+                .filter(descriptor -> descriptor.id().equals(actorId))
+                .findFirst()
+                .orElseThrow()
+                .sourceRevision();
+    }
+
+    private static ReferenceGrayboxSnapshot copyOf(ReferenceGrayboxSnapshot source, String stateRevision,
+                                                    List<ReferenceGrayboxSnapshot.Resident> residents) {
+        return new ReferenceGrayboxSnapshot(source.day(), source.profileId(), stateRevision, source.bounds(), source.cells(),
+                source.settlements(), source.facilities(), source.warehouses(), source.resourceSites(), source.routes(),
+                source.hiveOrgans(), source.bioforms(), residents, source.fieldPosts(), source.fieldLinks(), source.activities(),
+                source.effects(), source.cargoes(), source.interactions(), source.sectors(), source.chrysalises(), source.readouts(),
+                source.events());
     }
 }

@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.reference;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -218,15 +221,56 @@ public final class ReferenceGrayboxActorExecutionState {
         Objects.requireNonNull(snapshot, "snapshot");
         List<ActorDescriptor> result = new ArrayList<>(snapshot.residents().size() + snapshot.bioforms().size());
         for (ReferenceGrayboxSnapshot.Resident resident : snapshot.residents()) {
-            result.add(new ActorDescriptor(resident.id(), ActorKind.RESIDENT, snapshot.stateRevision(),
+            result.add(new ActorDescriptor(resident.id(), ActorKind.RESIDENT, residentRevision(snapshot.profileId(), resident),
                     center(resident.position().x()), center(resident.position().z())));
         }
         for (ReferenceGrayboxSnapshot.Bioform bioform : snapshot.bioforms()) {
-            result.add(new ActorDescriptor(bioform.id(), ActorKind.BIOFORM, snapshot.stateRevision(),
+            result.add(new ActorDescriptor(bioform.id(), ActorKind.BIOFORM, bioformRevision(snapshot.profileId(), bioform),
                     center(bioform.position().x()), center(bioform.position().z())));
         }
         result.sort(Comparator.comparing(ActorDescriptor::id));
         return List.copyOf(result);
+    }
+
+    /**
+     * A physical lease belongs to one body, not to an incidental complete-frame digest.
+     *
+     * <p>The projection's {@link ReferenceGrayboxSnapshot#stateRevision()} changes when a
+     * different settlement, route, label, or presentation-only field changes. Binding that
+     * global revision to every actor made a valid saved lease look stale after hydration. This
+     * stable digest instead covers the complete source-visible semantics of this one resident
+     * that the physical executor may observe or act upon.</p>
+     */
+    private static String residentRevision(String profileId, ReferenceGrayboxSnapshot.Resident resident) {
+        return semanticRevision("resident", profileId, resident.id(), Integer.toString(resident.homeSettlementId()),
+                resident.occupation(), resident.economicClass(), resident.location(),
+                resident.locationId() == null ? "" : resident.locationId().toString(), resident.condition(),
+                resident.deploymentRole() == null ? "" : resident.deploymentRole(),
+                Integer.toString(resident.position().x()), Integer.toString(resident.position().z()), resident.colour());
+    }
+
+    /** Stable source-visible semantics for one exact materialized bioform. */
+    private static String bioformRevision(String profileId, ReferenceGrayboxSnapshot.Bioform bioform) {
+        return semanticRevision("bioform", profileId, bioform.id(), Integer.toString(bioform.swarmId()), bioform.kind(),
+                bioform.phase(), Boolean.toString(bioform.feral()), Integer.toString(bioform.position().x()),
+                Integer.toString(bioform.position().z()), bioform.colour());
+    }
+
+    private static String semanticRevision(String kind, String... fields) {
+        StringBuilder canonical = new StringBuilder("frontier-graybox-actor-revision-v1");
+        appendSemanticField(canonical, kind);
+        for (String field : fields) appendSemanticField(canonical, field);
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException unavailable) {
+            throw new IllegalStateException("SHA-256 is required for source actor revisions", unavailable);
+        }
+    }
+
+    private static void appendSemanticField(StringBuilder target, String field) {
+        String value = Objects.requireNonNull(field, "semantic actor field");
+        target.append(value.length()).append(':').append(value);
     }
 
     private static int center(int block) {

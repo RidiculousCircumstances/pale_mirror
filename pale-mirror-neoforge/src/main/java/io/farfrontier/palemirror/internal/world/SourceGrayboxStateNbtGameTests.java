@@ -227,24 +227,35 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void v23ExecutionRevisionRebindsOnlyAfterExactActorIdentityProof(GameTestHelper helper) {
+    public static void v23AndV24ExecutionRevisionsRebindOnlyAfterExactActorIdentityProof(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
-        CompoundTag v23 = source.save(new CompoundTag(), null);
-        v23.putInt("schemaVersion", 23);
-        CompoundTag firstActor = v23.getCompound("actorExecution").getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
-        firstActor.putString("revision", "0".repeat(64));
+        for (int legacySchema : List.of(23, 24)) {
+            CompoundTag legacy = source.save(new CompoundTag(), null);
+            legacy.putInt("schemaVersion", legacySchema);
+            CompoundTag execution = legacy.getCompound("actorExecution");
+            execution.putInt("format", SourceGrayboxActorExecutionNbt.LEGACY_GLOBAL_REVISION_FORMAT);
+            CompoundTag firstActor = execution.getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+            firstActor.putString("revision", "0".repeat(64));
 
-        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(v23, null);
-        helper.assertValueEqual(restored.actorExecution().actors().getFirst().sourceRevision(), restored.snapshot().stateRevision(),
-                "a v23 migration may rebind a derived projection digest only after the retained source actor identity was inspected");
-        helper.assertTrue(restored.isDirty(),
-                "a successful v23 migration must request a world save even when no later simulation event happens");
-        helper.assertValueEqual(restored.save(new CompoundTag(), null).getInt("schemaVersion"), 24,
-                "a successful v23 migration must durably record the new strict execution envelope");
+            SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(legacy, null);
+            String actor = restored.actorExecution().actors().getFirst().id();
+            helper.assertValueEqual(restored.actorExecution().actors().getFirst().sourceRevision(), actorRevision(restored.snapshot(), actor),
+                    "a v" + legacySchema + " migration may rebind only after the retained source actor identity was inspected");
+            helper.assertTrue(restored.isDirty(),
+                    "a successful v" + legacySchema + " migration must request a world save even when no later simulation event happens");
+            CompoundTag upgraded = restored.save(new CompoundTag(), null);
+            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 25,
+                    "a successful legacy migration must durably record the strict v25 envelope");
+            helper.assertValueEqual(upgraded.getCompound("actorExecution").getInt("format"), SourceGrayboxActorExecutionNbt.FORMAT,
+                    "the migrated execution ledger must no longer retain the global-revision envelope");
+            SourceGrayboxSavedData.load(upgraded, null);
+        }
 
         CompoundTag missingActor = source.save(new CompoundTag(), null);
         missingActor.putInt("schemaVersion", 23);
-        missingActor.getCompound("actorExecution").put("actors", new net.minecraft.nbt.ListTag());
+        CompoundTag missingExecution = missingActor.getCompound("actorExecution");
+        missingExecution.putInt("format", SourceGrayboxActorExecutionNbt.LEGACY_GLOBAL_REVISION_FORMAT);
+        missingExecution.put("actors", new net.minecraft.nbt.ListTag());
         boolean rejected = false;
         try {
             SourceGrayboxSavedData.load(missingActor, null);
@@ -252,7 +263,7 @@ public final class SourceGrayboxStateNbtGameTests {
             rejected = true;
         }
         helper.assertTrue(rejected,
-                "a v23 migration must reject a missing exact source person rather than recreating an execution ledger");
+                "a legacy migration must reject a missing exact source person rather than recreating an execution ledger");
         helper.succeed();
     }
 
@@ -269,7 +280,23 @@ public final class SourceGrayboxStateNbtGameTests {
             rejected = true;
         }
         helper.assertTrue(rejected,
-                "only the explicit v23 migration may rebind a projection revision; a corrupted current execution ledger still stops startup");
+                "only the explicit legacy migration may rebind an old global revision; a corrupted current execution ledger still stops startup");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void currentSchemaRejectsTheLegacyGlobalRevisionEnvelope(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag corrupt = source.save(new CompoundTag(), null);
+        corrupt.getCompound("actorExecution").putInt("format", SourceGrayboxActorExecutionNbt.LEGACY_GLOBAL_REVISION_FORMAT);
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(corrupt, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "a current schema must not silently re-enter the legacy global-revision migration path");
         helper.succeed();
     }
 
@@ -329,5 +356,13 @@ public final class SourceGrayboxStateNbtGameTests {
         helper.assertTrue(rejected,
                 "a partial physical execution ledger must fail startup rather than silently recreating source people");
         helper.succeed();
+    }
+
+    private static String actorRevision(ReferenceGrayboxSnapshot snapshot, String actorId) {
+        return io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.descriptors(snapshot).stream()
+                .filter(descriptor -> descriptor.id().equals(actorId))
+                .findFirst()
+                .orElseThrow()
+                .sourceRevision();
     }
 }

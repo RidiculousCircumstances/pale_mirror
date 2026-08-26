@@ -43,6 +43,11 @@ public final class SourceGrayboxActorMaterializerGameTests {
         materializer.apply(helper.getLevel(), snapshot, execution, admitted);
         Villager resident = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->
                 value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
+        helper.assertValueEqual(resident.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_REVISION), snapshot.stateRevision(),
+                "the physical death observation must retain its complete current source snapshot revision");
+        helper.assertValueEqual(resident.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ACTOR_REVISION),
+                execution.actor(residentId).orElseThrow().sourceRevision(),
+                "the executor must independently retain the exact body's stable semantic revision");
         helper.assertTrue(helper.getLevel().getEntitiesOfClass(Zombie.class, new AABB(anchor).inflate(24), value ->
                         value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(coldBioformId)).isEmpty(),
                 "cold source bioforms must not become off-screen duplicate Zombies merely because a neighbouring chunk is loaded");

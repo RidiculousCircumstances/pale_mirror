@@ -27,14 +27,14 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** Durable canonical owner for one source-parity graybox world. */
 final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCombatOwner {
     static final String DATA_NAME = "pale_mirror_frontier";
-    // v24 replaces v23's derived projection-revision binding after proving
-    // the complete actor identity/kind set still agrees with the canonical
-    // source document. v23's revision hashes are not canonical state: a
-    // projection-only release legitimately changes them while retaining every
-    // person, bioform, lease and physical hand-off. v22 remains unsafe because
-    // it lacks the old and target positions for durable cargo relocation.
-    private static final int SCHEMA = 24;
-    private static final int PREVIOUS_SCHEMA = 23;
+    // v25 replaces the old global-projection revision stored once per actor
+    // with a stable digest of that exact resident/bioform's semantics. Both
+    // retained v23 and v24 documents used the format-3 global binding. v22
+    // remains unsafe because it lacks the old and target positions for durable
+    // cargo relocation.
+    private static final int SCHEMA = 25;
+    private static final int LEGACY_SCHEMA_V23 = 23;
+    private static final int LEGACY_SCHEMA_V24 = 24;
     private static final int MAX_PROCESSED_OBSERVATIONS = 4_096;
     private static final int MAX_EFFECT_LEASES = ReferenceGrayboxActorExecutionState.MAX_ACTORS + 512;
     private final ReferenceGrayboxSimulation simulation;
@@ -288,7 +288,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
 
     static SourceGrayboxSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
         int schema = tag.getInt("schemaVersion");
-        if ((schema != SCHEMA && schema != PREVIOUS_SCHEMA) || !tag.contains("sourceState", Tag.TAG_COMPOUND)) {
+        boolean legacyGlobalRevision = schema == LEGACY_SCHEMA_V23 || schema == LEGACY_SCHEMA_V24;
+        if ((!legacyGlobalRevision && schema != SCHEMA) || !tag.contains("sourceState", Tag.TAG_COMPOUND)) {
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         LinkedHashSet<String> processed = readProcessed(tag.getList("processedObservationIds", Tag.TAG_STRING));
@@ -296,7 +297,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         if (!tag.contains("actorExecution", Tag.TAG_COMPOUND)) {
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
-        ReferenceGrayboxActorExecutionState actorExecution = SourceGrayboxActorExecutionNbt.read(tag.getCompound("actorExecution"));
+        ReferenceGrayboxActorExecutionState actorExecution = SourceGrayboxActorExecutionNbt.read(
+                tag.getCompound("actorExecution"), legacyGlobalRevision);
         if (!tag.contains("effectLeases", Tag.TAG_LIST)) {
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
@@ -327,9 +329,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         SourceGrayboxPhysicalScarLedger physicalScars = SourceGrayboxPhysicalScarLedger.load(tag.getList("physicalScars", Tag.TAG_COMPOUND));
-        boolean migrated = schema == PREVIOUS_SCHEMA;
-        if (migrated) {
-            rebindV23ActorExecutionRevision(actorExecution, simulation.snapshot());
+        if (legacyGlobalRevision) {
+            rebindLegacyActorExecutionRevision(actorExecution, simulation.snapshot(), schema);
         } else {
             assertActorExecutionMatchesSource(actorExecution, simulation.snapshot());
         }
@@ -338,7 +339,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         // SavedData is otherwise written only after a later world mutation.
         // A successful versioned migration must be durable even when the
         // player enters and immediately stops the server.
-        if (migrated) restored.setDirty();
+        if (legacyGlobalRevision) restored.setDirty();
         return restored;
     }
 
@@ -401,17 +402,16 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     }
 
     /**
-     * v23 stored a complete source-projection digest in each physical lease.
-     * That digest is deliberately not canonical source state, so a later
-     * projection-only release cannot demand byte-for-byte equality before it
-     * has a chance to rebind the execution hand-off.  Migration therefore
-     * proves the stronger durable facts first: every exact actor ID and kind
-     * must still be present, and no resident/bioform may be silently invented,
-     * forgotten or retired.  Only then may the pure-domain ledger refresh its
-     * derived source revision and anchors from the retained source document.
+     * Retained v23/v24 records store a complete source-projection digest in
+     * each physical lease. That global digest is deliberately not the semantic
+     * revision of this exact source body, so migration proves the stronger
+     * durable facts first: every exact actor ID and kind must still be present,
+     * and no resident/bioform may be silently invented, forgotten or retired.
+     * Only then may the pure-domain ledger refresh its source-specific digest
+     * and anchor from the retained source document.
      */
-    private static void rebindV23ActorExecutionRevision(ReferenceGrayboxActorExecutionState execution,
-                                                         ReferenceGrayboxSnapshot snapshot) {
+    private static void rebindLegacyActorExecutionRevision(ReferenceGrayboxActorExecutionState execution,
+                                                            ReferenceGrayboxSnapshot snapshot, int legacySchema) {
         java.util.Map<String, ReferenceGrayboxActorExecutionState.ActorDescriptor> expected = new java.util.LinkedHashMap<>();
         for (ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor : ReferenceGrayboxActorExecutionState.descriptors(snapshot)) {
             expected.put(descriptor.id(), descriptor);
@@ -420,11 +420,11 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
             ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor = expected.remove(actor.id());
             if (descriptor == null || actor.mode() == ReferenceGrayboxActorExecutionState.Mode.RETIRED
                     || actor.kind() != descriptor.kind()) {
-                throw new IllegalStateException("v23 source graybox actor execution cannot be safely rebound: " + actor.id());
+                throw new IllegalStateException("v" + legacySchema + " source graybox actor execution cannot be safely rebound: " + actor.id());
             }
         }
         if (!expected.isEmpty()) {
-            throw new IllegalStateException("v23 source graybox actor execution is missing source actors: " + expected.keySet().iterator().next());
+            throw new IllegalStateException("v" + legacySchema + " source graybox actor execution is missing source actors: " + expected.keySet().iterator().next());
         }
         execution.reconcile(snapshot);
         assertActorExecutionMatchesSource(execution, snapshot);

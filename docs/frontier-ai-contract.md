@@ -64,19 +64,26 @@ X/Z identity, or remove canonical people to meet a presentation budget.
 `ReferenceGrayboxSimulation.save()` document, the pure-domain actor-execution
 ledger, a bounded physical-effect ledger, activation state, simulation clock
 and a bounded accepted-observation history. The execution ledger has one
-record for every exact resident/bioform: its latest source anchor and revision,
+record for every exact resident/bioform: its latest source anchor and stable
+source-specific semantic revision,
 fixed sixteenth-block physical position, one `COLD -> PREPARING -> HOT ->
 DRAINING -> COLD` lease lifecycle, and monotonic local combat epoch/cooldown.
-A one-time v23-to-v24 persistence migration may rebind the actor ledger's
-derived projection revision only after proving the complete exact actor-ID and
-actor-kind set against that retained canonical source document; it never
-creates, drops or substitutes a body. Current-format revision mismatches still
-stop startup, and a successful migration marks SavedData dirty so the first
-ordinary world save writes v24. A restart moves unfinished leases to `RECOVERING`; only an inspected entity with
+The v23/v24-to-v25 persistence migration accepts only the format-3 legacy
+global-projection envelope, then may replace it with per-actor semantic
+revisions only after proving the complete exact actor-ID and actor-kind set
+against the retained canonical source document; it never creates, drops or
+substitutes a body. A current v25 revision or envelope mismatch still stops
+startup, and a successful migration marks SavedData dirty so the first ordinary
+world save writes v25/format-4. A restart moves unfinished leases to `RECOVERING`; only an inspected entity with
 the exact old lease can return to `HOT`, while a missing/stale body settles
 `COLD` without a blind duplicate. Both documents restore all-or-nothing; an
 incompatible or incomplete document is a visible startup failure for the
 disposable world, never a regenerated campaign.
+
+A managed body keeps two different revisions deliberately: its complete-frame
+snapshot revision validates a death observation against the current canonical
+world, while its separate actor-semantic revision validates its exclusive HOT
+lease. Neither one is silently substituted for the other.
 
 The initial HOT coordinator runs every ten ticks. Its demand zone is the union
 of non-spectator player chunks plus one chunk; a second one-chunk apron may

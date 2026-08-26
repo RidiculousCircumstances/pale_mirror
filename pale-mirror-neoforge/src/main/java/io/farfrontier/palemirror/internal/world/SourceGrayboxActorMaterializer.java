@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.world;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
@@ -27,17 +28,20 @@ final class SourceGrayboxActorMaterializer {
 
     static void materialize(ServerLevel level, SourceGrayboxPresentationLedger ledger, ReferenceGrayboxSnapshot snapshot,
                             ReferenceGrayboxActorExecutionState execution, Set<String> active, Map<String, Entity> admitted) {
+        Map<String, String> semanticRevisions = semanticRevisions(snapshot);
         for (ReferenceGrayboxSnapshot.Resident resident : snapshot.residents()) {
             ReferenceGrayboxActorExecutionState.ActorState actor = actor(execution, resident.id());
             if (actor != null && actor.mode() != ReferenceGrayboxActorExecutionState.Mode.COLD) active.add(SourceGrayboxMaterializer.entityKey(resident.id(), "RESIDENT"));
             if (actor == null || actor.mode() != ReferenceGrayboxActorExecutionState.Mode.COLD
-                    && actor.mode() != ReferenceGrayboxActorExecutionState.Mode.RETIRED) ensureResident(level, ledger, snapshot.stateRevision(), resident, actor, active, admitted);
+                    && actor.mode() != ReferenceGrayboxActorExecutionState.Mode.RETIRED) ensureResident(level, ledger, snapshot.stateRevision(),
+                    semanticRevision(actor, semanticRevisions, resident.id()), resident, actor, active, admitted);
         }
         for (ReferenceGrayboxSnapshot.Bioform bioform : snapshot.bioforms()) {
             ReferenceGrayboxActorExecutionState.ActorState actor = actor(execution, bioform.id());
             if (actor != null && actor.mode() != ReferenceGrayboxActorExecutionState.Mode.COLD) active.add(SourceGrayboxMaterializer.entityKey(bioform.id(), "BIOFORM"));
             if (actor == null || actor.mode() != ReferenceGrayboxActorExecutionState.Mode.COLD
-                    && actor.mode() != ReferenceGrayboxActorExecutionState.Mode.RETIRED) ensureBioform(level, ledger, snapshot.stateRevision(), bioform, actor, active, admitted);
+                    && actor.mode() != ReferenceGrayboxActorExecutionState.Mode.RETIRED) ensureBioform(level, ledger, snapshot.stateRevision(),
+                    semanticRevision(actor, semanticRevisions, bioform.id()), bioform, actor, active, admitted);
         }
     }
 
@@ -47,14 +51,16 @@ final class SourceGrayboxActorMaterializer {
                 SourceGrayboxMaterializer.uuid(kind.equals("RESIDENT") ? "resident" : "bioform", actor.id()));
         if (entity == null || !SourceGrayboxMaterializer.identityMatches(entity, actor.id(), kind)) return null;
         SourceGrayboxMaterializer.ManagedEntity managed = SourceGrayboxMaterializer.managed(entity);
-        if (managed == null || !managed.revision().equals(actor.sourceRevision())) return null;
+        String semanticRevision = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ACTOR_REVISION);
+        if (managed == null || !semanticRevision.matches("[0-9a-f]{64}") || !semanticRevision.equals(actor.sourceRevision())) return null;
         return switch (actor.kind()) {
             case RESIDENT -> entity instanceof Villager ? entity : null;
             case BIOFORM -> entity instanceof Zombie ? entity : null;
         };
     }
 
-    private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
+    private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String observationRevision,
+                                       String semanticRevision,
                                        ReferenceGrayboxSnapshot.Resident resident, ReferenceGrayboxActorExecutionState.ActorState actor,
                                        Set<String> active, Map<String, Entity> admitted) {
         String key = SourceGrayboxMaterializer.entityKey(resident.id(), "RESIDENT");
@@ -66,7 +72,7 @@ final class SourceGrayboxActorMaterializer {
         if (current instanceof Villager known) {
             ledger.claimEntity(key);
             known.setVillagerData(known.getVillagerData().setProfession(VillagerProfession.NONE));
-            configure(known, resident.id(), "RESIDENT", revision, resident.occupation() + " | " + resident.location(),
+            configure(known, resident.id(), "RESIDENT", observationRevision, semanticRevision, resident.occupation() + " | " + resident.location(),
                     SourceGrayboxPalette.residentHat(resident.occupation(), resident.condition()), false);
             if (actor == null || actor.mode() == ReferenceGrayboxActorExecutionState.Mode.PREPARING) known.setPos(position);
             return;
@@ -75,14 +81,15 @@ final class SourceGrayboxActorMaterializer {
         Villager villager = new Villager(EntityType.VILLAGER, level);
         villager.setUUID(SourceGrayboxMaterializer.uuid("resident", resident.id()));
         villager.setVillagerData(villager.getVillagerData().setProfession(VillagerProfession.NONE));
-        configure(villager, resident.id(), "RESIDENT", revision, resident.occupation() + " | " + resident.location(),
+        configure(villager, resident.id(), "RESIDENT", observationRevision, semanticRevision, resident.occupation() + " | " + resident.location(),
                 SourceGrayboxPalette.residentHat(resident.occupation(), resident.condition()), false);
         villager.setPos(position);
         ledger.claimEntity(key);
         if (level.addFreshEntity(villager)) admitted.put(key, villager);
     }
 
-    private static void ensureBioform(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
+    private static void ensureBioform(ServerLevel level, SourceGrayboxPresentationLedger ledger, String observationRevision,
+                                      String semanticRevision,
                                       ReferenceGrayboxSnapshot.Bioform bioform, ReferenceGrayboxActorExecutionState.ActorState actor,
                                       Set<String> active, Map<String, Entity> admitted) {
         String key = SourceGrayboxMaterializer.entityKey(bioform.id(), "BIOFORM");
@@ -93,14 +100,16 @@ final class SourceGrayboxActorMaterializer {
         if (current != null && !(current instanceof Zombie && SourceGrayboxMaterializer.identityMatches(current, bioform.id(), "BIOFORM"))) return;
         if (current instanceof Zombie known) {
             ledger.claimEntity(key);
-            configure(known, bioform.id(), "BIOFORM", revision, bioform.kind() + " | " + bioform.phase(), SourceGrayboxPalette.bioformHat(bioform.kind()), true);
+            configure(known, bioform.id(), "BIOFORM", observationRevision, semanticRevision, bioform.kind() + " | " + bioform.phase(),
+                    SourceGrayboxPalette.bioformHat(bioform.kind()), true);
             if (actor == null || actor.mode() == ReferenceGrayboxActorExecutionState.Mode.PREPARING) known.setPos(position);
             return;
         }
         if (actor != null && actor.mode() != ReferenceGrayboxActorExecutionState.Mode.PREPARING || ledger.entityClaimed(key)) return;
         Zombie zombie = new Zombie(EntityType.ZOMBIE, level);
         zombie.setUUID(SourceGrayboxMaterializer.uuid("bioform", bioform.id()));
-        configure(zombie, bioform.id(), "BIOFORM", revision, bioform.kind() + " | " + bioform.phase(), SourceGrayboxPalette.bioformHat(bioform.kind()), true);
+        configure(zombie, bioform.id(), "BIOFORM", observationRevision, semanticRevision, bioform.kind() + " | " + bioform.phase(),
+                SourceGrayboxPalette.bioformHat(bioform.kind()), true);
         zombie.setPos(position);
         ledger.claimEntity(key);
         if (level.addFreshEntity(zombie)) admitted.put(key, zombie);
@@ -110,13 +119,33 @@ final class SourceGrayboxActorMaterializer {
         return state == null ? null : state.actor(id).orElseThrow(() -> new IllegalStateException("source actor execution is missing " + id));
     }
 
+    private static Map<String, String> semanticRevisions(ReferenceGrayboxSnapshot snapshot) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor : ReferenceGrayboxActorExecutionState.descriptors(snapshot)) {
+            if (result.putIfAbsent(descriptor.id(), descriptor.sourceRevision()) != null) {
+                throw new IllegalStateException("duplicate source actor semantic revision: " + descriptor.id());
+            }
+        }
+        return result;
+    }
+
+    private static String semanticRevision(ReferenceGrayboxActorExecutionState.ActorState actor, Map<String, String> expected, String actorId) {
+        String revision = expected.get(actorId);
+        if (revision == null) throw new IllegalStateException("source actor is absent from semantic revision map: " + actorId);
+        if (actor != null && !actor.sourceRevision().equals(revision)) {
+            throw new IllegalStateException("source actor execution disagrees with current semantic revision: " + actorId);
+        }
+        return revision;
+    }
+
     private static Vec3 position(ReferenceGrayboxActorExecutionState.ActorState actor, ReferenceGrayboxLayout.Point source) {
         if (actor == null) return Vec3.atBottomCenterOf(new BlockPos(source.x(), ENTITY_Y, source.z()));
         return new Vec3(actor.actualXSixteenths() / (double) ReferenceGrayboxActorExecutionState.POSITION_SCALE, ENTITY_Y,
                 actor.actualZSixteenths() / (double) ReferenceGrayboxActorExecutionState.POSITION_SCALE);
     }
 
-    private static void configure(Mob entity, String id, String kind, String revision, String name, Item helmet, boolean nameVisible) {
+    private static void configure(Mob entity, String id, String kind, String observationRevision, String semanticRevision,
+                                  String name, Item helmet, boolean nameVisible) {
         entity.setPersistenceRequired();
         entity.setNoAi(true);
         entity.setNoGravity(true);
@@ -125,6 +154,7 @@ final class SourceGrayboxActorMaterializer {
         entity.setItemSlot(EquipmentSlot.HEAD, new ItemStack(helmet));
         entity.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, id);
         entity.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, kind);
-        entity.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, revision);
+        entity.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, observationRevision);
+        entity.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ACTOR_REVISION, semanticRevision);
     }
 }
