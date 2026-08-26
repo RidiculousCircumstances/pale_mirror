@@ -7,6 +7,7 @@ public final class VisualServerConfig {
     public static final ModConfigSpec SPEC;
     public static final ModConfigSpec.IntValue ACTIVE_RESIDENT_AI_LIMIT;
     public static final ModConfigSpec.IntValue ACTIVE_RESIDENT_AI_RADIUS;
+    public static final ModConfigSpec.BooleanValue AUTHORED_GENESIS_ENABLED;
     public static final ModConfigSpec.IntValue GENESIS_MINIMUM_REGIONS;
     public static final ModConfigSpec.IntValue GENESIS_TARGET_REGIONS;
     public static final ModConfigSpec.IntValue GENESIS_MAXIMUM_REGIONS;
@@ -21,6 +22,10 @@ public final class VisualServerConfig {
                 .defineInRange("residents.activeAiLimit", 16, 0, 256);
         ACTIVE_RESIDENT_AI_RADIUS = builder.comment("Player distance in which authored resident AI may be activated.")
                 .defineInRange("residents.activeAiRadius", 96, 16, 256);
+        AUTHORED_GENESIS_ENABLED = builder.comment(
+                        "Plans authored regions and gates player admission until their catalog is ready. "
+                                + "Set false only for an explicit Frontier graybox world, whose projector owns materialization.")
+                .define("genesis.authoredEnabled", true);
         GENESIS_MINIMUM_REGIONS = builder.comment(
                         "Minimum complete authored regions required for a fresh world; fewer fails closed.")
                 .defineInRange("genesis.minimumRegions", 3, 1, 64);

@@ -67,9 +67,15 @@ public final class FrontierGenesisRuntime {
             PaleMirrorVisualsMod.LOGGER.info("Skipping terrain genesis planning on the synthetic GameTest world");
             return;
         }
+        AuthoredGenesisAdmission.Decision admission = AuthoredGenesisAdmission.resolve(
+                VisualServerConfig.AUTHORED_GENESIS_ENABLED.get());
+        READINESS.set(admission.readiness());
+        if (!admission.planAuthoredRegions()) {
+            PaleMirrorVisualsMod.LOGGER.info("Authored-region genesis is explicitly disabled; Frontier graybox admission is ready");
+            return;
+        }
         ServerLevel level = event.getServer().overworld();
         VisualGenesisSavedData ledger = VisualGenesisSavedData.get(level);
-        READINESS.set(new GenesisReadiness(GenesisReadiness.State.PLANNING, 0, "", "Planning authored regions"));
         plannerExecutor = Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "PaleMirror-Genesis-Planner");
             thread.setDaemon(true);
