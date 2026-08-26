@@ -48,7 +48,7 @@ public final class SourceGrayboxStateNbtGameTests {
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void savedDataPreflightRejectsAnUnhydratableCanonicalRecord(GameTestHelper helper) {
         CompoundTag corrupt = new CompoundTag();
-        corrupt.putInt("schemaVersion", 17);
+        corrupt.putInt("schemaVersion", 18);
         corrupt.put("sourceState", new CompoundTag());
         boolean rejected = false;
         try {

@@ -21,7 +21,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** Durable canonical owner for one source-parity graybox world. */
 final class SourceGrayboxSavedData extends SavedData {
     static final String DATA_NAME = "pale_mirror_frontier";
-    private static final int SCHEMA = 17;
+    private static final int SCHEMA = 18;
     private static final int MAX_PROCESSED_OBSERVATIONS = 4_096;
     private final ReferenceGrayboxSimulation simulation;
     private final ReferenceGrayboxActorExecutionState actorExecution;
@@ -70,6 +70,15 @@ final class SourceGrayboxSavedData extends SavedData {
     ReferenceGrayboxActorExecutionState actorExecution() { return actorExecution; }
     boolean activated() { return activated; }
 
+    /** Game time may be moved backwards by an operator; execution leases keep a monotonic local ordering. */
+    long actorExecutionGameTime(long observedGameTime) {
+        long result = Math.max(0L, observedGameTime);
+        for (ReferenceGrayboxActorExecutionState.ActorState actor : actorExecution.actors()) {
+            result = Math.max(result, Math.max(actor.changedAtGameTick(), actor.demandedAtGameTick()));
+        }
+        return result;
+    }
+
     boolean prepareActor(String id, String holder, long gameTick) {
         boolean changed = actorExecution.prepare(id, holder, gameTick);
         if (changed) setDirty();
@@ -82,8 +91,20 @@ final class SourceGrayboxSavedData extends SavedData {
         return changed;
     }
 
+    boolean cancelActorPreparation(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.cancelPreparation(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
     boolean captureActor(String id, String leaseId, String holder, int xSixteenths, int zSixteenths, long gameTick) {
         boolean changed = actorExecution.capture(id, leaseId, holder, xSixteenths, zSixteenths, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean touchActorDemand(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.touchDemand(id, leaseId, holder, gameTick);
         if (changed) setDirty();
         return changed;
     }
@@ -114,6 +135,12 @@ final class SourceGrayboxSavedData extends SavedData {
 
     boolean recoverActorCold(String id, String leaseId, String holder, long gameTick) {
         boolean changed = actorExecution.recoverCold(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean acknowledgeRetiredActor(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.acknowledgeRetired(id, leaseId, holder, gameTick);
         if (changed) setDirty();
         return changed;
     }

@@ -21,10 +21,12 @@ public final class SourceGrayboxRuntime {
     private static final long DAY_INTERVAL_TICKS = 1_200L;
     private static final int MAXIMUM_CATCH_UP_DAYS = 24;
     private static final long PRESENTATION_INTERVAL_TICKS = 20L;
+    private static final long ACTOR_EXECUTION_INTERVAL_TICKS = 10L;
     private static final Map<MinecraftServer, SourceGrayboxRuntime> INSTANCES = new IdentityHashMap<>();
     private final MinecraftServer server;
     private final SourceGrayboxSavedData data;
     private final SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+    private final SourceGrayboxActorExecutionRuntime actorExecution = new SourceGrayboxActorExecutionRuntime();
     private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
     private long lastPresentationGameTime = Long.MIN_VALUE;
 
@@ -33,7 +35,7 @@ public final class SourceGrayboxRuntime {
         data = SourceGrayboxSavedData.get(server.overworld());
         // A saved HOT/PREPARING actor is unknown after JVM restart.  Do not let
         // a later materializer blindly create a second body for that lease.
-        data.enterActorRecovery(server.overworld().getGameTime());
+        data.enterActorRecovery(data.actorExecutionGameTime(server.overworld().getGameTime()));
     }
 
     public static SourceGrayboxRuntime forServer(MinecraftServer server) {
@@ -59,8 +61,13 @@ public final class SourceGrayboxRuntime {
         if (!data.activated()) return false;
         ServerLevel graybox = grayboxLevel();
         long gameTime = graybox.getGameTime();
+        boolean actorDue = gameTime % ACTOR_EXECUTION_INTERVAL_TICKS == 0L;
+        boolean executionChanged = actorDue && actorExecution.beforePublication(graybox, data, materializer, admittedEntities);
         int advanced = data.advanceDueDays(gameTime, DAY_INTERVAL_TICKS, MAXIMUM_CATCH_UP_DAYS);
-        if (advanced > 0 || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) publish(graybox);
+        if (advanced > 0 || executionChanged || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) {
+            publish(graybox);
+            if (actorDue) actorExecution.afterPublication(graybox, data, materializer, admittedEntities);
+        }
         return true;
     }
 
@@ -221,7 +228,7 @@ public final class SourceGrayboxRuntime {
     }
 
     private void publish(ServerLevel level) {
-        materializer.apply(level, data.snapshot(), admittedEntities);
+        materializer.apply(level, data.snapshot(), data.actorExecution(), admittedEntities);
         lastPresentationGameTime = level.getGameTime();
     }
 }

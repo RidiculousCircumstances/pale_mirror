@@ -23,6 +23,7 @@ class ReferenceGrayboxActorExecutionStateTest {
         assertFalse(state.prepare(actor, "materializer:chunk:0_0", 21L), "a second executor must not receive a second lease");
         assertTrue(state.activate(actor, prepared.leaseId(), "materializer:chunk:0_0", 22L));
         assertTrue(state.capture(actor, prepared.leaseId(), "materializer:chunk:0_0", 321, -77, 30L));
+        assertTrue(state.touchDemand(actor, prepared.leaseId(), "materializer:chunk:0_0", 35L));
 
         simulation.tick();
         assertTrue(state.reconcile(simulation.snapshot()));
@@ -30,6 +31,7 @@ class ReferenceGrayboxActorExecutionStateTest {
         assertEquals(ReferenceGrayboxActorExecutionState.Mode.HOT, hot.mode());
         assertEquals(321, hot.actualXSixteenths());
         assertEquals(-77, hot.actualZSixteenths());
+        assertEquals(35L, hot.demandedAtGameTick());
         assertEquals(simulation.snapshot().stateRevision(), hot.sourceRevision());
     }
 
@@ -66,6 +68,6 @@ class ReferenceGrayboxActorExecutionStateTest {
         assertThrows(IllegalArgumentException.class, () -> new ReferenceGrayboxActorExecutionState.ActorState(
                 "resident:bad", ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT,
                 ReferenceGrayboxActorExecutionState.Mode.HOT, snapshot.stateRevision(), 0, 0, 0, 0,
-                0L, "", "", 0L));
+                0L, "", "", 0L, 0L));
     }
 }

@@ -72,6 +72,16 @@ the exact old lease can return to `HOT`, while a missing/stale body settles
 incompatible or incomplete document is a visible startup failure for the
 disposable world, never a regenerated campaign.
 
+The initial HOT coordinator runs every ten ticks. Its demand zone is the union
+of non-spectator player chunks plus one chunk; a second one-chunk apron may
+prepare only already resident chunks. It never makes a chunk ticket. A live
+body keeps its physical position between publications; it is captured in
+sixteenths of a block, then may drain only after 200 ticks outside demand and
+when no player is within 64 blocks. The executor uses a persisted monotonic
+lease-time floor, so `/time` rewind cannot reuse an old lease or turn a body
+into an immediate despawn. Role brains and operations will choose movement on
+top of this ownership path; this coordinator is deliberately not a second AI.
+
 `SourceGrayboxRuntime` is the sole campaign clock after the explicit
 `/pale_mirror frontier activate_graybox` command. Its schedule advances the
 source day from Minecraft game time, caps catch-up work, and republishes after

@@ -119,6 +119,14 @@ public final class ReferenceGrayboxActorExecutionState {
         return true;
     }
 
+    /** Releases an unmaterialized preparation lease after its bounded preparation window expires. */
+    public boolean cancelPreparation(String id, String leaseId, String holder, long gameTick) {
+        ActorState prior = require(id);
+        if (prior.mode() != Mode.PREPARING || !prior.leaseId().equals(leaseId) || !prior.holder().equals(holder)) return false;
+        actors.put(id, prior.cold(gameTick));
+        return true;
+    }
+
     /** Begins a hand-off; source code must capture the actual position before settling COLD. */
     public boolean beginDrain(String id, String leaseId, String holder, long gameTick) {
         ActorState prior = require(id);
@@ -133,6 +141,15 @@ public final class ReferenceGrayboxActorExecutionState {
         if (!(prior.mode() == Mode.HOT || prior.mode() == Mode.DRAINING)
                 || !prior.leaseId().equals(leaseId) || !prior.holder().equals(holder)) return false;
         actors.put(id, prior.capture(xSixteenths, zSixteenths, gameTick));
+        return true;
+    }
+
+    /** Records that a player still needs this prepared/live body, providing bounded drain hysteresis. */
+    public boolean touchDemand(String id, String leaseId, String holder, long gameTick) {
+        ActorState prior = require(id);
+        if (!(prior.mode() == Mode.PREPARING || prior.mode() == Mode.HOT)
+                || !prior.leaseId().equals(leaseId) || !prior.holder().equals(holder)) return false;
+        actors.put(id, prior.touchDemand(gameTick));
         return true;
     }
 
@@ -228,13 +245,15 @@ public final class ReferenceGrayboxActorExecutionState {
     public record ActorState(String id, ActorKind kind, Mode mode, String sourceRevision,
                              int anchorXSixteenths, int anchorZSixteenths,
                              int actualXSixteenths, int actualZSixteenths,
-                             long leaseEpoch, String leaseId, String holder, long changedAtGameTick) {
+                             long leaseEpoch, String leaseId, String holder, long changedAtGameTick, long demandedAtGameTick) {
         public ActorState {
             requireId(id, kind);
             kind = Objects.requireNonNull(kind, "kind");
             mode = Objects.requireNonNull(mode, "mode");
             requireRevision(sourceRevision);
-            if (leaseEpoch < 0L || changedAtGameTick < 0L) throw new IllegalArgumentException("execution epoch or game tick is invalid");
+            if (leaseEpoch < 0L || changedAtGameTick < 0L || demandedAtGameTick < 0L) {
+                throw new IllegalArgumentException("execution epoch or game tick is invalid");
+            }
             leaseId = leaseId == null ? "" : leaseId;
             holder = holder == null ? "" : holder;
             boolean leased = mode != Mode.COLD;
@@ -249,7 +268,7 @@ public final class ReferenceGrayboxActorExecutionState {
         static ActorState cold(ActorDescriptor descriptor) {
             return new ActorState(descriptor.id(), descriptor.kind(), Mode.COLD, descriptor.sourceRevision(),
                     descriptor.anchorXSixteenths(), descriptor.anchorZSixteenths(), descriptor.anchorXSixteenths(),
-                    descriptor.anchorZSixteenths(), 0L, "", "", 0L);
+                    descriptor.anchorZSixteenths(), 0L, "", "", 0L, 0L);
         }
 
         ActorState withSource(ActorDescriptor descriptor) {
@@ -257,34 +276,41 @@ public final class ReferenceGrayboxActorExecutionState {
             boolean cold = mode == Mode.COLD;
             return new ActorState(id, kind, mode, descriptor.sourceRevision(), descriptor.anchorXSixteenths(), descriptor.anchorZSixteenths(),
                     cold ? descriptor.anchorXSixteenths() : actualXSixteenths, cold ? descriptor.anchorZSixteenths() : actualZSixteenths,
-                    leaseEpoch, leaseId, holder, changedAtGameTick);
+                    leaseEpoch, leaseId, holder, changedAtGameTick, demandedAtGameTick);
         }
 
         ActorState prepare(String nextHolder, long gameTick) {
             return new ActorState(id, kind, Mode.PREPARING, sourceRevision, anchorXSixteenths, anchorZSixteenths,
                     actualXSixteenths, actualZSixteenths, Math.addExact(leaseEpoch, 1L), lease(id, kind, leaseEpoch + 1L),
-                    requireHolder(nextHolder), requireForward(gameTick));
+                    requireHolder(nextHolder), requireForward(gameTick), gameTick);
         }
 
         ActorState transition(Mode next, long gameTick) {
             return new ActorState(id, kind, next, sourceRevision, anchorXSixteenths, anchorZSixteenths,
-                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, requireForward(gameTick));
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, requireForward(gameTick), demandedAtGameTick);
         }
 
         ActorState capture(int x, int z, long gameTick) {
             return new ActorState(id, kind, mode, sourceRevision, anchorXSixteenths, anchorZSixteenths, x, z,
-                    leaseEpoch, leaseId, holder, requireForward(gameTick));
+                    leaseEpoch, leaseId, holder, requireForward(gameTick), demandedAtGameTick);
         }
 
         ActorState cold(long gameTick) {
             return new ActorState(id, kind, Mode.COLD, sourceRevision, anchorXSixteenths, anchorZSixteenths,
-                    actualXSixteenths, actualZSixteenths, leaseEpoch, "", "", requireForward(gameTick));
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, "", "", requireForward(gameTick), demandedAtGameTick);
         }
 
         ActorState retired() {
             if (mode == Mode.COLD) throw new IllegalStateException("cold actor must be removed directly");
             return new ActorState(id, kind, Mode.RETIRED, sourceRevision, anchorXSixteenths, anchorZSixteenths,
-                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, changedAtGameTick);
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, changedAtGameTick, demandedAtGameTick);
+        }
+
+        ActorState touchDemand(long gameTick) {
+            long tick = requireForward(gameTick);
+            return new ActorState(id, kind, mode, sourceRevision, anchorXSixteenths, anchorZSixteenths,
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, changedAtGameTick,
+                    Math.max(demandedAtGameTick, tick));
         }
 
         private long requireForward(long gameTick) {

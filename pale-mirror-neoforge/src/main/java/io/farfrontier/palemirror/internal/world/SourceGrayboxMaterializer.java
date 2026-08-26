@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,14 +20,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerProfession;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -52,7 +48,11 @@ final class SourceGrayboxMaterializer {
      * disconnected from its text when viewed from the observation deck.
      */
     private static final int MAX_LABEL_Y = SURFACE_Y + 81;
-    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) { return apply(level, snapshot, new LinkedHashMap<>()); }
+    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) { return apply(level, snapshot, null, new LinkedHashMap<>()); }
+
+    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Map<String, Entity> admittedEntities) {
+        return apply(level, snapshot, null, admittedEntities);
+    }
 
     /**
      * Projects one immutable snapshot while retaining entities observed during level admission.
@@ -61,7 +61,8 @@ final class SourceGrayboxMaterializer {
      * {@link ServerLevel#getEntity(UUID)}. The supplied map carries only those verified PM identities
      * across that publication window; it is presentation state, never a simulation owner.</p>
      */
-    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Map<String, Entity> admittedEntities) {
+    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxActorExecutionState actorExecution,
+                 Map<String, Entity> admittedEntities) {
         Objects.requireNonNull(admittedEntities, "admitted entities");
         LinkedHashMap<String, SourceGrayboxPresentationPlan.Desired> desired = SourceGrayboxPresentationPlan.from(snapshot);
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
@@ -73,12 +74,18 @@ final class SourceGrayboxMaterializer {
 
         Set<String> activeEntities = new LinkedHashSet<>();
         materializeLabels(level, ledger, snapshot, activeEntities, admittedEntities);
-        for (ReferenceGrayboxSnapshot.Resident resident : snapshot.residents()) {
-            ensureResident(level, ledger, snapshot.stateRevision(), resident, activeEntities, admittedEntities);
+        // A source removal may deliberately leave a RETIRED lease behind until
+        // the executor observes and acknowledges its old physical body.  Keep
+        // every non-cold lease out of generic retirement; the coordinator is
+        // the only component allowed to discard and acknowledge it.
+        if (actorExecution != null) {
+            for (ReferenceGrayboxActorExecutionState.ActorState actor : actorExecution.actors()) {
+                if (actor.mode() != ReferenceGrayboxActorExecutionState.Mode.COLD) {
+                    activeEntities.add(entityKey(actor.id(), actor.kind()));
+                }
+            }
         }
-        for (ReferenceGrayboxSnapshot.Bioform bioform : snapshot.bioforms()) {
-            ensureBioform(level, ledger, snapshot.stateRevision(), bioform, activeEntities, admittedEntities);
-        }
+        SourceGrayboxActorMaterializer.materialize(level, ledger, snapshot, actorExecution, activeEntities, admittedEntities);
         retireEntities(level, snapshot.bounds(), activeEntities, admittedEntities);
         ledger.releaseEntitiesExcept(activeEntities);
         return new Report(placed, desired.size(), conflicts, snapshot.stateRevision());
@@ -97,6 +104,12 @@ final class SourceGrayboxMaterializer {
 
     SourceGrayboxPresentationLedger.Claim claimAt(ServerLevel level, BlockPos position) {
         return SourceGrayboxPresentationLedger.get(level).at(position);
+    }
+
+    /** Finds one exact actor body without making absence permission to spawn or load a chunk. */
+    Entity actorEntity(ServerLevel level, Map<String, Entity> admittedEntities,
+                       ReferenceGrayboxActorExecutionState.ActorState actor) {
+        return SourceGrayboxActorMaterializer.actorEntity(level, admittedEntities, actor);
     }
 
     void recordBlockConflict(ServerLevel level, BlockPos position) {
@@ -332,58 +345,6 @@ final class SourceGrayboxMaterializer {
         label(level, active, admittedEntities, labels, "events:summary", SourceGrayboxPlayerBriefing.timelineLabel(snapshot), deck.getX(), deck.getZ());
     }
 
-    private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
-                                       ReferenceGrayboxSnapshot.Resident resident, Set<String> active, Map<String, Entity> admittedEntities) {
-        String key = entityKey(resident.id(), "RESIDENT");
-        active.add(key);
-        BlockPos position = new BlockPos(resident.position().x(), ENTITY_Y, resident.position().z());
-        if (!ready(level, position)) return;
-        Entity current = existingEntity(level, admittedEntities, resident.id(), "RESIDENT", uuid("resident", resident.id()));
-        if (current != null && !(current instanceof Villager && identityMatches(current, resident.id(), "RESIDENT"))) return;
-        if (current instanceof Villager known) {
-            ledger.claimEntity(key);
-            known.setVillagerData(known.getVillagerData().setProfession(VillagerProfession.NONE));
-            configure(known, resident.id(), "RESIDENT", revision, resident.occupation() + " | " + resident.location(),
-                    SourceGrayboxPalette.residentHat(resident.occupation(), resident.condition()), false);
-            known.setPos(Vec3.atBottomCenterOf(position));
-            return;
-        }
-        if (ledger.entityClaimed(key)) return;
-        Villager villager = new Villager(EntityType.VILLAGER, level);
-        villager.setUUID(uuid("resident", resident.id()));
-        villager.setVillagerData(villager.getVillagerData().setProfession(VillagerProfession.NONE));
-        configure(villager, resident.id(), "RESIDENT", revision, resident.occupation() + " | " + resident.location(),
-                SourceGrayboxPalette.residentHat(resident.occupation(), resident.condition()), false);
-        villager.setPos(Vec3.atBottomCenterOf(position));
-        ledger.claimEntity(key);
-        if (level.addFreshEntity(villager)) admittedEntities.put(key, villager);
-    }
-
-    private static void ensureBioform(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
-                                      ReferenceGrayboxSnapshot.Bioform bioform, Set<String> active, Map<String, Entity> admittedEntities) {
-        String key = entityKey(bioform.id(), "BIOFORM");
-        active.add(key);
-        BlockPos position = new BlockPos(bioform.position().x(), ENTITY_Y, bioform.position().z());
-        if (!ready(level, position)) return;
-        Entity current = existingEntity(level, admittedEntities, bioform.id(), "BIOFORM", uuid("bioform", bioform.id()));
-        if (current != null && !(current instanceof Zombie && identityMatches(current, bioform.id(), "BIOFORM"))) return;
-        if (current instanceof Zombie known) {
-            ledger.claimEntity(key);
-            configure(known, bioform.id(), "BIOFORM", revision, bioform.kind() + " | " + bioform.phase(),
-                    SourceGrayboxPalette.bioformHat(bioform.kind()), true);
-            known.setPos(Vec3.atBottomCenterOf(position));
-            return;
-        }
-        if (ledger.entityClaimed(key)) return;
-        Zombie zombie = new Zombie(EntityType.ZOMBIE, level);
-        zombie.setUUID(uuid("bioform", bioform.id()));
-        configure(zombie, bioform.id(), "BIOFORM", revision, bioform.kind() + " | " + bioform.phase(),
-                SourceGrayboxPalette.bioformHat(bioform.kind()), true);
-        zombie.setPos(Vec3.atBottomCenterOf(position));
-        ledger.claimEntity(key);
-        if (level.addFreshEntity(zombie)) admittedEntities.put(key, zombie);
-    }
-
     private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, SourceGrayboxLabelPositions labels,
                               String id, String text, int x, int z) {
         String key = entityKey(id, LABEL_KIND);
@@ -408,27 +369,11 @@ final class SourceGrayboxMaterializer {
         if (level.addFreshEntity(display)) admittedEntities.put(key, display);
     }
 
-    private static void configure(Mob entity, String id, String kind, String revision, String name, Item helmet, boolean nameVisible) {
-        entity.setPersistenceRequired();
-        entity.setNoAi(true);
-        entity.setNoGravity(true);
-        entity.setCustomName(Component.literal(name));
-        entity.setCustomNameVisible(nameVisible);
-        entity.setItemSlot(EquipmentSlot.HEAD, new ItemStack(helmet));
-        attach(entity, id, kind, revision);
-    }
-
-    private static void attach(Entity entity, String id, String kind, String revision) {
-        entity.getPersistentData().putString(ENTITY_ID, id);
-        entity.getPersistentData().putString(ENTITY_KIND, kind);
-        entity.getPersistentData().putString(ENTITY_REVISION, revision);
-    }
-
-    private static boolean identityMatches(Entity entity, String id, String kind) {
+    static boolean identityMatches(Entity entity, String id, String kind) {
         return entity.getPersistentData().getString(ENTITY_ID).equals(id) && entity.getPersistentData().getString(ENTITY_KIND).equals(kind);
     }
 
-    private static Entity existingEntity(ServerLevel level, Map<String, Entity> admittedEntities, String id, String kind, UUID expectedUuid) {
+    static Entity existingEntity(ServerLevel level, Map<String, Entity> admittedEntities, String id, String kind, UUID expectedUuid) {
         String key = entityKey(id, kind);
         Entity admitted = admittedEntities.get(key);
         if (admitted != null && !admitted.isRemoved()) return admitted;
@@ -449,7 +394,7 @@ final class SourceGrayboxMaterializer {
         admittedEntities.entrySet().removeIf(entry -> entry.getValue().isRemoved() || !active.contains(entry.getKey()));
     }
 
-    private static boolean ready(ServerLevel level, BlockPos position) {
+    static boolean ready(ServerLevel level, BlockPos position) {
         BlockPos ground = new BlockPos(position.getX(), SURFACE_Y - 1, position.getZ());
         return level.hasChunkAt(position) && !level.getBlockState(ground).isAir()
                 && level.getFluidState(ground).isEmpty();
@@ -459,8 +404,12 @@ final class SourceGrayboxMaterializer {
         return UUID.nameUUIDFromBytes(("pale-mirror-source-graybox:" + kind + ":" + id).getBytes(StandardCharsets.UTF_8));
     }
 
-    private static String entityKey(String id, String kind) {
+    static String entityKey(String id, String kind) {
         return kind + ":" + id;
+    }
+
+    static String entityKey(String id, ReferenceGrayboxActorExecutionState.ActorKind kind) {
+        return entityKey(id, kind.name());
     }
 
     private static int midpoint(int first, int second) {
