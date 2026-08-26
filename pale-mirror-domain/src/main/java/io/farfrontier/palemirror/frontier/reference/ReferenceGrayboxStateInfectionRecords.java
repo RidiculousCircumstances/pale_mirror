@@ -105,13 +105,16 @@ final class ReferenceGrayboxStateInfectionRecords {
         return List.copyOf(result);
     }
 
-    static List<ReferenceNestProject> projects(Object encoded, Map<Integer, ReferenceHiveOrgan> organs, int width, int height) {
+    static List<ReferenceNestProject> projects(Object encoded, int nextOrganId, int width, int height) {
         List<ReferenceNestProject> result = new ArrayList<>();
         for (Object item : ReferenceGrayboxStateReader.sequence(encoded, "list", "organ projects")) {
             Map<String, Object> fields = typed(item, "simulation.infection.NestProject", "organ project", "source_nest_id", "x", "y", "days_remaining", "kind", "committed_biomass");
             int source = ReferenceGrayboxStateReader.integer(fields.get("source_nest_id"), "project source");
             int days = ReferenceGrayboxStateReader.integer(fields.get("days_remaining"), "project days remaining");
-            if (!organs.containsKey(source) || days < 0) throw new IllegalArgumentException("organ project is invalid");
+            // A player may destroy the source organ between source days.  The
+            // source project then remains in the saved state until the next
+            // daily lifecycle deterministically records its cancellation.
+            if (source < 1 || source >= nextOrganId || days < 0) throw new IllegalArgumentException("organ project is invalid");
             result.add(new ReferenceNestProject(source, coordinate(fields.get("x"), width, "project x"), coordinate(fields.get("y"), height, "project y"), days,
                     organKind(fields.get("kind"), "project kind"), number(fields.get("committed_biomass"), "project biomass")));
         }
@@ -130,14 +133,17 @@ final class ReferenceGrayboxStateInfectionRecords {
         return List.copyOf(result);
     }
 
-    static List<ReferenceNetworkFlow> flows(Object encoded, Map<Integer, ReferenceHiveOrgan> organs, int width, int height) {
+    static List<ReferenceNetworkFlow> flows(Object encoded, int nextOrganId, int width, int height) {
         List<ReferenceNetworkFlow> result = new ArrayList<>();
         for (Object item : ReferenceGrayboxStateReader.sequence(encoded, "list", "infection network flows")) {
             Map<String, Object> fields = typed(item, "simulation.infection.NetworkFlow", "network flow", "day", "source_kind", "source_id", "source_x", "source_y",
                     "nest_id", "amount", "retained", "loss", "distance");
             String sourceKind = ReferenceGrayboxStateReader.string(fields.get("source_kind"), "flow source kind");
             int organId = ReferenceGrayboxStateReader.integer(fields.get("nest_id"), "flow organ id");
-            if (!organs.containsKey(organId)) throw new IllegalArgumentException("flow organ is unknown");
+            // Flows are the completed daily accounting report.  An immediate
+            // physical organ casualty makes this ID historical provenance
+            // until the following digest clears the report.
+            if (organId < 1 || organId >= nextOrganId) throw new IllegalArgumentException("flow organ was never issued");
             double sourceX = sourceCoordinate(fields.get("source_x"), sourceKind, width, "flow source x");
             double sourceY = sourceCoordinate(fields.get("source_y"), sourceKind, height, "flow source y");
             result.add(new ReferenceNetworkFlow(ReferenceGrayboxStateReader.integer(fields.get("day"), "flow day"), sourceKind,
@@ -148,13 +154,17 @@ final class ReferenceGrayboxStateInfectionRecords {
         return List.copyOf(result);
     }
 
-    static LinkedHashMap<Integer, ReferenceHiveEconomyEntry> nestEconomy(Object encoded, Map<Integer, ReferenceHiveOrgan> organs) {
+    static LinkedHashMap<Integer, ReferenceHiveEconomyEntry> nestEconomy(Object encoded, int nextOrganId) {
         LinkedHashMap<Integer, ReferenceHiveEconomyEntry> result = new LinkedHashMap<>();
         for (ReferenceGrayboxStateReader.Entry entry : ReferenceGrayboxStateReader.mapEntries(encoded, "nest economy")) {
             int id = ReferenceGrayboxStateReader.integer(entry.key(), "nest economy key");
             Map<String, Object> fields = mapping(entry.value(), "nest economy row", "day", "nest_id", "opening_biomass", "substrate_in", "biomass_income", "samples_in", "maintenance");
             int rowId = integral(fields.get("nest_id"), "nest economy organ");
-            if (id != rowId || !organs.containsKey(id) || result.containsKey(id)) throw new IllegalArgumentException("nest economy owner is invalid");
+            // This is the same daily report as networkFlows.  Its key remains
+            // a report subject after an in-between-days organ casualty.
+            if (id < 1 || id >= nextOrganId || id != rowId || result.containsKey(id)) {
+                throw new IllegalArgumentException("nest economy owner is invalid");
+            }
             ReferenceHiveEconomyEntry value = new ReferenceHiveEconomyEntry(integral(fields.get("day"), "nest economy day"), id,
                     number(fields.get("opening_biomass"), "nest economy opening biomass"));
             value.addSubstrateIn(number(fields.get("substrate_in"), "nest economy substrate")); value.addBiomassIncome(number(fields.get("biomass_income"), "nest economy income"));
