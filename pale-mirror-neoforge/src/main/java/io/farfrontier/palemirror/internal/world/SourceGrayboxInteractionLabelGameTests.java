@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import java.util.List;
-import java.util.Locale;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -30,13 +29,12 @@ public final class SourceGrayboxInteractionLabelGameTests {
         materializer.apply(helper.getLevel(), snapshot);
 
         ReferenceGrayboxSnapshot.Interaction interaction = snapshot.interactions().getFirst();
-        String text = "[X] route_damaged target=" + interaction.subjectId() + " total=18.00 available-slots="
-                + interaction.slots().size() + " each=" + String.format(Locale.ROOT, "%.2f", interaction.totalWeight() / interaction.slots().size());
+        String text = SourceGrayboxPlayerBriefing.interactionLabel(snapshot, SourceGrayboxPresentationLedger.get(helper.getLevel()), interaction);
         AABB arena = new AABB(anchor).inflate(64, 64, 64);
         List<Display.TextDisplay> labels = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, arena, value ->
                 value.hasCustomName() && value.getCustomName().getString().equals(text));
         helper.assertTrue(labels.size() == 1,
-                "every breakable source fact must name its type, exact target, remaining total and exact per-slot effect");
+                "every breakable source fact must tell a player what will change before the marked block is broken");
 
         materializer.apply(helper.getLevel(), withoutInteractions(snapshot));
         helper.assertTrue(labels.getFirst().isRemoved(),

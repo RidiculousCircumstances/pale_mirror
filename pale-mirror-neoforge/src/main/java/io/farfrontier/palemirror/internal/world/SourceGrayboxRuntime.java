@@ -9,6 +9,8 @@ import java.util.LinkedHashMap;
 import java.nio.file.Path;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Optional;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -116,12 +118,71 @@ public final class SourceGrayboxRuntime {
         return applied;
     }
 
+    /**
+     * Applies a managed death and returns a transient player receipt only when
+     * the canonical source accepted it. The receipt is derived before/after
+     * immutable snapshots and is never retained as a second event log.
+     */
+    public Optional<String> observeEntityDeathWithReceipt(Entity entity, String causationId) {
+        if (!data.activated() || entity.level() != grayboxLevel()) return Optional.empty();
+        ReferenceGrayboxSnapshot before = data.snapshot();
+        SourceGrayboxEntityObservation.Result result = SourceGrayboxEntityObservation.observeDetailed(data, entity, causationId);
+        publish(grayboxLevel());
+        if (!result.applied()) return Optional.empty();
+        return Optional.of(SourceGrayboxPlayerBriefing.acceptedEntityReceipt(before, data.snapshot(), result.entity()));
+    }
+
     /** Turns a declared physical interaction slot into the exact source fact it carries. */
     public boolean observeBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position, String causationId) {
         if (!data.activated() || level != grayboxLevel()) return false;
         boolean handled = SourceGrayboxBlockObservation.observe(data, materializer, level, position, causationId);
         publish(grayboxLevel());
         return handled;
+    }
+
+    /** Applies one declared slot and supplies a receipt only for an accepted canonical change. */
+    public Optional<String> observeBlockBreakWithReceipt(ServerLevel level, BlockPos position, String causationId) {
+        if (!data.activated() || level != grayboxLevel()) return Optional.empty();
+        ReferenceGrayboxSnapshot before = data.snapshot();
+        SourceGrayboxBlockObservation.Result result = SourceGrayboxBlockObservation.observeDetailed(data, materializer, level, position, causationId);
+        publish(grayboxLevel());
+        if (!result.handled()) return Optional.empty();
+        if (!result.applied()) {
+            return Optional.of(result.claim().interactionKind().isEmpty()
+                    ? "World unchanged: this block only describes a source object. Break a marked ACTION block to make a real intervention."
+                    : "World unchanged: this action was stale, already used, or rejected by the source world.");
+        }
+        ReferenceGrayboxSnapshot.Interaction interaction = before.interactions().stream()
+                .filter(value -> value.id().equals(result.claim().id().substring("interaction:".length(), result.claim().id().lastIndexOf(':'))))
+                .findFirst().orElse(null);
+        return interaction == null ? Optional.empty()
+                : Optional.of(SourceGrayboxPlayerBriefing.acceptedReceipt(before, data.snapshot(), interaction));
+    }
+
+    /** Presents a source-derived briefing for a physical source object without changing any source or world state. */
+    public boolean presentBriefing(ServerPlayer player, BlockPos position) {
+        if (!data.activated() || player.level() != grayboxLevel()) return false;
+        ReferenceGrayboxSnapshot snapshot = data.snapshot();
+        SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(grayboxLevel(), position);
+        Optional<String> briefing = claim != null && !claim.interactionKind().isEmpty()
+                ? SourceGrayboxPlayerBriefing.forIdentity(snapshot, interactionLabelId(claim), SourceGrayboxMaterializer.LABEL_KIND)
+                : SourceGrayboxPlayerBriefing.at(snapshot, position.getX(), position.getZ());
+        return briefing.map(text -> {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(text));
+            return true;
+        }).orElse(false);
+    }
+
+    /** Presents a source-derived briefing when a player clicks a board, resident or bioform. */
+    public boolean presentBriefing(ServerPlayer player, Entity entity) {
+        if (!data.activated() || entity.level() != grayboxLevel()) return false;
+        String id = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID);
+        String kind = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_KIND);
+        if (id.isBlank() || kind.isBlank()) return false;
+        return SourceGrayboxPlayerBriefing.forIdentity(data.snapshot(), id, kind).map(text -> {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(text));
+            return true;
+        }).orElse(false);
     }
 
     /** Explicit operator transport makes the disposable arena discoverable without touching the overworld. */
@@ -145,6 +206,15 @@ public final class SourceGrayboxRuntime {
 
     private ServerLevel grayboxLevel() {
         return SourceGrayboxWorldBoundary.level(server);
+    }
+
+    private static String interactionLabelId(SourceGrayboxPresentationLedger.Claim claim) {
+        String id = claim.id();
+        String prefix = "interaction:";
+        if (!id.startsWith(prefix) || id.lastIndexOf(':') <= prefix.length()) {
+            throw new IllegalStateException("interaction claim has no deterministic slot id: " + id);
+        }
+        return prefix + id.substring(prefix.length(), id.lastIndexOf(':'));
     }
 
     private void publish(ServerLevel level) {

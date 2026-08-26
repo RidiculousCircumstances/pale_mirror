@@ -44,7 +44,7 @@ public final class SourceGrayboxMaterializerGameTests {
                 value.hasCustomName() && value.getCustomName().getString().startsWith("[MARKET] cash=12.00")).isEmpty(),
                 "dense source dashboards must not turn every row into an overlapping map nameplate");
         Display.TextDisplay facilityLabel = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(facility).inflate(16, 32, 16), value ->
-                value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop")).stream().findFirst().orElseThrow();
+                value.hasCustomName() && value.getCustomName().getString().startsWith("[BUILDING] workshop")).stream().findFirst().orElseThrow();
         helper.assertValueEqual(facilityLabel.blockPosition().getY(), ReferenceGrayboxLayout.GROUND_Y + 3,
                 "a low one-block graybox structure must keep its label just above the player eye line, not on the object or a detached sky plane");
         helper.assertTrue(facilityLabel.isCurrentlyGlowing(),
@@ -224,8 +224,8 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.assertValueEqual(claim.subjectId(), raid.id(), "the raid marker must retain its exact source activity ID");
         helper.assertValueEqual(claim.kind(), "ACTIVITY", "the raid marker must retain its operation semantic kind");
         helper.assertTrue(helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(marker).inflate(3, 24, 3), value ->
-                        value.hasCustomName() && value.getCustomName().getString().equals("[A] operation#47 raid engaging p=2.00 i=0.50")).size() == 1,
-                "an active raid must expose its family, kind, phase, personnel and risk in a readable label");
+                        value.hasCustomName() && value.getCustomName().getString().equals(SourceGrayboxPlayerBriefing.activityLabel(raid))).size() == 1,
+                "an active raid must expose its purpose, current phase and committed people in a readable player label");
 
         Villager guard = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->
                 value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals("resident:raid:guard")).stream().findFirst().orElseThrow();

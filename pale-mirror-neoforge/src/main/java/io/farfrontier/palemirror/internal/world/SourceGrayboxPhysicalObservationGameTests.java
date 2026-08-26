@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import java.util.List;
-import java.util.Locale;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -57,12 +56,11 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         helper.assertValueEqual(helper.getLevel().getBlockState(position).getBlock(), Blocks.AIR,
                 "Minecraft's completed break keeps the consumed source cube visibly absent");
 
-        String label = "[X] route_damaged target=" + remaining.subjectId() + " total=" + number(expectedCapacity)
-                + " available-slots=" + availableSlots + " each=" + number(expectedCapacity / availableSlots);
+        String label = SourceGrayboxPlayerBriefing.interactionLabel(after, SourceGrayboxPresentationLedger.get(helper.getLevel()), remaining);
         List<Display.TextDisplay> labels = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(anchor).inflate(64, 64, 64), value ->
                 value.hasCustomName() && value.getCustomName().getString().equals(label));
         helper.assertTrue(labels.size() == 1,
-                "the refreshed [X] label must expose the exact remaining source capacity and remaining breakable slots");
+                "the refreshed action board must remain truthful after its source capacity changes");
 
         String afterRevision = after.stateRevision();
         helper.assertTrue(SourceGrayboxBlockObservation.observe(data, materializer, helper.getLevel(), position, "gametest:route-slot"),
@@ -131,7 +129,4 @@ public final class SourceGrayboxPhysicalObservationGameTests {
                 List.of(interaction), List.of(), List.of(), List.of());
     }
 
-    private static String number(double value) {
-        return String.format(Locale.ROOT, "%.2f", value);
-    }
 }

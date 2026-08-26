@@ -287,59 +287,49 @@ final class SourceGrayboxMaterializer {
                 "[KEY] V2 towers: red infection 0..1; purple spores 0..10; cyan human access 0..1; lime hive influence 0..1. Height=1..10.",
                 deck.getX(), deck.getZ());
         label(level, active, admittedEntities, labels, "legend:inspect",
-                "[CMD] Stand on a source object and run /pale_mirror frontier inspect for its exact current source values.", deck.getX(), deck.getZ());
+                "[GUIDE] Right-click a board, structure, Villager or hive zombie for its state, cause, risk and next action. The REPORT and TIMELINE boards explain the region.", deck.getX(), deck.getZ());
         for (ReferenceGrayboxSnapshot.Settlement settlement : snapshot.settlements()) {
-            label(level, active, admittedEntities, labels, "settlement:" + settlement.id(), "[S] #" + settlement.id() + " " + settlement.name()
-                    + " pop=" + number(settlement.population()) + " " + settlement.civicState() + " threat=" + number(settlement.threat())
-                    + " [inspect]",
+            label(level, active, admittedEntities, labels, "settlement:" + settlement.id(), SourceGrayboxPlayerBriefing.settlementLabel(snapshot, settlement),
                     settlement.rectangle().centreX(), settlement.rectangle().centreZ());
         }
         for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) label(level, active, admittedEntities, labels, "facility:" + facility.id(),
-                "[F] " + facility.kind() + "=" + number(facility.level()), facility.rectangle().centreX(), facility.rectangle().centreZ());
+                SourceGrayboxPlayerBriefing.facilityLabel(facility), facility.rectangle().centreX(), facility.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) label(level, active, admittedEntities, labels, "site:" + site.id(),
-                "[R] #" + site.id() + " " + site.kind() + " cap=" + number(site.capacity()) + " cond=" + number(site.condition()),
+                SourceGrayboxPlayerBriefing.resourceSiteLabel(site),
                 site.rectangle().centreX(), site.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) label(level, active, admittedEntities, labels, "organ:" + organ.id(),
-                "[H] #" + organ.id() + " " + organ.kind() + " biomass=" + number(organ.biomass()) + " vit=" + number(organ.vitality())
-                        + (organ.feral() ? " FERAL" : ""), organ.rectangle().centreX(), organ.rectangle().centreZ());
+                SourceGrayboxPlayerBriefing.organLabel(organ), organ.rectangle().centreX(), organ.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) label(level, active, admittedEntities, labels, "cargo:" + cargo.id(),
-                "[C] " + cargo.ownerKind() + "#" + cargo.ownerId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
+                SourceGrayboxPlayerBriefing.cargoLabel(cargo),
                 cargo.rectangle().centreX(), cargo.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, admittedEntities, labels, "route:" + route.id(),
-                "[T] " + route.settlementA() + "→" + route.settlementB() + " cap=" + number(route.capacity()) + " risk=" + number(route.risk())
-                        + (route.quarantined() ? " QUARANTINED" : route.disrupted() ? " DISRUPTED" : " OPEN"),
+                SourceGrayboxPlayerBriefing.routeLabel(snapshot, route),
                 midpoint(route.start().x(), route.end().x()), midpoint(route.start().z(), route.end().z()));
         for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, admittedEntities, labels, "field-post:" + post.id(),
-                "[P] #" + post.id() + " " + post.kind() + " " + post.status() + " i=" + number(post.integrity()) + " g=" + post.garrison()
-                        + " w=" + post.wounded(), post.rectangle().centreX(), post.rectangle().centreZ());
+                SourceGrayboxPlayerBriefing.fieldPostLabel(post), post.rectangle().centreX(), post.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
             ReferenceGrayboxLayout.Point label = link.slots().get(link.slots().size() / 2);
-            label(level, active, admittedEntities, labels, "field-link:" + link.id(), "[L] #" + link.id() + " " + link.kind() + " " + link.status()
-                    + " i=" + number(link.integrity()), label.x(), label.z());
+            label(level, active, admittedEntities, labels, "field-link:" + link.id(), SourceGrayboxPlayerBriefing.fieldLinkLabel(link), label.x(), label.z());
         }
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) if (!activity.terminal()) label(level, active, admittedEntities, labels,
-                "activity:" + activity.id(), "[A] " + activity.family() + "#" + shortId(activity.id()) + " " + activity.kind() + " " + activity.phase()
-                        + " p=" + number(activity.personnel()) + " i=" + number(activity.indicator()),
+                "activity:" + activity.id(), SourceGrayboxPlayerBriefing.activityLabel(activity),
                 activity.position().x(), activity.position().z());
         for (ReferenceGrayboxSnapshot.Sector sector : SourceGrayboxLabelLayout.labelledSectors(snapshot)) label(level, active, admittedEntities, labels, "sector:" + sector.key(),
                 "[V2] " + sector.key() + " " + sector.control().toUpperCase(Locale.ROOT) + (sector.supplied() ? " SUPPLIED" : ""),
                 sector.rectangle().centreX(), sector.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) label(level, active, admittedEntities, labels, "chrysalis:" + chrysalis.organId(),
-                "[C] organ#" + chrysalis.organId() + " " + chrysalis.status() + " d=" + chrysalis.daysRemaining()
-                        + " b=" + number(chrysalis.biomassCommitted()), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
+                SourceGrayboxPlayerBriefing.chrysalisLabel(chrysalis), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Interaction interaction : snapshot.interactions()) {
             ReferenceGrayboxLayout.Point point = interaction.slots().get(interaction.slots().size() / 2);
             label(level, active, admittedEntities, labels, "interaction:" + interaction.id(),
-                    SourceGrayboxInteractionPresentation.labelText(ledger, interaction), point.x(), point.z());
+                    SourceGrayboxPlayerBriefing.interactionLabel(snapshot, ledger, interaction), point.x(), point.z());
         }
         ledger.claims().stream().filter(SourceGrayboxPresentationLedger.Claim::conflicted)
                 .sorted(Comparator.comparing(SourceGrayboxPresentationLedger.Claim::id))
                 .forEach(claim -> label(level, active, admittedEntities, labels, "conflict:" + claim.id(),
                         SourceGrayboxConflictPresentation.labelText(claim), claim.x() + claim.width() / 2, claim.z() + claim.depth() / 2));
-        label(level, active, admittedEntities, labels, "dashboard:summary", "[D" + snapshot.day() + "] " + snapshot.readouts().size()
-                + " source dashboard rows; stand on a settlement and run /pale_mirror frontier inspect.", deck.getX(), deck.getZ());
-        label(level, active, admittedEntities, labels, "events:summary", "[D" + snapshot.day() + "] " + snapshot.events().size()
-                + " source events retained; /pale_mirror frontier inspect gives the local state.", deck.getX(), deck.getZ());
+        label(level, active, admittedEntities, labels, "dashboard:summary", SourceGrayboxPlayerBriefing.frontierReportLabel(snapshot), deck.getX(), deck.getZ());
+        label(level, active, admittedEntities, labels, "events:summary", SourceGrayboxPlayerBriefing.timelineLabel(snapshot), deck.getX(), deck.getZ());
     }
 
     private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
@@ -480,8 +470,6 @@ final class SourceGrayboxMaterializer {
     private static String number(double value) {
         return String.format(Locale.ROOT, "%.2f", value);
     }
-
-    private static String shortId(String value) { int separator = value.lastIndexOf(':'); return separator < 0 ? value : value.substring(separator + 1); }
 
     record ManagedEntity(String id, String kind, String revision) { }
     record Report(int placed, int desired, int conflicts, String revision) { }

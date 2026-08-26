@@ -62,7 +62,7 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
         BlockPos facility = anchor.offset(2, 0, 2);
         helper.assertTrue(labels(helper, facility).isEmpty(),
                 "a restored display admitted before ServerLevel UUID publication must be reused, never recreated");
-        helper.assertTrue(restoring.hasCustomName() && restoring.getCustomName().getString().startsWith("[F] workshop"),
+        helper.assertTrue(restoring.hasCustomName() && restoring.getCustomName().getString().startsWith("[BUILDING] workshop"),
                 "the admitted restored object must receive the current deterministic label text");
         helper.assertTrue(restoring.isCurrentlyGlowing(),
                 "the recovered display must retain the same high-contrast visual configuration as a fresh label");
@@ -99,6 +99,6 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
 
     private static java.util.List<Display.TextDisplay> labels(GameTestHelper helper, BlockPos facility) {
         return helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(facility).inflate(3, 32, 3), value ->
-                value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop"));
+                value.hasCustomName() && value.getCustomName().getString().startsWith("[BUILDING] workshop"));
     }
 }

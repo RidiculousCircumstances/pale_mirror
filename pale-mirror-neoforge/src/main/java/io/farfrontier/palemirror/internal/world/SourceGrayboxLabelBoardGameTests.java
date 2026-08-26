@@ -29,9 +29,9 @@ public final class SourceGrayboxLabelBoardGameTests {
         AABB arena = new AABB(anchor).inflate(48, 32, 48);
         List<Display.TextDisplay> labels = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, arena,
                 value -> value.hasCustomName());
-        Display.TextDisplay settlement = labels.stream().filter(value -> value.getCustomName().getString().startsWith("[S] #1 Testhold"))
+        Display.TextDisplay settlement = labels.stream().filter(value -> value.getCustomName().getString().startsWith("[SETTLEMENT] Testhold — STABLE"))
                 .findFirst().orElseThrow(() -> new AssertionError("settlement board must be materialized"));
-        Display.TextDisplay civicHall = labels.stream().filter(value -> value.getCustomName().getString().equals("[F] civic_hall=1.00"))
+        Display.TextDisplay civicHall = labels.stream().filter(value -> value.getCustomName().getString().startsWith("[BUILDING] civic hall"))
                 .findFirst().orElseThrow(() -> new AssertionError("co-located civic-hall board must be materialized"));
 
         helper.assertTrue(settlement.getX() != civicHall.getX() || settlement.getZ() != civicHall.getZ(),

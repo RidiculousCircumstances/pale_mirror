@@ -133,13 +133,24 @@ The graybox palette is semantic: hostile pressure/disruption is red, hive
 signal/quarantine purple, logistics blue, human control cyan, food lime,
 medical/housing white, storage brown, observation/tools yellow, extraction or
 contested state orange, brood pink, destruction/feral black and neutral
-descriptive state grey. Labels expose exact identities and values, so colour
-does not replace a domain fact. Functional settlement rectangles,
-resource-sites, organs, cargo, field posts/links, operations, territorial
-sectors, chrysalises, current events and actor roles are all separate readable
-claims or labels. Trade routes additionally have sampled colour-coded ground
-segments between their source endpoints; their elevated interaction slots remain
-the sole route-damage authority.
+descriptive state grey. Colour never replaces a source fact. Functional
+settlement rectangles, resource-sites, organs, cargo, field posts/links,
+operations, territorial sectors, chrysalises, current events and actor roles
+are all separate readable claims or labels. Trade routes additionally have
+sampled colour-coded ground segments between their source endpoints; their
+elevated interaction slots remain the sole route-damage authority.
+
+The player-facing layer is read-only and derived from the same snapshot. A
+landmark board gives a short named state, while right-clicking that board, its
+structure, a managed Villager or a hive Zombie gives a bounded briefing:
+**state, cause, risk and next action**. The observation deck has a frontier
+report (forecast and current priority) plus a three-event timeline. Breaking a
+declared action block or killing a managed actor gives its player an immediate
+receipt of the accepted canonical consequence; breaking a merely descriptive
+block says that the world was unchanged. These messages are transient
+presentation, not a second event log or an authority path. Exact raw values and
+IDs remain available to the permissioned `frontier inspect` QA command, but no
+ordinary player briefing depends on it.
 
 Automated acceptance requires the source fixture checks, pure-domain
 normal/negative/recovery tests, complete-state persistence tests, the annual
@@ -147,6 +158,7 @@ calibration envelope, source-materializer GameTests and packaged-JAR gates.
 Those tests prove code and the server-side contract; they do not prove that a
 human can read the world in Minecraft. Final acceptance therefore also needs
 a client run in the dedicated graybox: enter the level, capture screenshots,
-advance time, and confirm immediate canonical consequences of a managed
-Villager/Zombie death and an interaction-slot break. A stopped client leaves
-that last visual/manual gate pending rather than silently waived.
+advance time, right-click a settlement, route, hive organ and REPORT/TIMELINE
+board, then confirm the immediate receipt and canonical consequence of a
+managed Villager/Zombie death and an interaction-slot break. A stopped client
+leaves that last visual/manual gate pending rather than silently waived.

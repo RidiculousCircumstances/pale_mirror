@@ -141,7 +141,9 @@ public final class PaleMirrorEvents {
             SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(event.getEntity().level().getServer());
             if (source.activated()) {
                 String actor = event.getSource().getEntity() == null ? "environment" : event.getSource().getEntity().getUUID().toString();
-                source.observeEntityDeath(event.getEntity(), actor);
+                if (event.getSource().getEntity() instanceof ServerPlayer player) {
+                    source.observeEntityDeathWithReceipt(event.getEntity(), actor).ifPresent(message -> player.sendSystemMessage(Component.literal(message)));
+                } else source.observeEntityDeath(event.getEntity(), actor);
                 return;
             }
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
@@ -197,7 +199,8 @@ public final class PaleMirrorEvents {
     public static void onFrontierBlockBreak(BlockEvent.BreakEvent event) {
         if (!event.isCanceled() && event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
             SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
-            if (source.activated()) source.observeBlockBreak(level, event.getPos(), "player:" + player.getUUID());
+            if (source.activated()) source.observeBlockBreakWithReceipt(level, event.getPos(), "player:" + player.getUUID())
+                    .ifPresent(message -> player.sendSystemMessage(Component.literal(message)));
         }
     }
 
@@ -253,6 +256,12 @@ public final class PaleMirrorEvents {
             return;
         }
         if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()) {
+            SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
+            if (source.presentBriefing(player, event.getPos())) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+                return;
+            }
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
             var transfer = runtime.interactWithSupplyDepot(player, event.getPos());
             if (transfer.handled()) {
@@ -268,6 +277,12 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+                && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
         if (RefugeeCampRuntime.isRepresentative(event.getTarget())
                 || VanillaMinecartRailAdapter.isRepresentative(event.getTarget())) {
             event.setCanceled(true);
@@ -283,6 +298,12 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+                && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
         if (RefugeeCampRuntime.isRepresentative(event.getTarget())
                 || VanillaMinecartRailAdapter.isRepresentative(event.getTarget())) {
             event.setCanceled(true);
