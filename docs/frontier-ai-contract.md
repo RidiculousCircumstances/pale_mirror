@@ -61,9 +61,15 @@ X/Z identity, or remove canonical people to meet a presentation budget.
 ## Runtime authority and persistence
 
 `SourceGrayboxSavedData` persists the complete
-`ReferenceGrayboxSimulation.save()` document, activation state, simulation
-clock and a bounded accepted-observation history. It restores all-or-nothing;
-an incompatible or incomplete document is a visible startup failure for the
+`ReferenceGrayboxSimulation.save()` document, the pure-domain actor-execution
+ledger, activation state, simulation clock and a bounded accepted-observation
+history. The execution ledger has one record for every exact resident/bioform:
+its latest source anchor and revision, fixed sixteenth-block physical position,
+and one `COLD -> PREPARING -> HOT -> DRAINING -> COLD` lease lifecycle. A
+restart moves unfinished leases to `RECOVERING`; only an inspected entity with
+the exact old lease can return to `HOT`, while a missing/stale body settles
+`COLD` without a blind duplicate. Both documents restore all-or-nothing; an
+incompatible or incomplete document is a visible startup failure for the
 disposable world, never a regenerated campaign.
 
 `SourceGrayboxRuntime` is the sole campaign clock after the explicit

@@ -31,6 +31,9 @@ public final class SourceGrayboxRuntime {
     private SourceGrayboxRuntime(MinecraftServer server) {
         this.server = server;
         data = SourceGrayboxSavedData.get(server.overworld());
+        // A saved HOT/PREPARING actor is unknown after JVM restart.  Do not let
+        // a later materializer blindly create a second body for that lease.
+        data.enterActorRecovery(server.overworld().getGameTime());
     }
 
     public static SourceGrayboxRuntime forServer(MinecraftServer server) {

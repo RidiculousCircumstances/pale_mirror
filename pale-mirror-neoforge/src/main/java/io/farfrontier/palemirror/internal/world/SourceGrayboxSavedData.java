@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
@@ -20,16 +21,19 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** Durable canonical owner for one source-parity graybox world. */
 final class SourceGrayboxSavedData extends SavedData {
     static final String DATA_NAME = "pale_mirror_frontier";
-    private static final int SCHEMA = 16;
+    private static final int SCHEMA = 17;
     private static final int MAX_PROCESSED_OBSERVATIONS = 4_096;
     private final ReferenceGrayboxSimulation simulation;
+    private final ReferenceGrayboxActorExecutionState actorExecution;
     private final LinkedHashSet<String> processedObservationIds;
     private boolean activated;
     private long lastClockGameTime;
 
-    private SourceGrayboxSavedData(ReferenceGrayboxSimulation simulation, boolean activated, long lastClockGameTime,
+    private SourceGrayboxSavedData(ReferenceGrayboxSimulation simulation, ReferenceGrayboxActorExecutionState actorExecution,
+                                   boolean activated, long lastClockGameTime,
                                    LinkedHashSet<String> processedObservationIds) {
         this.simulation = simulation;
+        this.actorExecution = actorExecution;
         this.activated = activated;
         this.lastClockGameTime = lastClockGameTime;
         this.processedObservationIds = processedObservationIds;
@@ -42,7 +46,9 @@ final class SourceGrayboxSavedData extends SavedData {
     }
 
     static SourceGrayboxSavedData fresh(long seed) {
-        return new SourceGrayboxSavedData(ReferenceGrayboxSimulation.create(seed), false, 0L, new LinkedHashSet<>());
+        ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(seed);
+        return new SourceGrayboxSavedData(simulation, ReferenceGrayboxActorExecutionState.bootstrap(simulation.snapshot()),
+                false, 0L, new LinkedHashSet<>());
     }
 
     /**
@@ -61,10 +67,60 @@ final class SourceGrayboxSavedData extends SavedData {
     }
 
     ReferenceGrayboxSnapshot snapshot() { return simulation.snapshot(); }
+    ReferenceGrayboxActorExecutionState actorExecution() { return actorExecution; }
     boolean activated() { return activated; }
+
+    boolean prepareActor(String id, String holder, long gameTick) {
+        boolean changed = actorExecution.prepare(id, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean activateActor(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.activate(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean captureActor(String id, String leaseId, String holder, int xSixteenths, int zSixteenths, long gameTick) {
+        boolean changed = actorExecution.capture(id, leaseId, holder, xSixteenths, zSixteenths, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean beginActorDrain(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.beginDrain(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean settleActorCold(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.settleCold(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean enterActorRecovery(long gameTick) {
+        boolean changed = actorExecution.enterRecovery(gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean recoverActorHot(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.recoverHot(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean recoverActorCold(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.recoverCold(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
 
     void activate(long gameTime) {
         if (activated) return;
+        synchronizeActorExecution();
         activated = true;
         lastClockGameTime = gameTime;
         setDirty();
@@ -80,6 +136,7 @@ final class SourceGrayboxSavedData extends SavedData {
         long due = Math.min(maximumDays, (gameTime - lastClockGameTime) / intervalTicks);
         for (long index = 0; index < due; index++) simulation.tick();
         if (due > 0) {
+            synchronizeActorExecution();
             lastClockGameTime += due * intervalTicks;
             setDirty();
         }
@@ -90,6 +147,7 @@ final class SourceGrayboxSavedData extends SavedData {
         if (!activated) throw new IllegalStateException("source graybox is not activated");
         if (days < 1 || days > 365) throw new IllegalArgumentException("source graybox advance must be between one and 365 days");
         for (int index = 0; index < days; index++) simulation.tick();
+        synchronizeActorExecution();
         setDirty();
     }
 
@@ -112,6 +170,7 @@ final class SourceGrayboxSavedData extends SavedData {
         }
         ReferenceGrayboxObservationOutcome outcome = apply.get();
         if (outcome.applied()) {
+            synchronizeActorExecution();
             processedObservationIds.add(eventId);
             while (processedObservationIds.size() > MAX_PROCESSED_OBSERVATIONS) processedObservationIds.removeFirst();
             setDirty();
@@ -124,8 +183,13 @@ final class SourceGrayboxSavedData extends SavedData {
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         LinkedHashSet<String> processed = readProcessed(tag.getList("processedObservationIds", Tag.TAG_STRING));
-        return new SourceGrayboxSavedData(SourceGrayboxStateNbt.read(tag.getCompound("sourceState")), tag.getBoolean("activated"),
-                tag.getLong("lastClockGameTime"), processed);
+        ReferenceGrayboxSimulation simulation = SourceGrayboxStateNbt.read(tag.getCompound("sourceState"));
+        if (!tag.contains("actorExecution", Tag.TAG_COMPOUND)) {
+            throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
+        }
+        ReferenceGrayboxActorExecutionState actorExecution = SourceGrayboxActorExecutionNbt.read(tag.getCompound("actorExecution"));
+        assertActorExecutionMatchesSource(actorExecution, simulation.snapshot());
+        return new SourceGrayboxSavedData(simulation, actorExecution, tag.getBoolean("activated"), tag.getLong("lastClockGameTime"), processed);
     }
 
     @Override
@@ -134,6 +198,7 @@ final class SourceGrayboxSavedData extends SavedData {
         tag.putBoolean("activated", activated);
         tag.putLong("lastClockGameTime", lastClockGameTime);
         tag.put("sourceState", SourceGrayboxStateNbt.write(simulation));
+        tag.put("actorExecution", SourceGrayboxActorExecutionNbt.write(actorExecution));
         ListTag processed = new ListTag();
         processedObservationIds.forEach(id -> processed.add(StringTag.valueOf(id)));
         tag.put("processedObservationIds", processed);
@@ -148,5 +213,34 @@ final class SourceGrayboxSavedData extends SavedData {
             if (id.isBlank() || id.length() > 128 || !result.add(id)) throw new IllegalStateException("source graybox observation history is invalid");
         }
         return result;
+    }
+
+    private void synchronizeActorExecution() {
+        if (actorExecution.reconcile(simulation.snapshot())) setDirty();
+    }
+
+    /** A bad execution ledger is not allowed to fabricate/forget a source body during SavedData load. */
+    private static void assertActorExecutionMatchesSource(ReferenceGrayboxActorExecutionState execution,
+                                                          ReferenceGrayboxSnapshot snapshot) {
+        java.util.Map<String, ReferenceGrayboxActorExecutionState.ActorDescriptor> expected = new java.util.LinkedHashMap<>();
+        for (ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor : ReferenceGrayboxActorExecutionState.descriptors(snapshot)) {
+            expected.put(descriptor.id(), descriptor);
+        }
+        for (ReferenceGrayboxActorExecutionState.ActorState actor : execution.actors()) {
+            ReferenceGrayboxActorExecutionState.ActorDescriptor descriptor = expected.remove(actor.id());
+            if (descriptor == null) {
+                if (actor.mode() != ReferenceGrayboxActorExecutionState.Mode.RETIRED) {
+                    throw new IllegalStateException("source graybox execution has a non-retired actor absent from source: " + actor.id());
+                }
+                continue;
+            }
+            if (actor.mode() == ReferenceGrayboxActorExecutionState.Mode.RETIRED || actor.kind() != descriptor.kind()
+                    || !actor.sourceRevision().equals(descriptor.sourceRevision())) {
+                throw new IllegalStateException("source graybox actor execution disagrees with source: " + actor.id());
+            }
+        }
+        if (!expected.isEmpty()) {
+            throw new IllegalStateException("source graybox actor execution is missing source actors: " + expected.keySet().iterator().next());
+        }
     }
 }

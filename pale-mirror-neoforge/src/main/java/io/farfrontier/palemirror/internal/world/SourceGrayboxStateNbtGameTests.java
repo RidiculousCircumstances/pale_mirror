@@ -48,7 +48,7 @@ public final class SourceGrayboxStateNbtGameTests {
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void savedDataPreflightRejectsAnUnhydratableCanonicalRecord(GameTestHelper helper) {
         CompoundTag corrupt = new CompoundTag();
-        corrupt.putInt("schemaVersion", 16);
+        corrupt.putInt("schemaVersion", 17);
         corrupt.put("sourceState", new CompoundTag());
         boolean rejected = false;
         try {
@@ -79,6 +79,41 @@ public final class SourceGrayboxStateNbtGameTests {
                         "gametest:source-graybox:resident", applied.stateRevision(), resident)).status(),
                 io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
                 "a persisted physical fact must be rejected before it can replay after restart");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void actorExecutionLeaseSurvivesSavedDataRoundTripAndRejectsStaleRecovery(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        String actor = source.snapshot().residents().getFirst().id();
+        helper.assertTrue(source.prepareActor(actor, "gametest:chunk:0_0", 20L), "a source resident must get one preparation lease");
+        String lease = source.actorExecution().actor(actor).orElseThrow().leaseId();
+        helper.assertTrue(source.activateActor(actor, lease, "gametest:chunk:0_0", 21L), "the matching lease may become hot");
+
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(source.save(new CompoundTag(), null), null);
+        helper.assertTrue(restored.enterActorRecovery(22L), "restart must make unfinished physical ownership explicit");
+        helper.assertTrue(!restored.recoverActorHot(actor, lease, "gametest:other", 23L),
+                "a stale actor cannot be silently adopted after restart");
+        helper.assertTrue(restored.recoverActorCold(actor, lease, "gametest:chunk:0_0", 23L),
+                "the original lease may settle to cold after a failed physical inspection");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void savedDataRejectsAnActorExecutionLedgerThatForgetsASourcePerson(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag corrupt = source.save(new CompoundTag(), null);
+        CompoundTag execution = corrupt.getCompound("actorExecution");
+        execution.put("actors", new net.minecraft.nbt.ListTag());
+        corrupt.put("actorExecution", execution);
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(corrupt, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "a partial physical execution ledger must fail startup rather than silently recreating source people");
         helper.succeed();
     }
 }
