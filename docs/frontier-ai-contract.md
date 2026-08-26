@@ -79,8 +79,13 @@ body keeps its physical position between publications; it is captured in
 sixteenths of a block, then may drain only after 200 ticks outside demand and
 when no player is within 64 blocks. The executor uses a persisted monotonic
 lease-time floor, so `/time` rewind cannot reuse an old lease or turn a body
-into an immediate despawn. Role brains and operations will choose movement on
-top of this ownership path; this coordinator is deliberately not a second AI.
+into an immediate despawn. A separate bounded role brain refreshes only those
+HOT lease bodies every ten ticks from source role/deployment or swarm phase,
+then makes collision-checked movement steps (at most sixty-four bodies per
+Minecraft tick). Native goals stay disabled, so this is not a second strategic
+AI; it cannot spawn, damage, mutate source state or run inside an unloaded
+chunk. Combat will be enabled only with its own durable cooldown/effect receipt
+layer on top of this ownership path.
 
 `SourceGrayboxRuntime` is the sole campaign clock after the explicit
 `/pale_mirror frontier activate_graybox` command. Its schedule advances the

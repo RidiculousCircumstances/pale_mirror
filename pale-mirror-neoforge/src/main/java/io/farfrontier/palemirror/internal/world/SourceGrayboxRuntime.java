@@ -27,6 +27,7 @@ public final class SourceGrayboxRuntime {
     private final SourceGrayboxSavedData data;
     private final SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
     private final SourceGrayboxActorExecutionRuntime actorExecution = new SourceGrayboxActorExecutionRuntime();
+    private final SourceGrayboxActorBehaviorRuntime actorBehavior = new SourceGrayboxActorBehaviorRuntime();
     private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
     private long lastPresentationGameTime = Long.MIN_VALUE;
 
@@ -68,6 +69,7 @@ public final class SourceGrayboxRuntime {
             publish(graybox);
             if (actorDue) actorExecution.afterPublication(graybox, data, materializer, admittedEntities);
         }
+        actorBehavior.tick(graybox, data.snapshot(), data.actorExecution(), materializer, admittedEntities, gameTime);
         return true;
     }
 

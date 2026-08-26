@@ -81,6 +81,38 @@ public final class SourceGrayboxActorMaterializerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotGuardAndEngagingBioformMoveTowardOneAnotherUnderTheControlledBrain(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        String residentId = "resident:brain:guard";
+        ReferenceGrayboxSnapshot snapshot = SourceGrayboxMaterializerGameTests.fixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot(),
+                residentId, 1.0d, "controlled-brain");
+        String bioformId = snapshot.bioforms().getFirst().id();
+        ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", 1L), "the guard lease must be prepared");
+        helper.assertTrue(execution.prepare(bioformId, "gametest:actor-runtime", 1L), "the bioform lease must be prepared");
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        Map<String, Entity> admitted = new LinkedHashMap<>();
+        materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+        helper.assertTrue(execution.activate(residentId, execution.actor(residentId).orElseThrow().leaseId(), "gametest:actor-runtime", 2L),
+                "the resident must become HOT after its body exists");
+        helper.assertTrue(execution.activate(bioformId, execution.actor(bioformId).orElseThrow().leaseId(), "gametest:actor-runtime", 2L),
+                "the bioform must become HOT after its body exists");
+        Villager guard = (Villager) materializer.actorEntity(helper.getLevel(), admitted, execution.actor(residentId).orElseThrow());
+        Zombie bioform = (Zombie) materializer.actorEntity(helper.getLevel(), admitted, execution.actor(bioformId).orElseThrow());
+        double before = guard.distanceToSqr(bioform);
+
+        SourceGrayboxActorBehaviorRuntime brain = new SourceGrayboxActorBehaviorRuntime();
+        for (long tick = 3L; tick < 18L; tick++) brain.tick(helper.getLevel(), snapshot, execution, materializer, admitted, tick);
+
+        helper.assertTrue(guard.distanceToSqr(bioform) < before,
+                "HOT guard and engaging bioform must make visible controlled progress instead of remaining frozen snapshot markers");
+        helper.assertTrue(guard.isNoAi() && bioform.isNoAi(),
+                "the live source brain must remain the sole local controller instead of enabling uncontrolled vanilla goals");
+        helper.succeed();
+    }
+
     private static ReferenceGrayboxSnapshot withColdBioform(BlockPos anchor, ReferenceGrayboxSnapshot fixture, String bioformId) {
         return new ReferenceGrayboxSnapshot(fixture.day(), fixture.profileId(), fixture.stateRevision(), fixture.bounds(), fixture.cells(),
                 fixture.settlements(), fixture.facilities(), fixture.resourceSites(), fixture.routes(), fixture.hiveOrgans(),
