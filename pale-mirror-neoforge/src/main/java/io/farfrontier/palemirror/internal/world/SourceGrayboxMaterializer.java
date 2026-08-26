@@ -46,9 +46,7 @@ final class SourceGrayboxMaterializer {
     private static final int ENTITY_Y = SURFACE_Y + 1;
     private static final int LABEL_Y = SURFACE_Y + 17;
     private static final int MAX_LABEL_Y = LABEL_Y + 64;
-    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) {
-        return apply(level, snapshot, new LinkedHashMap<>());
-    }
+    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) { return apply(level, snapshot, new LinkedHashMap<>()); }
 
     /**
      * Projects one immutable snapshot while retaining entities observed during level admission.
@@ -89,9 +87,7 @@ final class SourceGrayboxMaterializer {
      * remains a separately visible presentation conflict in the persisted
      * ledger.</p>
      */
-    static void validateProjection(ReferenceGrayboxSnapshot snapshot) {
-        SourceGrayboxPresentationPlan.validate(snapshot);
-    }
+    static void validateProjection(ReferenceGrayboxSnapshot snapshot) { SourceGrayboxPresentationPlan.validate(snapshot); }
 
     SourceGrayboxPresentationLedger.Claim claimAt(ServerLevel level, BlockPos position) {
         return SourceGrayboxPresentationLedger.get(level).at(position);
@@ -320,6 +316,10 @@ final class SourceGrayboxMaterializer {
             label(level, active, admittedEntities, labels, "interaction:" + interaction.id(),
                     SourceGrayboxInteractionPresentation.labelText(ledger, interaction), point.x(), point.z());
         }
+        ledger.claims().stream().filter(SourceGrayboxPresentationLedger.Claim::conflicted)
+                .sorted(Comparator.comparing(SourceGrayboxPresentationLedger.Claim::id))
+                .forEach(claim -> label(level, active, admittedEntities, labels, "conflict:" + claim.id(),
+                        SourceGrayboxConflictPresentation.labelText(claim), claim.x() + claim.width() / 2, claim.z() + claim.depth() / 2));
         for (ReferenceGrayboxSnapshot.Readout readout : snapshot.readouts()) label(level, active, admittedEntities, labels, "readout:" + readout.id(),
                 "[" + readout.category() + "] " + readout.text(), readout.position().x(), readout.position().z());
         snapshot.cells().stream().filter(cell -> cell.infection() > 0.01d || cell.signal() > 0.01d)

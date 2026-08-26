@@ -95,7 +95,7 @@ final class SourceGrayboxPresentationLedger extends SavedData {
 
     void conflict(String id) {
         Claim claim = claims.get(id);
-        if (claim == null || claim.conflicted() || claim.consumed()) return;
+        if (claim == null || claim.conflicted()) return;
         claims.put(id, claim.withConflict());
         setDirty();
     }
@@ -194,7 +194,7 @@ final class SourceGrayboxPresentationLedger extends SavedData {
         }
 
         Claim withConflict() {
-            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, true, interactionKind, interactionWeight, false);
+            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, true, interactionKind, interactionWeight, consumed);
         }
 
         Claim withConsumed() {

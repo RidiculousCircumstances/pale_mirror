@@ -8,7 +8,6 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObs
 import java.util.LinkedHashMap;
 import java.nio.file.Path;
 import java.util.IdentityHashMap;
-import java.util.Locale;
 import java.util.Map;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -127,21 +126,9 @@ public final class SourceGrayboxRuntime {
     /** Turns a declared physical interaction slot into the exact source fact it carries. */
     public boolean observeBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position, String causationId) {
         if (!data.activated() || level != grayboxLevel()) return false;
-        SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(level, position);
-        if (claim == null) return false;
-        if (claim.interactionKind().isEmpty()) {
-            materializer.recordBlockConflict(level, position);
-            return true;
-        }
-        String eventId = "source-graybox:physical-break:" + causationId + ":" + claim.id();
-        ReferenceGrayboxStructureObservation.Kind kind = ReferenceGrayboxStructureObservation.Kind.valueOf(
-                claim.interactionKind().toUpperCase(Locale.ROOT));
-        ReferenceGrayboxObservationOutcome outcome = data.observe(new ReferenceGrayboxStructureObservation(
-                ReferenceGrayboxStructureObservation.VERSION, eventId, claim.revision(), kind, claim.subjectId(), claim.interactionWeight()));
-        if (outcome.applied()) materializer.consumeBlockClaim(level, position);
-        else materializer.recordBlockConflict(level, position);
+        boolean handled = SourceGrayboxBlockObservation.observe(data, materializer, level, position, causationId);
         publish(grayboxLevel());
-        return true;
+        return handled;
     }
 
     /** Explicit operator transport makes the disposable arena discoverable without touching the overworld. */

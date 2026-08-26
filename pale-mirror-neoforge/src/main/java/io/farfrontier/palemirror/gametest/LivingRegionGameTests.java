@@ -312,7 +312,7 @@ public final class LivingRegionGameTests {
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
         reset(data);
         BlockPos focus = helper.absolutePos(new net.minecraft.core.BlockPos(0, 2, 0));
-        BlockPos anchor = focus.offset(48, 24, 0);
+        BlockPos anchor = focus.offset(48, 24, 0); level.getChunkAt(anchor);
         level.setBlock(anchor, Blocks.BELL.defaultBlockState(), 3);
         level.setBlock(anchor.east(), Blocks.RED_BED.defaultBlockState(), 3);
         level.setBlock(anchor.west(), Blocks.BLUE_BED.defaultBlockState(), 3);
