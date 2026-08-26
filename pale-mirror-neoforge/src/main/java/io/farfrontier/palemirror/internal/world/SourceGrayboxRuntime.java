@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
-import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
@@ -126,7 +125,9 @@ public final class SourceGrayboxRuntime {
     /** Explicit operator transport makes the disposable arena discoverable without touching the overworld. */
     public void enter(ServerPlayer player) {
         ServerLevel graybox = grayboxLevel();
-        player.teleportTo(graybox, 0.5d, ReferenceGrayboxLayout.GROUND_Y + 1.0d, 0.5d, player.getYRot(), player.getXRot());
+        net.minecraft.core.BlockPos entry = SourceGrayboxWorldBoundary.preparedEntry(graybox);
+        player.teleportTo(graybox, entry.getX() + 0.5d, entry.getY(), entry.getZ() + 0.5d, player.getYRot(), player.getXRot());
+        player.fallDistance = 0.0f;
     }
 
     public String status() {
