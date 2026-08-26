@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.internal.world;
 
-import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
@@ -111,16 +111,9 @@ public final class SourceGrayboxRuntime {
     /** Reconciles one exact managed entity death in the same server event. */
     public boolean observeEntityDeath(Entity entity, String causationId) {
         if (!data.activated() || entity.level() != grayboxLevel()) return false;
-        SourceGrayboxMaterializer.ManagedEntity managed = SourceGrayboxMaterializer.managed(entity);
-        if (managed == null) return false;
-        String eventId = "source-graybox:physical-death:" + causationId + ":" + entity.getUUID();
-        ReferenceGrayboxObservationOutcome outcome = switch (managed.kind()) {
-            case "RESIDENT" -> data.observe(ReferenceGrayboxResidentObservation.killed(eventId, managed.revision(), managed.id()));
-            case "BIOFORM" -> data.observe(ReferenceGrayboxBioformObservation.killed(eventId, managed.revision(), managed.id()));
-            default -> throw new IllegalStateException("unreachable managed entity kind");
-        };
+        boolean applied = SourceGrayboxEntityObservation.observe(data, entity, causationId);
         publish(grayboxLevel());
-        return outcome.applied();
+        return applied;
     }
 
     /** Turns a declared physical interaction slot into the exact source fact it carries. */

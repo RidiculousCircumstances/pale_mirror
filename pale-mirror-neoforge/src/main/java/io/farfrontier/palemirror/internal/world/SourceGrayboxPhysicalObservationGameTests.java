@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -78,6 +79,39 @@ public final class SourceGrayboxPhysicalObservationGameTests {
                 value.hasCustomName() && value.getCustomName().getString().equals(conflictLabel));
         helper.assertTrue(conflicts.size() == 1,
                 "a rejected replay must remain visible to the tester instead of being silently swallowed by the presentation ledger");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void onlyTheProjectedEntityIdentityCanReportAnExactResidentDeath(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        data.activate(0L);
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        ReferenceGrayboxSnapshot baseline = data.snapshot();
+        String residentId = baseline.residents().getFirst().id();
+        ReferenceGrayboxSnapshot presentation = SourceGrayboxMaterializerGameTests.fixture(anchor, baseline, residentId, 1.0d, "entity-observation");
+        materializer.apply(helper.getLevel(), presentation);
+        Villager carrier = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), entity ->
+                entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
+        String before = data.snapshot().stateRevision();
+
+        Villager forged = new Villager(net.minecraft.world.entity.EntityType.VILLAGER, helper.getLevel());
+        forged.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, residentId);
+        forged.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, "RESIDENT");
+        forged.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, before);
+        helper.assertTrue(!SourceGrayboxEntityObservation.observe(data, forged, "gametest:forged-resident"),
+                "matching provenance text without the deterministic source UUID must not mutate canonical state");
+        helper.assertValueEqual(data.snapshot().stateRevision(), before,
+                "a forged carrier must leave the current canonical revision untouched");
+
+        helper.assertTrue(SourceGrayboxEntityObservation.observe(data, carrier, "gametest:resident-death"),
+                "the deterministic materialized Villager must report exactly its source resident death");
+        helper.assertTrue(data.snapshot().residents().stream().noneMatch(resident -> resident.id().equals(residentId)),
+                "the exact canonical resident must disappear after the accepted physical death");
+        String after = data.snapshot().stateRevision();
+        helper.assertTrue(!before.equals(after), "an accepted entity observation must advance the canonical revision");
         helper.succeed();
     }
 
