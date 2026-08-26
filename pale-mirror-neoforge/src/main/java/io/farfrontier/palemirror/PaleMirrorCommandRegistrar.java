@@ -73,7 +73,12 @@ final class PaleMirrorCommandRegistrar {
                 context.getSource().sendFailure(Component.literal("Only a player can enter the source graybox."));
                 return 0;
             }
-            SourceGrayboxRuntime.forServer(context.getSource().getServer()).enter(player);
+            try {
+                SourceGrayboxRuntime.forServer(context.getSource().getServer()).enter(player);
+            } catch (IllegalStateException failure) {
+                context.getSource().sendFailure(Component.literal("Could not enter the source graybox: " + failure.getMessage()));
+                return 0;
+            }
             context.getSource().sendSuccess(() -> Component.literal("Entered pale_mirror:frontier_graybox."), false);
             return 1;
         }));
