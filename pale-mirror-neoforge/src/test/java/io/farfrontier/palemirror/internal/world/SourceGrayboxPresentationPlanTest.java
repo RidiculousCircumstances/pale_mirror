@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class SourceGrayboxPresentationPlanTest {
@@ -20,6 +21,13 @@ class SourceGrayboxPresentationPlanTest {
                 "an infected sector must own a visible infection metric tower");
         assertTrue(desired.keySet().stream().anyMatch(id -> id.startsWith("sector-metric:") && id.endsWith(":human_access")),
                 "human access must be physically distinct from infection and hive control");
+        Map<String, Long> tissueClumps = desired.values().stream().filter(item -> item.kind().equals("INFECTION_TISSUE"))
+                .collect(java.util.stream.Collectors.groupingBy(SourceGrayboxPresentationPlan.Desired::subjectId, java.util.stream.Collectors.counting()));
+        assertTrue(!tissueClumps.isEmpty() && tissueClumps.values().stream().allMatch(count -> count >= 1L && count <= 4L),
+                "each infected source cell must own a bounded, visibly growing tissue contour rather than an unbounded block carpet");
+        assertTrue(desired.values().stream().filter(item -> item.kind().equals("INFECTION_TISSUE"))
+                        .allMatch(item -> item.width() == 3 && item.depth() == 3 && item.height() == 1),
+                "every tissue contour must use the fixed provenance-owned clump geometry");
         snapshot.hiveOrgans().forEach(organ -> {
             SourceGrayboxPresentationPlan.Desired crown = desired.get("hive-organ:" + organ.id() + ":crown");
             SourceGrayboxPresentationPlan.Desired spire = desired.get("hive-organ:" + organ.id() + ":spire");

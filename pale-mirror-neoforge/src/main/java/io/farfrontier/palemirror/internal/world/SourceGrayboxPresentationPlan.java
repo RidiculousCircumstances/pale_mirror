@@ -33,6 +33,12 @@ final class SourceGrayboxPresentationPlan {
     private static final int HIVE_CROWN_WIDTH = 9;
     /** Neutral lamps make an organ legible through the flat world's night cycle. */
     private static final int HIVE_SIGNAL_HEIGHT = 2;
+    /** A visible tissue patch starts only once source tissue is no longer zero-level numerical noise. */
+    private static final double INFECTION_TISSUE_MINIMUM = 0.01d;
+    /** Four independent clumps make a six-by-six surface that grows without one damaged block freezing a whole cell. */
+    private static final int INFECTION_TISSUE_CLUMPS = 4;
+    private static final int INFECTION_TISSUE_CLUMP_WIDTH = 3;
+    private static final int INFECTION_TISSUE_Y = SURFACE_Y + 1;
 
     private SourceGrayboxPresentationPlan() { }
 
@@ -128,6 +134,7 @@ final class SourceGrayboxPresentationPlan {
             if (!activity.terminal()) add(result, marker("activity:" + activity.id(), activity.id(), "ACTIVITY", snapshot.stateRevision(),
                     activity.position().x(), ACTIVITY_Y, activity.position().z(), activity.colour()));
         }
+        addInfectionTissue(result, snapshot);
         if (result.size() > MAX_CLAIMS) {
             throw new IllegalStateException("source graybox projection exceeds its bounded claim ledger");
         }
@@ -181,6 +188,56 @@ final class SourceGrayboxPresentationPlan {
         return new Desired("interaction:" + interaction.id() + ":" + index, interaction.subjectId(), "INTERACTION", revision,
                 slot.x(), SURFACE_Y + interaction.yOffset(), slot.z(), 1, 1, 1, interaction.colour(), interaction.id(),
                 interaction.kind(), interaction.totalWeight());
+    }
+
+    /**
+     * Projects source tissue as four independent, source-owned surface clumps.
+     *
+     * <p>The source cell remains the only infection value.  These clumps are
+     * merely a readable physical contour: one quarter, half, three quarters
+     * and a full six-by-six patch correspond to the current cell level.  The
+     * separate provenance of each clump is intentional.  A player-caused
+     * conflict in one clump remains a visible scar, while the other source
+     * clumps may still grow or retreat normally.</p>
+     */
+    private static void addInfectionTissue(Map<String, Desired> result, ReferenceGrayboxSnapshot snapshot) {
+        for (ReferenceGrayboxSnapshot.Cell cell : snapshot.cells()) {
+            int clumps = infectionTissueClumps(cell);
+            for (int index = 0; index < clumps; index++) {
+                int localX = switch (index) {
+                    case 0, 3 -> 5;
+                    case 1, 2 -> 8;
+                    default -> throw new IllegalStateException("invalid infection tissue clump index");
+                };
+                int localZ = switch (index) {
+                    case 0, 1 -> 5;
+                    case 2, 3 -> 8;
+                    default -> throw new IllegalStateException("invalid infection tissue clump index");
+                };
+                String cellId = "cell:" + cell.x() + ":" + cell.y();
+                add(result, new Desired("infection-tissue:" + cellId + ":" + index, cellId, "INFECTION_TISSUE",
+                        snapshot.stateRevision(), cell.rectangle().x() + localX, INFECTION_TISSUE_Y,
+                        cell.rectangle().z() + localZ, INFECTION_TISSUE_CLUMP_WIDTH, INFECTION_TISSUE_CLUMP_WIDTH, 1,
+                        infectionTissueColour(cell)));
+            }
+        }
+    }
+
+    private static int infectionTissueClumps(ReferenceGrayboxSnapshot.Cell cell) {
+        double infection = cell.infection();
+        if (!Double.isFinite(infection) || infection < 0.0d) {
+            throw new IllegalStateException("source cell infection is invalid: " + cell.x() + "," + cell.y());
+        }
+        if (infection < INFECTION_TISSUE_MINIMUM) return 0;
+        return Math.min(INFECTION_TISSUE_CLUMPS, Math.max(1, (int) Math.ceil(infection * INFECTION_TISSUE_CLUMPS)));
+    }
+
+    private static String infectionTissueColour(ReferenceGrayboxSnapshot.Cell cell) {
+        if (cell.infection() >= .70d) return cell.signal() > INFECTION_TISSUE_MINIMUM
+                ? "infection.tissue.signal_severe" : "infection.tissue.severe";
+        if (cell.infection() >= .28d) return cell.signal() > INFECTION_TISSUE_MINIMUM
+                ? "infection.tissue.signal_active" : "infection.tissue.active";
+        return "infection.tissue.trace";
     }
 
     /**

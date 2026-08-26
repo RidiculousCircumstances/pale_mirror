@@ -13,6 +13,15 @@ final class SourceGrayboxPalette {
 
     static BlockState block(String colour) {
         String token = colour.toLowerCase(Locale.ROOT);
+        // Infection tissue is a physical contour of the source cell, not a
+        // generic building colour.  Keep its stages visually distinct at
+        // ground level: brown scar/trace -> red active growth -> purple dense
+        // tissue, with pink/magenta identifying a live hive signal.
+        if (token.contains("infection.tissue.signal_severe")) return Blocks.MAGENTA_WOOL.defaultBlockState();
+        if (token.contains("infection.tissue.signal_active")) return Blocks.PINK_WOOL.defaultBlockState();
+        if (token.contains("infection.tissue.severe")) return Blocks.PURPLE_WOOL.defaultBlockState();
+        if (token.contains("infection.tissue.active")) return Blocks.RED_WOOL.defaultBlockState();
+        if (token.contains("infection.tissue.trace")) return Blocks.BROWN_WOOL.defaultBlockState();
         if (token.contains("metric.infection")) return Blocks.RED_WOOL.defaultBlockState();
         if (token.contains("metric.spores")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("metric.human_access")) return Blocks.CYAN_WOOL.defaultBlockState();

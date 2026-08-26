@@ -20,13 +20,14 @@ import net.minecraft.world.level.saveddata.SavedData;
  * Bounded, durable ownership of source-graybox blocks.
  *
  * <p>The canonical simulation owns whether a record exists. This ledger owns
- * only the exact rectangles that the projector was allowed to write, so a
- * later reconciliation can distinguish a PM colour update from an unknown
- * block conflict without recreating state from terrain.</p>
+ * only the exact rectangles that the projector was allowed to write (or was
+ * blocked from writing), so a later reconciliation can distinguish a PM
+ * colour update from an unknown block conflict without recreating state from
+ * terrain.  A blocked claim has no permission to clear the foreign block.</p>
  */
 final class SourceGrayboxPresentationLedger extends SavedData {
     private static final String DATA_NAME = "pale_mirror_source_graybox_presentation";
-    private static final int FORMAT = 2;
+    private static final int FORMAT = 3;
     private static final int MAX_ENTITY_CLAIMS = 4_096;
     private final LinkedHashMap<String, Claim> claims;
     private final LinkedHashSet<String> entityClaims;
@@ -125,7 +126,8 @@ final class SourceGrayboxPresentationLedger extends SavedData {
             Claim claim = new Claim(value.getString("id"), value.getString("subject"), value.getString("kind"),
                     value.getString("revision"), value.getInt("x"), value.getInt("y"), value.getInt("z"),
                     value.getInt("width"), value.getInt("depth"), value.getInt("height"), value.getBoolean("conflicted"),
-                    value.getString("interactionKind"), value.getDouble("interactionWeight"), value.getBoolean("consumed"));
+                    value.getString("interactionKind"), value.getDouble("interactionWeight"), value.getBoolean("consumed"),
+                    value.getBoolean("installed"));
             if (claims.putIfAbsent(claim.id(), claim) != null) {
                 throw new IllegalStateException("duplicate source graybox presentation claim: " + claim.id());
             }
@@ -165,7 +167,7 @@ final class SourceGrayboxPresentationLedger extends SavedData {
 
     record Claim(String id, String subjectId, String kind, String revision, int x, int y, int z,
                  int width, int depth, int height, boolean conflicted, String interactionKind, double interactionWeight,
-                 boolean consumed) {
+                 boolean consumed, boolean installed) {
         Claim {
             required(id, "claim ID", 192);
             required(subjectId, "claim subject", 192);
@@ -185,6 +187,15 @@ final class SourceGrayboxPresentationLedger extends SavedData {
                 throw new IllegalArgumentException("source graybox interaction kind is invalid");
             }
             if (consumed && !interactive) throw new IllegalArgumentException("only an interaction claim can be consumed");
+            if (consumed && !installed) throw new IllegalArgumentException("a blocked source claim cannot be consumed");
+        }
+
+        /** Compatibility constructor for a claim that did successfully place its PM-owned blocks. */
+        Claim(String id, String subjectId, String kind, String revision, int x, int y, int z,
+              int width, int depth, int height, boolean conflicted, String interactionKind, double interactionWeight,
+              boolean consumed) {
+            this(id, subjectId, kind, revision, x, y, z, width, depth, height, conflicted, interactionKind,
+                    interactionWeight, consumed, true);
         }
 
         boolean contains(BlockPos position) {
@@ -194,11 +205,13 @@ final class SourceGrayboxPresentationLedger extends SavedData {
         }
 
         Claim withConflict() {
-            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, true, interactionKind, interactionWeight, consumed);
+            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, true, interactionKind,
+                    interactionWeight, consumed, installed);
         }
 
         Claim withConsumed() {
-            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, false, interactionKind, interactionWeight, true);
+            return new Claim(id, subjectId, kind, revision, x, y, z, width, depth, height, false, interactionKind,
+                    interactionWeight, true, true);
         }
 
         CompoundTag save() {
@@ -217,6 +230,7 @@ final class SourceGrayboxPresentationLedger extends SavedData {
             tag.putString("interactionKind", interactionKind);
             tag.putDouble("interactionWeight", interactionWeight);
             tag.putBoolean("consumed", consumed);
+            tag.putBoolean("installed", installed);
             return tag;
         }
 

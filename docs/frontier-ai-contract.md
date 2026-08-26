@@ -135,16 +135,18 @@ ReferenceGrayboxSimulation
   -> immutable ReferenceGrayboxSnapshot
   -> SourceGrayboxPresentationPlan
   -> SourceGrayboxMaterializer (loaded chunks only)
-  -> coloured cubes, labels, Villagers and Zombies
+  -> coloured structures, growing/retreating infection tissue, labels, Villagers and Zombies
 ```
 
 `SourceGrayboxPresentationLedger` is only the durable physical-ownership
 ledger. It cannot create, remove or infer canonical source facts. Each managed
 entity has deterministic UUID, source ID, type and snapshot revision. Each
 claimed block has an exact source subject, fact kind, revision and—where
-interactive—its exact currently represented weight. Unrecognised blocks,
-modified claims and stale facts are visible persisted conflicts; they are not
-permission to overwrite player work.
+interactive—its exact currently represented weight. A claim also records
+whether PM actually installed its blocks: a foreign block that prevents a new
+claim is a durable `foreign-obstruction`, never a retroactive ownership grant.
+Unrecognised blocks, modified claims and stale facts are visible persisted
+conflicts; they are not permission to overwrite player work.
 
 The reverse path is synchronous in the accepting server event:
 
@@ -171,6 +173,18 @@ co-located facts keep their canonical X/Z and receive distinct deterministic
 layers in the compact Y=64–79 stack; labels begin above that stack. The
 materializer may relocate only an unchanged PM-owned claim when a later plan
 changes its layer; it must not silently cover a player block.
+
+Every non-zero source infection cell additionally owns zero to four independent
+three-by-three tissue clumps. They form a growing or retreating six-by-six
+surface contour within its sixteen-by-sixteen cell: brown trace, red active
+tissue, purple dense tissue, and pink/magenta signal-linked tissue. The source
+cell's exact infection and signal values remain canonical; the clumps do not
+invent a new infection model. A player obstruction or break retains a conflict
+and a visible physical scar rather than being rebuilt on the next publication.
+Tissue is descriptive in this wave: it deliberately does not pretend that a
+bare block break is a valid source suppression operation. Typed removal will
+arrive with the durable operation/effect boundary, where its real geometry and
+canonical suppression receipt can be recorded together.
 
 ## Autonomous physical causality
 
@@ -206,6 +220,9 @@ operations, territorial sectors, chrysalises, current events and actor roles
 are all separate readable claims or labels. Trade routes additionally have
 sampled colour-coded ground segments between their source endpoints; their
 elevated interaction slots remain the sole route-damage authority.
+Cell tissue is intentionally more legible than a metric tower alone: its
+contiguous extent shows local infection growth and retreat, while the existing
+red/purple/cyan/lime sector towers retain the exact territorial comparison.
 
 The player-facing layer is read-only and derived from the same snapshot. A
 landmark board gives a short named state, while right-clicking its labelled
@@ -227,5 +244,7 @@ human can read the world in Minecraft. Final acceptance therefore also needs
 a client run in the dedicated graybox: enter the level, capture screenshots,
 advance time, right-click a settlement, route, hive organ and the labelled
 structure beside REPORT/TIMELINE, then confirm the immediate receipt and canonical consequence of a
-managed Villager/Zombie death and an interaction-slot break. A stopped client
+managed Villager/Zombie death and an interaction-slot break. The same pass
+must show one tissue contour growing or retreating and one player-owned
+obstruction remaining visibly unpainted. A stopped client
 leaves that last visual/manual gate pending rather than silently waived.

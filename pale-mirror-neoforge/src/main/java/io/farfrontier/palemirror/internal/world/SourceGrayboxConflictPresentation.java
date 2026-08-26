@@ -5,7 +5,9 @@ final class SourceGrayboxConflictPresentation {
     private SourceGrayboxConflictPresentation() { }
 
     static String labelText(SourceGrayboxPresentationLedger.Claim claim) {
-        String outcome = claim.consumed() ? "replayed-event" : "foreign-or-stale-change";
+        String outcome = claim.consumed() ? "replayed-event"
+                : !claim.installed() ? "foreign-obstruction"
+                : "foreign-or-stale-change";
         return "[!] conflict " + claim.kind() + " target=" + claim.subjectId() + " outcome=" + outcome + " source=retained";
     }
 }

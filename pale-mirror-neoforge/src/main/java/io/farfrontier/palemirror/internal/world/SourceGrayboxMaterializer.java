@@ -209,6 +209,11 @@ final class SourceGrayboxMaterializer {
     }
 
     private static boolean clearOwnedClaim(ServerLevel level, SourceGrayboxPresentationLedger.Claim claim) {
+        // A claim may describe a source object that was blocked by a foreign
+        // block before PM ever wrote it.  Retiring that object may clear the
+        // ledger record, but it must never become authority to erase the
+        // obstruction.
+        if (!claim.installed()) return true;
         List<BlockPos> positions = positions(claim);
         if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir()
                 && !SourceGrayboxPalette.managed(level.getBlockState(position).getBlock()))) return false;
@@ -233,7 +238,19 @@ final class SourceGrayboxMaterializer {
         BlockState desired = SourceGrayboxPalette.block(item.colour());
         for (BlockPos position : positions) {
             BlockState actual = level.getBlockState(position);
-            if (before == null ? !actual.isAir() : !actual.isAir() && !SourceGrayboxPalette.managed(actual.getBlock())) return false;
+            if (before == null ? !actual.isAir() : !actual.isAir() && !SourceGrayboxPalette.managed(actual.getBlock())) {
+                // Retain the exact desired footprint even when no PM block
+                // was placed.  Otherwise a growing infection would retry and
+                // eventually overwrite the same player block every publish,
+                // while giving neither the player nor recovery code a visible
+                // conflict record.
+                if (before == null) {
+                    ledger.put(new SourceGrayboxPresentationLedger.Claim(item.id(), item.subjectId(), item.kind(), item.revision(), item.x(), item.y(),
+                            item.z(), item.width(), item.depth(), item.height(), false, item.interactionKind(), item.interactionWeight(), false, false));
+                }
+                ledger.conflict(item.id());
+                return false;
+            }
         }
         Map<BlockPos, BlockState> changed = new LinkedHashMap<>();
         for (BlockPos position : positions) {
@@ -250,7 +267,7 @@ final class SourceGrayboxMaterializer {
             return false;
         }
         ledger.put(new SourceGrayboxPresentationLedger.Claim(item.id(), item.subjectId(), item.kind(), item.revision(), item.x(), item.y(),
-                item.z(), item.width(), item.depth(), item.height(), false, item.interactionKind(), item.interactionWeight(), false));
+                item.z(), item.width(), item.depth(), item.height(), false, item.interactionKind(), item.interactionWeight(), false, true));
         return true;
     }
 
