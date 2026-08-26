@@ -141,7 +141,7 @@ sampled colour-coded ground segments between their source endpoints; their
 elevated interaction slots remain the sole route-damage authority.
 
 The player-facing layer is read-only and derived from the same snapshot. A
-landmark board gives a short named state, while right-clicking that board, its
+landmark board gives a short named state, while right-clicking its labelled
 structure, a managed Villager or a hive Zombie gives a bounded briefing:
 **state, cause, risk and next action**. The observation deck has a frontier
 report (forecast and current priority) plus a three-event timeline. Breaking a
@@ -158,7 +158,7 @@ calibration envelope, source-materializer GameTests and packaged-JAR gates.
 Those tests prove code and the server-side contract; they do not prove that a
 human can read the world in Minecraft. Final acceptance therefore also needs
 a client run in the dedicated graybox: enter the level, capture screenshots,
-advance time, right-click a settlement, route, hive organ and REPORT/TIMELINE
-board, then confirm the immediate receipt and canonical consequence of a
+advance time, right-click a settlement, route, hive organ and the labelled
+structure beside REPORT/TIMELINE, then confirm the immediate receipt and canonical consequence of a
 managed Villager/Zombie death and an interaction-slot break. A stopped client
 leaves that last visual/manual gate pending rather than silently waived.

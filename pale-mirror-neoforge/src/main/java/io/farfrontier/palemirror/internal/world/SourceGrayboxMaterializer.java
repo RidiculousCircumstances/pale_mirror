@@ -287,7 +287,7 @@ final class SourceGrayboxMaterializer {
                 "[KEY] V2 towers: red infection 0..1; purple spores 0..10; cyan human access 0..1; lime hive influence 0..1. Height=1..10.",
                 deck.getX(), deck.getZ());
         label(level, active, admittedEntities, labels, "legend:inspect",
-                "[GUIDE] Right-click a board, structure, Villager or hive zombie for its state, cause, risk and next action. The REPORT and TIMELINE boards explain the region.", deck.getX(), deck.getZ());
+                "[GUIDE] Right-click a labelled structure, Villager or hive zombie for its state, cause, risk and next action. The REPORT and TIMELINE boards explain the region.", deck.getX(), deck.getZ());
         for (ReferenceGrayboxSnapshot.Settlement settlement : snapshot.settlements()) {
             label(level, active, admittedEntities, labels, "settlement:" + settlement.id(), SourceGrayboxPlayerBriefing.settlementLabel(snapshot, settlement),
                     settlement.rectangle().centreX(), settlement.rectangle().centreZ());

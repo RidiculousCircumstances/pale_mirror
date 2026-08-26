@@ -255,7 +255,8 @@ public final class PaleMirrorEvents {
             event.setCancellationResult(InteractionResult.FAIL);
             return;
         }
-        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()) {
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()) {
             SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
             if (source.presentBriefing(player, event.getPos())) {
                 event.setCanceled(true);
@@ -277,7 +278,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
-        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
                 && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
@@ -298,7 +300,8 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
-        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
                 && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
