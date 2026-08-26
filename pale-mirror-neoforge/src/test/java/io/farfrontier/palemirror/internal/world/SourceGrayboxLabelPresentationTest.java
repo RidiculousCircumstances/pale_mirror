@@ -22,4 +22,10 @@ class SourceGrayboxLabelPresentationTest {
     void shortSourceLabelRemainsOneBoardLine() {
         assertEquals("[F] workshop=1.00", SourceGrayboxLabelBoard.text("[F] workshop=1.00"));
     }
+
+    @Test
+    void landmarkBoardsAreLargerThanLocalDetailBoards() {
+        assertTrue(SourceGrayboxLabelStyle.scale("settlement:2") > SourceGrayboxLabelStyle.scale("facility:2:workshop"));
+        assertTrue(SourceGrayboxLabelStyle.scale("organ:9") > SourceGrayboxLabelStyle.scale("route:1-2"));
+    }
 }

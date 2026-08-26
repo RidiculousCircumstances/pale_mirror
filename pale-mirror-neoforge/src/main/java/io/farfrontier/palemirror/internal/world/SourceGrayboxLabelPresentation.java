@@ -90,12 +90,13 @@ final class SourceGrayboxLabelPresentation {
     }
 
     /**
-     * TextDisplays use block-scale glyphs, so values greater than one obscure
-     * the source object at ordinary player distance.  Landmark names remain
-     * deliberately larger than detailed labels without becoming a billboard.
+     * Landmark boards must be readable from the next route junction, not only
+     * after the tester has already reached the object.  Fine-grained objects
+     * remain smaller and use their shorter view range so that a wide overview
+     * remains a map rather than an opaque wall of text.
      */
     static float scale(String id) {
-        return id.startsWith("settlement:") || id.startsWith("organ:") ? 0.95f : 0.80f;
+        return SourceGrayboxLabelStyle.scale(id);
     }
 
 }
