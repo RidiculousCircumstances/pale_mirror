@@ -38,6 +38,8 @@ public final class SourceGrayboxLabelBoardGameTests {
                 "co-located boards must separate sideways instead of stacking over the settlement");
         helper.assertTrue(Math.abs(settlement.getY() - civicHall.getY()) <= 2.0d,
                 "co-located boards must stay near the local roof rather than becoming sky labels");
+        helper.assertTrue(settlement.getY() <= anchor.getY() + 3,
+                "a tall co-located landmark must make a board choose nearby low ground, never a sky position");
         helper.succeed();
     }
 
@@ -50,7 +52,8 @@ public final class SourceGrayboxLabelBoardGameTests {
                 List.of(new ReferenceGrayboxSnapshot.Settlement(1, "Testhold", 0, 0, settlement, true, 3.0d, 1.0d, 0.1d, 0.0d,
                         "stable", 5.0d, 1.0d, "settlement.stable")),
                 List.of(new ReferenceGrayboxSnapshot.Facility("1:civic_hall", 1, "civic_hall", civicHall, 1.0d, "facility.civic_hall")),
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(new ReferenceGrayboxSnapshot.HiveOrgan(7, "core", civicHall, 1.0d, 1.0d, false,
+                "organ.core")), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of(), List.of());
     }
 }

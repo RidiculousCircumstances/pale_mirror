@@ -398,7 +398,7 @@ final class SourceGrayboxMaterializer {
                               String id, String text, int x, int z) {
         String key = entityKey(id, LABEL_KIND);
         active.add(key);
-        BlockPos position = labels.next(x, z);
+        BlockPos position = labels.next(id, x, z);
         if (!ready(level, position)) return;
         Entity current = existingEntity(level, admittedEntities, id, LABEL_KIND, uuid("label-display", id));
         if (current != null && !(current instanceof Display.TextDisplay && identityMatches(current, id, LABEL_KIND))) return;
