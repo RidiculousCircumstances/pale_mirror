@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObser
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxCargoObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
@@ -26,13 +27,14 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** Durable canonical owner for one source-parity graybox world. */
 final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCombatOwner {
     static final String DATA_NAME = "pale_mirror_frontier";
-    private static final int SCHEMA = 21;
+    private static final int SCHEMA = 22;
     private static final int MAX_PROCESSED_OBSERVATIONS = 4_096;
     private static final int MAX_EFFECT_LEASES = ReferenceGrayboxActorExecutionState.MAX_ACTORS + 512;
     private final ReferenceGrayboxSimulation simulation;
     private final ReferenceGrayboxActorExecutionState actorExecution;
     private final EffectLeaseLedger effectLeases;
     private final SourceGrayboxWarehouseLedger warehouseLedger;
+    private final SourceGrayboxCargoLedger cargoLedger;
     private final SourceGrayboxPhysicalScarLedger physicalScars;
     private final LinkedHashSet<String> processedObservationIds;
     private boolean activated;
@@ -41,6 +43,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     private SourceGrayboxSavedData(ReferenceGrayboxSimulation simulation, ReferenceGrayboxActorExecutionState actorExecution,
                                    EffectLeaseLedger effectLeases,
                                    SourceGrayboxWarehouseLedger warehouseLedger,
+                                   SourceGrayboxCargoLedger cargoLedger,
                                    SourceGrayboxPhysicalScarLedger physicalScars,
                                    boolean activated, long lastClockGameTime,
                                    LinkedHashSet<String> processedObservationIds) {
@@ -48,6 +51,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         this.actorExecution = actorExecution;
         this.effectLeases = effectLeases;
         this.warehouseLedger = warehouseLedger;
+        this.cargoLedger = cargoLedger;
         this.physicalScars = physicalScars;
         this.activated = activated;
         this.lastClockGameTime = lastClockGameTime;
@@ -63,7 +67,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     static SourceGrayboxSavedData fresh(long seed) {
         ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(seed);
         return new SourceGrayboxSavedData(simulation, ReferenceGrayboxActorExecutionState.bootstrap(simulation.snapshot()),
-                new EffectLeaseLedger(), new SourceGrayboxWarehouseLedger(), new SourceGrayboxPhysicalScarLedger(), false, 0L, new LinkedHashSet<>());
+                new EffectLeaseLedger(), new SourceGrayboxWarehouseLedger(), new SourceGrayboxCargoLedger(), new SourceGrayboxPhysicalScarLedger(),
+                false, 0L, new LinkedHashSet<>());
     }
 
     /**
@@ -85,7 +90,9 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     @Override public ReferenceGrayboxActorExecutionState actorExecution() { return actorExecution; }
     @Override public EffectLeaseLedger effectLeases() { return effectLeases; }
     SourceGrayboxWarehouseLedger warehouseLedger() { return warehouseLedger; }
+    SourceGrayboxCargoLedger cargoLedger() { return cargoLedger; }
     SourceGrayboxPhysicalScarLedger physicalScars() { return physicalScars; }
+    void markCargoLedgerDirty() { setDirty(); }
     void markPhysicalScarsDirty() { setDirty(); }
     void markWarehouseLedgerDirty() { setDirty(); }
     @Override public void markEffectLeaseDirty() { setDirty(); }
@@ -253,6 +260,10 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         return observe(observation.eventId(), () -> simulation.observe(observation));
     }
 
+    ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxCargoObservation observation) {
+        return observe(observation.eventId(), () -> simulation.observe(observation));
+    }
+
     private ReferenceGrayboxObservationOutcome observe(String eventId, java.util.function.Supplier<ReferenceGrayboxObservationOutcome> apply) {
         if (processedObservationIds.contains(eventId)) {
             return new ReferenceGrayboxObservationOutcome(eventId, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
@@ -300,12 +311,16 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         SourceGrayboxWarehouseLedger warehouseLedger = SourceGrayboxWarehouseLedger.load(tag.getList("warehouseLedger", Tag.TAG_COMPOUND));
+        if (!tag.contains("cargoLedger", Tag.TAG_LIST)) {
+            throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
+        }
+        SourceGrayboxCargoLedger cargoLedger = SourceGrayboxCargoLedger.load(tag.getList("cargoLedger", Tag.TAG_COMPOUND));
         if (!tag.contains("physicalScars", Tag.TAG_LIST)) {
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         SourceGrayboxPhysicalScarLedger physicalScars = SourceGrayboxPhysicalScarLedger.load(tag.getList("physicalScars", Tag.TAG_COMPOUND));
         assertActorExecutionMatchesSource(actorExecution, simulation.snapshot());
-        return new SourceGrayboxSavedData(simulation, actorExecution, effectLeases, warehouseLedger, physicalScars,
+        return new SourceGrayboxSavedData(simulation, actorExecution, effectLeases, warehouseLedger, cargoLedger, physicalScars,
                 tag.getBoolean("activated"), tag.getLong("lastClockGameTime"), processed);
     }
 
@@ -320,6 +335,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         effectLeases.leases().forEach(lease -> leases.add(PaleMirrorAuxiliaryPresentationCodec.writeEffectLease(lease)));
         tag.put("effectLeases", leases);
         tag.put("warehouseLedger", warehouseLedger.save());
+        tag.put("cargoLedger", cargoLedger.save());
         tag.put("physicalScars", physicalScars.save());
         ListTag processed = new ListTag();
         processedObservationIds.forEach(id -> processed.add(StringTag.valueOf(id)));

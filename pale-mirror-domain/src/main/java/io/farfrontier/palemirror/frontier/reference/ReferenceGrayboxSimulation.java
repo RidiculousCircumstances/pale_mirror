@@ -60,4 +60,9 @@ public final class ReferenceGrayboxSimulation {
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxWarehouseObservation observation) {
         return world.observe(observation);
     }
+
+    /** Applies one exact physical item movement in a registered field-cargo container. */
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxCargoObservation observation) {
+        return world.observe(observation);
+    }
 }

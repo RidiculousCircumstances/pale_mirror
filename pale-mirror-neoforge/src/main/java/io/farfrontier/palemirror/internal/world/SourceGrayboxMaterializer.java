@@ -124,9 +124,14 @@ final class SourceGrayboxMaterializer {
 
     /** Retains a non-owning container obstruction so the ordinary conflict-label path can explain it. */
     void recordWarehouseConflict(ServerLevel level, String id, String subjectId, String revision, BlockPos position, boolean installed) {
+        recordContainerConflict(level, id, subjectId, revision, position, installed);
+    }
+
+    /** Retains a non-owning physical-container obstruction without adopting its contents or ownership. */
+    void recordContainerConflict(ServerLevel level, String id, String subjectId, String revision, BlockPos position, boolean installed) {
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
         if (ledger.claim(id) == null) {
-            ledger.put(new SourceGrayboxPresentationLedger.Claim(id, subjectId, "WAREHOUSE_CONTAINER", revision,
+            ledger.put(new SourceGrayboxPresentationLedger.Claim(id, subjectId, "SOURCE_CONTAINER", revision,
                     position.getX(), position.getY(), position.getZ(), 1, 1, 1, false, "", 0.0d, false, installed));
         }
         ledger.conflict(id);

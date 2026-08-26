@@ -33,7 +33,7 @@ final class SourceGrayboxWarehouseRuntime {
     private static final int SHELF_DEPTH = 2;
     private static final int SHELF_HEIGHT = BARRELS_PER_RESOURCE / (SHELF_WIDTH * SHELF_DEPTH);
     static final int ITEMS_PER_SOURCE_UNIT = ReferenceGrayboxWarehouseObservation.ITEMS_PER_SOURCE_UNIT;
-    private static final int BARREL_CAPACITY = 27 * 64;
+    static final int BARREL_CAPACITY = 27 * 64;
     private static final int MAX_RESOURCE_ITEMS = BARRELS_PER_RESOURCE * BARREL_CAPACITY;
     private static final String BINDING_KEY = "pale_mirror_source_graybox_warehouse_binding";
     private static final String RESOURCE_KEY = "pale_mirror_source_graybox_warehouse_resource";
@@ -249,8 +249,12 @@ final class SourceGrayboxWarehouseRuntime {
     }
 
     static boolean matches(BarrelBlockEntity barrel, SourceGrayboxWarehouseLedger.Binding binding) {
-        return binding.id().equals(barrel.getPersistentData().getString(BINDING_KEY))
-                && binding.resource().name().equals(barrel.getPersistentData().getString(RESOURCE_KEY));
+        return matches(barrel, binding.id(), binding.resource());
+    }
+
+    static boolean matches(BarrelBlockEntity barrel, String id, ReferenceResource resource) {
+        return id.equals(barrel.getPersistentData().getString(BINDING_KEY))
+                && resource.name().equals(barrel.getPersistentData().getString(RESOURCE_KEY));
     }
 
     static int count(BarrelBlockEntity barrel, Item item) {
@@ -282,7 +286,7 @@ final class SourceGrayboxWarehouseRuntime {
         return inserted;
     }
 
-    private static int remove(BarrelBlockEntity barrel, Item item, int wanted) {
+    static int remove(BarrelBlockEntity barrel, Item item, int wanted) {
         int removed = 0;
         for (int slot = 0; slot < barrel.getContainerSize() && removed < wanted; slot++) {
             ItemStack stack = barrel.getItem(slot);

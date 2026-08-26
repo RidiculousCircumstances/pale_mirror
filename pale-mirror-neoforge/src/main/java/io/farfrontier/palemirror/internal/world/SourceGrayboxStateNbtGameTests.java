@@ -83,6 +83,22 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void savedDataRejectsAMissingCargoLedger(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag incomplete = source.save(new CompoundTag(), null);
+        incomplete.remove("cargoLedger");
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(incomplete, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "a source save without exact physical cargo custody must fail closed instead of recreating blank field containers");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void presentationLedgerPreflightRejectsAnOldOrIncompleteConflictRecord(GameTestHelper helper) {
         CompoundTag obsolete = new CompoundTag();
         obsolete.putInt("format", 2);
@@ -147,6 +163,21 @@ public final class SourceGrayboxStateNbtGameTests {
                         receipt.stateRevision(), 1, io.farfrontier.palemirror.frontier.reference.ReferenceResource.ORE, 1)).status(),
                 io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
                 "a durable warehouse receipt may not replay after a restart or retransmission");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void cargoContainerHandOffSurvivesSourceSavedDataRoundTrip(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxCargoLedger.Binding binding = new SourceGrayboxCargoLedger.Binding("cargo-container:operation:991:cargo:food",
+                "operation:991:cargo:food", "operation", 991, io.farfrontier.palemirror.frontier.reference.ReferenceResource.FOOD,
+                10, 65, 12, 47, SourceGrayboxCargoLedger.State.ACTIVE);
+        helper.assertTrue(source.cargoLedger().put(binding), "a materialized field container must retain one exact durable hand-off record");
+        source.markCargoLedgerDirty();
+
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(source.save(new CompoundTag(), null), null);
+        helper.assertValueEqual(restored.cargoLedger().binding(binding.id()), binding,
+                "a restart must preserve the exact cargo owner, resource and observed item count instead of reconstructing it from terrain");
         helper.succeed();
     }
 

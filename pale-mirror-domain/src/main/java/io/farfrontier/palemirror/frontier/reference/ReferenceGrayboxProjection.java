@@ -249,29 +249,29 @@ public final class ReferenceGrayboxProjection {
             Map<Integer, ReferenceGrayboxLayout.Point> postPositions
     ) {
         List<ReferenceGrayboxSnapshot.Cargo> result = new ArrayList<>();
-        Map<ReferenceGrayboxLayout.Point, Integer> usedSlots = new LinkedHashMap<>();
         for (ReferenceOperation operation : sorted(world.operations().active(), ReferenceOperation::id)) {
             ReferenceGrayboxLayout.Point anchor = requiredPoint(operationPositions, operation.id(), "operation", "cargo");
             for (ReferenceResource resource : ReferenceResource.values()) {
                 double quantity = operation.cargo().getOrDefault(resource, 0.0d);
                 if (quantity <= 0.0d) continue;
                 String resourceId = resource.name().toLowerCase(java.util.Locale.ROOT);
-                int ordinal = usedSlots.merge(anchor, 1, Integer::sum) - 1;
+                // The physical barrel is a durable hand-off. Do not compact
+                // remaining cargo when another resource reaches zero: its
+                // resource slot remains stable while this operation lives.
+                int ordinal = resource.ordinal();
                 result.add(new ReferenceGrayboxSnapshot.Cargo("operation:" + operation.id() + ":cargo:" + resourceId, "operation", operation.id(),
                         resourceId, quantity, ReferenceGrayboxLayout.cargo(anchor, ordinal), "cargo." + resourceId));
             }
         }
         for (ReferenceFieldPost post : sorted(world.field().posts().values(), ReferenceFieldPost::id)) {
             ReferenceGrayboxLayout.Point anchor = requiredPoint(postPositions, post.id(), "field post", "cargo");
-            int ordinal = 0;
             for (ReferenceResource resource : ReferenceResource.values()) {
                 double quantity = post.stock(resource);
                 if (quantity <= 0.0d) continue;
                 String resourceId = resource.name().toLowerCase(java.util.Locale.ROOT);
                 result.add(new ReferenceGrayboxSnapshot.Cargo("field_post:" + post.id() + ":cargo:" + resourceId, "field_post", post.id(),
-                        resourceId, quantity, ReferenceGrayboxLayout.fieldPostCargo(post.x(), post.y(), ordinal++), "cargo." + resourceId));
+                        resourceId, quantity, ReferenceGrayboxLayout.fieldPostCargo(post.x(), post.y(), resource.ordinal()), "cargo." + resourceId));
             }
-            if (ordinal > 16) throw new IllegalStateException("field post exceeds graybox cargo slots: " + post.id());
         }
         return List.copyOf(result);
     }

@@ -32,6 +32,7 @@ public final class SourceGrayboxRuntime {
     private final SourceGrayboxActorBehaviorRuntime actorBehavior = new SourceGrayboxActorBehaviorRuntime();
     private final SourceGrayboxActorCombatRuntime actorCombat = new SourceGrayboxActorCombatRuntime();
     private final SourceGrayboxWarehouseRuntime warehouses = new SourceGrayboxWarehouseRuntime();
+    private final SourceGrayboxCargoRuntime cargoes = new SourceGrayboxCargoRuntime();
     private final SourceGrayboxEffectRuntime effects = new SourceGrayboxEffectRuntime();
     private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
     private long lastPresentationGameTime = Long.MIN_VALUE;
@@ -72,11 +73,12 @@ public final class SourceGrayboxRuntime {
         long gameTime = graybox.getGameTime();
         if (gameTime % 5L == 0L) data.maintainEffectLeases(data.actorExecutionGameTime(gameTime));
         boolean warehouseChanged = warehouses.reconcileInbound(graybox, data, materializer);
+        boolean cargoChanged = cargoes.reconcileInbound(graybox, data, materializer);
         boolean actorDue = gameTime % ACTOR_EXECUTION_INTERVAL_TICKS == 0L;
         boolean executionChanged = actorDue && actorExecution.beforePublication(graybox, data, materializer, admittedEntities);
         List<ReferenceGrayboxSnapshot> dueBoundaries = data.advanceDueDaySnapshots(gameTime, DAY_INTERVAL_TICKS, MAXIMUM_CATCH_UP_DAYS);
         int advanced = dueBoundaries.size();
-        if (advanced > 0 || executionChanged || warehouseChanged || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) {
+        if (advanced > 0 || executionChanged || warehouseChanged || cargoChanged || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) {
             publish(graybox);
             if (actorDue) actorExecution.afterPublication(graybox, data, materializer, admittedEntities);
         }
@@ -274,6 +276,7 @@ public final class SourceGrayboxRuntime {
     private void publish(ServerLevel level) {
         materializer.apply(level, data.snapshot(), data.actorExecution(), admittedEntities);
         warehouses.materialize(level, data, materializer);
+        cargoes.materialize(level, data, materializer);
         lastPresentationGameTime = level.getGameTime();
     }
 }

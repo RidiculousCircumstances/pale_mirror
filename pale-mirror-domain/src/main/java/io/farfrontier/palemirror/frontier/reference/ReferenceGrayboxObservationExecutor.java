@@ -122,8 +122,90 @@ final class ReferenceGrayboxObservationExecutor {
         return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical warehouse stock updated", after);
     }
 
+    static ReferenceGrayboxObservationOutcome apply(
+            ReferenceWorld world,
+            ReferenceGrayboxCargoObservation observation
+    ) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        ReferenceGrayboxCargoObservation event = Objects.requireNonNull(observation, "observation");
+        ReferenceGrayboxLayout.requireSupported(required);
+        ReferenceGrayboxSnapshot beforeSnapshot = ReferenceGrayboxProjection.from(required);
+        String before = beforeSnapshot.stateRevision();
+        if (!before.equals(event.observedStateRevision())) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_STALE,
+                "observation was made against an older graybox state", before);
+        ReferenceGrayboxSnapshot.Cargo cargo = beforeSnapshot.cargoes().stream().filter(item -> item.id().equals(event.cargoId())).findFirst().orElse(null);
+        if (cargo == null) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_UNKNOWN,
+                "cargo no longer exists in canonical state", before);
+        if (!cargo.resource().equals(event.resource().name().toLowerCase(Locale.ROOT))) {
+            return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
+                    "physical cargo resource does not match its canonical owner", before);
+        }
+        double current = cargoQuantity(required, cargo);
+        double afterQuantity = current + event.sourceQuantity();
+        if (afterQuantity < -1.0e-9d) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
+                "cargo withdrawal exceeds canonical stock", before);
+        if (cargo.ownerKind().equals("field_post") && event.sourceQuantity() > 0.0d) {
+            ReferenceFieldPost post = fieldPost(required, cargo.ownerId());
+            double requiredVolume = event.sourceQuantity() * ReferenceFieldRules.storageVolume(event.resource());
+            if (requiredVolume > post.freeStorage() + 1.0e-9d) {
+                return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
+                        "cargo deposit exceeds canonical field-post storage", before);
+            }
+        }
+        setCargoQuantity(required, cargo, Math.max(0.0d, afterQuantity));
+        required.marketWorld().event("D" + required.day() + ": physical cargo " + event.cargoId() + " resource="
+                + cargo.resource() + " items=" + event.itemDelta() + " (" + event.eventId() + ")");
+        required.assertProfileInvariants();
+        String after = ReferenceGrayboxProjection.from(required).stateRevision();
+        return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical field cargo updated", after);
+    }
+
     private static boolean applySettlement(ResidentOwner owner, ReferenceGrayboxResidentObservation.Kind kind) {
         return ReferenceResidentObservationMutation.apply(owner.settlement(), owner.resident().id(), kind);
+    }
+
+    private static double cargoQuantity(ReferenceWorld world, ReferenceGrayboxSnapshot.Cargo cargo) {
+        ReferenceResource resource = resource(cargo.resource());
+        return switch (cargo.ownerKind()) {
+            case "operation" -> operation(world, cargo.ownerId()).cargo().getOrDefault(resource, 0.0d);
+            case "field_post" -> fieldPost(world, cargo.ownerId()).stock(resource);
+            default -> throw new IllegalStateException("unsupported canonical cargo owner: " + cargo.ownerKind());
+        };
+    }
+
+    private static void setCargoQuantity(ReferenceWorld world, ReferenceGrayboxSnapshot.Cargo cargo, double value) {
+        ReferenceResource resource = resource(cargo.resource());
+        switch (cargo.ownerKind()) {
+            case "operation" -> {
+                ReferenceOperation operation = operation(world, cargo.ownerId());
+                EnumMap<ReferenceResource, Double> quantities = new EnumMap<>(ReferenceResource.class);
+                quantities.putAll(operation.cargo());
+                quantities.put(resource, value);
+                operation.cargo(quantities);
+            }
+            case "field_post" -> fieldPost(world, cargo.ownerId()).stock(resource, value);
+            default -> throw new IllegalStateException("unsupported canonical cargo owner: " + cargo.ownerKind());
+        }
+    }
+
+    private static ReferenceOperation operation(ReferenceWorld world, int id) {
+        ReferenceOperation operation = world.operations().active().stream().filter(item -> item.id() == id).findFirst().orElse(null);
+        if (operation == null) throw new IllegalStateException("snapshot cargo has no active operation owner: " + id);
+        return operation;
+    }
+
+    private static ReferenceFieldPost fieldPost(ReferenceWorld world, int id) {
+        ReferenceFieldPost post = world.field().posts().get(id);
+        if (post == null) throw new IllegalStateException("snapshot cargo has no field post owner: " + id);
+        return post;
+    }
+
+    private static ReferenceResource resource(String id) {
+        try {
+            return ReferenceResource.valueOf(id.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalStateException("snapshot cargo has invalid resource: " + id, invalid);
+        }
     }
 
     private static boolean applyOperation(ReferenceWorld world, ResidentOwner owner, ReferenceGrayboxResidentObservation.Kind kind) {
@@ -185,6 +267,15 @@ final class ReferenceGrayboxObservationExecutor {
 
     private static ReferenceGrayboxObservationOutcome outcome(
             ReferenceGrayboxWarehouseObservation event,
+            ReferenceGrayboxObservationOutcome.Status status,
+            String reason,
+            String revision
+    ) {
+        return new ReferenceGrayboxObservationOutcome(event.eventId(), status, reason, revision);
+    }
+
+    private static ReferenceGrayboxObservationOutcome outcome(
+            ReferenceGrayboxCargoObservation event,
             ReferenceGrayboxObservationOutcome.Status status,
             String reason,
             String revision

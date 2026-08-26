@@ -151,18 +151,16 @@ public final class ReferenceWorld {
     /** Compatibility entry point for callers that already name the source phase transition. */
     public void runPhases() { engine.runPhases(this); }
 
-    /** Apply one typed, revision-checked materialized Villager fact to its canonical owner. */
+    /** Applies a revision-checked materialized resident, bioform, structure, warehouse or field-cargo fact. */
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxResidentObservation observation) { return ReferenceGrayboxObservationExecutor.apply(this, observation); }
-
-    /** Apply one typed, revision-checked materialized Zombie death to its canonical swarm. */
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxBioformObservation observation) { return ReferenceGrayboxObservationExecutor.apply(this, observation); }
-
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
         return ReferenceGrayboxObservationExecutor.apply(this, observation);
     }
-
-    /** Applies one exact physical warehouse transfer through the market's stock owner. */
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxWarehouseObservation observation) {
+        return ReferenceGrayboxObservationExecutor.apply(this, observation);
+    }
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxCargoObservation observation) {
         return ReferenceGrayboxObservationExecutor.apply(this, observation);
     }
 

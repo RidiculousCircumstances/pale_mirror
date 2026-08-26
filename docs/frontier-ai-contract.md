@@ -266,6 +266,20 @@ Only the matching resource item is accepted by a shelf. This keeps real player
 supply and theft legible without turning every source unit into a separate
 entity or hiding an aggregate multiplier.
 
+An active operation or field post receives one ordinary tagged barrel at the
+centre of each canonical cargo pallet. Its exact cargo ID, owner and resource
+come from the immutable snapshot; one real item is one sixty-fourth of a
+source unit. Resource pallets use fixed type slots, so consuming food never
+teleports a surviving medicine container. Before a source day advances, a player deposit or withdrawal of
+the matching item becomes one revision-validated cargo receipt, so it changes
+only that named operation or field-post stock. The barrel never adopts a
+foreign block or item type. A missing barrel attempts the exact source loss
+once and then becomes a visible blocked conflict. When the canonical cargo
+retires, its empty PM barrel may retire too; a mixed barrel retains every
+foreign player item and becomes a conflict, rather than deleting the player
+state. This is field custody, not pretend transport: a trade already committed
+by the source resolver is not rendered as a reversible cart after the fact.
+
 Cell tissue is intentionally more legible than a metric tower alone: its
 contiguous extent shows local infection growth and retreat, while the existing
 red/purple/cyan/lime sector towers retain the exact territorial comparison.
@@ -292,5 +306,6 @@ advance time, right-click a settlement, route, hive organ and the labelled
 structure beside REPORT/TIMELINE, then confirm the immediate receipt and canonical consequence of a
 managed Villager/Zombie death and an interaction-slot break. The same pass
 must show one tissue contour growing or retreating and one player-owned
-obstruction remaining visibly unpainted. A stopped client
+obstruction remaining visibly unpainted, plus one operation/field cargo
+deposit or withdrawal with its immediate canonical receipt. A stopped client
 leaves that last visual/manual gate pending rather than silently waived.
