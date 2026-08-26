@@ -63,6 +63,7 @@ final class SourceGrayboxLabelPresentation {
         if (id.startsWith("settlement:") || id.startsWith("field-post:")) return ChatFormatting.GOLD;
         if (id.startsWith("warehouse:")) return ChatFormatting.GOLD;
         if (id.startsWith("interaction:") || id.startsWith("conflict:")) return ChatFormatting.RED;
+        if (id.startsWith("effect:")) return ChatFormatting.RED;
         if (id.startsWith("facility:") || id.startsWith("site:") || id.startsWith("cargo:")) return ChatFormatting.YELLOW;
         return ChatFormatting.WHITE;
     }

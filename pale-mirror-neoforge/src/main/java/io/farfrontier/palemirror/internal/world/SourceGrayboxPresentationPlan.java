@@ -134,6 +134,10 @@ final class SourceGrayboxPresentationPlan {
             if (!activity.terminal()) add(result, marker("activity:" + activity.id(), activity.id(), "ACTIVITY", snapshot.stateRevision(),
                     activity.position().x(), ACTIVITY_Y, activity.position().z(), activity.colour()));
         }
+        for (ReferenceGrayboxSnapshot.Effect effect : snapshot.effects()) {
+            add(result, marker("effect:" + effect.id(), effect.subjectId(), "SOURCE_EFFECT", snapshot.stateRevision(),
+                    effect.position().x(), ACTIVITY_Y + 1, effect.position().z(), effect.colour()));
+        }
         addInfectionTissue(result, snapshot);
         if (result.size() > MAX_CLAIMS) {
             throw new IllegalStateException("source graybox projection exceeds its bounded claim ledger");

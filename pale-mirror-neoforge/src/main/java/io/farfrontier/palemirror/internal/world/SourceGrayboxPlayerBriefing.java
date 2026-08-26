@@ -57,12 +57,6 @@ final class SourceGrayboxPlayerBriefing {
                 + "\nRight-click: role and effect.";
     }
 
-    static String activityLabel(ReferenceGrayboxSnapshot.Activity activity) {
-        return "[OPERATION] " + words(activity.kind()) + " — " + title(activity.phase())
-                + "\nPeople committed: " + number(activity.personnel())
-                + "\nRight-click: purpose and current risk.";
-    }
-
     static String cargoLabel(ReferenceGrayboxSnapshot.Cargo cargo) {
         return "[SUPPLIES] " + words(cargo.resource()) + "\nAmount: " + number(cargo.quantity())
                 + "\nRight-click: owner and consequence.";
@@ -123,6 +117,9 @@ final class SourceGrayboxPlayerBriefing {
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) {
             if (at(activity.position(), x, z)) return Optional.of(activityBrief(activity));
         }
+        for (ReferenceGrayboxSnapshot.Effect effect : snapshot.effects()) {
+            if (at(effect.position(), x, z)) return Optional.of(SourceGrayboxLiveBriefing.effectBrief(effect));
+        }
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
             if (contains(cargo.rectangle(), x, z)) return Optional.of(cargoBrief(cargo));
         }
@@ -161,6 +158,8 @@ final class SourceGrayboxPlayerBriefing {
         if (link.isPresent()) return Optional.of(fieldLinkBrief(link.get()));
         Optional<ReferenceGrayboxSnapshot.Activity> activity = match(snapshot.activities(), "activity:", id, ReferenceGrayboxSnapshot.Activity::id);
         if (activity.isPresent()) return Optional.of(activityBrief(activity.get()));
+        Optional<ReferenceGrayboxSnapshot.Effect> effect = match(snapshot.effects(), "effect:", id, ReferenceGrayboxSnapshot.Effect::id);
+        if (effect.isPresent()) return Optional.of(SourceGrayboxLiveBriefing.effectBrief(effect.get()));
         Optional<ReferenceGrayboxSnapshot.Cargo> cargo = match(snapshot.cargoes(), "cargo:", id, ReferenceGrayboxSnapshot.Cargo::id);
         if (cargo.isPresent()) return Optional.of(cargoBrief(cargo.get()));
         Optional<ReferenceGrayboxSnapshot.Chrysalis> chrysalis = match(snapshot.chrysalises(), "chrysalis:", id,

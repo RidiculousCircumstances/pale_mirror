@@ -136,7 +136,8 @@ ReferenceGrayboxSimulation
   -> SourceGrayboxPresentationPlan
   -> SourceGrayboxMaterializer (loaded chunks only)
   -> coloured structures, growing/retreating infection tissue, readable boards,
-     resource-specific PM-owned barrel shelves, Villagers and Zombies
+     resource-specific PM-owned barrel shelves, Villagers/Zombies and current
+     source-day effect markers
 ```
 
 `SourceGrayboxPresentationLedger` is only the durable physical-ownership
@@ -200,6 +201,14 @@ bare block break is a valid source suppression operation. Typed removal will
 arrive with the durable operation/effect boundary, where its real geometry and
 canonical suppression receipt can be recorded together.
 
+The immutable snapshot also exposes only the current source day's already
+committed `CombatReceipt` and `ContainmentReceipt` as typed effects. This is a
+one-way rendering boundary, not a second tactical planner: a structural breach
+becomes a `breach_bomb`, ordinary pressure becomes an assault cue, and local
+human containment becomes a containment flare. The descriptor has a stable
+source-day ID, target and calibrated magnitude; its live board says exactly
+what source event caused it.
+
 ## Autonomous physical causality
 
 The simulation is not a safety shell around the world. A settlement operation
@@ -221,6 +230,20 @@ unmodelled space is retained as a bounded canonical physical-scar or obstruction
 fact, so it can affect later movement, terrain and infection logic and is never
 silently repaired from a materialization baseline. An interrupted effect is
 visible and is not replayed automatically after restart.
+
+`SourceGrayboxEffectRuntime` settles each descriptor exactly once at the source
+day boundary. It may use Minecraft physics only if the target chunk is already
+loaded and inside the non-spectator HOT zone; otherwise it writes a durable
+`cold` disposition and never executes a delayed blast when somebody revisits
+the location. A hot `breach_bomb` invokes normal `TNT` explosion interaction,
+without inspecting parcel ownership, source claim type or player identity.
+Immediately afterwards each actually changed claimed block becomes its typed
+observation or a persistent conflict; every changed unclaimed block is written
+to the bounded `SourceGrayboxPhysicalScarLedger`. The effect lease carries the
+causation and bounded impact summary, while the per-subject observations and
+scar rows retain the locatable aftermath. The whole state is persisted with
+the source world; its v21 loader fails closed when any part is absent or
+invalid.
 
 ## Readability and verification boundary
 

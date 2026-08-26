@@ -20,7 +20,6 @@ import java.util.TreeMap;
  */
 public final class ReferenceGrayboxProjection {
     private ReferenceGrayboxProjection() { }
-
     public static ReferenceGrayboxSnapshot from(ReferenceWorld world) {
         ReferenceWorld required = Objects.requireNonNull(world, "world");
         ReferenceGrayboxLayout.requireSupported(required);
@@ -42,6 +41,7 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.FieldPost> posts = posts(required);
         List<ReferenceGrayboxSnapshot.FieldLink> links = links(required);
         List<ReferenceGrayboxSnapshot.Activity> activities = activities(required, sectorAreas);
+        List<ReferenceGrayboxSnapshot.Effect> effects = ReferenceGrayboxEffectProjection.from(required, settlementAreas);
         List<ReferenceGrayboxSnapshot.Cargo> cargoes = cargoes(required, operationPositions, postPositions);
         List<ReferenceGrayboxSnapshot.Interaction> interactions = interactions(facilities, sites, routes, organs, posts, links, cargoes);
         List<ReferenceGrayboxSnapshot.Sector> sectors = sectors(required, sectorAreas);
@@ -49,9 +49,9 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.Readout> readouts = ReferenceGrayboxReadouts.from(required, settlementAreas);
         List<String> events = required.events();
         String stateRevision = stateRevision(required.day(), required.profile().id(), cells, settlements, facilities, warehouses, sites, routes, organs,
-                bioforms, residents, posts, links, activities, cargoes, interactions, sectors, chrysalises, readouts, events);
+                bioforms, residents, posts, links, activities, effects, cargoes, interactions, sectors, chrysalises, readouts, events);
         return new ReferenceGrayboxSnapshot(required.day(), required.profile().id(), stateRevision, ReferenceGrayboxLayout.bounds(), cells,
-                settlements, facilities, warehouses, sites, routes, organs, bioforms, residents, posts, links, activities, cargoes, interactions, sectors,
+                settlements, facilities, warehouses, sites, routes, organs, bioforms, residents, posts, links, activities, effects, cargoes, interactions, sectors,
                 chrysalises, readouts, events);
     }
 

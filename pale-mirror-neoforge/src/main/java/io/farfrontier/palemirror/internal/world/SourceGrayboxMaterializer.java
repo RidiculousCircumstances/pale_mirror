@@ -355,8 +355,10 @@ final class SourceGrayboxMaterializer {
             label(level, active, admittedEntities, labels, "field-link:" + link.id(), SourceGrayboxPlayerBriefing.fieldLinkLabel(link), label.x(), label.z());
         }
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) if (!activity.terminal()) label(level, active, admittedEntities, labels,
-                "activity:" + activity.id(), SourceGrayboxPlayerBriefing.activityLabel(activity),
+                "activity:" + activity.id(), SourceGrayboxLiveBriefing.activityLabel(activity),
                 activity.position().x(), activity.position().z());
+        for (ReferenceGrayboxSnapshot.Effect effect : snapshot.effects()) label(level, active, admittedEntities, labels,
+                "effect:" + effect.id(), SourceGrayboxLiveBriefing.effectLabel(effect), effect.position().x(), effect.position().z());
         for (ReferenceGrayboxSnapshot.Sector sector : SourceGrayboxLabelLayout.labelledSectors(snapshot)) label(level, active, admittedEntities, labels, "sector:" + sector.key(),
                 "[V2] " + sector.key() + " " + sector.control().toUpperCase(Locale.ROOT) + (sector.supplied() ? " SUPPLIED" : ""),
                 sector.rectangle().centreX(), sector.rectangle().centreZ());

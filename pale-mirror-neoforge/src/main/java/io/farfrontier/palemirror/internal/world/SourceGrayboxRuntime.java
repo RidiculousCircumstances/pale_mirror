@@ -3,11 +3,13 @@ package io.farfrontier.palemirror.internal.world;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
 import java.util.LinkedHashMap;
 import java.nio.file.Path;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
@@ -30,6 +32,7 @@ public final class SourceGrayboxRuntime {
     private final SourceGrayboxActorBehaviorRuntime actorBehavior = new SourceGrayboxActorBehaviorRuntime();
     private final SourceGrayboxActorCombatRuntime actorCombat = new SourceGrayboxActorCombatRuntime();
     private final SourceGrayboxWarehouseRuntime warehouses = new SourceGrayboxWarehouseRuntime();
+    private final SourceGrayboxEffectRuntime effects = new SourceGrayboxEffectRuntime();
     private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
     private long lastPresentationGameTime = Long.MIN_VALUE;
 
@@ -71,10 +74,34 @@ public final class SourceGrayboxRuntime {
         boolean warehouseChanged = warehouses.reconcileInbound(graybox, data, materializer);
         boolean actorDue = gameTime % ACTOR_EXECUTION_INTERVAL_TICKS == 0L;
         boolean executionChanged = actorDue && actorExecution.beforePublication(graybox, data, materializer, admittedEntities);
-        int advanced = data.advanceDueDays(gameTime, DAY_INTERVAL_TICKS, MAXIMUM_CATCH_UP_DAYS);
+        List<ReferenceGrayboxSnapshot> dueBoundaries = data.advanceDueDaySnapshots(gameTime, DAY_INTERVAL_TICKS, MAXIMUM_CATCH_UP_DAYS);
+        int advanced = dueBoundaries.size();
         if (advanced > 0 || executionChanged || warehouseChanged || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) {
             publish(graybox);
             if (actorDue) actorExecution.afterPublication(graybox, data, materializer, admittedEntities);
+        }
+        // The just-published plan is the observed world against which a real
+        // source-day consequence lands.  The executor decides HOT/COLD only
+        // once at this boundary, so an off-screen event cannot explode late
+        // merely because a player later returns to its chunk.
+        if (advanced > 0) {
+            boolean effectsSettled;
+            if (dueBoundaries.size() == 1) {
+                effectsSettled = effects.settleSourceDay(graybox, data, materializer, dueBoundaries.getFirst(), effect -> {
+                    BlockPos target = new BlockPos(effect.position().x(), ReferenceGrayboxLayout.GROUND_Y + 3, effect.position().z());
+                    return SourceGrayboxHotZone.from(graybox).hot(target) && graybox.hasChunkAt(target);
+                });
+            } else {
+                // A capped catch-up compressed several source boundaries into
+                // one server tick. They did not have individual live Minecraft
+                // frames, so conservatively retain each as COLD rather than
+                // showing a burst of late explosions in the final frame.
+                effectsSettled = false;
+                for (ReferenceGrayboxSnapshot frame : dueBoundaries) {
+                    effectsSettled |= effects.settleSourceDay(graybox, data, materializer, frame, ignored -> false);
+                }
+            }
+            if (effectsSettled) publish(graybox);
         }
         actorBehavior.tick(graybox, data.snapshot(), data.actorExecution(), materializer, admittedEntities, gameTime);
         actorCombat.tick(graybox, data, materializer, admittedEntities, gameTime);
@@ -92,7 +119,14 @@ public final class SourceGrayboxRuntime {
 
     public void advance(int days) {
         data.advance(days);
-        if (data.activated()) publish(grayboxLevel());
+        if (data.activated()) {
+            ServerLevel graybox = grayboxLevel();
+            publish(graybox);
+            // Explicit multi-day fast-forward has no physically elapsed day
+            // boundary.  Settle its final source receipt cold rather than
+            // fabricating a delayed detonation in the player's current scene.
+            if (effects.settleSourceDay(graybox, data, materializer, data.snapshot(), ignored -> false)) publish(graybox);
+        }
     }
 
     public ReferenceGrayboxSnapshot snapshot() {

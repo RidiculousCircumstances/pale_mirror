@@ -21,6 +21,7 @@ public record ReferenceGrayboxSnapshot(
         List<FieldPost> fieldPosts,
         List<FieldLink> fieldLinks,
         List<Activity> activities,
+        List<Effect> effects,
         List<Cargo> cargoes,
         List<Interaction> interactions,
         List<Sector> sectors,
@@ -46,6 +47,7 @@ public record ReferenceGrayboxSnapshot(
         fieldPosts = copied(fieldPosts, "fieldPosts");
         fieldLinks = copied(fieldLinks, "fieldLinks");
         activities = copied(activities, "activities");
+        effects = copied(effects, "effects");
         cargoes = copied(cargoes, "cargoes");
         interactions = copied(interactions, "interactions");
         sectors = copied(sectors, "sectors");
@@ -66,7 +68,7 @@ public record ReferenceGrayboxSnapshot(
                                     List<Interaction> interactions, List<Sector> sectors, List<Chrysalis> chrysalises,
                                     List<Readout> readouts, List<String> events) {
         this(day, profileId, stateRevision, bounds, cells, settlements, facilities, List.of(), resourceSites, routes, hiveOrgans,
-                bioforms, residents, fieldPosts, fieldLinks, activities, cargoes, interactions, sectors, chrysalises, readouts, events);
+                bioforms, residents, fieldPosts, fieldLinks, activities, List.of(), cargoes, interactions, sectors, chrysalises, readouts, events);
     }
 
     /** Compatibility constructor for physical fixtures predating informational readouts. */
@@ -217,6 +219,28 @@ public record ReferenceGrayboxSnapshot(
             kind = required(kind, "kind");
             phase = required(phase, "phase");
             position = Objects.requireNonNull(position, "position");
+            colour = required(colour, "colour");
+        }
+    }
+
+    /**
+     * One source-committed physical consequence that may be executed only at
+     * its source-day boundary.  It is not an adapter-side combat decision:
+     * combat and containment receipts already exist in canonical state before
+     * this descriptor is projected.
+     */
+    public record Effect(String id, String kind, String subjectId, int day, ReferenceGrayboxLayout.Point position,
+                         double magnitude, double radius, String detail, String colour) {
+        public Effect {
+            id = required(id, "id");
+            kind = required(kind, "kind");
+            subjectId = required(subjectId, "subjectId");
+            if (day < 0) throw new IllegalArgumentException("effect day must not be negative");
+            position = Objects.requireNonNull(position, "position");
+            if (!Double.isFinite(magnitude) || magnitude < 0.0d) throw new IllegalArgumentException("effect magnitude is invalid");
+            if (!Double.isFinite(radius) || radius < 0.0d || radius > 8.0d) throw new IllegalArgumentException("effect radius is invalid");
+            detail = required(detail, "detail");
+            if (detail.length() > 160) throw new IllegalArgumentException("effect detail is too long");
             colour = required(colour, "colour");
         }
     }

@@ -2,10 +2,12 @@ package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
 import io.farfrontier.palemirror.internal.effect.EffectLeaseState;
 import java.util.Arrays;
+import java.util.List;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -65,6 +67,22 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void savedDataRejectsAMissingPhysicalScarLedger(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag incomplete = source.save(new CompoundTag(), null);
+        incomplete.remove("physicalScars");
+        boolean rejected = false;
+        try {
+            SourceGrayboxSavedData.load(incomplete, null);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "a source save without retained real-world damage evidence must fail closed, not regenerate a blank scar ledger");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void presentationLedgerPreflightRejectsAnOldOrIncompleteConflictRecord(GameTestHelper helper) {
         CompoundTag obsolete = new CompoundTag();
         obsolete.putInt("format", 2);
@@ -83,7 +101,14 @@ public final class SourceGrayboxStateNbtGameTests {
     public static void savedDataRestoresTheClockAndDeduplicatesPhysicalFacts(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
         source.activate(1_200L);
-        source.advanceDueDays(3_600L, 1_200L, 24);
+        int initialDay = source.snapshot().day();
+        List<ReferenceGrayboxSnapshot> dueBoundaries = source.advanceDueDaySnapshots(3_600L, 1_200L, 24);
+        helper.assertValueEqual(dueBoundaries.size(), 2,
+                "a delayed server tick must retain every due source-day boundary instead of exposing only the last one");
+        helper.assertValueEqual(dueBoundaries.getFirst().day(), initialDay + 1,
+                "the first retained boundary must be the first missed source day");
+        helper.assertValueEqual(dueBoundaries.getLast(), source.snapshot(),
+                "the final retained boundary must remain the canonical source state after catch-up");
         var beforeObservation = source.snapshot();
         String resident = beforeObservation.residents().getFirst().id();
         var applied = source.observe(io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation.killed(

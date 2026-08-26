@@ -224,7 +224,7 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.assertValueEqual(claim.subjectId(), raid.id(), "the raid marker must retain its exact source activity ID");
         helper.assertValueEqual(claim.kind(), "ACTIVITY", "the raid marker must retain its operation semantic kind");
         helper.assertTrue(helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(marker).inflate(3, 24, 3), value ->
-                        value.hasCustomName() && value.getCustomName().getString().equals(SourceGrayboxPlayerBriefing.activityLabel(raid))).size() == 1,
+                        value.hasCustomName() && value.getCustomName().getString().equals(SourceGrayboxLiveBriefing.activityLabel(raid))).size() == 1,
                 "an active raid must expose its purpose, current phase and committed people in a readable player label");
 
         Villager guard = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->

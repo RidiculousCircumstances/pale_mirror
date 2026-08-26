@@ -141,6 +141,31 @@ class ReferenceGrayboxProjectionTest {
     }
 
     @Test
+    void sourceCommittedCombatAndContainmentReceiptsBecomeOneDayPhysicalEffects() {
+        ReferenceWorld world = grayboxWorld();
+        world.day(7);
+        world.recordCombat(new ReferenceCombatReceipt(7, 19, 1, world.settlements().get(1).x(), world.settlements().get(1).y(),
+                12.0d, "breaker:2,raider:1", ReferenceFormationPhase.MAIN_ACTION, 4.0d, 2.0d, 3.0d, 5.0d, false));
+        world.recordContainment(new ReferenceContainmentReceipt(7, 2, world.settlements().get(2).x(), world.settlements().get(2).y(),
+                3.0d, .04d, 1.2d, .11d));
+
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(world);
+
+        ReferenceGrayboxSnapshot.Effect breach = snapshot.effects().stream().filter(effect -> effect.kind().equals("breach_bomb"))
+                .findFirst().orElseThrow();
+        assertEquals("combat:7:19:1:0", breach.id());
+        assertEquals("settlement:1", breach.subjectId());
+        assertEquals(7, breach.day());
+        assertTrue(breach.radius() > 1.5d && breach.radius() <= 4.0d,
+                "the already-committed source breach, not a presentation AI, calibrates the physical blast radius");
+        assertTrue(snapshot.effects().stream().anyMatch(effect -> effect.id().equals("containment:7:2")
+                && effect.kind().equals("containment") && effect.magnitude() == .11d),
+                "source containment must remain separately observable rather than being misrepresented as a hive blast");
+        assertTrue(snapshot.effects().stream().allMatch(effect -> effect.day() == snapshot.day()),
+                "only the current source day is eligible for a real-time effect; old off-screen history cannot replay on return");
+    }
+
+    @Test
     void operationCargoSlotsStayInsideTheirCellAndClearItsTerrainMarker() {
         ReferenceGrayboxLayout.Point anchor = ReferenceGrayboxLayout.centre(10, 10);
         ReferenceGrayboxLayout.Rectangle cell = ReferenceGrayboxLayout.cell(10, 10);
