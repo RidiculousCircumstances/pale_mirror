@@ -443,7 +443,7 @@ public final class SourceGrayboxMaterializerGameTests {
                 List.of(), List.of(), List.of());
     }
 
-    private static ReferenceGrayboxSnapshot routeFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
+    static ReferenceGrayboxSnapshot routeFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
         ReferenceGrayboxLayout.Point start = new ReferenceGrayboxLayout.Point(anchor.getX() + 4, anchor.getZ() + 4);
         ReferenceGrayboxLayout.Point end = new ReferenceGrayboxLayout.Point(anchor.getX() + 44, anchor.getZ() + 4);
         ReferenceGrayboxSnapshot.Route route = new ReferenceGrayboxSnapshot.Route("route:701:702", 701, 702, start, end,

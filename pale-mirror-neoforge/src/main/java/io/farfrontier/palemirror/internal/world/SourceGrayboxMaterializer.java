@@ -68,7 +68,7 @@ final class SourceGrayboxMaterializer {
         for (SourceGrayboxPresentationPlan.Desired item : desired.values()) if (ensure(level, ledger, item)) placed++;
 
         Set<String> activeEntities = new LinkedHashSet<>();
-        materializeLabels(level, snapshot, activeEntities, admittedEntities);
+        materializeLabels(level, ledger, snapshot, activeEntities, admittedEntities);
         for (ReferenceGrayboxSnapshot.Resident resident : snapshot.residents()) {
             ensureResident(level, ledger, snapshot.stateRevision(), resident, activeEntities, admittedEntities);
         }
@@ -272,7 +272,7 @@ final class SourceGrayboxMaterializer {
         return result;
     }
 
-    private static void materializeLabels(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Set<String> active,
+    private static void materializeLabels(ServerLevel level, SourceGrayboxPresentationLedger ledger, ReferenceGrayboxSnapshot snapshot, Set<String> active,
                                           Map<String, Entity> admittedEntities) {
         LabelPositions labels = new LabelPositions();
         for (ReferenceGrayboxSnapshot.Settlement settlement : snapshot.settlements()) {
@@ -315,6 +315,11 @@ final class SourceGrayboxMaterializer {
         for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) label(level, active, admittedEntities, labels, "chrysalis:" + chrysalis.organId(),
                 "[C] organ=" + chrysalis.organId() + " " + chrysalis.status() + " days=" + chrysalis.daysRemaining()
                         + " biomass=" + number(chrysalis.biomassCommitted()), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
+        for (ReferenceGrayboxSnapshot.Interaction interaction : snapshot.interactions()) {
+            ReferenceGrayboxLayout.Point point = interaction.slots().get(interaction.slots().size() / 2);
+            label(level, active, admittedEntities, labels, "interaction:" + interaction.id(),
+                    SourceGrayboxInteractionPresentation.labelText(ledger, interaction), point.x(), point.z());
+        }
         for (ReferenceGrayboxSnapshot.Readout readout : snapshot.readouts()) label(level, active, admittedEntities, labels, "readout:" + readout.id(),
                 "[" + readout.category() + "] " + readout.text(), readout.position().x(), readout.position().z());
         snapshot.cells().stream().filter(cell -> cell.infection() > 0.01d || cell.signal() > 0.01d)
