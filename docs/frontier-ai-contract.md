@@ -71,6 +71,10 @@ gets no body (or the existing body is removed before it can tick embedded), the
 lease returns to `COLD` with its exact hand-off retained, and a readable
 `SOURCE_ACTOR_OBSTRUCTION` claim explains the deferred materialization. This
 is an executor recovery fact, not a source casualty or a second position model.
+A retained collision cannot churn a new lease every executor turn: the actor
+rechecks at a deterministic stagger no sooner than 200 ticks and no later than
+the next 200-tick stagger window, so removing the real obstruction allows one
+later body without polling or ticketing its chunk.
 
 ## Runtime authority and persistence
 

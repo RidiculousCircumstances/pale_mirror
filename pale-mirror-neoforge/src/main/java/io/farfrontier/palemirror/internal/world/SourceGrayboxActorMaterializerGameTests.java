@@ -154,6 +154,61 @@ public final class SourceGrayboxActorMaterializerGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-actor-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void blockedPreparationSettlesColdThenRetriesOnlyAtItsBoundedStagger(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        String residentId = "resident:actor-admission:retry";
+        ReferenceGrayboxSnapshot snapshot = SourceGrayboxMaterializerGameTests.fixture(anchor, baseline, residentId, 1.0d, "blocked-retry");
+        ReferenceGrayboxSnapshot.Resident resident = snapshot.residents().getFirst();
+        for (int x = -7; x <= 7; x++) for (int z = -7; z <= 7; z++) {
+            BlockPos obstruction = new BlockPos(resident.position().x() + x, ReferenceGrayboxLayout.GROUND_Y + 1, resident.position().z() + z);
+            helper.getLevel().setBlock(obstruction, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(obstruction.above(), Blocks.STONE.defaultBlockState(), 3);
+        }
+
+        AdmissionBorder border = AdmissionBorder.openAround(helper.getLevel().getWorldBorder(), resident.position());
+        try {
+            ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+            helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", 10L), "the exact source resident must reserve one preparation lease");
+            var preparing = execution.actor(residentId).orElseThrow();
+            SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+            Map<String, Entity> admitted = new LinkedHashMap<>();
+            materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+            boolean obstructed = SourceGrayboxActorMaterializer.isActorObstructed(SourceGrayboxPresentationLedger.get(helper.getLevel()), preparing);
+            helper.assertTrue(SourceGrayboxActorExecutionRuntime.mustReleaseBlockedPreparation(preparing, false, obstructed),
+                    "a no-body PREPARING lease with a retained collision fact must settle COLD in the runtime");
+            helper.assertTrue(execution.cancelPreparation(residentId, preparing.leaseId(), "gametest:actor-runtime", 20L),
+                    "the one rejected preparation lease must return to cold source custody");
+            var cold = execution.actor(residentId).orElseThrow();
+            helper.assertValueEqual(cold.mode().name(), "COLD", "a blocked preparation is never retained as a perpetual executor");
+            helper.assertTrue(!SourceGrayboxActorExecutionRuntime.allowsPreparation(cold, true, 30L),
+                    "a retained obstruction must not churn a fresh COLD lease every executor turn");
+
+            long retryTick = -1L;
+            for (long tick = 30L; tick <= 420L; tick += 10L) if (SourceGrayboxActorExecutionRuntime.allowsPreparation(cold, true, tick)) {
+                retryTick = tick;
+                break;
+            }
+            helper.assertTrue(retryTick >= 220L && retryTick <= 410L,
+                    "the deterministic obstruction retry must be delayed and bounded; retry=" + retryTick);
+            for (int x = -7; x <= 7; x++) for (int z = -7; z <= 7; z++) {
+                BlockPos obstruction = new BlockPos(resident.position().x() + x, ReferenceGrayboxLayout.GROUND_Y + 1, resident.position().z() + z);
+                helper.getLevel().setBlock(obstruction, Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(obstruction.above(), Blocks.AIR.defaultBlockState(), 3);
+            }
+            helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", retryTick),
+                    "the source actor may re-enter preparation only after its bounded collision retry");
+            materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+            helper.assertTrue(admitted.containsKey(SourceGrayboxMaterializer.entityKey(residentId, "RESIDENT")),
+                    "removing the real obstruction must allow one later source-owned body, not leave a permanent gap");
+        } finally {
+            border.restore();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-actor-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void hotActorEscapesNewSourceGeometryBeforeTheWorldCanSuffocateIt(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);

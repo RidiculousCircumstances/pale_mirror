@@ -80,6 +80,27 @@ class ReferenceGrayboxActorExecutionStateTest {
     }
 
     @Test
+    void blockedPreparationReleasesItsLeaseWithoutInventingAPhysicalBody() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        String actor = snapshot.residents().getFirst().id();
+        int sourceX = state.actor(actor).orElseThrow().actualXSixteenths();
+        int sourceZ = state.actor(actor).orElseThrow().actualZSixteenths();
+
+        assertTrue(state.prepare(actor, "materializer:chunk:0_0", 10L));
+        String lease = state.actor(actor).orElseThrow().leaseId();
+        assertFalse(state.cancelPreparation(actor, lease, "materializer:other", 11L),
+                "a foreign executor cannot release a preparation lease");
+        assertTrue(state.cancelPreparation(actor, lease, "materializer:chunk:0_0", 11L));
+
+        var released = state.actor(actor).orElseThrow();
+        assertEquals(ReferenceGrayboxActorExecutionState.Mode.COLD, released.mode());
+        assertTrue(released.leaseId().isEmpty(), "a blocked preparation has no body and no retained lease");
+        assertEquals(sourceX, released.actualXSixteenths());
+        assertEquals(sourceZ, released.actualZSixteenths());
+    }
+
+    @Test
     void combatActionHasOneDurableEpochAndCannotBypassItsCooldownOrLease() {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
         ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);

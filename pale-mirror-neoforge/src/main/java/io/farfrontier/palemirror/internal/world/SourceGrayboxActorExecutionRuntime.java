@@ -11,17 +11,22 @@ final class SourceGrayboxActorExecutionRuntime {
     private static final String HOLDER = "source-graybox:actor-runtime";
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final long CAPTURE_INTERVAL_TICKS = 10L;
+    /** A retained foreign collision is rechecked at a bounded stagger, never every executor turn. */
+    private static final long OBSTRUCTION_RETRY_TICKS = 200L;
+    private static final long OBSTRUCTION_RETRY_SLOTS = OBSTRUCTION_RETRY_TICKS / CAPTURE_INTERVAL_TICKS;
 
     boolean beforePublication(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
                               Map<String, Entity> admittedEntities) {
         long gameTick = data.actorExecutionGameTime(level.getGameTime());
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(level);
+        SourceGrayboxPresentationLedger presentation = SourceGrayboxPresentationLedger.get(level);
         boolean changed = recoverLoadedActors(level, data, materializer, admittedEntities, gameTick);
         for (ReferenceGrayboxActorExecutionState.ActorState actor : data.actorExecution().actors()) {
             BlockPos position = position(actor);
             switch (actor.mode()) {
                 case COLD -> {
-                    if (zone.preparing(position) && level.hasChunkAt(position)) {
+                    boolean obstructed = SourceGrayboxActorMaterializer.isActorObstructed(presentation, actor);
+                    if (zone.preparing(position) && level.hasChunkAt(position) && allowsPreparation(actor, obstructed, gameTick)) {
                         changed |= data.prepareActor(actor.id(), HOLDER, gameTick);
                     }
                 }
@@ -64,6 +69,12 @@ final class SourceGrayboxActorExecutionRuntime {
                         changed = true;
                         changed |= data.captureActor(actor.id(), actor.leaseId(), HOLDER, sixteenths(entity.getX()),
                                 sixteenths(entity.getZ()), gameTick);
+                    } else if (mustReleaseBlockedPreparation(actor, entity != null,
+                            SourceGrayboxActorMaterializer.isActorObstructed(presentation, actor))) {
+                        // A physically impossible admission is not a durable
+                        // executor. The obstruction claim explains the gap;
+                        // the source actor returns to COLD without a body.
+                        changed |= data.cancelActorPreparation(actor.id(), actor.leaseId(), HOLDER, gameTick);
                     }
                 }
                 case HOT -> {
@@ -122,6 +133,21 @@ final class SourceGrayboxActorExecutionRuntime {
 
     private static boolean expired(ReferenceGrayboxActorExecutionState.ActorState actor, long gameTick) {
         return gameTick - actor.demandedAtGameTick() >= DRAIN_HYSTERESIS_TICKS;
+    }
+
+    /** Package-visible pure policy proof for the bounded COLD re-admission path. */
+    static boolean allowsPreparation(ReferenceGrayboxActorExecutionState.ActorState actor, boolean obstructed, long gameTick) {
+        if (actor.mode() != ReferenceGrayboxActorExecutionState.Mode.COLD || gameTick < actor.changedAtGameTick()) return false;
+        if (!obstructed) return true;
+        if (gameTick - actor.changedAtGameTick() < OBSTRUCTION_RETRY_TICKS) return false;
+        long slot = Math.floorMod(actor.id().hashCode(), (int) OBSTRUCTION_RETRY_SLOTS) * CAPTURE_INTERVAL_TICKS;
+        return Math.floorMod(gameTick, OBSTRUCTION_RETRY_TICKS) == slot;
+    }
+
+    /** A PREPARING lease with no body and a retained collision fact must not remain live. */
+    static boolean mustReleaseBlockedPreparation(ReferenceGrayboxActorExecutionState.ActorState actor,
+                                                 boolean hasPhysicalBody, boolean obstructed) {
+        return actor.mode() == ReferenceGrayboxActorExecutionState.Mode.PREPARING && !hasPhysicalBody && obstructed;
     }
 
     private static BlockPos position(ReferenceGrayboxActorExecutionState.ActorState actor) {
