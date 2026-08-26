@@ -274,23 +274,22 @@ public final class ReferenceMarketEconomy {
         }
     }
 
-    double withdraw(int settlementId, ReferenceResource resource, double quantity) {
-        double remaining = Math.max(0.0d, quantity);
-        EnumMap<ReferenceResource, Double> reserve = publicInventory.computeIfAbsent(settlementId, ignored -> emptyStock());
-        double taken = Math.min(reserve.get(resource), remaining);
-        reserve.put(resource, reserve.get(resource) - taken);
-        remaining -= taken;
-        List<ReferenceCompany> local = companies.values().stream().filter(company -> company.homeSettlementId() == settlementId)
-                .sorted(Comparator.comparingDouble((ReferenceCompany company) -> company.amount(resource)).reversed()
-                        .thenComparingInt(ReferenceCompany::id)).toList();
-        for (ReferenceCompany company : local) {
-            if (remaining <= 1.0e-9d) break;
-            double part = company.remove(resource, remaining);
-            remaining -= part;
-        }
-        return quantity - remaining;
+    double withdraw(int settlementId, ReferenceResource resource, double quantity) { return ReferenceWarehouseCustody.withdraw(this, settlementId, resource, quantity); }
+
+    /**
+     * Reconciles one physical warehouse transfer without inventing a second
+     * stock owner. Deposits enter the public inventory; withdrawals retain the
+     * source market's established public-then-company custody order.
+     */
+    double applyWarehouseItemDelta(ReferenceMarketWorld world, int settlementId, ReferenceResource resource, double quantity) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(resource, "resource");
+        return ReferenceWarehouseCustody.apply(this, world, settlementId, resource, quantity);
     }
 
+    EnumMap<ReferenceResource, Double> warehousePublicInventory(int settlementId) { return mutablePublicInventory(settlementId); }
+    java.util.Collection<ReferenceCompany> warehouseCompanies() { return companies.values(); }
+    void synchronizeWarehouse(ReferenceMarketWorld world) { syncCompatibility(world); }
     private void payWage(ReferenceCompany company, ReferenceHouseholdLedger household) {
         company.wageBill(company.employees() * company.wageOffer());
         company.cash(company.cash() - company.wageBill());

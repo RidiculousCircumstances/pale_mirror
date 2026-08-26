@@ -29,11 +29,19 @@ final class SourceGrayboxLabelPositions {
     }
 
     BlockPos next(String id, int x, int z) {
+        return next(id, x, z, ReferenceGrayboxLayout.GROUND_Y + CLEARANCE);
+    }
+
+    /** Keeps a local board above a physical substructure that the block ledger does not own. */
+    BlockPos next(String id, int x, int z, int minimumY) {
+        if (minimumY < ReferenceGrayboxLayout.GROUND_Y + CLEARANCE) {
+            throw new IllegalArgumentException("source graybox label floor is invalid");
+        }
         // An operation board is a live field marker.  Unlike a static
         // infrastructure board, it must remain directly above the activity
         // cube so the player can unambiguously associate the event with the
         // nearby one-to-one participants.
-        if (id.startsWith("activity:")) return new BlockPos(x, baseline(x, z), z);
+        if (id.startsWith("activity:")) return new BlockPos(x, Math.max(minimumY, baseline(x, z)), z);
         Column anchor = new Column(x, z);
         int firstOrdinal = nextSlotByAnchor.getOrDefault(anchor, 0);
         while (true) {
@@ -42,7 +50,7 @@ final class SourceGrayboxLabelPositions {
                 SourceGrayboxLabelSlots.Offset offset = SourceGrayboxLabelSlots.offset(ordinal);
                 Column candidate = new Column(x + offset.x(), z + offset.z());
                 if (occupiedBoardColumns.contains(candidate)) continue;
-                Candidate proposed = new Candidate(candidate, ordinal, baseline(candidate.x(), candidate.z()));
+                Candidate proposed = new Candidate(candidate, ordinal, Math.max(minimumY, baseline(candidate.x(), candidate.z())));
                 if (best == null || proposed.y() < best.y()) best = proposed;
                 // Ground plus clearance is the lowest legal board position,
                 // so later slots cannot produce a better local reading height.

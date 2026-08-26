@@ -61,6 +61,7 @@ final class SourceGrayboxLabelPresentation {
         if (id.startsWith("organ:") || id.startsWith("chrysalis:")) return ChatFormatting.LIGHT_PURPLE;
         if (id.startsWith("route:") || id.startsWith("field-link:")) return ChatFormatting.AQUA;
         if (id.startsWith("settlement:") || id.startsWith("field-post:")) return ChatFormatting.GOLD;
+        if (id.startsWith("warehouse:")) return ChatFormatting.GOLD;
         if (id.startsWith("interaction:") || id.startsWith("conflict:")) return ChatFormatting.RED;
         if (id.startsWith("facility:") || id.startsWith("site:") || id.startsWith("cargo:")) return ChatFormatting.YELLOW;
         return ChatFormatting.WHITE;
@@ -85,6 +86,7 @@ final class SourceGrayboxLabelPresentation {
      */
     static float viewRange(String id) {
         if (id.startsWith("settlement:") || id.startsWith("organ:")) return 3.0f;
+        if (id.startsWith("warehouse:")) return 1.5f;
         if (id.startsWith("route:") || id.startsWith("field-link:") || id.startsWith("legend:")) return 1.75f;
         return 1.25f;
     }

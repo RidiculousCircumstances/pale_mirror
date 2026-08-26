@@ -152,16 +152,17 @@ public final class ReferenceWorld {
     public void runPhases() { engine.runPhases(this); }
 
     /** Apply one typed, revision-checked materialized Villager fact to its canonical owner. */
-    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxResidentObservation observation) {
-        return ReferenceGrayboxObservationExecutor.apply(this, observation);
-    }
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxResidentObservation observation) { return ReferenceGrayboxObservationExecutor.apply(this, observation); }
 
     /** Apply one typed, revision-checked materialized Zombie death to its canonical swarm. */
-    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxBioformObservation observation) {
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxBioformObservation observation) { return ReferenceGrayboxObservationExecutor.apply(this, observation); }
+
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
         return ReferenceGrayboxObservationExecutor.apply(this, observation);
     }
 
-    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
+    /** Applies one exact physical warehouse transfer through the market's stock owner. */
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxWarehouseObservation observation) {
         return ReferenceGrayboxObservationExecutor.apply(this, observation);
     }
 

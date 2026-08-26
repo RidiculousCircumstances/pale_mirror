@@ -65,6 +65,21 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void presentationLedgerPreflightRejectsAnOldOrIncompleteConflictRecord(GameTestHelper helper) {
+        CompoundTag obsolete = new CompoundTag();
+        obsolete.putInt("format", 2);
+        boolean rejected = false;
+        try {
+            SourceGrayboxPresentationLedger.assertHydratable(obsolete);
+        } catch (IllegalStateException expected) {
+            rejected = true;
+        }
+        helper.assertTrue(rejected,
+                "startup preflight must retain old conflict evidence as a visible failure instead of replacing it with a fresh presentation ledger");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void savedDataRestoresTheClockAndDeduplicatesPhysicalFacts(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
         source.activate(1_200L);
@@ -82,6 +97,31 @@ public final class SourceGrayboxStateNbtGameTests {
                         "gametest:source-graybox:resident", applied.stateRevision(), resident)).status(),
                 io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
                 "a persisted physical fact must be rejected before it can replay after restart");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void warehouseContainerHandOffSurvivesSourceSavedDataRoundTrip(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxWarehouseLedger.Binding binding = new SourceGrayboxWarehouseLedger.Binding("settlement:1:warehouse:ore:0", 1,
+                io.farfrontier.palemirror.frontier.reference.ReferenceResource.ORE, 10, 65, 12, 47,
+                SourceGrayboxWarehouseLedger.State.ACTIVE);
+        helper.assertTrue(source.warehouseLedger().put(binding), "a materialized container must have one durable physical hand-off record");
+        source.markWarehouseLedgerDirty();
+
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(source.save(new CompoundTag(), null), null);
+        helper.assertValueEqual(restored.warehouseLedger().binding(binding.id()), binding,
+                "a restart must preserve the exact barrel identity and acknowledged item count, not reconstruct it from terrain");
+        var snapshot = restored.snapshot();
+        var receipt = restored.observe(new io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxWarehouseObservation(
+                io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxWarehouseObservation.VERSION, "warehouse-binding:once",
+                snapshot.stateRevision(), 1, io.farfrontier.palemirror.frontier.reference.ReferenceResource.ORE, 1));
+        helper.assertTrue(receipt.applied(), "one physical container receipt must be accepted by the canonical stock owner");
+        helper.assertValueEqual(restored.observe(new io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxWarehouseObservation(
+                        io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxWarehouseObservation.VERSION, "warehouse-binding:once",
+                        receipt.stateRevision(), 1, io.farfrontier.palemirror.frontier.reference.ReferenceResource.ORE, 1)).status(),
+                io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
+                "a durable warehouse receipt may not replay after a restart or retransmission");
         helper.succeed();
     }
 

@@ -95,6 +95,8 @@ final class SourceGrayboxPlayerBriefing {
     }
 
     static Optional<String> at(ReferenceGrayboxSnapshot snapshot, int x, int z) {
+        Optional<String> warehouse = SourceGrayboxWarehouseBriefing.at(snapshot, x, z);
+        if (warehouse.isPresent()) return warehouse;
         for (ReferenceGrayboxSnapshot.Settlement settlement : snapshot.settlements()) {
             if (contains(settlement.rectangle(), x, z)) return Optional.of(settlementBrief(snapshot, settlement));
         }
@@ -145,6 +147,8 @@ final class SourceGrayboxPlayerBriefing {
         if (settlement.isPresent()) return Optional.of(settlementBrief(snapshot, settlement.get()));
         Optional<ReferenceGrayboxSnapshot.Facility> facility = match(snapshot.facilities(), "facility:", id, ReferenceGrayboxSnapshot.Facility::id);
         if (facility.isPresent()) return Optional.of(facilityBrief(snapshot, facility.get()));
+        Optional<String> warehouse = SourceGrayboxWarehouseBriefing.forIdentity(snapshot, id);
+        if (warehouse.isPresent()) return warehouse;
         Optional<ReferenceGrayboxSnapshot.ResourceSite> site = match(snapshot.resourceSites(), "site:", id, value -> Integer.toString(value.id()));
         if (site.isPresent()) return Optional.of(siteBrief(snapshot, site.get()));
         Optional<ReferenceGrayboxSnapshot.Route> route = match(snapshot.routes(), "route:", id, ReferenceGrayboxSnapshot.Route::id);
@@ -466,10 +470,8 @@ final class SourceGrayboxPlayerBriefing {
         return result;
     }
 
-    private static String settlementName(ReferenceGrayboxSnapshot snapshot, int id) {
-        return snapshot.settlements().stream().filter(value -> value.id() == id).map(ReferenceGrayboxSnapshot.Settlement::name)
-                .findFirst().orElse("settlement #" + id);
-    }
+    private static String settlementName(ReferenceGrayboxSnapshot snapshot, int id) { return snapshot.settlements().stream()
+            .filter(value -> value.id() == id).map(ReferenceGrayboxSnapshot.Settlement::name).findFirst().orElse("settlement #" + id); }
 
     private static <T> Optional<T> match(java.util.List<T> values, String prefix, String fullId, java.util.function.Function<T, String> id) {
         if (!fullId.startsWith(prefix)) return Optional.empty();

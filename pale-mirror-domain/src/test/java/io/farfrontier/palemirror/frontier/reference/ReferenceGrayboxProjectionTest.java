@@ -51,6 +51,25 @@ class ReferenceGrayboxProjectionTest {
     }
 
     @Test
+    void everySettlementPublishesOneTypedWarehouseWithAllCanonicalResources() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(grayboxWorld());
+
+        assertEquals(snapshot.settlements().size(), snapshot.warehouses().size(),
+                "the physical economy must not omit a settlement warehouse from the immutable source projection");
+        for (ReferenceGrayboxSnapshot.Warehouse warehouse : snapshot.warehouses()) {
+            assertEquals("settlement:" + warehouse.settlementId() + ":warehouse", warehouse.id());
+            assertEquals(ReferenceGrayboxLayout.facility(snapshot.settlements().stream()
+                    .filter(settlement -> settlement.id() == warehouse.settlementId()).findFirst().orElseThrow().rectangle(), "warehouse"),
+                    warehouse.rectangle(), "the physical storage bay must retain the functional warehouse footprint");
+            assertEquals(Set.of(ReferenceResource.values()).stream().map(value -> value.name().toLowerCase(java.util.Locale.ROOT))
+                    .collect(java.util.stream.Collectors.toSet()), warehouse.stockpiles().stream()
+                    .map(ReferenceGrayboxSnapshot.Stockpile::resource).collect(java.util.stream.Collectors.toSet()),
+                    "each container family must expose every source resource without inventing a material-only type");
+            assertTrue(warehouse.stockpiles().stream().allMatch(stockpile -> Double.isFinite(stockpile.quantity()) && stockpile.quantity() >= 0.0d));
+        }
+    }
+
+    @Test
     void tradeRoutesHaveAContinuousInspectableGrayboxCorridorAndBoundedDamageSlots() {
         ReferenceGrayboxLayout.Point start = new ReferenceGrayboxLayout.Point(10, 10);
         ReferenceGrayboxLayout.Point end = new ReferenceGrayboxLayout.Point(74, 31);

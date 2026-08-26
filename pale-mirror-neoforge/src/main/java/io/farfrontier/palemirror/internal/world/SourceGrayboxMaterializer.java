@@ -122,6 +122,16 @@ final class SourceGrayboxMaterializer {
         if (claim != null) SourceGrayboxPresentationLedger.get(level).consume(claim.id());
     }
 
+    /** Retains a non-owning container obstruction so the ordinary conflict-label path can explain it. */
+    void recordWarehouseConflict(ServerLevel level, String id, String subjectId, String revision, BlockPos position, boolean installed) {
+        SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
+        if (ledger.claim(id) == null) {
+            ledger.put(new SourceGrayboxPresentationLedger.Claim(id, subjectId, "WAREHOUSE_CONTAINER", revision,
+                    position.getX(), position.getY(), position.getZ(), 1, 1, 1, false, "", 0.0d, false, installed));
+        }
+        ledger.conflict(id);
+    }
+
     static ManagedEntity managed(Entity entity) {
         String id = entity.getPersistentData().getString(ENTITY_ID);
         String kind = entity.getPersistentData().getString(ENTITY_KIND);
@@ -324,6 +334,9 @@ final class SourceGrayboxMaterializer {
         }
         for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) label(level, active, admittedEntities, labels, "facility:" + facility.id(),
                 SourceGrayboxPlayerBriefing.facilityLabel(facility), facility.rectangle().centreX(), facility.rectangle().centreZ());
+        for (ReferenceGrayboxSnapshot.Warehouse warehouse : snapshot.warehouses()) label(level, active, admittedEntities, labels,
+                "warehouse:" + warehouse.id(), SourceGrayboxWarehouseBriefing.label(snapshot, warehouse),
+                warehouse.rectangle().centreX(), warehouse.rectangle().centreZ(), SourceGrayboxWarehouseRuntime.labelFloorY());
         for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) label(level, active, admittedEntities, labels, "site:" + site.id(),
                 SourceGrayboxPlayerBriefing.resourceSiteLabel(site),
                 site.rectangle().centreX(), site.rectangle().centreZ());
@@ -364,9 +377,14 @@ final class SourceGrayboxMaterializer {
 
     private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, SourceGrayboxLabelPositions labels,
                               String id, String text, int x, int z) {
+        label(level, active, admittedEntities, labels, id, text, x, z, ReferenceGrayboxLayout.GROUND_Y + 3);
+    }
+
+    private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, SourceGrayboxLabelPositions labels,
+                              String id, String text, int x, int z, int minimumY) {
         String key = entityKey(id, LABEL_KIND);
         active.add(key);
-        BlockPos position = labels.next(id, x, z);
+        BlockPos position = labels.next(id, x, z, minimumY);
         if (!ready(level, position)) return;
         Entity current = existingEntity(level, admittedEntities, id, LABEL_KIND, uuid("label-display", id));
         if (current != null && !(current instanceof Display.TextDisplay && identityMatches(current, id, LABEL_KIND))) return;

@@ -12,6 +12,7 @@ public record ReferenceGrayboxSnapshot(
         List<Cell> cells,
         List<Settlement> settlements,
         List<Facility> facilities,
+        List<Warehouse> warehouses,
         List<ResourceSite> resourceSites,
         List<Route> routes,
         List<HiveOrgan> hiveOrgans,
@@ -36,6 +37,7 @@ public record ReferenceGrayboxSnapshot(
         cells = copied(cells, "cells");
         settlements = copied(settlements, "settlements");
         facilities = copied(facilities, "facilities");
+        warehouses = copied(warehouses, "warehouses");
         resourceSites = copied(resourceSites, "resourceSites");
         routes = copied(routes, "routes");
         hiveOrgans = copied(hiveOrgans, "hiveOrgans");
@@ -53,6 +55,18 @@ public record ReferenceGrayboxSnapshot(
         if (cells.size() != ReferenceWorldConfig.SOURCE_WIDTH * ReferenceWorldConfig.SOURCE_HEIGHT) {
             throw new IllegalArgumentException("graybox snapshot must contain every logical cell");
         }
+    }
+
+    /** Compatibility constructor for fixtures predating physical settlement warehouses. */
+    public ReferenceGrayboxSnapshot(int day, String profileId, String stateRevision, ReferenceGrayboxLayout.Bounds bounds,
+                                    List<Cell> cells, List<Settlement> settlements, List<Facility> facilities,
+                                    List<ResourceSite> resourceSites, List<Route> routes, List<HiveOrgan> hiveOrgans,
+                                    List<Bioform> bioforms, List<Resident> residents, List<FieldPost> fieldPosts,
+                                    List<FieldLink> fieldLinks, List<Activity> activities, List<Cargo> cargoes,
+                                    List<Interaction> interactions, List<Sector> sectors, List<Chrysalis> chrysalises,
+                                    List<Readout> readouts, List<String> events) {
+        this(day, profileId, stateRevision, bounds, cells, settlements, facilities, List.of(), resourceSites, routes, hiveOrgans,
+                bioforms, residents, fieldPosts, fieldLinks, activities, cargoes, interactions, sectors, chrysalises, readouts, events);
     }
 
     /** Compatibility constructor for physical fixtures predating informational readouts. */
@@ -86,6 +100,43 @@ public record ReferenceGrayboxSnapshot(
     public record Facility(String id, int settlementId, String kind, ReferenceGrayboxLayout.Rectangle rectangle,
                            double level, String colour) {
         public Facility { id = required(id, "id"); kind = required(kind, "kind"); rectangle = Objects.requireNonNull(rectangle, "rectangle"); colour = required(colour, "colour"); }
+    }
+
+    /**
+     * Canonical settlement stock made available through real, resource-specific containers.
+     *
+     * <p>Each stockpile quantity remains a source number. The NeoForge boundary
+     * exposes its integral 1/64-unit item portion and reports every observed
+     * item delta back through a versioned warehouse observation.</p>
+     */
+    public record Warehouse(String id, int settlementId, ReferenceGrayboxLayout.Rectangle rectangle, List<Stockpile> stockpiles) {
+        public Warehouse {
+            id = required(id, "id");
+            if (settlementId < 1) throw new IllegalArgumentException("warehouse settlement ID is invalid");
+            rectangle = Objects.requireNonNull(rectangle, "rectangle");
+            stockpiles = copied(stockpiles, "stockpiles");
+            java.util.EnumSet<ReferenceResource> resources = java.util.EnumSet.noneOf(ReferenceResource.class);
+            for (Stockpile stockpile : stockpiles) {
+                try {
+                    resources.add(ReferenceResource.valueOf(stockpile.resource().toUpperCase(java.util.Locale.ROOT)));
+                } catch (IllegalArgumentException invalid) {
+                    throw new IllegalArgumentException("warehouse stockpile resource is invalid: " + stockpile.resource(), invalid);
+                }
+            }
+            if (stockpiles.size() != ReferenceResource.values().length || resources.size() != ReferenceResource.values().length) {
+                throw new IllegalArgumentException("warehouse stockpiles must cover every resource exactly once");
+            }
+        }
+    }
+
+    /** One exact canonical resource quantity in a settlement warehouse. */
+    public record Stockpile(String resource, double quantity) {
+        public Stockpile {
+            resource = required(resource, "resource");
+            if (!Double.isFinite(quantity) || quantity < 0.0d) {
+                throw new IllegalArgumentException("warehouse stockpile quantity is invalid");
+            }
+        }
     }
 
     public record ResourceSite(int id, String kind, int ownerSettlementId, ReferenceGrayboxLayout.Rectangle rectangle,

@@ -97,6 +97,31 @@ final class ReferenceGrayboxObservationExecutor {
         return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical structure owner updated", after);
     }
 
+    static ReferenceGrayboxObservationOutcome apply(
+            ReferenceWorld world,
+            ReferenceGrayboxWarehouseObservation observation
+    ) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        ReferenceGrayboxWarehouseObservation event = Objects.requireNonNull(observation, "observation");
+        ReferenceGrayboxLayout.requireSupported(required);
+        String before = ReferenceGrayboxProjection.from(required).stateRevision();
+        if (!before.equals(event.observedStateRevision())) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_STALE,
+                "observation was made against an older graybox state", before);
+        if (!required.settlements().containsKey(event.settlementId())) return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_UNKNOWN,
+                "warehouse settlement no longer exists in canonical state", before);
+        double applied = required.microeconomy().applyWarehouseItemDelta(required.marketWorld(), event.settlementId(), event.resource(),
+                event.sourceQuantity());
+        if (Math.abs(applied - event.sourceQuantity()) > 1.0e-9d) {
+            return outcome(event, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
+                    "warehouse withdrawal exceeds canonical stock", before);
+        }
+        required.marketWorld().event("D" + required.day() + ": physical warehouse " + event.resource().name().toLowerCase(Locale.ROOT)
+                + " settlement=" + event.settlementId() + " items=" + event.itemDelta() + " (" + event.eventId() + ")");
+        required.assertProfileInvariants();
+        String after = ReferenceGrayboxProjection.from(required).stateRevision();
+        return outcome(event, ReferenceGrayboxObservationOutcome.Status.APPLIED, "canonical warehouse stock updated", after);
+    }
+
     private static boolean applySettlement(ResidentOwner owner, ReferenceGrayboxResidentObservation.Kind kind) {
         return ReferenceResidentObservationMutation.apply(owner.settlement(), owner.resident().id(), kind);
     }
@@ -151,6 +176,15 @@ final class ReferenceGrayboxObservationExecutor {
 
     private static ReferenceGrayboxObservationOutcome outcome(
             ReferenceGrayboxStructureObservation event,
+            ReferenceGrayboxObservationOutcome.Status status,
+            String reason,
+            String revision
+    ) {
+        return new ReferenceGrayboxObservationOutcome(event.eventId(), status, reason, revision);
+    }
+
+    private static ReferenceGrayboxObservationOutcome outcome(
+            ReferenceGrayboxWarehouseObservation event,
             ReferenceGrayboxObservationOutcome.Status status,
             String reason,
             String revision

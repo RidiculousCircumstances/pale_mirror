@@ -33,6 +33,7 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.Cell> cells = cells(view);
         List<ReferenceGrayboxSnapshot.Settlement> settlements = settlements(required, settlementAreas);
         List<ReferenceGrayboxSnapshot.Facility> facilities = facilities(required, settlementAreas);
+        List<ReferenceGrayboxSnapshot.Warehouse> warehouses = warehouses(required, settlementAreas);
         List<ReferenceGrayboxSnapshot.ResourceSite> sites = sites(required);
         List<ReferenceGrayboxSnapshot.Route> routes = routes(required);
         List<ReferenceGrayboxSnapshot.HiveOrgan> organs = organs(required);
@@ -47,10 +48,10 @@ public final class ReferenceGrayboxProjection {
         List<ReferenceGrayboxSnapshot.Chrysalis> chrysalises = chrysalises(required, sectorAreas);
         List<ReferenceGrayboxSnapshot.Readout> readouts = ReferenceGrayboxReadouts.from(required, settlementAreas);
         List<String> events = required.events();
-        String stateRevision = stateRevision(required.day(), required.profile().id(), cells, settlements, facilities, sites, routes, organs,
+        String stateRevision = stateRevision(required.day(), required.profile().id(), cells, settlements, facilities, warehouses, sites, routes, organs,
                 bioforms, residents, posts, links, activities, cargoes, interactions, sectors, chrysalises, readouts, events);
         return new ReferenceGrayboxSnapshot(required.day(), required.profile().id(), stateRevision, ReferenceGrayboxLayout.bounds(), cells,
-                settlements, facilities, sites, routes, organs, bioforms, residents, posts, links, activities, cargoes, interactions, sectors,
+                settlements, facilities, warehouses, sites, routes, organs, bioforms, residents, posts, links, activities, cargoes, interactions, sectors,
                 chrysalises, readouts, events);
     }
 
@@ -97,7 +98,14 @@ public final class ReferenceGrayboxProjection {
         result.add(new ReferenceGrayboxSnapshot.Facility("settlement:" + settlement.id() + ":facility:" + kind, settlement.id(), kind,
                 ReferenceGrayboxLayout.facility(area, kind), level, "facility." + kind));
     }
-
+    private static List<ReferenceGrayboxSnapshot.Warehouse> warehouses(ReferenceWorld world, Map<Integer, ReferenceGrayboxLayout.Rectangle> areas) {
+        return sorted(world.settlements().values(), ReferenceSettlement::id).stream().map(settlement -> {
+            List<ReferenceGrayboxSnapshot.Stockpile> stockpiles = java.util.Arrays.stream(ReferenceResource.values()).map(resource ->
+                    new ReferenceGrayboxSnapshot.Stockpile(resource.name().toLowerCase(java.util.Locale.ROOT), settlement.amount(resource))).toList();
+            return new ReferenceGrayboxSnapshot.Warehouse("settlement:" + settlement.id() + ":warehouse", settlement.id(), ReferenceGrayboxLayout
+                    .facility(requiredArea(areas, settlement.id()), "warehouse"), stockpiles);
+        }).toList();
+    }
     private static List<ReferenceGrayboxSnapshot.ResourceSite> sites(ReferenceWorld world) {
         return sorted(world.resourceSites().values(), ReferenceResourceSite::id).stream().map(site -> new ReferenceGrayboxSnapshot.ResourceSite(
                 site.id(), site.kind().name().toLowerCase(java.util.Locale.ROOT), site.ownerId() == null ? -1 : site.ownerId(),

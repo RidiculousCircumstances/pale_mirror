@@ -135,7 +135,8 @@ ReferenceGrayboxSimulation
   -> immutable ReferenceGrayboxSnapshot
   -> SourceGrayboxPresentationPlan
   -> SourceGrayboxMaterializer (loaded chunks only)
-  -> coloured structures, growing/retreating infection tissue, labels, Villagers and Zombies
+  -> coloured structures, growing/retreating infection tissue, readable boards,
+     resource-specific PM-owned barrel shelves, Villagers and Zombies
 ```
 
 `SourceGrayboxPresentationLedger` is only the durable physical-ownership
@@ -167,6 +168,19 @@ unbounded interpretation of arbitrary player inventory changes. A successful
 slot break is consumed and its remaining sibling slots are rebalanced from the
 new canonical quantity. A rejected, stale or foreign change remains a conflict
 and changes no source state.
+
+Each settlement also has one snapshot `Warehouse` whose nine typed stockpiles
+are exposed through fixed resource-specific barrel shelves. One matching
+Minecraft item is exactly `1/64` of a source unit: a 64-item stack is one
+canonical unit. The physical ledger records each PM-installed barrel identity,
+resource and last acknowledged item count. A player deposit or withdrawal is
+one signed, versioned `ReferenceGrayboxWarehouseObservation`; the domain alone
+accepts it into public/company custody or rejects it for stale revision or
+insufficient source stock. An untagged barrel, wrong tag, broken barrel,
+foreign item or shelf capacity failure never becomes an implicit economic
+owner: it remains untouched physical state plus a visible retained conflict.
+The adapter does not force-load a shelf and does not invent a Minecraft-side
+economy counter.
 
 The immutable plan validates all source claims before writing. Legitimately
 co-located facts keep their canonical X/Z and receive distinct deterministic
@@ -220,6 +234,15 @@ operations, territorial sectors, chrysalises, current events and actor roles
 are all separate readable claims or labels. Trade routes additionally have
 sampled colour-coded ground segments between their source endpoints; their
 elevated interaction slots remain the sole route-damage authority.
+
+Warehouse shelves are deliberately low 2x2x4 barrel stacks inside the existing
+warehouse rectangle, rather than remote technical columns. Their gold board
+states the settlement, the exact `64 items = 1 source unit` exchange rule and
+the action; right-clicking that board gives the complete typed source stock.
+Only the matching resource item is accepted by a shelf. This keeps real player
+supply and theft legible without turning every source unit into a separate
+entity or hiding an aggregate multiplier.
+
 Cell tissue is intentionally more legible than a metric tower alone: its
 contiguous extent shows local infection growth and retreat, while the existing
 red/purple/cyan/lime sector towers retain the exact territorial comparison.

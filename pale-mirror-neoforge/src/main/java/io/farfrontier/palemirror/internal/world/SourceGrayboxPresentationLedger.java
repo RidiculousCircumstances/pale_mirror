@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.nio.file.Path;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -44,6 +45,20 @@ final class SourceGrayboxPresentationLedger extends SavedData {
     static SourceGrayboxPresentationLedger get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(SourceGrayboxPresentationLedger::new,
                 SourceGrayboxPresentationLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), DATA_NAME);
+    }
+
+    /**
+     * DimensionDataStorage would otherwise replace a failed presentation load
+     * with a fresh ledger and lose durable player-conflict evidence.
+     */
+    static void assertCompatibleData(Path worldRoot) {
+        PaleMirrorSavedDataCompatibility.assertHydratable(worldRoot, DATA_NAME,
+                SourceGrayboxPresentationLedger::assertHydratable, "source graybox presentation ledger");
+    }
+
+    /** Package-visible for the GameTest proof of the startup preflight. */
+    static void assertHydratable(CompoundTag tag) {
+        load(tag, null);
     }
 
     Claim claim(String id) {
