@@ -370,11 +370,11 @@ hash = "ff63d669db22f75f9c9e0471f80948563d441390c54fca0b7a2da57f462a8482"
 
 [[files]]
 file = "datapacks/pale-mirror-graybox/README.md"
-hash = "326f6cab539b3864f500fadb203fa02b3e97b05e582bdcb3ee3478dec7144e59"
+hash = "a14828a19dac01745a70b9a7d3981f711ea8e939e9fb923cfde5e8b720ee40b8"
 
 [[files]]
 file = "datapacks/pale-mirror-graybox/data/pale_mirror/dimension/frontier_graybox.json"
-hash = "ab36743046bdb4f8e0fad6a96c0632a7ddf21757fc1769fd57fd0a9d42780f0d"
+hash = "965f8450c47f77784fee7e8a85bcc81aae86bc08c1e96c4dffd38dbcf0ac57ec"
 
 [[files]]
 file = "datapacks/pale-mirror-graybox/pack.mcmeta"
