@@ -49,8 +49,10 @@ Y=64. It creates twelve settlements and two infection seeds.
 - Human population, stock, credit and capacity are explicitly scaled 1:40.
   Territorial ecology and organ biomass retain source spatial scale; combat
   effects are calibrated for the smaller human world.
-- Empty north/south space is a neutral border. It is not an extra simulation
-  grid or a place for hidden simulation state.
+- The north/south space is a neutral border, not an extra simulation grid or a
+  place for hidden simulation state.  Its one fixed 7x7 yellow, lit operator
+  observation deck is outside the logical arena and is a fail-closed physical
+  entry boundary only; it carries no source claim or canonical state.
 
 `ReferenceGrayboxLayout` owns these coordinates. A materializer must never
 choose a second scale, merge co-located source objects, relocate their logical

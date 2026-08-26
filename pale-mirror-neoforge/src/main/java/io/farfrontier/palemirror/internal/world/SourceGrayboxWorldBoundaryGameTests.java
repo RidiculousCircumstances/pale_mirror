@@ -64,4 +64,40 @@ public final class SourceGrayboxWorldBoundaryGameTests {
                 "a missing entry footing must reject transport instead of letting an operator fall through the graybox");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-source-graybox-boundary", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void operatorEntryUsesAProtectedDeckOutsideTheSourceArena(GameTestHelper helper) {
+        BlockPos footing = SourceGrayboxWorldBoundary.observationDeckFooting();
+        for (int x = -3; x <= 3; x++) {
+            for (int z = -3; z <= 3; z++) {
+                helper.getLevel().setBlock(footing.offset(x, 0, z), Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), 3);
+            }
+        }
+
+        BlockPos entry = SourceGrayboxWorldBoundary.preparedEntry(helper.getLevel());
+        helper.assertTrue(SourceGrayboxWorldBoundary.isNeutralObservationDeck(footing),
+                "the operator deck must stay in the neutral north border rather than a source cell");
+        helper.assertTrue(footing.getZ() < ReferenceGrayboxLayout.MIN_Z,
+                "the operator deck must be outside the 64x44 source arena");
+        helper.assertValueEqual(entry, footing.above(),
+                "operator transport must enter above the dedicated observation deck");
+        helper.assertTrue(helper.getLevel().getBlockState(footing).is(Blocks.SEA_LANTERN),
+                "the observation deck centre must be lit to suppress neutral-border hostile spawns");
+        helper.assertTrue(helper.getLevel().getBlockState(footing.offset(3, 0, 3)).is(Blocks.YELLOW_CONCRETE),
+                "the observation deck perimeter must be visibly distinct from the neutral floor");
+
+        BlockPos foreign = footing.offset(1, 0, 0);
+        helper.getLevel().setBlock(foreign, Blocks.OBSIDIAN.defaultBlockState(), 3);
+        boolean rejected = false;
+        try {
+            SourceGrayboxWorldBoundary.preparedEntry(helper.getLevel());
+        } catch (IllegalStateException expected) {
+            rejected = expected.getMessage().equals("source graybox operator deck conflicts with a non-boundary block");
+        }
+        helper.assertTrue(rejected,
+                "an operator deck must fail closed on a foreign block instead of overwriting player state");
+        helper.assertTrue(helper.getLevel().getBlockState(foreign).is(Blocks.OBSIDIAN),
+                "a rejected operator deck preparation must preserve the conflicting block");
+        helper.succeed();
+    }
 }
