@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationO
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
+import java.util.LinkedHashMap;
 import java.nio.file.Path;
 import java.util.IdentityHashMap;
 import java.util.Locale;
@@ -23,6 +24,7 @@ public final class SourceGrayboxRuntime {
     private final MinecraftServer server;
     private final SourceGrayboxSavedData data;
     private final SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+    private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
     private long lastPresentationGameTime = Long.MIN_VALUE;
 
     private SourceGrayboxRuntime(MinecraftServer server) {
@@ -36,6 +38,11 @@ public final class SourceGrayboxRuntime {
 
     public static void stop(MinecraftServer server) {
         INSTANCES.remove(server);
+    }
+
+    /** Avoid constructing source SavedData for ordinary entity admissions in unrelated dimensions. */
+    public static boolean recognizesManagedEntity(Entity entity) {
+        return SourceGrayboxMaterializer.recognizesManagedEntity(entity);
     }
 
     /** Verify durable source state before Minecraft can substitute a fresh SavedData instance. */
@@ -73,6 +80,15 @@ public final class SourceGrayboxRuntime {
 
     public boolean activated() {
         return data.activated();
+    }
+
+    /**
+     * Retains a restored PM entity before the level UUID index is guaranteed to expose it.
+     * The entry is transient; durable duplicate prevention is the presentation ledger claim.
+     */
+    public void observeEntityJoin(ServerLevel level, Entity entity) {
+        if (!level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION)) return;
+        SourceGrayboxMaterializer.rememberAdmittedEntity(admittedEntities, entity);
     }
 
     public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxResidentObservation observation) {
@@ -149,7 +165,7 @@ public final class SourceGrayboxRuntime {
     }
 
     private void publish(ServerLevel level) {
-        materializer.apply(level, data.snapshot());
+        materializer.apply(level, data.snapshot(), admittedEntities);
         lastPresentationGameTime = level.getGameTime();
     }
 }

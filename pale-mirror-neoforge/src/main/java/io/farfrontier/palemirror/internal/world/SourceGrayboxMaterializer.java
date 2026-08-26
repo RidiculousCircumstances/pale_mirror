@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -46,6 +47,18 @@ final class SourceGrayboxMaterializer {
     private static final int LABEL_Y = SURFACE_Y + 17;
     private static final int MAX_LABEL_Y = LABEL_Y + 64;
     Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) {
+        return apply(level, snapshot, new LinkedHashMap<>());
+    }
+
+    /**
+     * Projects one immutable snapshot while retaining entities observed during level admission.
+     *
+     * <p>NeoForge can emit {@code EntityJoinLevelEvent} before the restored entity is available through
+     * {@link ServerLevel#getEntity(UUID)}. The supplied map carries only those verified PM identities
+     * across that publication window; it is presentation state, never a simulation owner.</p>
+     */
+    Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Map<String, Entity> admittedEntities) {
+        Objects.requireNonNull(admittedEntities, "admitted entities");
         LinkedHashMap<String, SourceGrayboxPresentationPlan.Desired> desired = SourceGrayboxPresentationPlan.from(snapshot);
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
         rebalanceInteractionWeights(ledger, desired);
@@ -55,14 +68,15 @@ final class SourceGrayboxMaterializer {
         for (SourceGrayboxPresentationPlan.Desired item : desired.values()) if (ensure(level, ledger, item)) placed++;
 
         Set<String> activeEntities = new LinkedHashSet<>();
-        materializeLabels(level, snapshot, activeEntities);
+        materializeLabels(level, snapshot, activeEntities, admittedEntities);
         for (ReferenceGrayboxSnapshot.Resident resident : snapshot.residents()) {
-            ensureResident(level, snapshot.stateRevision(), resident, activeEntities);
+            ensureResident(level, ledger, snapshot.stateRevision(), resident, activeEntities, admittedEntities);
         }
         for (ReferenceGrayboxSnapshot.Bioform bioform : snapshot.bioforms()) {
-            ensureBioform(level, snapshot.stateRevision(), bioform, activeEntities);
+            ensureBioform(level, ledger, snapshot.stateRevision(), bioform, activeEntities, admittedEntities);
         }
-        retireEntities(level, snapshot.bounds(), activeEntities);
+        retireEntities(level, snapshot.bounds(), activeEntities, admittedEntities);
+        ledger.releaseEntitiesExcept(activeEntities);
         return new Report(placed, desired.size(), conflicts, snapshot.stateRevision());
     }
 
@@ -101,6 +115,26 @@ final class SourceGrayboxMaterializer {
         if (kind.equals("RESIDENT") && !id.startsWith("resident:")) return null;
         if (kind.equals("BIOFORM") && !id.startsWith("bioform:")) return null;
         return new ManagedEntity(id, kind, revision);
+    }
+
+    static boolean recognizesManagedEntity(Entity entity) {
+        String id = entity.getPersistentData().getString(ENTITY_ID);
+        String kind = entity.getPersistentData().getString(ENTITY_KIND);
+        if (id.isBlank()) return false;
+        return switch (kind) {
+            case "RESIDENT" -> id.startsWith("resident:") && entity instanceof Villager
+                    && entity.getUUID().equals(uuid("resident", id));
+            case "BIOFORM" -> id.startsWith("bioform:") && entity instanceof Zombie
+                    && entity.getUUID().equals(uuid("bioform", id));
+            case "LABEL" -> entity instanceof ArmorStand && entity.getUUID().equals(uuid("label", id));
+            default -> false;
+        };
+    }
+
+    static void rememberAdmittedEntity(Map<String, Entity> admittedEntities, Entity entity) {
+        if (!recognizesManagedEntity(entity)) return;
+        admittedEntities.putIfAbsent(entityKey(entity.getPersistentData().getString(ENTITY_ID),
+                entity.getPersistentData().getString(ENTITY_KIND)), entity);
     }
 
     private static void rebalanceInteractionWeights(SourceGrayboxPresentationLedger ledger,
@@ -238,109 +272,145 @@ final class SourceGrayboxMaterializer {
         return result;
     }
 
-    private static void materializeLabels(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Set<String> active) {
+    private static void materializeLabels(ServerLevel level, ReferenceGrayboxSnapshot snapshot, Set<String> active,
+                                          Map<String, Entity> admittedEntities) {
         LabelPositions labels = new LabelPositions();
         for (ReferenceGrayboxSnapshot.Settlement settlement : snapshot.settlements()) {
-            label(level, active, labels, "settlement:" + settlement.id(), "[S] " + settlement.name() + " | pop=" + number(settlement.population())
+            label(level, active, admittedEntities, labels, "settlement:" + settlement.id(), "[S] " + settlement.name() + " | pop=" + number(settlement.population())
                     + " | " + settlement.civicState() + " threat=" + number(settlement.threat()) + " food="
                     + number(settlement.foodReserveDays()) + "d ration=" + number(settlement.rationFraction()),
                     settlement.rectangle().centreX(), settlement.rectangle().centreZ());
         }
-        for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) label(level, active, labels, "facility:" + facility.id(),
+        for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) label(level, active, admittedEntities, labels, "facility:" + facility.id(),
                 "[F] " + facility.kind() + " level=" + number(facility.level()), facility.rectangle().centreX(), facility.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) label(level, active, labels, "site:" + site.id(),
+        for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) label(level, active, admittedEntities, labels, "site:" + site.id(),
                 "[R] " + site.kind() + " capacity=" + number(site.capacity()) + " condition=" + number(site.condition())
                         + " contamination=" + number(site.contamination()), site.rectangle().centreX(), site.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) label(level, active, labels, "organ:" + organ.id(),
+        for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) label(level, active, admittedEntities, labels, "organ:" + organ.id(),
                 "[H] " + organ.kind() + " biomass=" + number(organ.biomass()) + " vitality=" + number(organ.vitality())
                         + (organ.feral() ? " FERAL" : ""), organ.rectangle().centreX(), organ.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) label(level, active, labels, "cargo:" + cargo.id(),
+        for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) label(level, active, admittedEntities, labels, "cargo:" + cargo.id(),
                 "[CARGO] " + cargo.ownerKind() + "=" + cargo.ownerId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
                 cargo.rectangle().centreX(), cargo.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, labels, "route:" + route.id(),
+        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, admittedEntities, labels, "route:" + route.id(),
                 "[T] " + route.id() + " capacity=" + number(route.capacity()) + " risk=" + number(route.risk())
                         + " infection=" + number(route.infection()) + (route.quarantined() ? " QUARANTINED" : route.disrupted() ? " DISRUPTED" : " OPEN"),
                 midpoint(route.start().x(), route.end().x()), midpoint(route.start().z(), route.end().z()));
-        for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, labels, "field-post:" + post.id(),
+        for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, admittedEntities, labels, "field-post:" + post.id(),
                 "[P] " + post.kind() + " " + post.status() + " integrity=" + number(post.integrity()) + " garrison=" + post.garrison() + " wounded=" + post.wounded()
                         + " modules=" + String.join(",", post.modules()), post.rectangle().centreX(), post.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
             ReferenceGrayboxLayout.Point label = link.slots().get(link.slots().size() / 2);
-            label(level, active, labels, "field-link:" + link.id(), "[L] " + link.kind() + " " + link.status()
+            label(level, active, admittedEntities, labels, "field-link:" + link.id(), "[L] " + link.kind() + " " + link.status()
                     + " integrity=" + number(link.integrity()), label.x(), label.z());
         }
-        for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) if (!activity.terminal()) label(level, active, labels,
+        for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) if (!activity.terminal()) label(level, active, admittedEntities, labels,
                 "activity:" + activity.id(), "[A] " + activity.family() + " " + activity.kind() + " " + activity.phase()
                         + " personnel=" + number(activity.personnel()) + " indicator=" + number(activity.indicator()),
                 activity.position().x(), activity.position().z());
-        for (ReferenceGrayboxSnapshot.Sector sector : snapshot.sectors()) label(level, active, labels, "sector:" + sector.key(),
+        for (ReferenceGrayboxSnapshot.Sector sector : snapshot.sectors()) label(level, active, admittedEntities, labels, "sector:" + sector.key(),
                 "[V2] " + sector.key() + " " + sector.control() + " infection=" + number(sector.infection()) + " spores="
                         + number(sector.sporeLoad()) + " access=" + number(sector.humanAccess()) + " hive=" + number(sector.hiveInfluence())
                         + (sector.supplied() ? " SUPPLIED" : " UNSUPPLIED"), sector.rectangle().centreX(), sector.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) label(level, active, labels, "chrysalis:" + chrysalis.organId(),
+        for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) label(level, active, admittedEntities, labels, "chrysalis:" + chrysalis.organId(),
                 "[C] organ=" + chrysalis.organId() + " " + chrysalis.status() + " days=" + chrysalis.daysRemaining()
                         + " biomass=" + number(chrysalis.biomassCommitted()), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Readout readout : snapshot.readouts()) label(level, active, labels, "readout:" + readout.id(),
+        for (ReferenceGrayboxSnapshot.Readout readout : snapshot.readouts()) label(level, active, admittedEntities, labels, "readout:" + readout.id(),
                 "[" + readout.category() + "] " + readout.text(), readout.position().x(), readout.position().z());
         snapshot.cells().stream().filter(cell -> cell.infection() > 0.01d || cell.signal() > 0.01d)
                 .sorted(Comparator.comparingDouble((ReferenceGrayboxSnapshot.Cell cell) -> cell.infection() + cell.signal()).reversed()
                         .thenComparingInt(ReferenceGrayboxSnapshot.Cell::x).thenComparingInt(ReferenceGrayboxSnapshot.Cell::y)).limit(96)
-                .forEach(cell -> label(level, active, labels, "cell:" + cell.x() + ":" + cell.y(), "[E] " + cell.x() + "," + cell.y()
+                .forEach(cell -> label(level, active, admittedEntities, labels, "cell:" + cell.x() + ":" + cell.y(), "[E] " + cell.x() + "," + cell.y()
                         + " infection=" + number(cell.infection()) + " organic=" + number(cell.organicMass()) + " moisture="
                         + number(cell.moisture()) + " signal=" + number(cell.signal()), cell.rectangle().x() + 1, cell.rectangle().z() + 1));
         int firstEvent = Math.max(0, snapshot.events().size() - 12);
-        for (int index = firstEvent; index < snapshot.events().size(); index++) label(level, active, labels, "event:" + index,
+        for (int index = firstEvent; index < snapshot.events().size(); index++) label(level, active, admittedEntities, labels, "event:" + index,
                 "[D" + snapshot.day() + "] " + snapshot.events().get(index), snapshot.bounds().minX() + 8,
                 snapshot.bounds().minZ() + 8 + (index - firstEvent) * 2);
     }
 
-    private static void ensureResident(ServerLevel level, String revision, ReferenceGrayboxSnapshot.Resident resident, Set<String> active) {
+    private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
+                                       ReferenceGrayboxSnapshot.Resident resident, Set<String> active, Map<String, Entity> admittedEntities) {
         String key = entityKey(resident.id(), "RESIDENT");
         active.add(key);
         BlockPos position = new BlockPos(resident.position().x(), ENTITY_Y, resident.position().z());
         if (!ready(level, position)) return;
-        Entity current = level.getEntity(uuid("resident", resident.id()));
+        Entity current = existingEntity(level, admittedEntities, resident.id(), "RESIDENT", uuid("resident", resident.id()));
         if (current != null && !(current instanceof Villager && identityMatches(current, resident.id(), "RESIDENT"))) return;
-        Villager villager = current instanceof Villager known ? known : new Villager(EntityType.VILLAGER, level);
-        if (current == null) villager.setUUID(uuid("resident", resident.id()));
+        if (current instanceof Villager known) {
+            ledger.claimEntity(key);
+            known.setVillagerData(known.getVillagerData().setProfession(VillagerProfession.NONE));
+            configure(known, resident.id(), "RESIDENT", revision, resident.occupation() + " | " + resident.location(),
+                    SourceGrayboxPalette.residentHat(resident.occupation(), resident.condition()), false);
+            known.setPos(Vec3.atBottomCenterOf(position));
+            return;
+        }
+        if (ledger.entityClaimed(key)) return;
+        Villager villager = new Villager(EntityType.VILLAGER, level);
+        villager.setUUID(uuid("resident", resident.id()));
         villager.setVillagerData(villager.getVillagerData().setProfession(VillagerProfession.NONE));
         configure(villager, resident.id(), "RESIDENT", revision, resident.occupation() + " | " + resident.location(),
                 SourceGrayboxPalette.residentHat(resident.occupation(), resident.condition()), false);
         villager.setPos(Vec3.atBottomCenterOf(position));
-        if (current == null) level.addFreshEntity(villager);
+        ledger.claimEntity(key);
+        if (level.addFreshEntity(villager)) admittedEntities.put(key, villager);
     }
 
-    private static void ensureBioform(ServerLevel level, String revision, ReferenceGrayboxSnapshot.Bioform bioform, Set<String> active) {
+    private static void ensureBioform(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
+                                      ReferenceGrayboxSnapshot.Bioform bioform, Set<String> active, Map<String, Entity> admittedEntities) {
         String key = entityKey(bioform.id(), "BIOFORM");
         active.add(key);
         BlockPos position = new BlockPos(bioform.position().x(), ENTITY_Y, bioform.position().z());
         if (!ready(level, position)) return;
-        Entity current = level.getEntity(uuid("bioform", bioform.id()));
+        Entity current = existingEntity(level, admittedEntities, bioform.id(), "BIOFORM", uuid("bioform", bioform.id()));
         if (current != null && !(current instanceof Zombie && identityMatches(current, bioform.id(), "BIOFORM"))) return;
-        Zombie zombie = current instanceof Zombie known ? known : new Zombie(EntityType.ZOMBIE, level);
-        if (current == null) zombie.setUUID(uuid("bioform", bioform.id()));
+        if (current instanceof Zombie known) {
+            ledger.claimEntity(key);
+            configure(known, bioform.id(), "BIOFORM", revision, bioform.kind() + " | " + bioform.phase(),
+                    SourceGrayboxPalette.bioformHat(bioform.kind()), true);
+            known.setPos(Vec3.atBottomCenterOf(position));
+            return;
+        }
+        if (ledger.entityClaimed(key)) return;
+        Zombie zombie = new Zombie(EntityType.ZOMBIE, level);
+        zombie.setUUID(uuid("bioform", bioform.id()));
         configure(zombie, bioform.id(), "BIOFORM", revision, bioform.kind() + " | " + bioform.phase(),
                 SourceGrayboxPalette.bioformHat(bioform.kind()), true);
         zombie.setPos(Vec3.atBottomCenterOf(position));
-        if (current == null) level.addFreshEntity(zombie);
+        ledger.claimEntity(key);
+        if (level.addFreshEntity(zombie)) admittedEntities.put(key, zombie);
     }
 
-    private static void label(ServerLevel level, Set<String> active, LabelPositions labels, String id, String text, int x, int z) {
+    private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, LabelPositions labels,
+                              String id, String text, int x, int z) {
         String key = entityKey(id, "LABEL");
         active.add(key);
         BlockPos position = new BlockPos(x, labels.nextY(x, z), z);
         if (!ready(level, position)) return;
-        Entity current = level.getEntity(uuid("label", id));
+        Entity current = existingEntity(level, admittedEntities, id, "LABEL", uuid("label", id));
         if (current != null && !(current instanceof ArmorStand && identityMatches(current, id, "LABEL"))) return;
-        ArmorStand stand = current instanceof ArmorStand known ? known : new ArmorStand(EntityType.ARMOR_STAND, level);
-        if (current == null) stand.setUUID(uuid("label", id));
+        SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
+        if (current instanceof ArmorStand known) {
+            ledger.claimEntity(key);
+            known.setInvisible(true);
+            known.setNoGravity(true);
+            known.setCustomName(Component.literal(text));
+            known.setCustomNameVisible(true);
+            attach(known, id, "LABEL", "0000000000000000000000000000000000000000000000000000000000000000");
+            known.setPos(Vec3.atBottomCenterOf(position));
+            return;
+        }
+        if (ledger.entityClaimed(key)) return;
+        ArmorStand stand = new ArmorStand(EntityType.ARMOR_STAND, level);
+        stand.setUUID(uuid("label", id));
         stand.setInvisible(true);
         stand.setNoGravity(true);
         stand.setCustomName(Component.literal(text));
         stand.setCustomNameVisible(true);
         attach(stand, id, "LABEL", "0000000000000000000000000000000000000000000000000000000000000000");
         stand.setPos(Vec3.atBottomCenterOf(position));
-        if (current == null) level.addFreshEntity(stand);
+        ledger.claimEntity(key);
+        if (level.addFreshEntity(stand)) admittedEntities.put(key, stand);
     }
 
     private static void configure(Mob entity, String id, String kind, String revision, String name, Item helmet, boolean nameVisible) {
@@ -363,13 +433,25 @@ final class SourceGrayboxMaterializer {
         return entity.getPersistentData().getString(ENTITY_ID).equals(id) && entity.getPersistentData().getString(ENTITY_KIND).equals(kind);
     }
 
-    private static void retireEntities(ServerLevel level, ReferenceGrayboxLayout.Bounds bounds, Set<String> active) {
+    private static Entity existingEntity(ServerLevel level, Map<String, Entity> admittedEntities, String id, String kind, UUID expectedUuid) {
+        String key = entityKey(id, kind);
+        Entity admitted = admittedEntities.get(key);
+        if (admitted != null && !admitted.isRemoved()) return admitted;
+        admittedEntities.remove(key);
+        Entity indexed = level.getEntity(expectedUuid);
+        if (indexed != null) admittedEntities.put(key, indexed);
+        return indexed;
+    }
+
+    private static void retireEntities(ServerLevel level, ReferenceGrayboxLayout.Bounds bounds, Set<String> active,
+                                       Map<String, Entity> admittedEntities) {
         AABB arena = new AABB(bounds.minX(), SURFACE_Y, bounds.minZ(), bounds.minX() + bounds.width(), MAX_LABEL_Y,
                 bounds.minZ() + bounds.depth());
         for (Entity entity : level.getEntities((Entity) null, arena, value -> !value.getPersistentData().getString(ENTITY_ID).isBlank())) {
             String key = entityKey(entity.getPersistentData().getString(ENTITY_ID), entity.getPersistentData().getString(ENTITY_KIND));
             if (!active.contains(key)) entity.discard();
         }
+        admittedEntities.entrySet().removeIf(entry -> entry.getValue().isRemoved() || !active.contains(entry.getKey()));
     }
 
     private static boolean ready(ServerLevel level, BlockPos position) {
@@ -378,7 +460,7 @@ final class SourceGrayboxMaterializer {
                 && level.getFluidState(ground).isEmpty();
     }
 
-    private static UUID uuid(String kind, String id) {
+    static UUID uuid(String kind, String id) {
         return UUID.nameUUIDFromBytes(("pale-mirror-source-graybox:" + kind + ":" + id).getBytes(StandardCharsets.UTF_8));
     }
 

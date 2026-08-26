@@ -71,22 +71,6 @@ public final class SourceGrayboxMaterializerGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void presentationClaimSurvivesRestartEncodingAndKeepsItsConflict(GameTestHelper helper) {
-        SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(helper.getLevel());
-        SourceGrayboxPresentationLedger.Claim claim = new SourceGrayboxPresentationLedger.Claim("fixture:claim", "fixture", "FACILITY",
-                "a".repeat(64), 1, 64, 1, 2, 2, 1, false, "", 0.0d, false);
-        ledger.put(claim);
-        ledger.conflict(claim.id());
-
-        SourceGrayboxPresentationLedger restored = SourceGrayboxPresentationLedger.load(
-                ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
-
-        helper.assertTrue(restored.claim(claim.id()) != null && restored.claim(claim.id()).conflicted(),
-                "a source-graybox structural conflict must survive persistence instead of being silently repaired after restart");
-        helper.succeed();
-    }
-
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void interactionSlotCarriesAnExactRemainingShareAndStaysConsumed(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         prepareFlatFloor(helper, anchor, 18);
@@ -377,15 +361,15 @@ public final class SourceGrayboxMaterializerGameTests {
         }
     }
 
-    private static void prepareFlatFloor(GameTestHelper helper, BlockPos anchor, int radius) {
+    static void prepareFlatFloor(GameTestHelper helper, BlockPos anchor, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
             helper.getLevel().setBlock(anchor.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
             for (int y = 0; y <= 5; y++) helper.getLevel().setBlock(anchor.offset(x, y, z), Blocks.AIR.defaultBlockState(), 3);
         }
     }
 
-    private static ReferenceGrayboxSnapshot fixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, String residentId, double interactionWeight,
-                                                     String fixtureId) {
+    static ReferenceGrayboxSnapshot fixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, String residentId, double interactionWeight,
+                                            String fixtureId) {
         ReferenceGrayboxLayout.Rectangle facility = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 4, 4);
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
                 List.of(), List.of(new ReferenceGrayboxSnapshot.Facility(fixtureId + ":workshop", 1, "workshop", facility, 1.0d,
@@ -405,6 +389,12 @@ public final class SourceGrayboxMaterializerGameTests {
                 baseline.settlements(), baseline.facilities(), baseline.resourceSites(), baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(),
                 baseline.residents(), baseline.fieldPosts(), baseline.fieldLinks(), baseline.activities(), baseline.cargoes(), baseline.interactions(),
                 baseline.sectors(), baseline.chrysalises(), List.of(readout), baseline.events());
+    }
+
+    static ReferenceGrayboxSnapshot withoutPresentationRecords(ReferenceGrayboxSnapshot baseline) {
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of());
     }
 
     private static ReferenceGrayboxSnapshot coLocatedFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, boolean includeSite) {

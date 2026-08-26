@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.world;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,14 +27,17 @@ import net.minecraft.world.level.saveddata.SavedData;
 final class SourceGrayboxPresentationLedger extends SavedData {
     private static final String DATA_NAME = "pale_mirror_source_graybox_presentation";
     private static final int FORMAT = 2;
+    private static final int MAX_ENTITY_CLAIMS = 4_096;
     private final LinkedHashMap<String, Claim> claims;
+    private final LinkedHashSet<String> entityClaims;
 
     private SourceGrayboxPresentationLedger() {
-        this(new LinkedHashMap<>());
+        this(new LinkedHashMap<>(), new LinkedHashSet<>());
     }
 
-    private SourceGrayboxPresentationLedger(LinkedHashMap<String, Claim> claims) {
+    private SourceGrayboxPresentationLedger(LinkedHashMap<String, Claim> claims, LinkedHashSet<String> entityClaims) {
         this.claims = claims;
+        this.entityClaims = entityClaims;
     }
 
     static SourceGrayboxPresentationLedger get(ServerLevel level) {
@@ -60,6 +64,33 @@ final class SourceGrayboxPresentationLedger extends SavedData {
 
     void remove(String id) {
         if (claims.remove(id) != null) setDirty();
+    }
+
+    /**
+     * Reserves one deterministic physical entity while its canonical source record remains present.
+     *
+     * <p>The reservation deliberately survives an entity chunk unloading. Recreating the entity in a
+     * newly loaded target chunk would otherwise make two serialized chunks compete for the same UUID.
+     * A missing reserved entity is therefore a visible, fail-closed presentation gap until the original
+     * entity is observed again or the source record retires.</p>
+     */
+    boolean entityClaimed(String key) {
+        return entityClaims.contains(key);
+    }
+
+    void claimEntity(String key) {
+        requireEntityKey(key);
+        if (entityClaims.contains(key)) return;
+        if (entityClaims.size() >= MAX_ENTITY_CLAIMS) {
+            throw new IllegalStateException("source graybox entity claim limit reached");
+        }
+        entityClaims.add(key);
+        setDirty();
+    }
+
+    void releaseEntitiesExcept(Set<String> active) {
+        if (!entityClaims.removeIf(key -> !active.contains(key))) return;
+        setDirty();
     }
 
     void conflict(String id) {
@@ -99,7 +130,19 @@ final class SourceGrayboxPresentationLedger extends SavedData {
                 throw new IllegalStateException("duplicate source graybox presentation claim: " + claim.id());
             }
         }
-        return new SourceGrayboxPresentationLedger(claims);
+        LinkedHashSet<String> entityClaims = new LinkedHashSet<>();
+        for (Tag raw : tag.getList("entities", Tag.TAG_STRING)) {
+            String key = raw.getAsString();
+            try {
+                requireEntityKey(key);
+            } catch (IllegalArgumentException invalid) {
+                throw new IllegalStateException("invalid source graybox entity claim", invalid);
+            }
+            if (!entityClaims.add(key) || entityClaims.size() > MAX_ENTITY_CLAIMS) {
+                throw new IllegalStateException("duplicate or excessive source graybox entity claim");
+            }
+        }
+        return new SourceGrayboxPresentationLedger(claims, entityClaims);
     }
 
     @Override
@@ -108,7 +151,16 @@ final class SourceGrayboxPresentationLedger extends SavedData {
         ListTag encoded = new ListTag();
         claims.values().forEach(claim -> encoded.add(claim.save()));
         tag.put("claims", encoded);
+        ListTag entities = new ListTag();
+        entityClaims.forEach(key -> entities.add(net.minecraft.nbt.StringTag.valueOf(key)));
+        tag.put("entities", entities);
         return tag;
+    }
+
+    private static void requireEntityKey(String key) {
+        if (key == null || key.length() > 256 || !key.matches("(?:RESIDENT|BIOFORM|LABEL):.+")) {
+            throw new IllegalArgumentException("source graybox entity key is invalid");
+        }
     }
 
     record Claim(String id, String subjectId, String kind, String revision, int x, int y, int z,

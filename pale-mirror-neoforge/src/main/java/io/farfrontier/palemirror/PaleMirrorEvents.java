@@ -110,8 +110,14 @@ public final class PaleMirrorEvents {
     /** Source adapters may reject unmanaged native forms at the server boundary. */
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
-        if (!event.getLevel().isClientSide() && AdapterRegistry.rejectsUnmanagedEntity(event.getEntity())) {
+        if (event.getLevel().isClientSide()) return;
+        if (AdapterRegistry.rejectsUnmanagedEntity(event.getEntity())) {
             event.setCanceled(true);
+            return;
+        }
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
+            SourceGrayboxRuntime.forServer(level.getServer()).observeEntityJoin(level, event.getEntity());
         }
     }
 
