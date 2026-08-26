@@ -28,6 +28,7 @@ public final class SourceGrayboxRuntime {
     private final SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
     private final SourceGrayboxActorExecutionRuntime actorExecution = new SourceGrayboxActorExecutionRuntime();
     private final SourceGrayboxActorBehaviorRuntime actorBehavior = new SourceGrayboxActorBehaviorRuntime();
+    private final SourceGrayboxActorCombatRuntime actorCombat = new SourceGrayboxActorCombatRuntime();
     private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
     private long lastPresentationGameTime = Long.MIN_VALUE;
 
@@ -36,7 +37,9 @@ public final class SourceGrayboxRuntime {
         data = SourceGrayboxSavedData.get(server.overworld());
         // A saved HOT/PREPARING actor is unknown after JVM restart.  Do not let
         // a later materializer blindly create a second body for that lease.
-        data.enterActorRecovery(data.actorExecutionGameTime(server.overworld().getGameTime()));
+        long recoveryTick = data.actorExecutionGameTime(server.overworld().getGameTime());
+        data.enterActorRecovery(recoveryTick);
+        data.recoverEffectLeases(recoveryTick);
     }
 
     public static SourceGrayboxRuntime forServer(MinecraftServer server) {
@@ -62,6 +65,7 @@ public final class SourceGrayboxRuntime {
         if (!data.activated()) return false;
         ServerLevel graybox = grayboxLevel();
         long gameTime = graybox.getGameTime();
+        if (gameTime % 5L == 0L) data.maintainEffectLeases(data.actorExecutionGameTime(gameTime));
         boolean actorDue = gameTime % ACTOR_EXECUTION_INTERVAL_TICKS == 0L;
         boolean executionChanged = actorDue && actorExecution.beforePublication(graybox, data, materializer, admittedEntities);
         int advanced = data.advanceDueDays(gameTime, DAY_INTERVAL_TICKS, MAXIMUM_CATCH_UP_DAYS);
@@ -70,6 +74,7 @@ public final class SourceGrayboxRuntime {
             if (actorDue) actorExecution.afterPublication(graybox, data, materializer, admittedEntities);
         }
         actorBehavior.tick(graybox, data.snapshot(), data.actorExecution(), materializer, admittedEntities, gameTime);
+        actorCombat.tick(graybox, data, materializer, admittedEntities, gameTime);
         return true;
     }
 

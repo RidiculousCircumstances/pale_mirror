@@ -57,6 +57,26 @@ class ReferenceGrayboxActorExecutionStateTest {
     }
 
     @Test
+    void combatActionHasOneDurableEpochAndCannotBypassItsCooldownOrLease() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        String actor = snapshot.residents().getFirst().id();
+        assertTrue(state.prepare(actor, "materializer:chunk:0_0", 10L));
+        String lease = state.actor(actor).orElseThrow().leaseId();
+        assertTrue(state.activate(actor, lease, "materializer:chunk:0_0", 11L));
+
+        var action = state.reserveCombatAction(actor, lease, "materializer:chunk:0_0", 12L, 20L).orElseThrow();
+        assertEquals(1L, action.actionEpoch());
+        assertFalse(state.reserveCombatAction(actor, lease, "materializer:chunk:0_0", 13L, 20L).isPresent(),
+                "a tick-loop must not manufacture a second hit before the persisted cooldown expires");
+        assertFalse(state.reserveCombatAction(actor, lease, "materializer:other", 32L, 20L).isPresent(),
+                "a different executor must not use the live body's combat authority");
+        var next = state.reserveCombatAction(actor, lease, "materializer:chunk:0_0", 32L, 20L).orElseThrow();
+        assertEquals(2L, next.actionEpoch());
+        assertFalse(action.id().equals(next.id()), "a physical effect key must never be reused across actions");
+    }
+
+    @Test
     void malformedOrBackwardStateFailsClosed() {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
         ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
@@ -68,6 +88,6 @@ class ReferenceGrayboxActorExecutionStateTest {
         assertThrows(IllegalArgumentException.class, () -> new ReferenceGrayboxActorExecutionState.ActorState(
                 "resident:bad", ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT,
                 ReferenceGrayboxActorExecutionState.Mode.HOT, snapshot.stateRevision(), 0, 0, 0, 0,
-                0L, "", "", 0L, 0L));
+                0L, "", "", 0L, 0L, 0L, 0L));
     }
 }

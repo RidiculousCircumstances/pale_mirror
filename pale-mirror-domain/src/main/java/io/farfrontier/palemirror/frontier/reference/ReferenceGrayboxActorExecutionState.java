@@ -153,6 +153,21 @@ public final class ReferenceGrayboxActorExecutionState {
         return true;
     }
 
+    /**
+     * Reserves one local physical action before Minecraft may apply it. The
+     * durable epoch is never reused and the cooldown belongs to the exact
+     * source actor instead of an ephemeral native mob goal.
+     */
+    public Optional<CombatAction> reserveCombatAction(String id, String leaseId, String holder, long gameTick, long cooldownTicks) {
+        if (cooldownTicks < 1L) throw new IllegalArgumentException("combat cooldown must be positive");
+        ActorState prior = require(id);
+        if (prior.mode() != Mode.HOT || !prior.leaseId().equals(leaseId) || !prior.holder().equals(holder)
+                || gameTick < prior.nextCombatAtGameTick()) return Optional.empty();
+        ActorState next = prior.reserveCombatAction(gameTick, cooldownTicks);
+        actors.put(id, next);
+        return Optional.of(new CombatAction(combatActionId(next), next.id(), next.leaseId(), next.combatActionEpoch(), gameTick));
+    }
+
     /** Releases a draining executor only after its physical state was captured. */
     public boolean settleCold(String id, String leaseId, String holder, long gameTick) {
         ActorState prior = require(id);
@@ -233,6 +248,16 @@ public final class ReferenceGrayboxActorExecutionState {
 
     public enum Mode { COLD, PREPARING, HOT, DRAINING, RECOVERING, RETIRED }
 
+    /** Durable identity of one non-replayable physical combat action. */
+    public record CombatAction(String id, String actorId, String leaseId, long actionEpoch, long scheduledAtGameTick) {
+        public CombatAction {
+            if (id == null || id.isBlank() || actorId == null || actorId.isBlank() || leaseId == null || leaseId.isBlank()
+                    || actionEpoch < 1L || scheduledAtGameTick < 0L) {
+                throw new IllegalArgumentException("combat action identity is invalid");
+            }
+        }
+    }
+
     public record ActorDescriptor(String id, ActorKind kind, String sourceRevision, int anchorXSixteenths, int anchorZSixteenths) {
         public ActorDescriptor {
             requireId(id, kind);
@@ -245,13 +270,15 @@ public final class ReferenceGrayboxActorExecutionState {
     public record ActorState(String id, ActorKind kind, Mode mode, String sourceRevision,
                              int anchorXSixteenths, int anchorZSixteenths,
                              int actualXSixteenths, int actualZSixteenths,
-                             long leaseEpoch, String leaseId, String holder, long changedAtGameTick, long demandedAtGameTick) {
+                             long leaseEpoch, String leaseId, String holder, long changedAtGameTick, long demandedAtGameTick,
+                             long combatActionEpoch, long nextCombatAtGameTick) {
         public ActorState {
             requireId(id, kind);
             kind = Objects.requireNonNull(kind, "kind");
             mode = Objects.requireNonNull(mode, "mode");
             requireRevision(sourceRevision);
-            if (leaseEpoch < 0L || changedAtGameTick < 0L || demandedAtGameTick < 0L) {
+            if (leaseEpoch < 0L || changedAtGameTick < 0L || demandedAtGameTick < 0L
+                    || combatActionEpoch < 0L || nextCombatAtGameTick < 0L) {
                 throw new IllegalArgumentException("execution epoch or game tick is invalid");
             }
             leaseId = leaseId == null ? "" : leaseId;
@@ -268,7 +295,7 @@ public final class ReferenceGrayboxActorExecutionState {
         static ActorState cold(ActorDescriptor descriptor) {
             return new ActorState(descriptor.id(), descriptor.kind(), Mode.COLD, descriptor.sourceRevision(),
                     descriptor.anchorXSixteenths(), descriptor.anchorZSixteenths(), descriptor.anchorXSixteenths(),
-                    descriptor.anchorZSixteenths(), 0L, "", "", 0L, 0L);
+                    descriptor.anchorZSixteenths(), 0L, "", "", 0L, 0L, 0L, 0L);
         }
 
         ActorState withSource(ActorDescriptor descriptor) {
@@ -276,41 +303,52 @@ public final class ReferenceGrayboxActorExecutionState {
             boolean cold = mode == Mode.COLD;
             return new ActorState(id, kind, mode, descriptor.sourceRevision(), descriptor.anchorXSixteenths(), descriptor.anchorZSixteenths(),
                     cold ? descriptor.anchorXSixteenths() : actualXSixteenths, cold ? descriptor.anchorZSixteenths() : actualZSixteenths,
-                    leaseEpoch, leaseId, holder, changedAtGameTick, demandedAtGameTick);
+                    leaseEpoch, leaseId, holder, changedAtGameTick, demandedAtGameTick, combatActionEpoch, nextCombatAtGameTick);
         }
 
         ActorState prepare(String nextHolder, long gameTick) {
             return new ActorState(id, kind, Mode.PREPARING, sourceRevision, anchorXSixteenths, anchorZSixteenths,
                     actualXSixteenths, actualZSixteenths, Math.addExact(leaseEpoch, 1L), lease(id, kind, leaseEpoch + 1L),
-                    requireHolder(nextHolder), requireForward(gameTick), gameTick);
+                    requireHolder(nextHolder), requireForward(gameTick), gameTick, combatActionEpoch, nextCombatAtGameTick);
         }
 
         ActorState transition(Mode next, long gameTick) {
             return new ActorState(id, kind, next, sourceRevision, anchorXSixteenths, anchorZSixteenths,
-                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, requireForward(gameTick), demandedAtGameTick);
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, requireForward(gameTick), demandedAtGameTick,
+                    combatActionEpoch, nextCombatAtGameTick);
         }
 
         ActorState capture(int x, int z, long gameTick) {
             return new ActorState(id, kind, mode, sourceRevision, anchorXSixteenths, anchorZSixteenths, x, z,
-                    leaseEpoch, leaseId, holder, requireForward(gameTick), demandedAtGameTick);
+                    leaseEpoch, leaseId, holder, requireForward(gameTick), demandedAtGameTick, combatActionEpoch, nextCombatAtGameTick);
         }
 
         ActorState cold(long gameTick) {
             return new ActorState(id, kind, Mode.COLD, sourceRevision, anchorXSixteenths, anchorZSixteenths,
-                    actualXSixteenths, actualZSixteenths, leaseEpoch, "", "", requireForward(gameTick), demandedAtGameTick);
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, "", "", requireForward(gameTick), demandedAtGameTick,
+                    combatActionEpoch, nextCombatAtGameTick);
         }
 
         ActorState retired() {
             if (mode == Mode.COLD) throw new IllegalStateException("cold actor must be removed directly");
             return new ActorState(id, kind, Mode.RETIRED, sourceRevision, anchorXSixteenths, anchorZSixteenths,
-                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, changedAtGameTick, demandedAtGameTick);
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, changedAtGameTick, demandedAtGameTick,
+                    combatActionEpoch, nextCombatAtGameTick);
         }
 
         ActorState touchDemand(long gameTick) {
             long tick = requireForward(gameTick);
             return new ActorState(id, kind, mode, sourceRevision, anchorXSixteenths, anchorZSixteenths,
                     actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, changedAtGameTick,
-                    Math.max(demandedAtGameTick, tick));
+                    Math.max(demandedAtGameTick, tick), combatActionEpoch, nextCombatAtGameTick);
+        }
+
+        ActorState reserveCombatAction(long gameTick, long cooldownTicks) {
+            long tick = requireForward(gameTick);
+            long epoch = Math.addExact(combatActionEpoch, 1L);
+            return new ActorState(id, kind, mode, sourceRevision, anchorXSixteenths, anchorZSixteenths,
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, tick, demandedAtGameTick,
+                    epoch, Math.addExact(tick, cooldownTicks));
         }
 
         private long requireForward(long gameTick) {
@@ -321,6 +359,11 @@ public final class ReferenceGrayboxActorExecutionState {
 
     private static String lease(String id, ActorKind kind, long epoch) {
         return "graybox-actor:" + kind.name().toLowerCase(java.util.Locale.ROOT) + ":" + id + ":" + epoch;
+    }
+
+    private static String combatActionId(ActorState actor) {
+        return "graybox-combat:" + actor.kind().name().toLowerCase(java.util.Locale.ROOT) + ":" + actor.id()
+                + ":lease:" + actor.leaseEpoch() + ":action:" + actor.combatActionEpoch();
     }
 
     private static void requireId(String id, ActorKind kind) {

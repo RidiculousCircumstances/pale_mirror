@@ -35,6 +35,7 @@ import io.farfrontier.palemirror.internal.materialization.ParcelLedger;
 import io.farfrontier.palemirror.internal.observation.ReconciliationLedger;
 import io.farfrontier.palemirror.internal.effect.EffectLease;
 import io.farfrontier.palemirror.internal.effect.EffectLeaseLedger;
+import io.farfrontier.palemirror.internal.effect.EffectLeaseStore;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineLedger;
 import io.farfrontier.palemirror.internal.quarantine.QuarantineRecord;
 import io.farfrontier.palemirror.internal.combat.ThreatCombatLedger;
@@ -53,7 +54,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 /** One global server-world store, physically hosted in the Overworld data storage. */
-public final class PaleMirrorSavedData extends SavedData {
+public final class PaleMirrorSavedData extends SavedData implements EffectLeaseStore {
     public static final String DATA_NAME = "pale_mirror";
     static final int CURRENT_SCHEMA = 41;
     private final WorldState worldState;
@@ -139,6 +140,7 @@ public final class PaleMirrorSavedData extends SavedData {
     public ReconciliationLedger reconciliationLedger() { return reconciliationLedger; }
     public WorldObjectRegistry worldRegistry() { return worldRegistry; }
     public EffectLeaseLedger effectLeases() { return effectLeases; }
+    @Override public void markEffectLeaseDirty() { setDirty(); }
     public QuarantineLedger quarantine() { return quarantine; }
     public ThreatCombatLedger threatCombat() { return threatCombat; }
     public Map<String, CampaignRegionRecord> campaignRegions() { return campaignRegions; }

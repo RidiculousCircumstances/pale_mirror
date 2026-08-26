@@ -10,7 +10,7 @@ import net.minecraft.nbt.Tag;
 
 /** NeoForge NBT carrier for the pure-domain graybox actor execution ledger. */
 final class SourceGrayboxActorExecutionNbt {
-    private static final int FORMAT = 2;
+    private static final int FORMAT = 3;
 
     private SourceGrayboxActorExecutionNbt() { }
 
@@ -34,6 +34,8 @@ final class SourceGrayboxActorExecutionNbt {
             encoded.putString("holder", actor.holder());
             encoded.putLong("changedAt", actor.changedAtGameTick());
             encoded.putLong("demandedAt", actor.demandedAtGameTick());
+            encoded.putLong("combatEpoch", actor.combatActionEpoch());
+            encoded.putLong("nextCombatAt", actor.nextCombatAtGameTick());
             actors.add(encoded);
         }
         tag.put("actors", actors);
@@ -58,7 +60,7 @@ final class SourceGrayboxActorExecutionNbt {
                         ReferenceGrayboxActorExecutionState.Mode.valueOf(value.getString("mode")), value.getString("revision"),
                         value.getInt("anchorX16"), value.getInt("anchorZ16"), value.getInt("actualX16"), value.getInt("actualZ16"),
                         value.getLong("epoch"), value.getString("lease"), value.getString("holder"), value.getLong("changedAt"),
-                        value.getLong("demandedAt")));
+                        value.getLong("demandedAt"), value.getLong("combatEpoch"), value.getLong("nextCombatAt")));
             }
             return ReferenceGrayboxActorExecutionState.restore(restored);
         } catch (IllegalArgumentException invalid) {

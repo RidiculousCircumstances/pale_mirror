@@ -62,10 +62,12 @@ X/Z identity, or remove canonical people to meet a presentation budget.
 
 `SourceGrayboxSavedData` persists the complete
 `ReferenceGrayboxSimulation.save()` document, the pure-domain actor-execution
-ledger, activation state, simulation clock and a bounded accepted-observation
-history. The execution ledger has one record for every exact resident/bioform:
-its latest source anchor and revision, fixed sixteenth-block physical position,
-and one `COLD -> PREPARING -> HOT -> DRAINING -> COLD` lease lifecycle. A
+ledger, a bounded physical-effect ledger, activation state, simulation clock
+and a bounded accepted-observation history. The execution ledger has one
+record for every exact resident/bioform: its latest source anchor and revision,
+fixed sixteenth-block physical position, one `COLD -> PREPARING -> HOT ->
+DRAINING -> COLD` lease lifecycle, and monotonic local combat epoch/cooldown.
+A
 restart moves unfinished leases to `RECOVERING`; only an inspected entity with
 the exact old lease can return to `HOT`, while a missing/stale body settles
 `COLD` without a blind duplicate. Both documents restore all-or-nothing; an
@@ -84,8 +86,12 @@ HOT lease bodies every ten ticks from source role/deployment or swarm phase,
 then makes collision-checked movement steps (at most sixty-four bodies per
 Minecraft tick). Native goals stay disabled, so this is not a second strategic
 AI; it cannot spawn, damage, mutate source state or run inside an unloaded
-chunk. Combat will be enabled only with its own durable cooldown/effect receipt
-layer on top of this ownership path.
+chunk. Its sibling combat executor considers at most sixty-four HOT bodies
+every five ticks. It must reserve the exact lease-owned action epoch and
+cooldown, persist a target-bound physical effect before calling Minecraft, and
+store fixed-point target health before/after the hit. A running action becomes
+`UNKNOWN_AFTER_RESTART` on recovery and is never replayed; a managed death
+still re-enters the source only through its typed observation.
 
 `SourceGrayboxRuntime` is the sole campaign clock after the explicit
 `/pale_mirror frontier activate_graybox` command. Its schedule advances the
@@ -99,8 +105,8 @@ The future living-world runtime uses a durable layered clock. In the normal
 game ticks, or twenty real minutes at 20 TPS. The daily source order remains
 one indivisible deterministic transaction: it is not split into pseudo-hourly
 economy, population or strategic substeps merely to make actors look busy.
-Loaded actors instead move and fight at Minecraft tick rate, reconsider their
-role-level goals every ten ticks, reconcile tactical operation state every
+Loaded actors instead move at Minecraft tick rate, consider bounded melee every
+five ticks, reconsider their role-level goals every ten ticks, reconcile tactical operation state every
 twenty ticks, and perform bounded local work or infection progression every
 one hundred ticks. A confirmed physical observation is reconciled immediately,
 without waiting for the next source day.

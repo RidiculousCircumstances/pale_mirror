@@ -24,6 +24,7 @@ final class PaleMirrorAuxiliaryPresentationCodec {
         tag.putLong("finished", lease.finishedAtGameTick());
         if (lease.nativeReference() != null) tag.putUUID("native", lease.nativeReference());
         tag.putString("diagnostic", lease.diagnostic());
+        tag.putString("receipt", lease.receipt());
         return tag;
     }
 
@@ -31,7 +32,7 @@ final class PaleMirrorAuxiliaryPresentationCodec {
         return new EffectLease(tag.getString("id"), tag.getString("key"), tag.getString("source"),
                 tag.getString("facility"), tag.getString("slot"), tag.getString("kind"), tag.getLong("created"),
                 tag.getLong("expires"), EffectLeaseState.valueOf(tag.getString("state")), tag.getLong("finished"),
-                tag.hasUUID("native") ? tag.getUUID("native") : null, tag.getString("diagnostic"));
+                tag.hasUUID("native") ? tag.getUUID("native") : null, tag.getString("diagnostic"), tag.getString("receipt"));
     }
 
     static CompoundTag writeQuarantine(QuarantineRecord record) {

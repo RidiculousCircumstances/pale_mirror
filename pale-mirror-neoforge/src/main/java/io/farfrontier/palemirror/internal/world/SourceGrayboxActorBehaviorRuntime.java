@@ -61,10 +61,10 @@ final class SourceGrayboxActorBehaviorRuntime {
         }
     }
 
-    private static List<ActorView> physicalActors(ServerLevel level, ReferenceGrayboxSnapshot snapshot,
-                                                   ReferenceGrayboxActorExecutionState execution,
-                                                   SourceGrayboxMaterializer materializer,
-                                                   Map<String, Entity> admittedEntities) {
+    static List<ActorView> physicalActors(ServerLevel level, ReferenceGrayboxSnapshot snapshot,
+                                          ReferenceGrayboxActorExecutionState execution,
+                                          SourceGrayboxMaterializer materializer,
+                                          Map<String, Entity> admittedEntities) {
         Map<String, ReferenceGrayboxSnapshot.Resident> residents = snapshot.residents().stream()
                 .collect(java.util.stream.Collectors.toMap(ReferenceGrayboxSnapshot.Resident::id, value -> value));
         Map<String, ReferenceGrayboxSnapshot.Bioform> bioforms = snapshot.bioforms().stream()
@@ -123,7 +123,7 @@ final class SourceGrayboxActorBehaviorRuntime {
                 .min(Comparator.comparingDouble(candidate -> actor.body().distanceToSqr(candidate.body()))).orElse(null);
     }
 
-    private static boolean guard(ReferenceGrayboxSnapshot.Resident resident) {
+    static boolean guard(ReferenceGrayboxSnapshot.Resident resident) {
         if (resident.occupation().equals("guard") || resident.occupation().equals("soldier")) return true;
         return switch (resident.deploymentRole() == null ? "" : resident.deploymentRole()) {
             case "assault", "defend", "escort", "patrol" -> true;
@@ -161,8 +161,8 @@ final class SourceGrayboxActorBehaviorRuntime {
         return null;
     }
 
-    private record ActorView(ReferenceGrayboxActorExecutionState.ActorState state, Mob body,
-                             ReferenceGrayboxSnapshot.Resident resident, ReferenceGrayboxSnapshot.Bioform bioform) {
+    record ActorView(ReferenceGrayboxActorExecutionState.ActorState state, Mob body,
+                     ReferenceGrayboxSnapshot.Resident resident, ReferenceGrayboxSnapshot.Bioform bioform) {
         static ActorView resident(ReferenceGrayboxActorExecutionState.ActorState state, Mob body, ReferenceGrayboxSnapshot.Resident resident) {
             return new ActorView(state, body, resident, null);
         }

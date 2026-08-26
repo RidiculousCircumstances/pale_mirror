@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * SavedData-owned idempotency and crash-recovery ledger for bounded effects.
@@ -55,7 +56,18 @@ public final class EffectLeaseLedger {
     }
 
     public void complete(String id, long gameTick) { require(id).complete(gameTick); }
+    public void complete(String id, long gameTick, String physicalReceipt) { require(id).complete(gameTick, physicalReceipt); }
     public void fail(String id, long gameTick, String diagnostic) { require(id).fail(gameTick, diagnostic); }
+    /** A target is immutable once an effect has left its planned state. */
+    public boolean attachNativeReference(String id, UUID nativeReference) {
+        EffectLease lease = require(id);
+        if (lease.nativeReference() != null && !lease.nativeReference().equals(nativeReference)) {
+            throw new IllegalStateException("Effect lease target collision for " + id);
+        }
+        if (lease.state() != EffectLeaseState.PLANNED) return lease.nativeReference() != null;
+        lease.setNativeReference(nativeReference);
+        return true;
+    }
 
     /** Running effects have an unknown physical outcome after a restart and must never be replayed implicitly. */
     public boolean recoverAfterRestart(long gameTick) {

@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecuti
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
+import io.farfrontier.palemirror.internal.effect.EffectLeaseLedger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,6 +114,48 @@ public final class SourceGrayboxActorMaterializerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotMeleeUsesOneDurableEffectReceiptInsteadOfNativeAiRepeats(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        String residentId = "resident:combat:guard";
+        ReferenceGrayboxSnapshot snapshot = SourceGrayboxMaterializerGameTests.fixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot(),
+                residentId, 1.0d, "controlled-combat");
+        String bioformId = snapshot.bioforms().getFirst().id();
+        ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", 1L), "the guard must receive an exact lease");
+        helper.assertTrue(execution.prepare(bioformId, "gametest:actor-runtime", 1L), "the bioform must receive an exact lease");
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        Map<String, Entity> admitted = new LinkedHashMap<>();
+        materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+        helper.assertTrue(execution.activate(residentId, execution.actor(residentId).orElseThrow().leaseId(), "gametest:actor-runtime", 2L),
+                "the guard body must become HOT");
+        helper.assertTrue(execution.activate(bioformId, execution.actor(bioformId).orElseThrow().leaseId(), "gametest:actor-runtime", 2L),
+                "the bioform body must become HOT");
+        Villager guard = (Villager) materializer.actorEntity(helper.getLevel(), admitted, execution.actor(residentId).orElseThrow());
+        Zombie bioform = (Zombie) materializer.actorEntity(helper.getLevel(), admitted, execution.actor(bioformId).orElseThrow());
+        guard.setPos(anchor.getX() + 8.5d, ReferenceGrayboxLayout.GROUND_Y + 1, anchor.getZ() + 4.5d);
+        bioform.setPos(anchor.getX() + 9.7d, ReferenceGrayboxLayout.GROUND_Y + 1, anchor.getZ() + 4.5d);
+        float before = bioform.getHealth();
+        FixtureCombatOwner owner = new FixtureCombatOwner(snapshot, execution);
+
+        SourceGrayboxActorCombatRuntime combat = new SourceGrayboxActorCombatRuntime();
+        combat.tick(helper.getLevel(), owner, materializer, admitted, 5L);
+        float afterFirstHit = bioform.getHealth();
+        combat.tick(helper.getLevel(), owner, materializer, admitted, 10L);
+
+        helper.assertTrue(afterFirstHit < before, "a guard's HOT source action must cause real Minecraft damage");
+        helper.assertValueEqual(bioform.getHealth(), afterFirstHit,
+                "the durable cooldown must prevent a second tick-loop hit before its expiry");
+        var receipt = owner.effectLeases().leases().stream()
+                .filter(value -> value.actorSlotId().equals(residentId)).findFirst().orElseThrow();
+        helper.assertValueEqual(receipt.state().name(), "COMPLETED", "the physical hit needs one terminal receipt");
+        helper.assertValueEqual(receipt.nativeReference(), bioform.getUUID(), "the receipt must bind the inspected physical target");
+        helper.assertTrue(receipt.receipt().contains("beforeHealth16=") && receipt.receipt().contains("afterHealth16="),
+                "the terminal receipt must preserve the observed physical impact rather than a bare cooldown");
+        helper.succeed();
+    }
+
     private static ReferenceGrayboxSnapshot withColdBioform(BlockPos anchor, ReferenceGrayboxSnapshot fixture, String bioformId) {
         return new ReferenceGrayboxSnapshot(fixture.day(), fixture.profileId(), fixture.stateRevision(), fixture.bounds(), fixture.cells(),
                 fixture.settlements(), fixture.facilities(), fixture.resourceSites(), fixture.routes(), fixture.hiveOrgans(),
@@ -127,5 +170,26 @@ public final class SourceGrayboxActorMaterializerGameTests {
                 present.settlements(), present.facilities(), present.resourceSites(), present.routes(), present.hiveOrgans(), present.bioforms(),
                 List.of(), present.fieldPosts(), present.fieldLinks(), present.activities(), present.cargoes(), present.interactions(),
                 present.sectors(), present.chrysalises(), present.events());
+    }
+
+    private static final class FixtureCombatOwner implements SourceGrayboxCombatOwner {
+        private final ReferenceGrayboxSnapshot snapshot;
+        private final ReferenceGrayboxActorExecutionState execution;
+        private final EffectLeaseLedger effects = new EffectLeaseLedger();
+
+        private FixtureCombatOwner(ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxActorExecutionState execution) {
+            this.snapshot = snapshot;
+            this.execution = execution;
+        }
+
+        @Override public ReferenceGrayboxSnapshot snapshot() { return snapshot; }
+        @Override public ReferenceGrayboxActorExecutionState actorExecution() { return execution; }
+        @Override public long actorExecutionGameTime(long observedGameTime) { return observedGameTime; }
+        @Override public java.util.Optional<ReferenceGrayboxActorExecutionState.CombatAction> reserveActorCombat(
+                String id, String leaseId, String holder, long gameTick, long cooldownTicks) {
+            return execution.reserveCombatAction(id, leaseId, holder, gameTick, cooldownTicks);
+        }
+        @Override public EffectLeaseLedger effectLeases() { return effects; }
+        @Override public void markEffectLeaseDirty() { }
     }
 }

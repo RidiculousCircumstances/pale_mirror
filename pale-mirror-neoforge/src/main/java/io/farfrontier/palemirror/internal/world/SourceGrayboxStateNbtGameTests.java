@@ -2,6 +2,9 @@ package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
+import io.farfrontier.palemirror.internal.effect.ControlledEffectExecutor;
+import io.farfrontier.palemirror.internal.effect.EffectLease;
+import io.farfrontier.palemirror.internal.effect.EffectLeaseState;
 import java.util.Arrays;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -48,7 +51,7 @@ public final class SourceGrayboxStateNbtGameTests {
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void savedDataPreflightRejectsAnUnhydratableCanonicalRecord(GameTestHelper helper) {
         CompoundTag corrupt = new CompoundTag();
-        corrupt.putInt("schemaVersion", 18);
+        corrupt.putInt("schemaVersion", 19);
         corrupt.put("sourceState", new CompoundTag());
         boolean rejected = false;
         try {
@@ -96,6 +99,46 @@ public final class SourceGrayboxStateNbtGameTests {
                 "a stale actor cannot be silently adopted after restart");
         helper.assertTrue(restored.recoverActorCold(actor, lease, "gametest:chunk:0_0", 23L),
                 "the original lease may settle to cold after a failed physical inspection");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void interruptedSourceMeleeRemainsUnknownAfterRestartAndCannotReplay(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        String actor = source.snapshot().residents().getFirst().id();
+        helper.assertTrue(source.prepareActor(actor, "gametest:chunk:0_0", 20L), "the actor must have an exact physical lease");
+        String lease = source.actorExecution().actor(actor).orElseThrow().leaseId();
+        helper.assertTrue(source.activateActor(actor, lease, "gametest:chunk:0_0", 21L), "the actor must be hot before a local action");
+        var action = source.reserveActorCombat(actor, lease, "gametest:chunk:0_0", 22L, 20L).orElseThrow();
+        source.effectLeases().plan(EffectLease.planned(action.id(), action.id(), "reference-graybox", source.snapshot().profileId(),
+                actor, "melee", 22L, 23L));
+        helper.assertTrue(source.effectLeases().begin(action.id()), "the action must become physically in-flight before its interruption");
+
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(source.save(new CompoundTag(), null), null);
+        helper.assertTrue(restored.recoverEffectLeases(24L), "restart must classify an in-flight physical hit instead of replaying it");
+        helper.assertValueEqual(restored.effectLeases().find(action.id()).orElseThrow().state(), EffectLeaseState.UNKNOWN_AFTER_RESTART,
+                "the interrupted effect must remain a durable unknown receipt");
+        helper.assertTrue(!restored.effectLeases().begin(action.id()), "a terminal unknown action may never begin a second time");
+        helper.assertValueEqual(restored.actorExecution().actor(actor).orElseThrow().nextCombatAtGameTick(), 42L,
+                "the actor's durable cooldown must survive independently of the unknown effect receipt");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void completedPhysicalEffectReceiptSurvivesTheSourceSavedDataRoundTrip(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        String id = "gametest:source-graybox:effect:1";
+        java.util.UUID target = java.util.UUID.nameUUIDFromBytes("source-graybox-effect-target".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        helper.assertTrue(ControlledEffectExecutor.executeOnceWithReceipt(source,
+                EffectLease.planned(id, id, "reference-graybox", source.snapshot().profileId(), "resident:1:1", "melee", 12L, 13L),
+                12L, target, () -> "target=" + target + ";beforeHealth16=320;afterHealth16=288;landed=true"),
+                "the source effect ledger must authorize one completed physical receipt");
+
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(source.save(new CompoundTag(), null), null);
+        var receipt = restored.effectLeases().find(id).orElseThrow();
+        helper.assertValueEqual(receipt.state(), EffectLeaseState.COMPLETED, "the terminal physical action must persist");
+        helper.assertValueEqual(receipt.nativeReference(), target, "the inspected physical target must persist with the action");
+        helper.assertTrue(receipt.receipt().contains("afterHealth16=288"), "the exact post-impact receipt must survive restart hydration");
         helper.succeed();
     }
 
