@@ -118,7 +118,7 @@ public final class SourceGrayboxStateNbtGameTests {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
         source.activate(1_200L);
         int initialDay = source.snapshot().day();
-        List<ReferenceGrayboxSnapshot> dueBoundaries = source.advanceDueDaySnapshots(3_600L, 1_200L, 24);
+        List<ReferenceGrayboxSnapshot> dueBoundaries = source.advanceDueDaySnapshots(49_200L, 24);
         helper.assertValueEqual(dueBoundaries.size(), 2,
                 "a delayed server tick must retain every due source-day boundary instead of exposing only the last one");
         helper.assertValueEqual(dueBoundaries.getFirst().day(), initialDay + 1,
@@ -138,6 +138,40 @@ public final class SourceGrayboxStateNbtGameTests {
                         "gametest:source-graybox:resident", applied.stateRevision(), resident)).status(),
                 io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
                 "a persisted physical fact must be rejected before it can replay after restart");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void freshGameplayClockAndExplicitRateChangeHaveExactBoundaries(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        helper.assertValueEqual(source.clockProfile(), SourceGrayboxClockProfile.GAMEPLAY,
+                "a fresh living world must default to the twenty-minute gameplay day");
+        source.activate(1_000L);
+        int initialDay = source.snapshot().day();
+        helper.assertValueEqual(source.advanceDueDaySnapshots(24_999L, 24).size(), 0,
+                "a gameplay day must not commit one tick before its durable boundary");
+        helper.assertValueEqual(source.advanceDueDaySnapshots(25_000L, 24).size(), 1,
+                "a gameplay day must commit exactly at 24,000 elapsed game ticks");
+
+        helper.assertTrue(source.changeClockProfile(SourceGrayboxClockProfile.FAST_GRAYBOX, 26_000L),
+                "an explicit operator transition must select the retained fast calibration profile");
+        helper.assertValueEqual(source.advanceDueDaySnapshots(27_199L, 24).size(), 0,
+                "the changed profile must rebase instead of consuming ticks accumulated before the transition");
+        helper.assertValueEqual(source.advanceDueDaySnapshots(27_200L, 24).size(), 1,
+                "the explicit fast profile must retain its exact 1,200-tick day");
+
+        helper.assertTrue(source.changeClockProfile(SourceGrayboxClockProfile.GAMEPLAY, 28_000L),
+                "a live profile return must also be explicit and durable");
+        helper.assertValueEqual(source.advanceDueDaySnapshots(51_999L, 24).size(), 0,
+                "the return to gameplay must not fabricate an immediate day from fast-profile ticks");
+        helper.assertValueEqual(source.advanceDueDaySnapshots(52_000L, 24).size(), 1,
+                "the returned gameplay profile must again require a complete 24,000-tick day");
+        helper.assertValueEqual(source.snapshot().day(), initialDay + 3,
+                "only the three completed durable boundaries may mutate the source world");
+
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(source.save(new CompoundTag(), null), null);
+        helper.assertValueEqual(restored.clockProfile(), SourceGrayboxClockProfile.GAMEPLAY,
+                "the selected profile must survive a restart with the canonical clock state");
         helper.succeed();
     }
 
@@ -227,25 +261,32 @@ public final class SourceGrayboxStateNbtGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void v23AndV24ExecutionRevisionsRebindOnlyAfterExactActorIdentityProof(GameTestHelper helper) {
+    public static void v23ThroughV25MigrationsPreserveTheirHistoricalFastClock(GameTestHelper helper) {
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
-        for (int legacySchema : List.of(23, 24)) {
+        for (int legacySchema : List.of(23, 24, 25)) {
             CompoundTag legacy = source.save(new CompoundTag(), null);
             legacy.putInt("schemaVersion", legacySchema);
+            legacy.remove("clockProfile");
             CompoundTag execution = legacy.getCompound("actorExecution");
-            execution.putInt("format", SourceGrayboxActorExecutionNbt.LEGACY_GLOBAL_REVISION_FORMAT);
-            CompoundTag firstActor = execution.getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
-            firstActor.putString("revision", "0".repeat(64));
+            if (legacySchema < 25) {
+                execution.putInt("format", SourceGrayboxActorExecutionNbt.LEGACY_GLOBAL_REVISION_FORMAT);
+                CompoundTag firstActor = execution.getList("actors", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+                firstActor.putString("revision", "0".repeat(64));
+            }
 
             SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(legacy, null);
             String actor = restored.actorExecution().actors().getFirst().id();
             helper.assertValueEqual(restored.actorExecution().actors().getFirst().sourceRevision(), actorRevision(restored.snapshot(), actor),
                     "a v" + legacySchema + " migration may rebind only after the retained source actor identity was inspected");
+            helper.assertValueEqual(restored.clockProfile(), SourceGrayboxClockProfile.FAST_GRAYBOX,
+                    "a v" + legacySchema + " world must preserve the real historical 1,200-tick pacing instead of silently rescaling time");
             helper.assertTrue(restored.isDirty(),
                     "a successful v" + legacySchema + " migration must request a world save even when no later simulation event happens");
             CompoundTag upgraded = restored.save(new CompoundTag(), null);
-            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 25,
-                    "a successful legacy migration must durably record the strict v25 envelope");
+            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 26,
+                    "a successful legacy migration must durably record the strict v26 envelope");
+            helper.assertValueEqual(upgraded.getString("clockProfile"), "fast_graybox",
+                    "the upgraded document must make its preserved historical pacing explicit");
             helper.assertValueEqual(upgraded.getCompound("actorExecution").getInt("format"), SourceGrayboxActorExecutionNbt.FORMAT,
                     "the migrated execution ledger must no longer retain the global-revision envelope");
             SourceGrayboxSavedData.load(upgraded, null);
@@ -264,6 +305,33 @@ public final class SourceGrayboxStateNbtGameTests {
         }
         helper.assertTrue(rejected,
                 "a legacy migration must reject a missing exact source person rather than recreating an execution ledger");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-state", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void currentSchemaRejectsMissingOrUnknownClockProfile(GameTestHelper helper) {
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag missing = source.save(new CompoundTag(), null);
+        missing.remove("clockProfile");
+        boolean missingRejected = false;
+        try {
+            SourceGrayboxSavedData.load(missing, null);
+        } catch (IllegalStateException expected) {
+            missingRejected = true;
+        }
+        helper.assertTrue(missingRejected,
+                "a current source document without its pacing contract must fail closed instead of guessing a rate");
+
+        CompoundTag invalid = source.save(new CompoundTag(), null);
+        invalid.putString("clockProfile", "warp_speed");
+        boolean invalidRejected = false;
+        try {
+            SourceGrayboxSavedData.load(invalid, null);
+        } catch (IllegalStateException expected) {
+            invalidRejected = true;
+        }
+        helper.assertTrue(invalidRejected,
+                "an unknown persisted clock profile must stop startup before it can rescale canonical time");
         helper.succeed();
     }
 

@@ -27,14 +27,18 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** Durable canonical owner for one source-parity graybox world. */
 final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCombatOwner {
     static final String DATA_NAME = "pale_mirror_frontier";
-    // v25 replaces the old global-projection revision stored once per actor
+    // v26 persists the source-day clock profile. Earlier documents really did
+    // run at the then-hard-coded 1,200 ticks/day, so their migration must
+    // preserve FAST_GRAYBOX rather than silently changing a live campaign's
+    // pace. Separately, v25 replaces the old global-projection revision stored once per actor
     // with a stable digest of that exact resident/bioform's semantics. Both
     // retained v23 and v24 documents used the format-3 global binding. v22
     // remains unsafe because it lacks the old and target positions for durable
     // cargo relocation.
-    private static final int SCHEMA = 25;
+    private static final int SCHEMA = 26;
     private static final int LEGACY_SCHEMA_V23 = 23;
     private static final int LEGACY_SCHEMA_V24 = 24;
+    private static final int LEGACY_SCHEMA_V25 = 25;
     private static final int MAX_PROCESSED_OBSERVATIONS = 4_096;
     private static final int MAX_EFFECT_LEASES = ReferenceGrayboxActorExecutionState.MAX_ACTORS + 512;
     private final ReferenceGrayboxSimulation simulation;
@@ -46,13 +50,14 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     private final LinkedHashSet<String> processedObservationIds;
     private boolean activated;
     private long lastClockGameTime;
+    private SourceGrayboxClockProfile clockProfile;
 
     private SourceGrayboxSavedData(ReferenceGrayboxSimulation simulation, ReferenceGrayboxActorExecutionState actorExecution,
                                    EffectLeaseLedger effectLeases,
                                    SourceGrayboxWarehouseLedger warehouseLedger,
                                    SourceGrayboxCargoLedger cargoLedger,
                                    SourceGrayboxPhysicalScarLedger physicalScars,
-                                   boolean activated, long lastClockGameTime,
+                                   boolean activated, long lastClockGameTime, SourceGrayboxClockProfile clockProfile,
                                    LinkedHashSet<String> processedObservationIds) {
         this.simulation = simulation;
         this.actorExecution = actorExecution;
@@ -62,6 +67,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         this.physicalScars = physicalScars;
         this.activated = activated;
         this.lastClockGameTime = lastClockGameTime;
+        this.clockProfile = clockProfile;
         this.processedObservationIds = processedObservationIds;
     }
 
@@ -75,7 +81,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(seed);
         return new SourceGrayboxSavedData(simulation, ReferenceGrayboxActorExecutionState.bootstrap(simulation.snapshot()),
                 new EffectLeaseLedger(), new SourceGrayboxWarehouseLedger(), new SourceGrayboxCargoLedger(), new SourceGrayboxPhysicalScarLedger(),
-                false, 0L, new LinkedHashSet<>());
+                false, 0L, SourceGrayboxClockProfile.GAMEPLAY, new LinkedHashSet<>());
     }
 
     /**
@@ -104,6 +110,23 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     void markWarehouseLedgerDirty() { setDirty(); }
     @Override public void markEffectLeaseDirty() { setDirty(); }
     boolean activated() { return activated; }
+    SourceGrayboxClockProfile clockProfile() { return clockProfile; }
+    long dayIntervalTicks() { return clockProfile.dayIntervalTicks(); }
+
+    /**
+     * A live rate change is an operator-visible calibration action. Rebase the
+     * next boundary at the same server tick so ticks accumulated under the old
+     * rate cannot create an immediate synthetic source day under the new rate.
+     */
+    boolean changeClockProfile(SourceGrayboxClockProfile profile, long gameTime) {
+        if (profile == null) throw new IllegalArgumentException("source graybox clock profile is required");
+        if (gameTime < 0L) throw new IllegalArgumentException("source graybox clock game time must be non-negative");
+        if (clockProfile == profile) return false;
+        clockProfile = profile;
+        if (activated) lastClockGameTime = gameTime;
+        setDirty();
+        return true;
+    }
 
     /** Game time may be moved backwards by an operator; execution leases keep a monotonic local ordering. */
     @Override public long actorExecutionGameTime(long observedGameTime) {
@@ -213,8 +236,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         setDirty();
     }
 
-    int advanceDueDays(long gameTime, long intervalTicks, int maximumDays) {
-        return advanceDueDaySnapshots(gameTime, intervalTicks, maximumDays).size();
+    int advanceDueDays(long gameTime, int maximumDays) {
+        return advanceDueDaySnapshots(gameTime, maximumDays).size();
     }
 
     /**
@@ -222,13 +245,14 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
      * the physical boundary can settle missed days cold instead of silently
      * forgetting their already-committed effects or replaying them late.
      */
-    List<ReferenceGrayboxSnapshot> advanceDueDaySnapshots(long gameTime, long intervalTicks, int maximumDays) {
-        if (!activated || intervalTicks < 1 || maximumDays < 1) return List.of();
+    List<ReferenceGrayboxSnapshot> advanceDueDaySnapshots(long gameTime, int maximumDays) {
+        if (!activated || maximumDays < 1) return List.of();
         if (gameTime < lastClockGameTime) {
             lastClockGameTime = gameTime;
             setDirty();
             return List.of();
         }
+        long intervalTicks = clockProfile.dayIntervalTicks();
         long due = Math.min(maximumDays, (gameTime - lastClockGameTime) / intervalTicks);
         List<ReferenceGrayboxSnapshot> boundaries = new java.util.ArrayList<>();
         for (long index = 0; index < due; index++) {
@@ -289,7 +313,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     static SourceGrayboxSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
         int schema = tag.getInt("schemaVersion");
         boolean legacyGlobalRevision = schema == LEGACY_SCHEMA_V23 || schema == LEGACY_SCHEMA_V24;
-        if ((!legacyGlobalRevision && schema != SCHEMA) || !tag.contains("sourceState", Tag.TAG_COMPOUND)) {
+        boolean legacyClockProfile = legacyGlobalRevision || schema == LEGACY_SCHEMA_V25;
+        if ((!legacyClockProfile && schema != SCHEMA) || !tag.contains("sourceState", Tag.TAG_COMPOUND)) {
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         LinkedHashSet<String> processed = readProcessed(tag.getList("processedObservationIds", Tag.TAG_STRING));
@@ -329,17 +354,31 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
             throw new IllegalStateException("incompatible Frontier SavedData; reset the disposable graybox world");
         }
         SourceGrayboxPhysicalScarLedger physicalScars = SourceGrayboxPhysicalScarLedger.load(tag.getList("physicalScars", Tag.TAG_COMPOUND));
+        SourceGrayboxClockProfile clockProfile;
+        try {
+            if (legacyClockProfile) {
+                // The old runtime had no setting and always used this pace.
+                clockProfile = SourceGrayboxClockProfile.FAST_GRAYBOX;
+            } else {
+                if (!tag.contains("clockProfile", Tag.TAG_STRING)) {
+                    throw new IllegalStateException("source graybox clock profile is missing");
+                }
+                clockProfile = SourceGrayboxClockProfile.fromId(tag.getString("clockProfile"));
+            }
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalStateException("source graybox clock profile is invalid", invalid);
+        }
         if (legacyGlobalRevision) {
             rebindLegacyActorExecutionRevision(actorExecution, simulation.snapshot(), schema);
         } else {
             assertActorExecutionMatchesSource(actorExecution, simulation.snapshot());
         }
         SourceGrayboxSavedData restored = new SourceGrayboxSavedData(simulation, actorExecution, effectLeases, warehouseLedger, cargoLedger, physicalScars,
-                tag.getBoolean("activated"), tag.getLong("lastClockGameTime"), processed);
+                tag.getBoolean("activated"), tag.getLong("lastClockGameTime"), clockProfile, processed);
         // SavedData is otherwise written only after a later world mutation.
         // A successful versioned migration must be durable even when the
         // player enters and immediately stops the server.
-        if (legacyGlobalRevision) restored.setDirty();
+        if (legacyClockProfile) restored.setDirty();
         return restored;
     }
 
@@ -348,6 +387,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         tag.putInt("schemaVersion", SCHEMA);
         tag.putBoolean("activated", activated);
         tag.putLong("lastClockGameTime", lastClockGameTime);
+        tag.putString("clockProfile", clockProfile.id());
         tag.put("sourceState", SourceGrayboxStateNbt.write(simulation));
         tag.put("actorExecution", SourceGrayboxActorExecutionNbt.write(actorExecution));
         ListTag leases = new ListTag();

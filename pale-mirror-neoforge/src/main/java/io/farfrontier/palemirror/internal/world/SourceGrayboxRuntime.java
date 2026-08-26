@@ -20,7 +20,6 @@ import net.minecraft.world.entity.Entity;
 
 /** Server-thread scheduler and SavedData owner for the source-parity graybox. */
 public final class SourceGrayboxRuntime {
-    private static final long DAY_INTERVAL_TICKS = 1_200L;
     private static final int MAXIMUM_CATCH_UP_DAYS = 24;
     private static final long PRESENTATION_INTERVAL_TICKS = 20L;
     private static final long ACTOR_EXECUTION_INTERVAL_TICKS = 10L;
@@ -76,7 +75,7 @@ public final class SourceGrayboxRuntime {
         boolean cargoChanged = cargoes.reconcileInbound(graybox, data, materializer);
         boolean actorDue = gameTime % ACTOR_EXECUTION_INTERVAL_TICKS == 0L;
         boolean executionChanged = actorDue && actorExecution.beforePublication(graybox, data, materializer, admittedEntities);
-        List<ReferenceGrayboxSnapshot> dueBoundaries = data.advanceDueDaySnapshots(gameTime, DAY_INTERVAL_TICKS, MAXIMUM_CATCH_UP_DAYS);
+        List<ReferenceGrayboxSnapshot> dueBoundaries = data.advanceDueDaySnapshots(gameTime, MAXIMUM_CATCH_UP_DAYS);
         int advanced = dueBoundaries.size();
         if (advanced > 0 || executionChanged || warehouseChanged || cargoChanged || gameTime - lastPresentationGameTime >= PRESENTATION_INTERVAL_TICKS) {
             publish(graybox);
@@ -137,6 +136,12 @@ public final class SourceGrayboxRuntime {
 
     public boolean activated() {
         return data.activated();
+    }
+
+    /** Explicit operator-controlled pacing transition; it never changes source state itself. */
+    public boolean changeClockProfile(String profileId) {
+        SourceGrayboxClockProfile profile = SourceGrayboxClockProfile.fromId(profileId);
+        return data.changeClockProfile(profile, grayboxLevel().getGameTime());
     }
 
     /**
@@ -251,7 +256,7 @@ public final class SourceGrayboxRuntime {
 
     public String status() {
         ReferenceGrayboxSnapshot snapshot = data.snapshot();
-        return "profile=" + snapshot.profileId() + ", day=" + snapshot.day() + ", settlements=" + snapshot.settlements().size()
+        return "profile=" + snapshot.profileId() + ", clock=" + data.clockProfile().id() + " (" + data.dayIntervalTicks() + " ticks/day), day=" + snapshot.day() + ", settlements=" + snapshot.settlements().size()
                 + ", residents=" + snapshot.residents().size() + ", organs=" + snapshot.hiveOrgans().size()
                 + ", bioforms=" + snapshot.bioforms().size() + ", dimension=" + SourceGrayboxWorldBoundary.DIMENSION.location()
                 + ", materialization=" + (data.activated() ? "ACTIVE" : "DISABLED");

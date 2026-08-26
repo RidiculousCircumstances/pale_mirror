@@ -136,12 +136,16 @@ twenty ticks, and perform bounded local work or infection progression every
 one hundred ticks. A confirmed physical observation is reconciled immediately,
 without waiting for the next source day.
 
-`FAST_GRAYBOX` keeps the current 1,200-tick source day and explicit
-complete-day fast-forward for source-parity, calibration and manual testing.
-The selected clock profile and last source-day boundary are persisted with the
-world. Changing a live profile later requires an explicit versioned setting
-and fresh calibration evidence; it may never silently rescale an existing
-campaign.
+`FAST_GRAYBOX` keeps the 1,200-tick source day and explicit complete-day
+fast-forward for source-parity, calibration and manual testing. A fresh world
+persists `GAMEPLAY`; schema v26 explicitly stores `clockProfile` alongside the
+last source-day boundary. Retained v23-v25 worlds migrate to
+`FAST_GRAYBOX`, because that is the pace those worlds actually experienced.
+`/pale_mirror frontier clock gameplay|fast_graybox` is operator-only and,
+when it changes a live profile, rebases the next boundary to the current game
+tick. It therefore never turns elapsed ticks under one profile into an
+instantaneous source-day catch-up under another. Missing or unknown v26 clock
+profiles fail startup rather than guessing or silently rescaling a campaign.
 
 The profile lives only in the disposable data-driven
 `pale_mirror:frontier_graybox` level. The Far Frontier deployment owns the

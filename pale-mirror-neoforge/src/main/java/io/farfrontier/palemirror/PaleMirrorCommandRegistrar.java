@@ -75,6 +75,9 @@ final class PaleMirrorCommandRegistrar {
                     context.getSource().sendSuccess(() -> Component.literal("Advanced source Frontier " + days + " day(s)."), true);
                     return days;
                 })));
+        frontier.then(Commands.literal("clock").requires(source -> source.hasPermission(4))
+                .then(Commands.literal("gameplay").executes(context -> changeFrontierClock(context, "gameplay")))
+                .then(Commands.literal("fast_graybox").executes(context -> changeFrontierClock(context, "fast_graybox"))));
         frontier.then(Commands.literal("activate_graybox").requires(source -> source.hasPermission(4)).executes(context -> {
             SourceGrayboxRuntime.forServer(context.getSource().getServer()).activate();
             context.getSource().sendSuccess(() -> Component.literal("Source-parity Frontier graybox activated in pale_mirror:frontier_graybox."), true);
@@ -185,6 +188,16 @@ final class PaleMirrorCommandRegistrar {
                 }))));
         DebugCommandRegistrar.attach(root);
         event.getDispatcher().register(root);
+    }
+
+    private static int changeFrontierClock(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context, String profile) {
+        SourceGrayboxRuntime runtime = SourceGrayboxRuntime.forServer(context.getSource().getServer());
+        boolean changed = runtime.changeClockProfile(profile);
+        String message = changed
+                ? "Source Frontier clock set to " + profile + "; next source day rebased from this game tick."
+                : "Source Frontier clock already uses " + profile + ".";
+        context.getSource().sendSuccess(() -> Component.literal(message), true);
+        return changed ? 1 : 0;
     }
 
     private static StoryAudienceId audienceFor(CommandSourceStack source, PaleMirrorRuntime runtime) {
