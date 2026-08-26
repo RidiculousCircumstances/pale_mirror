@@ -11,7 +11,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -29,30 +29,30 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
                 "a".repeat(64), 1, 64, 1, 2, 2, 1, false, "", 0.0d, false);
         ledger.put(claim);
         ledger.conflict(claim.id());
-        ledger.claimEntity("LABEL:facility:fixture:workshop");
+        ledger.claimEntity("LABEL_DISPLAY:facility:fixture:workshop");
 
         SourceGrayboxPresentationLedger restored = SourceGrayboxPresentationLedger.load(
                 ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
 
         helper.assertTrue(restored.claim(claim.id()) != null && restored.claim(claim.id()).conflicted(),
                 "a source-graybox structural conflict must survive persistence instead of being silently repaired after restart");
-        helper.assertTrue(restored.entityClaimed("LABEL:facility:fixture:workshop"),
+        helper.assertTrue(restored.entityClaimed("LABEL_DISPLAY:facility:fixture:workshop"),
                 "an entity reservation must survive persistence so a restart cannot recreate an entity while its serialized predecessor loads");
         helper.succeed();
     }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void admittedRestoredLabelWinsBeforeUuidIndexPublication(GameTestHelper helper) {
+    public static void admittedRestoredLabelDisplayWinsBeforeUuidIndexPublication(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 18);
         ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
         ReferenceGrayboxSnapshot snapshot = SourceGrayboxMaterializerGameTests.fixture(
                 anchor, baseline, baseline.residents().getFirst().id(), 1.0d, "restored-label");
         String labelId = "facility:restored-label:workshop";
-        ArmorStand restoring = new ArmorStand(EntityType.ARMOR_STAND, helper.getLevel());
-        restoring.setUUID(SourceGrayboxMaterializer.uuid("label", labelId));
+        Display.TextDisplay restoring = new Display.TextDisplay(EntityType.TEXT_DISPLAY, helper.getLevel());
+        restoring.setUUID(SourceGrayboxMaterializer.uuid("label-display", labelId));
         restoring.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, labelId);
-        restoring.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, "LABEL");
+        restoring.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, "LABEL_DISPLAY");
         restoring.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, "0".repeat(64));
         Map<String, Entity> admitted = new LinkedHashMap<>();
         SourceGrayboxMaterializer.rememberAdmittedEntity(admitted, restoring);
@@ -61,10 +61,12 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
 
         BlockPos facility = anchor.offset(2, 0, 2);
         helper.assertTrue(labels(helper, facility).isEmpty(),
-                "a restored label admitted before ServerLevel UUID publication must be reused, never recreated");
+                "a restored display admitted before ServerLevel UUID publication must be reused, never recreated");
         helper.assertTrue(restoring.hasCustomName() && restoring.getCustomName().getString().startsWith("[F] workshop"),
                 "the admitted restored object must receive the current deterministic label text");
-        helper.assertTrue(SourceGrayboxPresentationLedger.get(helper.getLevel()).entityClaimed("LABEL:" + labelId),
+        helper.assertTrue(restoring.isCurrentlyGlowing(),
+                "the recovered display must retain the same high-contrast visual configuration as a fresh label");
+        helper.assertTrue(SourceGrayboxPresentationLedger.get(helper.getLevel()).entityClaimed("LABEL_DISPLAY:" + labelId),
                 "reusing a restored label must retain its durable duplicate-prevention claim");
         helper.succeed();
     }
@@ -78,7 +80,7 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
                 anchor, baseline, baseline.residents().getFirst().id(), 1.0d, "reserved-label");
         String labelId = "facility:reserved-label:workshop";
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(helper.getLevel());
-        ledger.claimEntity("LABEL:" + labelId);
+        ledger.claimEntity("LABEL_DISPLAY:" + labelId);
         SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
         BlockPos facility = anchor.offset(2, 0, 2);
 
@@ -87,7 +89,7 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
                 "a claimed but unavailable entity must remain a presentation gap instead of risking a duplicate UUID");
 
         materializer.apply(helper.getLevel(), SourceGrayboxMaterializerGameTests.withoutPresentationRecords(baseline));
-        helper.assertTrue(!ledger.entityClaimed("LABEL:" + labelId),
+        helper.assertTrue(!ledger.entityClaimed("LABEL_DISPLAY:" + labelId),
                 "only source retirement may release a missing entity reservation");
         materializer.apply(helper.getLevel(), snapshot);
         helper.assertTrue(labels(helper, facility).size() == 1,
@@ -95,8 +97,8 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
         helper.succeed();
     }
 
-    private static java.util.List<ArmorStand> labels(GameTestHelper helper, BlockPos facility) {
-        return helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(facility).inflate(3, 32, 3), value ->
+    private static java.util.List<Display.TextDisplay> labels(GameTestHelper helper, BlockPos facility) {
+        return helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(facility).inflate(3, 32, 3), value ->
                 value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop"));
     }
 }

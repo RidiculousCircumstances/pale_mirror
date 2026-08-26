@@ -9,7 +9,7 @@ import java.util.Locale;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -33,7 +33,7 @@ public final class SourceGrayboxInteractionLabelGameTests {
         String text = "[X] route_damaged target=" + interaction.subjectId() + " total=18.00 available-slots="
                 + interaction.slots().size() + " each=" + String.format(Locale.ROOT, "%.2f", interaction.totalWeight() / interaction.slots().size());
         AABB arena = new AABB(anchor).inflate(64, 64, 64);
-        List<ArmorStand> labels = helper.getLevel().getEntitiesOfClass(ArmorStand.class, arena, value ->
+        List<Display.TextDisplay> labels = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, arena, value ->
                 value.hasCustomName() && value.getCustomName().getString().equals(text));
         helper.assertTrue(labels.size() == 1,
                 "every breakable source fact must name its type, exact target, remaining total and exact per-slot effect");

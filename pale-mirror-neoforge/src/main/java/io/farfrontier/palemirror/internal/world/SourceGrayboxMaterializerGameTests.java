@@ -9,7 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Items;
@@ -40,13 +40,15 @@ public final class SourceGrayboxMaterializerGameTests {
         BlockPos facility = anchor.offset(2, 0, 2);
         helper.assertValueEqual(helper.getLevel().getBlockState(facility).getBlock(), Blocks.BLUE_WOOL,
                 "a source facility must become its readable colour-coded rectangle");
-        helper.assertTrue(helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(anchor.offset(6, 6, 6)).inflate(4, 32, 4), value ->
+        helper.assertTrue(helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(anchor.offset(6, 6, 6)).inflate(4, 32, 4), value ->
                 value.hasCustomName() && value.getCustomName().getString().startsWith("[MARKET] cash=12.00")).isEmpty(),
                 "dense source dashboards must not turn every row into an overlapping map nameplate");
-        ArmorStand facilityLabel = helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(facility).inflate(16, 32, 16), value ->
+        Display.TextDisplay facilityLabel = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(facility).inflate(16, 32, 16), value ->
                 value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop")).stream().findFirst().orElseThrow();
-        helper.assertTrue(facilityLabel.getY() >= ReferenceGrayboxLayout.GROUND_Y + 17,
-                "a readable source label must be above the compact presentation stack, not embedded in its blocks");
+        helper.assertValueEqual(facilityLabel.blockPosition().getY(), ReferenceGrayboxLayout.GROUND_Y + 2,
+                "a low one-block graybox structure must keep its label two blocks above the structure, not on a detached global sky plane");
+        helper.assertTrue(facilityLabel.isCurrentlyGlowing(),
+                "a source label must be bright enough to distinguish from the graybox floor at map scale");
         Villager resident = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(16), value ->
                 value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
         Zombie bioform = helper.getLevel().getEntitiesOfClass(Zombie.class, new AABB(anchor).inflate(16), value ->
@@ -214,7 +216,7 @@ public final class SourceGrayboxMaterializerGameTests {
                 "an engaging raid must project a red operation marker instead of an ambiguous generic block");
         helper.assertValueEqual(claim.subjectId(), raid.id(), "the raid marker must retain its exact source activity ID");
         helper.assertValueEqual(claim.kind(), "ACTIVITY", "the raid marker must retain its operation semantic kind");
-        helper.assertTrue(helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(marker).inflate(3, 24, 3), value ->
+        helper.assertTrue(helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(marker).inflate(3, 24, 3), value ->
                         value.hasCustomName() && value.getCustomName().getString().equals("[A] operation#47 raid engaging p=2.00 i=0.50")).size() == 1,
                 "an active raid must expose its family, kind, phase, personnel and risk in a readable label");
 

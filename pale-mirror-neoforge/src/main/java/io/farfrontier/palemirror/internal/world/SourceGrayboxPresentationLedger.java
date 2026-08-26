@@ -158,7 +158,7 @@ final class SourceGrayboxPresentationLedger extends SavedData {
     }
 
     private static void requireEntityKey(String key) {
-        if (key == null || key.length() > 256 || !key.matches("(?:RESIDENT|BIOFORM|LABEL):.+")) {
+        if (key == null || key.length() > 256 || !key.matches("(?:RESIDENT|BIOFORM|LABEL|LABEL_DISPLAY):.+")) {
             throw new IllegalArgumentException("source graybox entity key is invalid");
         }
     }

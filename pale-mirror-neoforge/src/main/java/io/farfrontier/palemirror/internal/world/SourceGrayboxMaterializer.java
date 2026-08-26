@@ -16,6 +16,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -42,10 +43,15 @@ final class SourceGrayboxMaterializer {
     static final String ENTITY_ID = "pale_mirror_source_graybox_id";
     static final String ENTITY_KIND = "pale_mirror_source_graybox_kind";
     static final String ENTITY_REVISION = "pale_mirror_source_graybox_revision";
+    static final String LABEL_KIND = "LABEL_DISPLAY";
     private static final int SURFACE_Y = ReferenceGrayboxLayout.GROUND_Y;
     private static final int ENTITY_Y = SURFACE_Y + 1;
-    private static final int LABEL_Y = SURFACE_Y + 17;
-    private static final int MAX_LABEL_Y = LABEL_Y + 64;
+    /**
+     * Labels are anchored to the local visible roof, rather than one distant
+     * global sky plane.  The latter made an ordinary one-block structure look
+     * disconnected from its text when viewed from the observation deck.
+     */
+    private static final int MAX_LABEL_Y = SURFACE_Y + 81;
     Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) { return apply(level, snapshot, new LinkedHashMap<>()); }
 
     /**
@@ -122,7 +128,12 @@ final class SourceGrayboxMaterializer {
                     && entity.getUUID().equals(uuid("resident", id));
             case "BIOFORM" -> id.startsWith("bioform:") && entity instanceof Zombie
                     && entity.getUUID().equals(uuid("bioform", id));
+            // LABEL is the persisted pre-display form.  It remains recognized
+            // only long enough for a later publication pass to retire it; new
+            // labels use a distinct deterministic UUID and cannot collide with
+            // an old serialized ArmorStand during migration.
             case "LABEL" -> entity instanceof ArmorStand && entity.getUUID().equals(uuid("label", id));
+            case LABEL_KIND -> entity instanceof Display.TextDisplay && entity.getUUID().equals(uuid("label-display", id));
             default -> false;
         };
     }
@@ -270,7 +281,7 @@ final class SourceGrayboxMaterializer {
 
     private static void materializeLabels(ServerLevel level, SourceGrayboxPresentationLedger ledger, ReferenceGrayboxSnapshot snapshot, Set<String> active,
                                           Map<String, Entity> admittedEntities) {
-        LabelPositions labels = new LabelPositions();
+        SourceGrayboxLabelPositions labels = new SourceGrayboxLabelPositions(ledger);
         BlockPos deck = SourceGrayboxWorldBoundary.observationDeckFooting();
         label(level, active, admittedEntities, labels, "legend:sector-metrics",
                 "[KEY] V2 towers: red infection 0..1; purple spores 0..10; cyan human access 0..1; lime hive influence 0..1. Height=1..10.",
@@ -295,7 +306,7 @@ final class SourceGrayboxMaterializer {
                 "[C] " + cargo.ownerKind() + "#" + cargo.ownerId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
                 cargo.rectangle().centreX(), cargo.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, admittedEntities, labels, "route:" + route.id(),
-                "[T] " + route.id() + " cap=" + number(route.capacity()) + " risk=" + number(route.risk())
+                "[T] " + route.settlementA() + "→" + route.settlementB() + " cap=" + number(route.capacity()) + " risk=" + number(route.risk())
                         + (route.quarantined() ? " QUARANTINED" : route.disrupted() ? " DISRUPTED" : " OPEN"),
                 midpoint(route.start().x(), route.end().x()), midpoint(route.start().z(), route.end().z()));
         for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, admittedEntities, labels, "field-post:" + post.id(),
@@ -383,36 +394,28 @@ final class SourceGrayboxMaterializer {
         if (level.addFreshEntity(zombie)) admittedEntities.put(key, zombie);
     }
 
-    private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, LabelPositions labels,
+    private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, SourceGrayboxLabelPositions labels,
                               String id, String text, int x, int z) {
-        String key = entityKey(id, "LABEL");
+        String key = entityKey(id, LABEL_KIND);
         active.add(key);
         BlockPos position = new BlockPos(x, labels.nextY(x, z), z);
         if (!ready(level, position)) return;
-        Entity current = existingEntity(level, admittedEntities, id, "LABEL", uuid("label", id));
-        if (current != null && !(current instanceof ArmorStand && identityMatches(current, id, "LABEL"))) return;
+        Entity current = existingEntity(level, admittedEntities, id, LABEL_KIND, uuid("label-display", id));
+        if (current != null && !(current instanceof Display.TextDisplay && identityMatches(current, id, LABEL_KIND))) return;
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
-        if (current instanceof ArmorStand known) {
+        if (current instanceof Display.TextDisplay known) {
             ledger.claimEntity(key);
-            known.setInvisible(true);
-            known.setNoGravity(true);
-            known.setCustomName(Component.literal(text));
-            known.setCustomNameVisible(true);
-            attach(known, id, "LABEL", "0000000000000000000000000000000000000000000000000000000000000000");
+            SourceGrayboxLabelPresentation.configure(known, id, text);
             known.setPos(Vec3.atBottomCenterOf(position));
             return;
         }
         if (ledger.entityClaimed(key)) return;
-        ArmorStand stand = new ArmorStand(EntityType.ARMOR_STAND, level);
-        stand.setUUID(uuid("label", id));
-        stand.setInvisible(true);
-        stand.setNoGravity(true);
-        stand.setCustomName(Component.literal(text));
-        stand.setCustomNameVisible(true);
-        attach(stand, id, "LABEL", "0000000000000000000000000000000000000000000000000000000000000000");
-        stand.setPos(Vec3.atBottomCenterOf(position));
+        Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, level);
+        display.setUUID(uuid("label-display", id));
+        SourceGrayboxLabelPresentation.configure(display, id, text);
+        display.setPos(Vec3.atBottomCenterOf(position));
         ledger.claimEntity(key);
-        if (level.addFreshEntity(stand)) admittedEntities.put(key, stand);
+        if (level.addFreshEntity(display)) admittedEntities.put(key, display);
     }
 
     private static void configure(Mob entity, String id, String kind, String revision, String name, Item helmet, boolean nameVisible) {
@@ -479,20 +482,6 @@ final class SourceGrayboxMaterializer {
     }
 
     private static String shortId(String value) { int separator = value.lastIndexOf(':'); return separator < 0 ? value : value.substring(separator + 1); }
-
-    /** Separates otherwise coincident nameplates without changing their source x/z address. */
-    private static final class LabelPositions {
-        private final Map<LabelColumn, Integer> nextByColumn = new LinkedHashMap<>();
-
-        int nextY(int x, int z) {
-            LabelColumn column = new LabelColumn(x, z);
-            int result = nextByColumn.getOrDefault(column, LABEL_Y);
-            nextByColumn.put(column, result + 2);
-            return result;
-        }
-    }
-
-    private record LabelColumn(int x, int z) { }
 
     record ManagedEntity(String id, String kind, String revision) { }
     record Report(int placed, int desired, int conflicts, String revision) { }

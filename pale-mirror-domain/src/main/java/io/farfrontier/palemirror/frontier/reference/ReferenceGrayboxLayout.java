@@ -168,17 +168,41 @@ public final class ReferenceGrayboxLayout {
         return List.copyOf(result);
     }
 
-    /** Readable sampled route nodes, shared by its marker and physical fact slots. */
-    public static List<Point> routeSlots(Point start, Point end) {
+    /**
+     * Contiguous raster line for a materialized trade corridor.  It is a
+     * presentation coordinate helper only: route existence, capacity and
+     * infection continue to belong exclusively to the source snapshot.
+     */
+    public static List<Point> routeLine(Point start, Point end) {
         Objects.requireNonNull(start, "start");
         Objects.requireNonNull(end, "end");
+        int dx = end.x() - start.x();
+        int dz = end.z() - start.z();
+        int steps = Math.max(Math.abs(dx), Math.abs(dz));
+        List<Point> result = new ArrayList<>(steps + 1);
+        for (int index = 0; index <= steps; index++) {
+            double fraction = steps == 0 ? 0.0d : (double) index / steps;
+            result.add(new Point((int) Math.round(start.x() + dx * fraction), (int) Math.round(start.z() + dz * fraction)));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalStateException("route raster must advance by at least one block per step");
+        }
+        return List.copyOf(result);
+    }
+
+    /** Readable damage slots chosen directly from the continuous visible route corridor. */
+    public static List<Point> routeSlots(Point start, Point end) {
+        List<Point> corridor = routeLine(start, end);
         int dx = end.x() - start.x();
         int dz = end.z() - start.z();
         int steps = Math.max(1, (int) Math.ceil(Math.hypot(dx, dz) / 32.0d));
         List<Point> result = new ArrayList<>(steps);
         for (int index = 1; index <= steps; index++) {
-            double fraction = (double) index / (steps + 1);
-            result.add(new Point((int) Math.round(start.x() + dx * fraction), (int) Math.round(start.z() + dz * fraction)));
+            int corridorIndex = (int) Math.round((double) index / (steps + 1) * (corridor.size() - 1));
+            result.add(corridor.get(corridorIndex));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalStateException("route interaction slots must be distinct");
         }
         return List.copyOf(result);
     }

@@ -8,7 +8,7 @@ import java.util.Locale;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
@@ -59,7 +59,7 @@ public final class SourceGrayboxPhysicalObservationGameTests {
 
         String label = "[X] route_damaged target=" + remaining.subjectId() + " total=" + number(expectedCapacity)
                 + " available-slots=" + availableSlots + " each=" + number(expectedCapacity / availableSlots);
-        List<ArmorStand> labels = helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(anchor).inflate(64, 64, 64), value ->
+        List<Display.TextDisplay> labels = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(anchor).inflate(64, 64, 64), value ->
                 value.hasCustomName() && value.getCustomName().getString().equals(label));
         helper.assertTrue(labels.size() == 1,
                 "the refreshed [X] label must expose the exact remaining source capacity and remaining breakable slots");
@@ -75,7 +75,7 @@ public final class SourceGrayboxPhysicalObservationGameTests {
                 "a replay keeps the accepted slot absent while retaining the rejected second change as a durable conflict");
         String conflictLabel = "[!] conflict " + replayed.kind() + " target=" + replayed.subjectId()
                 + " outcome=replayed-event source=retained";
-        List<ArmorStand> conflicts = helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(anchor).inflate(64, 64, 64), value ->
+        List<Display.TextDisplay> conflicts = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class, new AABB(anchor).inflate(64, 64, 64), value ->
                 value.hasCustomName() && value.getCustomName().getString().equals(conflictLabel));
         helper.assertTrue(conflicts.size() == 1,
                 "a rejected replay must remain visible to the tester instead of being silently swallowed by the presentation ledger");

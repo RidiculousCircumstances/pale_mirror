@@ -22,10 +22,11 @@ final class SourceGrayboxPresentationPlan {
     private static final int OVERLAY_Y = LABEL_Y + 1;
     private static final int ACTIVITY_Y = OVERLAY_Y + 1;
     private static final int SECTOR_METRIC_MAX_HEIGHT = 10;
-    /** Keep collision recovery compact and below the dedicated label plane. */
+    /** Keep collision recovery below the bounded label-retirement volume. */
     private static final int MAX_CLAIM_Y = SURFACE_Y + 15;
     /** Shared plan/ledger limit; every claim has already been validated before Minecraft receives it. */
-    static final int MAX_CLAIMS = 10_240;
+    static final int MAX_CLAIMS = 65_536;
+    private static final int ROUTE_WAYPOINT_INTERVAL = 24;
 
     private SourceGrayboxPresentationPlan() { }
 
@@ -46,15 +47,23 @@ final class SourceGrayboxPresentationPlan {
                     site.colour()));
         }
         for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) {
-            List<ReferenceGrayboxLayout.Point> slots = ReferenceGrayboxLayout.routeSlots(route.start(), route.end());
-            for (int index = 0; index < slots.size(); index++) {
-                ReferenceGrayboxLayout.Point slot = slots.get(index);
+            List<ReferenceGrayboxLayout.Point> corridor = ReferenceGrayboxLayout.routeLine(route.start(), route.end());
+            for (int index = 0; index < corridor.size(); index++) {
+                ReferenceGrayboxLayout.Point point = corridor.get(index);
                 add(result, new Desired("route-segment:" + route.id() + ":" + index, route.id(), "ROUTE", snapshot.stateRevision(),
-                        slot.x(), SURFACE_Y, slot.z(), 1, 1, 1, route.colour()));
+                        point.x(), SURFACE_Y, point.z(), 1, 1, 1, route.colour()));
+                if (index > 0 && index < corridor.size() - 1 && index % ROUTE_WAYPOINT_INTERVAL == 0) {
+                    add(result, new Desired("route-waypoint:" + route.id() + ":" + index, route.id(), "ROUTE_WAYPOINT",
+                            snapshot.stateRevision(), point.x(), SURFACE_Y, point.z(), 1, 1, 3, route.colour()));
+                }
             }
         }
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) {
             add(result, rectangle("hive-organ:" + organ.id(), "organ:" + organ.id(), "HIVE_ORGAN", snapshot.stateRevision(), organ.rectangle(), 2,
+                    organ.colour()));
+            int spireHeight = hiveSpireHeight(organ.kind());
+            add(result, new Desired("hive-organ:" + organ.id() + ":spire", "organ:" + organ.id(), "HIVE_ORGAN_LANDMARK",
+                    snapshot.stateRevision(), organ.rectangle().centreX(), SURFACE_Y, organ.rectangle().centreZ(), 1, 1, spireHeight,
                     organ.colour()));
         }
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
@@ -175,6 +184,19 @@ final class SourceGrayboxPresentationPlan {
         }
         if (value == 0.0d) return 0;
         return Math.min(SECTOR_METRIC_MAX_HEIGHT, Math.max(1, (int) Math.ceil(value / fullScale * SECTOR_METRIC_MAX_HEIGHT)));
+    }
+
+    /** Distinct block silhouettes make hive infrastructure recognizable before a player can read its label. */
+    private static int hiveSpireHeight(String kind) {
+        return switch (kind) {
+            case "core" -> 9;
+            case "sporulator" -> 8;
+            case "brood" -> 7;
+            case "synapse" -> 6;
+            case "digestive" -> 5;
+            case "harvester" -> 4;
+            default -> 5;
+        };
     }
 
     /**

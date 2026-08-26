@@ -52,7 +52,7 @@ final class SourceGrayboxInspector {
                     + number(organ.vitality()) + " feral=" + organ.feral());
             found = true;
         }
-        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) if (ReferenceGrayboxLayout.routeSlots(route.start(), route.end()).stream()
+        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) if (ReferenceGrayboxLayout.routeLine(route.start(), route.end()).stream()
                 .anyMatch(point -> at(point, x, z))) {
             append(result, "[T] " + route.id() + " settlements=" + route.settlementA() + "→" + route.settlementB() + " capacity="
                     + number(route.capacity()) + " risk=" + number(route.risk()) + " infection=" + number(route.infection())

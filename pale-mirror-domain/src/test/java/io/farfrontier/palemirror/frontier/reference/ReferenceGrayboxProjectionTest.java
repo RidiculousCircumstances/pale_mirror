@@ -51,6 +51,29 @@ class ReferenceGrayboxProjectionTest {
     }
 
     @Test
+    void tradeRoutesHaveAContinuousInspectableGrayboxCorridorAndBoundedDamageSlots() {
+        ReferenceGrayboxLayout.Point start = new ReferenceGrayboxLayout.Point(10, 10);
+        ReferenceGrayboxLayout.Point end = new ReferenceGrayboxLayout.Point(74, 31);
+
+        List<ReferenceGrayboxLayout.Point> corridor = ReferenceGrayboxLayout.routeLine(start, end);
+        List<ReferenceGrayboxLayout.Point> slots = ReferenceGrayboxLayout.routeSlots(start, end);
+
+        assertEquals(start, corridor.getFirst());
+        assertEquals(end, corridor.getLast());
+        assertTrue(corridor.size() > slots.size(), "the visible route must be a continuous corridor, not its sparse interaction points");
+        assertEquals(corridor.size(), corridor.stream().distinct().count(),
+                "the raster must never repeat a physical corridor block");
+        for (int index = 1; index < corridor.size(); index++) {
+            ReferenceGrayboxLayout.Point previous = corridor.get(index - 1);
+            ReferenceGrayboxLayout.Point current = corridor.get(index);
+            assertTrue(Math.abs(current.x() - previous.x()) <= 1 && Math.abs(current.z() - previous.z()) <= 1,
+                    "each route block must touch its predecessor so the corridor has no visual gaps");
+        }
+        assertTrue(slots.stream().allMatch(corridor::contains),
+                "each breakable route fact must stay on the visible continuous corridor");
+    }
+
+    @Test
     void nonSpatialMarketCivicAndHiveOwnersRemainReadableSourceDashboardFacts() {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxProjection.from(grayboxWorld());
 
