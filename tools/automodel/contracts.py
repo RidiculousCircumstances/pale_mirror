@@ -131,6 +131,24 @@ def validate_reference_bundle(value: dict[str, Any]) -> None:
         require_sha256(anchor.get("sha256"), f"anchors[{index}].sha256")
         if not isinstance(anchor.get("file"), str):
             raise AutomodelContractError(f"anchors[{index}] requires a pinned file")
+        if anchor_id == "edit360_opposite_broadside_r01":
+            if tier is not EvidenceTier.MODEL_DERIVED:
+                raise AutomodelContractError("Edit360 opposite anchor must remain MODEL_DERIVED")
+            if anchor.get("role") != "dual_view_anchor":
+                raise AutomodelContractError("Edit360 opposite anchor must declare dual_view_anchor role")
+            if anchor.get("derives_from") != ["primary"]:
+                raise AutomodelContractError("Edit360 opposite anchor must declare derivation from primary only")
+            if anchor.get("declared_yaw_degrees") != 180:
+                raise AutomodelContractError("Edit360 opposite anchor must declare 180 degrees")
+            preparation = anchor.get("preparation")
+            if not isinstance(preparation, dict) or preparation.get("profile") != "edit360_opposite_broadside_r01":
+                raise AutomodelContractError("Edit360 opposite anchor requires its pinned preparation profile")
+            for field in ("alpha_source_file", "receipt_file"):
+                require_relative_build_path(preparation.get(field), f"edit360_anchor.preparation.{field}")
+            for field in ("alpha_source_sha256", "receipt_sha256"):
+                require_sha256(preparation.get(field), f"edit360_anchor.preparation.{field}")
+            if preparation.get("geometry_or_canonical_use_prohibited") is not True:
+                raise AutomodelContractError("Edit360 opposite anchor must explicitly prohibit geometry and canonical use")
     seen_model_ids: set[str] = set()
     for index, model_input in enumerate(model_inputs):
         if not isinstance(model_input, dict):
@@ -145,8 +163,68 @@ def validate_reference_bundle(value: dict[str, Any]) -> None:
             raise AutomodelContractError(f"model_inputs[{index}] requires a pinned file")
         require_sha256(model_input.get("sha256"), f"model_inputs[{index}].sha256")
         derives_from = model_input.get("derives_from")
-        if not isinstance(derives_from, list) or sorted(derives_from) != ["primary", "primary_trace"]:
-            raise AutomodelContractError("model inputs must declare derivation from primary and primary_trace")
+        if input_id == "isolated_subject_v1":
+            if not isinstance(derives_from, list) or sorted(derives_from) != ["primary", "primary_trace"]:
+                raise AutomodelContractError("isolated subject input must declare derivation from primary and primary_trace")
+            preparation = model_input.get("preparation")
+            if not isinstance(preparation, dict) or preparation.get("profile") != "isolated_subject_v1":
+                raise AutomodelContractError("isolated subject input requires its pinned preparation profile")
+            for field in ("mask_file", "receipt_file", "effective_sv3d_review_file"):
+                require_relative_build_path(preparation.get(field), f"isolated_subject.preparation.{field}")
+            for field in ("mask_sha256", "receipt_sha256", "effective_sv3d_review_sha256"):
+                require_sha256(preparation.get(field), f"isolated_subject.preparation.{field}")
+        elif input_id == "edit360_front_white_r01":
+            if not isinstance(derives_from, list) or sorted(derives_from) != ["primary", "primary_trace"]:
+                raise AutomodelContractError("Edit360 front input must derive from primary and primary_trace")
+            preparation = model_input.get("preparation")
+            if not isinstance(preparation, dict) or preparation.get("profile") != "edit360_front_white_r01":
+                raise AutomodelContractError("Edit360 front input requires its pinned preparation profile")
+            require_relative_build_path(
+                preparation.get("source_conditioning_receipt_file"),
+                "edit360_front.preparation.source_conditioning_receipt_file",
+            )
+            require_sha256(
+                preparation.get("source_conditioning_receipt_sha256"),
+                "edit360_front.preparation.source_conditioning_receipt_sha256",
+            )
+            if preparation.get("geometry_or_canonical_use_prohibited") is not True:
+                raise AutomodelContractError("Edit360 front input must explicitly prohibit geometry and canonical use")
+        elif input_id == "edit360_generated_front_white_r01":
+            if not isinstance(derives_from, list) or derives_from != ["primary"]:
+                raise AutomodelContractError("generated Edit360 front input must declare derivation from primary only")
+            if parse_tier(model_input.get("tier"), "edit360_generated_front.tier") is not EvidenceTier.MODEL_DERIVED:
+                raise AutomodelContractError("generated Edit360 front input must remain MODEL_DERIVED")
+            preparation = model_input.get("preparation")
+            if not isinstance(preparation, dict) or preparation.get("profile") != "edit360_generated_front_white_r01":
+                raise AutomodelContractError("generated Edit360 front input requires its pinned preparation profile")
+            require_relative_build_path(
+                preparation.get("source_conditioning_receipt_file"),
+                "edit360_generated_front.preparation.source_conditioning_receipt_file",
+            )
+            require_sha256(
+                preparation.get("source_conditioning_receipt_sha256"),
+                "edit360_generated_front.preparation.source_conditioning_receipt_sha256",
+            )
+            if preparation.get("visual_review_required_before_execution") is not True:
+                raise AutomodelContractError("generated Edit360 front input must require a visual review before execution")
+            if preparation.get("geometry_or_canonical_use_prohibited") is not True:
+                raise AutomodelContractError("generated Edit360 front input must explicitly prohibit geometry and canonical use")
+        elif input_id == "generated_cutout_r01":
+            if not isinstance(derives_from, list) or derives_from != ["primary"]:
+                raise AutomodelContractError("generated cutout input must declare derivation from primary only")
+            if parse_tier(model_input.get("tier"), "generated_cutout.tier") is not EvidenceTier.MODEL_DERIVED:
+                raise AutomodelContractError("generated cutout input must remain MODEL_DERIVED")
+            preparation = model_input.get("preparation")
+            if not isinstance(preparation, dict) or preparation.get("profile") != "generated_cutout_r01":
+                raise AutomodelContractError("generated cutout input requires its pinned preparation profile")
+            for field in ("receipt_file", "effective_sv3d_review_file"):
+                require_relative_build_path(preparation.get(field), f"generated_cutout.preparation.{field}")
+            for field in ("receipt_sha256", "effective_sv3d_review_sha256"):
+                require_sha256(preparation.get(field), f"generated_cutout.preparation.{field}")
+            if preparation.get("geometry_or_canonical_use_prohibited") is not True:
+                raise AutomodelContractError("generated cutout must explicitly prohibit geometry and canonical use")
+        else:
+            raise AutomodelContractError(f"unregistered model conditioning input: {input_id}")
 
 
 def validate_view_set(value: dict[str, Any]) -> None:

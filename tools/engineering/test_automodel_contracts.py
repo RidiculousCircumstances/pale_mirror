@@ -56,6 +56,9 @@ class AutomodelContractsTest(unittest.TestCase):
         self.assertTrue(registry["sv3d_p_orbit"].local_preflight)
         self.assertTrue(registry["sv3d_p_orbit_fast_fp16_20"].local_preflight)
         self.assertEqual("windows_gpu", registry["sv3d_p_orbit_fast_fp16_20"].executor)
+        self.assertEqual("deferred_hardware", registry["edit360_dual_anchor_orbit"].status)
+        self.assertTrue(registry["edit360_dual_anchor_orbit_fast_fp16_20"].local_preflight)
+        self.assertEqual("windows_gpu", registry["edit360_dual_anchor_orbit_fast_fp16_20"].executor)
         self.assertTrue(registry["vggt_official"].local_preflight)
         self.assertEqual("deferred_hardware", registry["trellis2"].status)
         self.assertEqual("deferred_runtime", registry["hunyuan_paint"].status)
@@ -157,13 +160,116 @@ class AutomodelContractsTest(unittest.TestCase):
                 artist_input,
                 artist_trace,
                 run_directory,
-                trace_masked_conditioning=True,
+                isolated_subject_conditioning=True,
                 repository_root=repository,
             )
             validate_reference_bundle(bundle)
             self.assertEqual("sole_likeness_anchor", bundle["primary"]["role"])
+            self.assertEqual("isolated_subject_v1", bundle["model_inputs"][0]["id"])
             self.assertEqual("conditioning_only", bundle["model_inputs"][0]["role"])
-            self.assertTrue((run_directory / "input" / "trace_masked_conditioning.png").is_file())
+            self.assertTrue((run_directory / "input" / "isolated_subject_conditioning_v1.png").is_file())
+            self.assertTrue((run_directory / "input" / "isolated_subject_mask_v1.png").is_file())
+            self.assertTrue((run_directory / "input" / "isolated_subject_conditioning_v1.json").is_file())
+            with Image.open(run_directory / "input" / "isolated_subject_sv3d_effective_v1.png") as review:
+                self.assertEqual((576, 576), review.size)
+                self.assertEqual("RGB", review.mode)
+                self.assertEqual((255, 255, 255), review.getpixel((0, 0)))
+
+    def test_isolated_subject_conditioning_removes_trace_dust_and_fills_tiny_holes(self) -> None:
+        with TemporaryDirectory(prefix="pm-automodel-isolated-subject-") as temporary:
+            repository = Path(temporary)
+            artist_input = repository / "artist_primary.png"
+            artist_trace = repository / "artist_trace.json"
+            Image.new("RGB", (12, 12), (120, 30, 20)).save(artist_input)
+            artist_trace.write_text(
+                json.dumps(
+                    {
+                        "source": {"size": [12, 12]},
+                        "sampling": {"grid_px": 1},
+                        "rows": [
+                            {"y": 3, "runs": [[3, 7]]},
+                            {"y": 4, "runs": [[3, 4], [5, 7]]},
+                            {"y": 5, "runs": [[3, 7]]},
+                            {"y": 6, "runs": [[3, 7]]},
+                            {"y": 10, "runs": [[10, 11]]},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_directory = repository / "build" / "automodel" / "biomass_collector" / "isolated_input"
+            bundle = stage_reference_bundle(
+                "biomass_collector",
+                artist_input,
+                artist_trace,
+                run_directory,
+                isolated_subject_conditioning=True,
+                repository_root=repository,
+            )
+            preparation = bundle["model_inputs"][0]["preparation"]
+            receipt = json.loads((repository / preparation["receipt_file"]).read_text(encoding="utf-8"))
+            self.assertEqual(1, receipt["cleanup"]["removed_components"])
+            self.assertEqual(1, receipt["cleanup"]["filled_holes"])
+            with Image.open(repository / preparation["mask_file"]) as mask:
+                self.assertEqual(255, mask.getpixel((4, 4)))
+                self.assertEqual(0, mask.getpixel((10, 10)))
+
+    def test_generated_cutout_is_model_derived_preview_only(self) -> None:
+        with TemporaryDirectory(prefix="pm-automodel-generated-cutout-") as temporary:
+            repository = Path(temporary)
+            artist_input = repository / "artist_primary.png"
+            artist_trace = repository / "artist_trace.json"
+            generated_cutout = repository / "generated_cutout.png"
+            Image.new("RGB", (12, 8), (120, 30, 20)).save(artist_input)
+            artist_trace.write_text(
+                json.dumps({"source": {"size": [12, 8]}, "sampling": {"grid_px": 1}, "rows": [{"y": 1, "runs": [[1, 11]]}]}),
+                encoding="utf-8",
+            )
+            generated = Image.new("RGBA", (12, 8), (0, 0, 0, 0))
+            for y in range(2, 6):
+                for x in range(3, 9):
+                    generated.putpixel((x, y), (20, 100, 160, 255))
+            generated.save(generated_cutout)
+            run_directory = repository / "build" / "automodel" / "biomass_collector" / "generated_input"
+            bundle = stage_reference_bundle(
+                "biomass_collector",
+                artist_input,
+                artist_trace,
+                run_directory,
+                isolated_subject_conditioning=False,
+                generated_conditioning_source=generated_cutout,
+                repository_root=repository,
+            )
+            validate_reference_bundle(bundle)
+            conditioning = bundle["model_inputs"][0]
+            self.assertEqual("generated_cutout_r01", conditioning["id"])
+            self.assertEqual(EvidenceTier.MODEL_DERIVED.value, conditioning["tier"])
+            self.assertEqual(["primary"], conditioning["derives_from"])
+            self.assertTrue(conditioning["preparation"]["geometry_or_canonical_use_prohibited"])
+            self.assertTrue((run_directory / "input" / "generated_cutout_r01_sv3d_effective.png").is_file())
+
+    def test_generated_cutout_requires_real_transparency(self) -> None:
+        with TemporaryDirectory(prefix="pm-automodel-opaque-cutout-") as temporary:
+            repository = Path(temporary)
+            artist_input = repository / "artist_primary.png"
+            artist_trace = repository / "artist_trace.json"
+            generated_cutout = repository / "opaque.png"
+            Image.new("RGB", (8, 8), (120, 30, 20)).save(artist_input)
+            artist_trace.write_text(
+                json.dumps({"source": {"size": [8, 8]}, "sampling": {"grid_px": 1}, "rows": [{"y": 1, "runs": [[1, 7]]}]}),
+                encoding="utf-8",
+            )
+            Image.new("RGBA", (8, 8), (20, 100, 160, 255)).save(generated_cutout)
+            with self.assertRaisesRegex(AutomodelContractError, "transparent background"):
+                stage_reference_bundle(
+                    "biomass_collector",
+                    artist_input,
+                    artist_trace,
+                    repository / "build" / "automodel" / "biomass_collector" / "opaque_input",
+                    isolated_subject_conditioning=False,
+                    generated_conditioning_source=generated_cutout,
+                    repository_root=repository,
+                )
 
     def test_run_and_review_remain_inside_ignored_build_root(self) -> None:
         with TemporaryDirectory(prefix="pm-automodel-test-") as temporary:
@@ -177,7 +283,7 @@ class AutomodelContractsTest(unittest.TestCase):
             Image.new("RGB", (8, 8), (30, 20, 10)).save(primary)
             trace = inputs / "trace.json"
             trace.write_text("{}\n", encoding="utf-8")
-            conditioning = inputs / "trace_masked_primary.png"
+            conditioning = inputs / "isolated_subject_v1.png"
             Image.new("RGBA", (8, 8), (30, 20, 10, 255)).save(conditioning)
             bundle = {
                 "schema": "pale_mirror.automodel.reference_bundle.v1",
@@ -188,11 +294,20 @@ class AutomodelContractsTest(unittest.TestCase):
                 "anchors": [],
                 "model_inputs": [
                     {
-                        "id": "trace_masked_primary",
+                        "id": "isolated_subject_v1",
                         "role": "conditioning_only",
-                        "file": "build/automodel/input/trace_masked_primary.png",
+                        "file": "build/automodel/input/isolated_subject_v1.png",
                         "sha256": digest(conditioning),
                         "derives_from": ["primary", "primary_trace"],
+                        "preparation": {
+                            "profile": "isolated_subject_v1",
+                            "mask_file": "build/automodel/input/isolated_subject_mask.png",
+                            "mask_sha256": HASH,
+                            "receipt_file": "build/automodel/input/isolated_subject_receipt.json",
+                            "receipt_sha256": HASH,
+                            "effective_sv3d_review_file": "build/automodel/input/isolated_subject_sv3d_effective.png",
+                            "effective_sv3d_review_sha256": HASH,
+                        },
                     }
                 ],
             }
@@ -245,7 +360,7 @@ class AutomodelContractsTest(unittest.TestCase):
                 repository_root=repository,
             )
             self.assertEqual(21, vggt_input["frame_count"])
-            self.assertEqual("literal_primary_trace_masked", vggt_input["frames"][0]["source"])
+            self.assertEqual("literal_primary_isolated_subject", vggt_input["frames"][0]["source"])
             with self.assertRaisesRegex(AutomodelContractError, "overwrite"):
                 prepare_vggt_pose_depth_input(
                     view_path,

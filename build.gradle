@@ -98,10 +98,18 @@ def harvesterBlindPairwiseTests = layout.projectDirectory.file('tools/engineerin
 def harvesterBlindPairwiseProtocol = layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/blind_review_protocol_v01.json').asFile
 def hunyuan2mvPreparationTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_collector_multiview.py').asFile
 def hunyuan2mvPreparationTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_preparation.py').asFile
+def hunyuan2mvExternalSheetTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_external_reference_sheet.py').asFile
+def hunyuan2mvExternalSheetTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_external_sheet_preparation.py').asFile
 def historicalBlenderOperationTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_review_contract.py').asFile
 def blenderWinAppControlsTests = layout.projectDirectory.file('tools/engineering/test_blender_winapp_controls.py').asFile
 def automodelContractsTests = layout.projectDirectory.file('tools/engineering/test_automodel_contracts.py').asFile
+def automodelMultiviewRingTests = layout.projectDirectory.file('tools/engineering/test_automodel_multiview_ring.py').asFile
+def automodelRingBenchmarkTests = layout.projectDirectory.file('tools/engineering/test_automodel_ring_benchmark.py').asFile
+def automodelPoseDepthRingTests = layout.projectDirectory.file('tools/engineering/test_automodel_pose_depth_ring.py').asFile
+def da3RingContractTests = layout.projectDirectory.file('tools/engineering/test_da3_ring_contract.py').asFile
+def vggtReviewedRingContractTests = layout.projectDirectory.file('tools/engineering/test_vggt_reviewed_ring_contract.py').asFile
 def sv3dOrbitContractTests = layout.projectDirectory.file('tools/engineering/test_sv3d_orbit_contract.py').asFile
+def edit360OrbitContractTests = layout.projectDirectory.file('tools/engineering/test_edit360_orbit_contract.py').asFile
 def sv3dMultiviewBenchmarkTests = layout.projectDirectory.file('tools/engineering/test_sv3d_multiview_benchmark.py').asFile
 def vggtOmegaCollectorPilotTests = layout.projectDirectory.file('tools/engineering/test_vggt_omega_collector_pilot.py').asFile
 def mandatoryProjectSkillFiles = mandatoryProjectSkills.collectEntries { name -> [(name): [
@@ -126,7 +134,7 @@ def requiredArchitectureStatements = [
         ,'Fresh-world visual genesis is distinct from reconciliation materialization; one dedicated coordinator uses a bounded configurable worker pool for independent terrain probes and candidate attempts, then deterministically reduces indexed results and compiles immutable manifests into chunk-addressed slices before players are admitted. A registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v40 compatibility path.'
         ,'Every authored settlement is an immutable terrain-led site plan selected from a bounded archetype catalog. Buildings have stable identity, categories, functions, local foundations, semantic slots, ports and state profiles; each curated NBT module declares its real local threshold and canonical outward facade, and module rotation, door, apron and obstacle-aware circulation derive from that one contract rather than a bounding-box midpoint. Open spaces, circulation, segmented defences, irregular managed-area unions and five parcels plus two annex easements are typed and validated, and no radial wall or global settlement terrace is synthesized as a hidden fallback.'
         ,'The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions.'
-        ,'Automodel is an offline research boundary: source-pinned references and traces decide likeness, all model output remains provenance-pinned noncanonical evidence under ignored build artifacts, and no Automodel operation may write canonical Blender sources, PMMesh exports, runtime resources, server state or world state.'
+        ,'Automodel is an offline research boundary: source-pinned references and traces decide likeness, all model output remains provenance-pinned noncanonical evidence under ignored build artifacts, and no Automodel operation may write canonical Blender sources, PMMesh exports, runtime resources, server state or world state. External still staging remains MODEL_DERIVED; only an explicit complete-ring human receipt may promote secondary volume aids, while qualified DA3/VGGT disagreement is inspection-only and never mesh fusion.'
 ]
 
 tasks.register('verifyArchitecture') {
@@ -397,6 +405,13 @@ tasks.register('testHunyuan2mvPreparation', Exec) {
     commandLine 'python3', hunyuan2mvPreparationTests.absolutePath
 }
 
+tasks.register('testHunyuan2mvExternalSheetPreparation', Exec) {
+    group = 'verification'
+    description = 'Checks the noncanonical external 2x4 Hunyuan3D-2mv input contract.'
+    inputs.files(hunyuan2mvExternalSheetTool, hunyuan2mvExternalSheetTests)
+    commandLine 'python3', hunyuan2mvExternalSheetTests.absolutePath
+}
+
 tasks.register('testHistoricalBlenderOperationIsolation', Exec) {
     group = 'verification'
     description = 'Checks that rejected SF3D and Hunyuan proposal operations remain historical-only.'
@@ -435,6 +450,57 @@ tasks.register('testAutomodelContracts', Exec) {
     commandLine 'python3', automodelContractsTests.absolutePath
 }
 
+tasks.register('testAutomodelMultiviewRing', Exec) {
+    group = 'verification'
+    description = 'Checks the anatomy-aware external-still ring and its fail-closed review hand-off.'
+    inputs.files(automodelMultiviewRingTests,
+            layout.projectDirectory.file('tools/automodel/multiview_ring.py'),
+            layout.projectDirectory.file('tools/automodel/anatomy/biomass_collector.v1.json'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'))
+    commandLine 'python3', automodelMultiviewRingTests.absolutePath
+}
+
+tasks.register('testAutomodelRingBenchmark', Exec) {
+    group = 'verification'
+    description = 'Checks the known synthetic 8-view qualification gate for DA3/VGGT.'
+    inputs.files(automodelRingBenchmarkTests,
+            layout.projectDirectory.file('tools/automodel/ring_benchmark.py'),
+            layout.projectDirectory.file('tools/automodel/multiview_ring.py'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'))
+    commandLine 'python3', automodelRingBenchmarkTests.absolutePath
+}
+
+tasks.register('testAutomodelPoseDepthRing', Exec) {
+    group = 'verification'
+    description = 'Checks DA3/VGGT reviewed-ring preparation and non-fused disagreement diagnostics.'
+    inputs.files(automodelPoseDepthRingTests,
+            layout.projectDirectory.file('tools/automodel/multiview_ring.py'),
+            layout.projectDirectory.file('tools/automodel/pose_depth_ring.py'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'),
+            layout.projectDirectory.file('tools/automodel/model_registry.v1.json'))
+    commandLine 'python3', automodelPoseDepthRingTests.absolutePath
+}
+
+tasks.register('testDa3RingContracts', Exec) {
+    group = 'verification'
+    description = 'Checks the DA3-Base reviewed-ring runner remains pinned and diagnostic-only.'
+    inputs.files(da3RingContractTests,
+            layout.projectDirectory.file('tools/da3/run_da3_ring.py'),
+            layout.projectDirectory.file('tools/automodel/checkpoint_receipt.py'),
+            layout.projectDirectory.file('tools/automodel/pose_depth_ring.py'))
+    commandLine 'python3', da3RingContractTests.absolutePath
+}
+
+tasks.register('testVggtReviewedRingContracts', Exec) {
+    group = 'verification'
+    description = 'Checks the VGGT reviewed-ring runner remains pinned and diagnostic-only.'
+    inputs.files(vggtReviewedRingContractTests,
+            layout.projectDirectory.file('tools/vggt_omega/run_reviewed_ring.py'),
+            layout.projectDirectory.file('tools/vggt_omega/run_collector_pilot.py'),
+            layout.projectDirectory.file('tools/automodel/pose_depth_ring.py'))
+    commandLine 'python3', vggtReviewedRingContractTests.absolutePath
+}
+
 tasks.register('testSv3dOrbitContracts', Exec) {
     group = 'verification'
     description = 'Checks that the SV3D_p Windows runner remains local, pinned and noncanonical.'
@@ -450,6 +516,16 @@ tasks.register('testSv3dOrbitContracts', Exec) {
             layout.projectDirectory.file('tools/sv3d_orbit/prepare_synthetic_multiview_benchmark.py'),
             layout.projectDirectory.file('tools/sv3d_orbit/evaluate_synthetic_multiview_benchmark.py'))
     commandLine 'python3', sv3dOrbitContractTests.absolutePath
+}
+
+tasks.register('testEdit360OrbitContracts', Exec) {
+    group = 'verification'
+    description = 'Checks that the Edit360 dual-anchor runner stays noncanonical and camera-uncalibrated.'
+    inputs.files(edit360OrbitContractTests,
+            layout.projectDirectory.dir('tools/edit360_orbit'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'),
+            layout.projectDirectory.file('tools/automodel/model_registry.v1.json'))
+    commandLine 'python3', edit360OrbitContractTests.absolutePath
 }
 
 tasks.register('testSv3dMultiviewBenchmark', Exec) {
@@ -493,9 +569,15 @@ tasks.register('guardrails') {
             tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger'),
             tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
             tasks.named('testHarvesterVolumeBakeoff'), tasks.named('testHarvesterPrimaryModelOverlay'), tasks.named('testCollectorDirectMeshProtocol'),
-            tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),
+            tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparation'), tasks.named('testHunyuan2mvExternalSheetPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),
             tasks.named('testBlenderWinAppControls'), tasks.named('testAutomodelContracts'),
-            tasks.named('testSv3dOrbitContracts'), tasks.named('testSv3dMultiviewBenchmark'), tasks.named('testVggtOmegaCollectorPilot')
+            tasks.named('testAutomodelMultiviewRing'),
+            tasks.named('testAutomodelRingBenchmark'),
+            tasks.named('testAutomodelPoseDepthRing'),
+            tasks.named('testDa3RingContracts'),
+            tasks.named('testVggtReviewedRingContracts'),
+            tasks.named('testSv3dOrbitContracts'), tasks.named('testEdit360OrbitContracts'),
+            tasks.named('testSv3dMultiviewBenchmark'), tasks.named('testVggtOmegaCollectorPilot')
 }
 
 tasks.named('check') {

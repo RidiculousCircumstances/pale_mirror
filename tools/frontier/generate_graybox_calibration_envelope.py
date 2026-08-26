@@ -14,10 +14,53 @@ from statistics import median
 from generate_reference_trace import source_manifest
 
 
-SCHEMA = 1
+SCHEMA = 2
 PROFILE = "graybox_1_40"
 SEEDS = (7, 17, 41, 73)
 DAYS = 365
+
+# The yearly check deliberately permits a bounded legal downstream branch after
+# a numerical threshold differs, but it must not permit a different kind of
+# world.  The Java test reads these rules from this source-generated fixture;
+# it must not copy the policy into a second hand-maintained constant table.
+COMPARISON_RULES = {
+    "settlement_count": {"absolute_tolerance": 1},
+    "continuous": {"relative_tolerance": 0.15, "zero_maximum": 1.0e-9},
+    "fraction": {"relative_tolerance": 0.15, "zero_maximum": 1.0e-9, "minimum": 0.0, "maximum": 1.0},
+    "event_count": {"absolute_tolerance": 2, "relative_tolerance": 0.20, "zero_maximum": 1},
+}
+
+METRIC_RULES = {
+    "alive_settlements": "settlement_count",
+    "population_ratio": "continuous",
+    "recent_trade_value": "continuous",
+    "recent_trade_count": "event_count",
+    "peak_shortage_food": "fraction",
+    "peak_shortage_medicine": "fraction",
+    "peak_shortage_ammo": "fraction",
+    "peak_infection": "fraction",
+    "peak_illness_burden": "fraction",
+    "peak_active_nests": "event_count",
+    "peak_active_bioforms": "event_count",
+    "peak_contaminated_sites": "event_count",
+    "peak_hive_biomass": "continuous",
+    "final_ecological_scar": "continuous",
+    "harvested_biomass": "continuous",
+    "destroyed_organs": "event_count",
+    "destroyed_cores": "event_count",
+    "remaining_cores": "event_count",
+    "refugee_groups": "event_count",
+    "wounded_personnel": "continuous",
+    "operations_formed": "event_count",
+    "operations_completed": "event_count",
+    "field_posts_built": "event_count",
+    "field_posts_lost": "event_count",
+    "field_engagements": "event_count",
+    "front_campaigns_started": "event_count",
+    "front_campaigns_completed": "event_count",
+    "front_campaigns_withdrawn": "event_count",
+    "front_campaigns_failed": "event_count",
+}
 
 # These are semantic acceptance bands, not a lossy rewrite of the source
 # trace. They are intentionally set before the Java-side assertion and leave
@@ -45,6 +88,7 @@ def measure(world_module: object, seed: int) -> dict[str, float | int]:
     world.run(DAYS)
     history = world.history
     final = history[-1]
+    recent_trades = [record for record in world.trade.history if record.day > world.day - 30]
     peak_illness = max(
         (row["illness_burden"] for rows in world.settlement_history.values() for row in rows),
         default=0.0,
@@ -54,13 +98,29 @@ def measure(world_module: object, seed: int) -> dict[str, float | int]:
         if str(item.get("kind", "")).startswith("destroyed:")
     ]
     campaigns = list(world.v2.front_campaigns.values())
+    operations = [*world.operations.active, *world.operations.completed]
+    peak_shortage: dict[str, float] = {}
+    for resource in ("food", "medicine", "ammo"):
+        peak_shortage[resource] = max(
+            (
+                1.0 - min(1.0, row[resource] / row[f"{resource}_target"])
+                for rows in world.settlement_history.values()
+                for row in rows
+                if row["alive"] > 0 and row[f"{resource}_target"] > 0
+            ),
+            default=0.0,
+        )
     return {
         "seed": seed,
         "days_simulated": world.day,
-        "alive_settlements": int(final["alive"]),
-        "population_ratio": final["population"] / initial_population if initial_population else 0.0,
-        "recent_trade_value": final["trade_30d"],
-        "recent_trade_count": sum(record.day > world.day - 30 for record in world.trade.history),
+        "alive_settlements": sum(settlement.alive for settlement in world.settlements.values()),
+        "population_ratio": sum(settlement.population for settlement in world.settlements.values() if settlement.alive)
+        / initial_population if initial_population else 0.0,
+        "recent_trade_value": sum(record.value for record in recent_trades),
+        "recent_trade_count": len(recent_trades),
+        "peak_shortage_food": peak_shortage["food"],
+        "peak_shortage_medicine": peak_shortage["medicine"],
+        "peak_shortage_ammo": peak_shortage["ammo"],
         "peak_infection": max(row["infection"] for row in history),
         "peak_illness_burden": peak_illness,
         "peak_active_nests": max(int(row["nests"]) for row in history),
@@ -68,9 +128,18 @@ def measure(world_module: object, seed: int) -> dict[str, float | int]:
         "peak_contaminated_sites": max(int(row["contaminated_sites"]) for row in history),
         "peak_hive_biomass": max(row["hive_biomass"] for row in history),
         "final_ecological_scar": final["ecology_scar"],
+        "harvested_biomass": world.infection.harvested_biomass,
         "destroyed_organs": len(destroyed),
         "destroyed_cores": sum(item["kind"] == "destroyed:core" for item in destroyed),
         "remaining_cores": sum(organ.kind.value == "core" for organ in world.infection.nests.values()),
+        "refugee_groups": sum("refugees left" in event for event in world.events),
+        "wounded_personnel": sum(settlement.wounded_personnel for settlement in world.settlements.values()),
+        "operations_formed": len(operations),
+        "operations_completed": len(world.operations.completed),
+        "field_posts_built": len(world.field.posts),
+        "field_posts_lost": sum(post.status.value in {"abandoned", "overrun", "dismantled"}
+                                for post in world.field.posts.values()),
+        "field_engagements": len(world.field.engagements) + len(world.field.completed_engagements),
         "front_campaigns_started": len(campaigns),
         "front_campaigns_completed": sum(
             campaign.terminal_outcome is not None and campaign.terminal_outcome.value == "complete"
@@ -78,6 +147,10 @@ def measure(world_module: object, seed: int) -> dict[str, float | int]:
         ),
         "front_campaigns_failed": sum(
             campaign.terminal_outcome is not None and campaign.terminal_outcome.value == "failed"
+            for campaign in campaigns
+        ),
+        "front_campaigns_withdrawn": sum(
+            campaign.terminal_outcome is not None and campaign.terminal_outcome.value == "withdraw"
             for campaign in campaigns
         ),
     }
@@ -130,6 +203,7 @@ def trace(root: Path) -> dict[str, object]:
             "measurements": measurements,
             "summary": aggregate,
             "acceptance": ACCEPTANCE,
+            "comparison": {"rules": COMPARISON_RULES, "metric_rules": METRIC_RULES},
         }
     finally:
         sys.path.remove(str(root))

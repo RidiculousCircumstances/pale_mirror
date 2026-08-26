@@ -306,7 +306,7 @@ def _write_scene(scene: Scene, suite_root: Path, repository_root: Path) -> dict[
         primary_path,
         trace_path,
         run,
-        trace_masked_conditioning=True,
+        isolated_subject_conditioning=True,
         repository_root=repository_root,
     )
     spec = {

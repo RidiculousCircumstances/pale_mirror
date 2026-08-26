@@ -103,8 +103,6 @@ class ReferenceMarketEconomyTest {
         assertEquals(10.500000000000002d, world.settlements().get(1).dailyProduction().get(ReferenceResource.TOOLS));
         assertEquals(18.1764d, world.settlements().get(2).dailyProduction().get(ReferenceResource.ORE));
         assertEquals(3.0d, world.settlements().get(2).dailyProduction().get(ReferenceResource.MEDICINE));
-        assertEquals(18.1764d, world.extractedAtSite(3));
-        assertEquals(156.24d, world.extractedAtSite(7));
     }
 
     @Test

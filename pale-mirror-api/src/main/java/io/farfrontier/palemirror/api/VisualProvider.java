@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.api;
 import java.util.Collection;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 
 /** Experimental provider SPI. Implementations discover physical facts; they never mutate canonical state. */
@@ -37,6 +38,14 @@ public interface VisualProvider extends IntegrationAdapter {
     }
     Collection<ResidentDeathObservation> drainResidentDeaths(ServerLevel level);
     void applyProjection(ServerLevel level, VisualStateProjection projection);
+    /** Latest desired autonomous-world state. Delivery never grants canonical mutation authority. */
+    default void applyFrontierProjection(ServerLevel level, FrontierProjection projection) { }
+    /** Read-only physical facts are queued here; Core drains and validates them in the accepting server event. */
+    default Collection<FrontierPhysicalObservation> drainFrontierObservations(ServerLevel level) { return java.util.List.of(); }
+    /** Returns true only when this is a current managed Frontier entity. */
+    default boolean observeFrontierEntityDeath(ServerLevel level, Entity entity, String causationId) { return false; }
+    /** Returns true only when the destroyed block is a current managed Frontier facility or organ. */
+    default boolean observeFrontierBlockBreak(ServerLevel level, BlockPos position, String causationId) { return false; }
     default void applyJourneyProjection(ServerLevel level, JourneyProjection projection) { }
     default Collection<JourneyObservation> drainJourneyObservations(ServerLevel level) { return java.util.List.of(); }
     default ThreatControllerResult ensureThreatController(ServerLevel level, ThreatControllerProjection projection) {

@@ -258,7 +258,7 @@ public final class ReferenceMarketEconomy {
             ReferenceCompany company = companies.get(site.operatorCompanyId());
             ReferenceSettlement owner = world.settlements().get(site.ownerId());
             if (company == null || owner == null || !owner.alive()) continue;
-            double loss = Math.min(0.85d, Math.max(0.0d, world.siteHaulInfection(site.id())) * HAUL_LOSS_PER_INFECTION);
+            double loss = Math.min(0.85d, Math.max(0.0d, world.haulInfection(site, owner)) * HAUL_LOSS_PER_INFECTION);
             double shipped = site.remove(site.resource(), site.haulCapacity());
             company.add(site.resource(), shipped * (1.0d - loss));
         }
@@ -310,7 +310,7 @@ public final class ReferenceMarketEconomy {
             ReferenceResourceSite site = world.resourceSites().get(siteId);
             if (site == null || !site.operational() || !Objects.equals(site.operatorCompanyId(), company.id())) continue;
             SiteProductionSpec spec = siteSpec(site.kind());
-            double planned = spec.yield() * site.capacity() * site.quality() * site.condition() * world.siteOutputFactor(site.id())
+            double planned = spec.yield() * site.capacity() * site.quality() * site.condition() * world.humanOutputFactor(site)
                     * labour * (site.kind() == ReferenceSiteKind.FARM ? farmYield(world.day()) : 1.0d);
             if (site.kind() == ReferenceSiteKind.FARM && seedPerCapacity(world.day()) > 0.0d) {
                 double seedNeed = seedPerCapacity(world.day()) * site.capacity();
@@ -334,7 +334,7 @@ public final class ReferenceMarketEconomy {
                 site.add(site.resource(), output);
                 home.recordProduction(site.resource(), output);
             }
-            world.recordHumanExtraction(site.id(), output);
+            world.humanExtract(site, output);
         }
     }
 

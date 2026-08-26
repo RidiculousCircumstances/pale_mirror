@@ -25,7 +25,10 @@ param(
     [string]$MemoryProfile = 'official_default',
 
     [ValidateRange(1, 14)]
-    [int]$DecodingT = 2
+    [int]$DecodingT = 2,
+
+    [ValidateSet('isolated_subject_v1', 'generated_cutout_r01')]
+    [string]$ConditioningId = 'isolated_subject_v1'
 )
 
 Set-StrictMode -Version Latest
@@ -75,6 +78,7 @@ try {
         -ExecutionProfile $ExecutionProfile `
         -MemoryProfile $MemoryProfile `
         -DecodingT $DecodingT `
+        -ConditioningId $ConditioningId `
         1> $stdoutPath 2> $stderrPath
     if (-not $?) {
         throw 'SV3D runner returned a failed PowerShell status.'
@@ -89,6 +93,7 @@ try {
         execution_profile = $ExecutionProfile
         memory_profile = $MemoryProfile
         decoding_t = $DecodingT
+        conditioning_id = $ConditioningId
         scope = 'research_only_noncanonical'
         promotion_prohibited = $true
     } | ForEach-Object {
@@ -112,6 +117,7 @@ try {
         execution_profile = $ExecutionProfile
         memory_profile = $MemoryProfile
         decoding_t = $DecodingT
+        conditioning_id = $ConditioningId
         scope = 'research_only_noncanonical'
         promotion_prohibited = $true
     } | ForEach-Object {

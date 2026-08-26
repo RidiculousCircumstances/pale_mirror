@@ -31,9 +31,21 @@ OFFICIAL_CHECKPOINTS: dict[str, dict[str, str]] = {
         "repository": "stabilityai/sv3d",
         "filename": "sv3d_p.safetensors",
     },
+    "edit360_dual_anchor_orbit": {
+        "repository": "stabilityai/sv3d",
+        "filename": "sv3d_u.safetensors",
+    },
+    "edit360_dual_anchor_orbit_fast_fp16_20": {
+        "repository": "stabilityai/sv3d",
+        "filename": "sv3d_u.safetensors",
+    },
     "vggt_official": {
         "repository": "facebook/VGGT-Omega",
         "filename": "vggt_omega_1b_512.pt",
+    },
+    "da3_base": {
+        "repository": "depth-anything/DA3-BASE",
+        "filename": "model.safetensors",
     },
 }
 

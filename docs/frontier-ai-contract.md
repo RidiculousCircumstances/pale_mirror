@@ -73,6 +73,24 @@ each source change. `PaleMirrorRuntime.tick()` returns before the historical
 Frontier clock once this source runtime is active, so two autonomous campaign
 owners cannot run together.
 
+The future living-world runtime uses a durable layered clock. In the normal
+`GAMEPLAY` profile, one complete Python-shaped source day is 24,000 Minecraft
+game ticks, or twenty real minutes at 20 TPS. The daily source order remains
+one indivisible deterministic transaction: it is not split into pseudo-hourly
+economy, population or strategic substeps merely to make actors look busy.
+Loaded actors instead move and fight at Minecraft tick rate, reconsider their
+role-level goals every ten ticks, reconcile tactical operation state every
+twenty ticks, and perform bounded local work or infection progression every
+one hundred ticks. A confirmed physical observation is reconciled immediately,
+without waiting for the next source day.
+
+`FAST_GRAYBOX` keeps the current 1,200-tick source day and explicit
+complete-day fast-forward for source-parity, calibration and manual testing.
+The selected clock profile and last source-day boundary are persisted with the
+world. Changing a live profile later requires an explicit versioned setting
+and fresh calibration evidence; it may never silently rescale an existing
+campaign.
+
 The profile lives only in the disposable data-driven
 `pale_mirror:frontier_graybox` level. The Far Frontier deployment owns the
 world datapack because Minecraft level stems must exist before world creation.
@@ -126,6 +144,28 @@ co-located facts keep their canonical X/Z and receive distinct deterministic
 layers in the compact Y=64–79 stack; labels begin above that stack. The
 materializer may relocate only an unchanged PM-owned claim when a later plan
 changes its layer; it must not silently cover a player block.
+
+## Autonomous physical causality
+
+The simulation is not a safety shell around the world. A settlement operation
+selects an actor's intent and target, but never grants a protection boundary to
+blocks or entities outside that target. When a PM-controlled bomber, projectile
+or other physical effect is present in loaded space, it follows ordinary
+Minecraft flight, collision and effect geometry. Every physically reachable
+consequence is eligible: a missed bomb can hit a wall, a player-built
+barricade, an unrelated settlement component or a chain reaction. Pale Mirror
+defines no privileged safe zone and does not use ownership, parcel type or the
+operation boundary to filter a legitimate blast.
+
+Before such a non-replayable effect is executed, its durable identity and
+cause are persisted. Its terminal receipt contains the actual affected
+entities, changed blocks, terrain/infection residue and structural aftermath.
+Reconciliation converts known source subjects into their canonical damage,
+casualty, route, terrain or infection consequences. Damage to otherwise
+unmodelled space is retained as a bounded canonical physical-scar or obstruction
+fact, so it can affect later movement, terrain and infection logic and is never
+silently repaired from a materialization baseline. An interrupted effect is
+visible and is not replayed automatically after restart.
 
 ## Readability and verification boundary
 

@@ -82,7 +82,7 @@ def load_pilot_inputs(
             raise ValueError(f"Input frame is missing or changed: {file_name}")
     primary = frames[0]
     if primary.get("source") != "literal_primary_trace_masked" or primary.get("authority") != "sole_likeness_anchor":
-        raise ValueError("Frame 0 must be the literal trace-masked primary anchor")
+        raise ValueError("Frame 0 must be the literal isolated-subject primary anchor")
     automodel_provenance = manifest.get("automodel_provenance")
     if automodel_provenance is not None:
         if not isinstance(automodel_provenance, dict):

@@ -1,0 +1,61 @@
+{
+  "schema": "pale_mirror.automodel.anatomy_sheet.v1",
+  "asset_id": "biomass_collector",
+  "scope": "research_only_noncanonical",
+  "primary_authority": "PRIMARY_TRACE",
+  "camera_ring": {
+    "reference_yaw_degrees": 0,
+    "yaws": [0, 45, 90, 135, 180, 225, 270, 315],
+    "primary_view": "low_front_left_three_quarter",
+    "rotation_direction": "clockwise_about_vertical_axis_relative_to_primary",
+    "elevation_degrees": 12,
+    "framing": "centered_subject_with_at_least_24px_transparent_padding",
+    "background": "transparent_rgba",
+    "output_size_px": [1024, 1024]
+  },
+  "parts": [
+    {
+      "id": "body_core",
+      "instances": 1,
+      "role": "one_long_low_underbody_joining_all_supports"
+    },
+    {
+      "id": "dorsal_sac",
+      "instances": 6,
+      "role": "six_separate_overlapping_dorsal_shell_masses"
+    },
+    {
+      "id": "front_mantle",
+      "instances": 1,
+      "role": "one_heavy_leading_drape_with_hanging_feelers"
+    },
+    {
+      "id": "leg_pair",
+      "instances": 5,
+      "bilateral_members": 2,
+      "preserve_pairing": true,
+      "role": "ten_total_thick_articulated_support_legs"
+    },
+    {
+      "id": "tail",
+      "instances": 1,
+      "role": "one_narrow_trailing_form_subordinate_to_dorsal_masses"
+    }
+  ],
+  "view_expectations": {
+    "0": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "literal source anchor; do not regenerate"},
+    "45": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "front-left transition"},
+    "90": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "left broadside hypothesis"},
+    "135": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "left rear transition"},
+    "180": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "explicit artistic rear hypothesis"},
+    "225": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "right rear transition"},
+    "270": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "right broadside hypothesis"},
+    "315": {"required_part_ids": ["body_core", "dorsal_sac", "front_mantle", "leg_pair", "tail"], "leg_pair_count": 5, "dorsal_sac_count": 6, "note": "right-front closure into literal primary"}
+  },
+  "contract": {
+    "unseen_sides_are_reviewed_artistic_hypotheses": true,
+    "generated_stills_are_never_primary_likeness_authority": true,
+    "complete_user_ring_review_is_required_before_pose_depth": true,
+    "canonical_blender_pmmesh_runtime_server_world_access_forbidden": true
+  }
+}

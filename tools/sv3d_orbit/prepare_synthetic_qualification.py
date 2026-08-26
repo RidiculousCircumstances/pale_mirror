@@ -102,7 +102,7 @@ def prepare(output_directory: Path, *, repository_root: Path = ROOT) -> dict[str
         primary_path,
         trace_path,
         output_directory,
-        trace_masked_conditioning=True,
+        isolated_subject_conditioning=True,
         repository_root=repository_root,
     )
     receipt = {

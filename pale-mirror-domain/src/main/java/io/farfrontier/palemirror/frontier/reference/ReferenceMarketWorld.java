@@ -18,15 +18,20 @@ public final class ReferenceMarketWorld {
     private final LinkedHashMap<Integer, ReferenceResourceSite> resourceSites = new LinkedHashMap<>();
     private final Map<Integer, Double> siteOutputFactors = new LinkedHashMap<>();
     private final Map<Integer, Double> siteHaulInfections = new LinkedHashMap<>();
-    private final Map<Integer, Double> extractedBySite = new LinkedHashMap<>();
     private final List<String> events = new ArrayList<>();
     private final ReferenceTradeNetwork trade;
     private ReferenceSiteSurveyor siteSurveyor = ReferenceSiteSurveyor.unavailable();
+    private ReferenceMarketEcology ecology;
     private ReferenceRationAuthority rationAuthority;
     private int day;
 
     public ReferenceMarketWorld(ReferenceTradeNetwork trade) {
         this.trade = Objects.requireNonNull(trade, "trade");
+    }
+
+    ReferenceMarketWorld(ReferenceTradeNetwork trade, ReferenceMarketEcology ecology) {
+        this.trade = Objects.requireNonNull(trade, "trade");
+        this.ecology = Objects.requireNonNull(ecology, "ecology");
     }
 
     public int day() { return day; }
@@ -45,25 +50,25 @@ public final class ReferenceMarketWorld {
         events.clear();
         events.addAll(required);
     }
-    /** Read-only ecology projection; the later ecology owner refreshes this before market production. */
+    /**
+     * Source-free market tests can set a fixed projection through this legacy
+     * fixture surface.  A live {@link ReferenceWorld} supplies its owning
+     * ecology during construction instead.
+     */
     public double siteOutputFactor(int siteId) { return siteOutputFactors.getOrDefault(siteId, 1.0d); }
     public void siteOutputFactor(int siteId, double value) { siteOutputFactors.put(siteId, value); }
-    /** Read-only infection projection for the physical haul between site and its owner. */
+    /** See {@link #siteOutputFactor(int)}. */
     public double siteHaulInfection(int siteId) { return siteHaulInfections.getOrDefault(siteId, 0.0d); }
     public void siteHaulInfection(int siteId, double value) { siteHaulInfections.put(siteId, value); }
-    public void recordHumanExtraction(int siteId, double amount) {
-        if (amount > 0.0d) extractedBySite.merge(siteId, amount, Double::sum);
+    double humanOutputFactor(ReferenceResourceSite site) {
+        return ecology == null ? siteOutputFactor(site.id()) : ecology.humanOutputFactor(site);
     }
-    public double extractedAtSite(int siteId) { return extractedBySite.getOrDefault(siteId, 0.0d); }
-    /**
-     * Transfers this market phase's physical harvest back to the ecology owner.
-     * The pending values are not a second stock ledger and must be drained once
-     * by the source-order world engine before the next market day.
-     */
-    Map<Integer, Double> drainHumanExtractions() {
-        Map<Integer, Double> result = Map.copyOf(extractedBySite);
-        extractedBySite.clear();
-        return result;
+    double haulInfection(ReferenceResourceSite site, ReferenceSettlement owner) {
+        return ecology == null ? siteHaulInfection(site.id()) : ecology.haulInfection(site, owner);
+    }
+    void humanExtract(ReferenceResourceSite site, double amount) {
+        if (amount <= 0.0d || ecology == null) return;
+        ecology.humanExtract(site, amount);
     }
 
     public void addSettlement(ReferenceSettlement settlement) {

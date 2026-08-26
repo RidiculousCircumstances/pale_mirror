@@ -78,6 +78,11 @@ def prepare_run(
         if not candidate.is_file() or not candidate.is_relative_to(repository_root / BUILD_ROOT):
             raise AutomodelContractError("model conditioning input must be a staged build artifact")
         input_paths.append((f"conditioning:{model_input['id']}", candidate))
+    for anchor in bundle.get("anchors", []):
+        candidate = repository_root / anchor["file"]
+        if not candidate.is_file() or not candidate.is_relative_to(repository_root / BUILD_ROOT):
+            raise AutomodelContractError("model anchor input must be a staged build artifact")
+        input_paths.append((f"anchor:{anchor['id']}", candidate))
     actual_inputs = []
     for role, path in input_paths:
         record = manifest_inputs([path], repository_root)[0]

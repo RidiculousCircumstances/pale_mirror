@@ -9,17 +9,28 @@ The run is staged first with:
 
 ```text
 literal source primary + source-pixel trace
-  -> tools/automodel/stage_reference_bundle.py --trace-masked-conditioning
+  -> tools/automodel/stage_reference_bundle.py --isolated-subject-conditioning
   -> tools/automodel/orchestrator.py prepare-run
   -> Windows Preflight
   -> Windows Infer
   -> 20 model-derived orbit frames + literal primary ViewSet
 ```
 
-The literal input stays the only `PRIMARY_TRACE` view. The upstream model is
+The literal input stays the only `PRIMARY_TRACE` view. The staging command now
+emits `isolated_subject_v1`: it preserves literal source pixels only inside the
+trace, removes disconnected trace dust and tiny enclosed alpha holes, and
+records a mask/receipt beside the RGBA input. The legacy raw trace-mask raster
+is prohibited. The upstream model is
 called with 21 positions: generated `18°..360°`, then a final literal `0°`
 position which upstream overwrites with its source input. The extractor drops
 that final re-encoded duplicate and keeps only the twenty generated frames.
+
+For a visual-only comparison, the runner may instead receive the explicitly
+selected `generated_cutout_r01` profile. That PNG is recorded as
+`MODEL_DERIVED`; it is an SV3D preview aid only and is prohibited from
+VGGT/geometry/canonical asset use. `-ConditioningId` is hash-pinned in both
+the Windows preflight and inference receipt, so this substitution cannot be
+implicit.
 
 The Windows preflight requires all of the following before inference:
 

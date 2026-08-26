@@ -29,7 +29,10 @@ param(
     [string]$MemoryProfile = 'official_default',
 
     [ValidateRange(1, 14)]
-    [int]$DecodingT = 2
+    [int]$DecodingT = 2,
+
+    [ValidateSet('isolated_subject_v1', 'generated_cutout_r01')]
+    [string]$ConditioningId = 'isolated_subject_v1'
 )
 
 Set-StrictMode -Version Latest
@@ -157,7 +160,8 @@ if ([System.IO.Path]::GetFullPath($Checkpoint) -ne $expectedCheckpoint) {
     throw 'SV3D checkpoint must be the private source-root checkpoints\sv3d_p.safetensors file pinned in the manifest.'
 }
 $literalPrimary = Get-ManifestInput $manifest 'primary' $repositoryRoot
-$conditioning = Get-ManifestInput $manifest 'conditioning:trace_masked_primary' $repositoryRoot
+$conditioningRole = "conditioning:$ConditioningId"
+$conditioning = Get-ManifestInput $manifest $conditioningRole $repositoryRoot
 $memoryProfileRunner = switch ($MemoryProfile) {
     'low_vram_conditioner_cpu_offload' { Join-Path $scriptRoot 'low_vram_sample.py' }
     'low_vram_fp16_conditioner_cpu_offload' { Join-Path $scriptRoot 'low_vram_fp16_sample.py' }
@@ -213,6 +217,7 @@ if ($Phase -eq 'Preflight') {
         environment_lock_sha256 = (Get-Sha256 $EnvironmentLock)
         checkpoint_receipt_sha256 = (Get-Sha256 $checkpointReceiptPath)
         literal_primary_sha256 = (Get-Sha256 $literalPrimary)
+        conditioning_id = $ConditioningId
         conditioning_sha256 = (Get-Sha256 $conditioning)
         memory_profile = $MemoryProfile
         memory_profile_runner_sha256 = $memoryProfileRunnerSha256
@@ -237,7 +242,7 @@ if (-not (Test-Path -LiteralPath $preflightPath -PathType Leaf)) {
     throw 'Inference requires a separate successful Windows SV3D preflight receipt.'
 }
 $preflight = Get-Content -Raw -LiteralPath $preflightPath | ConvertFrom-Json
-$preflightMatches = ($preflight.status -eq 'preflight_passed' -and $preflight.checkpoint_sha256 -eq (Get-Sha256 $Checkpoint) -and $preflight.memory_profile -eq $MemoryProfile -and $preflight.memory_profile_runner_sha256 -eq $memoryProfileRunnerSha256 -and $preflight.execution_profile -eq $ExecutionProfile -and $preflight.sampling_steps -eq $profile.sampling_steps -and $preflight.precision -eq $profile.precision -and $preflight.decoding_t -eq $DecodingT)
+$preflightMatches = ($preflight.status -eq 'preflight_passed' -and $preflight.checkpoint_sha256 -eq (Get-Sha256 $Checkpoint) -and $preflight.conditioning_id -eq $ConditioningId -and $preflight.conditioning_sha256 -eq (Get-Sha256 $conditioning) -and $preflight.memory_profile -eq $MemoryProfile -and $preflight.memory_profile_runner_sha256 -eq $memoryProfileRunnerSha256 -and $preflight.execution_profile -eq $ExecutionProfile -and $preflight.sampling_steps -eq $profile.sampling_steps -and $preflight.precision -eq $profile.precision -and $preflight.decoding_t -eq $DecodingT)
 if (-not $preflightMatches) {
     throw 'Windows SV3D preflight receipt is absent, stale, or does not match this checkpoint.'
 }

@@ -20,6 +20,7 @@ assert '"hunyuan2mv_v02_primary_anchored"' in source
 assert '"hunyuan2mv_v03_primary_front"' in source
 assert '"hunyuan2mv_v04_calibrated_secondary"' in source
 assert '"hunyuan2mv_v05_canonical_turntable"' in source
+assert '"hunyuan2mv_external_reference_sheet_r02"' in source
 assert '"inference_steps": 50' in source
 
 print("Hunyuan2mv low-memory runner contract passed.")

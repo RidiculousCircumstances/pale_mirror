@@ -5,6 +5,8 @@ import io.farfrontier.palemirror.api.AuthoredRegionSeed;
 import io.farfrontier.palemirror.api.Capability;
 import io.farfrontier.palemirror.api.VisualProvider;
 import io.farfrontier.palemirror.api.VisualStateProjection;
+import io.farfrontier.palemirror.api.FrontierProjection;
+import io.farfrontier.palemirror.api.FrontierPhysicalObservation;
 import io.farfrontier.palemirror.api.ResidentDeathObservation;
 import io.farfrontier.palemirror.api.JourneyObservation;
 import io.farfrontier.palemirror.api.JourneyProjection;
@@ -25,6 +27,7 @@ public final class AuthoredVisualProvider implements VisualProvider {
     private final SettlementStateCueRuntime settlementCues = new SettlementStateCueRuntime();
     private final VisualProjectionLedger projections = new VisualProjectionLedger();
     private final JourneyProjectionRuntime journeys = new JourneyProjectionRuntime();
+    private final FrontierGrayboxRuntime frontierGraybox = new FrontierGrayboxRuntime();
     private final io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine foundry =
             new io.farfrontier.palemirror.visuals.foundry.FoundryAuditEngine();
     private final java.util.LinkedHashMap<String, ResidentDeathObservation> deaths = new java.util.LinkedHashMap<>();
@@ -42,6 +45,12 @@ public final class AuthoredVisualProvider implements VisualProvider {
     @Override public AdapterHealth health() {
         String failure = AuthoredAssetCatalog.verify();
         if (failure != null) return new AdapterHealth(AdapterHealth.Status.BLOCKED, failure, Set.of());
+        if (!VisualServerConfig.AUTHORED_GENESIS_ENABLED.get()) {
+            return new AdapterHealth(AdapterHealth.Status.AVAILABLE,
+                    "authored genesis disabled; Frontier graybox owns materialization",
+                    Set.of(Capability.AUTHORED_REGION_GENESIS, Capability.MANAGED_SETTLEMENT_RESIDENTS,
+                            Capability.DYNAMIC_WORLD_PRESENTATION, Capability.VISIBLE_PM_THREAT_CONTROLLER));
+        }
         return new AdapterHealth(AdapterHealth.Status.AVAILABLE, "fresh-world authored genesis active",
                 Set.of(Capability.AUTHORED_REGION_GENESIS, Capability.MANAGED_SETTLEMENT_RESIDENTS,
                         Capability.DYNAMIC_WORLD_PRESENTATION, Capability.VISIBLE_PM_THREAT_CONTROLLER));
@@ -159,6 +168,27 @@ public final class AuthoredVisualProvider implements VisualProvider {
 
     @Override public void applyProjection(ServerLevel level, VisualStateProjection projection) {
         projections.accept(level.dimension().location().toString(), projection);
+    }
+
+    @Override public void applyFrontierProjection(ServerLevel level, FrontierProjection projection) {
+        frontierGraybox.apply(level, projection);
+    }
+
+    @Override public Collection<FrontierPhysicalObservation> drainFrontierObservations(ServerLevel level) {
+        return frontierGraybox.drain(level);
+    }
+
+    @Override public boolean observeFrontierEntityDeath(ServerLevel level, net.minecraft.world.entity.Entity entity, String causationId) {
+        return frontierGraybox.observeEntityDeath(level, entity, causationId);
+    }
+
+    /** Records a restored graybox entity before its UUID becomes observable through ServerLevel. */
+    public void observeFrontierEntityJoin(ServerLevel level, net.minecraft.world.entity.Entity entity) {
+        frontierGraybox.observeEntityJoin(level, entity);
+    }
+
+    @Override public boolean observeFrontierBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position, String causationId) {
+        return frontierGraybox.observeBlockBreak(level, position, causationId);
     }
 
     /** Applies the retained latest desired state to loaded presentation only. */

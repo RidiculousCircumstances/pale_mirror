@@ -302,8 +302,16 @@ for a later materialization adapter, not that adapter itself.
    material change of world behaviour are not. The active graybox fixture is
    `docs/frontier-reference-graybox-calibration.json`: regenerate it with
    `tools/frontier/generate_graybox_calibration_envelope.py` under Python 3.11
-   and then invoke the same tool with `--check`. A passing aggregate dashboard
-   without focused source traces is therefore insufficient.
+   and then invoke the same tool with `--check`. Schema 2 records every named
+   seed's economy, shortage, health, ecology, hive, refugee, operation and
+   campaign measurements plus the source-owned drift rule for each metric.
+   Java reads that fixture rather than copying limits into a second table:
+   settlement counts allow one survivor difference, continuous values allow
+   15%, event counts allow `max(2, 20%)`, and a source-zero event may appear
+   only once. `tools/frontier/verify_graybox_calibration.sh --reference-root
+   /path/to/pale_mirror_ai` performs the no-rewrite Python fixture check before
+   the Java annual gate. A passing aggregate dashboard without focused source
+   traces and per-seed comparison is therefore insufficient.
 5. Python is the semantic design laboratory until the full-domain port is
    accepted, but it is not a release pipeline that demands a separate Python
    release before each Java edit. A domain change lands with its source trace

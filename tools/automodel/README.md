@@ -4,6 +4,13 @@
 experiments. It is intentionally outside Minecraft, the canonical Blender
 source, and PMMesh export.
 
+The active v3 path stages externally generated, transparent stills rather than
+embedding an image-generation service. `builtin_imagegen_staged` records
+provenance only; its candidates remain `MODEL_DERIVED`. A literal primary plus
+trace stays the sole likeness authority. A complete user review of one fixed
+eight-view ring is the only way its seven non-primary stills can become
+`REVIEWED_SECONDARY` volume aids.
+
 The baseline source authority is a pinned literal primary image and its trace.
 Model outputs remain non-canonical hypotheses. `model_registry.v1.json` is the
 sole catalogue of allowed providers; it records hardware, licence and execution
@@ -40,6 +47,14 @@ python tools/automodel/orchestrator.py record-turntable-review --help
 
 # Prepare the only permitted SV3D-to-VGGT hand-off.
 python tools/automodel/prepare_vggt_pose_depth_input.py --help
+
+# V3: stage/inspect a fixed 8-view external-still ring, then obtain the only
+# two independent diagnostics after an explicit complete-ring user approval.
+python tools/automodel/multiview_ring.py --help
+python tools/automodel/ring_benchmark.py --help
+python tools/automodel/pose_depth_ring.py --help
+python tools/da3/run_da3_ring.py --help
+python tools/vggt_omega/run_reviewed_ring.py --help
 ```
 
 The first model-specific wrapper is

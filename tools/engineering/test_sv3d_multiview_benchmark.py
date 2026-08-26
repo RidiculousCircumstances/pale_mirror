@@ -31,7 +31,7 @@ class SyntheticMultiviewBenchmarkTests(unittest.TestCase):
                 scene = json.loads(scene_path.read_text(encoding="utf-8"))
                 self.assertEqual(list(YAWS), scene["camera"]["yaw_degrees"])
                 self.assertEqual(len(YAWS), len(scene["ground_truth_frames"]))
-                self.assertTrue((scene_path.parent / "input" / "trace_masked_conditioning.png").is_file())
+                self.assertTrue((scene_path.parent / "input" / "isolated_subject_conditioning_v1.png").is_file())
 
     def test_perfect_known_render_scores_as_its_declared_pose(self) -> None:
         with TemporaryDirectory(prefix="pm-sv3d-multiview-") as temporary:

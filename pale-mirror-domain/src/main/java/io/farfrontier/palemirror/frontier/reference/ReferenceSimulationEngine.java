@@ -84,9 +84,7 @@ public final class ReferenceSimulationEngine {
         required.v2().updateCivics(required);
 
         // 4. The company economy clears before biological trade effects.
-        refreshMarketEcologyProjections(required);
         List<ReferenceTradeRecord> trades = required.microeconomy().runDay(required.marketWorld());
-        commitHumanExtraction(required);
         required.v2().updateCompanyStates(required);
         required.v2().issueProcurement(required);
         required.microeconomy().syncCompatibility(required.marketWorld());
@@ -136,29 +134,6 @@ public final class ReferenceSimulationEngine {
         }
     }
 
-    /**
-     * Projects current physical ecology into the market for this day only.
-     * Site ownership stays with the world and the company economy owns its
-     * warehouses; this boundary mirrors Python's direct InfectionModel reads.
-     */
-    private static void refreshMarketEcologyProjections(ReferenceWorld world) {
-        for (ReferenceResourceSite site : world.marketWorld().resourceSites().values()) {
-            world.marketWorld().siteOutputFactor(site.id(), world.infection().ecosystem()
-                    .humanOutputFactor(site.kind().name().toLowerCase(Locale.ROOT), site.x(), site.y()));
-            ReferenceSettlement owner = site.ownerId() == null ? null : world.settlements().get(site.ownerId());
-            world.marketWorld().siteHaulInfection(site.id(), owner == null ? 0.0d
-                    : world.infection().routeInfection(owner.x(), owner.y(), site.x(), site.y()));
-        }
-    }
-
-    /** Commit the current market's finite farm/forest withdrawal to ecology exactly once. */
-    private static void commitHumanExtraction(ReferenceWorld world) {
-        for (Map.Entry<Integer, Double> entry : world.marketWorld().drainHumanExtractions().entrySet()) {
-            ReferenceResourceSite site = world.marketWorld().resourceSites().get(entry.getKey());
-            if (site == null) throw new IllegalStateException("market recorded extraction for missing site " + entry.getKey());
-            world.infection().ecosystem().humanExtract(site.kind().name().toLowerCase(Locale.ROOT), site.x(), site.y(), entry.getValue());
-        }
-    }
 
     private static void resolveAttacks(ReferenceWorld world, List<ReferenceAttackEvent> attacks) {
         for (ReferenceAttackEvent attack : attacks) {

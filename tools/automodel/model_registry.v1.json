@@ -27,6 +27,26 @@
       "notes": "Qualification-only 21-frame SV3D_p orbit: FP16 denoiser from a CPU checkpoint cast, explicit FP32 VAE codec boundaries, CUDA FP16 autocast and exactly 20 sampler steps. It is distinct from the full 50-step profile."
     },
     {
+      "id": "edit360_dual_anchor_orbit",
+      "kind": "view_synthesis",
+      "status": "deferred_hardware",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 16,
+      "authority": "MODEL_DERIVED",
+      "licence": "MIT code plus Stability AI Community License checkpoint",
+      "notes": "Unmodified Edit360 dual-view sampler loads the 9.36 GB SV3D-U FP32 checkpoint directly into CUDA. It needs a separate >=16 GiB hardware preflight and emits visual-review-only sequence frames, never calibrated cameras or geometry evidence."
+    },
+    {
+      "id": "edit360_dual_anchor_orbit_fast_fp16_20",
+      "kind": "view_synthesis",
+      "status": "local_preflight",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "MIT code plus Stability AI Community License checkpoint",
+      "notes": "Bounded Edit360 dual-anchor visual experiment: CPU checkpoint cast, FP16 denoiser, FP32 image-codec boundaries, CPU safety-filter/conditioner offload, CUDA autocast and exactly 20 sampling steps. It emits only an uncalibrated visual sequence; no ViewSet, camera yaw, VGGT, geometry or canonical use is permitted."
+    },
+    {
       "id": "da3_base",
       "kind": "pose_depth",
       "status": "local_preflight",

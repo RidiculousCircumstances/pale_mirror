@@ -52,6 +52,15 @@ TRIALS = {
         "octree_resolution": 256,
         "num_chunks": 8_000,
     },
+    # User-supplied external 2x4 reference sheets are staged by the dedicated
+    # noncanonical preparer.  The source sheet and selected cells are pinned
+    # in the input manifest; the proposal cannot affect a canonical asset.
+    "hunyuan2mv_external_reference_sheet_r02": {
+        "bakeoff_id": "collector_multiview_bakeoff_external_reference_sheet_r02",
+        "inference_steps": 50,
+        "octree_resolution": 256,
+        "num_chunks": 8_000,
+    },
 }
 
 

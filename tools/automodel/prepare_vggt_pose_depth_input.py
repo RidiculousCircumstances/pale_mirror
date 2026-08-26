@@ -2,7 +2,7 @@
 """Bridge a reviewed SV3D orbit into the bounded legacy VGGT input shape.
 
 The bridge deliberately changes no evidence tier.  It copies the pinned
-trace-masked primary plus the twenty reviewed-*as-a-sequence* synthetic frames
+clean isolated primary plus the twenty reviewed-*as-a-sequence* synthetic frames
 into a fresh noncanonical run directory, where the existing VGGT pilot can
 read them.  The resulting manifest still says that the poses are uncalibrated
 model evidence and that all outputs are non-exportable.
@@ -112,20 +112,20 @@ def prepare(
     _verified_file(run_manifest_path, run_record.get("sha256"), "SV3D run manifest")
     run_manifest = load_object(run_manifest_path)
     validate_run_manifest(run_manifest)
-    conditioning = [record for record in run_manifest["inputs"] if record.get("role") == "conditioning:trace_masked_primary"]
+    conditioning = [record for record in run_manifest["inputs"] if record.get("role") == "conditioning:isolated_subject_v1"]
     if len(conditioning) != 1:
-        raise AutomodelContractError("SV3D run manifest must pin exactly one trace-masked primary conditioning input")
+        raise AutomodelContractError("SV3D run manifest must pin exactly one isolated-subject conditioning input")
     conditioning_record = conditioning[0]
     conditioning_path = repository_root / require_relative_build_path(
         conditioning_record.get("file"), "conditioning.file"
     )
-    _verified_file(conditioning_path, conditioning_record.get("sha256"), "trace-masked primary conditioning")
+    _verified_file(conditioning_path, conditioning_record.get("sha256"), "isolated-subject primary conditioning")
 
     output_directory.mkdir(parents=True)
     frames_directory = output_directory / "frames"
     frames_directory.mkdir()
     output_frames: list[dict[str, Any]] = []
-    primary_target = frames_directory / "frame_00_yaw_000_literal_trace_masked.png"
+    primary_target = frames_directory / "frame_00_yaw_000_literal_isolated_subject.png"
     shutil.copyfile(conditioning_path, primary_target)
     output_frames.append(
         {
@@ -133,7 +133,7 @@ def prepare(
             "yaw_degrees": 0,
             "file": str(primary_target.relative_to(output_directory)),
             "sha256": sha256(primary_target),
-            "source": "literal_primary_trace_masked",
+            "source": "literal_primary_isolated_subject",
             "authority": "sole_likeness_anchor",
         }
     )

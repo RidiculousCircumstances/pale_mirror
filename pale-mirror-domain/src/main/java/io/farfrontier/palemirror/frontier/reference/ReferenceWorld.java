@@ -82,7 +82,7 @@ public final class ReferenceWorld {
         trade = new ReferenceTradeNetwork(economy);
         operations = new ReferenceOperationManager();
         field = new ReferenceFieldWarfare();
-        marketWorld = new ReferenceMarketWorld(trade);
+        marketWorld = new ReferenceMarketWorld(trade, ReferenceMarketEcology.infection(infection));
         marketWorld.siteSurveyor(new ReferenceSiteSurveyor() {
             @Override
             public ReferenceSiteSurveyor.ReferenceSitePosition place(ReferenceSettlement host, ReferenceSiteKind kind) {
@@ -320,7 +320,7 @@ public final class ReferenceWorld {
             if (distance < SITE_PLACEMENT_MINIMUM_DISTANCE || distance > SITE_PLACEMENT_MAXIMUM_DISTANCE) continue;
             boolean clear = true;
             for (ReferenceGridPosition item : occupied) if (Math.hypot(x - item.x(), y - item.y()) < 1.5d) { clear = false; break; }
-            if (!clear) continue;
+            if (!clear || !ReferenceSiteSurveyEligibility.allows(v2, x, y)) continue;
             Candidate candidate = new Candidate(siteCellQuality(kind, x, y), -distance, -y, -x);
             if (best == null || candidate.greaterThan(best)) best = candidate;
         }
