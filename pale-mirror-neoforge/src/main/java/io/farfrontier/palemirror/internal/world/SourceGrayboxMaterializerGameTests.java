@@ -41,8 +41,8 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.assertValueEqual(helper.getLevel().getBlockState(facility).getBlock(), Blocks.BLUE_WOOL,
                 "a source facility must become its readable colour-coded rectangle");
         helper.assertTrue(helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(anchor.offset(6, 6, 6)).inflate(4, 32, 4), value ->
-                value.hasCustomName() && value.getCustomName().getString().startsWith("[MARKET] cash=12.00")).size() == 1,
-                "a source dashboard must retain its exact readable source text without becoming a second physical owner");
+                value.hasCustomName() && value.getCustomName().getString().startsWith("[MARKET] cash=12.00")).isEmpty(),
+                "dense source dashboards must not turn every row into an overlapping map nameplate");
         ArmorStand facilityLabel = helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(facility).inflate(16, 32, 16), value ->
                 value.hasCustomName() && value.getCustomName().getString().startsWith("[F] workshop")).stream().findFirst().orElseThrow();
         helper.assertTrue(facilityLabel.getY() >= ReferenceGrayboxLayout.GROUND_Y + 17,
@@ -215,7 +215,7 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.assertValueEqual(claim.subjectId(), raid.id(), "the raid marker must retain its exact source activity ID");
         helper.assertValueEqual(claim.kind(), "ACTIVITY", "the raid marker must retain its operation semantic kind");
         helper.assertTrue(helper.getLevel().getEntitiesOfClass(ArmorStand.class, new AABB(marker).inflate(3, 24, 3), value ->
-                        value.hasCustomName() && value.getCustomName().getString().equals("[A] operation raid engaging personnel=2.00 indicator=0.50")).size() == 1,
+                        value.hasCustomName() && value.getCustomName().getString().equals("[A] operation#47 raid engaging p=2.00 i=0.50")).size() == 1,
                 "an active raid must expose its family, kind, phase, personnel and risk in a readable label");
 
         Villager guard = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), value ->

@@ -15,6 +15,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 /** Owns the Brigadier command tree; event subscriptions only delegate here. */
@@ -49,6 +50,17 @@ final class PaleMirrorCommandRegistrar {
         LiteralArgumentBuilder<CommandSourceStack> frontier = Commands.literal("frontier").requires(source -> source.hasPermission(2));
         frontier.then(Commands.literal("status").executes(context -> {
             context.getSource().sendSuccess(() -> Component.literal(SourceGrayboxRuntime.forServer(context.getSource().getServer()).status()), false);
+            return 1;
+        }));
+        frontier.then(Commands.literal("inspect").executes(context -> {
+            SourceGrayboxRuntime runtime = SourceGrayboxRuntime.forServer(context.getSource().getServer());
+            if (!runtime.activated()) {
+                context.getSource().sendFailure(Component.literal("Activate the source graybox before inspecting it."));
+                return 0;
+            }
+            Vec3 position = context.getSource().getPosition();
+            String report = runtime.inspect((int) Math.floor(position.x), (int) Math.floor(position.z));
+            context.getSource().sendSuccess(() -> Component.literal(report), false);
             return 1;
         }));
         frontier.then(Commands.literal("step").requires(source -> source.hasPermission(4))

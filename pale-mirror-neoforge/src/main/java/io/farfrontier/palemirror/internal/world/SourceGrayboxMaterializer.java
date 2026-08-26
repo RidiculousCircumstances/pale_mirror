@@ -271,46 +271,51 @@ final class SourceGrayboxMaterializer {
     private static void materializeLabels(ServerLevel level, SourceGrayboxPresentationLedger ledger, ReferenceGrayboxSnapshot snapshot, Set<String> active,
                                           Map<String, Entity> admittedEntities) {
         LabelPositions labels = new LabelPositions();
+        BlockPos deck = SourceGrayboxWorldBoundary.observationDeckFooting();
+        label(level, active, admittedEntities, labels, "legend:sector-metrics",
+                "[KEY] V2 towers: red infection 0..1; purple spores 0..10; cyan human access 0..1; lime hive influence 0..1. Height=1..10.",
+                deck.getX(), deck.getZ());
+        label(level, active, admittedEntities, labels, "legend:inspect",
+                "[CMD] Stand on a source object and run /pale_mirror frontier inspect for its exact current source values.", deck.getX(), deck.getZ());
         for (ReferenceGrayboxSnapshot.Settlement settlement : snapshot.settlements()) {
-            label(level, active, admittedEntities, labels, "settlement:" + settlement.id(), "[S] " + settlement.name() + " | pop=" + number(settlement.population())
-                    + " | " + settlement.civicState() + " threat=" + number(settlement.threat()) + " food="
-                    + number(settlement.foodReserveDays()) + "d ration=" + number(settlement.rationFraction()),
+            label(level, active, admittedEntities, labels, "settlement:" + settlement.id(), "[S] #" + settlement.id() + " " + settlement.name()
+                    + " pop=" + number(settlement.population()) + " " + settlement.civicState() + " threat=" + number(settlement.threat())
+                    + " [inspect]",
                     settlement.rectangle().centreX(), settlement.rectangle().centreZ());
         }
         for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) label(level, active, admittedEntities, labels, "facility:" + facility.id(),
-                "[F] " + facility.kind() + " level=" + number(facility.level()), facility.rectangle().centreX(), facility.rectangle().centreZ());
+                "[F] " + facility.kind() + "=" + number(facility.level()), facility.rectangle().centreX(), facility.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) label(level, active, admittedEntities, labels, "site:" + site.id(),
-                "[R] " + site.kind() + " capacity=" + number(site.capacity()) + " condition=" + number(site.condition())
-                        + " contamination=" + number(site.contamination()), site.rectangle().centreX(), site.rectangle().centreZ());
+                "[R] #" + site.id() + " " + site.kind() + " cap=" + number(site.capacity()) + " cond=" + number(site.condition()),
+                site.rectangle().centreX(), site.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) label(level, active, admittedEntities, labels, "organ:" + organ.id(),
-                "[H] " + organ.kind() + " biomass=" + number(organ.biomass()) + " vitality=" + number(organ.vitality())
+                "[H] #" + organ.id() + " " + organ.kind() + " biomass=" + number(organ.biomass()) + " vit=" + number(organ.vitality())
                         + (organ.feral() ? " FERAL" : ""), organ.rectangle().centreX(), organ.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) label(level, active, admittedEntities, labels, "cargo:" + cargo.id(),
-                "[CARGO] " + cargo.ownerKind() + "=" + cargo.ownerId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
+                "[C] " + cargo.ownerKind() + "#" + cargo.ownerId() + " " + cargo.resource() + "=" + number(cargo.quantity()),
                 cargo.rectangle().centreX(), cargo.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, admittedEntities, labels, "route:" + route.id(),
-                "[T] " + route.id() + " capacity=" + number(route.capacity()) + " risk=" + number(route.risk())
-                        + " infection=" + number(route.infection()) + (route.quarantined() ? " QUARANTINED" : route.disrupted() ? " DISRUPTED" : " OPEN"),
+                "[T] " + route.id() + " cap=" + number(route.capacity()) + " risk=" + number(route.risk())
+                        + (route.quarantined() ? " QUARANTINED" : route.disrupted() ? " DISRUPTED" : " OPEN"),
                 midpoint(route.start().x(), route.end().x()), midpoint(route.start().z(), route.end().z()));
         for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, admittedEntities, labels, "field-post:" + post.id(),
-                "[P] " + post.kind() + " " + post.status() + " integrity=" + number(post.integrity()) + " garrison=" + post.garrison() + " wounded=" + post.wounded()
-                        + " modules=" + String.join(",", post.modules()), post.rectangle().centreX(), post.rectangle().centreZ());
+                "[P] #" + post.id() + " " + post.kind() + " " + post.status() + " i=" + number(post.integrity()) + " g=" + post.garrison()
+                        + " w=" + post.wounded(), post.rectangle().centreX(), post.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
             ReferenceGrayboxLayout.Point label = link.slots().get(link.slots().size() / 2);
-            label(level, active, admittedEntities, labels, "field-link:" + link.id(), "[L] " + link.kind() + " " + link.status()
-                    + " integrity=" + number(link.integrity()), label.x(), label.z());
+            label(level, active, admittedEntities, labels, "field-link:" + link.id(), "[L] #" + link.id() + " " + link.kind() + " " + link.status()
+                    + " i=" + number(link.integrity()), label.x(), label.z());
         }
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) if (!activity.terminal()) label(level, active, admittedEntities, labels,
-                "activity:" + activity.id(), "[A] " + activity.family() + " " + activity.kind() + " " + activity.phase()
-                        + " personnel=" + number(activity.personnel()) + " indicator=" + number(activity.indicator()),
+                "activity:" + activity.id(), "[A] " + activity.family() + "#" + shortId(activity.id()) + " " + activity.kind() + " " + activity.phase()
+                        + " p=" + number(activity.personnel()) + " i=" + number(activity.indicator()),
                 activity.position().x(), activity.position().z());
-        for (ReferenceGrayboxSnapshot.Sector sector : snapshot.sectors()) label(level, active, admittedEntities, labels, "sector:" + sector.key(),
-                "[V2] " + sector.key() + " " + sector.control() + " infection=" + number(sector.infection()) + " spores="
-                        + number(sector.sporeLoad()) + " access=" + number(sector.humanAccess()) + " hive=" + number(sector.hiveInfluence())
-                        + (sector.supplied() ? " SUPPLIED" : " UNSUPPLIED"), sector.rectangle().centreX(), sector.rectangle().centreZ());
+        for (ReferenceGrayboxSnapshot.Sector sector : SourceGrayboxLabelLayout.labelledSectors(snapshot)) label(level, active, admittedEntities, labels, "sector:" + sector.key(),
+                "[V2] " + sector.key() + " " + sector.control().toUpperCase(Locale.ROOT) + (sector.supplied() ? " SUPPLIED" : ""),
+                sector.rectangle().centreX(), sector.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) label(level, active, admittedEntities, labels, "chrysalis:" + chrysalis.organId(),
-                "[C] organ=" + chrysalis.organId() + " " + chrysalis.status() + " days=" + chrysalis.daysRemaining()
-                        + " biomass=" + number(chrysalis.biomassCommitted()), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
+                "[C] organ#" + chrysalis.organId() + " " + chrysalis.status() + " d=" + chrysalis.daysRemaining()
+                        + " b=" + number(chrysalis.biomassCommitted()), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
         for (ReferenceGrayboxSnapshot.Interaction interaction : snapshot.interactions()) {
             ReferenceGrayboxLayout.Point point = interaction.slots().get(interaction.slots().size() / 2);
             label(level, active, admittedEntities, labels, "interaction:" + interaction.id(),
@@ -320,18 +325,10 @@ final class SourceGrayboxMaterializer {
                 .sorted(Comparator.comparing(SourceGrayboxPresentationLedger.Claim::id))
                 .forEach(claim -> label(level, active, admittedEntities, labels, "conflict:" + claim.id(),
                         SourceGrayboxConflictPresentation.labelText(claim), claim.x() + claim.width() / 2, claim.z() + claim.depth() / 2));
-        for (ReferenceGrayboxSnapshot.Readout readout : snapshot.readouts()) label(level, active, admittedEntities, labels, "readout:" + readout.id(),
-                "[" + readout.category() + "] " + readout.text(), readout.position().x(), readout.position().z());
-        snapshot.cells().stream().filter(cell -> cell.infection() > 0.01d || cell.signal() > 0.01d)
-                .sorted(Comparator.comparingDouble((ReferenceGrayboxSnapshot.Cell cell) -> cell.infection() + cell.signal()).reversed()
-                        .thenComparingInt(ReferenceGrayboxSnapshot.Cell::x).thenComparingInt(ReferenceGrayboxSnapshot.Cell::y)).limit(96)
-                .forEach(cell -> label(level, active, admittedEntities, labels, "cell:" + cell.x() + ":" + cell.y(), "[E] " + cell.x() + "," + cell.y()
-                        + " infection=" + number(cell.infection()) + " organic=" + number(cell.organicMass()) + " moisture="
-                        + number(cell.moisture()) + " signal=" + number(cell.signal()), cell.rectangle().x() + 1, cell.rectangle().z() + 1));
-        int firstEvent = Math.max(0, snapshot.events().size() - 12);
-        for (int index = firstEvent; index < snapshot.events().size(); index++) label(level, active, admittedEntities, labels, "event:" + index,
-                "[D" + snapshot.day() + "] " + snapshot.events().get(index), snapshot.bounds().minX() + 8,
-                snapshot.bounds().minZ() + 8 + (index - firstEvent) * 2);
+        label(level, active, admittedEntities, labels, "dashboard:summary", "[D" + snapshot.day() + "] " + snapshot.readouts().size()
+                + " source dashboard rows; stand on a settlement and run /pale_mirror frontier inspect.", deck.getX(), deck.getZ());
+        label(level, active, admittedEntities, labels, "events:summary", "[D" + snapshot.day() + "] " + snapshot.events().size()
+                + " source events retained; /pale_mirror frontier inspect gives the local state.", deck.getX(), deck.getZ());
     }
 
     private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String revision,
@@ -480,6 +477,8 @@ final class SourceGrayboxMaterializer {
     private static String number(double value) {
         return String.format(Locale.ROOT, "%.2f", value);
     }
+
+    private static String shortId(String value) { int separator = value.lastIndexOf(':'); return separator < 0 ? value : value.substring(separator + 1); }
 
     /** Separates otherwise coincident nameplates without changing their source x/z address. */
     private static final class LabelPositions {

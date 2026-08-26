@@ -140,6 +140,9 @@ public final class SourceGrayboxRuntime {
                 + ", materialization=" + (data.activated() ? "ACTIVE" : "DISABLED");
     }
 
+    /** Read-only exact source detail for the materialized location under an operator. */
+    public String inspect(int x, int z) { return SourceGrayboxInspector.at(data.snapshot(), x, z); }
+
     private ServerLevel grayboxLevel() {
         return SourceGrayboxWorldBoundary.level(server);
     }

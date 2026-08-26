@@ -21,6 +21,7 @@ final class SourceGrayboxPresentationPlan {
     private static final int LABEL_Y = SURFACE_Y + 4;
     private static final int OVERLAY_Y = LABEL_Y + 1;
     private static final int ACTIVITY_Y = OVERLAY_Y + 1;
+    private static final int SECTOR_METRIC_MAX_HEIGHT = 10;
     /** Keep collision recovery compact and below the dedicated label plane. */
     private static final int MAX_CLAIM_Y = SURFACE_Y + 15;
     /** Shared plan/ledger limit; every claim has already been validated before Minecraft receives it. */
@@ -73,6 +74,14 @@ final class SourceGrayboxPresentationPlan {
         for (ReferenceGrayboxSnapshot.Sector sector : snapshot.sectors()) {
             add(result, marker("sector:" + sector.key(), "sector:" + sector.key(), "SECTOR", snapshot.stateRevision(),
                     sector.rectangle().centreX(), OVERLAY_Y, sector.rectangle().centreZ(), sector.colour()));
+            addSectorMetric(result, snapshot.stateRevision(), sector, "infection", 3, 3, sector.infection(), 1.0d,
+                    "metric.infection");
+            addSectorMetric(result, snapshot.stateRevision(), sector, "spores", 5, 3, sector.sporeLoad(), 10.0d,
+                    "metric.spores");
+            addSectorMetric(result, snapshot.stateRevision(), sector, "human_access", 3, 5, sector.humanAccess(), 1.0d,
+                    "metric.human_access");
+            addSectorMetric(result, snapshot.stateRevision(), sector, "hive_influence", 5, 5, sector.hiveInfluence(), 1.0d,
+                    "metric.hive_influence");
         }
         for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) {
             int x = chrysalis.rectangle().centreX() - 2;
@@ -143,6 +152,29 @@ final class SourceGrayboxPresentationPlan {
         return new Desired("interaction:" + interaction.id() + ":" + index, interaction.subjectId(), "INTERACTION", revision,
                 slot.x(), SURFACE_Y + interaction.yOffset(), slot.z(), 1, 1, 1, interaction.colour(), interaction.id(),
                 interaction.kind(), interaction.totalWeight());
+    }
+
+    /**
+     * Four short towers make the territorial values readable at map scale.
+     * Exact values remain in the immutable snapshot and are exposed by the
+     * spatial inspector; this is deliberately a bounded chart, not a hidden
+     * second numerical model.
+     */
+    private static void addSectorMetric(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Sector sector,
+                                        String metric, int localX, int localZ, double value, double fullScale, String colour) {
+        int height = sectorMetricHeight(value, fullScale, sector.key(), metric);
+        if (height == 0) return;
+        ReferenceGrayboxLayout.Rectangle area = sector.rectangle();
+        add(result, new Desired("sector-metric:" + sector.key() + ":" + metric, "sector:" + sector.key(), "SECTOR_METRIC", revision,
+                area.x() + localX, SURFACE_Y, area.z() + localZ, 1, 1, height, colour));
+    }
+
+    private static int sectorMetricHeight(double value, double fullScale, String sectorKey, String metric) {
+        if (!Double.isFinite(value) || value < 0.0d) {
+            throw new IllegalStateException("sector metric is invalid: " + sectorKey + " " + metric);
+        }
+        if (value == 0.0d) return 0;
+        return Math.min(SECTOR_METRIC_MAX_HEIGHT, Math.max(1, (int) Math.ceil(value / fullScale * SECTOR_METRIC_MAX_HEIGHT)));
     }
 
     /**

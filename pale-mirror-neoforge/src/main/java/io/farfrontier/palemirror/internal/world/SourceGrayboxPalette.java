@@ -13,6 +13,10 @@ final class SourceGrayboxPalette {
 
     static BlockState block(String colour) {
         String token = colour.toLowerCase(Locale.ROOT);
+        if (token.contains("metric.infection")) return Blocks.RED_WOOL.defaultBlockState();
+        if (token.contains("metric.spores")) return Blocks.PURPLE_WOOL.defaultBlockState();
+        if (token.contains("metric.human_access")) return Blocks.CYAN_WOOL.defaultBlockState();
+        if (token.contains("metric.hive_influence")) return Blocks.LIME_WOOL.defaultBlockState();
         if (token.contains("collapsed") || token.contains("disabled") || token.contains("destroyed") || token.contains("feral_severe")
                 || token.contains("abandoned") || token.contains("failed") || token.contains("aborted")) return Blocks.BLACK_WOOL.defaultBlockState();
         if (token.contains("feral_active") || token.contains("route.disrupted") || token.contains("sector.hive")
