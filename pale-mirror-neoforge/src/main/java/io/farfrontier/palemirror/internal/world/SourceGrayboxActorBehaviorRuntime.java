@@ -56,8 +56,7 @@ final class SourceGrayboxActorBehaviorRuntime {
             Vec3 target = replan || !intents.containsKey(actor.id())
                     ? target(actor, physical, gameTick) : intents.get(actor.id());
             if (target != null) intents.put(actor.id(), target);
-            if (target != null) moveToward(level, actor.body(), target, actor.kind() == ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT
-                    ? HUMAN_SPEED : HIVE_SPEED);
+            if (target != null) moveToward(level, actor.body(), target, movementSpeed(actor));
         }
     }
 
@@ -105,7 +104,7 @@ final class SourceGrayboxActorBehaviorRuntime {
             Vec3 escape = actor.body().position().subtract(hostile.body().position());
             if (escape.horizontalDistanceSqr() > 0.0001d) return actor.body().position().add(escape.normalize().scale(8.0d));
         }
-        return patrol(actor, gameTick, resident.deploymentRole() == null ? 4.0d : 6.0d);
+        return patrol(actor, gameTick, residentPatrolRadius(resident));
     }
 
     private static Vec3 bioformTarget(ActorView actor, List<ActorView> physical, long gameTick) {
@@ -126,8 +125,44 @@ final class SourceGrayboxActorBehaviorRuntime {
     static boolean guard(ReferenceGrayboxSnapshot.Resident resident) {
         if (resident.occupation().equals("guard") || resident.occupation().equals("soldier")) return true;
         return switch (resident.deploymentRole() == null ? "" : resident.deploymentRole()) {
-            case "assault", "defend", "escort", "patrol" -> true;
+            // The first three names are the exact source HumanUnitKind
+            // vocabulary. The latter names preserve existing pre-source-v2
+            // fixtures and do not create a second role model.
+            case "line", "scout", "assault", "defend", "escort", "patrol" -> true;
             default -> false;
+        };
+    }
+
+    /**
+     * A resident's snapshot slot is the only local formation datum. The
+     * source has already selected its operation, deployment role and exact
+     * source anchor; this routine merely gives the visible person an
+     * intelligible amount of motion around that slot. In particular, a medic
+     * or logistics worker does not begin a private combat patrol just because
+     * the player loaded their chunk.
+     */
+    private static double residentPatrolRadius(ReferenceGrayboxSnapshot.Resident resident) {
+        if (resident.condition().equals("wounded")) return 1.25d;
+        return switch (resident.deploymentRole() == null ? "" : resident.deploymentRole()) {
+            case "scout" -> 7.0d;
+            case "line" -> 3.5d;
+            case "assault" -> 2.5d;
+            case "engineer", "medic", "logistics" -> 1.5d;
+            case "defend", "escort", "patrol" -> 4.0d;
+            case "" -> 4.0d;
+            default -> 3.0d;
+        };
+    }
+
+    private static double movementSpeed(ActorView actor) {
+        if (actor.kind() == ReferenceGrayboxActorExecutionState.ActorKind.BIOFORM) return HIVE_SPEED;
+        ReferenceGrayboxSnapshot.Resident resident = actor.resident();
+        if (resident.condition().equals("wounded")) return HUMAN_SPEED * 0.55d;
+        return switch (resident.deploymentRole() == null ? "" : resident.deploymentRole()) {
+            case "scout" -> HUMAN_SPEED * 1.20d;
+            case "assault" -> HUMAN_SPEED * 1.10d;
+            case "engineer", "medic", "logistics" -> HUMAN_SPEED * 0.85d;
+            default -> HUMAN_SPEED;
         };
     }
 

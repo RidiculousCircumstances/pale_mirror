@@ -115,6 +115,45 @@ public final class SourceGrayboxActorMaterializerGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void exactSourceLineRoleFightsButMedicRoleStaysSupport(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        String residentId = "resident:combat:line";
+        ReferenceGrayboxSnapshot baseline = SourceGrayboxMaterializerGameTests.fixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot(),
+                residentId, 1.0d, "source-line-combat");
+        ReferenceGrayboxSnapshot snapshot = withResidentRole(baseline, residentId, "line");
+        ReferenceGrayboxSnapshot.Resident line = snapshot.residents().getFirst();
+        ReferenceGrayboxSnapshot.Resident medic = new ReferenceGrayboxSnapshot.Resident("resident:combat:medic", 1, "worker", "worker",
+                "operation", 47, "healthy", "medic", line.position(), "resident.worker");
+        helper.assertTrue(SourceGrayboxActorBehaviorRuntime.guard(line),
+                "the exact Python-source line role must defend itself in the HOT executor");
+        helper.assertTrue(!SourceGrayboxActorBehaviorRuntime.guard(medic),
+                "a source medic must remain local support rather than becoming an invented melee guard");
+
+        String bioformId = snapshot.bioforms().getFirst().id();
+        ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        helper.assertTrue(execution.prepare(residentId, "gametest:actor-runtime", 1L), "the line unit must receive its exact lease");
+        helper.assertTrue(execution.prepare(bioformId, "gametest:actor-runtime", 1L), "the bioform must receive its exact lease");
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        Map<String, Entity> admitted = new LinkedHashMap<>();
+        materializer.apply(helper.getLevel(), snapshot, execution, admitted);
+        helper.assertTrue(execution.activate(residentId, execution.actor(residentId).orElseThrow().leaseId(), "gametest:actor-runtime", 2L),
+                "the line unit must become HOT after physical materialization");
+        helper.assertTrue(execution.activate(bioformId, execution.actor(bioformId).orElseThrow().leaseId(), "gametest:actor-runtime", 2L),
+                "the bioform must become HOT after physical materialization");
+        Villager lineBody = (Villager) materializer.actorEntity(helper.getLevel(), admitted, execution.actor(residentId).orElseThrow());
+        Zombie bioform = (Zombie) materializer.actorEntity(helper.getLevel(), admitted, execution.actor(bioformId).orElseThrow());
+        lineBody.setPos(anchor.getX() + 8.5d, ReferenceGrayboxLayout.GROUND_Y + 1, anchor.getZ() + 4.5d);
+        bioform.setPos(anchor.getX() + 9.7d, ReferenceGrayboxLayout.GROUND_Y + 1, anchor.getZ() + 4.5d);
+        float before = bioform.getHealth();
+
+        new SourceGrayboxActorCombatRuntime().tick(helper.getLevel(), new FixtureCombatOwner(snapshot, execution), materializer, admitted, 5L);
+        helper.assertTrue(bioform.getHealth() < before,
+                "a nearby source line unit must create one observed local combat effect instead of standing as a noncombatant");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void hotMeleeUsesOneDurableEffectReceiptInsteadOfNativeAiRepeats(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
@@ -169,6 +208,16 @@ public final class SourceGrayboxActorMaterializerGameTests {
         return new ReferenceGrayboxSnapshot(present.day(), present.profileId(), present.stateRevision(), present.bounds(), present.cells(),
                 present.settlements(), present.facilities(), present.resourceSites(), present.routes(), present.hiveOrgans(), present.bioforms(),
                 List.of(), present.fieldPosts(), present.fieldLinks(), present.activities(), present.cargoes(), present.interactions(),
+                present.sectors(), present.chrysalises(), present.events());
+    }
+
+    private static ReferenceGrayboxSnapshot withResidentRole(ReferenceGrayboxSnapshot present, String residentId, String role) {
+        ReferenceGrayboxSnapshot.Resident original = present.residents().getFirst();
+        ReferenceGrayboxSnapshot.Resident line = new ReferenceGrayboxSnapshot.Resident(residentId, original.homeSettlementId(), "worker",
+                original.economicClass(), original.location(), original.locationId(), original.condition(), role, original.position(), original.colour());
+        return new ReferenceGrayboxSnapshot(present.day(), present.profileId(), present.stateRevision(), present.bounds(), present.cells(),
+                present.settlements(), present.facilities(), present.resourceSites(), present.routes(), present.hiveOrgans(), present.bioforms(),
+                List.of(line), present.fieldPosts(), present.fieldLinks(), present.activities(), present.cargoes(), present.interactions(),
                 present.sectors(), present.chrysalises(), present.events());
     }
 

@@ -84,9 +84,12 @@ lease-time floor, so `/time` rewind cannot reuse an old lease or turn a body
 into an immediate despawn. A separate bounded role brain refreshes only those
 HOT lease bodies every ten ticks from source role/deployment or swarm phase,
 then makes collision-checked movement steps (at most sixty-four bodies per
-Minecraft tick). Native goals stay disabled, so this is not a second strategic
-AI; it cannot spawn, damage, mutate source state or run inside an unloaded
-chunk. Its sibling combat executor considers at most sixty-four HOT bodies
+Minecraft tick). Exact source `line`, `scout` and `assault` deployment roles
+may defend against local managed bioforms; `engineer`, `medic` and `logistics`
+remain support bodies around their source slot, while wounds slow that body.
+This is presentation-scale role behaviour, not a second strategic planner.
+Native goals stay disabled, so it cannot spawn, damage, mutate source state or
+run inside an unloaded chunk. Its sibling combat executor considers at most sixty-four HOT bodies
 every five ticks. It must reserve the exact lease-owned action epoch and
 cooldown, persist a target-bound physical effect before calling Minecraft, and
 store fixed-point target health before/after the hit. A running action becomes
