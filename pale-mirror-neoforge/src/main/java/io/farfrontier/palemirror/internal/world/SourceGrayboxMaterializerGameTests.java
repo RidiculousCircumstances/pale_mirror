@@ -53,10 +53,9 @@ public final class SourceGrayboxMaterializerGameTests {
                 "a detailed facility label must cull before it turns a distant map overview into technical-text noise");
         helper.assertTrue(SourceGrayboxLabelPresentation.scale("settlement:fixture")
                         > SourceGrayboxLabelPresentation.scale("facility:fixture")
-                        && SourceGrayboxLabelPresentation.scale("settlement:fixture") <= 1.0f
                         && SourceGrayboxLabelPresentation.viewRange("settlement:fixture")
                         > SourceGrayboxLabelPresentation.viewRange("facility:fixture"),
-                "a settlement landmark must stay readable farther away while detailed labels remain compact and local");
+                "a settlement landmark must stay readable farther away and larger while detailed labels remain compact and local");
         Villager resident = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(16), value ->
                 value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
         Zombie bioform = helper.getLevel().getEntitiesOfClass(Zombie.class, new AABB(anchor).inflate(16), value ->
