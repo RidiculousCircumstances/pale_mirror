@@ -54,6 +54,7 @@ def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/c
 dependencies {
     implementation project(':pale-mirror-api')
     implementation project(':pale-mirror-domain')
+    implementation project(':pale-mirror-frontier')
     // API classes are referenced only by the isolated client plugin. JourneyMap
     // itself stays optional and is never packaged into Pale Mirror.
     compileOnly 'info.journeymap:journeymap-api-neoforge:2.0.0-1.21.1'

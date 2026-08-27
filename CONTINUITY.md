@@ -45,6 +45,7 @@
 - Wave 2 defines the v3-only `FrontierStore` port, typed durability/append/snapshot/compaction receipts and `RecoveryImage`; foreign world checkpoint/WAL inputs fail before replay.
 - Wave 2 adds checksummed pure snapshot/WAL schemas for complete checkpoint state; bad checksum, unknown schema version and truncated bytes fail closed before any recovery mutation.
 - Snapshots now bind an exact `coveredWalSequence`, so recovery can prove the retained WAL tail is complete before compaction deletes covered records.
+- NeoForge now provides a v3-only atomic file store: ordered checksummed WAL, snapshot install, covered-only compaction and recovery rejection for revision gaps/checksum corruption; residual uncommitted `.tmp` files are ignored and safely replaced.
 - `9c28c1f` records the cross-JVM deterministic replay proof. Wave 1 is complete at automated kernel-evidence level; it is not gameplay, persistence-host or product validation evidence.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
