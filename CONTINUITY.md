@@ -35,14 +35,15 @@
 - The complete pre-v3 ledger is archived at `docs/archive/CONTINUITY_2026-08-27_pre_frontier_v3.md`.
 - `a1a6931` establishes the stable v3 contract, decision-complete implementation waves, valid version-3 architecture transition and explicit frozen-v2 notice.
 - Wave 0 adds executable architecture validation and future `pale-mirror-frontier` source-boundary scans. Focused validator tests, `git diff --check` and `./gradlew guardrails check --no-daemon` pass; the full Gradle gate completed 56 tasks successfully.
+- Wave 1 foundation adds the independent pure-Java `pale-mirror-frontier` module, typed IDs and simulation values, checked fixed-point arithmetic, keyed RNG golden vectors, deterministic bounded scheduling and versioned kernel codecs. Focused tests and the critical Gradle gate, including 168 existing NeoForge GameTests, pass.
 
 ### Now
-- Wave 0 is complete at architecture/evidence level 1. No v3 runtime source exists yet, so no simulation, physical-world or player-product claim is made.
+- The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
+- Wave 1 is in progress: implement immutable command/event envelopes, revision validation, atomic transactions, event reduction and a bounded in-memory replay store before introducing gameplay aggregates.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
-- The old durable `/goal` is paused and obsolete but not complete; it must be cleared rather than falsely marked achieved.
 
 ### Next
-- Clear the obsolete paused goal with `/goal clear`, create the approved Frontier v3 durable goal, then begin Wave 1 with the isolated module and deterministic event kernel.
+- Complete the transactional FrontierEngine, immutable command/event envelopes, revision validation, event reducer and in-memory replay store; then record the Wave 1 benchmark baseline.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.
@@ -51,4 +52,4 @@
 ## Working set
 - `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `build.gradle`.
 - `docs/frontier-v3-contract.md`, `docs/frontier-v3-implementation-plan.md`, `docs/frontier-ai-contract.md`, and the archived pre-v3 ledger.
-- Current wave only: no `pale-mirror-frontier` source or settings entry exists yet.
+- Current wave: `pale-mirror-frontier/` kernel sources/tests, `settings.gradle` and architecture lifecycle validation.

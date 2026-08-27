@@ -12,7 +12,7 @@ components:
       - adapters
       - wall-clock time
   - name: "frontier_v3"
-    lifecycle: "planned"
+    lifecycle: "active-development"
     path: "pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3"
     owns:
       - Frontier v3 canonical world, typed commands and events, deterministic schedules, exact actors/resources, autonomous human and hive processes, immutable projections and pure persistence codecs
@@ -69,7 +69,7 @@ runtime_transitions:
     current_runtime: "frontier_v2_source_graybox"
     current_status: "frozen-active"
     target_runtime: "frontier_v3"
-    target_status: "planned"
+    target_status: "active-development"
     migration: "fresh-world-only"
     rules:
       - V3 never imports, delegates to, falls back to or shares canonical state with V2 or Python.

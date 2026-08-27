@@ -111,7 +111,7 @@ def validate(document: Any) -> None:
     expected_transition = {
         "current_status": "frozen-active",
         "target_runtime": "frontier_v3",
-        "target_status": "planned",
+        "target_status": "active-development",
         "migration": "fresh-world-only",
     }
     for key, expected in expected_transition.items():
