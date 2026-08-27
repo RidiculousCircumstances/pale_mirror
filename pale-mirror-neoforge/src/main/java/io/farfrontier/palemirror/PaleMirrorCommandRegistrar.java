@@ -113,11 +113,9 @@ final class PaleMirrorCommandRegistrar {
             views.forEach(view -> context.getSource().sendSuccess(() -> Component.literal(view), false));
             return views.size();
         }));
-        // Audit view identities are one unquoted token by contract.  Do not use
-        // a greedy argument here: it captures the parser separator on some
-        // live command paths and makes the exact id emitted by `audit list`
-        // fail to round-trip into this command.
-        frontierAudit.then(Commands.literal("tp").then(Commands.argument("view", StringArgumentType.word())
+        // Semantic ids deliberately contain slash and colon separators, so one
+        // operator argument must consume the complete identifier.
+        frontierAudit.then(Commands.literal("tp").then(Commands.argument("view", StringArgumentType.greedyString())
                 .executes(context -> {
                     if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
                         context.getSource().sendFailure(Component.literal("Only a player can enter a source-graybox audit view."));
