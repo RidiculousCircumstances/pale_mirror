@@ -10,4 +10,22 @@ dependencies {
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
+    if (name != 'wave1Benchmark') {
+        useJUnitPlatform {
+            excludeTags 'benchmark'
+        }
+    }
+}
+
+tasks.register('wave1Benchmark', Test) {
+    group = 'verification'
+    description = 'Runs the reproducible Frontier v3 Wave 1 kernel benchmark fixture.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'benchmark' }
+    include '**/FrontierKernelBenchmarkTest.class'
+    testLogging {
+        events 'passed', 'failed'
+        showStandardStreams = true
+    }
 }

@@ -221,14 +221,14 @@ invariants:
 
 critical_flows:
   - id: "frontier-v3-command-event"
-    lifecycle: "planned"
+    lifecycle: "active-development"
     path: "typed command or persisted due action -> expected-revision and invariant validation -> deterministic events and cause chain -> required WAL durability -> atomic canonical transition -> immutable revisioned projections"
-    owner: "planned pure-Java FrontierEngine; NeoForge owns only server-thread invocation and storage implementation"
+    owner: "pure-Java FrontierEngine kernel; NeoForge will own only server-thread invocation and storage implementation"
     verification: "critical-code"
   - id: "frontier-v3-scheduled-world"
-    lifecycle: "planned"
+    lifecycle: "active-development"
     path: "server tick or explicit sleep/fast-forward command -> monotonic SimInstant -> ordered due-action queue -> bounded deterministic execution or visible ordered deferral -> next scheduled transitions"
-    owner: "planned Frontier v3 kernel and subsystem processes"
+    owner: "Frontier v3 kernel and future subsystem processes"
     verification: "critical-code"
   - id: "frontier-v3-hot-cold-scene"
     lifecycle: "planned"

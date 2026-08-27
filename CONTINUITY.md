@@ -36,14 +36,16 @@
 - `a1a6931` establishes the stable v3 contract, decision-complete implementation waves, valid version-3 architecture transition and explicit frozen-v2 notice.
 - Wave 0 adds executable architecture validation and future `pale-mirror-frontier` source-boundary scans. Focused validator tests, `git diff --check` and `./gradlew guardrails check --no-daemon` pass; the full Gradle gate completed 56 tasks successfully.
 - Wave 1 foundation adds the independent pure-Java `pale-mirror-frontier` module, typed IDs and simulation values, checked fixed-point arithmetic, keyed RNG golden vectors, deterministic bounded scheduling and versioned kernel codecs. Focused tests and the critical Gradle gate, including 168 existing NeoForge GameTests, pass.
+- `eea89c1` records the Wave 1 module/primitives foundation.
+- Wave 1 now has immutable command/event envelopes, typed rejection, one-thread atomic in-memory transactions, bounded receipt/transaction retention, reducer quarantine, non-destructive due-action admission and a reproducible pure-kernel benchmark fixture. Focused negative/recovery tests pass.
 
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
-- Wave 1 is in progress: implement immutable command/event envelopes, revision validation, atomic transactions, event reduction and a bounded in-memory replay store before introducing gameplay aggregates.
+- Wave 1 is in progress: give commands/events/transactions complete versioned pure codecs, make schedule create/cancel/reschedule explicit event effects, then verify deterministic replay from retained transaction records.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Complete the transactional FrontierEngine, immutable command/event envelopes, revision validation, event reducer and in-memory replay store; then record the Wave 1 benchmark baseline.
+- Complete deterministic replay/codec evidence and the Wave 1 exit review before Wave 2 persistence/bootstrap; no gameplay aggregate or NeoForge v3 runtime path starts before that boundary.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.

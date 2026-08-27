@@ -32,25 +32,37 @@ public final class ScheduledActionQueue {
         return action != null && ordered.remove(action);
     }
 
-    public ScheduledWork takeDue(SimInstant instant, WorkBudget budget) {
+    /**
+     * Selects work without consuming it. The engine acknowledges each action only after its
+     * corresponding transaction is committed, so a failing reducer cannot lose future work.
+     */
+    public ScheduledWork selectDue(SimInstant instant, WorkBudget budget) {
         Objects.requireNonNull(instant, "instant");
         Objects.requireNonNull(budget, "budget");
         List<ScheduledAction> executed = new ArrayList<>();
         int weight = 0;
-        while (!ordered.isEmpty()) {
-            ScheduledAction next = ordered.first();
+        for (ScheduledAction next : ordered) {
             if (next.dueAt().compareTo(instant) > 0) {
                 break;
             }
             if (executed.size() == budget.maxActions() || next.weight() > budget.maxWeight() - weight) {
-                return new ScheduledWork(executed, true);
+                return new ScheduledWork(executed, next);
             }
-            ordered.pollFirst();
-            byId.remove(next.id());
             executed.add(next);
             weight = Math.addExact(weight, next.weight());
         }
-        return new ScheduledWork(executed, false);
+        return new ScheduledWork(executed, null);
+    }
+
+    /** Acknowledges the current head after its immutable completion event has committed. */
+    public void acknowledge(ScheduledAction action) {
+        Objects.requireNonNull(action, "action");
+        ScheduledAction current = ordered.isEmpty() ? null : ordered.first();
+        if (!action.equals(current)) {
+            throw new IllegalStateException("scheduled action acknowledgement is not the queue head: " + action.id().value());
+        }
+        ordered.pollFirst();
+        byId.remove(action.id());
     }
 
     public List<ScheduledAction> snapshot() {

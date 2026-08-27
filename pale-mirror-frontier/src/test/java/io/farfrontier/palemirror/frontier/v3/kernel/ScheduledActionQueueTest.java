@@ -20,10 +20,10 @@ class ScheduledActionQueueTest {
         queue.schedule(action("schedule:b", 10L, 2, "settlement:c", 1));
         queue.schedule(action("schedule:a", 10L, 2, "settlement:a", 1));
 
-        ScheduledWork work = queue.takeDue(new SimInstant(10L), new WorkBudget(3, 3));
+        ScheduledWork work = queue.selectDue(new SimInstant(10L), new WorkBudget(3, 3));
 
         assertEquals(List.of("schedule:a", "schedule:b", "schedule:c"),
-                work.executed().stream().map(value -> value.id().value()).toList());
+                work.admitted().stream().map(value -> value.id().value()).toList());
         assertFalse(work.dueWorkDeferred());
     }
 
@@ -33,12 +33,13 @@ class ScheduledActionQueueTest {
         queue.schedule(action("schedule:a", 10L, 0, "settlement:a", 2));
         queue.schedule(action("schedule:b", 10L, 0, "settlement:b", 2));
 
-        ScheduledWork first = queue.takeDue(new SimInstant(10L), new WorkBudget(2, 3));
-        ScheduledWork second = queue.takeDue(new SimInstant(10L), new WorkBudget(2, 3));
+        ScheduledWork first = queue.selectDue(new SimInstant(10L), new WorkBudget(2, 3));
+        queue.acknowledge(first.admitted().getFirst());
+        ScheduledWork second = queue.selectDue(new SimInstant(10L), new WorkBudget(2, 3));
 
-        assertEquals(List.of("schedule:a"), first.executed().stream().map(value -> value.id().value()).toList());
+        assertEquals(List.of("schedule:a"), first.admitted().stream().map(value -> value.id().value()).toList());
         assertTrue(first.dueWorkDeferred());
-        assertEquals(List.of("schedule:b"), second.executed().stream().map(value -> value.id().value()).toList());
+        assertEquals(List.of("schedule:b"), second.admitted().stream().map(value -> value.id().value()).toList());
         assertFalse(second.dueWorkDeferred());
     }
 
