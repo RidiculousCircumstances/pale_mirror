@@ -26,9 +26,25 @@ class SourceGrayboxLabelPresentationTest {
     }
 
     @Test
+    void authoredThreeLineBriefingIsNotWrappedIntoAnUnreadableFiveLineBoard() {
+        String briefing = "[ACTION] DAMAGE RESOURCE SITE\nremoves 0.11 of site condition and future output.\nBreak marked block: 8 point(s) remain.";
+
+        String board = SourceGrayboxLabelBoard.text(briefing);
+
+        assertEquals(briefing, board, "explicit briefing rows are the player-facing board grammar");
+        assertEquals(3L, board.lines().count(), "a native three-row board must not gain hidden paragraph wraps");
+    }
+
+    @Test
     void landmarkBoardsAreLargerThanLocalDetailBoards() {
         assertTrue(SourceGrayboxLabelStyle.scale("settlement:2") > SourceGrayboxLabelStyle.scale("facility:2:workshop"));
         assertTrue(SourceGrayboxLabelStyle.scale("organ:9") > SourceGrayboxLabelStyle.scale("route:1-2"));
+        assertTrue(SourceGrayboxLabelStyle.viewRange("settlement:2")
+                        > SourceGrayboxLabelStyle.viewRange("facility:2:workshop"),
+                "settlement landmarks must orient an arriving player before local detail boards are in range");
+        assertTrue(SourceGrayboxLabelStyle.viewRange("organ:9")
+                        > SourceGrayboxLabelStyle.viewRange("route:1-2"),
+                "hive landmarks must remain visible farther than route detail");
     }
 
     @Test

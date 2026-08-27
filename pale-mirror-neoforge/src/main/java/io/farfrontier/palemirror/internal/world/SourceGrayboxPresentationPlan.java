@@ -305,7 +305,9 @@ final class SourceGrayboxPresentationPlan {
      * and a full six-by-six patch correspond to the current cell level.  The
      * separate provenance of each clump is intentional.  A player-caused
      * conflict in one clump remains a visible scar, while the other source
-     * clumps may still grow or retreat normally.</p>
+     * clumps may still grow or retreat normally.  A live signal colours one
+     * of those already-owned clumps as an accent; it must not turn every
+     * infected cell into the same high-saturation colour.</p>
      */
     private static void addInfectionTissue(Map<String, Desired> result, ReferenceGrayboxSnapshot snapshot) {
         for (ReferenceGrayboxSnapshot.Cell cell : snapshot.cells()) {
@@ -325,7 +327,7 @@ final class SourceGrayboxPresentationPlan {
                 add(result, new Desired("infection-tissue:" + cellId + ":" + index, cellId, "INFECTION_TISSUE",
                         snapshot.stateRevision(), cell.rectangle().x() + localX, INFECTION_TISSUE_Y,
                         cell.rectangle().z() + localZ, INFECTION_TISSUE_CLUMP_WIDTH, INFECTION_TISSUE_CLUMP_WIDTH, 1,
-                        infectionTissueColour(cell)));
+                        infectionTissueColour(cell, index, clumps)));
             }
         }
     }
@@ -339,11 +341,12 @@ final class SourceGrayboxPresentationPlan {
         return Math.min(INFECTION_TISSUE_CLUMPS, Math.max(1, (int) Math.ceil(infection * INFECTION_TISSUE_CLUMPS)));
     }
 
-    private static String infectionTissueColour(ReferenceGrayboxSnapshot.Cell cell) {
-        if (cell.infection() >= .70d) return cell.signal() > INFECTION_TISSUE_MINIMUM
-                ? "infection.tissue.signal_severe" : "infection.tissue.severe";
-        if (cell.infection() >= .28d) return cell.signal() > INFECTION_TISSUE_MINIMUM
-                ? "infection.tissue.signal_active" : "infection.tissue.active";
+    private static String infectionTissueColour(ReferenceGrayboxSnapshot.Cell cell, int index, int clumps) {
+        if (cell.signal() > INFECTION_TISSUE_MINIMUM && index == clumps - 1) {
+            return cell.infection() >= .70d ? "infection.tissue.signal_severe" : "infection.tissue.signal_active";
+        }
+        if (cell.infection() >= .70d) return "infection.tissue.severe";
+        if (cell.infection() >= .28d) return "infection.tissue.active";
         return "infection.tissue.trace";
     }
 

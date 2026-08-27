@@ -28,15 +28,18 @@ final class SourceGrayboxLabelPresentation {
         // of technical text floating over the whole map.
         Component content = Component.literal(SourceGrayboxLabelBoard.text(text)).withStyle(colour(id), ChatFormatting.BOLD);
         data.putString(Display.TextDisplay.TAG_TEXT, Component.Serializer.toJson(content, display.registryAccess()));
-        data.putInt("line_width", 256);
+        // Three concise briefing rows must stay three rows.  This width avoids
+        // an implicit second wrap in the native renderer while the board's
+        // bounded culling volume still prevents horizon-wide text walls.
+        data.putInt("line_width", 384);
         data.putByte("text_opacity", (byte) 0xFF);
         data.putInt("background", 0xE0000000);
         data.putBoolean("shadow", true);
         data.putBoolean("see_through", true);
         data.putString("alignment", "center");
-        data.putFloat("view_range", viewRange(id));
-        data.putFloat("width", 16.0f);
-        data.putFloat("height", 4.0f);
+        data.putFloat("view_range", SourceGrayboxLabelStyle.viewRange(id));
+        data.putFloat("width", 24.0f);
+        data.putFloat("height", 6.0f);
         data.putInt("glow_color_override", glowColour(id));
         data.putBoolean("Glowing", true);
         Transformation.EXTENDED_CODEC.encodeStart(NbtOps.INSTANCE, new Transformation(new Vector3f(), new Quaternionf(),
@@ -79,17 +82,9 @@ final class SourceGrayboxLabelPresentation {
         };
     }
 
-    /**
-     * Map landmarks should orient a distant player; exact local facts should
-     * appear only once their associated greybox object is close enough to be
-     * inspected.  Otherwise twelve settlements' worth of state turns the
-     * whole horizon into overlapping text.
-     */
+    /** Compatibility seam for live GameTests; policy itself remains pure. */
     static float viewRange(String id) {
-        if (id.startsWith("settlement:") || id.startsWith("organ:")) return 3.0f;
-        if (id.startsWith("warehouse:")) return 1.5f;
-        if (id.startsWith("route:") || id.startsWith("field-link:") || id.startsWith("legend:")) return 1.75f;
-        return 1.25f;
+        return SourceGrayboxLabelStyle.viewRange(id);
     }
 
     /**

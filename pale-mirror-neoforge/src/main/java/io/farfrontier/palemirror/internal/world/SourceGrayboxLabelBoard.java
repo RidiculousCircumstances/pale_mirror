@@ -13,6 +13,12 @@ final class SourceGrayboxLabelBoard {
      * GameTests never parse presentation line breaks.
      */
     static String text(String source) {
+        // Player-facing source labels deliberately already have a compact
+        // three-line grammar.  Re-wrapping them as if they were one paragraph
+        // produces five or more physical lines, which a four-line display
+        // clips and makes unreadable.  Keep their authored row boundaries;
+        // the exact original remains separately mirrored as CustomName.
+        if (source.indexOf('\n') >= 0) return source;
         if (source.length() <= LINE_WIDTH) return source;
         StringBuilder result = new StringBuilder(source.length() + MAX_LINES - 1);
         int start = 0;

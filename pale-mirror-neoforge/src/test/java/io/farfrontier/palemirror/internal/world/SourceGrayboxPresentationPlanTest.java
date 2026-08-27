@@ -28,6 +28,12 @@ class SourceGrayboxPresentationPlanTest {
         assertTrue(desired.values().stream().filter(item -> item.kind().equals("INFECTION_TISSUE"))
                         .allMatch(item -> item.width() == 3 && item.depth() == 3 && item.height() == 1),
                 "every tissue contour must use the fixed provenance-owned clump geometry");
+        Map<String, List<SourceGrayboxPresentationPlan.Desired>> tissueByCell = desired.values().stream()
+                .filter(item -> item.kind().equals("INFECTION_TISSUE"))
+                .collect(java.util.stream.Collectors.groupingBy(SourceGrayboxPresentationPlan.Desired::subjectId));
+        assertTrue(tissueByCell.values().stream().allMatch(clumps -> clumps.stream()
+                        .filter(item -> item.colour().contains("signal_")).count() <= 1L),
+                "a source signal is one visible tissue accent, never a whole-cell magenta carpet");
         snapshot.hiveOrgans().forEach(organ -> {
             SourceGrayboxPresentationPlan.Desired crown = desired.get("hive-organ:" + organ.id() + ":crown");
             SourceGrayboxPresentationPlan.Desired spire = desired.get("hive-organ:" + organ.id() + ":spire");
