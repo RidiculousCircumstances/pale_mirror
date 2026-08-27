@@ -112,7 +112,7 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
             drainForCold(carrier, binding);
             return put(data, cold);
         }
-        moveToward(carrier, target);
+        advanceToward(carrier, target);
         if (level.getGameTime() % 10L == 0L) return put(data, binding.at(sixteenths(carrier.getX()), sixteenths(carrier.getZ())));
         return false;
     }
@@ -129,7 +129,7 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
 
     private static MinecartChest spawn(ServerLevel level, SourceGrayboxOperationCargoCarrierLedger.Binding binding, BlockPos target) {
         MinecartChest carrier = new MinecartChest(level, target.getX() + 0.5d, target.getY(), target.getZ() + 0.5d);
-        carrier.setUUID(uuid(binding.id()));
+        carrier.setUUID(carrierUuid(binding.id()));
         carrier.setNoGravity(true);
         carrier.setCustomName(net.minecraft.network.chat.Component.literal("[CARGO] " + binding.resource().name() + " · operation " + binding.operationId()));
         carrier.setCustomNameVisible(true);
@@ -187,7 +187,13 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
         return changed;
     }
 
-    private static void moveToward(MinecartChest carrier, BlockPos target) {
+    /**
+     * Advances one HOT carrier step through Minecraft collision.  The source
+     * snapshot owns the destination; this method deliberately never assigns
+     * the destination position, so walls and other real physical changes
+     * remain observable rather than being bypassed by a projection teleport.
+     */
+    static void advanceToward(MinecartChest carrier, BlockPos target) {
         Vec3 delta = new Vec3(target.getX() + 0.5d - carrier.getX(), 0.0d, target.getZ() + 0.5d - carrier.getZ());
         double distance = delta.horizontalDistance();
         if (distance <= ARRIVAL) {
@@ -223,12 +229,12 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
     }
 
     static boolean owns(MinecartChest carrier, SourceGrayboxOperationCargoCarrierLedger.Binding binding) {
-        return carrier.getUUID().equals(uuid(binding.id())) && carrier.getPersistentData().getString(ENTITY_ID).equals(binding.id())
+        return carrier.getUUID().equals(carrierUuid(binding.id())) && carrier.getPersistentData().getString(ENTITY_ID).equals(binding.id())
                 && carrier.getPersistentData().getString(ENTITY_RESOURCE).equals(binding.resource().name());
     }
 
     private static MinecartChest carrier(ServerLevel level, SourceGrayboxOperationCargoCarrierLedger.Binding binding) {
-        var entity = level.getEntity(uuid(binding.id()));
+        var entity = level.getEntity(carrierUuid(binding.id()));
         return entity instanceof MinecartChest carrier && owns(carrier, binding) ? carrier : null;
     }
 
@@ -356,7 +362,8 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
         return Math.toIntExact(Math.round(value * 16.0d));
     }
 
-    private static UUID uuid(String id) {
+    /** Stable physical identity for one source-owned operation cargo carrier. */
+    static UUID carrierUuid(String id) {
         return UUID.nameUUIDFromBytes(("source-graybox:operation-carrier:" + id).getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -265,4 +265,40 @@ public final class SourceGrayboxCargoGameTests {
                 "the first HOT observation must see zero delta rather than misclassifying COLD custody as a withdrawal");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotOperationCarrierMovesPhysicallyAndNeverTeleportsThroughAnObstruction(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y + 1).offset(2, 0, 2);
+        BlockPos wall = start.offset(3, 0, 0);
+        BlockPos target = start.offset(8, 0, 0);
+        for (int x = start.getX() - 1; x <= target.getX() + 1; x++) {
+            helper.getLevel().setBlock(new BlockPos(x, start.getY() - 1, start.getZ()), Blocks.STONE.defaultBlockState(), 3);
+        }
+        helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(wall.above(), Blocks.STONE.defaultBlockState(), 3);
+        SourceGrayboxOperationCargoCarrierLedger.Binding binding = new SourceGrayboxOperationCargoCarrierLedger.Binding(
+                "operation-carrier:operation:991:cargo:food", "operation:991:cargo:food", 991, ReferenceResource.FOOD, 64,
+                start.getX() * 16 + 8, start.getZ() * 16 + 8, SourceGrayboxOperationCargoCarrierLedger.Mode.HOT);
+        MinecartChest carrier = new MinecartChest(helper.getLevel(), start.getX() + 0.5d, start.getY(), start.getZ() + 0.5d);
+        carrier.setNoGravity(true);
+        carrier.setUUID(SourceGrayboxOperationCargoCarrierRuntime.carrierUuid(binding.id()));
+        carrier.getPersistentData().putString(SourceGrayboxOperationCargoCarrierRuntime.ENTITY_ID, binding.id());
+        carrier.getPersistentData().putString(SourceGrayboxOperationCargoCarrierRuntime.ENTITY_RESOURCE, binding.resource().name());
+        carrier.setItem(0, new ItemStack(SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD), 64));
+        helper.assertTrue(helper.getLevel().addFreshEntity(carrier), "the HOT operation carrier must first be a real minecart body");
+
+        double originalX = carrier.getX();
+        SourceGrayboxOperationCargoCarrierRuntime.advanceToward(carrier, target);
+        helper.assertTrue(carrier.getX() > originalX && carrier.getX() < target.getX() + 0.5d,
+                "one carrier step must make partial physical progress instead of assigning the source destination");
+        for (int step = 0; step < 64; step++) SourceGrayboxOperationCargoCarrierRuntime.advanceToward(carrier, target);
+
+        helper.assertTrue(carrier.getX() < wall.getX() - 0.45d,
+                "a source target beyond a real wall must leave the carrier blocked before the wall, never teleport it through");
+        helper.assertTrue(SourceGrayboxOperationCargoCarrierRuntime.owns(carrier, binding),
+                "a physical collision must not silently release the exact operation carrier identity");
+        helper.assertValueEqual(carrier.getItem(0).getCount(), 64,
+                "pure movement must preserve the exact physical source cargo until a typed item observation occurs");
+        helper.succeed();
+    }
 }
