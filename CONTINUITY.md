@@ -43,6 +43,7 @@
 - The Wave 1 review tightened event-time causality: a command is accepted only at the engine's current `SimInstant`, so retained history cannot acquire a backdated event that replay would reject.
 - A fresh-JVM fixture now serializes the same command/schedule transcript twice and proves byte-identical event and checkpoint output across independent Java processes.
 - Wave 2 defines the v3-only `FrontierStore` port, typed durability/append/snapshot/compaction receipts and `RecoveryImage`; foreign world checkpoint/WAL inputs fail before replay.
+- Wave 2 adds checksummed pure snapshot/WAL schemas for complete checkpoint state; bad checksum, unknown schema version and truncated bytes fail closed before any recovery mutation.
 - `9c28c1f` records the cross-JVM deterministic replay proof. Wave 1 is complete at automated kernel-evidence level; it is not gameplay, persistence-host or product validation evidence.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
