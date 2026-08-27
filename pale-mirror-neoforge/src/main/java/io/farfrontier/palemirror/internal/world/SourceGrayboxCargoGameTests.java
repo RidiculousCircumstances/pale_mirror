@@ -183,7 +183,7 @@ public final class SourceGrayboxCargoGameTests {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         BlockPos position = anchor.offset(2, 1, 2);
         helper.getLevel().setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("operation:993:cargo:food", "operation", 993,
+        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("operation:991:cargo:food", "operation", 991,
                 "food", 1.0d, new ReferenceGrayboxLayout.Rectangle(position.getX(), position.getZ(), 1, 1), "#ffffff");
         String legacyId = "cargo-container:" + cargo.id();
         BarrelBlockEntity barrel = SourceGrayboxWarehouseRuntime.ensureContainer(helper.getLevel(), position, legacyId, ReferenceResource.FOOD);
