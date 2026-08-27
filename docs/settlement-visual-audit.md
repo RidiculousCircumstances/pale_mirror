@@ -36,6 +36,19 @@ scripts/capture-settlement-visuals.sh \
   --server 127.0.0.1:25565
 ```
 
+For a manual player-visible audit, install the isolated camera overlay before
+starting the one audit client:
+
+```bash
+scripts/install-visual-audit-camera-mods.sh
+```
+
+It hash-pins client-only Freecam and Power Screenshot in the development audit
+run only. Freecam is for an eye-level camera inside chunks already loaded by
+the real audit player; it never becomes evidence that a remote scene is HOT.
+Power Screenshot is for a readable high-resolution frame. Neither tool is
+added to Packwiz, the server, or the ordinary player client.
+
 For an unregistered or deliberately selected test location, use its physical
 anchor instead:
 
