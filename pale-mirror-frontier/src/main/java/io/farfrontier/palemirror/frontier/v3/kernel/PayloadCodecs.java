@@ -22,6 +22,19 @@ public final class PayloadCodecs {
         byType = Map.copyOf(mutable);
     }
 
+    public static PayloadCodecs merge(PayloadCodecs... registries) {
+        Map<String, PayloadCodec> codecs = new LinkedHashMap<>();
+        for (PayloadCodecs registry : registries) {
+            Objects.requireNonNull(registry, "payload registry");
+            for (PayloadCodec codec : registry.byType.values()) {
+                if (codecs.putIfAbsent(codec.type(), codec) != null) {
+                    throw new IllegalArgumentException("duplicate payload codec: " + codec.type());
+                }
+            }
+        }
+        return new PayloadCodecs(List.copyOf(codecs.values()));
+    }
+
     public byte[] encode(FrontierPayload payload) {
         Objects.requireNonNull(payload, "payload");
         PayloadCodec codec = require(payload.type());

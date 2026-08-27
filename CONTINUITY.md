@@ -41,15 +41,16 @@
 - Explicit kernel schedule-created, schedule-cancelled, schedule-rescheduled and schedule-consumed events now mutate the due-action index only inside the same successful transaction; failed due work remains scheduled and visibly quarantines the engine.
 - Wave 1 now has explicit payload registries, versioned command/event/transaction codecs, built-in schedule-effect codecs and fail-closed deterministic transaction replay. Focused replay tests and the critical Gradle gate, including 168 GameTests, pass.
 - The Wave 1 review tightened event-time causality: a command is accepted only at the engine's current `SimInstant`, so retained history cannot acquire a backdated event that replay would reject.
+- A fresh-JVM fixture now serializes the same command/schedule transcript twice and proves byte-identical event and checkpoint output across independent Java processes.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
-- Wave 1 is in progress: review the kernel's bounded retention and codec/replay invariants against the Wave 1 exit gate, then record the exit evidence before Wave 2.
+- Wave 1 is in final critical verification and commit review; Wave 2 starts only if the resulting evidence remains complete.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Complete deterministic replay/codec evidence and the Wave 1 exit review before Wave 2 persistence/bootstrap; no gameplay aggregate or NeoForge v3 runtime path starts before that boundary.
+- Start Wave 2 v3-only WAL/snapshot persistence and fresh-world bootstrap after recording the Wave 1 exit evidence; no gameplay aggregate or NeoForge v3 runtime path starts before that boundary.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.
