@@ -97,6 +97,38 @@ final class PaleMirrorCommandRegistrar {
             context.getSource().sendSuccess(() -> Component.literal("Entered pale_mirror:frontier_graybox."), false);
             return 1;
         }));
+        LiteralArgumentBuilder<CommandSourceStack> frontierAudit = Commands.literal("audit");
+        frontierAudit.then(Commands.literal("list").executes(context -> {
+            SourceGrayboxRuntime runtime = SourceGrayboxRuntime.forServer(context.getSource().getServer());
+            if (!runtime.activated()) {
+                context.getSource().sendFailure(Component.literal("Activate the source graybox before requesting audit views."));
+                return 0;
+            }
+            var views = runtime.auditViewLines();
+            if (views.isEmpty()) {
+                context.getSource().sendFailure(Component.literal("No current source-graybox audit scenes are available."));
+                return 0;
+            }
+            context.getSource().sendSuccess(() -> Component.literal("Source-graybox semantic audit views:"), false);
+            views.forEach(view -> context.getSource().sendSuccess(() -> Component.literal(view), false));
+            return views.size();
+        }));
+        frontierAudit.then(Commands.literal("tp").then(Commands.argument("view", StringArgumentType.greedyString())
+                .executes(context -> {
+                    if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
+                        context.getSource().sendFailure(Component.literal("Only a player can enter a source-graybox audit view."));
+                        return 0;
+                    }
+                    String viewId = StringArgumentType.getString(context, "view");
+                    SourceGrayboxRuntime runtime = SourceGrayboxRuntime.forServer(context.getSource().getServer());
+                    if (!runtime.enterAuditView(player, viewId)) {
+                        context.getSource().sendFailure(Component.literal("Unknown or unavailable source-graybox audit view " + viewId));
+                        return 0;
+                    }
+                    context.getSource().sendSuccess(() -> Component.literal("Entered source-graybox audit view " + viewId + "."), false);
+                    return 1;
+                })));
+        frontier.then(frontierAudit);
         root.then(frontier);
         LiteralArgumentBuilder<CommandSourceStack> scenario = Commands.literal("scenario");
         scenario.then(Commands.literal("list").executes(context -> {

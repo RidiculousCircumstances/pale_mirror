@@ -7,6 +7,7 @@ username=pmaudit
 settlement_id=
 anchor=
 first_authored=false
+source_graybox=false
 output_root="$repo_dir/build/visual-audits"
 frame_wait=10
 width=1920
@@ -23,12 +24,14 @@ Usage:
   scripts/capture-settlement-visuals.sh --settlement-id NAMESPACE:ID [options]
   scripts/capture-settlement-visuals.sh --anchor X,Y,Z [options]
   scripts/capture-settlement-visuals.sh --first-authored [options]
+  scripts/capture-settlement-visuals.sh --source-graybox [options]
 
 Options:
   --server HOST:PORT       Multiplayer server (default 127.0.0.1:25565)
   --username NAME          Dedicated permission-level-4 audit player (default pmaudit)
   --dimension NAMESPACE:ID Dimension for --anchor (default minecraft:overworld)
   --first-authored         Resolve the first authored settlement from the live server
+  --source-graybox         Capture the current source-graybox semantic player-eye views
   --output DIRECTORY       Output root (default build/visual-audits)
   --frame-wait SECONDS     Chunk/render settling time per view (default 10)
   --size WIDTHxHEIGHT      Capture size (default 1920x1080)
@@ -49,6 +52,7 @@ while (($#)); do
     --anchor) anchor=${2:?missing anchor}; shift 2 ;;
     --dimension) anchor_dimension=${2:?missing dimension}; shift 2 ;;
     --first-authored) first_authored=true; shift ;;
+    --source-graybox) source_graybox=true; shift ;;
     --server) server=${2:?missing server}; shift 2 ;;
     --username) username=${2:?missing username}; shift 2 ;;
     --output) output_root=${2:?missing output directory}; shift 2 ;;
@@ -69,8 +73,9 @@ mode_count=0
 [[ -n "$settlement_id" ]] && mode_count=$((mode_count + 1))
 [[ -n "$anchor" ]] && mode_count=$((mode_count + 1))
 "$first_authored" && mode_count=$((mode_count + 1))
+"$source_graybox" && mode_count=$((mode_count + 1))
 if [[ "$mode_count" -ne 1 ]]; then
-  printf 'Specify exactly one of --settlement-id, --anchor or --first-authored.\n' >&2
+  printf 'Specify exactly one of --settlement-id, --anchor, --first-authored or --source-graybox.\n' >&2
   exit 2
 fi
 [[ "$username" =~ ^[A-Za-z0-9_]{1,16}$ ]] || { printf 'Invalid Minecraft username: %s\n' "$username" >&2; exit 2; }
@@ -85,6 +90,7 @@ fi
 [[ "$anchor_dimension" =~ ^[a-z0-9_.-]+:[a-z0-9_/.-]+$ ]] || {
   printf 'Invalid Minecraft dimension: %s\n' "$anchor_dimension" >&2; exit 2;
 }
+if "$source_graybox"; then anchor_dimension=pale_mirror:frontier_graybox; fi
 
 external_display=${PALE_MIRROR_DISPLAY:-}
 xvfb_bin=${PALE_MIRROR_XVFB:-}
@@ -117,7 +123,9 @@ upsert_option() {
 upsert_option onboardAccessibility false
 upsert_option tutorialStep none
 
-safe_target=${settlement_id:-${anchor:-first-authored}}
+if "$source_graybox"; then safe_target=source-graybox
+else safe_target=${settlement_id:-${anchor:-first-authored}}
+fi
 safe_target=${safe_target//[^A-Za-z0-9_.-]/_}
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 output_dir="$output_root/${stamp}-${safe_target}"
@@ -147,6 +155,7 @@ original_y=
 original_z=
 original_yaw=
 original_pitch=
+original_dimension=
 # PMAudit is intentionally retained as spectator; see the immediate admission
 # guard below.  This value is also safe if cleanup runs after a partial pass.
 original_gamemode=spectator
@@ -155,8 +164,8 @@ cleanup() {
     set +e
     if "$hud_hidden"; then python3 "$x11" key F1 >/dev/null 2>&1; fi
     if [[ -n "$original_time" ]]; then send_command "time set $original_time" >/dev/null 2>&1; fi
-    if [[ -n "$original_x" ]]; then
-      send_command "execute in minecraft:overworld run tp $username $original_x $original_y $original_z $original_yaw $original_pitch" >/dev/null 2>&1
+    if [[ -n "$original_x" && -n "$original_dimension" ]]; then
+      send_command "execute in $original_dimension run tp $username $original_x $original_y $original_z $original_yaw $original_pitch" >/dev/null 2>&1
     fi
     send_command "gamemode $original_gamemode $username" >/dev/null 2>&1
     set -e
@@ -266,8 +275,10 @@ original_time_line=$(query_command 'time query daytime' 'The time is [0-9]+' || 
 original_time=$(sed -E 's/.*The time is ([0-9]+).*/\1/' <<<"$original_time_line")
 original_position_line=$(query_command 'data get entity @s Pos' 'following entity data: \[' || true)
 original_rotation_line=$(query_command 'data get entity @s Rotation' 'following entity data: \[' || true)
+original_dimension_line=$(query_command 'data get entity @s Dimension' 'following entity data: "[a-z0-9_.-]+:[a-z0-9_/.-]+"' || true)
 original_position=$(sed -E 's/.*\[(-?[0-9.Ee+-]+)d, (-?[0-9.Ee+-]+)d, (-?[0-9.Ee+-]+)d\].*/\1,\2,\3/' <<<"$original_position_line")
 original_rotation=$(sed -E 's/.*\[(-?[0-9.Ee+-]+)f, (-?[0-9.Ee+-]+)f\].*/\1,\2/' <<<"$original_rotation_line")
+original_dimension=$(sed -E 's/.*following entity data: "([a-z0-9_.-]+:[a-z0-9_/.-]+)".*/\1/' <<<"$original_dimension_line")
 [[ "$original_time" =~ ^[0-9]+$ ]] || original_time=
 [[ "$original_position" =~ ^-?[0-9.Ee+-]+,-?[0-9.Ee+-]+,-?[0-9.Ee+-]+$ ]] || {
   printf 'Could not capture the audit player position before changing it.\n' >&2
@@ -275,6 +286,10 @@ original_rotation=$(sed -E 's/.*\[(-?[0-9.Ee+-]+)f, (-?[0-9.Ee+-]+)f\].*/\1,\2/'
 }
 [[ "$original_rotation" =~ ^-?[0-9.Ee+-]+,-?[0-9.Ee+-]+$ ]] || {
   printf 'Could not capture the audit player rotation before changing it.\n' >&2
+  exit 1
+}
+[[ "$original_dimension" =~ ^[a-z0-9_.-]+:[a-z0-9_/.-]+$ ]] || {
+  printf 'Could not capture the audit player dimension before changing it.\n' >&2
   exit 1
 }
 IFS=, read -r original_x original_y original_z <<<"$original_position"
@@ -297,6 +312,28 @@ if [[ -n "$settlement_id" ]]; then
   fi
   anchor=$(rg -F "Teleported to $settlement_id " "$client_log" | tail -1 \
       | sed -E 's/.* at (-?[0-9]+),(-?[0-9]+),(-?[0-9]+).*/\1,\2,\3/')
+fi
+
+graybox_audit_lines=
+if "$source_graybox"; then
+  state_changed=true
+  before_graybox_views=$(wc -l <"$client_log")
+  send_command 'pale_mirror frontier audit list'
+  for _ in $(seq 1 20); do
+    graybox_audit_lines=$(tail -n "+$((before_graybox_views + 1))" "$client_log" | rg 'PM_GRAYBOX_AUDIT_VIEW\|' || true)
+    [[ -n "$graybox_audit_lines" ]] && break
+    sleep 1
+  done
+  if [[ -z "$graybox_audit_lines" ]]; then graybox_audit_lines=$(rg 'PM_GRAYBOX_AUDIT_VIEW\|' "$client_log" || true); fi
+  [[ -n "$graybox_audit_lines" ]] || {
+    printf 'PM returned no current source-graybox semantic audit views.\n' >&2
+    cp "$client_log" "$output_dir/client-latest.log"
+    exit 1
+  }
+  first_graybox_view=${graybox_audit_lines%%$'\n'*}
+  first_graybox_view=${first_graybox_view#*PM_GRAYBOX_AUDIT_VIEW|}
+  IFS='|' read -r _ _ _ _ anchor_x anchor_y anchor_z _ _ <<<"$first_graybox_view"
+  anchor="$anchor_x,$anchor_y,$anchor_z"
 fi
 
 IFS=, read -r anchor_x anchor_y anchor_z <<<"$anchor"
@@ -400,6 +437,26 @@ if [[ -n "$settlement_id" ]]; then
     printf 'No semantic views matched --only %s.\n' "${only_prefix:-<unset>}" >&2
     exit 1
   }
+elif "$source_graybox"; then
+  while IFS= read -r raw_line; do
+    line=${raw_line#*PM_GRAYBOX_AUDIT_VIEW|}
+    IFS='|' read -r view_id kind target_id dimension x y z yaw pitch <<<"$line"
+    [[ -z "$only_prefix" || "$view_id" == "$only_prefix"* ]] || continue
+    name=${view_id//\//__}
+    printf 'Capturing %-28s at %s,%s,%s...\n' "$view_id" "$x" "$y" "$z"
+    # These are read-only source-frame poses.  Explicit spectator travel is
+    # normal player demand; the listing path itself does not load chunks.
+    send_command "execute in $dimension run tp $username $x $y $z $yaw $pitch"
+    sleep 2
+    kill -0 "$client_pid" 2>/dev/null \
+      || { printf 'Client exited while preparing semantic view %s.\n' "$view_id" >&2; exit 1; }
+    sleep "$frame_wait"
+    capture_frame "$name" "$view_id" "$kind" "$target_id" "$dimension" "$x" "$y" "$z" "$yaw" "$pitch"
+  done <<<"$graybox_audit_lines"
+  ((${#captured_rows[@]} > 0)) || {
+    printf 'No source-graybox semantic views matched --only %s.\n' "${only_prefix:-<unset>}" >&2
+    exit 1
+  }
 else
   capture_view top "$anchor_x" "$((anchor_y + top_height))" "$anchor_z" 0 90
   capture_view south_east "$((anchor_x + radius))" "$((anchor_y + view_height))" "$((anchor_z + radius))" 135 28
@@ -411,7 +468,7 @@ fi
 python3 "$x11" key F1
 hud_hidden=false
 if [[ -n "$original_time" ]]; then send_command "time set $original_time"; fi
-send_command "execute in minecraft:overworld run tp $username $original_x $original_y $original_z $original_yaw $original_pitch"
+send_command "execute in $original_dimension run tp $username $original_x $original_y $original_z $original_yaw $original_pitch"
 send_command "gamemode $original_gamemode $username"
 state_changed=false
 cp "$client_log" "$output_dir/client-latest.log"

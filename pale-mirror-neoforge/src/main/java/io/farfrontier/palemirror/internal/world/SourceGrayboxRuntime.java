@@ -303,6 +303,30 @@ public final class SourceGrayboxRuntime {
     /** Read-only exact source detail for the materialized location under an operator. */
     public String inspect(int x, int z) { return SourceGrayboxInspector.at(data.snapshot(), x, z); }
 
+    /**
+     * Bounded semantic player-eye camera poses for the currently materialized source frame.
+     *
+     * <p>The returned lines are intentionally machine-readable for the visual-audit harness. They are
+     * projection data only: requesting them neither loads a chunk nor changes source state.</p>
+     */
+    public List<String> auditViewLines() {
+        return SourceGrayboxAuditViews.from(data.snapshot()).stream().map(view -> "PM_GRAYBOX_AUDIT_VIEW|"
+                + view.id() + "|" + view.kind() + "|" + view.targetId() + "|"
+                + SourceGrayboxWorldBoundary.DIMENSION.location() + "|" + view.x() + "|" + view.y() + "|"
+                + view.z() + "|" + view.yaw() + "|" + view.pitch()).toList();
+    }
+
+    /** Explicit operator travel to an advertised pose; normal player chunk demand remains the only loading path. */
+    public boolean enterAuditView(ServerPlayer player, String viewId) {
+        if (!data.activated()) return false;
+        SourceGrayboxAuditViews.View view = SourceGrayboxAuditViews.from(data.snapshot()).stream()
+                .filter(candidate -> candidate.id().equals(viewId)).findFirst().orElse(null);
+        if (view == null) return false;
+        player.teleportTo(grayboxLevel(), view.x() + 0.5d, view.y(), view.z() + 0.5d, view.yaw(), view.pitch());
+        player.fallDistance = 0.0f;
+        return true;
+    }
+
     private ServerLevel grayboxLevel() {
         return SourceGrayboxWorldBoundary.level(server);
     }

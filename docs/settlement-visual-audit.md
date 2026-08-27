@@ -65,6 +65,23 @@ scripts/capture-settlement-visuals.sh \
   --server 127.0.0.1:25565
 ```
 
+For the actual source-graybox scene review, prefer its current semantic
+player-eye camera plan instead of that legacy anchor fallback:
+
+```bash
+scripts/capture-settlement-visuals.sh --source-graybox --server 127.0.0.1:25565
+```
+
+The pass reads at most five immutable-frame poses: the most urgent settlement,
+the most vital hive organ, the most consequential route, and—only when they
+exist—a live operation and an active field post. It deliberately reports no
+operation or post when the canonical snapshot has none; screenshots must not
+invent a scene for coverage. The equivalent manual commands are
+`/pale_mirror frontier audit list` and `/pale_mirror frontier audit tp <view>`.
+Listing poses neither loads chunks nor changes source state; explicit spectator
+travel is ordinary player demand, so a resulting HOT scene is evidence only
+after the usual render settle.
+
 Each run writes PNG files, the client log and a machine-readable
 `manifest.json` under `build/visual-audits/<UTC timestamp>-<target>`. It also
 builds an overall contact sheet and one contact sheet per target kind. Use
