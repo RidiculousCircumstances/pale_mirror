@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.kernel;
 
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandReceipt;
 import io.farfrontier.palemirror.frontier.v3.api.EventId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
@@ -27,6 +28,7 @@ public final class KernelCodec {
     private static final int EVENT_MAGIC = 0x46563345;
     private static final int TRANSACTION_MAGIC = 0x46563354;
     private static final int ACTION_VERSION = 1;
+    private static final int TRANSACTION_VERSION = 2;
     private static final int MAX_STRING_BYTES = 256;
     private static final int MAX_PAYLOAD_BYTES = 1_048_576;
 
@@ -106,7 +108,7 @@ public final class KernelCodec {
     }
 
     public static byte[] encodeTransaction(TransactionRecord transaction, PayloadCodecs codecs) {
-        return encode(TRANSACTION_MAGIC, output -> {
+        return encode(TRANSACTION_MAGIC, TRANSACTION_VERSION, output -> {
             writeString(output, transaction.id().value());
             writeString(output, transaction.worldId().value());
             output.writeLong(transaction.revision().value());
@@ -115,11 +117,13 @@ public final class KernelCodec {
             for (FrontierEvent event : transaction.events()) {
                 writeEvent(output, event, codecs);
             }
+            output.writeBoolean(transaction.acceptedCommandReceipt().isPresent());
+            if (transaction.acceptedCommandReceipt().isPresent()) writeReceipt(output, transaction.acceptedCommandReceipt().orElseThrow());
         });
     }
 
     public static TransactionRecord decodeTransaction(byte[] encoded, PayloadCodecs codecs) {
-        return decode(encoded, TRANSACTION_MAGIC, input -> {
+        return decode(encoded, TRANSACTION_MAGIC, TRANSACTION_VERSION, input -> {
             TransactionId id = new TransactionId(readString(input));
             WorldId world = new WorldId(readString(input));
             Revision revision = new Revision(input.readLong());
@@ -128,8 +132,21 @@ public final class KernelCodec {
             if (count == 0) throw new IllegalArgumentException("transaction contains no events");
             java.util.List<FrontierEvent> events = new java.util.ArrayList<>(count);
             for (int index = 0; index < count; index++) events.add(readEvent(input, codecs));
-            return new TransactionRecord(id, world, revision, instant, events);
+            java.util.Optional<CommandReceipt> receipt = input.readBoolean() ? java.util.Optional.of(readReceipt(input)) : java.util.Optional.empty();
+            return new TransactionRecord(id, world, revision, instant, events, receipt);
         });
+    }
+
+    private static void writeReceipt(DataOutputStream output, CommandReceipt receipt) throws IOException {
+        writeString(output, receipt.commandId().value());
+        output.writeLong(receipt.submittedAt().ticks());
+        writeString(output, receipt.transactionId().value());
+        output.writeLong(receipt.revision().value());
+    }
+
+    private static CommandReceipt readReceipt(DataInputStream input) throws IOException {
+        return new CommandReceipt(new CommandId(readString(input)), new SimInstant(input.readLong()),
+                new TransactionId(readString(input)), new Revision(input.readLong()));
     }
 
     private static void writeEvent(DataOutputStream output, FrontierEvent event, PayloadCodecs codecs) throws IOException {
@@ -179,12 +196,14 @@ public final class KernelCodec {
         return codecs.decode(type, bytes);
     }
 
-    private static byte[] encode(int magic, Encoder body) {
+    private static byte[] encode(int magic, Encoder body) { return encode(magic, ACTION_VERSION, body); }
+
+    private static byte[] encode(int magic, int version, Encoder body) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             DataOutputStream output = new DataOutputStream(bytes);
             output.writeInt(magic);
-            output.writeByte(ACTION_VERSION);
+            output.writeByte(version);
             body.write(output);
             output.flush();
             return bytes.toByteArray();
@@ -193,11 +212,13 @@ public final class KernelCodec {
         }
     }
 
-    private static <T> T decode(byte[] encoded, int magic, Decoder<T> body) {
+    private static <T> T decode(byte[] encoded, int magic, Decoder<T> body) { return decode(encoded, magic, ACTION_VERSION, body); }
+
+    private static <T> T decode(byte[] encoded, int magic, int version, Decoder<T> body) {
         try {
             DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded));
             if (input.readInt() != magic) throw new IllegalArgumentException("unknown kernel envelope magic");
-            if (input.readUnsignedByte() != ACTION_VERSION) throw new IllegalArgumentException("unknown kernel envelope version");
+            if (input.readUnsignedByte() != version) throw new IllegalArgumentException("unknown kernel envelope version");
             T result = body.read(input);
             if (input.available() != 0) throw new IllegalArgumentException("trailing kernel envelope bytes");
             return result;

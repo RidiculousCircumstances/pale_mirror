@@ -16,11 +16,14 @@ import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -179,6 +182,24 @@ class InMemoryFrontierEngineTest {
         assertEquals("transaction:revision-1", checkpoint.receipts().getFirst().transactionId().value());
     }
 
+    @Test
+    void engineFactoryRecoversVerifiedCheckpointAndWalWithoutStartingFresh() {
+        InMemoryFrontierEngine<Counter, CounterProjection> uninterrupted = engine(List.of(), false);
+        assertInstanceOf(CommandResult.Accepted.class, uninterrupted.submit(command("command:checkpoint-one", Revision.ZERO, 2)));
+        io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = uninterrupted.checkpoint();
+        assertInstanceOf(CommandResult.Accepted.class, uninterrupted.submit(command("command:checkpoint-two", new Revision(1L), 3)));
+
+        FrontierEngineConfiguration<Counter, CounterProjection> configuration = configuration();
+        io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<CounterProjection> recovered = FrontierEngines.recover(configuration,
+                new RecoveryImage(WORLD, Optional.of(new SnapshotRecord(checkpoint, 1L)), List.of(uninterrupted.transactions().getLast())));
+
+        assertEquals(uninterrupted.projection(ProjectionQuery.summary()), recovered.projection(ProjectionQuery.summary()));
+        assertEquals(uninterrupted.checkpoint(), recovered.checkpoint());
+        assertRejected(recovered.submit(command("command:checkpoint-two", new Revision(2L), 3)), RejectionCode.DUPLICATE_COMMAND);
+        assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(configuration,
+                new RecoveryImage(new WorldId("frontier:other"), Optional.empty(), List.of())));
+    }
+
     private static InMemoryFrontierEngine<Counter, CounterProjection> engine(
             List<ScheduledAction> schedules, boolean failOnNine
     ) {
@@ -193,6 +214,22 @@ class InMemoryFrontierEngineTest {
                 (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
                 new EngineLimits(8, 100L, 8),
                 schedules);
+    }
+
+    private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {
+        StateCodec<Counter> codec = new StateCodec<>() {
+            @Override public byte[] encode(Counter state) { return ByteBuffer.allocate(4).putInt(state.value()).array(); }
+            @Override public Counter decode(byte[] bytes) {
+                if (bytes.length != 4) throw new IllegalArgumentException("counter checkpoint is malformed");
+                return new Counter(ByteBuffer.wrap(bytes).getInt());
+            }
+        };
+        return new FrontierEngineConfiguration<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(action.weight()))),
+                (state, event) -> reduce(state, event, false), codec,
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of());
     }
 
     private static Counter reduce(Counter state, FrontierEvent event, boolean failOnNine) {

@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.kernel;
 
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandReceipt;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -32,11 +34,15 @@ class KernelEnvelopeCodecTest {
         FrontierEvent event = new FrontierEvent(1, new io.farfrontier.palemirror.frontier.v3.api.EventId("event:codec"),
                 new TransactionId("transaction:codec"), WORLD, new Revision(1L), new SimInstant(4L), SUBJECT,
                 CauseChain.root(COMMAND_ID), new Delta(7));
-        TransactionRecord transaction = new TransactionRecord(event.transactionId(), WORLD, event.revision(), event.instant(), List.of(event));
+        TransactionRecord transaction = new TransactionRecord(event.transactionId(), WORLD, event.revision(), event.instant(), List.of(event),
+                Optional.of(new CommandReceipt(COMMAND_ID, event.instant(), event.transactionId(), event.revision())));
 
         assertEquals(command, KernelCodec.decodeCommand(KernelCodec.encodeCommand(command, CODECS), CODECS));
         assertEquals(event, KernelCodec.decodeEvent(KernelCodec.encodeEvent(event, CODECS), CODECS));
         assertEquals(transaction, KernelCodec.decodeTransaction(KernelCodec.encodeTransaction(transaction, CODECS), CODECS));
+        byte[] transactionBytes = KernelCodec.encodeTransaction(transaction, CODECS);
+        transactionBytes[4] = 1;
+        assertThrows(IllegalArgumentException.class, () -> KernelCodec.decodeTransaction(transactionBytes, CODECS));
     }
 
     @Test

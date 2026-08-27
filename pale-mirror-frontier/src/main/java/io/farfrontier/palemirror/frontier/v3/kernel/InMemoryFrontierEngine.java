@@ -74,6 +74,21 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         stateCodec.encode(initialState);
     }
 
+    static <S, P extends FrontierProjection> InMemoryFrontierEngine<S, P> recovered(
+            FrontierEngineConfiguration<S, P> configuration, TransactionReplayer.ReplayResult<S> replay,
+            List<CommandReceipt> receipts, List<TransactionRecord> retainedTransactions
+    ) {
+        InMemoryFrontierEngine<S, P> engine = new InMemoryFrontierEngine<>(configuration.worldId(), replay.state(), replay.instant(),
+                configuration.commandPlanner(), configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(),
+                configuration.projectionMapper(), configuration.limits(), replay.schedules());
+        engine.revision = replay.revision();
+        for (CommandReceipt receipt : receipts) {
+            if (engine.receipts.put(receipt.commandId(), receipt) != null) throw new IllegalArgumentException("duplicate recovered command receipt");
+        }
+        engine.transactions.addAll(List.copyOf(retainedTransactions));
+        return engine;
+    }
+
     @Override
     public CommandResult submit(FrontierCommand command) {
         Objects.requireNonNull(command, "command");
@@ -108,8 +123,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 return new CommandResult.Rejected(command.id(), revision, rejected.rejection());
             }
             CommandPlan.Accepted accepted = (CommandPlan.Accepted) plan;
-            TransactionId transactionId = commit(command.causes(), command.submittedAt(), accepted.events());
-            receipts.put(command.id(), new CommandReceipt(command.id(), command.submittedAt(), transactionId, revision));
+            TransactionId transactionId = new TransactionId("transaction:revision-" + revision.next().value());
+            CommandReceipt receipt = new CommandReceipt(command.id(), command.submittedAt(), transactionId, revision.next());
+            commit(command.causes(), command.submittedAt(), accepted.events(), Optional.of(receipt));
+            receipts.put(command.id(), receipt);
             return new CommandResult.Accepted(command.id(), transactionId, revision);
         } catch (RuntimeException error) {
             return quarantine(command, error);
@@ -146,7 +163,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
                 events.addAll(planned);
                 CommandId cause = new CommandId("scheduler:" + action.id().value().replace(':', '/'));
-                completed.add(commit(CauseChain.root(cause), action.dueAt(), events));
+                completed.add(commit(CauseChain.root(cause), action.dueAt(), events, Optional.empty()));
             } catch (RuntimeException error) {
                 status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(error));
                 return advanceResult(completed, Optional.of(action));
@@ -184,7 +201,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return schedules.snapshot();
     }
 
-    private TransactionId commit(CauseChain causes, SimInstant eventInstant, List<ProposedEvent> proposed) {
+    private TransactionId commit(CauseChain causes, SimInstant eventInstant, List<ProposedEvent> proposed,
+                                 Optional<CommandReceipt> acceptedCommandReceipt) {
         Revision nextRevision = revision.next();
         TransactionId transactionId = new TransactionId("transaction:revision-" + nextRevision.value());
         List<FrontierEvent> events = new ArrayList<>(proposed.size());
@@ -210,7 +228,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         state = nextState;
         revision = nextRevision;
         schedules = nextSchedules;
-        transactions.add(new TransactionRecord(transactionId, worldId, revision, eventInstant, events));
+        transactions.add(new TransactionRecord(transactionId, worldId, revision, eventInstant, events, acceptedCommandReceipt));
         return transactionId;
     }
 

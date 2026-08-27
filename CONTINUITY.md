@@ -48,12 +48,13 @@
 - NeoForge now provides a v3-only atomic file store: ordered checksummed WAL, snapshot install, covered-only compaction and recovery rejection for revision gaps/checksum corruption; residual uncommitted `.tmp` files are ignored and safely replaced.
 - Recovery images now independently reject non-contiguous or time-reversing WAL, duplicate transaction/event identities, malformed event envelopes and duplicate/future checkpoint receipts before any reducer or state codec can observe history.
 - The fresh-world bootstrap manifest now deterministically defines the finite 1024×1024 profile: twelve named settlements with 20–40 exact residents and six functional structure identities each, plus one hive with two seed nests and 48 exact bioforms. Golden SHA-256 manifests cover two seeds and a Turkish-locale regression.
+- Recovery-capable state codecs and the public pure engine factory now restore checkpoint plus WAL tails without a new-world fallback. Accepted-command receipts are atomically part of each WAL transaction (kernel transaction schema 2), preserving restart idempotency; schema 1 transactions are rejected.
 - `9c28c1f` records the cross-JVM deterministic replay proof. Wave 1 is complete at automated kernel-evidence level; it is not gameplay, persistence-host or product validation evidence.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
-- Wave 2 now has checked recovery boundaries and the immutable fresh-world population/spatial manifest. It still lacks a persisted mutable v3 aggregate, lifecycle host and physical-intent durability boundary.
+- Wave 2 now has checked recovery boundaries, restartable kernel state and the immutable fresh-world population/spatial manifest. It still lacks the persisted mutable v3 aggregate, NeoForge lifecycle host and physical-intent durability boundary.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next

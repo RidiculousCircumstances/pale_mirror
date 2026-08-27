@@ -16,12 +16,21 @@ public final class TransactionReplayer {
             WorldId worldId, S initialState, SimInstant initialInstant, List<ScheduledAction> initialSchedules,
             List<TransactionRecord> transactions, EventReducer<S> reducer, StateCodec<S> stateCodec
     ) {
+        return replayFrom(worldId, initialState, Revision.ZERO, initialInstant, initialSchedules, transactions, reducer, stateCodec);
+    }
+
+    /** Replays the retained WAL tail from a verified checkpoint boundary. */
+    public static <S> ReplayResult<S> replayFrom(
+            WorldId worldId, S initialState, Revision initialRevision, SimInstant initialInstant,
+            List<ScheduledAction> initialSchedules, List<TransactionRecord> transactions,
+            EventReducer<S> reducer, StateCodec<S> stateCodec
+    ) {
         Objects.requireNonNull(worldId, "world id");
         S state = Objects.requireNonNull(initialState, "initial state");
+        Revision revision = Objects.requireNonNull(initialRevision, "initial revision");
         SimInstant instant = Objects.requireNonNull(initialInstant, "initial instant");
         ScheduledActionQueue schedules = new ScheduledActionQueue();
         List.copyOf(initialSchedules).forEach(schedules::schedule);
-        Revision revision = Revision.ZERO;
         for (TransactionRecord transaction : List.copyOf(transactions)) {
             validate(transaction, worldId, revision, instant);
             S next = state;
