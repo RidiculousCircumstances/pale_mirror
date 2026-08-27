@@ -81,6 +81,11 @@ public final class SourceGrayboxRuntime {
     public boolean tick() {
         if (!data.activated()) return false;
         ServerLevel graybox = grayboxLevel();
+        // An external explosion was captured from the non-cancellable
+        // Detonate event. Its Minecraft block changes now exist, so reconcile
+        // them before this tick can advance the source day or republish a
+        // replacement presentation.
+        reconcileExternalExplosions(graybox);
         long gameTime = graybox.getGameTime();
         ReferenceGrayboxSnapshot before = data.snapshot();
         if (gameTime % 5L == 0L) data.maintainEffectLeases(data.actorExecutionGameTime(gameTime));
@@ -294,6 +299,25 @@ public final class SourceGrayboxRuntime {
                 .findFirst().orElse(null);
         return interaction == null ? Optional.empty()
                 : Optional.of(SourceGrayboxPlayerBriefing.acceptedReceipt(before, data.snapshot(), interaction));
+    }
+
+    /** Captures only PM-owned blocks selected by a real external explosion for post-impact reconciliation. */
+    public boolean captureExternalExplosion(ServerLevel level, List<BlockPos> affected) {
+        if (!data.activated() || level != grayboxLevel() || SourceGrayboxExplosionObservation.isSourceEffect()) return false;
+        List<BlockPos> claimed = affected.stream().distinct().sorted(java.util.Comparator.comparingLong(BlockPos::asLong))
+                .filter(position -> materializer.claimAt(level, position) != null)
+                .filter(position -> SourceGrayboxPalette.managed(level.getBlockState(position).getBlock())).toList();
+        boolean captured = data.pendingExplosions().capture(level.getGameTime(), claimed);
+        if (captured) data.markPendingExplosionsDirty();
+        return captured;
+    }
+
+    /** Reconciles the actual post-explosion block state before the next source-day update. */
+    public boolean reconcileExternalExplosions(ServerLevel level) {
+        if (!data.activated() || level != grayboxLevel()) return false;
+        boolean changed = SourceGrayboxExplosionReconciliation.reconcile(data, materializer, level);
+        if (changed) publish(grayboxLevel(), data.snapshot());
+        return changed;
     }
 
     /** Presents a source-derived briefing for a physical source object without changing any source or world state. */

@@ -51,6 +51,7 @@ import net.neoforged.neoforge.common.util.TriState;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.BlockGrowFeatureEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
@@ -95,6 +96,14 @@ public final class PaleMirrorEvents {
     public static void onServerTick(ServerTickEvent.Post event) {
         AmbientSpawnThrottle.tick(event.getServer());
         PaleMirrorRuntime.forServer(event.getServer()).tick();
+    }
+
+    /** External explosions use their real Minecraft geometry, then reconcile exact changed PM claims. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            SourceGrayboxRuntime.forServer(level.getServer()).captureExternalExplosion(level, event.getAffectedBlocks());
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)

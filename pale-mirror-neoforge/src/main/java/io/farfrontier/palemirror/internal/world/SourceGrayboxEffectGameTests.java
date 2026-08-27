@@ -90,6 +90,17 @@ public final class SourceGrayboxEffectGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void sourceOwnedBlastScopeCannotEnterTheExternalExplosionObservationPath(GameTestHelper helper) {
+        helper.assertTrue(!SourceGrayboxExplosionObservation.isSourceEffect(),
+                "ordinary world code must not inherit source-owned blast suppression");
+        SourceGrayboxExplosionObservation.runSourceEffect(() -> helper.assertTrue(SourceGrayboxExplosionObservation.isSourceEffect(),
+                "a source effect must suppress only its own synchronous explosion event"));
+        helper.assertTrue(!SourceGrayboxExplosionObservation.isSourceEffect(),
+                "source-owned blast suppression must be released after the real effect so later player TNT remains observable");
+        helper.succeed();
+    }
+
     private static ReferenceGrayboxSnapshot breachFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
         ReferenceGrayboxLayout.Rectangle facility = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 4, 4);
         ReferenceGrayboxLayout.Point slot = new ReferenceGrayboxLayout.Point(anchor.getX() + 3, anchor.getZ() + 3);

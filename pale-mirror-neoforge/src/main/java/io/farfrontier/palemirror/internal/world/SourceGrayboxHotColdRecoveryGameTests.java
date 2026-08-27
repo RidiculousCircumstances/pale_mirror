@@ -148,9 +148,17 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    // Uses production-stable resident UUIDs.  Keep this recovery fixture out
+    // of the parallel materializer batch, otherwise another fixture can claim
+    // the same canonical body and turn a recovery assertion into a harness
+    // UUID collision.
+    @GameTest(batch = "pm-source-graybox-missing-hot-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void runtimeMissingLoadedHotBodyReleasesItsPhantomClaimBeforeOneFreshAdmission(GameTestHelper helper) {
-        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        // Other fixtures intentionally use seed 42 and may leave a canonical
+        // production UUID in the shared GameTest ServerLevel.  This recovery
+        // proof needs a distinct canonical actor, not an accidental lookup of
+        // that unrelated body.
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42_991L);
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(helper.getLevel());
         var initial = data.actorExecution().actors().stream()
                 .filter(actor -> actor.kind() == ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT)
@@ -168,6 +176,7 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
             }
             SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
             Map<String, Entity> admitted = new LinkedHashMap<>();
+            discardPriorCanonicalResident(helper, residentId);
             long gameTick = data.actorExecutionGameTime(helper.getLevel().getGameTime());
             helper.assertTrue(data.prepareActor(residentId, SourceGrayboxActorExecutionRuntime.HOLDER, gameTick),
                     "the fixture actor needs a real first admission before its body can disappear");
@@ -266,7 +275,9 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    // See the missing-HOT fixture above: retirement also deliberately starts
+    // from the production UUID, so it needs an isolated sequential batch.
+    @GameTest(batch = "pm-source-graybox-retirement-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void unindexedAdmissionObjectCannotActivateAnActor(GameTestHelper helper) {
         SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
         var actor = data.actorExecution().actors().stream()
@@ -340,7 +351,9 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void runtimeRetirementReleasesTheExactReservationAfterAcknowledgement(GameTestHelper helper) {
-        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        // Keep a separate canonical identity from the other seed-42 fixtures
+        // that share a GameTest ServerLevel.
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42_992L);
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(helper.getLevel());
         var initial = data.actorExecution().actors().stream()
                 .filter(actor -> actor.kind() == ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT)
@@ -358,6 +371,7 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
             }
             SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
             Map<String, Entity> admitted = new LinkedHashMap<>();
+            discardPriorCanonicalResident(helper, residentId);
             helper.assertTrue(data.prepareActor(residentId, SourceGrayboxActorExecutionRuntime.HOLDER, 1L),
                     "the source actor must have one runtime-owned executor before retirement");
             String lease = data.actorExecution().actor(residentId).orElseThrow().leaseId();
@@ -430,6 +444,19 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
     private static int residents(GameTestHelper helper, BlockPos anchor, String residentId) {
         return helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(32), value ->
                 value.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).size();
+    }
+
+    /**
+     * GameTest structures share one ServerLevel.  A preceding fixture may
+     * have deliberately materialized the same production actor ID, while
+     * this fixture must prove its own admission/recovery path.  Remove only
+     * that exact stale PM carrier and its matching presentation reservation.
+     */
+    private static void discardPriorCanonicalResident(GameTestHelper helper, String residentId) {
+        String key = SourceGrayboxMaterializer.entityKey(residentId, "RESIDENT");
+        Entity prior = helper.getLevel().getEntity(SourceGrayboxMaterializer.uuid("resident", residentId));
+        if (prior != null && SourceGrayboxMaterializer.identityMatches(prior, residentId, "RESIDENT")) prior.discard();
+        SourceGrayboxPresentationLedger.get(helper.getLevel()).releaseEntity(key);
     }
 
     private static int sixteenths(double value) {

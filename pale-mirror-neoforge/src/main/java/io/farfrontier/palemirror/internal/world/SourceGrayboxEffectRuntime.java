@@ -82,8 +82,8 @@ final class SourceGrayboxEffectRuntime {
         BlockPos impact = target(effect);
         List<BlockImpact> beforeBlocks = blocksAround(level, materializer, impact, effect.radius());
         List<EntityImpact> beforeEntities = entitiesAround(level, impact, effect.radius());
-        level.explode(null, impact.getX() + .5d, impact.getY() + .5d, impact.getZ() + .5d, (float) effect.radius(), false,
-                Level.ExplosionInteraction.TNT);
+        SourceGrayboxExplosionObservation.runSourceEffect(() -> level.explode(null, impact.getX() + .5d, impact.getY() + .5d,
+                impact.getZ() + .5d, (float) effect.radius(), false, Level.ExplosionInteraction.TNT));
         int facts = 0;
         int conflicts = 0;
         int scars = 0;

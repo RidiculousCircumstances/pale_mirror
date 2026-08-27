@@ -286,8 +286,8 @@ public final class SourceGrayboxStateNbtGameTests {
             helper.assertTrue(restored.isDirty(),
                     "a successful v" + legacySchema + " migration must request a world save even when no later simulation event happens");
             CompoundTag upgraded = restored.save(new CompoundTag(), null);
-            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 28,
-                    "a successful legacy migration must durably record the strict v28 envelope");
+            helper.assertValueEqual(upgraded.getInt("schemaVersion"), 29,
+                    "a successful legacy migration must durably record the strict v29 envelope");
             helper.assertValueEqual(upgraded.getString("clockProfile"), legacySchema < 26 ? "fast_graybox" : "gameplay",
                     "the upgraded document must make its preserved historical pacing explicit");
             helper.assertTrue(upgraded.contains("operationCarrierLedger", net.minecraft.nbt.Tag.TAG_LIST),
@@ -380,7 +380,7 @@ public final class SourceGrayboxStateNbtGameTests {
         helper.assertValueEqual(retained.actualZSixteenths(), -876,
                 "a v27 migration must preserve the observed HOT z hand-off instead of teleporting a body to the new slot");
         helper.assertTrue(restored.isDirty(), "the v27 admission migration must persist its v28 result before a later source day");
-        helper.assertValueEqual(restored.save(new CompoundTag(), null).getInt("schemaVersion"), 28,
+        helper.assertValueEqual(restored.save(new CompoundTag(), null).getInt("schemaVersion"), 29,
                 "the upgraded document must not re-enter the one-time v27 migration path");
 
         CompoundTag missing = source.save(new CompoundTag(), null);

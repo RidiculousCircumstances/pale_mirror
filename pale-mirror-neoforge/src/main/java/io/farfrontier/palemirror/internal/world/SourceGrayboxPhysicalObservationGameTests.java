@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Display;
@@ -94,6 +95,46 @@ public final class SourceGrayboxPhysicalObservationGameTests {
                 value.hasCustomName() && value.getCustomName().getString().equals(conflictLabel));
         helper.assertTrue(conflicts.size() == 1,
                 "a rejected replay must remain visible to the tester instead of being silently swallowed by the presentation ledger");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void externalExplosionPersistsThenReconcilesTheActualDestroyedRouteSlot(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 56);
+        SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
+        source.activate(0L);
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        ReferenceGrayboxSnapshot presentation = routePresentation(anchor, source.snapshot());
+        materializer.apply(helper.getLevel(), presentation);
+        ReferenceGrayboxSnapshot.Interaction interaction = presentation.interactions().getFirst();
+        ReferenceGrayboxLayout.Point slot = interaction.slots().getFirst();
+        BlockPos position = new BlockPos(slot.x(), ReferenceGrayboxLayout.GROUND_Y + interaction.yOffset(), slot.z());
+        double capacity = interaction.totalWeight();
+
+        SourceGrayboxSavedData survived = SourceGrayboxSavedData.fresh(42L);
+        survived.activate(0L);
+        helper.assertTrue(survived.pendingExplosions().capture(helper.getLevel().getGameTime(), List.of(position)),
+                "the negative case must retain an explosion candidate before its physical postcondition is inspected");
+        String beforeSurvived = survived.snapshot().stateRevision();
+        helper.assertTrue(!SourceGrayboxExplosionReconciliation.reconcile(survived, materializer, helper.getLevel()),
+                "a listed explosion target which Minecraft did not actually destroy must not mutate canonical state");
+        helper.assertValueEqual(survived.snapshot().stateRevision(), beforeSurvived,
+                "the external-effect boundary must use the real post-impact block state, not merely the pre-impact target list");
+
+        helper.assertTrue(source.pendingExplosions().capture(helper.getLevel().getGameTime(), List.of(position)),
+                "a real external explosion must persist its exact PM target before block removal");
+        CompoundTag saved = source.save(new CompoundTag(), null);
+        SourceGrayboxSavedData restored = SourceGrayboxSavedData.load(saved, null);
+        helper.getLevel().setBlock(position, Blocks.AIR.defaultBlockState(), 3);
+
+        helper.assertTrue(SourceGrayboxExplosionReconciliation.reconcile(restored, materializer, helper.getLevel()),
+                "the persisted explosion target must become a typed source observation only after Minecraft actually removed the block");
+        helper.assertValueEqual(restored.snapshot().routes().stream().filter(route -> route.id().equals(presentation.routes().getFirst().id()))
+                        .findFirst().orElseThrow().capacity(), capacity - materializer.claimAt(helper.getLevel(), position).interactionWeight(),
+                "a restart between detonation and reconciliation must preserve the exact route capacity loss");
+        helper.assertTrue(!SourceGrayboxExplosionReconciliation.reconcile(restored, materializer, helper.getLevel()),
+                "a drained external explosion observation must not replay a second canonical loss");
         helper.succeed();
     }
 

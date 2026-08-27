@@ -80,8 +80,9 @@ later body without polling or ticketing its chunk.
 
 `SourceGrayboxSavedData` persists the complete
 `ReferenceGrayboxSimulation.save()` document, the pure-domain actor-execution
-ledger, a bounded physical-effect ledger, activation state, simulation clock
-and a bounded accepted-observation history. The execution ledger has one
+ledger, bounded physical-effect, physical-scar and pending external-explosion
+ledgers, activation state, simulation clock and a bounded accepted-observation
+history. The execution ledger has one
 record for every exact resident/bioform: its latest source anchor and stable
 source-specific semantic revision,
 fixed sixteenth-block physical position, one `COLD -> PREPARING -> HOT ->
@@ -90,12 +91,13 @@ The v23/v24-to-v25 persistence migration accepts only the format-3 legacy
 global-projection envelope, then may replace it with per-actor semantic
 revisions only after proving the complete exact actor-ID and actor-kind set
 against the retained canonical source document; it never creates, drops or
-substitutes a body. Schema v28 alone also accepts the retained v27 admission-slot
-layout after the same complete ID/kind proof: it refreshes the source revision
-and anchor, while retaining a leased body's captured actual hand-off for normal
-restart recovery. A current v28 revision or envelope mismatch still stops
-startup, and a successful migration marks SavedData dirty so the first ordinary
-world save writes v28/format-4. A restart moves unfinished leases to `RECOVERING`; only an inspected entity with
+substitutes a body. Schema v29 accepts the retained v27 admission-slot layout
+after the same complete ID/kind proof and a v28 document by initializing only
+an empty pending external-explosion ledger: the actor migration refreshes the
+source revision and anchor while retaining a leased body's captured actual
+hand-off for normal restart recovery. A current v29 revision or envelope
+mismatch still stops startup, and a successful migration marks SavedData dirty
+so the first ordinary world save writes v29/format-4. A restart moves unfinished leases to `RECOVERING`; only an inspected entity with
 the exact old lease can return to `HOT`, while a missing/stale body settles
 `COLD` without a blind duplicate. Both documents restore all-or-nothing; an
 incompatible or incomplete document is a visible startup failure for the
@@ -163,8 +165,12 @@ without waiting for the next source day.
 
 `FAST_GRAYBOX` keeps the 1,200-tick source day and explicit complete-day
 fast-forward for source-parity, calibration and manual testing. A fresh world
-persists `GAMEPLAY`; schema v28 explicitly stores `clockProfile` alongside the
-last source-day boundary and its operation-carrier ledger. Retained v23-v25
+persists `GAMEPLAY`; schema v29 explicitly stores `clockProfile` alongside the
+last source-day boundary, operation-carrier ledger and pending external-explosion
+ledger. A real external explosion captures only its currently PM-owned targets,
+then after Minecraft resolves its blocks submits the same typed observations as
+an ordinary break; a PM-owned source blast is excluded because it has its own
+post-impact receipt. Retained v23-v25
 worlds migrate to `FAST_GRAYBOX`, because that is the pace those worlds
 actually experienced; a v26 world retains its already explicit profile.
 `/pale_mirror frontier clock gameplay|fast_graybox` is operator-only and,
