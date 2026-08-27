@@ -14,21 +14,22 @@ final class SourceGrayboxLabelSlots {
     static Offset offset(int ordinal) {
         if (ordinal < 0) throw new IllegalArgumentException("label slot ordinal must be non-negative");
         if (ordinal == 0) return new Offset(0, 0);
-        int seen = 1;
-        for (int ring = 1; ; ring++) {
-            for (int x = -ring; x <= ring; x++) {
-                if (ordinal == seen++) return scaled(x, -ring);
-            }
-            for (int z = -ring + 1; z <= ring; z++) {
-                if (ordinal == seen++) return scaled(ring, z);
-            }
-            for (int x = ring - 1; x >= -ring; x--) {
-                if (ordinal == seen++) return scaled(x, ring);
-            }
-            for (int z = ring - 1; z >= -ring + 1; z--) {
-                if (ordinal == seen++) return scaled(-ring, z);
-            }
-        }
+        // Ring r contains 8r positions and ends at ordinal 4r(r + 1).
+        // Deriving r and its edge directly keeps a dense conflict layout O(1)
+        // per candidate; walking every earlier ring made a safe lateral search
+        // capable of monopolising the server tick.
+        int ring = (int) Math.ceil((Math.sqrt(1.0d + ordinal) - 1.0d) / 2.0d);
+        int first = 1 + 4 * ring * (ring - 1);
+        int offset = ordinal - first;
+        int top = ring * 2 + 1;
+        if (offset < top) return scaled(-ring + offset, -ring);
+        offset -= top;
+        int right = ring * 2;
+        if (offset < right) return scaled(ring, -ring + 1 + offset);
+        offset -= right;
+        if (offset < right) return scaled(ring - 1 - offset, ring);
+        offset -= right;
+        return scaled(-ring, ring - 1 - offset);
     }
 
     private static Offset scaled(int x, int z) {

@@ -37,6 +37,7 @@
 - Static materialization is cached and only republishes changed source frames/COLD preparation/natural graybox chunk loads; HOT positions persist independently. A warm idle JFR showed no full snapshot work and low PM CPU after the client left.
 - Snapshot-only graybox post/campaign/operation scene silhouettes, exact typed interaction slots, physical source cargo carriers, real TNT/scar reconciliation and conflict retention are implemented; `graybox-10` is non-authoritative legacy scaffold.
 - The current presentation cut preserves exact explicit three-line briefings, uses larger full-bright native boards with a tested landmark/detail range hierarchy, and keeps CustomName as an unrendered recovery mirror.
+- The pending readability cut makes boards genuinely local (landmarks 128 blocks, object facts 29–35), reserves horizontal eye-level space, bounds lateral slot search at 4,096 O(1) spiral positions, and keeps one visible board for each player-facing conflicted object while retaining every exact background conflict in the ledger/scar. Replayed interaction events win the board priority and have a dedicated GameTest.
 - The same cut maps severe infection to purple tissue and permits only one existing pink signal clump per infected cell; no source rule, quantity, geometry or provenance changed.
 - Full critical verification of the cut passed: focused label/plan JUnit tests, `:pale-mirror-neoforge:runGameTestServer` 139/139, and `guardrails check :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar`.
 - Entry JFR identified repeated `PresentationLedger.claims()` copies and full footprint scans for every label candidate. `SourceGrayboxLabelHeightIndex` now builds one bounded, immutable 1024×704 source-height index per presentation and preserves the former highest-roof rule; focused negative/equivalence tests and the final critical gate pass, including 139/139 GameTests.
@@ -44,7 +45,7 @@
 - A matched COLD re-entry route at settlement 11 (`-56,89,72`, then four points at Y=73/radius 12) recorded no `SourceGrayboxLabelPositions` samples, versus 291 in the prior JFR, and 6 `claims()/valuesToArray` samples versus 270. One-second server-tick mean/max was 1.830/5.671 ms versus 3.194/59.360 ms; neither repeat emitted `Can't keep up`.
 
 ### Now
-- Source commits `17a26e7` and `abf6ae1` are deployed in the retained disposable `frontier-graybox-10-y63-r3-no-structures` server. It is currently running on port 25565 as Java PID 2803108.
+- Source commits `17a26e7` and `abf6ae1` are deployed in the retained disposable `frontier-graybox-10-y63-r3-no-structures` server. It is currently running on port 25565 as Java PID 2803108; the verified local readability cut is pending its own commit and deployment.
 - The deployed HOT/COLD fix releases exactly an actor's presentation reservation after its canonical DRAINING hand-off or RETIRED acknowledgement. Its recovery GameTests prove COLD re-admission, restart custody of actor/effect/carrier/scar, and both runtime cleanup paths; 143/143 GameTests plus `guardrails`, `check`, build and packaged-JAR verification pass.
 - Real-client visual evidence is at `build/visual-audits/20260827T010309Z-8_65_8/` and the close settlement-11 pass `build/visual-audits/20260827T010942Z--56_65_72/`. The close pass confirms local boards, color-coded routes and distinguishable purple tissue/pink signal accents; distant board clutter and raw graybox forms remain diagnostic presentation, not a product-art acceptance.
 - The current performance evidence is `build/profiles/graybox-entry-20260827T011858Z.jfr` and the matched repeat `build/profiles/graybox-entry-matched-after-20260827T013855Z.jfr`; the post-change screenshots are `build/visual-audits/20260827T013855Z--56_65_72/`. The verified short-range-safe index is committed and deployed.
@@ -56,7 +57,7 @@
 
 ### Next
 - If a distinct entry stall recurs, capture the same COLD route first and separate chunk load/deserialization, static projection, entity admission, save/lighting, network and client work before another performance change.
-- Improve label overlap and the physical reading of routes/settlement infrastructure against the semantic player-eye evidence; do not fake missing operation/post scenes for coverage.
+- Deploy and inspect the locally verified board-readability cut through the one real full-screen audit client, then improve the physical reading of routes/settlement infrastructure against the semantic player-eye evidence; do not fake missing operation/post scenes for coverage.
 - Exercise `capture-settlement-visuals.sh --source-graybox` with its isolated audit client and retain the reproducible contact sheet; its recovery path must return the operator to the captured original dimension.
 - Extend the deployed reload/restart proof to a naturally evolving live scene with a player-visible return on `DISPLAY=:0`.
 - Complete remaining source-parity domains and negative/recovery tests against the Python oracle; do not substitute legacy `graybox-10` mechanics.

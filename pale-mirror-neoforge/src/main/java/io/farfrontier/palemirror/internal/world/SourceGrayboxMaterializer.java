@@ -5,11 +5,9 @@ import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -19,13 +17,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 
 /**
  * Loaded-chunks-only source-graybox projector.
@@ -78,7 +74,7 @@ final class SourceGrayboxMaterializer {
         for (SourceGrayboxPresentationPlan.Desired item : desired.values()) if (ensure(level, ledger, item)) placed++;
 
         Set<String> activeEntities = new LinkedHashSet<>();
-        materializeLabels(level, ledger, snapshot, activeEntities, admittedEntities);
+        SourceGrayboxLabelMaterializer.materialize(level, ledger, snapshot, activeEntities, admittedEntities);
         // A source removal may deliberately leave a RETIRED lease behind until
         // the executor observes and acknowledges its old physical body.  Keep
         // every non-cold lease out of generic retirement; the coordinator is
@@ -355,93 +351,6 @@ final class SourceGrayboxMaterializer {
         return result;
     }
 
-    private static void materializeLabels(ServerLevel level, SourceGrayboxPresentationLedger ledger, ReferenceGrayboxSnapshot snapshot, Set<String> active,
-                                          Map<String, Entity> admittedEntities) {
-        SourceGrayboxLabelPositions labels = new SourceGrayboxLabelPositions(ledger);
-        BlockPos deck = SourceGrayboxWorldBoundary.observationDeckFooting();
-        label(level, active, admittedEntities, labels, "legend:sector-metrics",
-                "[KEY] V2 towers: red infection 0..1; purple spores 0..10; cyan human access 0..1; lime hive influence 0..1. Height=1..10.",
-                deck.getX(), deck.getZ());
-        label(level, active, admittedEntities, labels, "legend:inspect",
-                "[GUIDE] Right-click a labelled structure, Villager or hive zombie for its state, cause, risk and next action. The REPORT and TIMELINE boards explain the region.", deck.getX(), deck.getZ());
-        for (ReferenceGrayboxSnapshot.Settlement settlement : snapshot.settlements()) {
-            label(level, active, admittedEntities, labels, "settlement:" + settlement.id(), SourceGrayboxPlayerBriefing.settlementLabel(snapshot, settlement),
-                    settlement.rectangle().centreX(), settlement.rectangle().centreZ());
-        }
-        for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) label(level, active, admittedEntities, labels, "facility:" + facility.id(),
-                SourceGrayboxPlayerBriefing.facilityLabel(facility), facility.rectangle().centreX(), facility.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Warehouse warehouse : snapshot.warehouses()) label(level, active, admittedEntities, labels,
-                "warehouse:" + warehouse.id(), SourceGrayboxWarehouseBriefing.label(snapshot, warehouse),
-                warehouse.rectangle().centreX(), warehouse.rectangle().centreZ(), SourceGrayboxWarehouseRuntime.labelFloorY());
-        for (ReferenceGrayboxSnapshot.ResourceSite site : snapshot.resourceSites()) label(level, active, admittedEntities, labels, "site:" + site.id(),
-                SourceGrayboxPlayerBriefing.resourceSiteLabel(site),
-                site.rectangle().centreX(), site.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) label(level, active, admittedEntities, labels, "organ:" + organ.id(),
-                SourceGrayboxPlayerBriefing.organLabel(organ), organ.rectangle().centreX(), organ.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) label(level, active, admittedEntities, labels, "cargo:" + cargo.id(),
-                SourceGrayboxPlayerBriefing.cargoLabel(cargo),
-                cargo.rectangle().centreX(), cargo.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) label(level, active, admittedEntities, labels, "route:" + route.id(),
-                SourceGrayboxPlayerBriefing.routeLabel(snapshot, route),
-                midpoint(route.start().x(), route.end().x()), midpoint(route.start().z(), route.end().z()));
-        for (ReferenceGrayboxSnapshot.FieldPost post : snapshot.fieldPosts()) label(level, active, admittedEntities, labels, "field-post:" + post.id(),
-                SourceGrayboxPlayerBriefing.fieldPostLabel(post), post.rectangle().centreX(), post.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.FieldLink link : snapshot.fieldLinks()) {
-            ReferenceGrayboxLayout.Point label = link.slots().get(link.slots().size() / 2);
-            label(level, active, admittedEntities, labels, "field-link:" + link.id(), SourceGrayboxPlayerBriefing.fieldLinkLabel(link), label.x(), label.z());
-        }
-        for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) if (!activity.terminal()) label(level, active, admittedEntities, labels,
-                "activity:" + activity.id(), SourceGrayboxLiveBriefing.activityLabel(activity),
-                activity.position().x(), activity.position().z());
-        for (ReferenceGrayboxSnapshot.Effect effect : snapshot.effects()) label(level, active, admittedEntities, labels,
-                "effect:" + effect.id(), SourceGrayboxLiveBriefing.effectLabel(effect), effect.position().x(), effect.position().z());
-        for (ReferenceGrayboxSnapshot.Sector sector : SourceGrayboxLabelLayout.labelledSectors(snapshot)) label(level, active, admittedEntities, labels, "sector:" + sector.key(),
-                "[V2] " + sector.key() + " " + sector.control().toUpperCase(Locale.ROOT) + (sector.supplied() ? " SUPPLIED" : ""),
-                sector.rectangle().centreX(), sector.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Chrysalis chrysalis : snapshot.chrysalises()) label(level, active, admittedEntities, labels, "chrysalis:" + chrysalis.organId(),
-                SourceGrayboxPlayerBriefing.chrysalisLabel(chrysalis), chrysalis.rectangle().centreX(), chrysalis.rectangle().centreZ());
-        for (ReferenceGrayboxSnapshot.Interaction interaction : snapshot.interactions()) {
-            ReferenceGrayboxLayout.Point point = interaction.slots().get(interaction.slots().size() / 2);
-            label(level, active, admittedEntities, labels, "interaction:" + interaction.id(),
-                    SourceGrayboxPlayerBriefing.interactionLabel(snapshot, ledger, interaction), point.x(), point.z());
-        }
-        ledger.claims().stream().filter(SourceGrayboxPresentationLedger.Claim::conflicted)
-                .sorted(Comparator.comparing(SourceGrayboxPresentationLedger.Claim::id))
-                .forEach(claim -> label(level, active, admittedEntities, labels, "conflict:" + claim.id(),
-                        SourceGrayboxConflictPresentation.labelText(claim), claim.x() + claim.width() / 2, claim.z() + claim.depth() / 2));
-        label(level, active, admittedEntities, labels, "dashboard:summary", SourceGrayboxPlayerBriefing.frontierReportLabel(snapshot), deck.getX(), deck.getZ());
-        label(level, active, admittedEntities, labels, "events:summary", SourceGrayboxPlayerBriefing.timelineLabel(snapshot), deck.getX(), deck.getZ());
-    }
-
-    private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, SourceGrayboxLabelPositions labels,
-                              String id, String text, int x, int z) {
-        label(level, active, admittedEntities, labels, id, text, x, z, ReferenceGrayboxLayout.GROUND_Y + 3);
-    }
-
-    private static void label(ServerLevel level, Set<String> active, Map<String, Entity> admittedEntities, SourceGrayboxLabelPositions labels,
-                              String id, String text, int x, int z, int minimumY) {
-        String key = entityKey(id, LABEL_KIND);
-        active.add(key);
-        BlockPos position = labels.next(id, x, z, minimumY);
-        if (!ready(level, position)) return;
-        Entity current = existingEntity(level, admittedEntities, id, LABEL_KIND, uuid("label-display", id));
-        if (current != null && !(current instanceof Display.TextDisplay && identityMatches(current, id, LABEL_KIND))) return;
-        SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(level);
-        if (current instanceof Display.TextDisplay known) {
-            ledger.claimEntity(key);
-            SourceGrayboxLabelPresentation.configure(known, id, text);
-            known.setPos(Vec3.atBottomCenterOf(position));
-            return;
-        }
-        if (ledger.entityClaimed(key)) return;
-        Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, level);
-        display.setUUID(uuid("label-display", id));
-        SourceGrayboxLabelPresentation.configure(display, id, text);
-        display.setPos(Vec3.atBottomCenterOf(position));
-        ledger.claimEntity(key);
-        if (level.addFreshEntity(display)) admittedEntities.put(key, display);
-    }
-
     static boolean identityMatches(Entity entity, String id, String kind) {
         return entity.getPersistentData().getString(ENTITY_ID).equals(id) && entity.getPersistentData().getString(ENTITY_KIND).equals(kind);
     }
@@ -483,14 +392,6 @@ final class SourceGrayboxMaterializer {
 
     static String entityKey(String id, ReferenceGrayboxActorExecutionState.ActorKind kind) {
         return entityKey(id, kind.name());
-    }
-
-    private static int midpoint(int first, int second) {
-        return first + (second - first) / 2;
-    }
-
-    private static String number(double value) {
-        return String.format(Locale.ROOT, "%.2f", value);
     }
 
     record ManagedEntity(String id, String kind, String revision) { }

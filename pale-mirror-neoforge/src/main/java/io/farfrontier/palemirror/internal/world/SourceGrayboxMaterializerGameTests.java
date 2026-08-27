@@ -49,8 +49,8 @@ public final class SourceGrayboxMaterializerGameTests {
                 "a low one-block graybox structure must keep its label just above the player eye line, not on the object or a detached sky plane");
         helper.assertTrue(facilityLabel.isCurrentlyGlowing(),
                 "a source label must be bright enough to distinguish from the graybox floor at map scale");
-        helper.assertValueEqual(facilityLabel.saveWithoutId(new net.minecraft.nbt.CompoundTag()).getFloat("view_range"), 2.5f,
-                "a functional building board must be visible from the approach, while landmark boards still own the farther range");
+        helper.assertValueEqual(facilityLabel.saveWithoutId(new net.minecraft.nbt.CompoundTag()).getFloat("view_range"), 0.55f,
+                "a functional building board must remain readable on the local approach, while landmark boards alone own the farther range");
         helper.assertTrue(SourceGrayboxLabelPresentation.scale("settlement:fixture")
                         > SourceGrayboxLabelPresentation.scale("facility:fixture")
                         && SourceGrayboxLabelPresentation.viewRange("settlement:fixture")

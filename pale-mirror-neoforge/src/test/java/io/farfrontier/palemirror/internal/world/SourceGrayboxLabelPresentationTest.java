@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.world;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashSet;
@@ -48,6 +49,19 @@ class SourceGrayboxLabelPresentationTest {
     }
 
     @Test
+    void exactObjectBoardsStayLocalInsteadOfCreatingAHorizonWideHud() {
+        assertEquals(2.0f, SourceGrayboxLabelStyle.viewRange("settlement:2"),
+                "a landmark may orient an arriving player, but must not cover most of the 1024-block map");
+        assertEquals(0.55f, SourceGrayboxLabelStyle.viewRange("facility:2:workshop"),
+                "a functional building board belongs to the local approach");
+        assertEquals(0.45f, SourceGrayboxLabelStyle.viewRange("interaction:facility:2:workshop"),
+                "a precise damage prompt must not compete with a settlement landmark until the player reaches it");
+        assertTrue(SourceGrayboxLabelStyle.reservationRadius("settlement:2")
+                        > SourceGrayboxLabelStyle.reservationRadius("facility:2:workshop"),
+                "large landmark boards require a larger local visual reservation");
+    }
+
+    @Test
     void collocatedBoardsSpreadHorizontallyInsteadOfBecomingSkyLabels() {
         Set<SourceGrayboxLabelSlots.Offset> slots = new HashSet<>();
         for (int ordinal = 0; ordinal < 24; ordinal++) slots.add(SourceGrayboxLabelSlots.offset(ordinal));
@@ -56,5 +70,36 @@ class SourceGrayboxLabelPresentationTest {
         assertEquals(new SourceGrayboxLabelSlots.Offset(0, 0), SourceGrayboxLabelSlots.offset(0));
         assertTrue(slots.stream().anyMatch(slot -> slot.x() != 0 || slot.z() != 0),
                 "a second board must move sideways rather than adding vertical height");
+    }
+
+    @Test
+    void denseSpiralSlotsRemainDistinctAtTheLargestLocalReservationRing() {
+        Set<SourceGrayboxLabelSlots.Offset> slots = new HashSet<>();
+        for (int ordinal = 0; ordinal < 4_096; ordinal++) slots.add(SourceGrayboxLabelSlots.offset(ordinal));
+
+        assertEquals(4_096, slots.size(), "every bounded board reservation must retain a distinct lateral slot");
+        assertEquals(new SourceGrayboxLabelSlots.Offset(-32 * SourceGrayboxLabelSlots.SPACING,
+                        -32 * SourceGrayboxLabelSlots.SPACING), SourceGrayboxLabelSlots.offset(3_969),
+                "the direct ring calculation must preserve the established square-spiral ordering");
+    }
+
+    @Test
+    void nearbyBoardsReserveEyeLevelSpaceInsteadOfOnlyAvoidingTheSameColumn() {
+        SourceGrayboxLabelReservations reservations = new SourceGrayboxLabelReservations();
+        reservations.reserve("settlement:2", 0, 0);
+
+        assertFalse(reservations.available("facility:2:workshop", 1, 0),
+                "a facility board beside a settlement board must move sideways before the two billboards overlap");
+        assertTrue(reservations.available("facility:2:workshop", -13, -14),
+                "a valid lateral slot remains available; separation must not create a vertical sky-label fallback");
+    }
+
+    @Test
+    void distantMinecraftCoordinatesDoNotOverflowIntoFalseBoardCollisions() {
+        SourceGrayboxLabelReservations reservations = new SourceGrayboxLabelReservations();
+        reservations.reserve("legend:sector-metrics", 0, 0);
+
+        assertTrue(reservations.available("facility:2:workshop", 11_400_000, 5_800_000),
+                "an origin legend must not consume a local board slot in a distant GameTest or world region");
     }
 }

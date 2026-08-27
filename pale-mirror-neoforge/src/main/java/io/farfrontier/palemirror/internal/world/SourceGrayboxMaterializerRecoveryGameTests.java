@@ -82,19 +82,24 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
         SourceGrayboxPresentationLedger ledger = SourceGrayboxPresentationLedger.get(helper.getLevel());
         ledger.claimEntity("LABEL_DISPLAY:" + labelId);
         SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
-        BlockPos facility = anchor.offset(2, 0, 2);
 
         materializer.apply(helper.getLevel(), snapshot);
-        helper.assertTrue(labels(helper, facility).isEmpty(),
+        helper.assertTrue(label(helper, labelId) == null,
                 "a claimed but unavailable entity must remain a presentation gap instead of risking a duplicate UUID");
 
         materializer.apply(helper.getLevel(), SourceGrayboxMaterializerGameTests.withoutPresentationRecords(baseline));
         helper.assertTrue(!ledger.entityClaimed("LABEL_DISPLAY:" + labelId),
                 "only source retirement may release a missing entity reservation");
         materializer.apply(helper.getLevel(), snapshot);
-        helper.assertTrue(labels(helper, facility).size() == 1,
+        helper.assertTrue(label(helper, labelId) != null,
                 "a later canonical record may materialize once no serialized predecessor remains claimed");
         helper.succeed();
+    }
+
+    private static Display.TextDisplay label(GameTestHelper helper, String id) {
+        var entity = helper.getLevel().getEntity(SourceGrayboxMaterializer.uuid("label-display", id));
+        return entity instanceof Display.TextDisplay display && display.hasCustomName()
+                && display.getCustomName().getString().startsWith("[BUILDING] workshop") ? display : null;
     }
 
     private static java.util.List<Display.TextDisplay> labels(GameTestHelper helper, BlockPos facility) {
