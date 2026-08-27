@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.world;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
@@ -47,6 +48,8 @@ final class SourceGrayboxMaterializer {
      * disconnected from its text when viewed from the observation deck.
      */
     private static final int MAX_LABEL_Y = SURFACE_Y + 81;
+    /** One direct retirement trace distinguishes an active-key bug from a foreign removal. */
+    private static boolean unexpectedActorRetirementTraceCaptured;
     private final SourceGrayboxActorRecoveryCapture actorRecoveries = new SourceGrayboxActorRecoveryCapture();
     Report apply(ServerLevel level, ReferenceGrayboxSnapshot snapshot) { return apply(level, snapshot, null, new LinkedHashMap<>()); }
 
@@ -365,13 +368,27 @@ final class SourceGrayboxMaterializer {
         return indexed != null && !indexed.isRemoved() ? indexed : null;
     }
 
+    /** The UUID index is necessary but not sufficient: the body must be admitted to this level. */
+    static Entity activeIndexedEntity(ServerLevel level, UUID expectedUuid) {
+        Entity entity = level.getEntity(expectedUuid);
+        return entity != null && !entity.isRemoved() && entity.isAddedToLevel() && entity.level() == level ? entity : null;
+    }
+
     private static void retireEntities(ServerLevel level, ReferenceGrayboxLayout.Bounds bounds, Set<String> active,
                                        Map<String, Entity> admittedEntities) {
         AABB arena = new AABB(bounds.minX(), SURFACE_Y, bounds.minZ(), bounds.minX() + bounds.width(), MAX_LABEL_Y,
                 bounds.minZ() + bounds.depth());
         for (Entity entity : level.getEntities((Entity) null, arena, value -> !value.getPersistentData().getString(ENTITY_ID).isBlank())) {
             String key = entityKey(entity.getPersistentData().getString(ENTITY_ID), entity.getPersistentData().getString(ENTITY_KIND));
-            if (!active.contains(key)) entity.discard();
+            if (!active.contains(key)) {
+                if (recognizesManagedEntity(entity) && !unexpectedActorRetirementTraceCaptured) {
+                    unexpectedActorRetirementTraceCaptured = true;
+                    PaleMirrorMod.LOGGER.warn("PM source-graybox retirement discard: key={} active={} uuid={} added={} removed={}",
+                            key, active.contains(key), entity.getUUID(), entity.isAddedToLevel(), entity.isRemoved(),
+                            new IllegalStateException("PM source-graybox retirement discard caller"));
+                }
+                entity.discard();
+            }
         }
         admittedEntities.entrySet().removeIf(entry -> entry.getValue().isRemoved() || !active.contains(entry.getKey()));
     }

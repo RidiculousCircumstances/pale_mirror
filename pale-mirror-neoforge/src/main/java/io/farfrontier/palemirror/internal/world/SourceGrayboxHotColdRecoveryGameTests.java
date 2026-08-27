@@ -15,6 +15,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.border.WorldBorder;
@@ -204,6 +205,136 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
             throw failure;
         }
         border.restore();
+        helper.succeed();
+    }
+
+    // This fixture uses production-stable actor UUIDs.  Give it a distinct
+    // sequential batch: concurrent fixture worlds share one ServerLevel, and
+    // a duplicate canonical UUID there would test the harness collision
+    // rather than restart recovery.
+    @GameTest(batch = "pm-source-graybox-restart-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void restartRecoveryReleasesOnlyAnAbsentBodyReservationBeforeFreshAdmission(GameTestHelper helper) {
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(helper.getLevel());
+        var initial = data.actorExecution().actors().stream()
+                .filter(actor -> actor.kind() == ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT)
+                .filter(actor -> zone.safeToDrain(position(actor)))
+                .findFirst().orElseThrow(() -> new IllegalStateException("GameTest fixture has no resident outside the drain safety radius"));
+        String residentId = initial.id();
+        BlockPos position = position(initial);
+        helper.getLevel().getChunkAt(position);
+        TestBorder border = TestBorder.openAround(helper.getLevel().getWorldBorder(), position);
+        try {
+            for (int x = -4; x <= 4; x++) for (int z = -4; z <= 4; z++) {
+                helper.getLevel().setBlock(position.offset(x, -2, z), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(position.offset(x, 0, z), Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(position.offset(x, 1, z), Blocks.AIR.defaultBlockState(), 3);
+            }
+            SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+            Map<String, Entity> admitted = new LinkedHashMap<>();
+            long gameTick = data.actorExecutionGameTime(helper.getLevel().getGameTime());
+            helper.assertTrue(data.prepareActor(residentId, SourceGrayboxActorExecutionRuntime.HOLDER, gameTick),
+                    "the restart fixture needs a first exact executor lease");
+            String lease = data.actorExecution().actor(residentId).orElseThrow().leaseId();
+            materializer.apply(helper.getLevel(), data.snapshot(), data.actorExecution(), admitted);
+            helper.assertTrue(data.activateActor(residentId, lease, SourceGrayboxActorExecutionRuntime.HOLDER, gameTick),
+                    "the first physical body must become HOT before restart recovery");
+            String key = SourceGrayboxMaterializer.entityKey(residentId, "RESIDENT");
+            resident(helper, position, residentId).discard();
+            admitted.remove(key);
+            helper.assertTrue(SourceGrayboxPresentationLedger.get(helper.getLevel()).entityClaimed(key),
+                    "the lost pre-restart body begins with its durable duplicate-prevention reservation");
+            helper.assertTrue(data.enterActorRecovery(gameTick + 1L),
+                    "restart must mark the unfinished HOT lease as unknown before re-admission");
+
+            helper.assertTrue(!new SourceGrayboxActorExecutionRuntime().prepareForLoadedExecution(helper.getLevel(), data, materializer, admitted),
+                    "recovery without player demand settles custody but must not fabricate a same-turn replacement");
+            helper.assertValueEqual(data.actorExecution().actor(residentId).orElseThrow().mode(), ReferenceGrayboxActorExecutionState.Mode.COLD,
+                    "an absent post-restart body must settle to COLD source custody");
+            helper.assertTrue(!SourceGrayboxPresentationLedger.get(helper.getLevel()).entityClaimed(key),
+                    "the absent body's old reservation must be released so a later PREPARING lease cannot strand");
+
+            long nextTick = data.actorExecutionGameTime(helper.getLevel().getGameTime());
+            helper.assertTrue(data.prepareActor(residentId, SourceGrayboxActorExecutionRuntime.HOLDER, nextTick),
+                    "a later player demand must receive a fresh post-restart executor lease");
+            materializer.apply(helper.getLevel(), data.snapshot(), data.actorExecution(), admitted);
+            helper.assertValueEqual(residents(helper, position, residentId), 1,
+                    "the released reservation must admit exactly one fresh post-restart body");
+        } finally {
+            border.restore();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void unindexedAdmissionObjectCannotActivateAnActor(GameTestHelper helper) {
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        var actor = data.actorExecution().actors().stream()
+                .filter(value -> value.kind() == ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT)
+                .findFirst().orElseThrow();
+        long gameTick = data.actorExecutionGameTime(helper.getLevel().getGameTime());
+        helper.assertTrue(data.prepareActor(actor.id(), SourceGrayboxActorExecutionRuntime.HOLDER, gameTick),
+                "the ghost-admission fixture needs one PREPARING lease");
+        actor = data.actorExecution().actor(actor.id()).orElseThrow();
+        Entity retained = helper.getLevel().getEntity(SourceGrayboxMaterializer.uuid("resident", actor.id()));
+        if (retained != null) retained.discard();
+        Villager unindexed = new Villager(EntityType.VILLAGER, helper.getLevel());
+        unindexed.setUUID(SourceGrayboxMaterializer.uuid("resident", actor.id()));
+        unindexed.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, actor.id());
+        unindexed.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, "RESIDENT");
+        unindexed.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, data.snapshot().stateRevision());
+        unindexed.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ACTOR_REVISION, actor.sourceRevision());
+        Map<String, Entity> admitted = new LinkedHashMap<>();
+        admitted.put(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()), unindexed);
+
+        new SourceGrayboxActorExecutionRuntime().reconcileLoadedActors(helper.getLevel(), data,
+                new SourceGrayboxMaterializer(), admitted);
+
+        helper.assertValueEqual(data.actorExecution().actor(actor.id()).orElseThrow().mode(), ReferenceGrayboxActorExecutionState.Mode.PREPARING,
+                "an unindexed Java object is only a pending join and must never make a source actor HOT");
+        helper.assertTrue(!SourceGrayboxActorMaterializer.hasObservedActorBody(helper.getLevel(), admitted, actor),
+                "the exact UUID must be present in ServerLevel before it counts as a physical actor body");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void indexedButUnaddedBodyCannotActivateAnActor(GameTestHelper helper) {
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        var actor = data.actorExecution().actors().stream()
+                .filter(value -> value.kind() == ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT)
+                .findFirst().orElseThrow();
+        long gameTick = data.actorExecutionGameTime(helper.getLevel().getGameTime());
+        helper.assertTrue(data.prepareActor(actor.id(), SourceGrayboxActorExecutionRuntime.HOLDER, gameTick),
+                "the stale-index fixture needs one PREPARING lease");
+        actor = data.actorExecution().actor(actor.id()).orElseThrow();
+        Villager stale = new Villager(EntityType.VILLAGER, helper.getLevel());
+        stale.setUUID(SourceGrayboxMaterializer.uuid("resident", actor.id()));
+        stale.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, actor.id());
+        stale.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, "RESIDENT");
+        stale.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, data.snapshot().stateRevision());
+        stale.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ACTOR_REVISION, actor.sourceRevision());
+        helper.assertTrue(helper.getLevel().addFreshEntity(stale),
+                "the fixture must first create the UUID index entry");
+        stale.onRemovedFromLevel();
+        helper.assertTrue(helper.getLevel().getEntity(stale.getUUID()) == stale,
+                "the fixture must retain the stale UUID entry after addition is revoked");
+        helper.assertTrue(!stale.isAddedToLevel(),
+                "the fixture must distinguish an indexed reference from a body admitted to the Minecraft level");
+        Map<String, Entity> admitted = new LinkedHashMap<>();
+        admitted.put(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()), stale);
+
+        new SourceGrayboxActorExecutionRuntime().reconcileLoadedActors(helper.getLevel(), data,
+                new SourceGrayboxMaterializer(), admitted);
+
+        helper.assertValueEqual(data.actorExecution().actor(actor.id()).orElseThrow().mode(), ReferenceGrayboxActorExecutionState.Mode.PREPARING,
+                "a stale UUID lookup entry is not a physical body and must never make a source actor HOT");
+        helper.assertTrue(!SourceGrayboxActorMaterializer.hasObservedActorBody(helper.getLevel(), admitted, actor),
+                "the observed-body predicate requires active Minecraft-level admission, not only a UUID-map reference");
+        helper.assertTrue(SourceGrayboxActorMaterializer.existingActor(helper.getLevel(),
+                        SourceGrayboxPresentationLedger.get(helper.getLevel()), admitted, actor.id(), "RESIDENT", stale.getUUID()) == null,
+                "a stale UUID entry must not be reused as a materializer body and renew a phantom reservation");
+        helper.assertTrue(stale.isRemoved(),
+                "the exact stale PM carrier must be discarded before a later COLD actor may obtain a fresh body");
         helper.succeed();
     }
 

@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.world;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
@@ -24,6 +25,8 @@ import net.minecraft.world.phys.Vec3;
 /** Lease-aware projection of exact source actors; it never decides who canonically exists. */
 final class SourceGrayboxActorMaterializer {
     private static final int ENTITY_Y = ReferenceGrayboxLayout.GROUND_Y + 1;
+    /** One direct-caller trace is enough to diagnose a violated HOT-body lease without log spam. */
+    private static boolean unexpectedActorDiscardTraceCaptured;
 
     private SourceGrayboxActorMaterializer() { }
 
@@ -49,8 +52,15 @@ final class SourceGrayboxActorMaterializer {
 
     static Entity actorEntity(ServerLevel level, Map<String, Entity> admitted, ReferenceGrayboxActorExecutionState.ActorState actor) {
         String kind = actor.kind().name();
-        Entity entity = SourceGrayboxMaterializer.existingEntity(level, admitted, actor.id(), kind,
-                SourceGrayboxMaterializer.uuid(kind.equals("RESIDENT") ? "resident" : "bioform", actor.id()));
+        // EntityJoinLevelEvent is observable before NeoForge commits the body
+        // to ServerLevel's UUID index.  The transient admission map preserves
+        // that short window for materialization, but it is not proof that a
+        // body actually entered the world: a later listener may still reject
+        // the join.  Lifecycle transitions therefore accept only the exact
+        // UUID-indexed body as a physical executor.
+        String key = SourceGrayboxMaterializer.entityKey(actor.id(), kind);
+        Entity entity = indexedBody(level, SourceGrayboxMaterializer.uuid(kind.equals("RESIDENT") ? "resident" : "bioform", actor.id()));
+        if (entity != null) admitted.put(key, entity);
         if (entity == null || !SourceGrayboxMaterializer.identityMatches(entity, actor.id(), kind)) return null;
         SourceGrayboxMaterializer.ManagedEntity managed = SourceGrayboxMaterializer.managed(entity);
         String semanticRevision = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ACTOR_REVISION);
@@ -69,8 +79,18 @@ final class SourceGrayboxActorMaterializer {
     static boolean hasObservedActorBody(ServerLevel level, Map<String, Entity> admitted,
                                         ReferenceGrayboxActorExecutionState.ActorState actor) {
         String kind = actor.kind().name();
-        return SourceGrayboxMaterializer.existingEntity(level, admitted, actor.id(), kind,
-                SourceGrayboxMaterializer.uuid(kind.equals("RESIDENT") ? "resident" : "bioform", actor.id())) != null;
+        return indexedBody(level, SourceGrayboxMaterializer.uuid(kind.equals("RESIDENT") ? "resident" : "bioform", actor.id())) != null;
+    }
+
+    /**
+     * A UUID map entry alone is not a Minecraft body.  NeoForge may retain an
+     * entity in the level lookup while its addition has been rolled back or
+     * its removal is still being reconciled.  Such an object cannot be seen,
+     * ticked, collided with, saved, or observed by a player, therefore it
+     * must never satisfy the executor's HOT postcondition.
+     */
+    private static Entity indexedBody(ServerLevel level, java.util.UUID uuid) {
+        return SourceGrayboxMaterializer.activeIndexedEntity(level, uuid);
     }
 
     private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String observationRevision,
@@ -81,7 +101,7 @@ final class SourceGrayboxActorMaterializer {
         active.add(key);
         Vec3 position = position(actor, resident.position());
         if (!level.hasChunkAt(BlockPos.containing(position))) return;
-        Entity current = SourceGrayboxMaterializer.existingEntity(level, admitted, resident.id(), "RESIDENT", SourceGrayboxMaterializer.uuid("resident", resident.id()));
+        Entity current = existingActor(level, ledger, admitted, resident.id(), "RESIDENT", SourceGrayboxMaterializer.uuid("resident", resident.id()));
         if (current != null && !(current instanceof Villager && SourceGrayboxMaterializer.identityMatches(current, resident.id(), "RESIDENT"))) return;
         if (current instanceof Villager known) {
             known.setVillagerData(known.getVillagerData().setProfession(VillagerProfession.NONE));
@@ -90,7 +110,7 @@ final class SourceGrayboxActorMaterializer {
             if (requiresPhysicalAdmission(actor, known)) {
                 Vec3 recovery = recoveryPosition(actor, known, position);
                 if (!placePrepared(level, ledger, key, resident.id(), "RESIDENT", semanticRevision, known, recovery)) {
-                    known.discard();
+                    discardRejectedBody("resident-position-rejected", key, actor, known);
                     admitted.remove(key);
                     ledger.releaseEntity(key);
                     return;
@@ -121,7 +141,7 @@ final class SourceGrayboxActorMaterializer {
         active.add(key);
         Vec3 position = position(actor, bioform.position());
         if (!level.hasChunkAt(BlockPos.containing(position))) return;
-        Entity current = SourceGrayboxMaterializer.existingEntity(level, admitted, bioform.id(), "BIOFORM", SourceGrayboxMaterializer.uuid("bioform", bioform.id()));
+        Entity current = existingActor(level, ledger, admitted, bioform.id(), "BIOFORM", SourceGrayboxMaterializer.uuid("bioform", bioform.id()));
         if (current != null && !(current instanceof Zombie && SourceGrayboxMaterializer.identityMatches(current, bioform.id(), "BIOFORM"))) return;
         if (current instanceof Zombie known) {
             configure(known, bioform.id(), "BIOFORM", observationRevision, semanticRevision, bioform.kind() + " | " + bioform.phase(),
@@ -129,7 +149,7 @@ final class SourceGrayboxActorMaterializer {
             if (requiresPhysicalAdmission(actor, known)) {
                 Vec3 recovery = recoveryPosition(actor, known, position);
                 if (!placePrepared(level, ledger, key, bioform.id(), "BIOFORM", semanticRevision, known, recovery)) {
-                    known.discard();
+                    discardRejectedBody("bioform-position-rejected", key, actor, known);
                     admitted.remove(key);
                     ledger.releaseEntity(key);
                     return;
@@ -149,6 +169,59 @@ final class SourceGrayboxActorMaterializer {
             ledger.claimEntity(key);
             admitted.put(key, zombie);
         }
+    }
+
+    /**
+     * Resolves only an actively admitted Minecraft body for the actor path.
+     *
+     * <p>The general materializer intentionally accepts a just-restored
+     * non-indexed display from {@code admitted}: labels must survive the short
+     * restore-to-index interval without duplication. An actor is different:
+     * a body that has not entered this {@link ServerLevel} cannot fulfil a
+     * PREPARING/HOT lease. In particular, a rolled-back join can leave its
+     * exact UUID in the level lookup with {@code isAddedToLevel()==false}.
+     * Reusing that object claimed the lease but never created a visible body,
+     * producing a one-frame re-admission loop. Discard only that exact PM
+     * carrier and release its reservation; a foreign collision still reaches
+     * the caller unchanged and fails closed.</p>
+     */
+    static Entity existingActor(ServerLevel level, SourceGrayboxPresentationLedger ledger, Map<String, Entity> admitted,
+                                String id, String kind, java.util.UUID expectedUuid) {
+        String key = SourceGrayboxMaterializer.entityKey(id, kind);
+        Entity indexed = level.getEntity(expectedUuid);
+        Entity active = SourceGrayboxMaterializer.activeIndexedEntity(level, expectedUuid);
+        if (active != null) {
+            admitted.put(key, active);
+            return active;
+        }
+        if (indexed != null && !indexed.isRemoved()) {
+            if (SourceGrayboxMaterializer.identityMatches(indexed, id, kind)) {
+                discardRejectedBody("uuid-indexed-but-not-added", key, null, indexed);
+                admitted.remove(key, indexed);
+                ledger.releaseEntity(key);
+                return null;
+            }
+            return indexed;
+        }
+        Entity remembered = admitted.get(key);
+        if (remembered != null && remembered.isRemoved()) admitted.remove(key, remembered);
+        return null;
+    }
+
+    /**
+     * A HOT lease must not silently turn into a disappearing body.  This is a
+     * deliberately bounded diagnostic at each local discard edge, so a live
+     * report can distinguish an invalid PM recovery from a foreign remover.
+     */
+    private static void discardRejectedBody(String reason, String key,
+                                            ReferenceGrayboxActorExecutionState.ActorState actor, Entity body) {
+        if (!unexpectedActorDiscardTraceCaptured) {
+            unexpectedActorDiscardTraceCaptured = true;
+            PaleMirrorMod.LOGGER.warn("PM source-graybox actor discard: reason={} key={} mode={} uuid={} added={} removed={}",
+                    reason, key, actor == null ? "unknown" : actor.mode(), body.getUUID(), body.isAddedToLevel(), body.isRemoved(),
+                    new IllegalStateException("PM source-graybox actor discard caller"));
+        }
+        body.discard();
     }
 
     private static ReferenceGrayboxActorExecutionState.ActorState actor(ReferenceGrayboxActorExecutionState state, String id) {

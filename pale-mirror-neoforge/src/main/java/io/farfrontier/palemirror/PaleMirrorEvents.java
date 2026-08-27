@@ -40,6 +40,7 @@ import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
@@ -123,6 +124,22 @@ public final class PaleMirrorEvents {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
                 && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
             SourceGrayboxRuntime.forServer(level.getServer()).observeEntityJoin(level, event.getEntity());
+        }
+    }
+
+    /**
+     * Keep an exact managed-body departure observable. A body which leaves a
+     * loaded HOT scene without the actor executor initiating a drain is an
+     * invariant breach: source custody must recover on its normal cadence,
+     * but the operator also needs the physical evidence rather than a silent
+     * one-frame re-admission loop.
+     */
+    @SubscribeEvent
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
+            SourceGrayboxRuntime.forServer(level.getServer()).observeEntityLeave(level, event.getEntity());
         }
     }
 

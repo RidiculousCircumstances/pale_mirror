@@ -38,6 +38,8 @@ public final class SourceGrayboxRuntime {
     private List<SourceGrayboxAuditViews.View> advertisedAuditViews = List.of();
     /** A naturally loaded graybox chunk needs one claim-checked projection pass. */
     private boolean presentationRequested;
+    /** One actionable invariant trace per server lifetime; never turn a recurring breach into log spam. */
+    private boolean unexpectedActorDepartureTraceCaptured;
 
     private SourceGrayboxRuntime(MinecraftServer server) {
         this.server = server;
@@ -182,6 +184,33 @@ public final class SourceGrayboxRuntime {
     public void observeEntityJoin(ServerLevel level, Entity entity) {
         if (!level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION)) return;
         SourceGrayboxMaterializer.rememberAdmittedEntity(admittedEntities, entity);
+    }
+
+    /**
+     * Makes an unexpected departure of an exact physical executor observable
+     * at the Minecraft boundary. The actor coordinator remains the only
+     * authority which changes HOT/COLD custody on its cadence; this callback
+     * removes only transient admission memory and emits the invariant breach
+     * with enough identity to correlate it to the persisted lease.
+     */
+    public void observeEntityLeave(ServerLevel level, Entity entity) {
+        if (!data.activated() || level != grayboxLevel()) return;
+        SourceGrayboxMaterializer.ManagedEntity managed = SourceGrayboxMaterializer.managed(entity);
+        if (managed == null) return;
+        data.actorExecution().actor(managed.id()).ifPresent(actor -> {
+            if (actor.mode() != io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.Mode.PREPARING
+                    && actor.mode() != io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.Mode.HOT) return;
+            String key = SourceGrayboxMaterializer.entityKey(managed.id(), managed.kind());
+            admittedEntities.remove(key, entity);
+            if (!unexpectedActorDepartureTraceCaptured) {
+                unexpectedActorDepartureTraceCaptured = true;
+                io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
+                        "Unexpected source-graybox HOT body departure: actor={} kind={} mode={} lease={} uuid={} removalReason={} added={} removed={} tick={}",
+                        actor.id(), actor.kind(), actor.mode(), actor.leaseId(), entity.getUUID(), entity.getRemovalReason(),
+                        entity.isAddedToLevel(), entity.isRemoved(), level.getGameTime(),
+                        new IllegalStateException("source-graybox HOT body departure trace"));
+            }
+        });
     }
 
     /**

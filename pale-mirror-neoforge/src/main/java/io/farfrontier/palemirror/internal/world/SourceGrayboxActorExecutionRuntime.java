@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -14,6 +15,13 @@ final class SourceGrayboxActorExecutionRuntime {
     /** A retained foreign collision is rechecked at a bounded stagger, never every executor turn. */
     private static final long OBSTRUCTION_RETRY_TICKS = 200L;
     private static final long OBSTRUCTION_RETRY_SLOTS = OBSTRUCTION_RETRY_TICKS / CAPTURE_INTERVAL_TICKS;
+    /**
+     * EntityJoinLevelEvent can precede ServerLevel UUID indexing.  This
+     * noncanonical, bounded grace record prevents recovery from treating that
+     * single hand-off turn as absence, while never permitting an unindexed
+     * Java object to become a physical executor.
+     */
+    private final Map<String, Long> pendingIndexSince = new LinkedHashMap<>();
 
     /**
      * Advances lease admission before a possible immutable-frame projection.
@@ -46,6 +54,18 @@ final class SourceGrayboxActorExecutionRuntime {
                 }
                 case PREPARING -> {
                     if (zone.hot(position)) data.touchActorDemand(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    // Removal from ServerLevel's UUID manager is finalized on
+                    // a later server tick. If a previous exact body was
+                    // rejected or rolled back, the first re-admission pass
+                    // may correctly refuse to reuse it yet be unable to add
+                    // the replacement with that UUID in the same turn. Keep
+                    // one bounded actor-cadence retry while the player still
+                    // demands the loaded scene; this is a recovery pass, not
+                    // a static-world polling loop.
+                    if (zone.preparing(position) && level.hasChunkAt(position)
+                            && materializer.actorEntity(level, admittedEntities, actor) == null) {
+                        admissionRequested = true;
+                    }
                     if (!zone.preparing(position) && expired(actor, gameTick)
                             && materializer.actorEntity(level, admittedEntities, actor) == null) {
                         data.cancelActorPreparation(actor.id(), actor.leaseId(), HOLDER, gameTick);
@@ -91,12 +111,26 @@ final class SourceGrayboxActorExecutionRuntime {
                         changed = true;
                         changed |= data.captureActor(actor.id(), actor.leaseId(), HOLDER, sixteenths(entity.getX()),
                                 sixteenths(entity.getZ()), gameTick);
+                    } else if (awaitingIndex(level, admittedEntities, actor, gameTick)) {
+                        // A just-admitted body may not have reached the UUID
+                        // index until the next executor turn.  It is not HOT
+                        // until that postcondition is observable.
                     } else if (mustReleaseBlockedPreparation(actor, entity != null,
                             SourceGrayboxActorMaterializer.isActorObstructed(presentation, actor))) {
                         // A physically impossible admission is not a durable
                         // executor. The obstruction claim explains the gap;
                         // the source actor returns to COLD without a body.
                         changed |= data.cancelActorPreparation(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    } else if (!SourceGrayboxActorMaterializer.hasObservedActorBody(level, admittedEntities, actor)
+                            && gameTick - actor.changedAtGameTick() >= CAPTURE_INTERVAL_TICKS) {
+                        // A canceled or otherwise failed entity join may have
+                        // returned a transient Java object to the admission
+                        // map.  It must not strand a PREPARING lease or be
+                        // mistaken for a live executor.  The later COLD
+                        // admission gets a new deterministic lease.
+                        boolean settled = data.cancelActorPreparation(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                        if (settled) presentation.releaseEntity(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()));
+                        changed |= settled;
                     }
                 }
                 case HOT -> {
@@ -155,19 +189,64 @@ final class SourceGrayboxActorExecutionRuntime {
         return changed;
     }
 
-    private static boolean recoverLoadedActors(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
-                                               Map<String, Entity> admittedEntities, long gameTick) {
+    private boolean recoverLoadedActors(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
+                                        Map<String, Entity> admittedEntities, long gameTick) {
         boolean changed = false;
+        SourceGrayboxPresentationLedger presentation = SourceGrayboxPresentationLedger.get(level);
         for (ReferenceGrayboxActorExecutionState.ActorState actor : data.actorExecution().actors()) {
             if (actor.mode() != ReferenceGrayboxActorExecutionState.Mode.RECOVERING) continue;
             BlockPos position = position(actor);
             if (!level.hasChunkAt(position)) continue;
             Entity entity = materializer.actorEntity(level, admittedEntities, actor);
-            changed |= entity == null
-                    ? data.recoverActorCold(actor.id(), actor.leaseId(), HOLDER, gameTick)
-                    : data.recoverActorHot(actor.id(), actor.leaseId(), HOLDER, gameTick);
+            if (entity != null) {
+                pendingIndexSince.remove(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()));
+                changed |= data.recoverActorHot(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                continue;
+            }
+            if (awaitingIndex(level, admittedEntities, actor, gameTick)) continue;
+            boolean settled = data.recoverActorCold(actor.id(), actor.leaseId(), HOLDER, gameTick);
+            // A restart may retain the old duplicate-prevention reservation
+            // even though the exact body was never saved.  That reservation
+            // belongs to the now-settled lease, not to the canonical actor;
+            // keeping it would strand the actor in PREPARING forever.  A
+            // present but invalid UUID/body remains fail-closed and retains
+            // its reservation, so this is never authority to replace an
+            // integrity conflict with a fresh executor.
+            if (settled && !SourceGrayboxActorMaterializer.hasObservedActorBody(level, admittedEntities, actor)) {
+                presentation.releaseEntity(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()));
+            }
+            changed |= settled;
         }
         return changed;
+    }
+
+    /**
+     * Returns true only for the bounded join-to-index hand-off.  A matching
+     * unindexed object is removed after one executor interval so an event
+     * cancellation cannot preserve a ghost lease indefinitely.
+     */
+    private boolean awaitingIndex(ServerLevel level, Map<String, Entity> admittedEntities,
+                                  ReferenceGrayboxActorExecutionState.ActorState actor, long gameTick) {
+        String key = SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind());
+        Entity observed = admittedEntities.get(key);
+        if (!pendingExactJoin(level, observed, actor)) {
+            pendingIndexSince.remove(key);
+            return false;
+        }
+        long firstSeen = pendingIndexSince.computeIfAbsent(key, ignored -> gameTick);
+        if (gameTick - firstSeen < CAPTURE_INTERVAL_TICKS) return true;
+        admittedEntities.remove(key, observed);
+        pendingIndexSince.remove(key);
+        return false;
+    }
+
+    private static boolean pendingExactJoin(ServerLevel level, Entity observed,
+                                            ReferenceGrayboxActorExecutionState.ActorState actor) {
+        if (observed == null || observed.isRemoved()
+                || !SourceGrayboxMaterializer.identityMatches(observed, actor.id(), actor.kind().name())) return false;
+        String kind = actor.kind().name();
+        return observed.getUUID().equals(SourceGrayboxMaterializer.uuid(kind.equals("RESIDENT") ? "resident" : "bioform", actor.id()))
+                && (!observed.isAddedToLevel() || level.getEntity(observed.getUUID()) == null);
     }
 
     private static boolean expired(ReferenceGrayboxActorExecutionState.ActorState actor, long gameTick) {
