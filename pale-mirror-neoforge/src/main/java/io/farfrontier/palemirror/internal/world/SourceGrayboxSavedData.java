@@ -58,6 +58,15 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     private boolean activated;
     private long lastClockGameTime;
     private SourceGrayboxClockProfile clockProfile;
+    /**
+     * Immutable read model for the unchanged canonical source document.
+     *
+     * <p>The source projection is deliberately broad so it can explain every
+     * settlement, cell and actor to a player. Rebuilding it is not a harmless
+     * per-tick read: callers on the server thread must receive the same frame
+     * until a source-day or accepted observation actually changes canon.</p>
+     */
+    private ReferenceGrayboxSnapshot cachedSnapshot;
 
     private SourceGrayboxSavedData(ReferenceGrayboxSimulation simulation, ReferenceGrayboxActorExecutionState actorExecution,
                                    EffectLeaseLedger effectLeases,
@@ -108,7 +117,10 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         load(tag, null);
     }
 
-    @Override public ReferenceGrayboxSnapshot snapshot() { return simulation.snapshot(); }
+    @Override public ReferenceGrayboxSnapshot snapshot() {
+        if (cachedSnapshot == null) cachedSnapshot = simulation.snapshot();
+        return cachedSnapshot;
+    }
     @Override public ReferenceGrayboxActorExecutionState actorExecution() { return actorExecution; }
     @Override public EffectLeaseLedger effectLeases() { return effectLeases; }
     SourceGrayboxWarehouseLedger warehouseLedger() { return warehouseLedger; }
@@ -274,7 +286,8 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         List<ReferenceGrayboxSnapshot> boundaries = new java.util.ArrayList<>();
         for (long index = 0; index < due; index++) {
             simulation.tick();
-            boundaries.add(simulation.snapshot());
+            invalidateSnapshot();
+            boundaries.add(snapshot());
         }
         if (due > 0) {
             synchronizeActorExecution();
@@ -288,6 +301,7 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         if (!activated) throw new IllegalStateException("source graybox is not activated");
         if (days < 1 || days > 365) throw new IllegalArgumentException("source graybox advance must be between one and 365 days");
         for (int index = 0; index < days; index++) simulation.tick();
+        invalidateSnapshot();
         synchronizeActorExecution();
         setDirty();
     }
@@ -315,10 +329,11 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     private ReferenceGrayboxObservationOutcome observe(String eventId, java.util.function.Supplier<ReferenceGrayboxObservationOutcome> apply) {
         if (processedObservationIds.contains(eventId)) {
             return new ReferenceGrayboxObservationOutcome(eventId, ReferenceGrayboxObservationOutcome.Status.REJECTED_CONFLICT,
-                    "observation event was already processed", simulation.snapshot().stateRevision());
+                    "observation event was already processed", snapshot().stateRevision());
         }
         ReferenceGrayboxObservationOutcome outcome = apply.get();
         if (outcome.applied()) {
+            invalidateSnapshot();
             synchronizeActorExecution();
             processedObservationIds.add(eventId);
             while (processedObservationIds.size() > MAX_PROCESSED_OBSERVATIONS) processedObservationIds.removeFirst();
@@ -444,7 +459,11 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     }
 
     private void synchronizeActorExecution() {
-        if (actorExecution.reconcile(simulation.snapshot())) setDirty();
+        if (actorExecution.reconcile(snapshot())) setDirty();
+    }
+
+    private void invalidateSnapshot() {
+        cachedSnapshot = null;
     }
 
 }

@@ -20,6 +20,23 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public final class SourceGrayboxPhysicalObservationGameTests {
     private SourceGrayboxPhysicalObservationGameTests() { }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void unchangedSourceReadsReuseOneFrameButAcceptedTimeAdvancementRefreshesIt(GameTestHelper helper) {
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        ReferenceGrayboxSnapshot first = data.snapshot();
+        helper.assertTrue(first == data.snapshot(),
+                "unchanged source reads must reuse their immutable presentation frame instead of rebuilding the whole world each tick");
+
+        data.activate(0L);
+        data.advance(1);
+        ReferenceGrayboxSnapshot advanced = data.snapshot();
+        helper.assertTrue(advanced != first && advanced.day() == first.day() + 1,
+                "a real canonical day must invalidate the cached frame and publish the new source day exactly once");
+        helper.assertTrue(advanced == data.snapshot(),
+                "the refreshed immutable frame must remain reusable until another accepted source mutation");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void brokenRouteSlotUpdatesCanonicalCapacityAndItsReadableRemainingFact(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);

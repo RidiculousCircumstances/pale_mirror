@@ -78,7 +78,6 @@ public final class SourceGrayboxMaterializerGameTests {
                 "an unsupported structural perturbation must remain visibly conflicted, never be silently repaired");
         helper.succeed();
     }
-
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void interactionSlotCarriesAnExactRemainingShareAndStaysConsumed(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
@@ -122,9 +121,10 @@ public final class SourceGrayboxMaterializerGameTests {
 
         ReferenceGrayboxSnapshot.Interaction interaction = snapshot.interactions().stream()
                 .filter(value -> value.kind().equals("field_post_cargo_lost")).findFirst().orElseThrow();
-        ReferenceGrayboxLayout.Point slot = interaction.slots().getFirst();
-        SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(helper.getLevel(),
-                new BlockPos(slot.x(), ReferenceGrayboxLayout.GROUND_Y + interaction.yOffset(), slot.z()));
+        // Assert the pallet's stable identity, not a co-located batch neighbour.
+        SourceGrayboxPresentationLedger.Claim claim = SourceGrayboxPresentationLedger.get(helper.getLevel())
+                .claim("interaction:" + interaction.id() + ":0");
+        helper.assertTrue(claim != null, "the field-post pallet must publish its own stable interaction claim");
         helper.assertValueEqual(claim.subjectId(), "field_post:701:cargo:food",
                 "one field-post pallet must retain its exact canonical stock subject");
         helper.assertValueEqual(claim.interactionKind(), "field_post_cargo_lost",

@@ -382,6 +382,9 @@ public final class PaleMirrorEvents {
     public static void onChunkLoaded(ChunkEvent.Load event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             PaleMirrorRuntime.forServer(level.getServer()).railChunkLoaded(level, event.getChunk().getPos());
+            if (SourceGrayboxRuntime.isGrayboxLevel(level)) {
+                SourceGrayboxRuntime.forServer(level.getServer()).observeChunkLoaded(level);
+            }
         }
     }
 

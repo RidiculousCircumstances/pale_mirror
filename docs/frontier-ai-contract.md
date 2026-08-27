@@ -131,7 +131,11 @@ still re-enters the source only through its typed observation.
 `SourceGrayboxRuntime` is the sole campaign clock after the explicit
 `/pale_mirror frontier activate_graybox` command. Its schedule advances the
 source day from Minecraft game time, caps catch-up work, and republishes after
-each source change. `PaleMirrorRuntime.tick()` returns before the historical
+each source change, `COLD -> PREPARING` body admission or naturally loaded
+graybox chunk. An unchanged source frame is cached as immutable read-only
+projection data; HOT demand heartbeats and captured body hand-offs are still
+persisted at their executor cadence, but never poll and rebuild the whole arena
+merely because time passed. `PaleMirrorRuntime.tick()` returns before the historical
 Frontier clock once this source runtime is active, so two autonomous campaign
 owners cannot run together.
 

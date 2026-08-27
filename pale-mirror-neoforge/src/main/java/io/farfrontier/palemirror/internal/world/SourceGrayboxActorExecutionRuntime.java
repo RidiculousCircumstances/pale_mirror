@@ -15,42 +15,64 @@ final class SourceGrayboxActorExecutionRuntime {
     private static final long OBSTRUCTION_RETRY_TICKS = 200L;
     private static final long OBSTRUCTION_RETRY_SLOTS = OBSTRUCTION_RETRY_TICKS / CAPTURE_INTERVAL_TICKS;
 
-    boolean beforePublication(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
-                              Map<String, Entity> admittedEntities) {
+    /**
+     * Advances lease admission before a possible immutable-frame projection.
+     *
+     * <p>The return value deliberately means {@code a new body needs the
+     * materializer}, not merely {@code durable execution state changed}. A
+     * HOT demand heartbeat and a captured hand-off are persisted so restart
+     * remains exact, but neither changes the static source scene. Treating
+     * either as a presentation request rebuilt every settlement and label at
+     * the actor cadence while a player was nearby.</p>
+     */
+    boolean prepareForLoadedExecution(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
+                                      Map<String, Entity> admittedEntities) {
         long gameTick = data.actorExecutionGameTime(level.getGameTime());
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(level);
         SourceGrayboxPresentationLedger presentation = SourceGrayboxPresentationLedger.get(level);
-        boolean changed = recoverLoadedActors(level, data, materializer, admittedEntities, gameTick);
+        recoverLoadedActors(level, data, materializer, admittedEntities, gameTick);
+        boolean admissionRequested = false;
         for (ReferenceGrayboxActorExecutionState.ActorState actor : data.actorExecution().actors()) {
             BlockPos position = position(actor);
             switch (actor.mode()) {
                 case COLD -> {
                     boolean obstructed = SourceGrayboxActorMaterializer.isActorObstructed(presentation, actor);
                     if (zone.preparing(position) && level.hasChunkAt(position) && allowsPreparation(actor, obstructed, gameTick)) {
-                        changed |= data.prepareActor(actor.id(), HOLDER, gameTick);
+                        // Only the COLD -> PREPARING transition needs a broad
+                        // claim-checked pass: it is the one transition that
+                        // may create a Minecraft body.
+                        admissionRequested |= data.prepareActor(actor.id(), HOLDER, gameTick);
                     }
                 }
                 case PREPARING -> {
-                    if (zone.hot(position)) changed |= data.touchActorDemand(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    if (zone.hot(position)) data.touchActorDemand(actor.id(), actor.leaseId(), HOLDER, gameTick);
                     if (!zone.preparing(position) && expired(actor, gameTick)
                             && materializer.actorEntity(level, admittedEntities, actor) == null) {
-                        changed |= data.cancelActorPreparation(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                        data.cancelActorPreparation(actor.id(), actor.leaseId(), HOLDER, gameTick);
                     }
                 }
                 case HOT -> {
-                    if (zone.hot(position)) changed |= data.touchActorDemand(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    if (zone.hot(position)) data.touchActorDemand(actor.id(), actor.leaseId(), HOLDER, gameTick);
                     if (!zone.hot(position) && expired(actor, gameTick) && zone.safeToDrain(position)) {
-                        changed |= data.beginActorDrain(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                        data.beginActorDrain(actor.id(), actor.leaseId(), HOLDER, gameTick);
                     }
                 }
                 case DRAINING, RETIRED, RECOVERING -> { /* completed after materialization/loaded observation */ }
             }
         }
-        return changed;
+        return admissionRequested;
     }
 
-    boolean afterPublication(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
-                             Map<String, Entity> admittedEntities) {
+    /**
+     * Captures and drains already-loaded bodies at the executor cadence.
+     *
+     * <p>This runs after a frame publication when admission was requested, or
+     * directly against an already materialized HOT body. It never asks the
+     * static materializer to replay an unchanged source snapshot merely to
+     * retain an exact physical hand-off.</p>
+     */
+    boolean reconcileLoadedActors(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
+                                  Map<String, Entity> admittedEntities) {
         long gameTick = data.actorExecutionGameTime(level.getGameTime());
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(level);
         SourceGrayboxPresentationLedger presentation = SourceGrayboxPresentationLedger.get(level);
