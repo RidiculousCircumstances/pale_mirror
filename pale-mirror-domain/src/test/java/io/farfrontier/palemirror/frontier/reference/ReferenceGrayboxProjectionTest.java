@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -69,6 +70,36 @@ class ReferenceGrayboxProjectionTest {
                 "cell actors must reserve the clear outer apron rather than the central hive/tissue silhouette");
         assertThrows(IllegalStateException.class, () -> ReferenceGrayboxLayout.cellActorSlot(cell, 28),
                 "a source overflow must fail closed instead of silently stacking exact bodies into one unsafe location");
+    }
+
+    @Test
+    void naturalSourceFrontCampaignProjectsItsNamedForceAtTheLiveCampaignAnchor() {
+        ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(7L);
+        for (int day = 0; day < 7; day++) simulation.tick();
+
+        ReferenceGrayboxSnapshot snapshot = simulation.snapshot();
+        List<ReferenceGrayboxSnapshot.Activity> active = snapshot.activities().stream()
+                .filter(activity -> activity.family().equals("front_campaign") && !activity.terminal()).toList();
+        assertEquals(2, active.size(), "the calibrated source seed must authorise live frontier work without a synthetic operation");
+        List<ReferenceGrayboxSnapshot.Resident> deployed = snapshot.residents().stream()
+                .filter(resident -> resident.location().equals("operation")).toList();
+        assertEquals(6, deployed.size(), "every materialized campaign person remains an exact named source resident");
+
+        ReferenceGrayboxActorExecutionState execution = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        for (ReferenceGrayboxSnapshot.Activity campaign : active) {
+            int operationId = 1_000_000 + Integer.parseInt(campaign.id().substring("front-campaign:".length()));
+            List<ReferenceGrayboxSnapshot.Resident> force = deployed.stream()
+                    .filter(resident -> Integer.valueOf(operationId).equals(resident.locationId())).toList();
+            assertEquals((int) campaign.personnel(), force.size(), "campaign " + campaign.id() + " keeps its exact physical roster");
+            List<ReferenceGrayboxLayout.Point> expectedSlots = new ArrayList<>();
+            for (int index = 0; index < force.size(); index++) expectedSlots.add(ReferenceGrayboxLayout.cellActorSlot(campaign.position(), index));
+            assertEquals(expectedSlots, force.stream().map(ReferenceGrayboxSnapshot.Resident::position).toList(),
+                    "every front-campaign resident keeps its deterministic formation slot around the source campaign anchor");
+            assertTrue(force.stream().allMatch(resident -> execution.actor(resident.id()).orElseThrow().anchorXSixteenths()
+                    == resident.position().x() * ReferenceGrayboxActorExecutionState.POSITION_SCALE
+                    + ReferenceGrayboxActorExecutionState.POSITION_SCALE / 2),
+                    "the HOT/COLD executor receives the source anchor without an adapter-owned destination");
+        }
     }
 
     @Test
