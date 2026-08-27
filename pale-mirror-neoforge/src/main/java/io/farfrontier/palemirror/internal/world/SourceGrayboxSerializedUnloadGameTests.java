@@ -22,7 +22,10 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public final class SourceGrayboxSerializedUnloadGameTests {
     private SourceGrayboxSerializedUnloadGameTests() { }
 
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    // This proof uses an exact source-world actor coordinate and temporarily
+    // narrows the level-wide border. It must not run concurrently with other
+    // materializer fixtures that can hold the same deterministic actor UUID.
+    @GameTest(batch = "pm-source-graybox-serialized-unload", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void serializedUnloadResumesOneExactBodyWhenHotDemandReturns(GameTestHelper helper) {
         SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(54_161L);
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(helper.getLevel());

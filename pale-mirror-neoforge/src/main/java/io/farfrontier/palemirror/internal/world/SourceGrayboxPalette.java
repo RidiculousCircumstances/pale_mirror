@@ -22,6 +22,11 @@ final class SourceGrayboxPalette {
         if (token.contains("infection.tissue.severe")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("infection.tissue.active")) return Blocks.RED_WOOL.defaultBlockState();
         if (token.contains("infection.tissue.trace")) return Blocks.BROWN_WOOL.defaultBlockState();
+        if (token.contains("infection.settlement.signal_severe")) return Blocks.MAGENTA_WOOL.defaultBlockState();
+        if (token.contains("infection.settlement.signal_active")) return Blocks.PINK_WOOL.defaultBlockState();
+        if (token.contains("infection.settlement.severe")) return Blocks.PURPLE_WOOL.defaultBlockState();
+        if (token.contains("infection.settlement.active")) return Blocks.RED_WOOL.defaultBlockState();
+        if (token.contains("infection.settlement.trace")) return Blocks.BROWN_WOOL.defaultBlockState();
         if (token.contains("metric.infection")) return Blocks.RED_WOOL.defaultBlockState();
         if (token.contains("metric.spores")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("metric.human_access")) return Blocks.CYAN_WOOL.defaultBlockState();

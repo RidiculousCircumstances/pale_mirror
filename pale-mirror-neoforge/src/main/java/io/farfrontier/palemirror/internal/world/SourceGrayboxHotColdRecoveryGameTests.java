@@ -308,7 +308,10 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    // This fixture deliberately inserts the production UUID into the level-wide
+    // UUID index.  It therefore cannot share the concurrent materializer batch
+    // with fixtures derived from the same deterministic source seed.
+    @GameTest(batch = "pm-source-graybox-stale-index", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void indexedButUnaddedBodyCannotActivateAnActor(GameTestHelper helper) {
         SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
         var actor = data.actorExecution().actors().stream()

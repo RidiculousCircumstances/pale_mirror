@@ -113,6 +113,7 @@ final class SourceGrayboxPresentationPlan {
         for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) {
             SourceGrayboxInfrastructureGrammar.facilityFrame(snapshot.stateRevision(), facility).forEach(item -> add(result, item));
         }
+        SourceGrayboxSettlementInfectionPlan.from(snapshot).forEach(item -> add(result, item));
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) {
             if (!activity.terminal()) addActivityScene(result, snapshot.stateRevision(), activity);
         }
