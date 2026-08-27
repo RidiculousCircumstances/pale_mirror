@@ -141,6 +141,23 @@ public final class ReferenceGrayboxActorExecutionState {
         return true;
     }
 
+    /**
+     * Settles a live lease only after its executor has inspected an already
+     * loaded scene and found that the exact expected body is absent.
+     *
+     * <p>This is deliberately distinct from a typed physical death: a death
+     * observation first changes the canonical source actor. This recovery
+     * path retains the source actor and only releases an executor that no
+     * longer exists, so a later HOT admission receives a fresh lease rather
+     * than leaving the actor permanently claimed as an invisible body.</p>
+     */
+    public boolean settleMissingHotActor(String id, String leaseId, String holder, long gameTick) {
+        ActorState prior = require(id);
+        if (prior.mode() != Mode.HOT || !prior.leaseId().equals(leaseId) || !prior.holder().equals(holder)) return false;
+        actors.put(id, prior.cold(gameTick));
+        return true;
+    }
+
     /** Begins a hand-off; source code must capture the actual position before settling COLD. */
     public boolean beginDrain(String id, String leaseId, String holder, long gameTick) {
         ActorState prior = require(id);

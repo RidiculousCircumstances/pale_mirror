@@ -147,6 +147,66 @@ public final class SourceGrayboxHotColdRecoveryGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void runtimeMissingLoadedHotBodyReleasesItsPhantomClaimBeforeOneFreshAdmission(GameTestHelper helper) {
+        SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
+        SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(helper.getLevel());
+        var initial = data.actorExecution().actors().stream()
+                .filter(actor -> actor.kind() == ReferenceGrayboxActorExecutionState.ActorKind.RESIDENT)
+                .filter(actor -> zone.safeToDrain(position(actor)))
+                .findFirst().orElseThrow(() -> new IllegalStateException("GameTest fixture has no resident outside the drain safety radius"));
+        String residentId = initial.id();
+        BlockPos position = position(initial);
+        helper.getLevel().getChunkAt(position);
+        TestBorder border = TestBorder.openAround(helper.getLevel().getWorldBorder(), position);
+        try {
+            for (int x = -4; x <= 4; x++) for (int z = -4; z <= 4; z++) {
+                helper.getLevel().setBlock(position.offset(x, -2, z), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(position.offset(x, 0, z), Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(position.offset(x, 1, z), Blocks.AIR.defaultBlockState(), 3);
+            }
+            SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+            Map<String, Entity> admitted = new LinkedHashMap<>();
+            long gameTick = data.actorExecutionGameTime(helper.getLevel().getGameTime());
+            helper.assertTrue(data.prepareActor(residentId, SourceGrayboxActorExecutionRuntime.HOLDER, gameTick),
+                    "the fixture actor needs a real first admission before its body can disappear");
+            String lostLease = data.actorExecution().actor(residentId).orElseThrow().leaseId();
+            materializer.apply(helper.getLevel(), data.snapshot(), data.actorExecution(), admitted);
+            helper.assertTrue(data.activateActor(residentId, lostLease, SourceGrayboxActorExecutionRuntime.HOLDER, gameTick),
+                    "the first body must become HOT before loaded-scene recovery can inspect it");
+            String key = SourceGrayboxMaterializer.entityKey(residentId, "RESIDENT");
+            resident(helper, position, residentId).discard();
+            admitted.remove(key);
+            var hot = data.actorExecution().actor(residentId).orElseThrow();
+            helper.assertTrue(materializer.actorEntity(helper.getLevel(), admitted, hot) == null,
+                    "the recovery test must observe no exact body, not merely a stale map entry");
+            helper.assertTrue(SourceGrayboxPresentationLedger.get(helper.getLevel()).entityClaimed(key),
+                    "the missing HOT body starts with its old duplicate-prevention reservation");
+            helper.assertTrue(new SourceGrayboxActorExecutionRuntime().reconcileLoadedActors(helper.getLevel(), data, materializer, admitted),
+                    "a loaded absence must change durable executor state rather than leave HOT forever");
+            helper.assertValueEqual(data.actorExecution().actor(residentId).orElseThrow().mode(), ReferenceGrayboxActorExecutionState.Mode.COLD,
+                    "the phantom HOT lease must settle to source custody");
+            helper.assertTrue(!SourceGrayboxPresentationLedger.get(helper.getLevel()).entityClaimed(key),
+                    "a missing body must release its old reservation before any later admission");
+            helper.assertValueEqual(residents(helper, position, residentId), 0,
+                    "recovery must not create a replacement in the same reconciliation turn");
+
+            long nextTick = data.actorExecutionGameTime(helper.getLevel().getGameTime());
+            helper.assertTrue(data.prepareActor(residentId, SourceGrayboxActorExecutionRuntime.HOLDER, nextTick),
+                    "a later HOT request must receive a fresh lease after the missing body settled");
+            helper.assertTrue(!lostLease.equals(data.actorExecution().actor(residentId).orElseThrow().leaseId()),
+                    "the replacement body must not inherit the lost lease identity");
+            materializer.apply(helper.getLevel(), data.snapshot(), data.actorExecution(), admitted);
+            helper.assertValueEqual(residents(helper, position, residentId), 1,
+                    "the next explicit admission must restore exactly one body after the old claim was released");
+        } catch (RuntimeException | Error failure) {
+            border.restore();
+            throw failure;
+        }
+        border.restore();
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void runtimeRetirementReleasesTheExactReservationAfterAcknowledgement(GameTestHelper helper) {
         SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);

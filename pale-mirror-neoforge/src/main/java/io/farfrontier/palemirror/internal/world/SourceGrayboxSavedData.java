@@ -184,6 +184,12 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
         return changed;
     }
 
+    boolean settleMissingHotActor(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.settleMissingHotActor(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
     boolean captureActor(String id, String leaseId, String holder, int xSixteenths, int zSixteenths, long gameTick) {
         boolean changed = actorExecution.capture(id, leaseId, holder, xSixteenths, zSixteenths, gameTick);
         if (changed) setDirty();

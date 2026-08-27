@@ -80,6 +80,31 @@ class ReferenceGrayboxActorExecutionStateTest {
     }
 
     @Test
+    void missingHotBodyReleasesOnlyItsOwnLeaseForOneFreshLaterAdmission() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        String actor = snapshot.residents().getFirst().id();
+        assertTrue(state.prepare(actor, "materializer:chunk:0_0", 1L));
+        String lostLease = state.actor(actor).orElseThrow().leaseId();
+        assertTrue(state.activate(actor, lostLease, "materializer:chunk:0_0", 2L));
+        assertTrue(state.capture(actor, lostLease, "materializer:chunk:0_0", 321, -77, 3L));
+
+        assertFalse(state.settleMissingHotActor(actor, lostLease, "materializer:other", 4L),
+                "a foreign executor may not settle an observed missing body");
+        assertTrue(state.settleMissingHotActor(actor, lostLease, "materializer:chunk:0_0", 4L));
+        var cold = state.actor(actor).orElseThrow();
+        assertEquals(ReferenceGrayboxActorExecutionState.Mode.COLD, cold.mode());
+        assertEquals(321, cold.actualXSixteenths());
+        assertEquals(-77, cold.actualZSixteenths());
+        assertTrue(cold.leaseId().isEmpty(), "the absent body must not retain a phantom HOT lease");
+
+        assertTrue(state.prepare(actor, "materializer:chunk:0_0", 5L),
+                "only a later demand may reserve the replacement body");
+        assertFalse(lostLease.equals(state.actor(actor).orElseThrow().leaseId()),
+                "a missing-body recovery must never reuse the lost body's lease");
+    }
+
+    @Test
     void blockedPreparationReleasesItsLeaseWithoutInventingAPhysicalBody() {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
         ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);

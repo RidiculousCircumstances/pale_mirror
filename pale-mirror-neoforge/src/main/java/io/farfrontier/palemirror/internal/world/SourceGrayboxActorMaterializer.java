@@ -61,6 +61,18 @@ final class SourceGrayboxActorMaterializer {
         };
     }
 
+    /**
+     * Distinguishes a truly absent body from one whose identity, kind or
+     * semantic revision is invalid. The latter is a fail-closed integrity
+     * conflict and must never authorize a replacement body.
+     */
+    static boolean hasObservedActorBody(ServerLevel level, Map<String, Entity> admitted,
+                                        ReferenceGrayboxActorExecutionState.ActorState actor) {
+        String kind = actor.kind().name();
+        return SourceGrayboxMaterializer.existingEntity(level, admitted, actor.id(), kind,
+                SourceGrayboxMaterializer.uuid(kind.equals("RESIDENT") ? "resident" : "bioform", actor.id())) != null;
+    }
+
     private static void ensureResident(ServerLevel level, SourceGrayboxPresentationLedger ledger, String observationRevision,
                                        String semanticRevision,
                                        ReferenceGrayboxSnapshot.Resident resident, ReferenceGrayboxActorExecutionState.ActorState actor,

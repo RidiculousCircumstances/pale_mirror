@@ -361,8 +361,8 @@ final class SourceGrayboxMaterializer {
         if (admitted != null && !admitted.isRemoved()) return admitted;
         admittedEntities.remove(key);
         Entity indexed = level.getEntity(expectedUuid);
-        if (indexed != null) admittedEntities.put(key, indexed);
-        return indexed;
+        if (indexed != null && !indexed.isRemoved()) admittedEntities.put(key, indexed);
+        return indexed != null && !indexed.isRemoved() ? indexed : null;
     }
 
     private static void retireEntities(ServerLevel level, ReferenceGrayboxLayout.Bounds bounds, Set<String> active,

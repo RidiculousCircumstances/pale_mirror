@@ -100,6 +100,7 @@ final class SourceGrayboxActorExecutionRuntime {
                     }
                 }
                 case HOT -> {
+                    String key = SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind());
                     if (entity == null && SourceGrayboxActorMaterializer.isActorObstructed(presentation, actor)) {
                         // The materializer removed the body in the same server
                         // turn in which it found no collision-free recovery
@@ -107,6 +108,18 @@ final class SourceGrayboxActorExecutionRuntime {
                         // obstruction is the only reason a later HOT demand
                         // may retry, never a duplicate body.
                         changed |= data.deferBlockedHotActor(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    } else if (entity == null && level.hasChunkAt(position)
+                            && !SourceGrayboxActorMaterializer.hasObservedActorBody(level, admittedEntities, actor)) {
+                        // A loaded scene has no exact body at all. This is not
+                        // a death (that reaches the source through the typed
+                        // observation boundary), nor a foreign/invalid body
+                        // (which must remain fail-closed). Release precisely
+                        // this phantom HOT lease so a later admission can use
+                        // a new UUID-safe lease rather than preserve an
+                        // invisible actor forever.
+                        boolean settled = data.settleMissingHotActor(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                        if (settled) presentation.releaseEntity(key);
+                        changed |= settled;
                     } else if (entity != null && (recoveredThisPublication || gameTick % CAPTURE_INTERVAL_TICKS == 0L)) {
                         changed |= data.captureActor(actor.id(), actor.leaseId(), HOLDER, sixteenths(entity.getX()),
                                 sixteenths(entity.getZ()), gameTick);
