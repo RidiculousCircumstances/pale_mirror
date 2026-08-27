@@ -78,6 +78,7 @@ public final class SourceGrayboxMaterializerGameTests {
                 "an unsupported structural perturbation must remain visibly conflicted, never be silently repaired");
         helper.succeed();
     }
+
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void interactionSlotCarriesAnExactRemainingShareAndStaysConsumed(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
@@ -456,7 +457,6 @@ public final class SourceGrayboxMaterializerGameTests {
                         link.integrity(), 2, slots, link.colour())),
                 List.of(), List.of(), List.of());
     }
-
     static ReferenceGrayboxSnapshot routeFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
         ReferenceGrayboxLayout.Point start = new ReferenceGrayboxLayout.Point(anchor.getX() + 4, anchor.getZ() + 4);
         ReferenceGrayboxLayout.Point end = new ReferenceGrayboxLayout.Point(anchor.getX() + 44, anchor.getZ() + 4);
