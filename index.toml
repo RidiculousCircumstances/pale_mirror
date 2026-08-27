@@ -409,6 +409,10 @@ file = "docs/expedition-system.md"
 hash = "463a83f786b5f652652b5b0b8503e64d312e3f108828d9527ea897a44a524cb7"
 
 [[files]]
+file = "docs/graybox-runtime-profile.md"
+hash = "bb2b066fa6fa1621d32b5b29d15c67bf46bb60e97bea71f672ccd1452ddb4779"
+
+[[files]]
 file = "docs/mod-compatibility.md"
 hash = "0bc7aa8a015d89599ab27221860d5aaf077118d12b496c058a220fa06329fe36"
 
@@ -777,6 +781,10 @@ hash = "db79eecd0e6243230201566ecc677cc330b1976414a91aeb6fef5fd1cda04a0e"
 [[files]]
 file = "scripts/server-smoke-test.sh"
 hash = "1ba7237c674a925e707b8ad7032fe51ea14accedae568e39be083f4986a088a5"
+
+[[files]]
+file = "scripts/set-graybox-runtime-profile.sh"
+hash = "0425b3cbd067f8127033b2c348b1aaaeea4541ebfc35a7b3076220d7cbe10f86"
 
 [[files]]
 file = "scripts/set-server-performance-profile.sh"
