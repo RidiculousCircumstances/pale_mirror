@@ -193,11 +193,9 @@ public final class SourceGrayboxRuntime {
     }
 
     /**
-     * Makes an unexpected departure of an exact physical executor observable
-     * at the Minecraft boundary. The actor coordinator remains the only
-     * authority which changes HOT/COLD custody on its cadence; this callback
-     * removes only transient admission memory and emits the invariant breach
-     * with enough identity to correlate it to the persisted lease.
+     * Separates an expected serialized unload from an unexpected loss of an
+     * exact HOT executor. The execution runtime owns the durable hand-off;
+     * this Minecraft callback only supplies the physical departure evidence.
      */
     public void observeEntityLeave(ServerLevel level, Entity entity) {
         if (!data.activated() || level != grayboxLevel()) return;
@@ -208,6 +206,15 @@ public final class SourceGrayboxRuntime {
                     && actor.mode() != io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.Mode.HOT) return;
             String key = SourceGrayboxMaterializer.entityKey(managed.id(), managed.kind());
             admittedEntities.remove(key, entity);
+            net.minecraft.core.BlockPos position = new net.minecraft.core.BlockPos(
+                    Math.floorDiv(actor.actualXSixteenths(), io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.POSITION_SCALE),
+                    io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout.GROUND_Y + 1,
+                    Math.floorDiv(actor.actualZSixteenths(), io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.POSITION_SCALE));
+            SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(level);
+            if (actor.mode() == io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.Mode.HOT
+                    && !zone.hot(position) && !level.hasChunkAt(position)
+                    && SourceGrayboxActorExecutionRuntime.beginUnloadedHotDrain(data, actor, entity,
+                    data.actorExecutionGameTime(level.getGameTime()))) return;
             if (!unexpectedActorDepartureTraceCaptured) {
                 unexpectedActorDepartureTraceCaptured = true;
                 io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(

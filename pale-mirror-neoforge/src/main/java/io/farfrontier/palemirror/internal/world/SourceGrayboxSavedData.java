@@ -122,7 +122,6 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     static void assertHydratable(CompoundTag tag) {
         load(tag, null);
     }
-
     @Override public ReferenceGrayboxSnapshot snapshot() {
         if (cachedSnapshot == null) cachedSnapshot = simulation.snapshot();
         return cachedSnapshot;
@@ -143,7 +142,6 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
     boolean activated() { return activated; }
     SourceGrayboxClockProfile clockProfile() { return clockProfile; }
     long dayIntervalTicks() { return clockProfile.dayIntervalTicks(); }
-
     /**
      * A live rate change is an operator-visible calibration action. Rebase the
      * next boundary at the same server tick so ticks accumulated under the old
@@ -212,6 +210,12 @@ final class SourceGrayboxSavedData extends SavedData implements SourceGrayboxCom
 
     boolean beginActorDrain(String id, String leaseId, String holder, long gameTick) {
         boolean changed = actorExecution.beginDrain(id, leaseId, holder, gameTick);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    boolean resumeDrainingActorHot(String id, String leaseId, String holder, long gameTick) {
+        boolean changed = actorExecution.resumeDrainingHot(id, leaseId, holder, gameTick);
         if (changed) setDirty();
         return changed;
     }

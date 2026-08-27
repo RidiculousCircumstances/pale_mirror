@@ -166,6 +166,21 @@ public final class ReferenceGrayboxActorExecutionState {
         return true;
     }
 
+    /**
+     * Re-adopts the same serialized body when normal player demand returns
+     * before a DRAINING hand-off has physically completed.
+     *
+     * <p>This is deliberately not a new admission: the body still owns the
+     * exact persisted lease and must retain its UUID and captured position.
+     * A missing body remains a COLD recovery path instead.</p>
+     */
+    public boolean resumeDrainingHot(String id, String leaseId, String holder, long gameTick) {
+        ActorState prior = require(id);
+        if (prior.mode() != Mode.DRAINING || !prior.leaseId().equals(leaseId) || !prior.holder().equals(holder)) return false;
+        actors.put(id, prior.resumeHot(gameTick));
+        return true;
+    }
+
     /** Captures a real Minecraft position after movement/combat without exposing binary64 to the domain. */
     public boolean capture(String id, String leaseId, String holder, int xSixteenths, int zSixteenths, long gameTick) {
         ActorState prior = require(id);
@@ -387,6 +402,13 @@ public final class ReferenceGrayboxActorExecutionState {
         ActorState transition(Mode next, long gameTick) {
             return new ActorState(id, kind, next, sourceRevision, anchorXSixteenths, anchorZSixteenths,
                     actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, requireForward(gameTick), demandedAtGameTick,
+                    combatActionEpoch, nextCombatAtGameTick);
+        }
+
+        ActorState resumeHot(long gameTick) {
+            long tick = requireForward(gameTick);
+            return new ActorState(id, kind, Mode.HOT, sourceRevision, anchorXSixteenths, anchorZSixteenths,
+                    actualXSixteenths, actualZSixteenths, leaseEpoch, leaseId, holder, tick, tick,
                     combatActionEpoch, nextCombatAtGameTick);
         }
 

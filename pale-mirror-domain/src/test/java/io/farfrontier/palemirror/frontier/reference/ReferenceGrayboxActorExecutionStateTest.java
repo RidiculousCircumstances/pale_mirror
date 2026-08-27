@@ -80,6 +80,27 @@ class ReferenceGrayboxActorExecutionStateTest {
     }
 
     @Test
+    void drainingSerializedBodyResumesItsExactLeaseInsteadOfCreatingAReplacement() {
+        ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);
+        String actor = snapshot.residents().getFirst().id();
+        assertTrue(state.prepare(actor, "materializer:chunk:0_0", 1L));
+        String lease = state.actor(actor).orElseThrow().leaseId();
+        assertTrue(state.activate(actor, lease, "materializer:chunk:0_0", 2L));
+        assertTrue(state.capture(actor, lease, "materializer:chunk:0_0", 321, -77, 3L));
+        assertTrue(state.beginDrain(actor, lease, "materializer:chunk:0_0", 4L));
+
+        assertFalse(state.resumeDrainingHot(actor, lease, "materializer:other", 5L),
+                "a different executor may not adopt a serialized physical body");
+        assertTrue(state.resumeDrainingHot(actor, lease, "materializer:chunk:0_0", 5L));
+        var resumed = state.actor(actor).orElseThrow();
+        assertEquals(ReferenceGrayboxActorExecutionState.Mode.HOT, resumed.mode());
+        assertEquals(lease, resumed.leaseId(), "a return from chunk serialization is not a new admission");
+        assertEquals(321, resumed.actualXSixteenths());
+        assertEquals(-77, resumed.actualZSixteenths());
+    }
+
+    @Test
     void missingHotBodyReleasesOnlyItsOwnLeaseForOneFreshLaterAdmission() {
         ReferenceGrayboxSnapshot snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
         ReferenceGrayboxActorExecutionState state = ReferenceGrayboxActorExecutionState.bootstrap(snapshot);

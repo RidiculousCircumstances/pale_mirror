@@ -163,7 +163,16 @@ final class SourceGrayboxActorExecutionRuntime {
                     }
                 }
                 case DRAINING -> {
-                    if (!level.hasChunkAt(position) || !zone.safeToDrain(position)) continue;
+                    // Minecraft may serialize a body while its player-demanded
+                    // chunk unloads before this coordinator gets another turn.
+                    // If the player returns while that exact body is restored,
+                    // retain the old lease and resume it rather than discarding
+                    // the body then visibly creating a replacement.
+                    if (resumeDemandedDrainingBody(data, actor, entity, zone.hot(position), gameTick)) {
+                        changed = true;
+                        continue;
+                    }
+                    if (!zone.safeToDrain(position) || !level.hasChunkAt(position)) continue;
                     if (entity != null) {
                         data.captureActor(actor.id(), actor.leaseId(), HOLDER, sixteenths(entity.getX()), sixteenths(entity.getZ()), gameTick);
                         entity.discard();
@@ -187,6 +196,36 @@ final class SourceGrayboxActorExecutionRuntime {
             }
         }
         return changed;
+    }
+
+    /**
+     * Records a normal Minecraft chunk-unload hand-off without confusing it
+     * with a source death or a missing body. The caller has already proved
+     * that the actor is no longer in a player HOT zone and its chunk is gone;
+     * the reservation remains until that serialized body is either re-adopted
+     * or observed absent from a naturally loaded chunk.
+     */
+    static boolean beginUnloadedHotDrain(SourceGrayboxSavedData data,
+                                         ReferenceGrayboxActorExecutionState.ActorState actor,
+                                         Entity body, long gameTick) {
+        if (actor.mode() != ReferenceGrayboxActorExecutionState.Mode.HOT) return false;
+        if (!data.captureActor(actor.id(), actor.leaseId(), HOLDER, sixteenths(body.getX()), sixteenths(body.getZ()), gameTick)) return false;
+        return data.beginActorDrain(actor.id(), actor.leaseId(), HOLDER, gameTick);
+    }
+
+    /**
+     * Reuses the exact serialized body when player demand returns during the
+     * unload hand-off.  No presentation claim is released or reacquired: it
+     * is still the same physical incarnation, distinguished by its old lease
+     * and UUID.
+     */
+    static boolean resumeDemandedDrainingBody(SourceGrayboxSavedData data,
+                                              ReferenceGrayboxActorExecutionState.ActorState actor,
+                                              Entity body, boolean hotDemand, long gameTick) {
+        if (!hotDemand || body == null || actor.mode() != ReferenceGrayboxActorExecutionState.Mode.DRAINING) return false;
+        if (!data.resumeDrainingActorHot(actor.id(), actor.leaseId(), HOLDER, gameTick)) return false;
+        return data.captureActor(actor.id(), actor.leaseId(), HOLDER,
+                sixteenths(body.getX()), sixteenths(body.getZ()), gameTick);
     }
 
     private boolean recoverLoadedActors(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
