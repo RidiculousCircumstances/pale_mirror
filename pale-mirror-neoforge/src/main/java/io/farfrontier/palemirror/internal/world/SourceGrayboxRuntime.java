@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -262,6 +263,12 @@ public final class SourceGrayboxRuntime {
         return Optional.of(SourceGrayboxPlayerBriefing.acceptedEntityReceipt(before, data.snapshot(), result.entity()));
     }
 
+    /** Displays an accepted source effect without retaining an obscuring chat backlog. */
+    public void presentTransientReceipt(ServerPlayer player, String receipt) {
+        Objects.requireNonNull(player, "player");
+        player.displayClientMessage(net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(receipt)), true);
+    }
+
     /** Turns a declared physical interaction slot into the exact source fact it carries. */
     public boolean observeBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position, String causationId) {
         if (!data.activated() || level != grayboxLevel()) return false;
@@ -298,7 +305,7 @@ public final class SourceGrayboxRuntime {
                 ? SourceGrayboxPlayerBriefing.forIdentity(snapshot, interactionLabelId(claim), SourceGrayboxMaterializer.LABEL_KIND)
                 : SourceGrayboxPlayerBriefing.at(snapshot, position.getX(), position.getZ());
         return briefing.map(text -> {
-            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(text));
+            player.displayClientMessage(net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)), true);
             return true;
         }).orElse(false);
     }
@@ -310,7 +317,7 @@ public final class SourceGrayboxRuntime {
         String kind = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_KIND);
         if (id.isBlank() || kind.isBlank()) return false;
         return SourceGrayboxPlayerBriefing.forIdentity(data.snapshot(), id, kind).map(text -> {
-            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(text));
+            player.displayClientMessage(net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)), true);
             return true;
         }).orElse(false);
     }

@@ -42,6 +42,23 @@ public final class SourceGrayboxInteractionLabelGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void transientBriefingReplacesChatBacklogButRetainsTitleStateAndRisk(GameTestHelper helper) {
+        String detailed = "digestive pool hive organ #6\nState: vitality 100.00; biomass 334.10.\n"
+                + "Risk: living hive tissue supports infection, growth and hostile bioforms.\n"
+                + "Next: marked blocks are exact damage points; destroying one immediately reduces this organ's vitality.";
+        String overlay = SourceGrayboxTransientOverlay.from(detailed);
+        helper.assertValueEqual(overlay, "digestive pool hive organ #6\nState: vitality 100.00; biomass 334.10.\n"
+                        + "Risk: living hive tissue supports infection, growth and hostile bioforms.",
+                "a repeated click must replace the prior aid with its identity, current state and immediate consequence, not append a full chat transcript");
+        try {
+            SourceGrayboxTransientOverlay.from("\n \n");
+            helper.fail("an empty player briefing must fail visibly instead of erasing the current overlay");
+        } catch (IllegalArgumentException expected) {
+            helper.succeed();
+        }
+    }
+
     private static ReferenceGrayboxSnapshot withoutInteractions(ReferenceGrayboxSnapshot baseline) {
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
                 baseline.settlements(), baseline.facilities(), baseline.resourceSites(), baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(),

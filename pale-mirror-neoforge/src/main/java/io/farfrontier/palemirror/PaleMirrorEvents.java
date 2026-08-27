@@ -158,7 +158,7 @@ public final class PaleMirrorEvents {
             if (source.activated()) {
                 String actor = event.getSource().getEntity() == null ? "environment" : event.getSource().getEntity().getUUID().toString();
                 if (event.getSource().getEntity() instanceof ServerPlayer player) {
-                    source.observeEntityDeathWithReceipt(event.getEntity(), actor).ifPresent(message -> player.sendSystemMessage(Component.literal(message)));
+                    source.observeEntityDeathWithReceipt(event.getEntity(), actor).ifPresent(message -> source.presentTransientReceipt(player, message));
                 } else source.observeEntityDeath(event.getEntity(), actor);
                 return;
             }
@@ -216,7 +216,7 @@ public final class PaleMirrorEvents {
         if (!event.isCanceled() && event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
             SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
             if (source.activated()) source.observeBlockBreakWithReceipt(level, event.getPos(), "player:" + player.getUUID())
-                    .ifPresent(message -> player.sendSystemMessage(Component.literal(message)));
+                    .ifPresent(message -> source.presentTransientReceipt(player, message));
         }
     }
 
