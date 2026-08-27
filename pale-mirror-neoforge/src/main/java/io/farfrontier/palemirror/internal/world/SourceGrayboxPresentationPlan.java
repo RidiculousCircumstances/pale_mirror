@@ -40,12 +40,6 @@ final class SourceGrayboxPresentationPlan {
      */
     private static final int ROUTE_CORRIDOR_HALF_WIDTH = 1;
     private static final int ROUTE_WAYPOINT_INTERVAL = 24;
-    /** A three-block mast reads as infrastructure, not as a sector-value column. */
-    private static final int HIVE_SPIRE_WIDTH = 3;
-    /** The cap projects a deliberately broad, type-coloured hive silhouette. */
-    private static final int HIVE_CROWN_WIDTH = 9;
-    /** Neutral lamps make an organ legible through the flat world's night cycle. */
-    private static final int HIVE_SIGNAL_HEIGHT = 2;
     /** A visible tissue patch starts only once source tissue is no longer zero-level numerical noise. */
     private static final double INFECTION_TISSUE_MINIMUM = 0.01d;
     /** Four independent clumps make a six-by-six surface that grows without one damaged block freezing a whole cell. */
@@ -75,24 +69,7 @@ final class SourceGrayboxPresentationPlan {
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) {
             add(result, rectangle("hive-organ:" + organ.id(), "organ:" + organ.id(), "HIVE_ORGAN", snapshot.stateRevision(), organ.rectangle(), 2,
                     organ.colour()));
-            int spireHeight = hiveSpireHeight(organ.kind());
-            int spireX = organ.rectangle().centreX() - HIVE_SPIRE_WIDTH / 2;
-            int spireZ = organ.rectangle().centreZ() - HIVE_SPIRE_WIDTH / 2;
-            add(result, new Desired("hive-organ:" + organ.id() + ":spire", "organ:" + organ.id(), "HIVE_ORGAN_LANDMARK",
-                    snapshot.stateRevision(), spireX, SURFACE_Y + 2, spireZ, HIVE_SPIRE_WIDTH, HIVE_SPIRE_WIDTH, spireHeight,
-                    organ.colour()));
-            // The lamps do not encode a new simulation quantity: they only
-            // keep the coloured organ silhouette visible in the night cycle.
-            add(result, new Desired("hive-organ:" + organ.id() + ":signal", "organ:" + organ.id(), "HIVE_ORGAN_SIGNAL",
-                    snapshot.stateRevision(), spireX, SURFACE_Y + 2 + spireHeight, spireZ, HIVE_SPIRE_WIDTH, HIVE_SPIRE_WIDTH,
-                    HIVE_SIGNAL_HEIGHT, "hive.signal"));
-            // A broad cap plus a thick mast makes the organ read as hive
-            // infrastructure at a distance, rather than as a territorial
-            // metric tower. Its colour remains the organ kind's colour.
-            add(result, new Desired("hive-organ:" + organ.id() + ":crown", "organ:" + organ.id(), "HIVE_ORGAN_LANDMARK",
-                    snapshot.stateRevision(), organ.rectangle().centreX() - HIVE_CROWN_WIDTH / 2,
-                    SURFACE_Y + 2 + spireHeight + HIVE_SIGNAL_HEIGHT, organ.rectangle().centreZ() - HIVE_CROWN_WIDTH / 2,
-                    HIVE_CROWN_WIDTH, HIVE_CROWN_WIDTH, 1, organ.colour()));
+            SourceGrayboxInfrastructureGrammar.hiveLandmark(snapshot.stateRevision(), organ).forEach(item -> add(result, item));
         }
         for (ReferenceGrayboxSnapshot.Cargo cargo : snapshot.cargoes()) {
             add(result, rectangle("cargo-pallet:" + cargo.id(), cargo.id(), "CARGO", snapshot.stateRevision(), cargo.rectangle(), 1, cargo.colour()));
@@ -128,6 +105,13 @@ final class SourceGrayboxPresentationPlan {
                 ReferenceGrayboxLayout.Point slot = interaction.slots().get(index);
                 add(result, interactionSlot(interaction, index, snapshot.stateRevision(), slot));
             }
+        }
+        // A declared interaction slot is a source-owned causal boundary.  Add
+        // purely descriptive building volume after it, so a damaged/interactive
+        // slot remains at its canonical height and any colliding frame piece is
+        // moved by the existing visible-layer resolver instead.
+        for (ReferenceGrayboxSnapshot.Facility facility : snapshot.facilities()) {
+            SourceGrayboxInfrastructureGrammar.facilityFrame(snapshot.stateRevision(), facility).forEach(item -> add(result, item));
         }
         for (ReferenceGrayboxSnapshot.Activity activity : snapshot.activities()) {
             if (!activity.terminal()) addActivityScene(result, snapshot.stateRevision(), activity);
@@ -396,19 +380,6 @@ final class SourceGrayboxPresentationPlan {
         }
         if (value == 0.0d) return 0;
         return Math.min(SECTOR_METRIC_MAX_HEIGHT, Math.max(1, (int) Math.ceil(value / fullScale * SECTOR_METRIC_MAX_HEIGHT)));
-    }
-
-    /** Distinct block silhouettes make hive infrastructure recognizable before a player can read its label. */
-    private static int hiveSpireHeight(String kind) {
-        return switch (kind) {
-            case "core" -> 9;
-            case "sporulator" -> 8;
-            case "brood" -> 7;
-            case "synapse" -> 6;
-            case "digestive" -> 5;
-            case "harvester" -> 4;
-            default -> 5;
-        };
     }
 
     /**

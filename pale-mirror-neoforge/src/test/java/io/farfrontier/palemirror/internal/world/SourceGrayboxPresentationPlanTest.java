@@ -38,14 +38,18 @@ class SourceGrayboxPresentationPlanTest {
             SourceGrayboxPresentationPlan.Desired crown = desired.get("hive-organ:" + organ.id() + ":crown");
             SourceGrayboxPresentationPlan.Desired spire = desired.get("hive-organ:" + organ.id() + ":spire");
             SourceGrayboxPresentationPlan.Desired signal = desired.get("hive-organ:" + organ.id() + ":signal");
-            assertTrue(crown != null && crown.width() == 9 && crown.depth() == 9 && crown.height() == 1,
-                    "each hive organ must retain a broad, bounded distant-recognition crown");
-            assertTrue(spire != null && spire.width() == 3 && spire.depth() == 3,
-                    "each hive landmark must have a thick enough mast to differ from a one-block metric tower");
-            assertTrue(signal != null && signal.height() == 2 && signal.y() == spire.y() + spire.height(),
-                    "each hive mast must carry a bounded night-visible signal immediately above its coloured body");
-            assertTrue(crown.y() == signal.y() + signal.height(),
-                    "the hive crown must sit above its visible signal, never hidden inside its base");
+            assertTrue(crown != null && crown.width() == 7 && crown.depth() == 7 && crown.height() == 1,
+                    "each hive organ must retain a bounded low crown above its rooted core");
+            assertTrue(spire != null && spire.width() == 4 && spire.depth() == 4 && spire.height() == 5,
+                    "each hive landmark must have a short broad core rather than a map-value tower");
+            assertTrue(signal != null && signal.height() == 2 && signal.y() == crown.y() + crown.height(),
+                    "each hive core must carry a bounded night-visible signal immediately above its crown");
+            assertTrue(crown.y() == spire.y() + spire.height(),
+                    "the hive crown must sit directly above its coloured core");
+            long roots = desired.values().stream().filter(item -> item.subjectId().equals("organ:" + organ.id())
+                    && item.kind().equals("HIVE_ORGAN_ROOT")).count();
+            assertEquals(4L, roots,
+                    "each organ must expose four bounded source-coloured roots before a player can read its board");
         });
         assertTrue(SourceGrayboxLabelLayout.labelledSectors(snapshot).size() <= 24,
                 "a dense V2 map must never create an unbounded cloud of nameplates");
@@ -90,5 +94,33 @@ class SourceGrayboxPresentationPlanTest {
         }
         assertTrue(desired.size() <= SourceGrayboxPresentationPlan.MAX_CLAIMS,
                 "the brighter route grammar must stay inside the persisted presentation bound");
+    }
+
+    @Test
+    void facilitiesUseUniformOpenFramesWithoutCoveringCanonicalWarehouseShelves() {
+        var snapshot = ReferenceGrayboxSimulation.create(42L).snapshot();
+        var desired = SourceGrayboxPresentationPlan.from(snapshot);
+
+        snapshot.facilities().forEach(facility -> {
+            String id = "facility:" + facility.id();
+            if (facility.kind().equals("fortification")) {
+                long corners = desired.values().stream().filter(item -> item.id().startsWith(id + ":corner:")).count();
+                assertEquals(4L, corners, "a fortification must expose four bounded corner towers instead of a filled square");
+                return;
+            }
+            for (String side : List.of("north", "south", "west", "east")) {
+                SourceGrayboxPresentationPlan.Desired frame = desired.get(id + ":frame:" + side);
+                assertTrue(frame != null && frame.kind().equals("FACILITY_FRAME") && frame.subjectId().equals(facility.id())
+                                && frame.interactionId().isEmpty(),
+                        "a facility frame must remain a non-causal visual derivative of its exact facility");
+            }
+            SourceGrayboxPresentationPlan.Desired roof = desired.get(id + ":frame:roof");
+            if (facility.kind().equals("warehouse")) {
+                assertEquals(null, roof, "warehouse barrels are the physical stock boundary and must remain open to the player");
+            } else {
+                assertTrue(roof != null && roof.height() == 1,
+                        "every non-warehouse functional building must gain one shallow readable graybox roof");
+            }
+        });
     }
 }

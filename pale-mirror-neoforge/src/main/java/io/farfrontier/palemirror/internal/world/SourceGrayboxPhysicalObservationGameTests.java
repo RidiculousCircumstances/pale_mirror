@@ -38,14 +38,18 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    // Each case publishes through the level-wide durable presentation ledger.
+    // Keep those publications in separate GameTest batches: the runner starts
+    // one batch's independent fixtures concurrently, and concurrent complete
+    // snapshots are deliberately mutually exclusive in production.
+    @GameTest(batch = "pm-source-graybox-observation-route", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void brokenRouteSlotUpdatesCanonicalCapacityAndItsReadableRemainingFact(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 56);
         SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
         data.activate(0L);
         SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
-        ReferenceGrayboxSnapshot before = routePresentation(anchor, data.snapshot());
+        ReferenceGrayboxSnapshot before = routePresentation(anchor, data.snapshot(), "route-break");
         materializer.apply(helper.getLevel(), before);
 
         ReferenceGrayboxSnapshot.Interaction interaction = before.interactions().getFirst();
@@ -59,7 +63,7 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         helper.assertTrue(SourceGrayboxBlockObservation.observe(data, materializer, helper.getLevel(), position, "gametest:route-slot"),
                 "a declared elevated slot must be handled as a typed source observation");
         helper.getLevel().setBlock(position, Blocks.AIR.defaultBlockState(), 3);
-        ReferenceGrayboxSnapshot after = routePresentation(anchor, data.snapshot());
+        ReferenceGrayboxSnapshot after = routePresentation(anchor, data.snapshot(), "route-break");
         materializer.apply(helper.getLevel(), after);
 
         ReferenceGrayboxSnapshot.Interaction remaining = after.interactions().getFirst();
@@ -98,14 +102,14 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    @GameTest(batch = "pm-source-graybox-observation-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void externalExplosionPersistsThenReconcilesTheActualDestroyedRouteSlot(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 56);
         SourceGrayboxSavedData source = SourceGrayboxSavedData.fresh(42L);
         source.activate(0L);
         SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
-        ReferenceGrayboxSnapshot presentation = routePresentation(anchor, source.snapshot());
+        ReferenceGrayboxSnapshot presentation = routePresentation(anchor, source.snapshot(), "external-explosion");
         materializer.apply(helper.getLevel(), presentation);
         ReferenceGrayboxSnapshot.Interaction interaction = presentation.interactions().getFirst();
         ReferenceGrayboxLayout.Point slot = interaction.slots().getFirst();
@@ -138,7 +142,7 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    @GameTest(batch = "pm-source-graybox-observation-entity", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void onlyTheProjectedEntityIdentityCanReportAnExactResidentDeath(GameTestHelper helper) {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
@@ -171,7 +175,7 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         helper.succeed();
     }
 
-    private static ReferenceGrayboxSnapshot routePresentation(BlockPos anchor, ReferenceGrayboxSnapshot source) {
+    private static ReferenceGrayboxSnapshot routePresentation(BlockPos anchor, ReferenceGrayboxSnapshot source, String fixtureId) {
         ReferenceGrayboxSnapshot.Route canonical = source.routes().stream()
                 .filter(route -> route.capacity() > 0.0d).findFirst().orElseThrow();
         ReferenceGrayboxLayout.Point start = new ReferenceGrayboxLayout.Point(anchor.getX() + 4, anchor.getZ() + 4);
@@ -180,7 +184,7 @@ public final class SourceGrayboxPhysicalObservationGameTests {
                 start, end, canonical.capacity(), canonical.risk(), canonical.infection(), canonical.quarantined(), canonical.disrupted(),
                 canonical.colour());
         List<ReferenceGrayboxLayout.Point> slots = ReferenceGrayboxLayout.routeSlots(start, end);
-        ReferenceGrayboxSnapshot.Interaction interaction = new ReferenceGrayboxSnapshot.Interaction("route:" + route.id(), route.id(),
+        ReferenceGrayboxSnapshot.Interaction interaction = new ReferenceGrayboxSnapshot.Interaction("route:" + route.id() + ":" + fixtureId, route.id(),
                 "route_damaged", route.capacity(), 3, slots, route.colour());
         return new ReferenceGrayboxSnapshot(source.day(), source.profileId(), source.stateRevision(), source.bounds(), source.cells(),
                 List.of(), List.of(), List.of(), List.of(route), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
