@@ -50,7 +50,7 @@
 
 ### Now
 - The retained disposable `frontier-graybox-10-y63-r3-no-structures` server is running on port 25565 with the deployed Pale Mirror JAR SHA-512 `cdd650cf…e29f4`; exactly one PMAudit client is connected at 3840×2400 on real `DISPLAY=:0`.
-- The active runtime has `spawn-animals=true`, `spawn-monsters=true`, and `spawn-npcs=true`. This is intentional: vanilla's global NPC switch would otherwise remove canonical Villagers. The profile script and its documentation are changed but not committed.
+- The active runtime has `spawn-animals=true`, `spawn-monsters=true`, and `spawn-npcs=true`. This is intentional: vanilla's global NPC switch would otherwise remove canonical Villagers. The separate verified commits are Pale Mirror `914dbcc` (HOT actor recovery) and outer-pack `e0d6fc2` (runtime profile).
 - Evidence is `build/visual-audits/20260827T1408Z-disappearance-trace/final-npc-lifetime*.png`, `admission-probe-exact-immediate.png`, and `/home/rd/far-frontier-server/logs/graybox-final-npc-lifetime-20260827T0957Z.log`. The first proves continuous source-resident lifetime; the latter clean probe reports `No entity was found` for an explicitly summoned cow within four blocks of the real graybox player, proving the EntityJoin custody boundary rather than relying on the vanilla success message.
 
 ### Next
