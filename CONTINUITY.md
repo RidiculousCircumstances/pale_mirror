@@ -42,15 +42,16 @@
 - Wave 1 now has explicit payload registries, versioned command/event/transaction codecs, built-in schedule-effect codecs and fail-closed deterministic transaction replay. Focused replay tests and the critical Gradle gate, including 168 GameTests, pass.
 - The Wave 1 review tightened event-time causality: a command is accepted only at the engine's current `SimInstant`, so retained history cannot acquire a backdated event that replay would reject.
 - A fresh-JVM fixture now serializes the same command/schedule transcript twice and proves byte-identical event and checkpoint output across independent Java processes.
+- `9c28c1f` records the cross-JVM deterministic replay proof. Wave 1 is complete at automated kernel-evidence level; it is not gameplay, persistence-host or product validation evidence.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
-- Wave 1 is in final critical verification and commit review; Wave 2 starts only if the resulting evidence remains complete.
+- Wave 2 is starting with a v3-only persistence contract: recovery image, WAL transaction records, snapshot integrity and a NeoForge storage host, before fresh-world gameplay aggregates.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Start Wave 2 v3-only WAL/snapshot persistence and fresh-world bootstrap after recording the Wave 1 exit evidence; no gameplay aggregate or NeoForge v3 runtime path starts before that boundary.
+- Implement checksummed pure snapshot/WAL schemas and fault-injection recovery tests, then add the v3-only NeoForge storage host and exact bootstrap ownership.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.

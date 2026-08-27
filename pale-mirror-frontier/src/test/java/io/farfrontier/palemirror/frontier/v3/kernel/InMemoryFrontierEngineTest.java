@@ -165,6 +165,20 @@ class InMemoryFrontierEngineTest {
         assertEquals(new SimInstant(5L), engine.projection(ProjectionQuery.summary()).instant());
     }
 
+    @Test
+    void checkpointIncludesBoundedScheduleAndCommandReceiptState() {
+        ScheduledAction action = scheduled("schedule:checkpoint", "settlement:a", 8L, 1);
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(action), false);
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:checkpoint", Revision.ZERO, 2)));
+
+        io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = engine.checkpoint();
+
+        assertEquals(List.of(action), checkpoint.schedules());
+        assertEquals(1, checkpoint.receipts().size());
+        assertEquals("command:checkpoint", checkpoint.receipts().getFirst().commandId().value());
+        assertEquals("transaction:revision-1", checkpoint.receipts().getFirst().transactionId().value());
+    }
+
     private static InMemoryFrontierEngine<Counter, CounterProjection> engine(
             List<ScheduledAction> schedules, boolean failOnNine
     ) {

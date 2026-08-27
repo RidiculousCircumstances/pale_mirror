@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandRejection;
+import io.farfrontier.palemirror.frontier.v3.api.CommandReceipt;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.EngineStatus;
 import io.farfrontier.palemirror.frontier.v3.api.EventId;
@@ -41,7 +42,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final ProjectionMapper<S, P> projectionMapper;
     private final EngineLimits limits;
     private ScheduledActionQueue schedules = new ScheduledActionQueue();
-    private final Map<CommandId, SimInstant> receipts = new LinkedHashMap<>();
+    private final Map<CommandId, CommandReceipt> receipts = new LinkedHashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
     private S state;
     private Revision revision = Revision.ZERO;
@@ -108,7 +109,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             }
             CommandPlan.Accepted accepted = (CommandPlan.Accepted) plan;
             TransactionId transactionId = commit(command.causes(), command.submittedAt(), accepted.events());
-            receipts.put(command.id(), command.submittedAt());
+            receipts.put(command.id(), new CommandReceipt(command.id(), command.submittedAt(), transactionId, revision));
             return new CommandResult.Accepted(command.id(), transactionId, revision);
         } catch (RuntimeException error) {
             return quarantine(command, error);
@@ -165,7 +166,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     @Override
     public CheckpointImage checkpoint() {
         requireOwnerThread();
-        return new CheckpointImage(worldId, revision, instant, stateCodec.encode(state));
+        return new CheckpointImage(worldId, revision, instant, stateCodec.encode(state), schedules.snapshot(), List.copyOf(receipts.values()));
     }
 
     @Override
@@ -229,7 +230,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
 
     private void pruneReceipts() {
         long oldest = safeOldestReceiptInstant();
-        receipts.entrySet().removeIf(entry -> entry.getValue().ticks() < oldest);
+        receipts.entrySet().removeIf(entry -> entry.getValue().submittedAt().ticks() < oldest);
     }
 
     private long safeOldestReceiptInstant() {
