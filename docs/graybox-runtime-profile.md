@@ -19,12 +19,13 @@ the non-PM sources of creatures, infection, events or time-line authority. No
 separate Blood Moon JAR is installed in the current runtime; this profile covers
 the actual competing sources instead.
 
-The server application also sets `spawn-animals`, `spawn-monsters` and
-`spawn-npcs` to `false`. PM materializes its residents and bioforms explicitly,
-so those properties do not suppress PM actors. Existing third-party entities
-are not deleted: their removal would be an untyped simulation mutation. They
-are allowed to despawn naturally or are handled through a separately auditable
-operator action.
+The server application keeps `spawn-animals`, `spawn-monsters` and `spawn-npcs`
+enabled. These server properties are not a graybox isolation mechanism:
+vanilla discards existing Villagers when `spawn-npcs=false`, which would also
+delete PM residents. Instead, `SourceGrayboxEntityAdmission` rejects every
+non-PM `Mob` at the entity-join boundary of the source-graybox dimension. This
+keeps canonical residents and bioforms alive under normal Minecraft lifetime
+rules while allowing ordinary world behavior outside that test dimension.
 
 The profile does not remove Pale Mirror, Pale Mirror Visuals, Create, player
 items, rendering/performance mods or inert dependency libraries. In particular,

@@ -185,12 +185,16 @@ snapshot_server_properties() {
   done
 }
 
-disable_server_spawns() {
+enable_server_spawns() {
   [[ -f "$properties" ]] || return 0
   snapshot_server_properties
   local key
-  for key in spawn-animals spawn-monsters spawn-npcs; do upsert_property "$key" false; done
-  printf 'Disabled natural animal, monster and NPC spawning for this server runtime.\n'
+  # These flags do more than prevent natural creation: vanilla discards an
+  # already materialized Villager while spawn-npcs=false.  PM owns ambient
+  # exclusion at the graybox EntityJoinLevel boundary instead, so canonical
+  # residents and bioforms retain normal entity lifetime semantics.
+  for key in spawn-animals spawn-monsters spawn-npcs; do upsert_property "$key" true; done
+  printf 'Enabled vanilla spawn flags; Pale Mirror owns non-source-mob exclusion inside the graybox dimension.\n'
 }
 
 restore_server_spawns() {
@@ -216,5 +220,5 @@ fi
 for jar in "${competing_jars[@]}"; do disable_jar "$jar"; done
 for jar in "${required_jars[@]}"; do ensure_required_jar "$jar"; done
 for jar in "${pinned_source_jars[@]}"; do ensure_pinned_source_jar "$jar"; done
-disable_server_spawns
+enable_server_spawns
 printf 'Graybox runtime profile is active for %s. Restart this runtime before use.\n' "$runtime"
