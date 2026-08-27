@@ -1,0 +1,67 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.DecisionKey;
+import io.farfrontier.palemirror.frontier.v3.kernel.KeyedRandom;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/** Deterministic generator for the single supported fresh-world Frontier v3 profile. */
+public final class FrontierBootstrapper {
+    private static final WorldBounds BOUNDS = new WorldBounds(-512, -512, 1024, 1024);
+    private static final String[] NAMES = {
+            "Northwatch", "Stonefield", "Dawnbridge", "Redwillow",
+            "Ashcross", "Hearthvale", "Clearwater", "Ironmeadow",
+            "Southgate", "Mossbrook", "Westhaven", "Sunreach"
+    };
+    private static final int[][] ANCHORS = {
+            {-360, -340}, {-120, -340}, {120, -340}, {360, -340},
+            {-360, 0}, {-120, 0}, {120, 0}, {360, 0},
+            {-360, 340}, {-120, 340}, {120, 340}, {360, 340}
+    };
+
+    private FrontierBootstrapper() { }
+
+    public static FrontierBootstrap create(WorldId worldId, long seed) {
+        List<Settlement> settlements = new ArrayList<>(12);
+        for (int index = 0; index < NAMES.length; index++) settlements.add(settlement(seed, index));
+        SubjectId hiveId = new SubjectId("hive:frontier");
+        List<HiveNest> nests = List.of(
+                new HiveNest(new SubjectId("nest:seed-west"), hiveId, new BlockPosition(-420, 64, 420)),
+                new HiveNest(new SubjectId("nest:seed-east"), hiveId, new BlockPosition(420, 64, 420)));
+        List<Bioform> bioforms = new ArrayList<>();
+        for (int nestIndex = 0; nestIndex < nests.size(); nestIndex++) {
+            HiveNest nest = nests.get(nestIndex);
+            for (int ordinal = 0; ordinal < 24; ordinal++) {
+                BioformRole role = BioformRole.values()[ordinal % BioformRole.values().length];
+                int x = (ordinal % 6 - 3) * 3;
+                int z = (ordinal / 6 - 2) * 3;
+                bioforms.add(new Bioform(new SubjectId("bioform:" + (nestIndex == 0 ? "west-" : "east-") + ordinal), hiveId,
+                        nest.id(), role, nest.anchor().offset(x, 0, z)));
+            }
+        }
+        return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, bioforms));
+    }
+
+    private static Settlement settlement(long seed, int index) {
+        SubjectId settlementId = new SubjectId("settlement:" + (index + 1));
+        BlockPosition anchor = new BlockPosition(ANCHORS[index][0], 64, ANCHORS[index][1]);
+        int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
+        List<Resident> people = new ArrayList<>(residents);
+        for (int ordinal = 0; ordinal < residents; ordinal++) {
+            people.add(new Resident(new SubjectId("resident:" + (index + 1) + "-" + (ordinal + 1)), settlementId,
+                    ResidentRole.values()[ordinal % ResidentRole.values().length], anchor.offset((ordinal % 8 - 4) * 2, 0, (ordinal / 8 - 2) * 2)));
+        }
+        List<SettlementStructure> structures = new ArrayList<>();
+        int[][] offsets = {{0, 0}, {-20, -12}, {20, -12}, {-20, 14}, {20, 14}, {0, 22}};
+        for (StructureKind kind : StructureKind.values()) {
+            int[] offset = offsets[kind.ordinal()];
+            structures.add(new SettlementStructure(new SubjectId("structure:" + (index + 1) + "-" + kind.name().toLowerCase(Locale.ROOT)),
+                    settlementId, kind, anchor.offset(offset[0], 0, offset[1])));
+        }
+        return new Settlement(settlementId, NAMES[index], anchor, people, structures);
+    }
+}
