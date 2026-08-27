@@ -21,6 +21,10 @@ final class SourceGrayboxAuditViews {
     private static final int OUTER_STANDOFF = 14;
     private static final int ROUTE_STANDOFF = 12;
     private static final int LOCAL_STANDOFF = 12;
+    // The board and the physical consequence must share one player-eye frame.
+    // This remains inside the 48-block effect-board range while avoiding the
+    // steep sky-facing pitch required by the ordinary 12-block local view.
+    private static final int EFFECT_STANDOFF = 24;
     // Current effect boards deliberately clear the materialized consequence
     // rather than hiding in it.  A player-eye audit must therefore frame the
     // consequence and its board, not keep its pitch at bare ground level.
@@ -144,8 +148,8 @@ final class SourceGrayboxAuditViews {
     }
 
     private static View effect(ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxSnapshot.Effect effect) {
-        Point camera = bounded(snapshot.bounds(), effect.position().x() + LOCAL_STANDOFF,
-                effect.position().z() + LOCAL_STANDOFF);
+        Point camera = bounded(snapshot.bounds(), effect.position().x() + EFFECT_STANDOFF,
+                effect.position().z() + EFFECT_STANDOFF);
         return view("graybox/effect/" + effect.id() + "/scene", "GRAYBOX_EFFECT", "effect:" + effect.id(),
                 snapshot.bounds(), camera, effect.position().x(), effect.position().z(), EFFECT_FOCUS_HEIGHT);
     }
