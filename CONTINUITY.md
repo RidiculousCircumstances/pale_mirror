@@ -44,14 +44,13 @@
 - A matched COLD re-entry route at settlement 11 (`-56,89,72`, then four points at Y=73/radius 12) recorded no `SourceGrayboxLabelPositions` samples, versus 291 in the prior JFR, and 6 `claims()/valuesToArray` samples versus 270. One-second server-tick mean/max was 1.830/5.671 ms versus 3.194/59.360 ms; neither repeat emitted `Can't keep up`.
 
 ### Now
-- Verified artifact SHA-512 `93c043dd47c32913fdbc29ab653ed72572ccb21319a8ffe92b6017281e58b6f86ba19237d6149c6ab00cba8b97b5db6ffe9662433b726d79a5b94a56ff094c6d` is hosted, installed and running in the disposable server PID 2305725 on port 25565; `frontier-graybox-10-y63-r3-no-structures` was retained.
+- Verified commit `d5ac1ef` artifact SHA-512 `91ad611e300fb6f88e71f4efe4c2787b8bfea6a66a3ab949ae8cb7b62a6ad1513dfdc516b009f6501393ad8a669f4641b65048496d43c499853a2bc4fd3e6914` is hosted, checksum-pinned installed and running in the disposable server PID 2400614 on port 25565; `frontier-graybox-10-y63-r3-no-structures` was retained.
 - Real-client visual evidence is at `build/visual-audits/20260827T010309Z-8_65_8/` and the close settlement-11 pass `build/visual-audits/20260827T010942Z--56_65_72/`. The close pass confirms local boards, color-coded routes and distinguishable purple tissue/pink signal accents; distant board clutter and raw graybox forms remain diagnostic presentation, not a product-art acceptance.
-- The current performance evidence is `build/profiles/graybox-entry-20260827T011858Z.jfr` and the matched repeat `build/profiles/graybox-entry-matched-after-20260827T013855Z.jfr`; the post-change screenshots are `build/visual-audits/20260827T013855Z--56_65_72/`. The verified short-range-safe index is ready to commit and deploy; no audit client is running.
+- The current performance evidence is `build/profiles/graybox-entry-20260827T011858Z.jfr` and the matched repeat `build/profiles/graybox-entry-matched-after-20260827T013855Z.jfr`; the post-change screenshots are `build/visual-audits/20260827T013855Z--56_65_72/`. The verified short-range-safe index is committed and deployed; no audit client is running.
 - The first high observation-deck top frame was invalid for visual judgment; the reduced-height top frame correctly sees the ground. Future graybox audit cameras need semantic eye-level views, not only generic anchor aerials.
 - The presentation refinement is committed as `08d0a29`. The outer pack repository has no tracked change.
 
 ### Next
-- Commit the verified source-safe bounded label-height index after reviewing the complete diff and both repositories' dirty state.
 - If a distinct entry stall recurs, capture the same COLD route first and separate chunk load/deserialization, static projection, entity admission, save/lighting, network and client work before another performance change.
 - Add semantic graybox audit cameras for a settlement, hive organ, route/intersection, active operation and field post; capture player-eye views after each material visual change.
 - Continue the HOT/COLD executor proof: reload/restart and return to an evolving active scene must retain exact bodies, effects, cargo and player-caused scars without force-loading or repair.
