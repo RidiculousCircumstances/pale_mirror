@@ -133,16 +133,11 @@ def focus(display: ctypes.c_void_p, window: int) -> None:
 def send_command(value: str) -> None:
     display = open_display()
     focus(display, minecraft_window())
-    # Opening chat with T and then typing '/' is deliberately redundant.  If
-    # the software-rendered client drops T while it is still returning from an
-    # F2 capture, slash opens command chat itself.  If T succeeds, slash is
-    # inserted into the already-open chat.  With slash alone a dropped event
-    # made the command text hit gameplay bindings (notably E/inventory), which
-    # poisoned every later audit frame.
-    press(display, "t")
-    time.sleep(0.4)
+    # Slash opens command chat directly.  Do not prepend T: after an F2 capture
+    # Minecraft can treat that key as literal text in a still-open command
+    # field, corrupting the next audit command (for example `t@s`).
     type_character(display, "/")
-    time.sleep(0.2)
+    time.sleep(0.4)
     for character in value:
         type_character(display, character)
     press(display, "Return")

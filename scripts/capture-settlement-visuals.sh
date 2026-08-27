@@ -15,6 +15,7 @@ radius=110
 view_height=72
 top_height=150
 only_prefix=
+anchor_dimension=minecraft:overworld
 
 usage() {
   cat <<'EOF'
@@ -26,6 +27,7 @@ Usage:
 Options:
   --server HOST:PORT       Multiplayer server (default 127.0.0.1:25565)
   --username NAME          Dedicated permission-level-4 audit player (default pmaudit)
+  --dimension NAMESPACE:ID Dimension for --anchor (default minecraft:overworld)
   --first-authored         Resolve the first authored settlement from the live server
   --output DIRECTORY       Output root (default build/visual-audits)
   --frame-wait SECONDS     Chunk/render settling time per view (default 10)
@@ -45,6 +47,7 @@ while (($#)); do
   case "$1" in
     --settlement-id) settlement_id=${2:?missing settlement id}; shift 2 ;;
     --anchor) anchor=${2:?missing anchor}; shift 2 ;;
+    --dimension) anchor_dimension=${2:?missing dimension}; shift 2 ;;
     --first-authored) first_authored=true; shift ;;
     --server) server=${2:?missing server}; shift 2 ;;
     --username) username=${2:?missing username}; shift 2 ;;
@@ -79,6 +82,9 @@ fi
 if [[ -n "$anchor" ]]; then
   [[ "$anchor" =~ ^(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)$ ]] || { printf 'Invalid anchor: %s\n' "$anchor" >&2; exit 2; }
 fi
+[[ "$anchor_dimension" =~ ^[a-z0-9_.-]+:[a-z0-9_/.-]+$ ]] || {
+  printf 'Invalid Minecraft dimension: %s\n' "$anchor_dimension" >&2; exit 2;
+}
 
 external_display=${PALE_MIRROR_DISPLAY:-}
 xvfb_bin=${PALE_MIRROR_XVFB:-}
@@ -141,7 +147,9 @@ original_y=
 original_z=
 original_yaw=
 original_pitch=
-original_gamemode=creative
+# PMAudit is intentionally retained as spectator; see the immediate admission
+# guard below.  This value is also safe if cleanup runs after a partial pass.
+original_gamemode=spectator
 cleanup() {
   if "$state_changed" && [[ -n "$client_pid" ]] && kill -0 "$client_pid" 2>/dev/null; then
     set +e
@@ -203,7 +211,6 @@ if ! "$connected"; then
   tail -100 "$launcher_log" >&2
   exit 1
 fi
-sleep 8
 
 export DISPLAY="$display"
 python3 "$x11" resize "$width" "$height"
@@ -219,6 +226,19 @@ query_command() {
   done
   return 1
 }
+
+# PMAudit is a disposable operator identity, not a test participant.  It must
+# become non-targetable before the render-settle delay: on a live graybox a
+# hostile can otherwise kill it between world join and the first camera command.
+# Keep the account in spectator mode after every pass rather than restoring an
+# unsafe accidental mode from a previous interrupted audit.
+send_command "gamemode spectator $username"
+audit_gamemode_line=$(query_command 'data get entity @s playerGameType' 'following entity data: 3' || true)
+[[ "$audit_gamemode_line" == *'following entity data: 3'* ]] || {
+  printf 'Could not put the dedicated audit player into spectator mode.\n' >&2
+  exit 1
+}
+sleep 8
 
 if "$first_authored"; then
   before_settlements=$(wc -l <"$client_log")
@@ -242,10 +262,8 @@ original_time_line=$(query_command 'time query daytime' 'The time is [0-9]+' || 
 original_time=$(sed -E 's/.*The time is ([0-9]+).*/\1/' <<<"$original_time_line")
 original_position_line=$(query_command 'data get entity @s Pos' 'following entity data: \[' || true)
 original_rotation_line=$(query_command 'data get entity @s Rotation' 'following entity data: \[' || true)
-original_gamemode_line=$(query_command 'data get entity @s playerGameType' 'following entity data: [0-3]' || true)
 original_position=$(sed -E 's/.*\[(-?[0-9.Ee+-]+)d, (-?[0-9.Ee+-]+)d, (-?[0-9.Ee+-]+)d\].*/\1,\2,\3/' <<<"$original_position_line")
 original_rotation=$(sed -E 's/.*\[(-?[0-9.Ee+-]+)f, (-?[0-9.Ee+-]+)f\].*/\1,\2/' <<<"$original_rotation_line")
-original_gamemode_id=$(sed -E 's/.*following entity data: ([0-3]).*/\1/' <<<"$original_gamemode_line")
 [[ "$original_time" =~ ^[0-9]+$ ]] || original_time=
 [[ "$original_position" =~ ^-?[0-9.Ee+-]+,-?[0-9.Ee+-]+,-?[0-9.Ee+-]+$ ]] || {
   printf 'Could not capture the audit player position before changing it.\n' >&2
@@ -257,13 +275,6 @@ original_gamemode_id=$(sed -E 's/.*following entity data: ([0-3]).*/\1/' <<<"$or
 }
 IFS=, read -r original_x original_y original_z <<<"$original_position"
 IFS=, read -r original_yaw original_pitch <<<"$original_rotation"
-case "$original_gamemode_id" in
-  0) original_gamemode=survival ;;
-  1) original_gamemode=creative ;;
-  2) original_gamemode=adventure ;;
-  3) original_gamemode=spectator ;;
-  *) printf 'Could not capture the audit player game mode.\n' >&2; exit 1 ;;
-esac
 
 if [[ -n "$settlement_id" ]]; then
   state_changed=true
@@ -325,11 +336,16 @@ capture_frame() {
 }
 
 capture_view() {
-  local name=$1 x=$2 y=$3 z=$4 yaw=$5 pitch=$6
+  local name=$1 x=$2 y=$3 z=$4 yaw=$5 pitch=$6 camera_rotation
   printf 'Capturing %-28s at %s,%s,%s...\n' "$name" "$x" "$y" "$z"
-  send_command "execute in minecraft:overworld run tp $username $x $y $z $yaw $pitch"
+  send_command "execute in $anchor_dimension run tp $username $x $y $z $yaw $pitch"
+  camera_rotation=$(query_command 'data get entity @s Rotation' 'following entity data: \[' || true)
+  [[ "$camera_rotation" == *"[$yaw.0f, $pitch.0f]"* ]] || {
+    printf 'Minecraft did not accept the requested camera rotation for %s: %s\n' "$name" "$camera_rotation" >&2
+    exit 1
+  }
   sleep "$frame_wait"
-  capture_frame "$name" "$name" settlement "${settlement_id:-manual_anchor}" minecraft:overworld \
+  capture_frame "$name" "$name" settlement "${settlement_id:-manual_anchor}" "$anchor_dimension" \
     "$x" "$y" "$z" "$yaw" "$pitch"
 }
 

@@ -43,6 +43,15 @@ anchor instead:
 scripts/capture-settlement-visuals.sh --anchor 6536,133,3128
 ```
 
+The same bounded five-view pass can audit the source graybox without treating
+its disposable custom dimension as the ordinary overworld:
+
+```bash
+scripts/capture-settlement-visuals.sh \
+  --anchor 8,65,8 --dimension pale_mirror:frontier_graybox \
+  --server 127.0.0.1:25565
+```
+
 Each run writes PNG files, the client log and a machine-readable
 `manifest.json` under `build/visual-audits/<UTC timestamp>-<target>`. It also
 builds an overall contact sheet and one contact sheet per target kind. Use
@@ -55,8 +64,9 @@ The contact sheets are reviewed manually; they are intentionally not compared
 with brittle pixel snapshots. The automated suite separately compiles and
 checks all 216 climate/archetype/layout-variant combinations.
 
-The harness uses spectator mode only for the dedicated audit player, restores
-the server's daytime, original camera position and original game mode after
-capture. It never edits blocks or canonical Pale Mirror state. The fallback
+The harness makes the dedicated audit player a spectator before its first
+render-settle delay and leaves that disposable account in spectator mode. It
+restores the server's daytime and the audit camera position after capture. It
+never edits blocks or canonical Pale Mirror state. The fallback
 `--anchor` mode retains the original five aerial views for locations which are
 not registered as authored PM settlements.
