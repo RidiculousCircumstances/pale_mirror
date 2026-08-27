@@ -149,6 +149,30 @@ public final class SourceGrayboxFieldPresentationGameTests {
         }
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void frontCampaignPhaseChangeRetainsPlayerConflictWhilePublishingTheNewCanonicalScene(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxSnapshot recon = withActivities(baseline,
+                List.of(frontCampaign("front-campaign:phase-test", "recon", anchor.getX() + 8, anchor.getZ() + 8)));
+        ReferenceGrayboxSnapshot cordon = withActivities(baseline,
+                List.of(frontCampaign("front-campaign:phase-test", "cordon", anchor.getX() + 8, anchor.getZ() + 8)));
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        BlockPos formerScout = anchor.offset(5, 1, 5);
+        materializer.apply(helper.getLevel(), recon);
+        materializer.recordBlockConflict(helper.getLevel(), formerScout);
+        helper.getLevel().setBlock(formerScout, Blocks.AIR.defaultBlockState(), 3);
+
+        materializer.apply(helper.getLevel(), cordon);
+        helper.assertValueEqual(helper.getLevel().getBlockState(formerScout).getBlock(), Blocks.AIR,
+                "a front-campaign phase transition must not silently rebuild a retired scout block changed by the player/world");
+        helper.assertTrue(materializer.claimAt(helper.getLevel(), formerScout).conflicted(),
+                "the old scout conflict must remain attached to its exact campaign claim after the source phase advances");
+        assertSceneKind(helper, materializer, anchor.offset(6, 1, 6), "ACTIVITY_FRONT_CORDON", "front-campaign:phase-test");
+        helper.succeed();
+    }
+
     private static void assertSceneKind(GameTestHelper helper, SourceGrayboxMaterializer materializer, BlockPos position,
                                         String kind, String subjectId) {
         SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(helper.getLevel(), position);
