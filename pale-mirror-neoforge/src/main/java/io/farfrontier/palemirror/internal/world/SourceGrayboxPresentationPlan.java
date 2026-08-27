@@ -234,26 +234,18 @@ final class SourceGrayboxPresentationPlan {
 
     /**
      * A low silhouette makes operations visible before a player can read the
-     * board: travelling units form a column, a campaign forms a camp, and a
-     * V2 front campaign presents a short line.  The high phase marker remains
-     * so the scene is still readable from the overview deck.
+     * board.  It is a direct rendering of the source phase, not a new local
+     * state machine: assembly is a staging square, outbound and return are
+     * perpendicular marching columns, a station is a compact perimeter, and
+     * combat is two opposing lines.  Campaign and front-campaign shapes stay
+     * separate because those are distinct canonical activity families.
      */
     private static void addActivityScene(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Activity activity) {
         String prefix = "activity:" + activity.id();
         int x = activity.position().x();
         int z = activity.position().z();
         switch (activity.family()) {
-            case "operation" -> {
-                // Leave the centre open for the beacon: layer packing is a
-                // collision recovery mechanism, not the way this source
-                // silhouette is meant to acquire its shape.
-                add(result, new Desired(prefix + ":scene:column-west", activity.id(), "ACTIVITY_OPERATION_COLUMN", revision,
-                        x - 2, ACTIVITY_SCENE_Y, z, 2, 1, 1, activity.colour()));
-                add(result, new Desired(prefix + ":scene:column-east", activity.id(), "ACTIVITY_OPERATION_COLUMN", revision,
-                        x + 1, ACTIVITY_SCENE_Y, z, 2, 1, 1, activity.colour()));
-                add(result, new Desired(prefix + ":scene:beacon", activity.id(), "ACTIVITY_BEACON", revision,
-                        x, ACTIVITY_SCENE_Y, z, 1, 1, 5, activity.colour()));
-            }
+            case "operation" -> SourceGrayboxOperationScenePlan.from(revision, activity, ACTIVITY_SCENE_Y).forEach(item -> add(result, item));
             case "field_campaign" -> {
                 addActivityCampCorner(result, revision, activity, "north-west", x - 2, z - 2);
                 addActivityCampCorner(result, revision, activity, "north-east", x + 2, z - 2);

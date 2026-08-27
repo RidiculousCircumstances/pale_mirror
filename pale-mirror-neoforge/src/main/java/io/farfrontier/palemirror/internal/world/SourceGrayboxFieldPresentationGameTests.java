@@ -75,6 +75,52 @@ public final class SourceGrayboxFieldPresentationGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void operationPhasesMaterializeDistinctSourceOwnedGroundScenes(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 88);
+        ReferenceGrayboxSnapshot snapshot = operationPhaseScenesFixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot());
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        materializer.apply(helper.getLevel(), snapshot);
+
+        assertSceneKind(helper, materializer, anchor.offset(6, 1, 6), "ACTIVITY_OPERATION_ASSEMBLY", "operation:assembly");
+        assertSceneKind(helper, materializer, anchor.offset(22, 1, 8), "ACTIVITY_OPERATION_OUTBOUND_COLUMN", "operation:outbound");
+        assertSceneKind(helper, materializer, anchor.offset(38, 1, 7), "ACTIVITY_OPERATION_BATTLE_LINE", "operation:engaged");
+        assertSceneKind(helper, materializer, anchor.offset(54, 1, 6), "ACTIVITY_OPERATION_STATION", "operation:station");
+        assertSceneKind(helper, materializer, anchor.offset(72, 1, 6), "ACTIVITY_OPERATION_RETURN_COLUMN", "operation:returning");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void operationPhaseChangePreservesPlayerConflictWhilePublishingTheNewCanonicalScene(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(42L).snapshot();
+        ReferenceGrayboxSnapshot assembling = oneOperationPhaseFixture(anchor, baseline, "assembling", "activity.operation.assembling");
+        ReferenceGrayboxSnapshot outbound = oneOperationPhaseFixture(anchor, baseline, "en_route", "activity.operation.en_route");
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        BlockPos formerAssembly = anchor.offset(6, 1, 6);
+        materializer.apply(helper.getLevel(), assembling);
+        materializer.recordBlockConflict(helper.getLevel(), formerAssembly);
+        helper.getLevel().setBlock(formerAssembly, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+
+        materializer.apply(helper.getLevel(), outbound);
+        helper.assertValueEqual(helper.getLevel().getBlockState(formerAssembly).getBlock(), net.minecraft.world.level.block.Blocks.AIR,
+                "a phase transition must not silently rebuild an assembly block that became a player/world conflict");
+        helper.assertTrue(materializer.claimAt(helper.getLevel(), formerAssembly).conflicted(),
+                "the retired source-owned assembly claim must retain its conflict instead of granting cleanup authority over the player change");
+        assertSceneKind(helper, materializer, anchor.offset(6, 1, 8), "ACTIVITY_OPERATION_OUTBOUND_COLUMN", "operation:phase-test");
+        helper.succeed();
+    }
+
+    private static void assertSceneKind(GameTestHelper helper, SourceGrayboxMaterializer materializer, BlockPos position,
+                                        String kind, String subjectId) {
+        SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(helper.getLevel(), position);
+        helper.assertTrue(claim != null, "a source activity scene must retain a physical claim at " + position);
+        helper.assertValueEqual(claim.kind(), kind, "the scene shape must expose its source phase instead of a generic operation marker");
+        helper.assertValueEqual(claim.subjectId(), subjectId, "the phase silhouette must preserve its one source activity identity");
+    }
+
     private static ReferenceGrayboxSnapshot fieldPostModulesFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
         ReferenceGrayboxLayout.Rectangle post = new ReferenceGrayboxLayout.Rectangle(anchor.getX() + 2, anchor.getZ() + 2, 12, 12);
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
@@ -95,6 +141,31 @@ public final class SourceGrayboxFieldPresentationGameTests {
                 new ReferenceGrayboxSnapshot.Activity("front-campaign:707", "front_campaign", "offensive", "engage",
                         new ReferenceGrayboxLayout.Point(anchor.getX() + 48, anchor.getZ() + 8), 6.0d, 0.62d, false,
                         "activity.front_campaign.engage"));
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), activities,
+                List.of(), List.of(), List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot operationPhaseScenesFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
+        List<ReferenceGrayboxSnapshot.Activity> activities = List.of(
+                operation("operation:assembly", "assembling", anchor.getX() + 8, anchor.getZ() + 8, "activity.operation.assembling"),
+                operation("operation:outbound", "en_route", anchor.getX() + 24, anchor.getZ() + 8, "activity.operation.en_route"),
+                operation("operation:engaged", "engaged", anchor.getX() + 40, anchor.getZ() + 8, "activity.operation.engaged"),
+                operation("operation:station", "on_station", anchor.getX() + 56, anchor.getZ() + 8, "activity.operation.on_station"),
+                operation("operation:returning", "returning", anchor.getX() + 72, anchor.getZ() + 8, "activity.operation.returning"));
+        return withActivities(baseline, activities);
+    }
+
+    private static ReferenceGrayboxSnapshot oneOperationPhaseFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline, String phase, String colour) {
+        return withActivities(baseline, List.of(operation("operation:phase-test", phase, anchor.getX() + 8, anchor.getZ() + 8, colour)));
+    }
+
+    private static ReferenceGrayboxSnapshot.Activity operation(String id, String phase, int x, int z, String colour) {
+        return new ReferenceGrayboxSnapshot.Activity(id, "operation", "patrol", phase,
+                new ReferenceGrayboxLayout.Point(x, z), 3.0d, 0.0d, false, colour);
+    }
+
+    private static ReferenceGrayboxSnapshot withActivities(ReferenceGrayboxSnapshot baseline, List<ReferenceGrayboxSnapshot.Activity> activities) {
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), activities,
                 List.of(), List.of(), List.of(), List.of(), List.of());

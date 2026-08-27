@@ -482,8 +482,8 @@ public final class SourceGrayboxMaterializerGameTests {
                                 "healthy", "assault", new ReferenceGrayboxLayout.Point(anchor.getX() + 9, anchor.getZ() + 11), "resident.guard"),
                         new ReferenceGrayboxSnapshot.Resident("resident:raid:engineer", 1, "engineer", "worker", "operation", 47,
                                 "healthy", "support", new ReferenceGrayboxLayout.Point(anchor.getX() + 9, anchor.getZ() + 13), "resident.engineer")),
-                List.of(), List.of(), List.of(new ReferenceGrayboxSnapshot.Activity("operation:47", "operation", "raid", "engaging", marker,
-                2.0d, 0.5d, false, "activity.operation.engaging")), List.of(), List.of(), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(new ReferenceGrayboxSnapshot.Activity("operation:47", "operation", "raid", "engaged", marker,
+                2.0d, 0.5d, false, "activity.operation.engaged")), List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     private static ReferenceGrayboxSnapshot settlementFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
