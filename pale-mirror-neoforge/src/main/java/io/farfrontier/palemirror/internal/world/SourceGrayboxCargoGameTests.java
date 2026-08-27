@@ -240,4 +240,29 @@ public final class SourceGrayboxCargoGameTests {
                 "a retained mixed cart must lose PM ownership before another operation may materialize nearby");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void coldOperationCarrierReentryRestoresCanonicalCargoBeforeItCanBecomeALossReceipt(GameTestHelper helper) {
+        BlockPos position = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y + 1).offset(2, 0, 2);
+        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("operation:991:cargo:food", "operation", 991,
+                "food", 2.0d, new ReferenceGrayboxLayout.Rectangle(position.getX(), position.getZ(), 1, 1), "cargo.food");
+        SourceGrayboxOperationCargoCarrierLedger.Binding cold = new SourceGrayboxOperationCargoCarrierLedger.Binding(
+                "operation-carrier:" + cargo.id(), cargo.id(), 991, ReferenceResource.FOOD, 64,
+                position.getX() * 16 + 8, position.getZ() * 16 + 8, SourceGrayboxOperationCargoCarrierLedger.Mode.COLD);
+        MinecartChest carrier = new MinecartChest(helper.getLevel(), position.getX() + 0.5d, position.getY(), position.getZ() + 0.5d);
+
+        SourceGrayboxOperationCargoCarrierLedger.Binding hot = SourceGrayboxOperationCargoCarrierRuntime.hydrateForHot(carrier, cold, cargo);
+
+        helper.assertValueEqual(hot.mode(), SourceGrayboxOperationCargoCarrierLedger.Mode.HOT,
+                "COLD re-entry must explicitly acquire a HOT carrier lease");
+        helper.assertValueEqual(hot.observedItems(), 128,
+                "the new HOT ledger hand-off must use canonical cargo, not the historical COLD stack count");
+        helper.assertValueEqual(carrier.getItem(0).getCount(), 64,
+                "the fresh physical cart must receive the first canonical ordinary stack before observation");
+        helper.assertValueEqual(carrier.getItem(1).getCount(), 64,
+                "the fresh physical cart must receive the complete canonical ordinary quantity before observation");
+        helper.assertValueEqual(hot.observedItems(), carrier.getItem(0).getCount() + carrier.getItem(1).getCount(),
+                "the first HOT observation must see zero delta rather than misclassifying COLD custody as a withdrawal");
+        helper.succeed();
+    }
 }

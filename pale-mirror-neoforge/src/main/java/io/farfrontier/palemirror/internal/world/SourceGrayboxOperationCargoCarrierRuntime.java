@@ -74,9 +74,19 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
         SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(level);
         if (binding.mode() == SourceGrayboxOperationCargoCarrierLedger.Mode.COLD) {
             if (!zone.hot(target) || !level.hasChunkAt(target)) return false;
+            int expected = expectedItems(cargo);
+            if (expected > SourceGrayboxWarehouseRuntime.BARREL_CAPACITY) {
+                return loseAndBlock(level, data, materializer, binding, binding.observedItems(), "carrier-capacity-exhausted");
+            }
+            // A COLD binding owns no live PM cart.  A retained tagged cart is
+            // a recovery conflict, not an invitation to overwrite player
+            // contents while trying to rehydrate the canonical source stock.
+            if (carrier != null && !carrier.isEmpty()) {
+                return loseAndBlock(level, data, materializer, binding, binding.observedItems(), "cold-carrier-has-contents");
+            }
             if (carrier == null) carrier = spawn(level, binding, target);
             if (carrier == null) return false;
-            return put(data, binding.withMode(SourceGrayboxOperationCargoCarrierLedger.Mode.HOT));
+            return put(data, hydrateForHot(carrier, binding, cargo));
         }
         if (carrier == null) {
             BlockPos actual = actualPosition(binding);
@@ -187,6 +197,29 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
         Vec3 movement = delta.scale(Math.min(SPEED, distance) / distance);
         carrier.move(MoverType.SELF, movement);
         carrier.setDeltaMovement(Vec3.ZERO);
+    }
+
+    /**
+     * COLD is source custody, not a physical zero.  Hydrating a new HOT cart
+     * from the immutable source frame must happen before the first item-delta
+     * observation; otherwise the intentionally absent COLD stack looks like
+     * a player withdrawal and corrupts canonical cargo on re-entry.
+     */
+    static SourceGrayboxOperationCargoCarrierLedger.Binding hydrateForHot(
+            MinecartChest carrier, SourceGrayboxOperationCargoCarrierLedger.Binding cold,
+            ReferenceGrayboxSnapshot.Cargo cargo
+    ) {
+        if (cold.mode() != SourceGrayboxOperationCargoCarrierLedger.Mode.COLD || !same(cold, cargo)) {
+            throw new IllegalArgumentException("operation carrier HOT hydration requires matching COLD custody");
+        }
+        int expected = expectedItems(cargo);
+        if (expected > SourceGrayboxWarehouseRuntime.BARREL_CAPACITY) {
+            throw new IllegalArgumentException("operation carrier HOT hydration exceeds capacity");
+        }
+        int actual = adjust(carrier, item(cold.resource()), expected);
+        if (actual != expected) throw new IllegalStateException("operation carrier HOT hydration did not restore canonical cargo");
+        return cold.withObservedItems(actual).at(sixteenths(carrier.getX()), sixteenths(carrier.getZ()))
+                .withMode(SourceGrayboxOperationCargoCarrierLedger.Mode.HOT);
     }
 
     static boolean owns(MinecartChest carrier, SourceGrayboxOperationCargoCarrierLedger.Binding binding) {
