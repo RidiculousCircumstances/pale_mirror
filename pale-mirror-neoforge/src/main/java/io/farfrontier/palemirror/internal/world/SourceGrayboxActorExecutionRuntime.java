@@ -8,7 +8,7 @@ import net.minecraft.world.entity.Entity;
 
 /** Loaded-chunk-only hand-off coordinator for exact source-graybox actor bodies. */
 final class SourceGrayboxActorExecutionRuntime {
-    private static final String HOLDER = "source-graybox:actor-runtime";
+    static final String HOLDER = "source-graybox:actor-runtime";
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final long CAPTURE_INTERVAL_TICKS = 10L;
     /** A retained foreign collision is rechecked at a bounded stagger, never every executor turn. */
@@ -122,7 +122,9 @@ final class SourceGrayboxActorExecutionRuntime {
                         entity.discard();
                         admittedEntities.remove(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()));
                     }
-                    changed |= data.settleActorCold(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    boolean settled = data.settleActorCold(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    if (settled) presentation.releaseEntity(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()));
+                    changed |= settled;
                 }
                 case RETIRED -> {
                     if (!level.hasChunkAt(position) || !zone.safeToDrain(position)) continue;
@@ -130,7 +132,9 @@ final class SourceGrayboxActorExecutionRuntime {
                         entity.discard();
                         admittedEntities.remove(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()));
                     }
-                    changed |= data.acknowledgeRetiredActor(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    boolean acknowledged = data.acknowledgeRetiredActor(actor.id(), actor.leaseId(), HOLDER, gameTick);
+                    if (acknowledged) presentation.releaseEntity(SourceGrayboxMaterializer.entityKey(actor.id(), actor.kind()));
+                    changed |= acknowledged;
                 }
                 case COLD, RECOVERING -> { /* handled before publication */ }
             }

@@ -13,7 +13,7 @@
 - Core schema v41 and Visuals schema v40 intentionally reject older worlds. The dedicated test world is disposable unless the user says otherwise.
 - One source resident is one managed Villager and one source bioform is one managed Zombie; no cohorts or hidden population multiplier. Human stock/capacity/credit use the accepted 1:40 scale.
 - No player or PM ownership class is a safe zone. Real PM physical effects are observed and reconciled; unknown/player changes remain explicit conflicts and are never silently overwritten.
-- User permits starting a client without a new approval, but only one Minecraft client may run at a time; run only relevant tests.
+- User permits starting a client without a new approval, but only one Minecraft client may run at a time; run only relevant tests. Manual game audits use the real `DISPLAY=:0` so the user can observe them; automated GameTests remain headless.
 - Private visual/creature asset provenance and their existing acceptance rules remain unchanged; unrelated Harvester work is not part of the graybox implementation slice.
 
 ## Key decisions
@@ -45,6 +45,7 @@
 
 ### Now
 - Verified commit `d5ac1ef` artifact SHA-512 `91ad611e300fb6f88e71f4efe4c2787b8bfea6a66a3ab949ae8cb7b62a6ad1513dfdc516b009f6501393ad8a669f4641b65048496d43c499853a2bc4fd3e6914` is hosted, checksum-pinned installed and running in the disposable server PID 2400614 on port 25565; `frontier-graybox-10-y63-r3-no-structures` was retained.
+- The verified HOT/COLD fix is ready to commit and deploy: after the canonical DRAINING hand-off or RETIRED acknowledgement, runtime releases exactly that actor's presentation reservation. New recovery GameTests prove COLD re-admission, restart custody of actor/effect/carrier/scar, and both runtime cleanup paths; 143/143 GameTests plus `guardrails`, `check`, build and packaged-JAR verification pass.
 - Real-client visual evidence is at `build/visual-audits/20260827T010309Z-8_65_8/` and the close settlement-11 pass `build/visual-audits/20260827T010942Z--56_65_72/`. The close pass confirms local boards, color-coded routes and distinguishable purple tissue/pink signal accents; distant board clutter and raw graybox forms remain diagnostic presentation, not a product-art acceptance.
 - The current performance evidence is `build/profiles/graybox-entry-20260827T011858Z.jfr` and the matched repeat `build/profiles/graybox-entry-matched-after-20260827T013855Z.jfr`; the post-change screenshots are `build/visual-audits/20260827T013855Z--56_65_72/`. The verified short-range-safe index is committed and deployed; no audit client is running.
 - The first high observation-deck top frame was invalid for visual judgment; the reduced-height top frame correctly sees the ground. Future graybox audit cameras need semantic eye-level views, not only generic anchor aerials.
@@ -53,7 +54,7 @@
 ### Next
 - If a distinct entry stall recurs, capture the same COLD route first and separate chunk load/deserialization, static projection, entity admission, save/lighting, network and client work before another performance change.
 - Add semantic graybox audit cameras for a settlement, hive organ, route/intersection, active operation and field post; capture player-eye views after each material visual change.
-- Continue the HOT/COLD executor proof: reload/restart and return to an evolving active scene must retain exact bodies, effects, cargo and player-caused scars without force-loading or repair.
+- Deploy the verified HOT/COLD reservation fix, then extend its reload/restart proof to a naturally evolving live scene with a player-visible return.
 - Complete remaining source-parity domains and negative/recovery tests against the Python oracle; do not substitute legacy `graybox-10` mechanics.
 - Validate active operations, exact physical transport and tactical effects as continuous player scenes, including kills/destruction/item flows returning to source state.
 - Product gates remain open: live natural discovery, infection/recovery, logistics/evacuation/refusal, cooperative authority and clean-room player comprehension; the accurate status is not product-validated.

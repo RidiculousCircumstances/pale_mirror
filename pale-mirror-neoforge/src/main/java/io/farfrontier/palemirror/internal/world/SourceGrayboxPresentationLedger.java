@@ -104,7 +104,7 @@ final class SourceGrayboxPresentationLedger extends SavedData {
         setDirty();
     }
 
-    /** Releases only a discarded PREPARING body so the same one-source lease may retry safely. */
+    /** Releases a body reservation only after its executor has discarded or acknowledged that exact body. */
     void releaseEntity(String key) {
         requireEntityKey(key);
         if (entityClaims.remove(key)) setDirty();
