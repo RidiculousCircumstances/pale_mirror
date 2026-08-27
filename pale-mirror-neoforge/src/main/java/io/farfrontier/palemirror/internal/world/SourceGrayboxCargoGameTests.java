@@ -183,7 +183,7 @@ public final class SourceGrayboxCargoGameTests {
         BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
         BlockPos position = anchor.offset(2, 1, 2);
         helper.getLevel().setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("operation:991:cargo:food", "operation", 991,
+        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("operation:993:cargo:food", "operation", 993,
                 "food", 1.0d, new ReferenceGrayboxLayout.Rectangle(position.getX(), position.getZ(), 1, 1), "#ffffff");
         String legacyId = "cargo-container:" + cargo.id();
         BarrelBlockEntity barrel = SourceGrayboxWarehouseRuntime.ensureContainer(helper.getLevel(), position, legacyId, ReferenceResource.FOOD);
@@ -263,6 +263,35 @@ public final class SourceGrayboxCargoGameTests {
                 "the fresh physical cart must receive the complete canonical ordinary quantity before observation");
         helper.assertValueEqual(hot.observedItems(), carrier.getItem(0).getCount() + carrier.getItem(1).getCount(),
                 "the first HOT observation must see zero delta rather than misclassifying COLD custody as a withdrawal");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void coldOperationCarrierReentryStartsAtItsRetainedPositionAndCatchesTheAdvancedSourceAnchor(GameTestHelper helper) {
+        BlockPos retained = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y + 1).offset(2, 0, 2);
+        BlockPos sourceTarget = retained.offset(8, 0, 0);
+        for (int x = retained.getX() - 1; x <= sourceTarget.getX() + 1; x++) {
+            helper.getLevel().setBlock(new BlockPos(x, retained.getY() - 1, retained.getZ()), Blocks.STONE.defaultBlockState(), 3);
+        }
+        ReferenceGrayboxSnapshot.Cargo cargo = new ReferenceGrayboxSnapshot.Cargo("operation:993:cargo:food", "operation", 993,
+                "food", 1.0d, new ReferenceGrayboxLayout.Rectangle(sourceTarget.getX(), sourceTarget.getZ(), 1, 1), "cargo.food");
+        SourceGrayboxOperationCargoCarrierLedger.Binding cold = new SourceGrayboxOperationCargoCarrierLedger.Binding(
+                "operation-carrier:" + cargo.id(), cargo.id(), 993, ReferenceResource.FOOD, 64,
+                retained.getX() * 16 + 8, retained.getZ() * 16 + 8, SourceGrayboxOperationCargoCarrierLedger.Mode.COLD);
+
+        MinecartChest carrier = SourceGrayboxOperationCargoCarrierRuntime.spawnAtRetainedPosition(helper.getLevel(), cold);
+        helper.assertTrue(carrier != null, "COLD re-entry must materialize one retained physical carrier when its chunk is available");
+        helper.assertValueEqual(carrier.blockPosition(), retained,
+                "a source anchor that advanced while COLD must not teleport the returning carrier to its new position");
+        SourceGrayboxOperationCargoCarrierLedger.Binding hot = SourceGrayboxOperationCargoCarrierRuntime.hydrateForHot(carrier, cold, cargo);
+
+        SourceGrayboxOperationCargoCarrierRuntime.advanceToward(carrier, sourceTarget);
+        helper.assertTrue(carrier.getX() > retained.getX() + 0.5d && carrier.getX() < sourceTarget.getX() + 0.5d,
+                "after exact COLD restoration the HOT carrier must physically catch the current source anchor in bounded steps");
+        helper.assertTrue(SourceGrayboxOperationCargoCarrierRuntime.owns(carrier, hot),
+                "the retained-to-HOT hand-off must preserve the one exact source carrier identity");
+        helper.assertValueEqual(carrier.getItem(0).getCount(), 64,
+                "re-entering from the retained position must restore canonical cargo before movement is observed");
         helper.succeed();
     }
 

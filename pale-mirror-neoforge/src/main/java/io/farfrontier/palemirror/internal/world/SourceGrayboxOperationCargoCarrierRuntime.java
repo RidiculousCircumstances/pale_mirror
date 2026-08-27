@@ -84,7 +84,7 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
             if (carrier != null && !carrier.isEmpty()) {
                 return loseAndBlock(level, data, materializer, binding, binding.observedItems(), "cold-carrier-has-contents");
             }
-            if (carrier == null) carrier = spawn(level, binding, target);
+            if (carrier == null) carrier = spawnAtRetainedPosition(level, binding);
             if (carrier == null) return false;
             return put(data, hydrateForHot(carrier, binding, cargo));
         }
@@ -137,6 +137,16 @@ final class SourceGrayboxOperationCargoCarrierRuntime {
         carrier.getPersistentData().putString(ENTITY_RESOURCE, binding.resource().name());
         if (!level.addFreshEntity(carrier)) return null;
         return carrier;
+    }
+
+    /**
+     * Rehydrates a COLD carrier where its last HOT body was observed, rather
+     * than at a source anchor that may have advanced while the player was
+     * away.  The normal HOT step then catches this real body up to the latest
+     * source position through collision.
+     */
+    static MinecartChest spawnAtRetainedPosition(ServerLevel level, SourceGrayboxOperationCargoCarrierLedger.Binding binding) {
+        return spawn(level, binding, actualPosition(binding));
     }
 
     private static boolean applyDelta(ServerLevel level, SourceGrayboxSavedData data, SourceGrayboxMaterializer materializer,
