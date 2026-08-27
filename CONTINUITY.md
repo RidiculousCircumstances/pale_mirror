@@ -39,17 +39,20 @@
 - The current presentation cut preserves exact explicit three-line briefings, uses larger full-bright native boards with a tested landmark/detail range hierarchy, and keeps CustomName as an unrendered recovery mirror.
 - The same cut maps severe infection to purple tissue and permits only one existing pink signal clump per infected cell; no source rule, quantity, geometry or provenance changed.
 - Full critical verification of the cut passed: focused label/plan JUnit tests, `:pale-mirror-neoforge:runGameTestServer` 139/139, and `guardrails check :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar`.
+- Entry JFR identified repeated `PresentationLedger.claims()` copies and full footprint scans for every label candidate. `SourceGrayboxLabelHeightIndex` now builds one bounded, immutable 1024×704 source-height index per presentation and preserves the former highest-roof rule; focused negative/equivalence tests and the final critical gate pass, including 139/139 GameTests.
+- The Village observer GameTest fixture now places its vertical-only landmark directly above the focus, rather than relying on asynchronous POI indexing outside the adapter's intentional horizontal fallback radius; it still proves the documented vertical search contract.
+- A matched COLD re-entry route at settlement 11 (`-56,89,72`, then four points at Y=73/radius 12) recorded no `SourceGrayboxLabelPositions` samples, versus 291 in the prior JFR, and 6 `claims()/valuesToArray` samples versus 270. One-second server-tick mean/max was 1.830/5.671 ms versus 3.194/59.360 ms; neither repeat emitted `Can't keep up`.
 
 ### Now
-- Verified artifact SHA-512 `37703c3d06d424e5b75d9b4e12e78b5845a41fe4044ca672f6f09c0e71b6d8d6ba16a881689572ddc84bd114b8d02d3a2f4a37cafe29a1a531b2a6f41de8ee6a` is hosted, installed and running in the disposable server PID 2184340 on port 25565; `frontier-graybox-10-y63-r3-no-structures` was retained.
+- Verified artifact SHA-512 `93c043dd47c32913fdbc29ab653ed72572ccb21319a8ffe92b6017281e58b6f86ba19237d6149c6ab00cba8b97b5db6ffe9662433b726d79a5b94a56ff094c6d` is hosted, installed and running in the disposable server PID 2305725 on port 25565; `frontier-graybox-10-y63-r3-no-structures` was retained.
 - Real-client visual evidence is at `build/visual-audits/20260827T010309Z-8_65_8/` and the close settlement-11 pass `build/visual-audits/20260827T010942Z--56_65_72/`. The close pass confirms local boards, color-coded routes and distinguishable purple tissue/pink signal accents; distant board clutter and raw graybox forms remain diagnostic presentation, not a product-art acceptance.
+- The current performance evidence is `build/profiles/graybox-entry-20260827T011858Z.jfr` and the matched repeat `build/profiles/graybox-entry-matched-after-20260827T013855Z.jfr`; the post-change screenshots are `build/visual-audits/20260827T013855Z--56_65_72/`. The verified short-range-safe index is ready to commit and deploy; no audit client is running.
 - The first high observation-deck top frame was invalid for visual judgment; the reduced-height top frame correctly sees the ground. Future graybox audit cameras need semantic eye-level views, not only generic anchor aerials.
-- The close client entry produced several 2.2–3.0 s `Can't keep up` warnings while chunks/materialization entered view. It is classified as a loading/materialization-entry risk, not an idle regression; no new entry-route JFR exists yet.
-- This coherent presentation change is uncommitted. No second client is running. The outer pack repository has no tracked change.
+- The presentation refinement is committed as `08d0a29`. The outer pack repository has no tracked change.
 
 ### Next
-- Record an entry-route JFR with exact route/config/chunk state, then separate chunk load/deserialization, static projection, entity admission, save/lighting, network and client work before any performance change.
-- Commit the verified source-safe presentation cut after reviewing the complete diff and both repositories' dirty state.
+- Commit the verified source-safe bounded label-height index after reviewing the complete diff and both repositories' dirty state.
+- If a distinct entry stall recurs, capture the same COLD route first and separate chunk load/deserialization, static projection, entity admission, save/lighting, network and client work before another performance change.
 - Add semantic graybox audit cameras for a settlement, hive organ, route/intersection, active operation and field post; capture player-eye views after each material visual change.
 - Continue the HOT/COLD executor proof: reload/restart and return to an evolving active scene must retain exact bodies, effects, cargo and player-caused scars without force-loading or repair.
 - Complete remaining source-parity domains and negative/recovery tests against the Python oracle; do not substitute legacy `graybox-10` mechanics.
@@ -58,7 +61,6 @@
 
 ## Open questions
 - UNCONFIRMED: exact source-parity breadth still needs an auditable domain-by-domain checklist and calibration evidence for the complete Python oracle.
-- UNCONFIRMED: the root cause and tail latency of player entry into a loaded graybox scene; do not tune budgets or add concurrency before the entry JFR.
 - UNCONFIRMED: optimal player-facing label range/interaction affordance after semantic eye-level cameras replace anchor-only aerials.
 - UNCONFIRMED: physical operation transport needs a dedicated canonical transit state before it can be generalized beyond the current carrier hand-off.
 - UNCONFIRMED: 0.3 human product gates and the separate Harvester contour acceptance remain open.

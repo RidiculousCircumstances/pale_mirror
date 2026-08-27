@@ -20,12 +20,14 @@ final class SourceGrayboxLabelPositions {
     private static final int CLEARANCE = 3;
     /** Inspect enough nearby board slots to step around a mast or metric tower. */
     private static final int SLOT_LOOKAHEAD = 64;
-    private final SourceGrayboxPresentationLedger ledger;
+    private final SourceGrayboxLabelHeightIndex heights;
     private final Map<Column, Integer> nextSlotByAnchor = new LinkedHashMap<>();
     private final Set<Column> occupiedBoardColumns = new LinkedHashSet<>();
 
     SourceGrayboxLabelPositions(SourceGrayboxPresentationLedger ledger) {
-        this.ledger = ledger;
+        heights = SourceGrayboxLabelHeightIndex.from(ledger.claims().stream().map(claim ->
+                new SourceGrayboxLabelHeightIndex.Footprint(claim.x(), claim.y(), claim.z(), claim.width(), claim.depth(), claim.height()))
+                .toList());
     }
 
     BlockPos next(String id, int x, int z) {
@@ -66,11 +68,7 @@ final class SourceGrayboxLabelPositions {
     }
 
     private int baseline(int x, int z) {
-        return ledger.claims().stream()
-                .filter(claim -> x >= claim.x() && x < claim.x() + claim.width()
-                        && z >= claim.z() && z < claim.z() + claim.depth())
-                .mapToInt(claim -> claim.y() + claim.height() - 1)
-                .max().orElse(ReferenceGrayboxLayout.GROUND_Y) + CLEARANCE;
+        return heights.baseline(x, z, CLEARANCE);
     }
 
     private record Column(int x, int z) { }
