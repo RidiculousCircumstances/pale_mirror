@@ -50,6 +50,7 @@
 - The current performance evidence is `build/profiles/graybox-entry-20260827T011858Z.jfr` and the matched repeat `build/profiles/graybox-entry-matched-after-20260827T013855Z.jfr`; the post-change screenshots are `build/visual-audits/20260827T013855Z--56_65_72/`. The verified short-range-safe index is committed and deployed; no audit client is running.
 - The first high observation-deck top frame was invalid for visual judgment; the reduced-height top frame correctly sees the ground. Future graybox audit cameras need semantic eye-level views, not only generic anchor aerials.
 - The presentation refinement is committed as `08d0a29`. The outer pack repository has no tracked change.
+- Manual HOT/COLD evidence is now on the real `DISPLAY=:0`: a live settlement-11 Villager was present in HOT, absent after the 200-tick COLD delay with no forced loading, and a live settlement Villager was present again after the sole audit client rejoined and returned. The temporary respawn gamerule was restored to `false`; PMAudit is in Survival at the scene. One client remains running solely so the user can observe it.
 
 ### Next
 - If a distinct entry stall recurs, capture the same COLD route first and separate chunk load/deserialization, static projection, entity admission, save/lighting, network and client work before another performance change.
