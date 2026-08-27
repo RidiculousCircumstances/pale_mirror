@@ -86,9 +86,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             return rejected(command, RejectionCode.QUARANTINED, status.failureDetail().orElse("engine quarantined"));
         }
         pruneReceipts();
-        if (command.submittedAt().compareTo(instant) > 0
-                || command.submittedAt().ticks() < safeOldestReceiptInstant()) {
-            return rejected(command, RejectionCode.COMMAND_EXPIRED, "command falls outside the retained receipt window");
+        if (!command.submittedAt().equals(instant)) {
+            return rejected(command, RejectionCode.COMMAND_EXPIRED, "command must enter at the current simulation instant");
         }
         if (receipts.containsKey(command.id())) {
             return rejected(command, RejectionCode.DUPLICATE_COMMAND, "command id is already retained");

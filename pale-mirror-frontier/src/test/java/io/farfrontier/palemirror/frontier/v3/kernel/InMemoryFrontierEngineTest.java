@@ -155,6 +155,16 @@ class InMemoryFrontierEngineTest {
                 (state, event) -> reduce(state, event, false), state -> new byte[] {0}));
     }
 
+    @Test
+    void delayedCommandCannotCreateAChronologicallyInvalidEvent() {
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false);
+        engine.advanceTo(new SimInstant(5L), new WorkBudget(1, 1));
+
+        assertRejected(engine.submit(command("command:late", Revision.ZERO, 1)), RejectionCode.COMMAND_EXPIRED);
+        assertEquals(0, engine.transactions().size());
+        assertEquals(new SimInstant(5L), engine.projection(ProjectionQuery.summary()).instant());
+    }
+
     private static InMemoryFrontierEngine<Counter, CounterProjection> engine(
             List<ScheduledAction> schedules, boolean failOnNine
     ) {
