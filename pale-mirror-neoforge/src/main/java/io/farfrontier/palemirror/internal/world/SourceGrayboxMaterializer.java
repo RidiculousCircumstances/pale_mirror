@@ -196,6 +196,9 @@ final class SourceGrayboxMaterializer {
         };
     }
 
+    /** Only an exact source actor body warrants the high-signal retirement trace. */
+    static boolean tracesUnexpectedActorRetirement(Entity entity) { return managed(entity) != null; }
+
     static void rememberAdmittedEntity(Map<String, Entity> admittedEntities, Entity entity) {
         if (!recognizesManagedEntity(entity)) return;
         admittedEntities.putIfAbsent(entityKey(entity.getPersistentData().getString(ENTITY_ID),
@@ -381,7 +384,7 @@ final class SourceGrayboxMaterializer {
         for (Entity entity : level.getEntities((Entity) null, arena, value -> !value.getPersistentData().getString(ENTITY_ID).isBlank())) {
             String key = entityKey(entity.getPersistentData().getString(ENTITY_ID), entity.getPersistentData().getString(ENTITY_KIND));
             if (!active.contains(key)) {
-                if (recognizesManagedEntity(entity) && !unexpectedActorRetirementTraceCaptured) {
+                if (tracesUnexpectedActorRetirement(entity) && !unexpectedActorRetirementTraceCaptured) {
                     unexpectedActorRetirementTraceCaptured = true;
                     PaleMirrorMod.LOGGER.warn("PM source-graybox retirement discard: key={} active={} uuid={} added={} removed={}",
                             key, active.contains(key), entity.getUUID(), entity.isAddedToLevel(), entity.isRemoved(),

@@ -12,6 +12,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -38,6 +39,25 @@ public final class SourceGrayboxMaterializerRecoveryGameTests {
                 "a source-graybox structural conflict must survive persistence instead of being silently repaired after restart");
         helper.assertTrue(restored.entityClaimed("LABEL_DISPLAY:facility:fixture:workshop"),
                 "an entity reservation must survive persistence so a restart cannot recreate an entity while its serialized predecessor loads");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void labelRetirementNeverMasqueradesAsAnActorFailure(GameTestHelper helper) {
+        Display.TextDisplay label = new Display.TextDisplay(EntityType.TEXT_DISPLAY, helper.getLevel());
+        label.setUUID(SourceGrayboxMaterializer.uuid("label-display", "effect:fixture"));
+        label.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, "effect:fixture");
+        label.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, SourceGrayboxMaterializer.LABEL_KIND);
+        label.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, "a".repeat(64));
+        helper.assertTrue(!SourceGrayboxMaterializer.tracesUnexpectedActorRetirement(label),
+                "normal display retirement is presentation cleanup, never an actor continuity failure");
+
+        Villager resident = new Villager(EntityType.VILLAGER, helper.getLevel());
+        resident.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, "resident:fixture");
+        resident.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, "RESIDENT");
+        resident.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, "b".repeat(64));
+        helper.assertTrue(SourceGrayboxMaterializer.tracesUnexpectedActorRetirement(resident),
+                "an exact canonical actor must retain the high-signal continuity diagnostic");
         helper.succeed();
     }
 
