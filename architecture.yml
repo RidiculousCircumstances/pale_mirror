@@ -1,8 +1,8 @@
-version: 2
+version: 3
 
 components:
-  - name: domain
-    path: pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain
+  - name: "domain"
+    path: "pale-mirror-domain/src/main/java/io/farfrontier/palemirror/domain"
     owns:
       - Canonical world model, deterministic simulation, domain events, Narrator, and scenario state machines
     must_not_depend_on:
@@ -11,22 +11,38 @@ components:
       - persistence
       - adapters
       - wall-clock time
-  - name: neoforge
-    path: pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror
+  - name: "frontier_v3"
+    lifecycle: "planned"
+    path: "pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3"
+    owns:
+      - Frontier v3 canonical world, typed commands and events, deterministic schedules, exact actors/resources, autonomous human and hive processes, immutable projections and pure persistence codecs
+    may_depend_on:
+      - Java standard library
+    must_not_depend_on:
+      - pale-mirror-domain
+      - frontier.reference
+      - Minecraft
+      - NeoForge
+      - persistence implementations
+      - adapters
+      - wall-clock time
+      - ambient random APIs
+  - name: "neoforge"
+    path: "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror"
     owns:
       - SavedData persistence, Minecraft observation, materialization execution, scheduling, and commands
     may_depend_on:
       - domain
       - Minecraft
       - NeoForge
-  - name: adapter_api
-    path: pale-mirror-api (stable package io.farfrontier.palemirror.api)
+  - name: "adapter_api"
+    path: "pale-mirror-api (stable package io.farfrontier.palemirror.api)"
     owns:
       - Narrow experimental SPI for optional integrations
     must_not_depend_on:
       - internal implementation types
-  - name: visuals
-    path: pale-mirror-visuals/src/main/java/io/farfrontier/palemirror/visuals
+  - name: "visuals"
+    path: "pale-mirror-visuals/src/main/java/io/farfrontier/palemirror/visuals"
     owns:
       - Fresh-world regional genesis manifests, PM-owned settlement structures, stable physical residents, and dynamic visual projection
       - Read-only Foundry plan/materialization audits, bounded asset lint, and disposable diagnostic exports
@@ -38,8 +54,8 @@ components:
     must_not_depend_on:
       - domain implementation
       - core internal implementation
-  - name: automodel_lab
-    path: tools/automodel
+  - name: "automodel_lab"
+    path: "tools/automodel"
     owns:
       - Offline provenance-pinned image-to-3D research contracts, local model registry, known-geometry qualification and review-only evidence packages
     must_not_depend_on:
@@ -48,255 +64,314 @@ components:
       - PMMesh export
       - server or world state
 
+runtime_transitions:
+  - id: "frontier-v3-greenfield-cutover"
+    current_runtime: "frontier_v2_source_graybox"
+    current_status: "frozen-active"
+    target_runtime: "frontier_v3"
+    target_status: "planned"
+    migration: "fresh-world-only"
+    rules:
+      - V3 never imports, delegates to, falls back to or shares canonical state with V2 or Python.
+      - V2 remains isolated and receives no feature development while V3 is incomplete.
+      - V2 runtime removal requires the automated, performance, restart, physical-world and player-product gates in the Frontier v3 implementation plan.
+
 invariants:
   # Compatibility wording enforced by the repository architecture gate.
-  - statement: Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.
-  - statement: Unknown or player-owned block changes are conflicts and must not be overwritten by default.
-  - id: canonical-state
-    statement: Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations.
-  - id: canonical-mutation-boundary
-    statement: Production code mutates canonical WorldState only through a DomainCommandExecutor transaction; collection views are immutable, package-private mutation is reserved for the command processor, and persistence hydration is isolated to codecs.
-  - id: snapshot-integrity
-    statement: Schema-v40 snapshots are accepted only after canonical aggregate and physical-projection validation; orphan references, duplicate active jobs and mismatched exact parcel bindings fail closed before save or after hydration.
-  - id: bounded-causal-retention
-    statement: Detailed domain history, terminal journeys and terminal materialization jobs have fixed upper bounds; deterministic summaries and receipts preserve aggregate causality without allowing server-lifetime growth.
-  - id: weighted-route-allocation
-    statement: Shared facility output is allocated deterministically across active routes by destination demand and explicit route weight; route identity is used only for stable remainder ordering and never as economic priority.
-  - id: domain-purity
-    statement: Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.
-  - id: materialization-safety
-    statement: Every long-lived physical transition is compiled from pinned semantic policy into a Core-owned persisted PRESENTATION or CAPABILITY job and executed only through the guarded NeoForge MaterializationGateway with loaded-chunk, exact parcel identity, semantic-slot, precondition and postcondition checks plus rollback on a rejected postcondition. Canonical infection registers immutable semantic ownership without loading its whole MineSite, observes each physical baseline only when that cell's chunk naturally becomes available, and materializes its controller before bounded overlay reconciliation whenever the site is nearby, independently of story acceptance. Applied cells are durable crash-safe progress and do not require their chunks to remain loaded while later slices reconcile; unloaded cells remain pending without force-loading. Combat actors and source-native gate mechanics are incident- and knowledge-gated shared physical help: entering an infected MineSite may materialize them without accepting a private scenario, while strategic commands still require RESPOND.
-  - id: fresh-world-genesis
-    statement: Fresh-world visual genesis is distinct from reconciliation materialization; one dedicated coordinator uses a bounded configurable worker pool for independent terrain probes and candidate attempts, then deterministically reduces indexed results and compiles immutable manifests into chunk-addressed slices before players are admitted. A registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v40 compatibility path. When `genesis.authoredEnabled=true`, that coordinator is the admission owner. `genesis.authoredEnabled=false` is an explicit Frontier-graybox-only admission mode: it starts no terrain planner, publishes no authored catalog and cannot silently turn a failed authored campaign into a ready world.
-  - id: terrain-led-settlement-grammar
-    statement: Every authored settlement is an immutable terrain-led site plan selected from a bounded archetype catalog. Buildings have stable identity, categories, functions, local foundations, semantic slots, ports and state profiles; each curated NBT module declares its real local threshold and canonical outward facade, and module rotation, door, apron and obstacle-aware circulation derive from that one contract rather than a bounding-box midpoint. Open spaces, circulation, segmented defences, irregular managed-area unions and five parcels plus two annex easements are typed and validated, and no radial wall or global settlement terrace is synthesized as a hidden fallback.
-  - id: perimeter-terrain-safety
-    statement: The low physical enclosure requires a bounded dry stable cross-section on both sides of every sampled wall run, so a narrow ravine missed by the coarse settlement grid rejects the center instead of becoming a hidden retaining terrace.
-  - id: settlement-genesis-vegetation
-    statement: Before player admission, every fresh-world authored settlement and mine installs an immutable chunk-indexed SiteEnvironmentPlan against the exact Overworld generator. Foreign surface decoration is rejected during configured-feature placement inside the hard site circle; whole tree features also observe a crown apron and thin deterministically through the 128-176 settlement transition band. Foreign surface structures whose complete bounding boxes intersect the settlement hard circle plus sixteen blocks are rejected as units, while snow/freeze, water, caves, ores, geodes and genuinely deep structures remain natural. A C2ME-safe thread-local feature scope and WorldGenRegion write firewall prevent late leaves, hives, plants and surface formations without post-load mutation. PM gardens are authored exemptions, the rail corridor retains only its narrow safety cleanup, and loaded-chunk events are read-only stamp observers.
-  - id: authored-site-surface
-    statement: Each authored site compiles one exclusive absolute SiteSurfaceColumn owner and first-air datum for every active foundation, road, sidewalk, plaza, open-space, gate, perimeter and fixture column before chunk slicing; a soft future reservation has no physical marker or surface claim until a project starts. Only a curated module's true footprint is hard-graded as foundation, while its catalog apron is a one-column-per-level terrain transition and may never become a generic exposed platform. Terrain, buildings and decoration consume that persisted plan without runtime heightmap queries; semantic priority resolves intersections once, module compilers cannot invent relative surface slots, each same-datum perimeter run installs its own footing, and one structural perimeter stream owns a five-wide freight opening, three real pedestrian gates and a low terrain-following frontier boundary.
-  - id: bounded-batch-genesis-planning
-    statement: One dedicated genesis coordinator and its bounded 1-16-worker pool consume one immutable RegionPlacementProfile that owns search bands and budgets, settlement terrain and vegetation suitability, typed site requirements, spatial relations and route policy; layout grammars do not hide terrain constants. Expensive candidate attempts run in index-addressed waves, shared terrain caches are concurrent, nested work executes inline, and only the sequential reducer may assign ordinals, accept a region, apply spacing or mutate the manifest list. Coarse-height lookup resolves equal-distance samples by their signed coordinate key, never by map iteration or worker completion order. Region cardinality is a validated minimum/target/maximum range: genesis fails below the minimum, may finish below target, and never exceeds maximum. The output cap and bounded survey-candidate cap are independent; the iron profile may inspect at most 160 ranked centers while materializing no more than six regions. Optional feasibility reserves never trigger the large-world search policy and use only envelope-scale separation; configured region spacing is enforced between accepted manifests, so a discarded survey center cannot exclude nearby geography. Site selection first rejects wet or excessively wooded biome footprints without a height query, then ranks deterministic foothill refinements with a 25-column grid sampled at forty-eight-block spacing. Township planning performs the authoritative 130-column sixteen-block footprint snapshot and rejects total relief over sixteen, local grade over four, second-difference roughness over three, depressions over three or less than eighty-two percent buildable surface before trying at most twenty-four deterministic layouts; all twenty building pads receive exact nine-column water/cut/fill validation and reject more than four blocks of cut or fill. Every MineSite candidate must have a biome-confirmed dry mountain face, nearby mountain-biome evidence, a continuous median OCEAN_FLOOR_WG cross-section rising at least ten blocks over forty-eight blocks and individually verified dry surface-building pads with relief at most eight blocks, cut at most four and fill at most four. Each mine resolution allows at most twenty-four exact candidates and fails closed without flat-land or wet fallback. Primary and alternate mountain masses are constrained to 160-320 and 320-560 blocks from the settlement. A bounded deterministic railway-corridor search strongly prefers dry land, permits only water spans up to twenty-four blocks with explicit bridge clearance and rejects grades steeper than one-in-four. The final rail path is verified column-by-column; only the naturally generating current chunk uses its ready heightmaps and fluid state for local cut, fill and bridge representation.
-  - id: authored-mine-blueprints
-    statement: Every authored MineSite is a typed immutable blueprint manifest with portal, loading endpoint, controller anchor, bounds, orientation, semantic surface buildings, underground modules, independently surveyed local foundation pads, staged modules and semantic volumes. Mine17 materializes a complete industrial campus while Red Valley remains a compact staged outpost; PM-authored surface landmarks are reproducibly generated and SHA-pinned, while remaining curated private-pack structures are pinned by origin and SHA-256. Imported entity lists are ignored because resident and threat carriers are PM-managed. Curated block entities, finite container contents, local Create machinery and architectural resource cells retain their one-shot NBT; coordinates are rewritten, external links are removed, and creative power, explosives, spawners, structure machinery, unscoped controllers, invalid states and missing dependencies fail closed or use an explicit per-block curator substitution. Static modules materialize exactly once after their full block state pass, are never periodically rebuilt or refilled, guarded staged block entities persist an operation idempotency marker against crash replay, and settlement circulation and decoration may not overwrite their true footprints. The canonical adit portal is the sole public mine entrance: its road owns a continuous five-wide grounded throat at the portal datum, its industrial frame remains outside that clearance and final entrance compilation runs after curated NBT, underground rooms and decoration. The imported hoist building is an offset landmark with its own semantic door and may never occupy or substitute for the adit. Every MineSite surface cell belongs to a curated module, an explicit access/loading route or a supported fixture; loose yard paint, spoil rows and furniture positioned from a borrowed nearest-foundation datum are forbidden. Genesis MineSite interiors are sealed and dry; later flooding requires an explicit canonical visual transition.
-  - id: visual-projection-boundary
-    statement: The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions.
-  - id: frontier-two-way-authority
-    statement: The pure-domain `ReferenceGrayboxSimulation` is the sole canonical owner of the active Python-source-shaped settlement economy, named residents and their custody, ecology, infection/hive topology, tissue signal, organs, bioforms, territorial control/beliefs, civic doctrine/reserves/ration/quarantine, companies/contracts/credit, site works, field posts/links, operations, campaigns and engagements. Its pure-domain `ReferenceGrayboxActorExecutionState` separately owns the continuous physical hand-off for every exact resident/bioform: fixed-point actual position, source-specific semantic revision, one durable executor lease, monotonic combat action epoch/cooldown and COLD/PREPARING/HOT/DRAINING/RECOVERING/RETIRED lifecycle. `SourceGrayboxSavedData` atomically persists the complete source document, execution ledger, bounded physical-effect ledger, bounded warehouse/field-post container and operation-carrier hand-offs, bounded unmodelled physical-scar and pending external-explosion ledgers, and selected clock profile; Minecraft blocks, entities, labels and the presentation ledger are never a second simulation state. An operation carrier is one deterministic chest-minecart UUID with exact source cargo ID, resource, item count and sixteenth-block position: it exists only in naturally player-HOT loaded chunks, moves by real collision, and is COLD source custody elsewhere. Its loss submits the exact item delta before it remains visibly blocked; a mixed cart is released to the player after PM removes only its own resource. The explicit v23/v24-to-v25 actor-revision migration accepts only the legacy format-3 global-projection envelope and may rebind it to source-specific actor revisions only after exact full actor-ID/kind proof against retained canonical source; it never recreates, drops or substitutes a body. Schema v29 writes the current format-4 execution envelope, explicit clock profile, bounded operation-carrier ledger and bounded pending external-explosion ledger; retained v23-v25 documents become `FAST_GRAYBOX` because that is their historical hard-coded pace, v26 retains its stored profile, v23-v27 begin with no invented carrier, and v28 begins with no invented pending blast. A v26 operation barrel converts only after its exact active, naturally loaded, count-matching custody is released; otherwise the old barrel remains the sole custody point. Missing/current-invalid clock, carrier, pending-explosion or revision/envelope data remains fail-closed. `SourceGrayboxRuntime` alone advances the source clock once activated, so the historical `FrontierWorldState` scaffold has no active tick path. Materialized residents and bioforms carry immutable source ID, a complete-frame snapshot revision for typed death observations, and a separate source-specific semantic revision for exclusive executor adoption. Their physical deaths, declared interactive source slots and exact matching item deltas in snapshot-owned warehouse, field-post barrel or operation carrier become deduplicated, revision-validated `ReferenceGraybox*Observation` events; an external real explosion first persistently captures its exact currently PM-owned target blocks, then after Minecraft's own block resolution emits the same observations as one batch before source-day advancement. A stale, foreign, replayed or player-owned change remains a visible conflict and never becomes permission to mutate canonical state. A source cell's infection value may only appear physically as its bounded provenance-owned tissue clumps; a blocked clump records that PM never installed it and may never erase the foreign obstruction on a later source publication.
-  - id: frontier-actor-execution-recovery
-    statement: A source-graybox actor may have at most one physical executor. The read-only player HOT zone is the union of non-spectator player chunks plus one chunk, with a one-chunk already-loaded preparation apron; it never tickets or force-loads a chunk. Entering HOT requires a persisted deterministic lease after that preparation; a source-owned deterministic settlement street/cell apron is first choice, and the physical executor may choose only a bounded deterministic collision-free neighbour without clearing a block, then captures that exact sixteenth-block hand-off in the same admission turn. A scene that newly intersects an already HOT body gets the same-tick bounded recovery from its observed body position before entity ticking; no free body cell discards that executor, retains a visible non-owning obstruction and settles the exact hand-off COLD for a later deterministically staggered collision recheck, never a duplicate or a suffocating body. The check is no more frequent than 200 ticks per actor and naturally retries after removal of the real foreign obstacle without polling or ticketing unloaded chunks. DRAINING captures its actual sixteenth-block position before any removal, only after 200-tick demand hysteresis and a 64-block no-player safety check. On restart every unfinished actor becomes RECOVERING and an entity is re-adopted only by the matching pre-restart lease; a missing or stale body settles COLD and is never blindly duplicated. Actor execution runs at a bounded ten-tick cadence, has a 4,096-record bound, keeps a monotonic local lease clock across operator time rewind, and source reconciliation may retire an absent actor only through executor acknowledgement.
-  - id: frontier-actor-admission-migration
-    statement: Schema v29 may migrate a retained schema-v27 actor execution ledger whose source-visible actor revisions changed only because deterministic physical admission slots moved from geometry to street/perimeter cells; its v28 predecessor additionally initializes only an empty pending external-explosion ledger. The actor migration proves the complete exact actor-ID/kind set, then refreshes source revision and anchor; COLD records take that source anchor, while PREPARING/HOT/DRAINING/RECOVERING records retain their captured actual sixteenth-block hand-off and lease until ordinary recovery inspects it. A missing, retired, foreign-kind or current-v29 revision mismatch remains fail-closed; migration never creates, deletes, substitutes or teleports an executor.
-  - id: frontier-role-brain
-    statement: A HOT source-graybox body uses a bounded, collision-checked NeoForge role brain rather than uncontrolled vanilla goals. Every ten ticks it refreshes only exact leased bodies from the immutable source snapshot and derives a local human role/deployment or hive phase intent; up to sixty-four bodies receive smooth movement steps each Minecraft tick toward that intent. A separate bounded local combat executor may examine up to sixty-four HOT bodies every five ticks: source combat roles line/scout/assault and resident guards strike nearby managed bioforms, while engineer/medic/logistics bodies remain local support and pursuing bioforms use the real local entity collision set, including players and foreign living bodies. Before any hit, the exact actor lease reserves a monotonic action epoch/cooldown and a durable effect receipt binds the inspected target; its fixed-point pre/post health receipt is terminal, or becomes UNKNOWN_AFTER_RESTART and is never replayed. Neither executor owns strategic target selection, inventory, source health or source mutation; neither can materialize a COLD body or run in an unloaded chunk. Persisted execution position remains the restart hand-off, and a managed physical death still crosses only the typed observation boundary.
-  - id: autonomous-physical-causality
-    statement: Pale Mirror is an autonomous world, not a protected simulation exhibit. A PM-caused physical event uses its real Minecraft collision and effect geometry over every physically reachable block and entity: an operation identifies an actor's intent but never forms a protection boundary, and no PM-defined safe zone, ownership class or target filter suppresses a legitimate consequence. Every non-replayable effect has a durable identity and exact post-impact observation (cause, affected entities, changed blocks, terrain/infection residue and structural consequences); reconciliation maps known semantic subjects to their source-state damage and retains an explicit bounded physical-scar or obstruction fact for other affected world space. No physical consequence may be silently dropped, repaired from baseline, or replayed after restart.
-  - id: frontier-time-scales
-    statement: The living-world clock is layered. In the persistent GAMEPLAY profile, one complete source day is 24,000 Minecraft game ticks (twenty real minutes at 20 TPS); the source daily order is never fractionated or accelerated merely for presentation. Loaded physical actors move at Minecraft tick rate, role brains reconsider local goals every ten ticks, bounded local melee considers actions every five ticks, tactical operations reconcile every twenty ticks and bounded local work/infection progression runs every one hundred ticks. Accepted physical observations reconcile immediately and never wait for a source-day boundary. The disposable FAST_GRAYBOX profile retains 1,200 ticks per source day plus explicit complete-day fast-forward for calibration and manual testing. A fresh schema-v29 world persists GAMEPLAY; v23-v25 migration preserves FAST_GRAYBOX because that was the retained runtime pace, while v26 retains its explicit persisted profile. Clock profile and last canonical source-day boundary are durable world state; an operator-only live rate change rebases the boundary at its game tick, and missing or unknown current profiles fail closed instead of silently rescaling a campaign.
-  - id: frontier-graybox-scale
-    statement: The active source-parity `graybox_1_40` profile owns the active Python reference's 64×44 logical grid, mapped 16 blocks per cell into a centred 1024×704 arena inside a 1024×1024 flat Y=64 world with neutral top/bottom borders, twelve settlements and two infection seeds. It is a discrete scale profile: each canonical resident is exactly one person and one managed Villager when materialized, and each canonical bioform is exactly one managed Zombie; no cohort entity or hidden population multiplier is allowed. Human population, stock, credit and capacity are explicitly rescaled 1:40; territorial ecology and organ biomass retain source spatial scale, while individual-bioform combat effects are calibrated against the smaller human world. Rates, phase ordering and topology remain source-derived. `genesis.authoredEnabled=false` prevents legacy terrain-authored genesis from writing to or gating the graybox; explicit activation makes `SourceGrayboxRuntime` the sole campaign-clock authority. Every materialized object carries identity/revision and each managed Villager/Zombie death or declared interaction-slot break becomes a validated, deduplicated typed perturbation; arbitrary player-owned changes remain visible conflicts. Each nonzero infection cell has at most four independently claimed 3×3 tissue clumps: brown trace/red active/purple dense growth encodes level, and a live pink signal may accent only one existing clump, never repaint the whole cell; growth and retreat remain visible without a per-block unbounded ledger. A conflicted clump is a permanent visible physical scar until its source identity retires. Loaded labels and colour-coded graybox geometry expose canonical processes, while performance limits may defer unloaded presentation but may not aggregate or delete canonical people.
-  - id: automodel-evidence-boundary
-    statement: Automodel is an offline research boundary: source-pinned references and traces decide likeness, all model output remains provenance-pinned noncanonical evidence under ignored build artifacts, and no Automodel operation may write canonical Blender sources, PMMesh exports, runtime resources, server state or world state. External still staging remains MODEL_DERIVED; only an explicit complete-ring human receipt may promote secondary volume aids, while qualified DA3/VGGT disagreement is inspection-only and never mesh fusion.
-  - id: foundry-diagnostic-boundary
-    statement: Pale Mirror Foundry is a read-only internal materialization framework over immutable genesis manifests and already-loaded physical chunks. The COMPILED gate runs before catalog publication; runtime MATERIALIZED, SETTLED and RELOADED audits never force-load or repair chunks, never mutate canonical state, and emit only bounded findings, one-shot operator markers, defect camera poses and disposable JSON/HTML/PNG artifacts. Unloaded columns remain explicitly unverified, raw authored NBT is held only in a bounded immutable template cache, and every severe rule requires negative or recovery coverage.
-  - id: managed-resident-identity
-    statement: Every PM-authored resident has a stable UUID, namespaced role and exact home-building/home-slot plus workplace-or-patrol-building/slot binding; ambient absence never implies death, only a confirmed death of that UUID may reduce PM-owned population, recruitment is denied in the exact-version behaviour bridge, and physical births require an explicit canonical growth permit.
-  - id: observation-boundary
-    statement: Observers publish typed facts; reconciliation alone converts them into domain commands and events.
-  - id: conflict-safety
-    statement: Unknown or player-owned block changes conflict at semantic-slot granularity and must not be overwritten by default; a player may explicitly commission a community asset or authorize a previewed reset for one object, module and slot.
-  - id: authored-parcel-ownership
-    statement: Settlement influence never grants block ownership. Only PublicInfrastructure and CommunityParcel areas are PM-managed; PlayerLeaseParcel remains player-owned, and a soft ReservedPlot occupied before a project is reclassified or blocks development without overwrite.
-  - id: world-journey
-    statement: Population and actor travel is a persisted canonical WorldJourney over a shared WorldPath. Off-screen movement and risk advance deterministically without force-loading, while nearby stable identities materialize under exclusive leases and return typed progress, casualty and obstruction observations through reconciliation. The physical provider retains the latest bounded projection and continues reconciliation while players or chunks become available; canonical revision suppression may reduce delivery traffic but may not stop staged resident spawning or movement.
-  - id: authored-damage-and-development
-    statement: Off-screen damage, reconstruction and positive development compile deterministic staged projects against managed semantic slots. Authored damage is a bounded module-specific overlay and pristine reconstruction restores its captured baseline; positive development compiles a real climate-family module onto a verified free reserved plot. Red Valley begins as a working adit with an offline dispatch site; only a server-validated player choice may reserve 12 canonical IRON and start its foundation, shell, isolated Create-machinery and commissioning stages. Overlapping stages retain their original baseline and advance only exact PM-authored postconditions into later slots, so unrelated player edits still fail closed. Capability is granted only after physical postconditions, and its Create route still requires an independent real-train proof; community labour/resources and player receipts fund work without treating ordinary containers as canonical stock.
-  - id: product-profile-preflight
-    statement: A product-profile server validates Pale Mirror Visuals, Create 6.0.10, pinned resident/render dependencies and the versioned asset catalog before opening a world and fails closed on mismatch. Core-only synthetic representations exist only in an explicitly selected dev/test profile.
-  - id: adapter-fallback
-    statement: Missing optional integrations degrade to explicit adapter health states and must not block the core slice.
-  - id: source-identity
-    statement: Each facility has one immutable canonical InfectionSourceId; adapters and physical overlays must match it, and mixed-source composition requires an explicit future policy.
-  - id: source-adapter-isolation
-    statement: Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.
-  - id: controlled-effects
-    statement: Every PM-authorized non-replayable physical effect has a persisted idempotency lease before execution; a RUNNING lease after restart is visible and never replayed implicitly.
-  - id: pm-threat-combat
-    statement: A registered Crimson or Spore form is a visual carrier only; PM persists its identity, target, health, cooldowns, movement, effects and projectile state, intercepts every incoming vanilla-compatible damage source, and never permits uncontrolled native AI, hurt/death, loot, terrain or infection logic. A PM-authorized physical effect remains allowed only through the durable, observed autonomous-physical-causality path.
-  - id: excluded-source-items
-    statement: While Crimson and Spore item progression is out of scope, their source stacks cannot craft, pickup, interact, tick, or apply melee behavior; legacy stacks are quarantined without becoming PM state.
-  - id: logistics-observation
-    statement: A physical logistics route becomes canonical capacity only through typed, bounded adapter observations. The read-only Create bridge samples whichever registered endpoint is naturally loaded, persists the opaque vehicle fact through reconciliation, and certifies capacity only after the same vehicle is observed at the other endpoint inside the proof window; it never drives transport or force-loads route chunks.
-  - id: managed-railway-commissioning
-    statement: Railway Untold/Create is an explicit later industrial route provider, never an implicit default for a small campaign settlement. Its production materialization is independent and out of order by naturally loaded chunk footprints only; neither PM nor its provider may generate unseen route chunks. A permission-level-4 closed-alpha exercise may explicitly persist AUTONOMOUS_DEV authority for one Red Valley line, letting the provider ticket only its next bounded segment footprint; this record never mutates canonical capacity, which still requires the ordinary read-only Create proof. Initial authored-corridor construction records provenance while accepting provider transforms, later repairs fail closed on unknown changes, player schedule edits suspend canonical service, and PM remains the owner of route capacity and resource flow.
-  - id: vanilla-minecart-baseline
-    statement: A fresh authored campaign region may use the built-in low-capacity VANILLA_MINECART provider. Its immutable genesis manifest is persistent initial topology evidence, so healthy canonical flow begins at registration and never depends on a player loading every corridor chunk; unlike Create traversal proof, this evidence does not age and is replaced only by explicit loaded-world observations. Its complete path, track, trestles and receiving platform are pinned and written by chunk-local worldgen; runtime only adopts stamped generated segments into exact provenance and never rebuilds missing genesis geometry. Adoption verifies the canonical rail cell, a dry non-falling support and graph continuity rather than replaying decorative live-heightmap writes; a loaded missing genesis rail or invalid support immediately suspends capacity. Block and chunk-load events update bounded local or connected-graph slices, chunk unload preserves the last accepted revision, a disconnected graph suspends canonical capacity, and any connected player reroute may be adopted without matching authored cells. Exact provenance guards later PM writes but never authorizes overwriting an adopted player path. The persisted lease-authorized cart/cargo pair is a singleton non-physical projection: loaded duplicates are reconciled deterministically, collision impulses are discarded, it follows the accepted path only during operational supply, parks at origin otherwise, and never simulates deliveries in unloaded chunks.
-  - id: runtime-work-budget
-    statement: All non-critical Pale Mirror server-thread reconciliation is admitted through one configurable soft time and weighted-operation budget with staggered cadence, per-work metrics and deterministic deferral. Combat attribution, canonical safety checks and already-started idempotent physical operations remain critical; deferred jobs retain their persisted cursors and are never silently discarded.
-  - id: distant-horizons-budget
-    statement: Distant Horizons is client-side by default, where ordinary received chunks populate each client's local presentation cache without server work. The exact-version optional server bridge is an explicit benchmark opt-in; when present it disables the background importer, retains PRE_EXISTING_ONLY as a dormant fail-safe and may build/synchronize LODs only from normal chunk events. It never changes canonical state, generates terrain, force-loads PM sites or blocks core runtime when absent or incompatible. Its once-per-second speed observer lowers only the public-API runtime ratio during fast travel and restores it after bounded hysteresis; transition failures remain operator-visible.
-  - id: enderman-grief-protection
-    statement: Endermen cannot pick up or place blocks in a Pale Mirror runtime. This server-wide physical-safety policy protects route supports and other infrastructure without changing the global mobGriefing rule or the behavior of other mobs.
-  - id: ambient-spawn-budget
-    statement: Ambient spawn throttling is an ephemeral NeoForge physical policy applied only to natural, chunk-generation and patrol attempts. It reuses Minecraft SpawnState counts instead of scanning loaded entities, and may suppress non-canonical hostile and passive background populations, but never PM materialization, residents, breeding, structures, spawners, events, commands or canonical state.
-  - id: settlement-territory-ecology
-    statement: Persisted Settlement Influence parcels follow the irregular managed-area union and define horizontal ecology-protection columns without granting block ownership. Tree-like feature growth and natural, chunk-generation or patrol MONSTER spawns are denied inside those columns, while explicit PM encounters, spawners, events and commands remain outside this physical policy.
-  - id: settlement-observation
-    statement: Vanilla-compatible places are recognized only after a complete 400-tick loaded evidence window. Large and vertical villages resolve a stable loaded bell/home through the Minecraft POI index and require a bounded resident cluster; the player's exact position is never the identity. Reliability, freshness, representative membership and causal losses remain typed and separate, and missing entities never imply death or ruin. Campaign logistics uses a separate ground-projected infrastructure anchor so a tower bell cannot create aerial depots or rails.
-  - id: settlement-actor
-    statement: A settlement community, its physical place, economy, security and policy are separate canonical records; deterministic settlement policy creates crisis facts and continues acting when Narrator returns NO_SCENARIO.
-  - id: route-contract
-    statement: Strategic flow uses persisted RouteContract validation; both endpoints must be operational before positive capacity can be accepted or transferred. WorldSites may keep multiple typed affiliations and ambiguous beneficiaries fail closed; Create observations prove capability without delivering stock directly, and capacity ages from CURRENT to STALE to EXPIRED without force-loading chunks.
-  - id: presentation-read-only
-    statement: FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression.
-  - id: client-atlas-projection
-    statement: The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence. Every authored manifest pins a horizontal semantic discovery-chunk set covering the irregular managed address, gates, depot and short railway approach without granting block ownership; Mine17 is discovered independently by any chunk intersecting its immutable authored site bounds rather than by distance from one technical anchor. Every non-spectator StoryAudience discovers and persists its own knowledge independently, receives only known region cards, and gets an immediate refreshed snapshot for each newly learned feature; spectator/operator audit never creates knowledge or online-presence facts.
-  - id: transactional-resource-boundary
-    statement: Physical items cross the settlement economy boundary only through a persisted bounded transfer ledger; ordinary container contents never mirror canonical stock, and reserved stacks fail closed until reconciliation completes.
-  - id: pm-owned-settlement-sites
-    statement: Pale Mirror materializes settlement infrastructure only inside a persisted deterministic PM-owned footprint with per-cell provenance and postconditions; observed village blocks remain read-only.
-  - id: population-separation
-    statement: SettlementCommunity owns social identity while PopulationGroup owns cohort counts and disposition; evacuation changes occupancy and location without deleting community identity or inferring deaths from missing entities.
-  - id: settlement-catastrophe-fairness
-    statement: A known critical settlement receives one persisted global reachability-adjusted grace window before automatic evacuation. Abstract policy continues without Narrator, but irreversible grace advances while any informed non-spectator audience is online and pauses only while all informed audiences are offline; physical consequences touch only PM-owned cells.
-  - id: multi-audience-region-authority
-    statement: LivingRegion, economy, facilities, routes, population, incident timing and physical outcome are global world facts. Knowledge, access observations, scenario offers, acceptance and decline are private per StoryAudience; scoreboard teams are one audience and unteamed players are personal audiences, and team changes never merge old knowledge. Physical help is open to every audience that knows the settlement, strategic commands require that audience's active RESPOND crisis plus world prerequisites, and the first canonical outcome resolves every linked nonterminal private scenario exactly once.
-  - id: settlement-positive-development
-    statement: Stable surplus creates a persisted domain DevelopmentIntent with bounded project escrow. Player physical IRON crosses through idempotent receipts, or the settlement reserves the remainder after 24 qualifying steps; only a fully funded, provenance-safe verified PM-owned storehouse may advance capacity, housing, prosperity and growth.
-  - id: living-frontier-instancing
-    statement: An iron_frontier instance derives all canonical object identities from its deterministic fresh-world authored genesis manifest, pins settlement, mines, sites, residents and route geometry before any physical work, and cannot share a community, route, resident or physical job with another instance; observed villages never bootstrap the default campaign.
-  - id: narrator-candidate-boundary
-    statement: Narrator candidates are deterministic, transient per-audience interpretations of canonical events/history. The same global event may yield distinct private scenario identities and decisions for every informed audience. Replayed development and return opportunities are eligible only while the causally referenced DevelopmentIntent remains PLANNED, and a recovery investment additionally requires a same-community CRISIS_DETECTED -> STABILIZED history before its development plan. Ordinary fresh-world prosperity remains autonomous; stale offers are command-cancelled without cancelling their valid settlement intent. Acceptance revalidates canonical intent state before entering RESPOND. Candidates may select a scenario or persist NO_SCENARIO, but never create a crisis, change settlement policy, inspect Minecraft/adapters, or become a competing mutable queue.
-  - id: prepared-evacuation
-    statement: A Refugee Anchor item is only a signed player proposal and a strategic action. Canonical shelter registration and player-started evacuation require that audience's active RESPOND supply-crisis scenario, then validate emergency, dimension, safe PM-owned footprint and capacity before physical camp work. Player-started evacuation names that exact prepared site and its canonical path; it may never fall back to lexicographic selection among reserved candidates. A prepared camp remains operational while its population is resident, departing, in transit or hosted; its durable lifecycle retires the site only after that population has actually departed and returned home. Camp reconciliation may repair a persisted arrived or completed misroute only through a validated domain command and an explicit terminal correction journey. Automatic settlement-policy evacuation remains possible without a player permit.
-  - id: settlement-field-authority
-    statement: Every campaign settlement pins a source-neutral field authority profile; native-reconciled settlements may contribute population and integrity facts while PM remains unable to move, ruin, grow or construct the native society.
-  - id: operator-debug-safety
-    statement: Operator debug reads projections or invokes normal validated state transitions; navigation teleports only by explicit command to a persisted physical anchor; maintenance reset is two-phase, bounded to wholly unmaterialized PM state, rechecks every precondition at commit time, and fails closed without touching Minecraft blocks, entities, chunks or foreign state.
+  - statement: "Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions."
+  - statement: "Unknown or player-owned block changes are conflicts and must not be overwritten by default."
+  - id: "frontier-v3-greenfield-isolation"
+    statement: "Frontier v3 is a fresh-world pure-Java runtime in pale-mirror-frontier and must not import, invoke, fixture-gate or share canonical state with pale-mirror-domain, frontier.reference, SourceGraybox, Python, Minecraft or NeoForge."
+  - id: "frontier-v3-single-writer"
+    statement: "One FrontierEngine mutation lane on the Minecraft server thread owns each v3 world's canonical revision; commands and due actions validate and emit immutable events before an atomic state transition, while workers, adapters, entities, renderers and persistence callbacks never mutate canonical state."
+  - id: "frontier-v3-event-time"
+    statement: "Frontier v3 time is a monotonic event-driven SimInstant with persisted due actions and deterministic tie breaks; it has no indivisible daily phase, advances while the server runs without players, pauses while the server is stopped, advances skipped sleep only through an explicit command and ignores presentation-only time changes."
+  - id: "frontier-v3-hot-cold"
+    statement: "HOT and COLD are exact execution locations for the same canonical actors, cargo and scenes; one persisted scene lease prevents double execution, captures complete hand-off state and reconstructs current continuation without force-loading, duplication, frozen entities or replayed history."
+  - id: "frontier-v3-physical-causality"
+    statement: "A persisted v3 physical intent may affect every physically reachable Minecraft block, entity or player-owned structure without a protected-zone filter; actual results are immutable typed evidence, known subjects receive semantic consequences and unknown results enter the bounded physical-delta index instead of being erased by desired-state materialization."
+  - id: "frontier-v3-exact-economy"
+    statement: "Frontier v3 represents each canonical person, bioform and Minecraft item exactly once; inventories are exact owned slots, HOT containers and carriers are custody surfaces for that same state, and no cohort multiplier, hidden stock counter or duplicate transport economy is permitted."
+  - id: "frontier-v3-persistence"
+    statement: "Frontier v3 persists versioned checksummed snapshots plus an ordered write-ahead log; player custody, physical leases and non-replayable effects are durable before acknowledgement or invocation, recovery never blindly replays a running effect, and compaction keeps events, schedules, receipts and physical deltas bounded."
+  - id: "frontier-v3-bounded-runtime"
+    statement: "Frontier v3 uses indexed event-driven work, bounded server-tick budgets, incremental projections and naturally loaded chunks only; deferral preserves due-action order and simulation lag, conflicts, queue depth, storage growth and per-stage cost remain observable."
+  - id: "canonical-state"
+    statement: "Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations."
+  - id: "canonical-mutation-boundary"
+    statement: "Production code mutates canonical WorldState only through a DomainCommandExecutor transaction; collection views are immutable, package-private mutation is reserved for the command processor, and persistence hydration is isolated to codecs."
+  - id: "snapshot-integrity"
+    statement: "Schema-v40 snapshots are accepted only after canonical aggregate and physical-projection validation; orphan references, duplicate active jobs and mismatched exact parcel bindings fail closed before save or after hydration."
+  - id: "bounded-causal-retention"
+    statement: "Detailed domain history, terminal journeys and terminal materialization jobs have fixed upper bounds; deterministic summaries and receipts preserve aggregate causality without allowing server-lifetime growth."
+  - id: "weighted-route-allocation"
+    statement: "Shared facility output is allocated deterministically across active routes by destination demand and explicit route weight; route identity is used only for stable remainder ordering and never as economic priority."
+  - id: "domain-purity"
+    statement: "Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs."
+  - id: "materialization-safety"
+    statement: "Every long-lived physical transition is compiled from pinned semantic policy into a Core-owned persisted PRESENTATION or CAPABILITY job and executed only through the guarded NeoForge MaterializationGateway with loaded-chunk, exact parcel identity, semantic-slot, precondition and postcondition checks plus rollback on a rejected postcondition. Canonical infection registers immutable semantic ownership without loading its whole MineSite, observes each physical baseline only when that cell's chunk naturally becomes available, and materializes its controller before bounded overlay reconciliation whenever the site is nearby, independently of story acceptance. Applied cells are durable crash-safe progress and do not require their chunks to remain loaded while later slices reconcile; unloaded cells remain pending without force-loading. Combat actors and source-native gate mechanics are incident- and knowledge-gated shared physical help: entering an infected MineSite may materialize them without accepting a private scenario, while strategic commands still require RESPOND."
+  - id: "fresh-world-genesis"
+    statement: "Fresh-world visual genesis is distinct from reconciliation materialization; one dedicated coordinator uses a bounded configurable worker pool for independent terrain probes and candidate attempts, then deterministically reduces indexed results and compiles immutable manifests into chunk-addressed slices before players are admitted. A registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v40 compatibility path. When `genesis.authoredEnabled=true`, that coordinator is the admission owner. `genesis.authoredEnabled=false` is an explicit Frontier-graybox-only admission mode: it starts no terrain planner, publishes no authored catalog and cannot silently turn a failed authored campaign into a ready world."
+  - id: "terrain-led-settlement-grammar"
+    statement: "Every authored settlement is an immutable terrain-led site plan selected from a bounded archetype catalog. Buildings have stable identity, categories, functions, local foundations, semantic slots, ports and state profiles; each curated NBT module declares its real local threshold and canonical outward facade, and module rotation, door, apron and obstacle-aware circulation derive from that one contract rather than a bounding-box midpoint. Open spaces, circulation, segmented defences, irregular managed-area unions and five parcels plus two annex easements are typed and validated, and no radial wall or global settlement terrace is synthesized as a hidden fallback."
+  - id: "perimeter-terrain-safety"
+    statement: "The low physical enclosure requires a bounded dry stable cross-section on both sides of every sampled wall run, so a narrow ravine missed by the coarse settlement grid rejects the center instead of becoming a hidden retaining terrace."
+  - id: "settlement-genesis-vegetation"
+    statement: "Before player admission, every fresh-world authored settlement and mine installs an immutable chunk-indexed SiteEnvironmentPlan against the exact Overworld generator. Foreign surface decoration is rejected during configured-feature placement inside the hard site circle; whole tree features also observe a crown apron and thin deterministically through the 128-176 settlement transition band. Foreign surface structures whose complete bounding boxes intersect the settlement hard circle plus sixteen blocks are rejected as units, while snow/freeze, water, caves, ores, geodes and genuinely deep structures remain natural. A C2ME-safe thread-local feature scope and WorldGenRegion write firewall prevent late leaves, hives, plants and surface formations without post-load mutation. PM gardens are authored exemptions, the rail corridor retains only its narrow safety cleanup, and loaded-chunk events are read-only stamp observers."
+  - id: "authored-site-surface"
+    statement: "Each authored site compiles one exclusive absolute SiteSurfaceColumn owner and first-air datum for every active foundation, road, sidewalk, plaza, open-space, gate, perimeter and fixture column before chunk slicing; a soft future reservation has no physical marker or surface claim until a project starts. Only a curated module's true footprint is hard-graded as foundation, while its catalog apron is a one-column-per-level terrain transition and may never become a generic exposed platform. Terrain, buildings and decoration consume that persisted plan without runtime heightmap queries; semantic priority resolves intersections once, module compilers cannot invent relative surface slots, each same-datum perimeter run installs its own footing, and one structural perimeter stream owns a five-wide freight opening, three real pedestrian gates and a low terrain-following frontier boundary."
+  - id: "bounded-batch-genesis-planning"
+    statement: "One dedicated genesis coordinator and its bounded 1-16-worker pool consume one immutable RegionPlacementProfile that owns search bands and budgets, settlement terrain and vegetation suitability, typed site requirements, spatial relations and route policy; layout grammars do not hide terrain constants. Expensive candidate attempts run in index-addressed waves, shared terrain caches are concurrent, nested work executes inline, and only the sequential reducer may assign ordinals, accept a region, apply spacing or mutate the manifest list. Coarse-height lookup resolves equal-distance samples by their signed coordinate key, never by map iteration or worker completion order. Region cardinality is a validated minimum/target/maximum range: genesis fails below the minimum, may finish below target, and never exceeds maximum. The output cap and bounded survey-candidate cap are independent; the iron profile may inspect at most 160 ranked centers while materializing no more than six regions. Optional feasibility reserves never trigger the large-world search policy and use only envelope-scale separation; configured region spacing is enforced between accepted manifests, so a discarded survey center cannot exclude nearby geography. Site selection first rejects wet or excessively wooded biome footprints without a height query, then ranks deterministic foothill refinements with a 25-column grid sampled at forty-eight-block spacing. Township planning performs the authoritative 130-column sixteen-block footprint snapshot and rejects total relief over sixteen, local grade over four, second-difference roughness over three, depressions over three or less than eighty-two percent buildable surface before trying at most twenty-four deterministic layouts; all twenty building pads receive exact nine-column water/cut/fill validation and reject more than four blocks of cut or fill. Every MineSite candidate must have a biome-confirmed dry mountain face, nearby mountain-biome evidence, a continuous median OCEAN_FLOOR_WG cross-section rising at least ten blocks over forty-eight blocks and individually verified dry surface-building pads with relief at most eight blocks, cut at most four and fill at most four. Each mine resolution allows at most twenty-four exact candidates and fails closed without flat-land or wet fallback. Primary and alternate mountain masses are constrained to 160-320 and 320-560 blocks from the settlement. A bounded deterministic railway-corridor search strongly prefers dry land, permits only water spans up to twenty-four blocks with explicit bridge clearance and rejects grades steeper than one-in-four. The final rail path is verified column-by-column; only the naturally generating current chunk uses its ready heightmaps and fluid state for local cut, fill and bridge representation."
+  - id: "authored-mine-blueprints"
+    statement: "Every authored MineSite is a typed immutable blueprint manifest with portal, loading endpoint, controller anchor, bounds, orientation, semantic surface buildings, underground modules, independently surveyed local foundation pads, staged modules and semantic volumes. Mine17 materializes a complete industrial campus while Red Valley remains a compact staged outpost; PM-authored surface landmarks are reproducibly generated and SHA-pinned, while remaining curated private-pack structures are pinned by origin and SHA-256. Imported entity lists are ignored because resident and threat carriers are PM-managed. Curated block entities, finite container contents, local Create machinery and architectural resource cells retain their one-shot NBT; coordinates are rewritten, external links are removed, and creative power, explosives, spawners, structure machinery, unscoped controllers, invalid states and missing dependencies fail closed or use an explicit per-block curator substitution. Static modules materialize exactly once after their full block state pass, are never periodically rebuilt or refilled, guarded staged block entities persist an operation idempotency marker against crash replay, and settlement circulation and decoration may not overwrite their true footprints. The canonical adit portal is the sole public mine entrance: its road owns a continuous five-wide grounded throat at the portal datum, its industrial frame remains outside that clearance and final entrance compilation runs after curated NBT, underground rooms and decoration. The imported hoist building is an offset landmark with its own semantic door and may never occupy or substitute for the adit. Every MineSite surface cell belongs to a curated module, an explicit access/loading route or a supported fixture; loose yard paint, spoil rows and furniture positioned from a borrowed nearest-foundation datum are forbidden. Genesis MineSite interiors are sealed and dry; later flooding requires an explicit canonical visual transition."
+  - id: "visual-projection-boundary"
+    statement: "The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions."
+  - id: "frontier-two-way-authority"
+    statement: "The pure-domain `ReferenceGrayboxSimulation` is the sole canonical owner of the active Python-source-shaped settlement economy, named residents and their custody, ecology, infection/hive topology, tissue signal, organs, bioforms, territorial control/beliefs, civic doctrine/reserves/ration/quarantine, companies/contracts/credit, site works, field posts/links, operations, campaigns and engagements. Its pure-domain `ReferenceGrayboxActorExecutionState` separately owns the continuous physical hand-off for every exact resident/bioform: fixed-point actual position, source-specific semantic revision, one durable executor lease, monotonic combat action epoch/cooldown and COLD/PREPARING/HOT/DRAINING/RECOVERING/RETIRED lifecycle. `SourceGrayboxSavedData` atomically persists the complete source document, execution ledger, bounded physical-effect ledger, bounded warehouse/field-post container and operation-carrier hand-offs, bounded unmodelled physical-scar and pending external-explosion ledgers, and selected clock profile; Minecraft blocks, entities, labels and the presentation ledger are never a second simulation state. An operation carrier is one deterministic chest-minecart UUID with exact source cargo ID, resource, item count and sixteenth-block position: it exists only in naturally player-HOT loaded chunks, moves by real collision, and is COLD source custody elsewhere. Its loss submits the exact item delta before it remains visibly blocked; a mixed cart is released to the player after PM removes only its own resource. The explicit v23/v24-to-v25 actor-revision migration accepts only the legacy format-3 global-projection envelope and may rebind it to source-specific actor revisions only after exact full actor-ID/kind proof against retained canonical source; it never recreates, drops or substitutes a body. Schema v29 writes the current format-4 execution envelope, explicit clock profile, bounded operation-carrier ledger and bounded pending external-explosion ledger; retained v23-v25 documents become `FAST_GRAYBOX` because that is their historical hard-coded pace, v26 retains its stored profile, v23-v27 begin with no invented carrier, and v28 begins with no invented pending blast. A v26 operation barrel converts only after its exact active, naturally loaded, count-matching custody is released; otherwise the old barrel remains the sole custody point. Missing/current-invalid clock, carrier, pending-explosion or revision/envelope data remains fail-closed. `SourceGrayboxRuntime` alone advances the source clock once activated, so the historical `FrontierWorldState` scaffold has no active tick path. Materialized residents and bioforms carry immutable source ID, a complete-frame snapshot revision for typed death observations, and a separate source-specific semantic revision for exclusive executor adoption. Their physical deaths, declared interactive source slots and exact matching item deltas in snapshot-owned warehouse, field-post barrel or operation carrier become deduplicated, revision-validated `ReferenceGraybox*Observation` events; an external real explosion first persistently captures its exact currently PM-owned target blocks, then after Minecraft's own block resolution emits the same observations as one batch before source-day advancement. A stale, foreign, replayed or player-owned change remains a visible conflict and never becomes permission to mutate canonical state. A source cell's infection value may only appear physically as its bounded provenance-owned tissue clumps; a blocked clump records that PM never installed it and may never erase the foreign obstruction on a later source publication."
+  - id: "frontier-actor-execution-recovery"
+    statement: "A source-graybox actor may have at most one physical executor. The read-only player HOT zone is the union of non-spectator player chunks plus one chunk, with a one-chunk already-loaded preparation apron; it never tickets or force-loads a chunk. Entering HOT requires a persisted deterministic lease after that preparation; a source-owned deterministic settlement street/cell apron is first choice, and the physical executor may choose only a bounded deterministic collision-free neighbour without clearing a block, then captures that exact sixteenth-block hand-off in the same admission turn. A scene that newly intersects an already HOT body gets the same-tick bounded recovery from its observed body position before entity ticking; no free body cell discards that executor, retains a visible non-owning obstruction and settles the exact hand-off COLD for a later deterministically staggered collision recheck, never a duplicate or a suffocating body. The check is no more frequent than 200 ticks per actor and naturally retries after removal of the real foreign obstacle without polling or ticketing unloaded chunks. DRAINING captures its actual sixteenth-block position before any removal, only after 200-tick demand hysteresis and a 64-block no-player safety check. On restart every unfinished actor becomes RECOVERING and an entity is re-adopted only by the matching pre-restart lease; a missing or stale body settles COLD and is never blindly duplicated. Actor execution runs at a bounded ten-tick cadence, has a 4,096-record bound, keeps a monotonic local lease clock across operator time rewind, and source reconciliation may retire an absent actor only through executor acknowledgement."
+  - id: "frontier-actor-admission-migration"
+    statement: "Schema v29 may migrate a retained schema-v27 actor execution ledger whose source-visible actor revisions changed only because deterministic physical admission slots moved from geometry to street/perimeter cells; its v28 predecessor additionally initializes only an empty pending external-explosion ledger. The actor migration proves the complete exact actor-ID/kind set, then refreshes source revision and anchor; COLD records take that source anchor, while PREPARING/HOT/DRAINING/RECOVERING records retain their captured actual sixteenth-block hand-off and lease until ordinary recovery inspects it. A missing, retired, foreign-kind or current-v29 revision mismatch remains fail-closed; migration never creates, deletes, substitutes or teleports an executor."
+  - id: "frontier-role-brain"
+    statement: "A HOT source-graybox body uses a bounded, collision-checked NeoForge role brain rather than uncontrolled vanilla goals. Every ten ticks it refreshes only exact leased bodies from the immutable source snapshot and derives a local human role/deployment or hive phase intent; up to sixty-four bodies receive smooth movement steps each Minecraft tick toward that intent. A separate bounded local combat executor may examine up to sixty-four HOT bodies every five ticks: source combat roles line/scout/assault and resident guards strike nearby managed bioforms, while engineer/medic/logistics bodies remain local support and pursuing bioforms use the real local entity collision set, including players and foreign living bodies. Before any hit, the exact actor lease reserves a monotonic action epoch/cooldown and a durable effect receipt binds the inspected target; its fixed-point pre/post health receipt is terminal, or becomes UNKNOWN_AFTER_RESTART and is never replayed. Neither executor owns strategic target selection, inventory, source health or source mutation; neither can materialize a COLD body or run in an unloaded chunk. Persisted execution position remains the restart hand-off, and a managed physical death still crosses only the typed observation boundary."
+  - id: "autonomous-physical-causality"
+    statement: "Pale Mirror is an autonomous world, not a protected simulation exhibit. A PM-caused physical event uses its real Minecraft collision and effect geometry over every physically reachable block and entity: an operation identifies an actor's intent but never forms a protection boundary, and no PM-defined safe zone, ownership class or target filter suppresses a legitimate consequence. Every non-replayable effect has a durable identity and exact post-impact observation (cause, affected entities, changed blocks, terrain/infection residue and structural consequences); reconciliation maps known semantic subjects to their source-state damage and retains an explicit bounded physical-scar or obstruction fact for other affected world space. No physical consequence may be silently dropped, repaired from baseline, or replayed after restart."
+  - id: "frontier-time-scales"
+    statement: "The living-world clock is layered. In the persistent GAMEPLAY profile, one complete source day is 24,000 Minecraft game ticks (twenty real minutes at 20 TPS); the source daily order is never fractionated or accelerated merely for presentation. Loaded physical actors move at Minecraft tick rate, role brains reconsider local goals every ten ticks, bounded local melee considers actions every five ticks, tactical operations reconcile every twenty ticks and bounded local work/infection progression runs every one hundred ticks. Accepted physical observations reconcile immediately and never wait for a source-day boundary. The disposable FAST_GRAYBOX profile retains 1,200 ticks per source day plus explicit complete-day fast-forward for calibration and manual testing. A fresh schema-v29 world persists GAMEPLAY; v23-v25 migration preserves FAST_GRAYBOX because that was the retained runtime pace, while v26 retains its explicit persisted profile. Clock profile and last canonical source-day boundary are durable world state; an operator-only live rate change rebases the boundary at its game tick, and missing or unknown current profiles fail closed instead of silently rescaling a campaign."
+  - id: "frontier-graybox-scale"
+    statement: "The active source-parity `graybox_1_40` profile owns the active Python reference's 64×44 logical grid, mapped 16 blocks per cell into a centred 1024×704 arena inside a 1024×1024 flat Y=64 world with neutral top/bottom borders, twelve settlements and two infection seeds. It is a discrete scale profile: each canonical resident is exactly one person and one managed Villager when materialized, and each canonical bioform is exactly one managed Zombie; no cohort entity or hidden population multiplier is allowed. Human population, stock, credit and capacity are explicitly rescaled 1:40; territorial ecology and organ biomass retain source spatial scale, while individual-bioform combat effects are calibrated against the smaller human world. Rates, phase ordering and topology remain source-derived. `genesis.authoredEnabled=false` prevents legacy terrain-authored genesis from writing to or gating the graybox; explicit activation makes `SourceGrayboxRuntime` the sole campaign-clock authority. Every materialized object carries identity/revision and each managed Villager/Zombie death or declared interaction-slot break becomes a validated, deduplicated typed perturbation; arbitrary player-owned changes remain visible conflicts. Each nonzero infection cell has at most four independently claimed 3×3 tissue clumps: brown trace/red active/purple dense growth encodes level, and a live pink signal may accent only one existing clump, never repaint the whole cell; growth and retreat remain visible without a per-block unbounded ledger. A conflicted clump is a permanent visible physical scar until its source identity retires. Loaded labels and colour-coded graybox geometry expose canonical processes, while performance limits may defer unloaded presentation but may not aggregate or delete canonical people."
+  - id: "automodel-evidence-boundary"
+    statement: "Automodel is an offline research boundary: source-pinned references and traces decide likeness, all model output remains provenance-pinned noncanonical evidence under ignored build artifacts, and no Automodel operation may write canonical Blender sources, PMMesh exports, runtime resources, server state or world state. External still staging remains MODEL_DERIVED; only an explicit complete-ring human receipt may promote secondary volume aids, while qualified DA3/VGGT disagreement is inspection-only and never mesh fusion."
+  - id: "foundry-diagnostic-boundary"
+    statement: "Pale Mirror Foundry is a read-only internal materialization framework over immutable genesis manifests and already-loaded physical chunks. The COMPILED gate runs before catalog publication; runtime MATERIALIZED, SETTLED and RELOADED audits never force-load or repair chunks, never mutate canonical state, and emit only bounded findings, one-shot operator markers, defect camera poses and disposable JSON/HTML/PNG artifacts. Unloaded columns remain explicitly unverified, raw authored NBT is held only in a bounded immutable template cache, and every severe rule requires negative or recovery coverage."
+  - id: "managed-resident-identity"
+    statement: "Every PM-authored resident has a stable UUID, namespaced role and exact home-building/home-slot plus workplace-or-patrol-building/slot binding; ambient absence never implies death, only a confirmed death of that UUID may reduce PM-owned population, recruitment is denied in the exact-version behaviour bridge, and physical births require an explicit canonical growth permit."
+  - id: "observation-boundary"
+    statement: "Observers publish typed facts; reconciliation alone converts them into domain commands and events."
+  - id: "conflict-safety"
+    statement: "Unknown or player-owned block changes conflict at semantic-slot granularity and must not be overwritten by default; a player may explicitly commission a community asset or authorize a previewed reset for one object, module and slot."
+  - id: "authored-parcel-ownership"
+    statement: "Settlement influence never grants block ownership. Only PublicInfrastructure and CommunityParcel areas are PM-managed; PlayerLeaseParcel remains player-owned, and a soft ReservedPlot occupied before a project is reclassified or blocks development without overwrite."
+  - id: "world-journey"
+    statement: "Population and actor travel is a persisted canonical WorldJourney over a shared WorldPath. Off-screen movement and risk advance deterministically without force-loading, while nearby stable identities materialize under exclusive leases and return typed progress, casualty and obstruction observations through reconciliation. The physical provider retains the latest bounded projection and continues reconciliation while players or chunks become available; canonical revision suppression may reduce delivery traffic but may not stop staged resident spawning or movement."
+  - id: "authored-damage-and-development"
+    statement: "Off-screen damage, reconstruction and positive development compile deterministic staged projects against managed semantic slots. Authored damage is a bounded module-specific overlay and pristine reconstruction restores its captured baseline; positive development compiles a real climate-family module onto a verified free reserved plot. Red Valley begins as a working adit with an offline dispatch site; only a server-validated player choice may reserve 12 canonical IRON and start its foundation, shell, isolated Create-machinery and commissioning stages. Overlapping stages retain their original baseline and advance only exact PM-authored postconditions into later slots, so unrelated player edits still fail closed. Capability is granted only after physical postconditions, and its Create route still requires an independent real-train proof; community labour/resources and player receipts fund work without treating ordinary containers as canonical stock."
+  - id: "product-profile-preflight"
+    statement: "A product-profile server validates Pale Mirror Visuals, Create 6.0.10, pinned resident/render dependencies and the versioned asset catalog before opening a world and fails closed on mismatch. Core-only synthetic representations exist only in an explicitly selected dev/test profile."
+  - id: "adapter-fallback"
+    statement: "Missing optional integrations degrade to explicit adapter health states and must not block the core slice."
+  - id: "source-identity"
+    statement: "Each facility has one immutable canonical InfectionSourceId; adapters and physical overlays must match it, and mixed-source composition requires an explicit future policy."
+  - id: "source-adapter-isolation"
+    statement: "Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts."
+  - id: "controlled-effects"
+    statement: "Every PM-authorized non-replayable physical effect has a persisted idempotency lease before execution; a RUNNING lease after restart is visible and never replayed implicitly."
+  - id: "pm-threat-combat"
+    statement: "A registered Crimson or Spore form is a visual carrier only; PM persists its identity, target, health, cooldowns, movement, effects and projectile state, intercepts every incoming vanilla-compatible damage source, and never permits uncontrolled native AI, hurt/death, loot, terrain or infection logic. A PM-authorized physical effect remains allowed only through the durable, observed autonomous-physical-causality path."
+  - id: "excluded-source-items"
+    statement: "While Crimson and Spore item progression is out of scope, their source stacks cannot craft, pickup, interact, tick, or apply melee behavior; legacy stacks are quarantined without becoming PM state."
+  - id: "logistics-observation"
+    statement: "A physical logistics route becomes canonical capacity only through typed, bounded adapter observations. The read-only Create bridge samples whichever registered endpoint is naturally loaded, persists the opaque vehicle fact through reconciliation, and certifies capacity only after the same vehicle is observed at the other endpoint inside the proof window; it never drives transport or force-loads route chunks."
+  - id: "managed-railway-commissioning"
+    statement: "Railway Untold/Create is an explicit later industrial route provider, never an implicit default for a small campaign settlement. Its production materialization is independent and out of order by naturally loaded chunk footprints only; neither PM nor its provider may generate unseen route chunks. A permission-level-4 closed-alpha exercise may explicitly persist AUTONOMOUS_DEV authority for one Red Valley line, letting the provider ticket only its next bounded segment footprint; this record never mutates canonical capacity, which still requires the ordinary read-only Create proof. Initial authored-corridor construction records provenance while accepting provider transforms, later repairs fail closed on unknown changes, player schedule edits suspend canonical service, and PM remains the owner of route capacity and resource flow."
+  - id: "vanilla-minecart-baseline"
+    statement: "A fresh authored campaign region may use the built-in low-capacity VANILLA_MINECART provider. Its immutable genesis manifest is persistent initial topology evidence, so healthy canonical flow begins at registration and never depends on a player loading every corridor chunk; unlike Create traversal proof, this evidence does not age and is replaced only by explicit loaded-world observations. Its complete path, track, trestles and receiving platform are pinned and written by chunk-local worldgen; runtime only adopts stamped generated segments into exact provenance and never rebuilds missing genesis geometry. Adoption verifies the canonical rail cell, a dry non-falling support and graph continuity rather than replaying decorative live-heightmap writes; a loaded missing genesis rail or invalid support immediately suspends capacity. Block and chunk-load events update bounded local or connected-graph slices, chunk unload preserves the last accepted revision, a disconnected graph suspends canonical capacity, and any connected player reroute may be adopted without matching authored cells. Exact provenance guards later PM writes but never authorizes overwriting an adopted player path. The persisted lease-authorized cart/cargo pair is a singleton non-physical projection: loaded duplicates are reconciled deterministically, collision impulses are discarded, it follows the accepted path only during operational supply, parks at origin otherwise, and never simulates deliveries in unloaded chunks."
+  - id: "runtime-work-budget"
+    statement: "All non-critical Pale Mirror server-thread reconciliation is admitted through one configurable soft time and weighted-operation budget with staggered cadence, per-work metrics and deterministic deferral. Combat attribution, canonical safety checks and already-started idempotent physical operations remain critical; deferred jobs retain their persisted cursors and are never silently discarded."
+  - id: "distant-horizons-budget"
+    statement: "Distant Horizons is client-side by default, where ordinary received chunks populate each client's local presentation cache without server work. The exact-version optional server bridge is an explicit benchmark opt-in; when present it disables the background importer, retains PRE_EXISTING_ONLY as a dormant fail-safe and may build/synchronize LODs only from normal chunk events. It never changes canonical state, generates terrain, force-loads PM sites or blocks core runtime when absent or incompatible. Its once-per-second speed observer lowers only the public-API runtime ratio during fast travel and restores it after bounded hysteresis; transition failures remain operator-visible."
+  - id: "enderman-grief-protection"
+    statement: "Endermen cannot pick up or place blocks in a Pale Mirror runtime. This server-wide physical-safety policy protects route supports and other infrastructure without changing the global mobGriefing rule or the behavior of other mobs."
+  - id: "ambient-spawn-budget"
+    statement: "Ambient spawn throttling is an ephemeral NeoForge physical policy applied only to natural, chunk-generation and patrol attempts. It reuses Minecraft SpawnState counts instead of scanning loaded entities, and may suppress non-canonical hostile and passive background populations, but never PM materialization, residents, breeding, structures, spawners, events, commands or canonical state."
+  - id: "settlement-territory-ecology"
+    statement: "Persisted Settlement Influence parcels follow the irregular managed-area union and define horizontal ecology-protection columns without granting block ownership. Tree-like feature growth and natural, chunk-generation or patrol MONSTER spawns are denied inside those columns, while explicit PM encounters, spawners, events and commands remain outside this physical policy."
+  - id: "settlement-observation"
+    statement: "Vanilla-compatible places are recognized only after a complete 400-tick loaded evidence window. Large and vertical villages resolve a stable loaded bell/home through the Minecraft POI index and require a bounded resident cluster; the player's exact position is never the identity. Reliability, freshness, representative membership and causal losses remain typed and separate, and missing entities never imply death or ruin. Campaign logistics uses a separate ground-projected infrastructure anchor so a tower bell cannot create aerial depots or rails."
+  - id: "settlement-actor"
+    statement: "A settlement community, its physical place, economy, security and policy are separate canonical records; deterministic settlement policy creates crisis facts and continues acting when Narrator returns NO_SCENARIO."
+  - id: "route-contract"
+    statement: "Strategic flow uses persisted RouteContract validation; both endpoints must be operational before positive capacity can be accepted or transferred. WorldSites may keep multiple typed affiliations and ambiguous beneficiaries fail closed; Create observations prove capability without delivering stock directly, and capacity ages from CURRENT to STALE to EXPIRED without force-loading chunks."
+  - id: "presentation-read-only"
+    statement: "FTB Quests and the in-world journal present PM facts but never own, mutate or feed back scenario progression."
+  - id: "client-atlas-projection"
+    statement: "The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence. Every authored manifest pins a horizontal semantic discovery-chunk set covering the irregular managed address, gates, depot and short railway approach without granting block ownership; Mine17 is discovered independently by any chunk intersecting its immutable authored site bounds rather than by distance from one technical anchor. Every non-spectator StoryAudience discovers and persists its own knowledge independently, receives only known region cards, and gets an immediate refreshed snapshot for each newly learned feature; spectator/operator audit never creates knowledge or online-presence facts."
+  - id: "transactional-resource-boundary"
+    statement: "Physical items cross the settlement economy boundary only through a persisted bounded transfer ledger; ordinary container contents never mirror canonical stock, and reserved stacks fail closed until reconciliation completes."
+  - id: "pm-owned-settlement-sites"
+    statement: "Pale Mirror materializes settlement infrastructure only inside a persisted deterministic PM-owned footprint with per-cell provenance and postconditions; observed village blocks remain read-only."
+  - id: "population-separation"
+    statement: "SettlementCommunity owns social identity while PopulationGroup owns cohort counts and disposition; evacuation changes occupancy and location without deleting community identity or inferring deaths from missing entities."
+  - id: "settlement-catastrophe-fairness"
+    statement: "A known critical settlement receives one persisted global reachability-adjusted grace window before automatic evacuation. Abstract policy continues without Narrator, but irreversible grace advances while any informed non-spectator audience is online and pauses only while all informed audiences are offline; physical consequences touch only PM-owned cells."
+  - id: "multi-audience-region-authority"
+    statement: "LivingRegion, economy, facilities, routes, population, incident timing and physical outcome are global world facts. Knowledge, access observations, scenario offers, acceptance and decline are private per StoryAudience; scoreboard teams are one audience and unteamed players are personal audiences, and team changes never merge old knowledge. Physical help is open to every audience that knows the settlement, strategic commands require that audience's active RESPOND crisis plus world prerequisites, and the first canonical outcome resolves every linked nonterminal private scenario exactly once."
+  - id: "settlement-positive-development"
+    statement: "Stable surplus creates a persisted domain DevelopmentIntent with bounded project escrow. Player physical IRON crosses through idempotent receipts, or the settlement reserves the remainder after 24 qualifying steps; only a fully funded, provenance-safe verified PM-owned storehouse may advance capacity, housing, prosperity and growth."
+  - id: "living-frontier-instancing"
+    statement: "An iron_frontier instance derives all canonical object identities from its deterministic fresh-world authored genesis manifest, pins settlement, mines, sites, residents and route geometry before any physical work, and cannot share a community, route, resident or physical job with another instance; observed villages never bootstrap the default campaign."
+  - id: "narrator-candidate-boundary"
+    statement: "Narrator candidates are deterministic, transient per-audience interpretations of canonical events/history. The same global event may yield distinct private scenario identities and decisions for every informed audience. Replayed development and return opportunities are eligible only while the causally referenced DevelopmentIntent remains PLANNED, and a recovery investment additionally requires a same-community CRISIS_DETECTED -> STABILIZED history before its development plan. Ordinary fresh-world prosperity remains autonomous; stale offers are command-cancelled without cancelling their valid settlement intent. Acceptance revalidates canonical intent state before entering RESPOND. Candidates may select a scenario or persist NO_SCENARIO, but never create a crisis, change settlement policy, inspect Minecraft/adapters, or become a competing mutable queue."
+  - id: "prepared-evacuation"
+    statement: "A Refugee Anchor item is only a signed player proposal and a strategic action. Canonical shelter registration and player-started evacuation require that audience's active RESPOND supply-crisis scenario, then validate emergency, dimension, safe PM-owned footprint and capacity before physical camp work. Player-started evacuation names that exact prepared site and its canonical path; it may never fall back to lexicographic selection among reserved candidates. A prepared camp remains operational while its population is resident, departing, in transit or hosted; its durable lifecycle retires the site only after that population has actually departed and returned home. Camp reconciliation may repair a persisted arrived or completed misroute only through a validated domain command and an explicit terminal correction journey. Automatic settlement-policy evacuation remains possible without a player permit."
+  - id: "settlement-field-authority"
+    statement: "Every campaign settlement pins a source-neutral field authority profile; native-reconciled settlements may contribute population and integrity facts while PM remains unable to move, ruin, grow or construct the native society."
+  - id: "operator-debug-safety"
+    statement: "Operator debug reads projections or invokes normal validated state transitions; navigation teleports only by explicit command to a persisted physical anchor; maintenance reset is two-phase, bounded to wholly unmaterialized PM state, rechecks every precondition at commit time, and fails closed without touching Minecraft blocks, entities, chunks or foreign state."
 
 critical_flows:
-  - id: authored-frontier-genesis
-    path: world seed plus ordinal -> generator-only terrain survey -> immutable visual manifest -> asynchronous chunk-slice compilation -> player admission gate -> naturally generating chunk Feature -> persisted chunk stamp -> read-only load observation -> core validation -> canonical LivingRegion
-    owner: visuals genesis and NeoForge authored-region registrar; domain owns the accepted region
-    verification: critical-code
-  - id: foundry-materialization-audit
-    path: immutable manifest plus compiled chunk catalog -> fail-closed compiled rules -> already-loaded physical observation -> bounded findings and maps -> settled/reloaded recovery verification
-    owner: visuals Foundry rule engine/exporter plus NeoForge operator debug projection
-    verification: critical-code
-  - id: managed-resident-casualty
-    path: stable resident UUID -> confirmed physical death -> typed observation -> reconciliation deduplication -> PM-owned cohort decrement -> domain event
-    owner: visuals resident bridge plus NeoForge reconciliation and domain casualty runtime
-    verification: critical-code
-  - id: dynamic-visual-projection
-    path: canonical facility and settlement state -> immutable visual projection -> animated Threat Heart and bounded cues -> canonical cleanup projection
-    owner: NeoForge projection publisher plus visuals presentation runtime
-    verification: critical-code
-  - id: frontier-graybox-projection
-    path: source-shaped ReferenceGrayboxSimulation -> deterministic V2 daily source order (ecology, movement, perception/civics, market, trade, planning, demography) -> immutable cached ReferenceGrayboxSnapshot plus actor execution ledger and current-day committed effect descriptors -> explicitly activated disposable graybox with an enforced 1024-block physical border -> source change, COLD-to-PREPARING body admission or natural graybox-chunk load requests one loaded-chunk claim-checked projection of coloured structures, bounded source-cell tissue clumps, readable boards, source-derived field-post kind/module silhouettes plus operation/campaign scenes, resource-specific PM-owned barrel shelves, field-post cargo barrels, one exact deterministic HOT chest-minecart per operation resource and lease-owned Villager/Zombie bodies; an exact HOT demand heartbeat/captured hand-off remains durable but unchanged time never rebuilds the arena -> an expected unloaded HOT body first captures its exact hand-off and stays DRAINING with its reservation, then either re-adopts that same serialized UUID when player demand returns or settles COLD only after a naturally loaded scene proves no body -> revision-checked matching item delta becomes a source receipt; COLD operation cargo retains exact source-owned position/count in its bounded carrier ledger without a physical cart, while a v26 barrel converts only by clean naturally loaded release and a moving carrier uses real collision, never a teleport or ticket. A lost carrier submits its exact delta then remains blocked; a mixed carrier/barrel releases player items and never becomes PM custody again -> source-day HOT effect lease or durable COLD disposition -> normal Minecraft blast/cue geometry -> typed physical observation or captured hand-off state plus bounded unmodelled physical scars -> identity/revision/lease/dedup validation -> ReferenceGrayboxObservationExecutor -> immediate canonical source republish; a blocked desired clump or container persists as non-owning foreign-obstruction evidence and is never retried over player geometry
-    owner: frontier.reference pure domain plus NeoForge SourceGrayboxSavedData/Runtime/Materializer/EffectRuntime
-    verification: critical-code
-  - id: core-recovery
-    path: simulation -> MineInfected -> Narrator -> scenario -> materialization job -> observation -> reconciliation -> recovery
-    owner: domain plus neoforge bridge
-    verification: critical-code
-  - id: multi-audience-crisis
-    path: authored discovery chunks -> independent audience knowledge -> one globally armed incident -> private scenario offers and responses -> shared physical help or RESPOND-gated strategic action -> first canonical outcome -> all linked nonterminal scenarios resolve exactly once
-    owner: domain regional knowledge/scenario authority plus NeoForge discovery and presentation bridges
-    verification: critical-code
-  - id: restart-recovery
-    path: persisted job -> restart -> postcondition check -> idempotent completion
-    owner: neoforge
-    verification: critical-code
-  - id: native-settlement-reconciliation
-    path: pinned read-only adapter -> stable typed evidence -> field-authority check -> command -> canonical population reconciliation
-    owner: isolated optional adapter plus generic observation bridge and domain authority profile
-    verification: critical-code
-  - id: optional-encounter-degradation
-    path: PM anchor -> optional encounter operation -> explicit degradation -> PM recovery
-    owner: neoforge adapter and materialization bridge
-    verification: critical-code
-  - id: crimson-sandbox
-    path: PM encounter intent -> isolated Crimson actor protocol -> typed observation -> PM reconciliation
-    owner: neoforge CrimsonSandboxAdapter and top-priority built-in datapack
-    verification: critical-code
-  - id: pm-threat-tiers
-    path: deterministic simulation -> PM threat tier -> desired revision -> bounded encounter roster -> local actor runtime
-    owner: domain tiers plus neoforge CrimsonSandboxAdapter
-    verification: critical-code
-  - id: pm-staged-infection-biome
-    path: PM threat tier -> persisted tier-pinned overlay job -> registered test-mine cells -> provenance pre/postconditions -> baseline cleanup
-    owner: neoforge test-mine template, materialization executor and SavedData schema persistence
-    verification: critical-code
-  - id: pm-source-gate
-    path: APEX -> source-adapter gate plan -> PM-persisted gate parts -> adapter presentation -> unsealed PM anchor -> recovery
-    owner: domain source-neutral gate state plus neoforge materialization and source adapter
-    verification: critical-code
-  - id: pm-crimson-visual-contract
-    path: PM actor lifecycle/combat -> bounded CrimsonPresentationRuntime -> exact model frames, sounds and particles -> pinned Crimson client resources -> client rendering
-    owner: neoforge CrimsonSandboxAdapter, CrimsonPresentationRuntime and pinned Crimson client pack
-    verification: critical-code
-  - id: pm-source-aware-site
-    path: canonical InfectionSourceId -> source-neutral encounter operation -> isolated source adapter -> typed source-checked observation
-    owner: domain FacilityState plus neoforge materialization and reconciliation bridge
-    verification: critical-code
-  - id: pm-spore-controlled-combat
-    path: PM tier/composition -> persisted encounter intent -> constrained native form -> PM-owned combat HP/cooldown/movement -> typed defeat observation -> PM anchor clearance -> discard cleanup
-    owner: neoforge SporeSandboxAdapter, SporeCombatRuntime, SporeMovementRuntime and PM materialization bridge
-    verification: critical-code
-  - id: pm-spore-global-isolation
-    path: exact Spore pin -> top built-in no-spawn datapack plus isolated global-handler mixins -> entity-join provenance firewall -> PM-local actor materialization only
-    owner: neoforge SporeRuntimeFirewall and the spore_sandbox built-in pack
-    verification: critical-code
-  - id: pm-controlled-effect-lease
-    path: PM actor action -> persisted effect lease -> physical bounded effect -> terminal receipt -> restart deduplication/compaction
-    owner: neoforge ControlledEffectExecutor and EffectLeaseLedger
-    verification: critical-code
-  - id: pm-targeted-projectile
-    path: PM action -> persisted projectile intent/provenance and effect lease -> source visual carrier -> real Minecraft flight and collision -> one physical impact or expiry -> exact affected-entity/block/terrain observation -> canonical reconciliation and bounded physical-scar retention -> restart-safe terminal receipt
-    owner: neoforge ThreatCombatLedger, PmProjectileRuntime, controlled physical-effect executor and source-isolated projectile runtimes; domain owns reconciliation
-    verification: critical-code
-  - id: pm-excluded-source-item-firewall
-    path: source item stack -> interaction/craft/pickup/inventory/melee boundary -> denied action -> quarantine diagnostic
-    owner: neoforge ExcludedSourceItemFirewall, ItemStack mixin and event observers
-    verification: critical-code
-  - id: living-region-supply
-    path: typed place evidence -> Community/Place binding -> Mine -> RouteContract -> ResourceAccount -> SettlementPolicy -> objective crisis -> combat/logistics outcome
-    owner: domain settlement actor model plus NeoForge evidence, presentation and logistics bridges
-    verification: critical-code
-  - id: living-frontier-aftermath
-    path: canonical crisis outcome -> surplus or displacement -> DevelopmentIntent/return intent -> history-derived Narrator candidate -> offered player continuation or explicit NO_SCENARIO -> verified autonomous result
-    owner: domain settlement policy/Narrator plus NeoForge presentation bridge
-    verification: critical-code
-  - id: prepared-refugee-site
-    path: emergency window -> audience-bound permit -> player placement fact -> validated shelter command -> persisted PM camp job -> physical postcondition -> operational shelter -> resettled population
-    owner: domain emergency policy plus NeoForge camp materialization bridge
-    verification: critical-code
-  - id: create-same-vehicle-proof
-    path: either named loaded station -> persisted opaque native vehicle observation -> later observation at the independently loaded second endpoint -> bounded same-vehicle proof -> canonical route capacity
-    owner: NeoForge Create adapter and regional logistics reconciliation
-    verification: critical-code
-  - id: managed-regional-railway
-    path: explicit industrial RouteProvider selection or operator-only Red Valley exercise -> persisted regional plan and construction policy -> guarded MineSite commissioning -> loaded-chunks-only production plan or one-footprint-at-a-time AUTONOMOUS_DEV exercise -> persisted RUNNING/track/support postconditions -> complete Create graph -> independently loaded endpoint stations -> origin-loaded train assembly -> ordinary independently observed same-vehicle proof -> canonical RouteContract validation
-    owner: NeoForge ManagedRailwayRuntime plus generic adapter boundary and isolated Railway Untold provider; domain owns route and flow
-    verification: critical-code
-  - id: vanilla-regional-freight
-    path: authored region manifest -> persisted vanilla RouteProvider contract -> chunk-local MineSite and rail worldgen -> generated stamp observation -> provenance adoption -> persisted observed rail graph -> event-driven endpoint connectivity reconciliation -> RouteContract validation -> accepted-path representative cart
-    owner: NeoForge VanillaMinecartRouteRuntime and isolated VanillaMinecartRailAdapter; domain owns route and flow
-    verification: critical-code
-  - id: settlement-resource-transfer
-    path: depot interaction -> persisted PREPARED receipt -> reserved physical stack or canonical debit -> domain command/event -> physical completion -> bounded compaction
-    owner: domain economy plus NeoForge resource transfer ledger and depot executor
-    verification: critical-code
-  - id: settlement-displacement
-    path: objective critical state -> persisted grace window -> player shelter selection or degraded autonomous fallback -> WorldJourney -> leased resident projection and full-risk simulation -> destination camp -> PopulationGroup disposition and occupancy
-    owner: domain emergency and journey policy plus NeoForge identity leases and provenance-safe settlement presentation
-    verification: critical-code
-  - id: settlement-development
-    path: stable surplus -> persisted intent -> player project receipts or delayed autonomous reservation -> fully funded escrow -> PM-owned storehouse postcondition -> capacity/prosperity/housing -> bounded population growth
-    owner: domain development policy plus NeoForge storehouse executor
-    verification: critical-code
-  - id: operator-runtime-debug
-    path: typed projections -> observed or canonical authored-place anchors -> operator diagnostics/particle markers/location links -> explicit navigation or canonical command or two-phase safe maintenance
-    owner: NeoForge runtime debug service/controller/navigator; domain and physical adapters remain authoritative for changes
-    verification: critical-code
+  - id: "frontier-v3-command-event"
+    lifecycle: "planned"
+    path: "typed command or persisted due action -> expected-revision and invariant validation -> deterministic events and cause chain -> required WAL durability -> atomic canonical transition -> immutable revisioned projections"
+    owner: "planned pure-Java FrontierEngine; NeoForge owns only server-thread invocation and storage implementation"
+    verification: "critical-code"
+  - id: "frontier-v3-scheduled-world"
+    lifecycle: "planned"
+    path: "server tick or explicit sleep/fast-forward command -> monotonic SimInstant -> ordered due-action queue -> bounded deterministic execution or visible ordered deferral -> next scheduled transitions"
+    owner: "planned Frontier v3 kernel and subsystem processes"
+    verification: "critical-code"
+  - id: "frontier-v3-hot-cold-scene"
+    lifecycle: "planned"
+    path: "naturally loaded player demand -> canonical scene catch-up -> durable scene lease and complete custody hand-off -> exact Minecraft bodies, containers and local goals -> observed final physical state -> atomic COLD hand-off and future schedules"
+    owner: "planned Frontier v3 canonical scene state plus NeoForge scene executor and observation bridge"
+    verification: "critical-code"
+  - id: "frontier-v3-physical-feedback"
+    lifecycle: "planned"
+    path: "canonical physical intent -> DURABLE_BEFORE_EFFECT receipt -> ordinary Minecraft movement, collision or effect geometry without protected-zone filtering -> exact changed entity, block and item observation -> deduplicated reconciliation -> semantic damage plus bounded unknown physical deltas -> immediate projection"
+    owner: "planned Frontier v3 reconciliation plus NeoForge causal effect executor and observation bridge"
+    verification: "critical-code"
+  - id: "frontier-v3-restart-recovery"
+    lifecycle: "planned"
+    path: "verified v3 snapshot -> ordered complete WAL replay -> invariant audit -> prepared/running physical-intent postcondition inspection -> idempotent completion or visible quarantine -> resumed event schedule"
+    owner: "planned pure v3 codecs and recovery policy plus NeoForge FrontierStore"
+    verification: "critical-code"
+  - id: "frontier-v3-cutover"
+    lifecycle: "planned"
+    path: "complete domain matrix -> deterministic and full-scale performance gates -> packaged restart and physical-world gates -> clean-room product gates -> v3-only production activation -> v2 runtime and fixtures removal -> repeated no-v2 verification"
+    owner: "Pale Mirror release workflow across the nested source repository and outer deployment repository"
+    verification: "critical-code"
+  - id: "authored-frontier-genesis"
+    path: "world seed plus ordinal -> generator-only terrain survey -> immutable visual manifest -> asynchronous chunk-slice compilation -> player admission gate -> naturally generating chunk Feature -> persisted chunk stamp -> read-only load observation -> core validation -> canonical LivingRegion"
+    owner: "visuals genesis and NeoForge authored-region registrar; domain owns the accepted region"
+    verification: "critical-code"
+  - id: "foundry-materialization-audit"
+    path: "immutable manifest plus compiled chunk catalog -> fail-closed compiled rules -> already-loaded physical observation -> bounded findings and maps -> settled/reloaded recovery verification"
+    owner: "visuals Foundry rule engine/exporter plus NeoForge operator debug projection"
+    verification: "critical-code"
+  - id: "managed-resident-casualty"
+    path: "stable resident UUID -> confirmed physical death -> typed observation -> reconciliation deduplication -> PM-owned cohort decrement -> domain event"
+    owner: "visuals resident bridge plus NeoForge reconciliation and domain casualty runtime"
+    verification: "critical-code"
+  - id: "dynamic-visual-projection"
+    path: "canonical facility and settlement state -> immutable visual projection -> animated Threat Heart and bounded cues -> canonical cleanup projection"
+    owner: "NeoForge projection publisher plus visuals presentation runtime"
+    verification: "critical-code"
+  - id: "frontier-graybox-projection"
+    lifecycle: "frozen-active-until-frontier-v3-cutover"
+    path: "source-shaped ReferenceGrayboxSimulation -> deterministic V2 daily source order (ecology, movement, perception/civics, market, trade, planning, demography) -> immutable cached ReferenceGrayboxSnapshot plus actor execution ledger and current-day committed effect descriptors -> explicitly activated disposable graybox with an enforced 1024-block physical border -> source change, COLD-to-PREPARING body admission or natural graybox-chunk load requests one loaded-chunk claim-checked projection of coloured structures, bounded source-cell tissue clumps, readable boards, source-derived field-post kind/module silhouettes plus operation/campaign scenes, resource-specific PM-owned barrel shelves, field-post cargo barrels, one exact deterministic HOT chest-minecart per operation resource and lease-owned Villager/Zombie bodies; an exact HOT demand heartbeat/captured hand-off remains durable but unchanged time never rebuilds the arena -> an expected unloaded HOT body first captures its exact hand-off and stays DRAINING with its reservation, then either re-adopts that same serialized UUID when player demand returns or settles COLD only after a naturally loaded scene proves no body -> revision-checked matching item delta becomes a source receipt; COLD operation cargo retains exact source-owned position/count in its bounded carrier ledger without a physical cart, while a v26 barrel converts only by clean naturally loaded release and a moving carrier uses real collision, never a teleport or ticket. A lost carrier submits its exact delta then remains blocked; a mixed carrier/barrel releases player items and never becomes PM custody again -> source-day HOT effect lease or durable COLD disposition -> normal Minecraft blast/cue geometry -> typed physical observation or captured hand-off state plus bounded unmodelled physical scars -> identity/revision/lease/dedup validation -> ReferenceGrayboxObservationExecutor -> immediate canonical source republish; a blocked desired clump or container persists as non-owning foreign-obstruction evidence and is never retried over player geometry"
+    owner: "frontier.reference pure domain plus NeoForge SourceGrayboxSavedData/Runtime/Materializer/EffectRuntime"
+    verification: "critical-code"
+  - id: "core-recovery"
+    path: "simulation -> MineInfected -> Narrator -> scenario -> materialization job -> observation -> reconciliation -> recovery"
+    owner: "domain plus neoforge bridge"
+    verification: "critical-code"
+  - id: "multi-audience-crisis"
+    path: "authored discovery chunks -> independent audience knowledge -> one globally armed incident -> private scenario offers and responses -> shared physical help or RESPOND-gated strategic action -> first canonical outcome -> all linked nonterminal scenarios resolve exactly once"
+    owner: "domain regional knowledge/scenario authority plus NeoForge discovery and presentation bridges"
+    verification: "critical-code"
+  - id: "restart-recovery"
+    path: "persisted job -> restart -> postcondition check -> idempotent completion"
+    owner: "neoforge"
+    verification: "critical-code"
+  - id: "native-settlement-reconciliation"
+    path: "pinned read-only adapter -> stable typed evidence -> field-authority check -> command -> canonical population reconciliation"
+    owner: "isolated optional adapter plus generic observation bridge and domain authority profile"
+    verification: "critical-code"
+  - id: "optional-encounter-degradation"
+    path: "PM anchor -> optional encounter operation -> explicit degradation -> PM recovery"
+    owner: "neoforge adapter and materialization bridge"
+    verification: "critical-code"
+  - id: "crimson-sandbox"
+    path: "PM encounter intent -> isolated Crimson actor protocol -> typed observation -> PM reconciliation"
+    owner: "neoforge CrimsonSandboxAdapter and top-priority built-in datapack"
+    verification: "critical-code"
+  - id: "pm-threat-tiers"
+    path: "deterministic simulation -> PM threat tier -> desired revision -> bounded encounter roster -> local actor runtime"
+    owner: "domain tiers plus neoforge CrimsonSandboxAdapter"
+    verification: "critical-code"
+  - id: "pm-staged-infection-biome"
+    path: "PM threat tier -> persisted tier-pinned overlay job -> registered test-mine cells -> provenance pre/postconditions -> baseline cleanup"
+    owner: "neoforge test-mine template, materialization executor and SavedData schema persistence"
+    verification: "critical-code"
+  - id: "pm-source-gate"
+    path: "APEX -> source-adapter gate plan -> PM-persisted gate parts -> adapter presentation -> unsealed PM anchor -> recovery"
+    owner: "domain source-neutral gate state plus neoforge materialization and source adapter"
+    verification: "critical-code"
+  - id: "pm-crimson-visual-contract"
+    path: "PM actor lifecycle/combat -> bounded CrimsonPresentationRuntime -> exact model frames, sounds and particles -> pinned Crimson client resources -> client rendering"
+    owner: "neoforge CrimsonSandboxAdapter, CrimsonPresentationRuntime and pinned Crimson client pack"
+    verification: "critical-code"
+  - id: "pm-source-aware-site"
+    path: "canonical InfectionSourceId -> source-neutral encounter operation -> isolated source adapter -> typed source-checked observation"
+    owner: "domain FacilityState plus neoforge materialization and reconciliation bridge"
+    verification: "critical-code"
+  - id: "pm-spore-controlled-combat"
+    path: "PM tier/composition -> persisted encounter intent -> constrained native form -> PM-owned combat HP/cooldown/movement -> typed defeat observation -> PM anchor clearance -> discard cleanup"
+    owner: "neoforge SporeSandboxAdapter, SporeCombatRuntime, SporeMovementRuntime and PM materialization bridge"
+    verification: "critical-code"
+  - id: "pm-spore-global-isolation"
+    path: "exact Spore pin -> top built-in no-spawn datapack plus isolated global-handler mixins -> entity-join provenance firewall -> PM-local actor materialization only"
+    owner: "neoforge SporeRuntimeFirewall and the spore_sandbox built-in pack"
+    verification: "critical-code"
+  - id: "pm-controlled-effect-lease"
+    path: "PM actor action -> persisted effect lease -> physical bounded effect -> terminal receipt -> restart deduplication/compaction"
+    owner: "neoforge ControlledEffectExecutor and EffectLeaseLedger"
+    verification: "critical-code"
+  - id: "pm-targeted-projectile"
+    path: "PM action -> persisted projectile intent/provenance and effect lease -> source visual carrier -> real Minecraft flight and collision -> one physical impact or expiry -> exact affected-entity/block/terrain observation -> canonical reconciliation and bounded physical-scar retention -> restart-safe terminal receipt"
+    owner: "neoforge ThreatCombatLedger, PmProjectileRuntime, controlled physical-effect executor and source-isolated projectile runtimes; domain owns reconciliation"
+    verification: "critical-code"
+  - id: "pm-excluded-source-item-firewall"
+    path: "source item stack -> interaction/craft/pickup/inventory/melee boundary -> denied action -> quarantine diagnostic"
+    owner: "neoforge ExcludedSourceItemFirewall, ItemStack mixin and event observers"
+    verification: "critical-code"
+  - id: "living-region-supply"
+    path: "typed place evidence -> Community/Place binding -> Mine -> RouteContract -> ResourceAccount -> SettlementPolicy -> objective crisis -> combat/logistics outcome"
+    owner: "domain settlement actor model plus NeoForge evidence, presentation and logistics bridges"
+    verification: "critical-code"
+  - id: "living-frontier-aftermath"
+    path: "canonical crisis outcome -> surplus or displacement -> DevelopmentIntent/return intent -> history-derived Narrator candidate -> offered player continuation or explicit NO_SCENARIO -> verified autonomous result"
+    owner: "domain settlement policy/Narrator plus NeoForge presentation bridge"
+    verification: "critical-code"
+  - id: "prepared-refugee-site"
+    path: "emergency window -> audience-bound permit -> player placement fact -> validated shelter command -> persisted PM camp job -> physical postcondition -> operational shelter -> resettled population"
+    owner: "domain emergency policy plus NeoForge camp materialization bridge"
+    verification: "critical-code"
+  - id: "create-same-vehicle-proof"
+    path: "either named loaded station -> persisted opaque native vehicle observation -> later observation at the independently loaded second endpoint -> bounded same-vehicle proof -> canonical route capacity"
+    owner: "NeoForge Create adapter and regional logistics reconciliation"
+    verification: "critical-code"
+  - id: "managed-regional-railway"
+    path: "explicit industrial RouteProvider selection or operator-only Red Valley exercise -> persisted regional plan and construction policy -> guarded MineSite commissioning -> loaded-chunks-only production plan or one-footprint-at-a-time AUTONOMOUS_DEV exercise -> persisted RUNNING/track/support postconditions -> complete Create graph -> independently loaded endpoint stations -> origin-loaded train assembly -> ordinary independently observed same-vehicle proof -> canonical RouteContract validation"
+    owner: "NeoForge ManagedRailwayRuntime plus generic adapter boundary and isolated Railway Untold provider; domain owns route and flow"
+    verification: "critical-code"
+  - id: "vanilla-regional-freight"
+    path: "authored region manifest -> persisted vanilla RouteProvider contract -> chunk-local MineSite and rail worldgen -> generated stamp observation -> provenance adoption -> persisted observed rail graph -> event-driven endpoint connectivity reconciliation -> RouteContract validation -> accepted-path representative cart"
+    owner: "NeoForge VanillaMinecartRouteRuntime and isolated VanillaMinecartRailAdapter; domain owns route and flow"
+    verification: "critical-code"
+  - id: "settlement-resource-transfer"
+    path: "depot interaction -> persisted PREPARED receipt -> reserved physical stack or canonical debit -> domain command/event -> physical completion -> bounded compaction"
+    owner: "domain economy plus NeoForge resource transfer ledger and depot executor"
+    verification: "critical-code"
+  - id: "settlement-displacement"
+    path: "objective critical state -> persisted grace window -> player shelter selection or degraded autonomous fallback -> WorldJourney -> leased resident projection and full-risk simulation -> destination camp -> PopulationGroup disposition and occupancy"
+    owner: "domain emergency and journey policy plus NeoForge identity leases and provenance-safe settlement presentation"
+    verification: "critical-code"
+  - id: "settlement-development"
+    path: "stable surplus -> persisted intent -> player project receipts or delayed autonomous reservation -> fully funded escrow -> PM-owned storehouse postcondition -> capacity/prosperity/housing -> bounded population growth"
+    owner: "domain development policy plus NeoForge storehouse executor"
+    verification: "critical-code"
+  - id: "operator-runtime-debug"
+    path: "typed projections -> observed or canonical authored-place anchors -> operator diagnostics/particle markers/location links -> explicit navigation or canonical command or two-phase safe maintenance"
+    owner: "NeoForge runtime debug service/controller/navigator; domain and physical adapters remain authoritative for changes"
+    verification: "critical-code"

@@ -1,5 +1,13 @@
 # Frontier AI contract
 
+> **Frozen Frontier v2 contract.** This document describes the retained
+> source-parity runtime only and is no longer a target for feature development.
+> Frontier v3 is a greenfield event-driven system governed by
+> [`frontier-v3-contract.md`](frontier-v3-contract.md) and
+> [`frontier-v3-implementation-plan.md`](frontier-v3-implementation-plan.md).
+> Python fixtures and the rules below are historical v2 evidence, not v3
+> acceptance criteria.
+
 ## Semantic authority and acceptance
 
 The active `/home/rd/proj/pale_mirror_ai/simulation/` checkout is the semantic
