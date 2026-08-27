@@ -254,14 +254,8 @@ final class SourceGrayboxPresentationPlan {
                 add(result, new Desired(prefix + ":scene:beacon", activity.id(), "ACTIVITY_BEACON", revision,
                         x, ACTIVITY_SCENE_Y, z, 1, 1, 4, activity.colour()));
             }
-            case "front_campaign" -> {
-                add(result, new Desired(prefix + ":scene:front-north", activity.id(), "ACTIVITY_FRONT_LINE", revision,
-                        x, ACTIVITY_SCENE_Y, z - 2, 1, 2, 2, activity.colour()));
-                add(result, new Desired(prefix + ":scene:front-south", activity.id(), "ACTIVITY_FRONT_LINE", revision,
-                        x, ACTIVITY_SCENE_Y, z + 1, 1, 2, 2, activity.colour()));
-                add(result, new Desired(prefix + ":scene:beacon", activity.id(), "ACTIVITY_BEACON", revision,
-                        x, ACTIVITY_SCENE_Y, z, 1, 1, 5, activity.colour()));
-            }
+            case "front_campaign" -> SourceGrayboxFrontCampaignScenePlan.from(revision, activity, ACTIVITY_SCENE_Y)
+                    .forEach(item -> add(result, item));
             default -> throw new IllegalStateException("unknown source graybox activity family: " + activity.family());
         }
         add(result, marker(prefix, activity.id(), "ACTIVITY", revision, x, ACTIVITY_Y, z, activity.colour()));

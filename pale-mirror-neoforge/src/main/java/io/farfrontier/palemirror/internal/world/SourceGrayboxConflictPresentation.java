@@ -29,7 +29,9 @@ final class SourceGrayboxConflictPresentation {
     static boolean needsLocalBoard(String kind) {
         return switch (kind) {
             case "FACILITY", "RESOURCE_SITE", "ROUTE", "HIVE_ORGAN", "CARGO", "FIELD_POST", "FIELD_POST_MODULE",
-                    "FIELD_LINK", "ACTIVITY", "ACTIVITY_BEACON", "ACTIVITY_CAMPAIGN_CAMP", "ACTIVITY_FRONT_LINE",
+                    "FIELD_LINK", "ACTIVITY", "ACTIVITY_BEACON", "ACTIVITY_CAMPAIGN_CAMP", "ACTIVITY_FRONT_RECON_SCOUT",
+                    "ACTIVITY_FRONT_ASSEMBLY", "ACTIVITY_FRONT_ESTABLISH", "ACTIVITY_FRONT_CORDON", "ACTIVITY_FRONT_CLEAR_LINE",
+                    "ACTIVITY_FRONT_HOLD", "ACTIVITY_FRONT_RESTORE", "ACTIVITY_FRONT_WITHDRAW_COLUMN",
                     "CHRYSALIS", "INTERACTION", "SOURCE_CONTAINER", "SOURCE_CONTAINER_RELOCATING",
                     "SOURCE_ACTOR_OBSTRUCTION" -> true;
             default -> false;

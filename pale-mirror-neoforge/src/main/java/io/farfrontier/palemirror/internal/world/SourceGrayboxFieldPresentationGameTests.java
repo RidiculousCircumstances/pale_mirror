@@ -66,11 +66,11 @@ public final class SourceGrayboxFieldPresentationGameTests {
         helper.assertValueEqual(campClaim.subjectId(), fieldCampaign.id(), "the camp corner must retain its exact campaign identity");
 
         ReferenceGrayboxSnapshot.Activity frontCampaign = snapshot.activities().get(2);
-        BlockPos front = new BlockPos(frontCampaign.position().x(), ReferenceGrayboxLayout.GROUND_Y + 1,
-                frontCampaign.position().z() - 2);
+        BlockPos front = new BlockPos(frontCampaign.position().x() - 3, ReferenceGrayboxLayout.GROUND_Y + 1,
+                frontCampaign.position().z() - 1);
         SourceGrayboxPresentationLedger.Claim frontClaim = materializer.claimAt(helper.getLevel(), front);
-        helper.assertValueEqual(frontClaim.kind(), "ACTIVITY_FRONT_LINE",
-                "a V2 front campaign must project a line silhouette rather than a camp or generic activity marker");
+        helper.assertValueEqual(frontClaim.kind(), "ACTIVITY_FRONT_CLEAR_LINE",
+                "a V2 clearance campaign must project its active line rather than a camp or generic activity marker");
         helper.assertValueEqual(frontClaim.subjectId(), frontCampaign.id(), "the front line must retain its exact campaign identity");
         helper.succeed();
     }
@@ -113,6 +113,42 @@ public final class SourceGrayboxFieldPresentationGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void frontCampaignPhasesMaterializeDistinctSourceOwnedGroundScenes(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 152);
+        ReferenceGrayboxSnapshot snapshot = frontCampaignPhaseScenesFixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot());
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+        materializer.apply(helper.getLevel(), snapshot);
+
+        assertSceneKind(helper, materializer, anchor.offset(5, 1, 5), "ACTIVITY_FRONT_RECON_SCOUT", "front-campaign:recon");
+        assertSceneKind(helper, materializer, anchor.offset(24, 1, 6), "ACTIVITY_FRONT_ASSEMBLY", "front-campaign:assemble");
+        assertSceneKind(helper, materializer, anchor.offset(42, 1, 7), "ACTIVITY_FRONT_ESTABLISH", "front-campaign:establish");
+        assertSceneKind(helper, materializer, anchor.offset(60, 1, 6), "ACTIVITY_FRONT_CORDON", "front-campaign:cordon");
+        assertSceneKind(helper, materializer, anchor.offset(77, 1, 7), "ACTIVITY_FRONT_CLEAR_LINE", "front-campaign:clear");
+        assertSceneKind(helper, materializer, anchor.offset(96, 1, 6), "ACTIVITY_FRONT_HOLD", "front-campaign:hold");
+        assertSceneKind(helper, materializer, anchor.offset(116, 1, 6), "ACTIVITY_FRONT_RESTORE", "front-campaign:restore");
+        assertSceneKind(helper, materializer, anchor.offset(133, 1, 5), "ACTIVITY_FRONT_WITHDRAW_COLUMN", "front-campaign:withdraw");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void frontCampaignSceneRejectsUnknownAndTerminalSourcePhase(GameTestHelper helper) {
+        ReferenceGrayboxSnapshot.Activity unknown = frontCampaign("front-campaign:unknown", "unrecognized", 0, 0);
+        ReferenceGrayboxSnapshot.Activity terminal = frontCampaign("front-campaign:terminal", "complete", 0, 0);
+        try {
+            SourceGrayboxFrontCampaignScenePlan.from("test", unknown, ReferenceGrayboxLayout.GROUND_Y + 1);
+            helper.fail("an unknown source front phase must fail closed instead of projecting a misleading scene");
+        } catch (IllegalStateException expected) {
+            try {
+                SourceGrayboxFrontCampaignScenePlan.from("test", terminal, ReferenceGrayboxLayout.GROUND_Y + 1);
+                helper.fail("a terminal source front campaign must not retain a live physical scene");
+            } catch (IllegalStateException alsoExpected) {
+                helper.succeed();
+            }
+        }
+    }
+
     private static void assertSceneKind(GameTestHelper helper, SourceGrayboxMaterializer materializer, BlockPos position,
                                         String kind, String subjectId) {
         SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(helper.getLevel(), position);
@@ -138,9 +174,9 @@ public final class SourceGrayboxFieldPresentationGameTests {
                 new ReferenceGrayboxSnapshot.Activity("field-campaign:706", "field_campaign", "containment", "build_up",
                         new ReferenceGrayboxLayout.Point(anchor.getX() + 28, anchor.getZ() + 8), 5.0d, 0.35d, false,
                         "activity.field_campaign.build_up"),
-                new ReferenceGrayboxSnapshot.Activity("front-campaign:707", "front_campaign", "offensive", "engage",
+                new ReferenceGrayboxSnapshot.Activity("front-campaign:707", "front_campaign", "offensive", "clear",
                         new ReferenceGrayboxLayout.Point(anchor.getX() + 48, anchor.getZ() + 8), 6.0d, 0.62d, false,
-                        "activity.front_campaign.engage"));
+                        "activity.front_campaign.clear"));
         return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(), baseline.cells(),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), activities,
                 List.of(), List.of(), List.of(), List.of(), List.of());
@@ -163,6 +199,24 @@ public final class SourceGrayboxFieldPresentationGameTests {
     private static ReferenceGrayboxSnapshot.Activity operation(String id, String phase, int x, int z, String colour) {
         return new ReferenceGrayboxSnapshot.Activity(id, "operation", "patrol", phase,
                 new ReferenceGrayboxLayout.Point(x, z), 3.0d, 0.0d, false, colour);
+    }
+
+    private static ReferenceGrayboxSnapshot frontCampaignPhaseScenesFixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
+        List<ReferenceGrayboxSnapshot.Activity> activities = List.of(
+                frontCampaign("front-campaign:recon", "recon", anchor.getX() + 8, anchor.getZ() + 8),
+                frontCampaign("front-campaign:assemble", "assemble", anchor.getX() + 26, anchor.getZ() + 8),
+                frontCampaign("front-campaign:establish", "establish", anchor.getX() + 44, anchor.getZ() + 8),
+                frontCampaign("front-campaign:cordon", "cordon", anchor.getX() + 62, anchor.getZ() + 8),
+                frontCampaign("front-campaign:clear", "clear", anchor.getX() + 80, anchor.getZ() + 8),
+                frontCampaign("front-campaign:hold", "hold", anchor.getX() + 98, anchor.getZ() + 8),
+                frontCampaign("front-campaign:restore", "restore", anchor.getX() + 116, anchor.getZ() + 8),
+                frontCampaign("front-campaign:withdraw", "withdraw", anchor.getX() + 134, anchor.getZ() + 8));
+        return withActivities(baseline, activities);
+    }
+
+    private static ReferenceGrayboxSnapshot.Activity frontCampaign(String id, String phase, int x, int z) {
+        return new ReferenceGrayboxSnapshot.Activity(id, "front_campaign", "offensive", phase,
+                new ReferenceGrayboxLayout.Point(x, z), 6.0d, 0.62d, false, "activity.front_campaign." + phase);
     }
 
     private static ReferenceGrayboxSnapshot withActivities(ReferenceGrayboxSnapshot baseline, List<ReferenceGrayboxSnapshot.Activity> activities) {
