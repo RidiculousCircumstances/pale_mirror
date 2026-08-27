@@ -14,10 +14,10 @@ scripts/set-graybox-runtime-profile.sh --target pale-mirror/pale-mirror-neoforge
 ```
 
 It reversibly disables Alex's Caves, Born in Chaos, Hostile Tactics, Cataclysm,
-Naturalist, Ravents and RPG Timeline. These are the non-PM sources of creatures,
-infection, events or time-line authority. No separate Blood Moon JAR is
-installed in the current runtime; this profile covers the actual competing
-sources instead.
+Naturalist, Ravents, RPG Timeline, Crimson Curse and Mowzie's Mobs. These are
+the non-PM sources of creatures, infection, events or time-line authority. No
+separate Blood Moon JAR is installed in the current runtime; this profile covers
+the actual competing sources instead.
 
 The server application also sets `spawn-animals`, `spawn-monsters` and
 `spawn-npcs` to `false`. PM materializes its residents and bioforms explicitly,
@@ -30,16 +30,14 @@ The profile does not remove Pale Mirror, Pale Mirror Visuals, Create, player
 items, rendering/performance mods or inert dependency libraries. In particular,
 Pale Mirror Visuals declares an exact hard dependency on Villager Overhaul, so
 the profile retains that bridge while PM owns every managed resident's identity,
-movement, combat and mortality. It also retains Crimson and Spore: PM's built-in
-sandbox makes them visual carriers with no native spreading, spawning or actor
-lifecycle, and the current registered datapacks reference their content. Mowzie's
-Mobs is also retained as a saved-data compatibility carrier: existing living
-entities have its attachment keys, whereas all natural spawning is disabled by
-this profile. Startup proof caught these dependencies explicitly. Rerun the
-profile after Packwiz updates, which may restore the JAR files. If Packwiz has
-recreated one beside its previous `.graybox-disabled` copy, the profile archives
-that old copy under `.far-frontier-graybox-profile/packwiz-replaced-jars/` and
-then disables the freshly managed JAR; it never silently deletes either copy.
+movement, combat and mortality. It retains Spore only because the current
+disposable world's saved `far-frontier-spore-zones` datapack registers `spore:*`
+values and NeoForge refuses to load that world without the registry provider;
+native spawning remains disabled and PM owns the Spore sandbox lifecycle. Rerun
+the profile after Packwiz updates, which may restore the JAR files. If Packwiz
+has recreated one beside its previous `.graybox-disabled` copy, the profile
+archives that old copy under `.far-frontier-graybox-profile/packwiz-replaced-jars/`
+and then disables the freshly managed JAR; it never silently deletes either copy.
 
 To return a runtime to the full pack, stop it and run:
 
