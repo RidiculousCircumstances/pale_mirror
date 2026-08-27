@@ -61,6 +61,7 @@ tasks.register('verifyJava21') {
 
 def architectureFile = layout.projectDirectory.file('architecture.yml').asFile
 def domainJavaSources = fileTree('pale-mirror-domain/src/main/java') { include '**/*.java' }
+def frontierV3JavaSources = fileTree('pale-mirror-frontier/src/main/java') { include '**/*.java' }
 def apiJavaSources = fileTree('pale-mirror-api/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
 def visualJavaSources = fileTree('pale-mirror-visuals/src/main/java') { include '**/*.java' }
 def genericNeoForgeJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror') {
@@ -68,7 +69,8 @@ def genericNeoForgeJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io
     exclude 'internal/integration/**', 'gametest/**', 'internal/adapter/AdapterRegistry.java'
 }
 def guardedJavaSources = fileTree('.') {
-    include 'pale-mirror-domain/src/**/*.java', 'pale-mirror-neoforge/src/**/*.java', 'pale-mirror-visuals/src/**/*.java'
+    include 'pale-mirror-domain/src/**/*.java', 'pale-mirror-frontier/src/**/*.java',
+            'pale-mirror-neoforge/src/**/*.java', 'pale-mirror-visuals/src/**/*.java'
     exclude '**/build/**'
 }
 def mandatoryProjectSkills = [
@@ -84,6 +86,8 @@ def agentRulesFile = layout.projectDirectory.file('AGENTS.md').asFile
 def continuityLedgerFile = layout.projectDirectory.file('CONTINUITY.md').asFile
 def continuityLedgerValidator = layout.projectDirectory.file('tools/engineering/continuity_ledger.py').asFile
 def continuityLedgerTests = layout.projectDirectory.file('tools/engineering/test_continuity_ledger.py').asFile
+def architectureContractValidator = layout.projectDirectory.file('tools/engineering/architecture_contract.py').asFile
+def architectureContractTests = layout.projectDirectory.file('tools/engineering/test_architecture_contract.py').asFile
 def harvesterContourTool = layout.projectDirectory.file('tools/harvester_contour_overlay.py').asFile
 def harvesterContourTests = layout.projectDirectory.file('tools/engineering/test_harvester_contour_overlay.py').asFile
 def harvesterAnatomicalModelTool = layout.projectDirectory.file('tools/rebuild_harvester_anatomical_models.mjs').asFile
@@ -134,6 +138,11 @@ def requiredArchitectureStatements = [
         ,'Fresh-world visual genesis is distinct from reconciliation materialization; one dedicated coordinator uses a bounded configurable worker pool for independent terrain probes and candidate attempts, then deterministically reduces indexed results and compiles immutable manifests into chunk-addressed slices before players are admitted. A registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v40 compatibility path.'
         ,'Every authored settlement is an immutable terrain-led site plan selected from a bounded archetype catalog. Buildings have stable identity, categories, functions, local foundations, semantic slots, ports and state profiles; each curated NBT module declares its real local threshold and canonical outward facade, and module rotation, door, apron and obstacle-aware circulation derive from that one contract rather than a bounding-box midpoint. Open spaces, circulation, segmented defences, irregular managed-area unions and five parcels plus two annex easements are typed and validated, and no radial wall or global settlement terrace is synthesized as a hidden fallback.'
         ,'The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions.'
+        ,'Frontier v3 is a fresh-world pure-Java runtime in pale-mirror-frontier and must not import, invoke, fixture-gate or share canonical state with pale-mirror-domain, frontier.reference, SourceGraybox, Python, Minecraft or NeoForge.'
+        ,'One FrontierEngine mutation lane on the Minecraft server thread owns each v3 world\'s canonical revision; commands and due actions validate and emit immutable events before an atomic state transition, while workers, adapters, entities, renderers and persistence callbacks never mutate canonical state.'
+        ,'HOT and COLD are exact execution locations for the same canonical actors, cargo and scenes; one persisted scene lease prevents double execution, captures complete hand-off state and reconstructs current continuation without force-loading, duplication, frozen entities or replayed history.'
+        ,'A persisted v3 physical intent may affect every physically reachable Minecraft block, entity or player-owned structure without a protected-zone filter; actual results are immutable typed evidence, known subjects receive semantic consequences and unknown results enter the bounded physical-delta index instead of being erased by desired-state materialization.'
+        ,'Frontier v3 persists versioned checksummed snapshots plus an ordered write-ahead log; player custody, physical leases and non-replayable effects are durable before acknowledgement or invocation, recovery never blindly replays a running effect, and compaction keeps events, schedules, receipts and physical deltas bounded.'
         ,'Automodel is an offline research boundary: source-pinned references and traces decide likeness, all model output remains provenance-pinned noncanonical evidence under ignored build artifacts, and no Automodel operation may write canonical Blender sources, PMMesh exports, runtime resources, server state or world state. External still staging remains MODEL_DERIVED; only an explicit complete-ring human receipt may promote secondary volume aids, while qualified DA3/VGGT disagreement is inspection-only and never mesh fusion.'
 ]
 
@@ -141,7 +150,7 @@ tasks.register('verifyArchitecture') {
     group = 'verification'
     description = 'Checks Pale Mirror layer boundaries and required architecture invariants.'
     inputs.file(architectureFile)
-        inputs.files(domainJavaSources, apiJavaSources, visualJavaSources)
+        inputs.files(domainJavaSources, frontierV3JavaSources, apiJavaSources, visualJavaSources)
     doLast {
         if (!architectureFile.exists()) {
             throw new GradleException('architecture.yml is missing')
@@ -162,6 +171,24 @@ tasks.register('verifyArchitecture') {
             forbiddenDomainReferences.each { reference ->
                 if (text.contains(reference)) {
                     throw new GradleException("Domain boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+
+        def forbiddenFrontierV3References = [
+                'net.minecraft.', 'net.neoforged.',
+                'io.farfrontier.palemirror.domain.',
+                'io.farfrontier.palemirror.frontier.reference.',
+                'SourceGraybox', 'pale_mirror_ai',
+                'System.currentTimeMillis', 'System.nanoTime', 'Instant.now',
+                'LocalDateTime.now', 'Clock.system', 'Math.random',
+                'new Random(', 'ThreadLocalRandom'
+        ]
+        frontierV3JavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenFrontierV3References.each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Frontier v3 boundary violation: ${source} references ${reference}")
                 }
             }
         }
@@ -328,6 +355,20 @@ tasks.register('verifyContinuityLedger', Exec) {
     description = 'Validates the compact canonical continuity ledger.'
     inputs.files(continuityLedgerFile, continuityLedgerValidator)
     commandLine 'python3', continuityLedgerValidator.absolutePath
+}
+
+tasks.register('testArchitectureContract', Exec) {
+    group = 'verification'
+    description = 'Runs focused negative tests for the machine-readable architecture contract.'
+    inputs.files(architectureFile, architectureContractValidator, architectureContractTests)
+    commandLine 'python3', architectureContractTests.absolutePath
+}
+
+tasks.register('verifyArchitectureContract', Exec) {
+    group = 'verification'
+    description = 'Parses and validates architecture.yml component boundaries and transition state.'
+    inputs.files(architectureFile, architectureContractValidator)
+    commandLine 'python3', architectureContractValidator.absolutePath, architectureFile.absolutePath
 }
 
 tasks.register('testHarvesterContourOverlay', Exec) {
@@ -567,6 +608,7 @@ tasks.register('guardrails') {
             tasks.named('verifySourceIsolation'), tasks.named('verifyJavaStyle'),
             tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills'),
             tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger'),
+            tasks.named('testArchitectureContract'), tasks.named('verifyArchitectureContract'),
             tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
             tasks.named('testHarvesterVolumeBakeoff'), tasks.named('testHarvesterPrimaryModelOverlay'), tasks.named('testCollectorDirectMeshProtocol'),
             tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparation'), tasks.named('testHunyuan2mvExternalSheetPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),

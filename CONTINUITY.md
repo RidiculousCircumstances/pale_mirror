@@ -33,14 +33,15 @@
 - The user accepted replacement of the Python/source-parity direction with greenfield Frontier v3 and approved the stable contract, implementation-wave structure and legacy-removal policy.
 - V2 established useful exact-identity, HOT/COLD, physical-effect, reverse-causality, graybox readability and performance evidence; it is historical input, not a v3 runtime dependency.
 - The complete pre-v3 ledger is archived at `docs/archive/CONTINUITY_2026-08-27_pre_frontier_v3.md`.
+- `a1a6931` establishes the stable v3 contract, decision-complete implementation waves, valid version-3 architecture transition and explicit frozen-v2 notice.
+- Wave 0 adds executable architecture validation and future `pale-mirror-frontier` source-boundary scans. Focused validator tests, `git diff --check` and `./gradlew guardrails check --no-daemon` pass; the full Gradle gate completed 56 tasks successfully.
 
 ### Now
-- Wave 0 is preparing `docs/frontier-v3-contract.md`, `docs/frontier-v3-implementation-plan.md`, version-3 architecture boundaries, future-module Gradle guardrails and an explicit v2 freeze notice.
-- The repository changes are not yet verified or committed. Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
+- Wave 0 is complete at architecture/evidence level 1. No v3 runtime source exists yet, so no simulation, physical-world or player-product claim is made.
+- Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 - The old durable `/goal` is paused and obsolete but not complete; it must be cleared rather than falsely marked achieved.
 
 ### Next
-- Run `git diff --check` and `./gradlew guardrails check`, inspect both repositories and commit documentation and build guardrails atomically.
 - Clear the obsolete paused goal with `/goal clear`, create the approved Frontier v3 durable goal, then begin Wave 1 with the isolated module and deterministic event kernel.
 
 ## Open questions
