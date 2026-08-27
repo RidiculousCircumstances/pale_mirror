@@ -43,6 +43,8 @@ final class SourceGrayboxPalette {
         if (token.contains("post.module.fortification")) return Blocks.CYAN_WOOL.defaultBlockState();
         if (token.contains("collapsed") || token.contains("disabled") || token.contains("destroyed") || token.contains("feral_severe")
                 || token.contains("abandoned") || token.contains("failed") || token.contains("aborted")) return Blocks.BLACK_WOOL.defaultBlockState();
+        if (token.contains("route.shoulder")) return Blocks.GRAY_WOOL.defaultBlockState();
+        if (token.contains("route.open")) return Blocks.LIGHT_BLUE_WOOL.defaultBlockState();
         if (token.contains("feral_active") || token.contains("route.disrupted") || token.contains("sector.hive")
                 || token.contains("siege") || token.contains("core") || token.contains("strongpoint") || token.contains("engage")
                 || token.contains("engaging") || token.contains("intercepted")) {
@@ -61,7 +63,7 @@ final class SourceGrayboxPalette {
         if (token.contains("synapse") || token.contains("signal") || token.contains("quarantin") || token.contains("carrier")
                 || token.contains("sporulator") || token.contains("contaminated")) return Blocks.PURPLE_WOOL.defaultBlockState();
         if (token.contains("brood") || token.contains("chrysalis")) return Blocks.PINK_WOOL.defaultBlockState();
-        if (token.contains("workshop") || token.contains("route.open") || token.contains("supply_corridor")
+        if (token.contains("workshop") || token.contains("supply_corridor")
                 || token.contains("en_route") || token.contains("forward_base")) return Blocks.BLUE_WOOL.defaultBlockState();
         if (token.contains("fortification") || token.contains("fortified_line") || token.contains("field") || token.contains("sector.human")
                 || token.contains("checkpoint") || token.contains("returning") || token.contains("withdraw")) return Blocks.CYAN_WOOL.defaultBlockState();

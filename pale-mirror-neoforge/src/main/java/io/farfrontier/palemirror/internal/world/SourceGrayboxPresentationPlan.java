@@ -32,6 +32,13 @@ final class SourceGrayboxPresentationPlan {
     private static final int MAX_CLAIM_Y = SURFACE_Y + 24;
     /** Shared plan/ledger limit; every claim has already been validated before Minecraft receives it. */
     static final int MAX_CLAIMS = 65_536;
+    /**
+     * A route is a traversable-looking corridor, not a one-block map stroke.
+     * The exact middle line remains the one that owns typed route-damage
+     * slots; the two neutral shoulders make it legible from player height
+     * without inventing extra route capacity or interaction weight.
+     */
+    private static final int ROUTE_CORRIDOR_HALF_WIDTH = 1;
     private static final int ROUTE_WAYPOINT_INTERVAL = 24;
     /** A three-block mast reads as infrastructure, not as a sector-value column. */
     private static final int HIVE_SPIRE_WIDTH = 3;
@@ -64,18 +71,7 @@ final class SourceGrayboxPresentationPlan {
             add(result, rectangle("resource-site:" + site.id(), "site:" + site.id(), "RESOURCE_SITE", snapshot.stateRevision(), site.rectangle(), 1,
                     site.colour()));
         }
-        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) {
-            List<ReferenceGrayboxLayout.Point> corridor = ReferenceGrayboxLayout.routeLine(route.start(), route.end());
-            for (int index = 0; index < corridor.size(); index++) {
-                ReferenceGrayboxLayout.Point point = corridor.get(index);
-                add(result, new Desired("route-segment:" + route.id() + ":" + index, route.id(), "ROUTE", snapshot.stateRevision(),
-                        point.x(), SURFACE_Y, point.z(), 1, 1, 1, route.colour()));
-                if (index > 0 && index < corridor.size() - 1 && index % ROUTE_WAYPOINT_INTERVAL == 0) {
-                    add(result, new Desired("route-waypoint:" + route.id() + ":" + index, route.id(), "ROUTE_WAYPOINT",
-                            snapshot.stateRevision(), point.x(), SURFACE_Y, point.z(), 1, 1, 3, route.colour()));
-                }
-            }
-        }
+        for (ReferenceGrayboxSnapshot.Route route : snapshot.routes()) addRoute(result, snapshot.stateRevision(), route);
         for (ReferenceGrayboxSnapshot.HiveOrgan organ : snapshot.hiveOrgans()) {
             add(result, rectangle("hive-organ:" + organ.id(), "organ:" + organ.id(), "HIVE_ORGAN", snapshot.stateRevision(), organ.rectangle(), 2,
                     organ.colour()));
@@ -171,6 +167,48 @@ final class SourceGrayboxPresentationPlan {
     private static Desired rectangle(String id, String subject, String kind, String revision, ReferenceGrayboxLayout.Rectangle area,
                                      int height, String colour) {
         return new Desired(id, subject, kind, revision, area.x(), SURFACE_Y, area.z(), area.width(), area.depth(), height, colour);
+    }
+
+    /**
+     * Compiles the source route into one bright semantic centre line and two
+     * neutral shoulders.  The shoulders deliberately have their own stable
+     * claim IDs but the same subject identity: they describe the route's
+     * readable ground corridor, never a second logistics record.  Keeping the
+     * interaction line in the middle means an ordinary route-damage slot
+     * retains its exact source capacity accounting.
+     */
+    private static void addRoute(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Route route) {
+        List<ReferenceGrayboxLayout.Point> corridor = ReferenceGrayboxLayout.routeLine(route.start(), route.end());
+        RouteNormal normal = routeNormal(route);
+        for (int index = 0; index < corridor.size(); index++) {
+            ReferenceGrayboxLayout.Point point = corridor.get(index);
+            add(result, new Desired("route-segment:" + route.id() + ":" + index, route.id(), "ROUTE", revision,
+                    point.x(), SURFACE_Y, point.z(), 1, 1, 1, route.colour()));
+            for (int side : List.of(-ROUTE_CORRIDOR_HALF_WIDTH, ROUTE_CORRIDOR_HALF_WIDTH)) {
+                int x = point.x() + normal.x() * side;
+                int z = point.z() + normal.z() * side;
+                add(result, new Desired("route-shoulder:" + route.id() + ":" + index + ":" + side, route.id(), "ROUTE_SHOULDER",
+                        revision, x, SURFACE_Y, z, 1, 1, 1, "route.shoulder"));
+            }
+            if (index > 0 && index < corridor.size() - 1 && index % ROUTE_WAYPOINT_INTERVAL == 0) {
+                // Put the mast above a shoulder rather than over the central
+                // damage line.  A route interaction at y+3 can then keep its
+                // stable semantic slot instead of being vertically displaced
+                // by a purely visual landmark.
+                int x = point.x() + normal.x() * ROUTE_CORRIDOR_HALF_WIDTH;
+                int z = point.z() + normal.z() * ROUTE_CORRIDOR_HALF_WIDTH;
+                add(result, new Desired("route-waypoint:" + route.id() + ":" + index, route.id(), "ROUTE_WAYPOINT",
+                        revision, x, SURFACE_Y + 1, z, 1, 1, 4, route.colour()));
+            }
+        }
+    }
+
+    /** Uses one stable side of the dominant route axis, avoiding a nine-block carpet on diagonal links. */
+    private static RouteNormal routeNormal(ReferenceGrayboxSnapshot.Route route) {
+        int dx = route.end().x() - route.start().x();
+        int dz = route.end().z() - route.start().z();
+        if (Math.abs(dx) >= Math.abs(dz)) return new RouteNormal(0, 1);
+        return new RouteNormal(1, 0);
     }
 
     /**
@@ -273,6 +311,7 @@ final class SourceGrayboxPresentationPlan {
     }
 
     private record PostShape(int localX, int localZ, int width, int depth, int height) { }
+    private record RouteNormal(int x, int z) { }
 
     /** A fortification is a perimeter, not a filled foundation that hides its named buildings. */
     private static void addFortification(Map<String, Desired> result, String revision, ReferenceGrayboxSnapshot.Facility facility) {

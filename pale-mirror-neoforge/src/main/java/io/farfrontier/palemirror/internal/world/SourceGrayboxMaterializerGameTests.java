@@ -193,8 +193,8 @@ public final class SourceGrayboxMaterializerGameTests {
         ReferenceGrayboxLayout.Point segment = ReferenceGrayboxLayout.routeSlots(route.start(), route.end()).getFirst();
         BlockPos ground = new BlockPos(segment.x(), ReferenceGrayboxLayout.GROUND_Y, segment.z());
         SourceGrayboxPresentationLedger.Claim routeClaim = materializer.claimAt(helper.getLevel(), ground);
-        helper.assertValueEqual(helper.getLevel().getBlockState(ground).getBlock(), Blocks.BLUE_WOOL,
-                "an open trade route must have readable logistics geometry on the graybox ground");
+        helper.assertValueEqual(helper.getLevel().getBlockState(ground).getBlock(), Blocks.LIGHT_BLUE_WOOL,
+                "an open trade route must keep a bright semantic centre line on the graybox ground");
         helper.assertValueEqual(routeClaim.kind(), "ROUTE", "the ground segment must retain its route semantic kind");
         helper.assertValueEqual(routeClaim.subjectId(), route.id(), "the ground segment must retain its exact source route ID");
 
@@ -288,9 +288,9 @@ public final class SourceGrayboxMaterializerGameTests {
         helper.assertValueEqual(SourceGrayboxPalette.block("cell.signal_active").getBlock(), Blocks.PURPLE_WOOL,
                 "a signal-led hive cell must remain visibly different from feral infection");
         helper.assertValueEqual(SourceGrayboxPalette.block("route.disrupted").getBlock(), Blocks.RED_WOOL,
-                "a disrupted route must be distinguishable from an open blue route");
-        helper.assertValueEqual(SourceGrayboxPalette.block("route.open").getBlock(), Blocks.BLUE_WOOL,
-                "an open route must retain the logistics colour");
+                "a disrupted route must be distinguishable from an open light-blue route");
+        helper.assertValueEqual(SourceGrayboxPalette.block("route.open").getBlock(), Blocks.LIGHT_BLUE_WOOL,
+                "an open route must retain a bright logistics centre line");
         helper.assertValueEqual(SourceGrayboxPalette.block("cargo.medicine").getBlock(), Blocks.WHITE_WOOL,
                 "medical cargo must remain visibly separate from food and ammunition");
         helper.assertValueEqual(SourceGrayboxPalette.block("cargo.ammo").getBlock(), Blocks.RED_WOOL,

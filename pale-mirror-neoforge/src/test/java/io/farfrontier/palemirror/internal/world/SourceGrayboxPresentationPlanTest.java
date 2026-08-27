@@ -65,4 +65,30 @@ class SourceGrayboxPresentationPlanTest {
             }
         }
     }
+
+    @Test
+    void routeCorridorsKeepOneExactInteractiveCentreAndBoundedNeutralShoulders() {
+        ReferenceGrayboxSimulation simulation = ReferenceGrayboxSimulation.create(42L);
+        var snapshot = simulation.snapshot();
+        var desired = SourceGrayboxPresentationPlan.from(snapshot);
+
+        for (var route : snapshot.routes()) {
+            long centres = desired.values().stream().filter(item -> item.kind().equals("ROUTE") && item.subjectId().equals(route.id())).count();
+            long shoulders = desired.values().stream().filter(item -> item.kind().equals("ROUTE_SHOULDER") && item.subjectId().equals(route.id())).count();
+            long interactiveCentres = desired.values().stream().filter(item -> item.kind().equals("ROUTE")
+                    && item.subjectId().equals(route.id()) && !item.interactionId().isEmpty()).count();
+            long interactiveShoulders = desired.values().stream().filter(item -> item.kind().equals("ROUTE_SHOULDER")
+                    && item.subjectId().equals(route.id()) && !item.interactionId().isEmpty()).count();
+            long routeLine = io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout.routeLine(route.start(), route.end()).size();
+
+            assertEquals(routeLine, centres, "every canonical route point must retain one bright centre line");
+            assertEquals(routeLine * 2L, shoulders, "each centre point must gain exactly two neutral route shoulders");
+            assertEquals(0L, interactiveCentres,
+                    "interaction metadata is added later from source slots, never invented by the corridor compiler");
+            assertEquals(0L, interactiveShoulders,
+                    "neutral shoulders must never multiply the canonical route-damage surface");
+        }
+        assertTrue(desired.size() <= SourceGrayboxPresentationPlan.MAX_CLAIMS,
+                "the brighter route grammar must stay inside the persisted presentation bound");
+    }
 }
