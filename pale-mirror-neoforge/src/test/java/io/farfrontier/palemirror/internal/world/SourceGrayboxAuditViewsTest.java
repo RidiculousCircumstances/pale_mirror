@@ -96,6 +96,10 @@ class SourceGrayboxAuditViewsTest {
         assertTrue(views.stream().anyMatch(view -> view.id().equals("graybox/effect/combat:fixture/scene")
                         && view.kind().equals("GRAYBOX_EFFECT") && view.targetId().equals("effect:combat:fixture")),
                 "the highest-impact source effect must be auditable at its exact canonical location");
+        SourceGrayboxAuditViews.View effectView = views.stream()
+                .filter(view -> view.id().equals("graybox/effect/combat:fixture/scene")).findFirst().orElseThrow();
+        assertTrue(effectView.pitch() < -25.0f,
+                "an effect camera must frame the consequence board above its local structure instead of aiming only at ground level");
         assertFalse(views.stream().anyMatch(view -> view.id().contains("containment:fixture")),
                 "one audit pass must not create an unbounded camera per effect");
     }

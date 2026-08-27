@@ -21,6 +21,10 @@ final class SourceGrayboxAuditViews {
     private static final int OUTER_STANDOFF = 14;
     private static final int ROUTE_STANDOFF = 12;
     private static final int LOCAL_STANDOFF = 12;
+    // Current effect boards deliberately clear the materialized consequence
+    // rather than hiding in it.  A player-eye audit must therefore frame the
+    // consequence and its board, not keep its pitch at bare ground level.
+    private static final int EFFECT_FOCUS_HEIGHT = 12;
 
     private SourceGrayboxAuditViews() { }
 
@@ -143,7 +147,7 @@ final class SourceGrayboxAuditViews {
         Point camera = bounded(snapshot.bounds(), effect.position().x() + LOCAL_STANDOFF,
                 effect.position().z() + LOCAL_STANDOFF);
         return view("graybox/effect/" + effect.id() + "/scene", "GRAYBOX_EFFECT", "effect:" + effect.id(),
-                snapshot.bounds(), camera, effect.position().x(), effect.position().z(), 3);
+                snapshot.bounds(), camera, effect.position().x(), effect.position().z(), EFFECT_FOCUS_HEIGHT);
     }
 
     private static View view(String id, String kind, String targetId, ReferenceGrayboxLayout.Bounds bounds,
