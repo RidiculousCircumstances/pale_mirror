@@ -32,11 +32,13 @@ public final class FrontierPersistenceCodec {
 
     private FrontierPersistenceCodec() {}
 
-    public static byte[] encodeSnapshot(CheckpointImage image) {
+    public static byte[] encodeSnapshot(SnapshotRecord snapshot) {
         return envelope(SNAPSHOT_MAGIC, output -> {
+            CheckpointImage image = snapshot.checkpoint();
             writeString(output, image.worldId().value());
             output.writeLong(image.revision().value());
             output.writeLong(image.instant().ticks());
+            output.writeLong(snapshot.coveredWalSequence());
             writeBytes(output, image.canonicalState(), MAX_STATE_BYTES);
             writeActions(output, image.schedules());
             if (image.receipts().size() > MAX_ENTRIES) throw new IllegalArgumentException("too many snapshot receipts");
@@ -50,11 +52,13 @@ public final class FrontierPersistenceCodec {
         });
     }
 
-    public static CheckpointImage decodeSnapshot(byte[] encoded) {
+    public static SnapshotRecord decodeSnapshot(byte[] encoded) {
         return decode(encoded, SNAPSHOT_MAGIC, input -> {
             WorldId world = new WorldId(readString(input));
             Revision revision = new Revision(input.readLong());
             SimInstant instant = new SimInstant(input.readLong());
+            long coveredSequence = input.readLong();
+            if (coveredSequence < 0L) throw new IllegalArgumentException("negative covered WAL sequence");
             byte[] state = readBytes(input, MAX_STATE_BYTES);
             List<ScheduledAction> schedules = readActions(input);
             int receipts = input.readUnsignedShort();
@@ -63,7 +67,7 @@ public final class FrontierPersistenceCodec {
                 values.add(new CommandReceipt(new CommandId(readString(input)), new SimInstant(input.readLong()),
                         new TransactionId(readString(input)), new Revision(input.readLong())));
             }
-            return new CheckpointImage(world, revision, instant, state, schedules, values);
+            return new SnapshotRecord(new CheckpointImage(world, revision, instant, state, schedules, values), coveredSequence);
         });
     }
 

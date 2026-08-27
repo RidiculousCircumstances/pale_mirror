@@ -25,20 +25,22 @@ class FrontierPersistenceCodecTest {
                 new byte[] {1, 2, 3}, List.of(new ScheduledAction(new ScheduleId("schedule:one"), new SimInstant(12L), 0,
                 new SubjectId("settlement:one"), "process.test", 1)), List.of(new CommandReceipt(new CommandId("command:one"),
                 new SimInstant(10L), new TransactionId("transaction:three"), new Revision(3L))));
-        byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(image);
-        CheckpointImage decoded = FrontierPersistenceCodec.decodeSnapshot(encoded);
-        assertEquals(image.worldId(), decoded.worldId());
-        assertEquals(image.schedules(), decoded.schedules());
-        assertEquals(image.receipts(), decoded.receipts());
-        assertArrayEquals(image.canonicalState(), decoded.canonicalState());
+        SnapshotRecord record = new SnapshotRecord(image, 7L);
+        byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(record);
+        SnapshotRecord decoded = FrontierPersistenceCodec.decodeSnapshot(encoded);
+        assertEquals(7L, decoded.coveredWalSequence());
+        assertEquals(image.worldId(), decoded.checkpoint().worldId());
+        assertEquals(image.schedules(), decoded.checkpoint().schedules());
+        assertEquals(image.receipts(), decoded.checkpoint().receipts());
+        assertArrayEquals(image.canonicalState(), decoded.checkpoint().canonicalState());
         encoded[encoded.length - 1] ^= 1;
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(encoded));
     }
 
     @Test
     void unknownVersionAndTruncatedSnapshotsFailClosed() {
-        byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(new CheckpointImage(new WorldId("frontier:empty"), Revision.ZERO,
-                SimInstant.ZERO, new byte[0], List.of(), List.of()));
+        byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:empty"), Revision.ZERO,
+                SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
         encoded[4] = 99;
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(encoded));
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(new byte[] {0, 1, 2}));

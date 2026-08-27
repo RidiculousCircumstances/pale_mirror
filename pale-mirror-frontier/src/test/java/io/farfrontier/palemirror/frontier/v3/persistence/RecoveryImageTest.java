@@ -18,7 +18,7 @@ class RecoveryImageTest {
         WorldId world = new WorldId("frontier:recovery");
         CheckpointImage checkpoint = new CheckpointImage(world, Revision.ZERO, SimInstant.ZERO, new byte[] {1}, List.of(), List.of());
 
-        RecoveryImage image = new RecoveryImage(world, Optional.of(checkpoint), List.of());
+        RecoveryImage image = new RecoveryImage(world, Optional.of(new SnapshotRecord(checkpoint, 0L)), List.of());
 
         assertEquals(world, image.worldId());
         assertEquals(new Revision(2L), new AppendReceipt(
@@ -32,6 +32,6 @@ class RecoveryImageTest {
         CheckpointImage checkpoint = new CheckpointImage(new WorldId("frontier:other"), Revision.ZERO, SimInstant.ZERO,
                 new byte[] {1}, List.of(), List.of());
         assertThrows(IllegalArgumentException.class, () -> new RecoveryImage(
-                new WorldId("frontier:expected"), Optional.of(checkpoint), List.of()));
+                new WorldId("frontier:expected"), Optional.of(new SnapshotRecord(checkpoint, 0L)), List.of()));
     }
 }

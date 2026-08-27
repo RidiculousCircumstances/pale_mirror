@@ -11,7 +11,7 @@ public interface FrontierStore {
 
     AppendReceipt append(TransactionRecord transaction, Durability durability);
 
-    SnapshotReceipt installSnapshot(CheckpointImage checkpoint);
+    SnapshotReceipt installSnapshot(SnapshotRecord snapshot);
 
     CompactionReceipt compact(WorldId worldId, Revision coveredRevision);
 }
