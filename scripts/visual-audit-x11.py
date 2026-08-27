@@ -163,6 +163,16 @@ def send_key(value: str) -> None:
     press(display, value)
 
 
+def click(x: int, y: int) -> None:
+    display = open_display()
+    window = minecraft_window()
+    X11.XSetInputFocus(display, window, 2, 0)
+    XTEST.XTestFakeMotionEvent(display, -1, x, y, 0)
+    XTEST.XTestFakeButtonEvent(display, 1, 1, 0)
+    XTEST.XTestFakeButtonEvent(display, 1, 0, 0)
+    flush(display)
+
+
 def capture(destination: Path) -> None:
     try:
         from PIL import ImageGrab
@@ -182,6 +192,9 @@ def main() -> int:
     command.add_argument("value")
     key = actions.add_parser("key")
     key.add_argument("value")
+    click_action = actions.add_parser("click")
+    click_action.add_argument("x", type=int)
+    click_action.add_argument("y", type=int)
     window = actions.add_parser("resize")
     window.add_argument("width", type=int)
     window.add_argument("height", type=int)
@@ -193,6 +206,8 @@ def main() -> int:
             send_command(args.value)
         elif args.action == "key":
             send_key(args.value)
+        elif args.action == "click":
+            click(args.x, args.y)
         elif args.action == "resize":
             resize(args.width, args.height)
         else:

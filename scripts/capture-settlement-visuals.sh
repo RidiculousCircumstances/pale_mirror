@@ -197,7 +197,11 @@ setsid bash -c 'cd "$1" && DISPLAY="$2" LIBGL_ALWAYS_SOFTWARE=1 exec ./gradlew \
 client_pid=$!
 
 connected=false
-for _ in $(seq 1 150); do
+for _ in $(seq 1 240); do
+  # The actual world-ready UI marker can arrive well after the TCP/UDP
+  # handshake on a cold client.  Do not mistake a transport handshake for a
+  # command-ready game screen: the latter is what makes the spectator probe
+  # below meaningful.
   if [[ -f "$client_log" ]] && rg -q 'JourneyMap: Press|Client on ClientOnly mode connecting|Pale Mirror Atlas snapshot' "$client_log"; then
     connected=true
     break
