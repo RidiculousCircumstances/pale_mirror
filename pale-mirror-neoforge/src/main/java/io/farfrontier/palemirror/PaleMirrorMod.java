@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.internal.network.PaleMirrorNetwork;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.AddPackFindersEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import org.slf4j.Logger;
 
 @Mod(PaleMirrorMod.MOD_ID)
@@ -16,6 +17,7 @@ public final class PaleMirrorMod {
     public PaleMirrorMod(IEventBus modBus, net.neoforged.fml.ModContainer container) {
         modBus.addListener(PaleMirrorMod::registerBuiltInPacks);
         modBus.addListener(PaleMirrorNetwork::register);
+        NeoForge.EVENT_BUS.addListener(PaleMirrorCommandRegistrar::register);
         PaleMirrorItems.register(modBus);
         AdapterRegistry.registerConfigs(container);
         LOGGER.info("Pale Mirror bootstrapped; PM-owned vanilla anchors are available.");

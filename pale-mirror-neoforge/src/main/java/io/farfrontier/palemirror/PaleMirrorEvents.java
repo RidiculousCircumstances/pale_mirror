@@ -34,7 +34,6 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
@@ -386,11 +385,6 @@ public final class PaleMirrorEvents {
                 SourceGrayboxRuntime.forServer(level.getServer()).observeChunkLoaded(level);
             }
         }
-    }
-
-    @SubscribeEvent
-    public static void registerCommands(RegisterCommandsEvent event) {
-        PaleMirrorCommandRegistrar.register(event);
     }
 
     private static boolean denyExcludedItem(Player player, ItemStack stack, String operation) {
