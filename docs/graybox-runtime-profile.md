@@ -36,7 +36,10 @@ lifecycle, and the current registered datapacks reference their content. Mowzie'
 Mobs is also retained as a saved-data compatibility carrier: existing living
 entities have its attachment keys, whereas all natural spawning is disabled by
 this profile. Startup proof caught these dependencies explicitly. Rerun the
-profile after Packwiz updates, which may restore the JAR files.
+profile after Packwiz updates, which may restore the JAR files. If Packwiz has
+recreated one beside its previous `.graybox-disabled` copy, the profile archives
+that old copy under `.far-frontier-graybox-profile/packwiz-replaced-jars/` and
+then disables the freshly managed JAR; it never silently deletes either copy.
 
 To return a runtime to the full pack, stop it and run:
 

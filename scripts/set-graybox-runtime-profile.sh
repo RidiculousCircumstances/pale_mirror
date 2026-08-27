@@ -85,8 +85,16 @@ run() {
 disable_jar() {
   local source="$mods_dir/$1" disabled="$mods_dir/$1.graybox-disabled"
   if [[ -f "$source" && -f "$disabled" ]]; then
-    printf 'Profile conflict: both enabled and disabled copies exist for %s\n' "$1" >&2
-    exit 1
+    # Packwiz restores managed files by their canonical filename. A later pack
+    # refresh can therefore recreate the enabled JAR beside the deliberate
+    # graybox-disabled copy. Preserve that former copy for diagnosis rather
+    # than silently choosing or deleting it, then make the freshly managed
+    # artifact the one disabled copy.
+    local duplicate_root="$profile_dir/packwiz-replaced-jars"
+    local archived="$duplicate_root/$1.$(date -u +%Y%m%dT%H%M%SZ)"
+    run mkdir -p "$duplicate_root"
+    run mv -- "$disabled" "$archived"
+    printf 'Archived previous disabled gameplay mod after Packwiz refresh: %s\n' "$archived"
   fi
   if [[ -f "$source" ]]; then
     run mv -- "$source" "$disabled"
