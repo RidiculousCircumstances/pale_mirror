@@ -26,6 +26,14 @@ final class SourceGrayboxLabelMaterializer {
                 "[KEY] V2 towers: red infection 0..1; purple spores 0..10; cyan human access 0..1; lime hive influence 0..1. Height=1..10.", deck.getX(), deck.getZ());
         label(level, active, admittedEntities, labels, "legend:inspect",
                 "[GUIDE] Right-click a labelled structure, Villager or hive zombie for its state, cause, risk and next action. The REPORT and TIMELINE boards explain the region.", deck.getX(), deck.getZ());
+        // A current canonical effect is the strongest local player cue.  Give
+        // it the source anchor before ordinary infrastructure boards reserve
+        // a nearby lateral slot; it is still presentation only and carries no
+        // authority beyond the immutable snapshot.
+        for (ReferenceGrayboxSnapshot.Effect value : snapshot.effects()) {
+            label(level, active, admittedEntities, labels, "effect:" + value.id(),
+                    SourceGrayboxLiveBriefing.effectLabel(value), value.position().x(), value.position().z());
+        }
         for (ReferenceGrayboxSnapshot.Settlement value : snapshot.settlements()) {
             label(level, active, admittedEntities, labels, "settlement:" + value.id(),
                     SourceGrayboxPlayerBriefing.settlementLabel(snapshot, value), value.rectangle().centreX(), value.rectangle().centreZ());
@@ -65,7 +73,6 @@ final class SourceGrayboxLabelMaterializer {
             if (!value.terminal()) label(level, active, admittedEntities, labels, "activity:" + value.id(),
                     SourceGrayboxLiveBriefing.activityLabel(value), value.position().x(), value.position().z());
         }
-        for (ReferenceGrayboxSnapshot.Effect value : snapshot.effects()) label(level, active, admittedEntities, labels, "effect:" + value.id(), SourceGrayboxLiveBriefing.effectLabel(value), value.position().x(), value.position().z());
         for (ReferenceGrayboxSnapshot.Sector value : SourceGrayboxLabelLayout.labelledSectors(snapshot)) {
             String text = "[V2] " + value.key() + " " + value.control().toUpperCase(Locale.ROOT)
                     + (value.supplied() ? " SUPPLIED" : "");

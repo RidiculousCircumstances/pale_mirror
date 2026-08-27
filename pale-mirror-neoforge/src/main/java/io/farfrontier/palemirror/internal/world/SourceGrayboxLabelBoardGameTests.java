@@ -43,6 +43,35 @@ public final class SourceGrayboxLabelBoardGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void currentEffectKeepsTheExactAnchorBoardAndRetiresWithItsSourceFact(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y);
+        SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 48);
+        ReferenceGrayboxSnapshot baseline = fixture(anchor, ReferenceGrayboxSimulation.create(42L).snapshot());
+        ReferenceGrayboxSnapshot.Effect effect = new ReferenceGrayboxSnapshot.Effect("containment:board", "containment",
+                "settlement:1", baseline.day(), new ReferenceGrayboxLayout.Point(anchor.getX(), anchor.getZ()), 2.0d, .5d,
+                "tissue_removed=0.500", "effect.containment");
+        ReferenceGrayboxSnapshot current = withEffects(baseline, List.of(effect));
+        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+
+        materializer.apply(helper.getLevel(), current);
+        String text = SourceGrayboxLiveBriefing.effectLabel(effect);
+        List<Display.TextDisplay> labels = helper.getLevel().getEntitiesOfClass(Display.TextDisplay.class,
+                new AABB(anchor).inflate(48, 32, 48), value -> value.hasCustomName() && value.getCustomName().getString().equals(text));
+        helper.assertTrue(labels.size() == 1, "one current source effect must publish one player-facing board");
+        Display.TextDisplay board = labels.getFirst();
+        helper.assertValueEqual(board.blockPosition().getX(), anchor.getX(),
+                "the current effect board must remain at the exact canonical effect X coordinate");
+        helper.assertValueEqual(board.blockPosition().getZ(), anchor.getZ(),
+                "the current effect board must remain at the exact canonical effect Z coordinate");
+        helper.assertValueEqual(board.saveWithoutId(new net.minecraft.nbt.CompoundTag()).getFloat("view_range"), 0.75f,
+                "an effect board must remain local but readable before a player reaches the impact point");
+
+        materializer.apply(helper.getLevel(), withEffects(baseline, List.of()));
+        helper.assertTrue(board.isRemoved(), "a no-longer-current source effect must retire its board instead of leaving a false active scene");
+        helper.succeed();
+    }
+
     private static ReferenceGrayboxSnapshot fixture(BlockPos anchor, ReferenceGrayboxSnapshot baseline) {
         ReferenceGrayboxLayout.Rectangle settlement = new ReferenceGrayboxLayout.Rectangle(anchor.getX() - 24, anchor.getZ() - 24, 48, 48);
         ReferenceGrayboxLayout.Rectangle civicHall = new ReferenceGrayboxLayout.Rectangle(anchor.getX() - 4, anchor.getZ() - 4, 8, 8);
@@ -55,5 +84,14 @@ public final class SourceGrayboxLabelBoardGameTests {
                 List.of(), List.of(), List.of(new ReferenceGrayboxSnapshot.HiveOrgan(7, "core", civicHall, 1.0d, 1.0d, false,
                 "organ.core")), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of(), List.of());
+    }
+
+    private static ReferenceGrayboxSnapshot withEffects(ReferenceGrayboxSnapshot baseline,
+                                                         List<ReferenceGrayboxSnapshot.Effect> effects) {
+        return new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(), baseline.stateRevision(), baseline.bounds(),
+                baseline.cells(), baseline.settlements(), baseline.facilities(), baseline.warehouses(), baseline.resourceSites(),
+                baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(), baseline.residents(), baseline.fieldPosts(),
+                baseline.fieldLinks(), baseline.activities(), effects, baseline.cargoes(), baseline.interactions(), baseline.sectors(),
+                baseline.chrysalises(), baseline.readouts(), baseline.events());
     }
 }

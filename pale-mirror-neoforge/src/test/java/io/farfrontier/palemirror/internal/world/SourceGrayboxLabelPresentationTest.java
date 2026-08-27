@@ -56,6 +56,10 @@ class SourceGrayboxLabelPresentationTest {
                 "a functional building board belongs to the local approach");
         assertEquals(0.45f, SourceGrayboxLabelStyle.viewRange("interaction:facility:2:workshop"),
                 "a precise damage prompt must not compete with a settlement landmark until the player reaches it");
+        assertEquals(0.75f, SourceGrayboxLabelStyle.viewRange("effect:containment:2"),
+                "a current canonical effect must be readable on the local approach, not hidden like a damage prompt");
+        assertEquals(1.10f, SourceGrayboxLabelStyle.scale("effect:containment:2"),
+                "an effect board must be larger than an ordinary local detail without becoming a map-wide landmark");
         assertTrue(SourceGrayboxLabelStyle.reservationRadius("settlement:2")
                         > SourceGrayboxLabelStyle.reservationRadius("facility:2:workshop"),
                 "large landmark boards require a larger local visual reservation");

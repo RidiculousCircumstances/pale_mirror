@@ -46,6 +46,19 @@ final class SourceGrayboxLabelPositions {
         // infrastructure board, it must remain directly above the activity
         // cube so the player can unambiguously associate the event with the
         // nearby one-to-one participants.
+        if (id.startsWith("effect:")) {
+            Column anchor = new Column(x, z);
+            // A current source effect is an immediate local event, not a map
+            // landmark.  It owns the exact effect anchor when free so the
+            // player can connect the board to its materialized consequence.
+            // If another higher-priority event already occupies that column,
+            // the bounded ordinary search below keeps both boards legible.
+            if (!occupiedBoardColumns.contains(anchor) && reservations.available(id, x, z)) {
+                occupiedBoardColumns.add(anchor);
+                reservations.reserve(id, x, z);
+                return new BlockPos(x, Math.max(minimumY, baseline(x, z)), z);
+            }
+        }
         if (id.startsWith("activity:")) return new BlockPos(x, Math.max(minimumY, baseline(x, z)), z);
         Column anchor = new Column(x, z);
         int firstOrdinal = nextSlotByAnchor.getOrDefault(anchor, 0);

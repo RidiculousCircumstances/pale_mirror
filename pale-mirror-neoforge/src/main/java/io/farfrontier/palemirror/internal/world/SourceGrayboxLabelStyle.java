@@ -7,6 +7,7 @@ final class SourceGrayboxLabelStyle {
     static float scale(String id) {
         if (isLandmark(id)) return 1.35f;
         if (id.startsWith("dashboard:") || id.startsWith("events:") || id.startsWith("legend:")) return 1.20f;
+        if (id.startsWith("effect:")) return 1.10f;
         if (id.startsWith("field-post:") || id.startsWith("warehouse:") || id.startsWith("activity:")) return 1.10f;
         return 1.00f;
     }
@@ -24,6 +25,7 @@ final class SourceGrayboxLabelStyle {
         // immediate approach; all exact facts stay genuinely local.
         if (isLandmark(id)) return 2.0f;
         if (id.startsWith("dashboard:") || id.startsWith("events:") || id.startsWith("legend:")) return 1.0f;
+        if (id.startsWith("effect:")) return 0.75f;
         if (id.startsWith("field-post:") || id.startsWith("activity:")) return 1.0f;
         if (id.startsWith("route:") || id.startsWith("field-link:")) return 0.75f;
         if (id.startsWith("warehouse:") || id.startsWith("facility:") || id.startsWith("site:")
