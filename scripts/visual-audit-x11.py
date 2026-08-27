@@ -30,6 +30,8 @@ X11.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
 X11.XKeysymToKeycode.restype = ctypes.c_ubyte
 X11.XFlush.argtypes = [ctypes.c_void_p]
 X11.XSetInputFocus.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+X11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.c_void_p]
+X11.XSendEvent.restype = ctypes.c_int
 X11.XMoveResizeWindow.argtypes = [
     ctypes.c_void_p,
     ctypes.c_ulong,
@@ -41,6 +43,78 @@ X11.XMoveResizeWindow.argtypes = [
 XTEST.XTestFakeKeyEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
 XTEST.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
 XTEST.XTestFakeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
+
+
+class XKeyEvent(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_int),
+        ("serial", ctypes.c_ulong),
+        ("send_event", ctypes.c_int),
+        ("display", ctypes.c_void_p),
+        ("window", ctypes.c_ulong),
+        ("root", ctypes.c_ulong),
+        ("subwindow", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("x", ctypes.c_int),
+        ("y", ctypes.c_int),
+        ("x_root", ctypes.c_int),
+        ("y_root", ctypes.c_int),
+        ("state", ctypes.c_uint),
+        ("keycode", ctypes.c_uint),
+        ("same_screen", ctypes.c_int),
+    ]
+
+
+class XEvent(ctypes.Union):
+    _fields_ = [("xkey", XKeyEvent), ("pad", ctypes.c_long * 24)]
+
+
+class XImage(ctypes.Structure):
+    _fields_ = [
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("xoffset", ctypes.c_int),
+        ("format", ctypes.c_int),
+        ("data", ctypes.c_void_p),
+        ("byte_order", ctypes.c_int),
+        ("bitmap_unit", ctypes.c_int),
+        ("bitmap_bit_order", ctypes.c_int),
+        ("bitmap_pad", ctypes.c_int),
+        ("depth", ctypes.c_int),
+        ("bytes_per_line", ctypes.c_int),
+        ("bits_per_pixel", ctypes.c_int),
+        ("red_mask", ctypes.c_ulong),
+        ("green_mask", ctypes.c_ulong),
+        ("blue_mask", ctypes.c_ulong),
+        ("obdata", ctypes.c_void_p),
+        ("funcs", ctypes.c_void_p),
+    ]
+
+
+X11.XGetImage.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_ulong,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_uint,
+    ctypes.c_uint,
+    ctypes.c_ulong,
+    ctypes.c_int,
+]
+X11.XGetImage.restype = ctypes.POINTER(XImage)
+X11.XDestroyImage.argtypes = [ctypes.POINTER(XImage)]
+X11.XGetGeometry.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_ulong,
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_uint),
+    ctypes.POINTER(ctypes.c_uint),
+    ctypes.POINTER(ctypes.c_uint),
+    ctypes.POINTER(ctypes.c_uint),
+]
+X11.XGetGeometry.restype = ctypes.c_int
 
 
 def open_display() -> ctypes.c_void_p:
@@ -66,6 +140,29 @@ def flush(display: ctypes.c_void_p) -> None:
     X11.XFlush(display)
 
 
+def window_size(display: ctypes.c_void_p, window: int) -> tuple[int, int]:
+    root = ctypes.c_ulong()
+    x = ctypes.c_int()
+    y = ctypes.c_int()
+    width = ctypes.c_uint()
+    height = ctypes.c_uint()
+    border = ctypes.c_uint()
+    depth = ctypes.c_uint()
+    if not X11.XGetGeometry(
+        display,
+        window,
+        ctypes.byref(root),
+        ctypes.byref(x),
+        ctypes.byref(y),
+        ctypes.byref(width),
+        ctypes.byref(height),
+        ctypes.byref(border),
+        ctypes.byref(depth),
+    ):
+        raise RuntimeError("X11 could not read the Minecraft window geometry")
+    return width.value, height.value
+
+
 def keycode(display: ctypes.c_void_p, keysym_name: str) -> int:
     keysym = X11.XStringToKeysym(keysym_name.encode("ascii"))
     if not keysym:
@@ -76,13 +173,40 @@ def keycode(display: ctypes.c_void_p, keysym_name: str) -> int:
     return code
 
 
-def key_event(display: ctypes.c_void_p, keysym_name: str, pressed: bool) -> None:
-    XTEST.XTestFakeKeyEvent(display, keycode(display, keysym_name), int(pressed), 0)
+def key_event(
+    display: ctypes.c_void_p,
+    window: int,
+    keysym_name: str,
+    pressed: bool,
+    modifiers: int = 0,
+) -> None:
+    """Deliver one key to the target window without relying on XTEST focus.
+
+    Some real XWayland sessions accept synthetic input from XTEST but do not
+    forward it to a captured GLFW window.  The audit client already owns the
+    focused Minecraft window, so a direct X11 key event is deterministic there
+    and also keeps the isolated-Xvfb path free of pointer/camera movement.
+    """
+    event = XEvent()
+    event.xkey.type = 2 if pressed else 3  # KeyPress / KeyRelease
+    event.xkey.send_event = 1
+    event.xkey.display = display
+    event.xkey.window = window
+    event.xkey.root = window
+    event.xkey.subwindow = 0
+    event.xkey.time = 0
+    event.xkey.x = event.xkey.y = event.xkey.x_root = event.xkey.y_root = 1
+    event.xkey.state = modifiers
+    event.xkey.keycode = keycode(display, keysym_name)
+    event.xkey.same_screen = 1
+    mask = 1 if pressed else 2  # KeyPressMask / KeyReleaseMask
+    if not X11.XSendEvent(display, window, False, mask, ctypes.byref(event)):
+        raise RuntimeError(f"X11 rejected key event for {keysym_name}")
 
 
-def press(display: ctypes.c_void_p, keysym_name: str) -> None:
-    key_event(display, keysym_name, True)
-    key_event(display, keysym_name, False)
+def press(display: ctypes.c_void_p, window: int, keysym_name: str, modifiers: int = 0) -> None:
+    key_event(display, window, keysym_name, True, modifiers)
+    key_event(display, window, keysym_name, False, modifiers)
     flush(display)
     time.sleep(0.025)
 
@@ -110,37 +234,30 @@ PLAIN = {
 }
 
 
-def type_character(display: ctypes.c_void_p, value: str) -> None:
+def type_character(display: ctypes.c_void_p, window: int, value: str) -> None:
     shifted = value in SHIFTED or value.isupper()
     name = SHIFTED.get(value, PLAIN.get(value, value.lower()))
-    if shifted:
-        key_event(display, "Shift_L", True)
-    press(display, name)
-    if shifted:
-        key_event(display, "Shift_L", False)
-        flush(display)
+    press(display, window, name, 1 if shifted else 0)  # ShiftMask
 
 
 def focus(display: ctypes.c_void_p, window: int) -> None:
     X11.XSetInputFocus(display, window, 2, 0)
-    XTEST.XTestFakeMotionEvent(display, -1, 960, 540, 0)
-    XTEST.XTestFakeButtonEvent(display, 1, 1, 0)
-    XTEST.XTestFakeButtonEvent(display, 1, 0, 0)
     flush(display)
     time.sleep(0.15)
 
 
 def send_command(value: str) -> None:
     display = open_display()
-    focus(display, minecraft_window())
+    window = minecraft_window()
+    focus(display, window)
     # Slash opens command chat directly.  Do not prepend T: after an F2 capture
     # Minecraft can treat that key as literal text in a still-open command
     # field, corrupting the next audit command (for example `t@s`).
-    type_character(display, "/")
+    type_character(display, window, "/")
     time.sleep(0.4)
     for character in value:
-        type_character(display, character)
-    press(display, "Return")
+        type_character(display, window, character)
+    press(display, window, "Return")
 
 
 def resize(width: int, height: int) -> None:
@@ -157,10 +274,11 @@ def send_key(value: str) -> None:
     # synthetic click is useful before typing chat, but it also changes the
     # audited camera angle immediately before F2.  Keyboard-only actions need
     # focus without moving or clicking the pointer.
-    X11.XSetInputFocus(display, minecraft_window(), 2, 0)
+    window = minecraft_window()
+    X11.XSetInputFocus(display, window, 2, 0)
     flush(display)
     time.sleep(0.05)
-    press(display, value)
+    press(display, window, value)
 
 
 def click(x: int, y: int) -> None:
@@ -175,14 +293,33 @@ def click(x: int, y: int) -> None:
 
 def capture(destination: Path) -> None:
     try:
-        from PIL import ImageGrab
+        from PIL import Image
     except ImportError as failure:
         raise RuntimeError("Python Pillow is required for visual-audit capture") from failure
     destination.parent.mkdir(parents=True, exist_ok=True)
-    image = ImageGrab.grab()
-    if image.width <= 0 or image.height <= 0:
-        raise RuntimeError("X11 returned an empty framebuffer")
-    image.save(destination)
+    display = open_display()
+    window = minecraft_window()
+    width, height = window_size(display, window)
+    image = X11.XGetImage(display, window, 0, 0, width, height, ctypes.c_ulong(-1).value, 2)
+    if not image:
+        raise RuntimeError("X11 could not capture the Minecraft window")
+    try:
+        width = image.contents.width
+        height = image.contents.height
+        if width <= 0 or height <= 0:
+            raise RuntimeError("X11 returned an empty Minecraft window")
+        raw = ctypes.string_at(image.contents.data, image.contents.bytes_per_line * height)
+        Image.frombytes(
+            "RGBA",
+            (width, height),
+            raw,
+            "raw",
+            "BGRA",
+            image.contents.bytes_per_line,
+            1,
+        ).save(destination)
+    finally:
+        X11.XDestroyImage(image)
 
 
 def main() -> int:

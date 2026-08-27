@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Bounded read-only player-eye camera plan for the source graybox.
@@ -34,6 +35,23 @@ final class SourceGrayboxAuditViews {
         bestFieldPost(snapshot).ifPresent(value -> result.add(fieldPost(snapshot, value)));
         if (result.size() > MAX_VIEWS) throw new IllegalStateException("source graybox audit view limit exceeded");
         return List.copyOf(result);
+    }
+
+    /**
+     * Resolves a copied audit id against the last advertised bounded plan
+     * before considering the newest source frame.  An operator may take a few
+     * seconds to paste an id while the autonomous clock commits a new day; the
+     * originally advertised camera is still a valid player-demand pose and
+     * must not turn into a spurious command failure.
+     */
+    static Optional<View> resolve(String requestedId, List<View> advertised, ReferenceGrayboxSnapshot current) {
+        Objects.requireNonNull(requestedId, "requestedId");
+        Objects.requireNonNull(advertised, "advertised");
+        Objects.requireNonNull(current, "current");
+        String id = requestedId.trim();
+        if (id.isEmpty()) return Optional.empty();
+        return advertised.stream().filter(candidate -> candidate.id().equals(id)).findFirst()
+                .or(() -> from(current).stream().filter(candidate -> candidate.id().equals(id)).findFirst());
     }
 
     private static java.util.Optional<ReferenceGrayboxSnapshot.Settlement> bestSettlement(ReferenceGrayboxSnapshot snapshot) {

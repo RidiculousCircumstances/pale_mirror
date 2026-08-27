@@ -34,6 +34,8 @@ public final class SourceGrayboxRuntime {
     private final SourceGrayboxOperationCargoCarrierRuntime operationCarriers = new SourceGrayboxOperationCargoCarrierRuntime();
     private final SourceGrayboxEffectRuntime effects = new SourceGrayboxEffectRuntime();
     private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
+    /** Last bounded, read-only camera plan given to an operator; never canonical state. */
+    private List<SourceGrayboxAuditViews.View> advertisedAuditViews = List.of();
     /** A naturally loaded graybox chunk needs one claim-checked projection pass. */
     private boolean presentationRequested;
 
@@ -310,7 +312,8 @@ public final class SourceGrayboxRuntime {
      * projection data only: requesting them neither loads a chunk nor changes source state.</p>
      */
     public List<String> auditViewLines() {
-        return SourceGrayboxAuditViews.from(data.snapshot()).stream().map(view -> "PM_GRAYBOX_AUDIT_VIEW|"
+        advertisedAuditViews = SourceGrayboxAuditViews.from(data.snapshot());
+        return advertisedAuditViews.stream().map(view -> "PM_GRAYBOX_AUDIT_VIEW|"
                 + view.id() + "|" + view.kind() + "|" + view.targetId() + "|"
                 + SourceGrayboxWorldBoundary.DIMENSION.location() + "|" + view.x() + "|" + view.y() + "|"
                 + view.z() + "|" + view.yaw() + "|" + view.pitch()).toList();
@@ -319,8 +322,8 @@ public final class SourceGrayboxRuntime {
     /** Explicit operator travel to an advertised pose; normal player chunk demand remains the only loading path. */
     public boolean enterAuditView(ServerPlayer player, String viewId) {
         if (!data.activated()) return false;
-        SourceGrayboxAuditViews.View view = SourceGrayboxAuditViews.from(data.snapshot()).stream()
-                .filter(candidate -> candidate.id().equals(viewId)).findFirst().orElse(null);
+        SourceGrayboxAuditViews.View view = SourceGrayboxAuditViews
+                .resolve(viewId, advertisedAuditViews, data.snapshot()).orElse(null);
         if (view == null) return false;
         player.teleportTo(grayboxLevel(), view.x() + 0.5d, view.y(), view.z() + 0.5d, view.yaw(), view.pitch());
         player.fallDistance = 0.0f;

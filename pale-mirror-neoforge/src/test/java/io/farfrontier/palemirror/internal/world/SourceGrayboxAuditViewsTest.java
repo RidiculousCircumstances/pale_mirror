@@ -74,4 +74,18 @@ class SourceGrayboxAuditViewsTest {
         assertFalse(views.stream().anyMatch(view -> view.id().contains("retired")),
                 "a terminal operation must not be visually revived as a live player scene");
     }
+
+    @Test
+    void copiedAdvertisedViewRemainsResolvableAcrossFramesAndWhitespace() {
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(7L).snapshot();
+        SourceGrayboxAuditViews.View expected = new SourceGrayboxAuditViews.View(
+                "graybox/settlement/previous-frame/approach", "GRAYBOX_SETTLEMENT", "settlement:previous-frame",
+                14, 65, 14, 0.0f, 0.0f);
+        List<SourceGrayboxAuditViews.View> advertised = List.of(expected);
+
+        assertEquals(expected, SourceGrayboxAuditViews.resolve("  " + expected.id() + "  ", advertised, baseline).orElseThrow(),
+                "a copied id from the bounded advertised plan must survive a later source frame");
+        assertTrue(SourceGrayboxAuditViews.resolve("   ", advertised, baseline).isEmpty(),
+                "blank operator input must fail closed rather than selecting an arbitrary audit pose");
+    }
 }
