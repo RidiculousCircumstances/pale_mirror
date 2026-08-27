@@ -197,7 +197,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                     new EventId("event:revision-" + nextRevision.value() + "-" + index),
                     transactionId, worldId, nextRevision, eventInstant, next.subject(), causes, next.payload());
             if (event.payload() instanceof ScheduleEffect effect) {
-                applyScheduleEffect(nextSchedules, effect);
+                ScheduleEffectApplier.apply(nextSchedules, effect);
             } else {
                 nextState = Objects.requireNonNull(reducer.apply(nextState, event), "reducer state");
             }
@@ -216,31 +216,6 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
 
     private CommandResult.Rejected rejected(FrontierCommand command, RejectionCode code, String detail) {
         return new CommandResult.Rejected(command.id(), revision, new CommandRejection(code, detail));
-    }
-
-    private static void applyScheduleEffect(ScheduledActionQueue schedules, ScheduleEffect effect) {
-        if (effect instanceof ScheduleEffect.Created created) {
-            schedules.schedule(created.action());
-        } else if (effect instanceof ScheduleEffect.Cancelled cancelled) {
-            requireSchedule(schedules.cancel(cancelled.scheduleId()), cancelled.scheduleId());
-        } else if (effect instanceof ScheduleEffect.Rescheduled rescheduled) {
-            requireSchedule(schedules.cancel(rescheduled.scheduleId()), rescheduled.scheduleId());
-            schedules.schedule(rescheduled.replacement());
-        } else if (effect instanceof ScheduleEffect.Consumed consumed) {
-            ScheduledAction head = schedules.snapshot().isEmpty() ? null : schedules.snapshot().getFirst();
-            if (head == null || !head.id().equals(consumed.scheduleId())) {
-                throw new IllegalStateException("schedule consumption is not the due queue head: " + consumed.scheduleId().value());
-            }
-            schedules.acknowledge(head);
-        } else {
-            throw new IllegalStateException("unknown schedule effect: " + effect.type());
-        }
-    }
-
-    private static void requireSchedule(boolean changed, io.farfrontier.palemirror.frontier.v3.api.ScheduleId scheduleId) {
-        if (!changed) {
-            throw new IllegalStateException("schedule does not exist: " + scheduleId.value());
-        }
     }
 
     private CommandResult.Rejected quarantine(FrontierCommand command, RuntimeException error) {

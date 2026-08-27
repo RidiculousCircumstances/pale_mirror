@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryFrontierEngineTest {
@@ -130,6 +131,28 @@ class InMemoryFrontierEngineTest {
         assertArrayEquals(first.checkpoint().canonicalState(), second.checkpoint().canonicalState());
         assertEquals(first.transactions(), second.transactions());
         assertTrue(Arrays.equals(first.checkpoint().canonicalState(), ByteBuffer.allocate(4).putInt(3).array()));
+    }
+
+    @Test
+    void retainedTransactionsReplayToTheSameStateAndRejectCorruptSequence() {
+        List<ScheduledAction> schedules = List.of(scheduled("schedule:replay", "settlement:a", 4L, 2));
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(schedules, false);
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:replay", Revision.ZERO, 3)));
+        engine.advanceTo(new SimInstant(4L), new WorkBudget(1, 2));
+
+        TransactionReplayer.ReplayResult<Counter> replay = TransactionReplayer.replay(
+                WORLD, new Counter(0), SimInstant.ZERO, schedules, engine.transactions(),
+                (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array());
+
+        assertEquals(engine.projection(ProjectionQuery.summary()).value(), replay.state().value());
+        assertEquals(new Revision(2L), replay.revision());
+        assertTrue(replay.schedules().isEmpty());
+        TransactionRecord corrupt = new TransactionRecord(engine.transactions().getFirst().id(), WORLD,
+                new Revision(2L), SimInstant.ZERO, engine.transactions().getFirst().events());
+        assertThrows(IllegalArgumentException.class, () -> TransactionReplayer.replay(
+                WORLD, new Counter(0), SimInstant.ZERO, List.of(), List.of(corrupt),
+                (state, event) -> reduce(state, event, false), state -> new byte[] {0}));
     }
 
     private static InMemoryFrontierEngine<Counter, CounterProjection> engine(

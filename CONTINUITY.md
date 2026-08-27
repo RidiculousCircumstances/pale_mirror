@@ -39,11 +39,12 @@
 - `eea89c1` records the Wave 1 module/primitives foundation.
 - `84d3136` adds immutable command/event envelopes, typed rejection, one-thread atomic in-memory transactions, bounded receipt/transaction retention, reducer quarantine, non-destructive due-action admission and a reproducible pure-kernel benchmark fixture.
 - Explicit kernel schedule-created, schedule-cancelled, schedule-rescheduled and schedule-consumed events now mutate the due-action index only inside the same successful transaction; failed due work remains scheduled and visibly quarantines the engine.
+- Wave 1 now has explicit payload registries, versioned command/event/transaction codecs, built-in schedule-effect codecs and fail-closed deterministic transaction replay. Focused replay tests and the critical Gradle gate, including 168 GameTests, pass.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
-- Wave 1 is in progress: give commands/events/transactions complete versioned pure codecs, then verify deterministic replay from retained transaction records.
+- Wave 1 is in progress: review the kernel's bounded retention and codec/replay invariants against the Wave 1 exit gate, then record the exit evidence before Wave 2.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
