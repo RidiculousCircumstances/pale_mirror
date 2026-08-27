@@ -32,6 +32,16 @@ public final class ScheduledActionQueue {
         return action != null && ordered.remove(action);
     }
 
+    public ScheduledActionQueue copy() {
+        ScheduledActionQueue copy = new ScheduledActionQueue();
+        snapshot().forEach(copy::schedule);
+        return copy;
+    }
+
+    public boolean isHead(ScheduledAction action) {
+        return action.equals(ordered.isEmpty() ? null : ordered.first());
+    }
+
     /**
      * Selects work without consuming it. The engine acknowledges each action only after its
      * corresponding transaction is committed, so a failing reducer cannot lose future work.

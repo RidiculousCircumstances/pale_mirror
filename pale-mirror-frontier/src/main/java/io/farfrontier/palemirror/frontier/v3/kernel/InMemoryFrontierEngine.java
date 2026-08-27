@@ -40,7 +40,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final StateCodec<S> stateCodec;
     private final ProjectionMapper<S, P> projectionMapper;
     private final EngineLimits limits;
-    private final ScheduledActionQueue schedules = new ScheduledActionQueue();
+    private ScheduledActionQueue schedules = new ScheduledActionQueue();
     private final Map<CommandId, SimInstant> receipts = new LinkedHashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
     private S state;
@@ -130,18 +130,23 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         ScheduledWork work = schedules.selectDue(target, budget);
         List<TransactionId> completed = new ArrayList<>();
         for (ScheduledAction action : work.admitted()) {
+            if (!schedules.isHead(action)) {
+                continue;
+            }
             if (transactions.size() == limits.maxTransactions()) {
                 status = new EngineStatus(EngineStatus.Kind.QUARANTINED, "transaction retention capacity exhausted during due work");
                 return advanceResult(completed, Optional.of(action));
             }
             try {
-                List<ProposedEvent> events = List.copyOf(scheduledPlanner.plan(state, action));
-                if (events.isEmpty()) {
+                List<ProposedEvent> planned = List.copyOf(scheduledPlanner.plan(state, action));
+                if (planned.isEmpty()) {
                     throw new IllegalStateException("due action emitted no completion event: " + action.id().value());
                 }
+                List<ProposedEvent> events = new ArrayList<>(planned.size() + 1);
+                events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
+                events.addAll(planned);
                 CommandId cause = new CommandId("scheduler:" + action.id().value().replace(':', '/'));
                 completed.add(commit(CauseChain.root(cause), action.dueAt(), events));
-                schedules.acknowledge(action);
             } catch (RuntimeException error) {
                 status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(error));
                 return advanceResult(completed, Optional.of(action));
@@ -184,13 +189,18 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         TransactionId transactionId = new TransactionId("transaction:revision-" + nextRevision.value());
         List<FrontierEvent> events = new ArrayList<>(proposed.size());
         S nextState = state;
+        ScheduledActionQueue nextSchedules = schedules.copy();
         for (int index = 0; index < proposed.size(); index++) {
             ProposedEvent next = proposed.get(index);
             FrontierEvent event = new FrontierEvent(
                     FrontierEvent.SCHEMA_VERSION,
                     new EventId("event:revision-" + nextRevision.value() + "-" + index),
                     transactionId, worldId, nextRevision, eventInstant, next.subject(), causes, next.payload());
-            nextState = Objects.requireNonNull(reducer.apply(nextState, event), "reducer state");
+            if (event.payload() instanceof ScheduleEffect effect) {
+                applyScheduleEffect(nextSchedules, effect);
+            } else {
+                nextState = Objects.requireNonNull(reducer.apply(nextState, event), "reducer state");
+            }
             events.add(event);
         }
         byte[] encoded = stateCodec.encode(nextState);
@@ -199,12 +209,38 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         }
         state = nextState;
         revision = nextRevision;
+        schedules = nextSchedules;
         transactions.add(new TransactionRecord(transactionId, worldId, revision, eventInstant, events));
         return transactionId;
     }
 
     private CommandResult.Rejected rejected(FrontierCommand command, RejectionCode code, String detail) {
         return new CommandResult.Rejected(command.id(), revision, new CommandRejection(code, detail));
+    }
+
+    private static void applyScheduleEffect(ScheduledActionQueue schedules, ScheduleEffect effect) {
+        if (effect instanceof ScheduleEffect.Created created) {
+            schedules.schedule(created.action());
+        } else if (effect instanceof ScheduleEffect.Cancelled cancelled) {
+            requireSchedule(schedules.cancel(cancelled.scheduleId()), cancelled.scheduleId());
+        } else if (effect instanceof ScheduleEffect.Rescheduled rescheduled) {
+            requireSchedule(schedules.cancel(rescheduled.scheduleId()), rescheduled.scheduleId());
+            schedules.schedule(rescheduled.replacement());
+        } else if (effect instanceof ScheduleEffect.Consumed consumed) {
+            ScheduledAction head = schedules.snapshot().isEmpty() ? null : schedules.snapshot().getFirst();
+            if (head == null || !head.id().equals(consumed.scheduleId())) {
+                throw new IllegalStateException("schedule consumption is not the due queue head: " + consumed.scheduleId().value());
+            }
+            schedules.acknowledge(head);
+        } else {
+            throw new IllegalStateException("unknown schedule effect: " + effect.type());
+        }
+    }
+
+    private static void requireSchedule(boolean changed, io.farfrontier.palemirror.frontier.v3.api.ScheduleId scheduleId) {
+        if (!changed) {
+            throw new IllegalStateException("schedule does not exist: " + scheduleId.value());
+        }
     }
 
     private CommandResult.Rejected quarantine(FrontierCommand command, RuntimeException error) {

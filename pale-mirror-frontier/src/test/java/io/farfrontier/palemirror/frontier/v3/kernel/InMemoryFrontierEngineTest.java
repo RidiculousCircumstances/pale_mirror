@@ -80,6 +80,8 @@ class InMemoryFrontierEngineTest {
         assertEquals(3, engine.projection(ProjectionQuery.summary()).value());
         assertEquals(List.of("event:revision-1-0", "event:revision-2-0"), engine.transactions().stream()
                 .map(record -> record.events().getFirst().id().value()).toList());
+        assertEquals(List.of("event:revision-1-1", "event:revision-2-1"), engine.transactions().stream()
+                .map(record -> record.events().get(1).id().value()).toList());
     }
 
     @Test
@@ -93,6 +95,26 @@ class InMemoryFrontierEngineTest {
         assertEquals(List.of(action), engine.scheduledActions());
         assertEquals(0, engine.transactions().size());
         assertEquals(0, engine.projection(ProjectionQuery.summary()).value());
+    }
+
+    @Test
+    void scheduleCreationRescheduleAndCancellationAreCommittedEvents() {
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false);
+        ScheduledAction original = scheduled("schedule:created", "settlement:a", 10L, 1);
+        ScheduledAction replacement = scheduled("schedule:replacement", "settlement:b", 20L, 2);
+
+        assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command("command:create", Revision.ZERO, new ScheduleEffect.Created(original))));
+        assertEquals(List.of(original), engine.scheduledActions());
+        assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command("command:reschedule", new Revision(1L),
+                        new ScheduleEffect.Rescheduled(original.id(), replacement))));
+        assertEquals(List.of(replacement), engine.scheduledActions());
+        assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command("command:cancel", new Revision(2L), new ScheduleEffect.Cancelled(replacement.id()))));
+        assertTrue(engine.scheduledActions().isEmpty());
+        assertEquals(List.of("kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled"),
+                engine.transactions().stream().map(record -> record.events().getFirst().payload().type()).toList());
     }
 
     @Test
@@ -135,9 +157,13 @@ class InMemoryFrontierEngineTest {
     }
 
     private static FrontierCommand command(String id, Revision revision, int delta) {
+        return command(id, revision, new Delta(delta));
+    }
+
+    private static FrontierCommand command(String id, Revision revision, FrontierPayload payload) {
         CommandId commandId = new CommandId(id);
         return new FrontierCommand(1, commandId, WORLD, revision, SimInstant.ZERO, SUBJECT,
-                CauseChain.root(commandId), new Delta(delta));
+                CauseChain.root(commandId), payload);
     }
 
     private static ScheduledAction scheduled(String id, String subject, long dueAt, int weight) {
