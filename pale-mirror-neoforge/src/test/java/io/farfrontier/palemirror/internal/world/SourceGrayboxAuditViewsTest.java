@@ -18,7 +18,7 @@ class SourceGrayboxAuditViewsTest {
         List<SourceGrayboxAuditViews.View> second = SourceGrayboxAuditViews.from(snapshot);
 
         assertEquals(first, second, "one immutable source frame must yield the same audit camera plan");
-        assertTrue(first.size() >= 3 && first.size() <= 5,
+        assertTrue(first.size() >= 3 && first.size() <= 6,
                 "every normal source frame must expose settlement, hive and route scenes without an unbounded camera cloud");
         assertTrue(first.stream().anyMatch(view -> view.kind().equals("GRAYBOX_SETTLEMENT")));
         assertTrue(first.stream().anyMatch(view -> view.kind().equals("GRAYBOX_HIVE_ORGAN")));
@@ -73,6 +73,31 @@ class SourceGrayboxAuditViewsTest {
         assertTrue(views.stream().anyMatch(view -> view.id().equals("graybox/field-post/91/approach")));
         assertFalse(views.stream().anyMatch(view -> view.id().contains("retired")),
                 "a terminal operation must not be visually revived as a live player scene");
+    }
+
+    @Test
+    void currentEffectGetsOneSourceDerivedCameraWithoutDisplacingAnyLiveScene() {
+        ReferenceGrayboxSnapshot baseline = ReferenceGrayboxSimulation.create(41L).snapshot();
+        ReferenceGrayboxSnapshot withEffects = new ReferenceGrayboxSnapshot(baseline.day(), baseline.profileId(),
+                baseline.stateRevision(), baseline.bounds(), baseline.cells(), baseline.settlements(), baseline.facilities(),
+                baseline.warehouses(), baseline.resourceSites(), baseline.routes(), baseline.hiveOrgans(), baseline.bioforms(),
+                baseline.residents(), baseline.fieldPosts(), baseline.fieldLinks(), baseline.activities(), List.of(
+                        new ReferenceGrayboxSnapshot.Effect("containment:fixture", "containment", "settlement:3", baseline.day(),
+                                new io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout.Point(20, 24), .25d, 6.0d,
+                                "ammo=3.000; tissue_removed=0.250", "effect.containment"),
+                        new ReferenceGrayboxSnapshot.Effect("combat:fixture", "breach_bomb", "settlement:4", baseline.day(),
+                                new io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout.Point(44, 48), .10d, 2.0d,
+                                "swarm=1; composition=rusher; damage=0.100", "effect.breach")), baseline.cargoes(),
+                baseline.interactions(), baseline.sectors(), baseline.chrysalises(), baseline.readouts(), baseline.events());
+
+        List<SourceGrayboxAuditViews.View> views = SourceGrayboxAuditViews.from(withEffects);
+
+        assertEquals(4, views.size(), "one current effect adds one bounded camera beside the normal three scenes");
+        assertTrue(views.stream().anyMatch(view -> view.id().equals("graybox/effect/combat:fixture/scene")
+                        && view.kind().equals("GRAYBOX_EFFECT") && view.targetId().equals("effect:combat:fixture")),
+                "the highest-impact source effect must be auditable at its exact canonical location");
+        assertFalse(views.stream().anyMatch(view -> view.id().contains("containment:fixture")),
+                "one audit pass must not create an unbounded camera per effect");
     }
 
     @Test

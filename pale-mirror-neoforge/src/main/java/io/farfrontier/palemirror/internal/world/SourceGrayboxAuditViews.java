@@ -17,7 +17,7 @@ import java.util.Optional;
  * explicit player action and remains the normal chunk-demand path.</p>
  */
 final class SourceGrayboxAuditViews {
-    private static final int MAX_VIEWS = 5;
+    private static final int MAX_VIEWS = 6;
     private static final int OUTER_STANDOFF = 14;
     private static final int ROUTE_STANDOFF = 12;
     private static final int LOCAL_STANDOFF = 12;
@@ -33,6 +33,7 @@ final class SourceGrayboxAuditViews {
         bestRoute(snapshot).ifPresent(value -> result.add(route(snapshot, value)));
         bestActivity(snapshot).ifPresent(value -> result.add(activity(snapshot, value)));
         bestFieldPost(snapshot).ifPresent(value -> result.add(fieldPost(snapshot, value)));
+        bestEffect(snapshot).ifPresent(value -> result.add(effect(snapshot, value)));
         if (result.size() > MAX_VIEWS) throw new IllegalStateException("source graybox audit view limit exceeded");
         return List.copyOf(result);
     }
@@ -89,6 +90,14 @@ final class SourceGrayboxAuditViews {
                 .thenComparingInt(ReferenceGrayboxSnapshot.FieldPost::id));
     }
 
+    private static java.util.Optional<ReferenceGrayboxSnapshot.Effect> bestEffect(ReferenceGrayboxSnapshot snapshot) {
+        return snapshot.effects().stream().min(Comparator
+                .comparing((ReferenceGrayboxSnapshot.Effect value) -> value.kind().equals("breach_bomb")).reversed()
+                .thenComparing(Comparator.comparingDouble(ReferenceGrayboxSnapshot.Effect::radius).reversed())
+                .thenComparing(Comparator.comparingDouble(ReferenceGrayboxSnapshot.Effect::magnitude).reversed())
+                .thenComparing(ReferenceGrayboxSnapshot.Effect::id));
+    }
+
     private static View settlement(ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxSnapshot.Settlement settlement) {
         ReferenceGrayboxLayout.Rectangle area = settlement.rectangle();
         Point camera = bounded(snapshot.bounds(), area.centreX(), area.z() + area.depth() + OUTER_STANDOFF);
@@ -128,6 +137,13 @@ final class SourceGrayboxAuditViews {
         Point camera = bounded(snapshot.bounds(), area.x() - LOCAL_STANDOFF, area.z() + area.depth() + LOCAL_STANDOFF);
         return view("graybox/field-post/" + post.id() + "/approach", "GRAYBOX_FIELD_POST", "field-post:" + post.id(),
                 snapshot.bounds(), camera, area.centreX(), area.centreZ(), 3);
+    }
+
+    private static View effect(ReferenceGrayboxSnapshot snapshot, ReferenceGrayboxSnapshot.Effect effect) {
+        Point camera = bounded(snapshot.bounds(), effect.position().x() + LOCAL_STANDOFF,
+                effect.position().z() + LOCAL_STANDOFF);
+        return view("graybox/effect/" + effect.id() + "/scene", "GRAYBOX_EFFECT", "effect:" + effect.id(),
+                snapshot.bounds(), camera, effect.position().x(), effect.position().z(), 3);
     }
 
     private static View view(String id, String kind, String targetId, ReferenceGrayboxLayout.Bounds bounds,

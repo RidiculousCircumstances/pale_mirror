@@ -72,11 +72,12 @@ player-eye camera plan instead of that legacy anchor fallback:
 scripts/capture-settlement-visuals.sh --source-graybox --server 127.0.0.1:25565
 ```
 
-The pass reads at most five immutable-frame poses: the most urgent settlement,
+The pass reads at most six immutable-frame poses: the most urgent settlement,
 the most vital hive organ, the most consequential route, and—only when they
-exist—a live operation and an active field post. It deliberately reports no
-operation or post when the canonical snapshot has none; screenshots must not
-invent a scene for coverage. The equivalent manual commands are
+exist—a live operation, an active field post and the highest-impact current
+source effect. It deliberately reports no operation, post or effect when the
+canonical snapshot has none; screenshots must not invent a scene for coverage.
+The equivalent manual commands are
 `/pale_mirror frontier audit list` and `/pale_mirror frontier audit tp <view>`.
 Listing poses neither loads chunks nor changes source state; explicit spectator
 travel is ordinary player demand, so a resulting HOT scene is evidence only
