@@ -53,6 +53,8 @@ competing_jars=(
   'naturalist-2.0.2-neoforge-1.21.1.jar'
   'Ravents-neoforge-3.0.jar'
   'rpgtimeline-neoforge-1.21-2.0.4.1.jar'
+  'crimson_curse-1.4.3.1.jar'
+  'mowziesmobs-1.21.1-1.8.2.jar'
 )
 
 # Pale Mirror Visuals has an exact declared dependency on Villager Overhaul.
@@ -62,14 +64,14 @@ required_jars=(
   'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar'
 )
 
-# These source mods are not independent graybox authority.  PM's built-in
-# sandbox owns their lifecycle when they are present, and the current runtime's
-# registered source datapacks reference their content. Keep them available;
-# the sandbox's no-spawn/firewall contracts prevent native world simulation.
+# The retained disposable world has a saved `far-frontier-spore-zones`
+# datapack which registers spore:* worldgen entries. NeoForge rejects the
+# world before PM can start when this one registry provider is absent. Native
+# Spore spawning remains disabled by the server profile and PM's sandbox owns
+# its lifecycle, so this is a load compatibility dependency, not an authority
+# granted to the source-graybox simulation.
 pinned_source_jars=(
-  'crimson_curse-1.4.3.1.jar'
   'spore_1.21.1_2.2.0j_neo.jar'
-  'mowziesmobs-1.21.1-1.8.2.jar'
 )
 
 run() {
@@ -143,11 +145,12 @@ ensure_pinned_source_jar() {
   fi
   if [[ -f "$disabled" ]]; then
     run mv -- "$disabled" "$pinned"
-    printf 'Restored PM-sandboxed source carrier: %s\n' "$1"
+    printf 'Restored required world-registry provider: %s\n' "$1"
   elif [[ -f "$pinned" ]]; then
-    printf 'Retained PM-sandboxed source carrier: %s\n' "$1"
+    printf 'Retained required world-registry provider: %s\n' "$1"
   else
-    printf 'Optional PM source carrier is not installed: %s\n' "$1"
+    printf 'Required world-registry provider is missing: %s\n' "$1" >&2
+    exit 1
   fi
 }
 
