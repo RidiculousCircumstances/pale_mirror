@@ -53,6 +53,7 @@
 - The active runtime has `spawn-animals=true`, `spawn-monsters=true`, and `spawn-npcs=true`. This is intentional: vanilla's global NPC switch would otherwise remove canonical Villagers. The separate verified commits are Pale Mirror `914dbcc` (HOT actor recovery) and outer-pack `e0d6fc2` (runtime profile).
 - Evidence is `build/visual-audits/20260827T1408Z-disappearance-trace/final-npc-lifetime*.png`, `admission-probe-exact-immediate.png`, and `/home/rd/far-frontier-server/logs/graybox-final-npc-lifetime-20260827T0957Z.log`. The first proves continuous source-resident lifetime; the latter clean probe reports `No entity was found` for an explicitly summoned cow within four blocks of the real graybox player, proving the EntityJoin custody boundary rather than relying on the vanilla success message.
 - A controlled operator advance of 16 canonical days left the live save at day 178 with 12 settlements, 265 exact residents, 9 organs and 1 bioform. Its audit plan has no nonterminal activity or field-post view, so it truthfully exposes only settlement, hive-organ and route; do not reset or synthesize an operation scene merely for a screenshot.
+- The operation-materialization audit found no second simulation: a nonterminal operation projects its source-owned scene, while its named residents and operation cargo share the operation's canonical source anchor and become real HOT bodies/carriers on player demand. The remaining presentational limit is explicit: the scene silhouette distinguishes only activity family (operation/campaign/front), while kind/phase currently communicate through colour and board text; a broader transit model must be canonical rather than invented by NeoForge.
 
 ### Next
 - If a distinct entry stall recurs, capture the same COLD route first and separate chunk load/deserialization, static projection, entity admission, save/lighting, network and client work before another performance change.
@@ -62,6 +63,7 @@
 - Keep exercising the deployed HOT/COLD recovery in a naturally evolving live scene; retain the exact resident identity, relevant server log interval, and one-client evidence rather than trusting a one-frame observation.
 - Complete remaining source-parity domains and negative/recovery tests against the Python oracle; do not substitute legacy `graybox-10` mechanics.
 - Validate active operations, exact physical transport and tactical effects as continuous player scenes, including kills/destruction/item flows returning to source state.
+- Decide and implement the next source-owned operation-transit envelope only after defining the source parity contract; do not make a client-side actor/cargo interpolation a competing simulation.
 - Product gates remain open: live natural discovery, infection/recovery, logistics/evacuation/refusal, cooperative authority and clean-room player comprehension; the accurate status is not product-validated.
 
 ## Open questions
