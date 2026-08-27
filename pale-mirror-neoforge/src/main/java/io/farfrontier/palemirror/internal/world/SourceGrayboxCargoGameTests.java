@@ -1,12 +1,21 @@
 package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSimulation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
+import io.farfrontier.palemirror.frontier.reference.ReferenceOperation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceOperationKind;
 import io.farfrontier.palemirror.frontier.reference.ReferenceResource;
+import io.farfrontier.palemirror.frontier.reference.ReferenceTargetRef;
+import io.farfrontier.palemirror.frontier.reference.ReferenceWorld;
+import io.farfrontier.palemirror.frontier.reference.ReferenceWorldConfig;
+import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.item.ItemStack;
@@ -329,5 +338,55 @@ public final class SourceGrayboxCargoGameTests {
         helper.assertValueEqual(carrier.getItem(0).getCount(), 64,
                 "pure movement must preserve the exact physical source cargo until a typed item observation occurs");
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void realCarrierWithdrawalImmediatelyChangesItsCanonicalOperationCargo(GameTestHelper helper) {
+        SourceGrayboxSavedData data = suppliedOperationData();
+        ReferenceGrayboxSnapshot.Cargo cargo = data.snapshot().cargoes().stream()
+                .filter(candidate -> candidate.ownerKind().equals("operation"))
+                .filter(candidate -> candidate.resource().equals("food"))
+                .findFirst().orElseThrow(() -> new IllegalStateException("canonical supplied operation must project food cargo"));
+        helper.assertValueEqual(cargo.quantity(), 1.0d,
+                "the source operation fixture must begin with exactly one canonical food unit (one real Minecraft stack)");
+
+        BlockPos position = helper.absolutePos(BlockPos.ZERO).atY(ReferenceGrayboxLayout.GROUND_Y + 1).offset(2, 0, 2);
+        SourceGrayboxOperationCargoCarrierLedger.Binding binding = new SourceGrayboxOperationCargoCarrierLedger.Binding(
+                "operation-carrier:" + cargo.id(), cargo.id(), cargo.ownerId(), ReferenceResource.FOOD, 64,
+                position.getX() * 16 + 8, position.getZ() * 16 + 8, SourceGrayboxOperationCargoCarrierLedger.Mode.HOT);
+        helper.assertTrue(data.operationCarrierLedger().put(binding),
+                "the persisted executor must own one exact HOT physical carrier before it observes a player withdrawal");
+        MinecartChest carrier = new MinecartChest(helper.getLevel(), position.getX() + 0.5d, position.getY(), position.getZ() + 0.5d);
+        carrier.setNoGravity(true);
+        carrier.setUUID(SourceGrayboxOperationCargoCarrierRuntime.carrierUuid(binding.id()));
+        carrier.getPersistentData().putString(SourceGrayboxOperationCargoCarrierRuntime.ENTITY_ID, binding.id());
+        carrier.getPersistentData().putString(SourceGrayboxOperationCargoCarrierRuntime.ENTITY_RESOURCE, binding.resource().name());
+        carrier.setItem(0, new ItemStack(SourceGrayboxWarehouseRuntime.item(ReferenceResource.FOOD), 63));
+        helper.assertTrue(helper.getLevel().addFreshEntity(carrier),
+                "the observed source operation cargo must be a real chest minecart, not an adapter-side count");
+
+        helper.assertTrue(new SourceGrayboxOperationCargoCarrierRuntime().tick(helper.getLevel(), data, new SourceGrayboxMaterializer()),
+                "the changed owned stack must create one canonical receipt before any movement or COLD hand-off");
+        ReferenceGrayboxSnapshot.Cargo after = data.snapshot().cargoes().stream().filter(candidate -> candidate.id().equals(cargo.id()))
+                .findFirst().orElseThrow(() -> new IllegalStateException("one item withdrawal must not retire the live source operation cargo"));
+        helper.assertValueEqual(after.quantity(), 63.0d / 64.0d,
+                "one physical item removed from the carrier must immediately reduce only its exact source operation cargo by one sixty-fourth");
+        helper.assertValueEqual(data.operationCarrierLedger().binding(binding.id()).observedItems(), 63,
+                "the durable carrier receipt must acknowledge the exact observed Minecraft count after source acceptance");
+        helper.succeed();
+    }
+
+    private static SourceGrayboxSavedData suppliedOperationData() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.graybox1To40(42L));
+        ReferenceOperation operation = world.operations().launchHuman(world, ReferenceOperationKind.RECON, 1,
+                ReferenceTargetRef.cell(10, 10), null, null, Map.of(ReferenceResource.FOOD, 1.0d), null, Map.of());
+        if (operation == null) throw new IllegalStateException("source operation fixture must pass normal canonical launch admission");
+        ReferenceGrayboxSimulation source = ReferenceGrayboxSimulation.capture(world);
+
+        SourceGrayboxSavedData fresh = SourceGrayboxSavedData.fresh(42L);
+        CompoundTag saved = fresh.save(new CompoundTag(), null);
+        saved.put("sourceState", SourceGrayboxStateNbt.write(source));
+        saved.put("actorExecution", SourceGrayboxActorExecutionNbt.write(ReferenceGrayboxActorExecutionState.bootstrap(source.snapshot())));
+        return SourceGrayboxSavedData.load(saved, null);
     }
 }

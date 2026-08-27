@@ -21,6 +21,20 @@ public final class ReferenceGrayboxSimulation {
         return new ReferenceGrayboxSimulation(new ReferenceWorld(ReferenceWorldConfig.graybox1To40(seed)));
     }
 
+    /**
+     * Captures one already constructed canonical source world as an independent
+     * simulation document.
+     *
+     * <p>This is deliberately a document boundary rather than a second
+     * constructor retaining the caller's mutable {@link ReferenceWorld}. It
+     * is used by deterministic scenario harnesses which must exercise the
+     * same complete restore path as a persisted graybox world.</p>
+     */
+    public static ReferenceGrayboxSimulation capture(ReferenceWorld world) {
+        Objects.requireNonNull(world, "world");
+        return restore(ReferenceGrayboxStateDocument.encode(ReferenceGrayboxCanonicalState.capture(world)));
+    }
+
     public static ReferenceGrayboxSimulation restore(byte[] document) {
         return new ReferenceGrayboxSimulation(ReferenceGrayboxWorldHydrator.restore(document));
     }

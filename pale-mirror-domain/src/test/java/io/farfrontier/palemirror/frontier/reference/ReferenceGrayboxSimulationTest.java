@@ -2,12 +2,30 @@ package io.farfrontier.palemirror.frontier.reference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
 class ReferenceGrayboxSimulationTest {
+    @Test
+    void captureDetachesAConstructedCanonicalWorldThroughTheNormalDocumentBoundary() {
+        ReferenceWorld world = new ReferenceWorld(ReferenceWorldConfig.graybox1To40(42L));
+        ReferenceOperation operation = world.operations().launchHuman(world, ReferenceOperationKind.RECON, 1,
+                ReferenceTargetRef.cell(10, 10), null, null, java.util.Map.of(ReferenceResource.FOOD, 1.0d), null, java.util.Map.of());
+        assertNotNull(operation);
+
+        ReferenceGrayboxSimulation captured = ReferenceGrayboxSimulation.capture(world);
+        assertEquals(ReferenceGrayboxProjection.from(world), captured.snapshot(),
+                "capture must preserve the complete constructed source state, including its active supplied operation");
+
+        world.tick();
+        assertNotEquals(ReferenceGrayboxProjection.from(world), captured.snapshot(),
+                "capture must be an independent canonical document, never a second owner retaining the caller's mutable world");
+    }
+
     @Test
     void persistsOnlyTheCompleteSourceStateAndContinuesFromIt() {
         ReferenceGrayboxSimulation source = ReferenceGrayboxSimulation.create(42L);
