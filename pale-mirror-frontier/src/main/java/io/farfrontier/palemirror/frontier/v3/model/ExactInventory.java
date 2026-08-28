@@ -51,10 +51,12 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             case InventoryCustody.ContainerSlot slot -> {
                 ContainerRecord container = containers.get(slot.containerId());
                 if (container == null || slot.slot() >= container.slotCount() || slots.put(slot, item.id()) != null) throw new IllegalArgumentException("invalid or duplicate container slot custody");
+                if (!container.ownerId().equals(item.economicOwnerId())) throw new IllegalArgumentException("container-held item claim must belong to its container owner");
             }
             case InventoryCustody.Cargo batch -> {
                 CargoBatch value = cargo.get(batch.cargoId());
                 if (value == null || !value.itemIds().contains(item.id())) throw new IllegalArgumentException("dangling or conflicting cargo custody");
+                if (!value.ownerId().equals(item.economicOwnerId())) throw new IllegalArgumentException("cargo-held item claim must belong to its sender");
             }
             case InventoryCustody.Player player -> {
                 List<SubjectId> value = playerItems.get(player.playerId());
@@ -114,6 +116,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!items.containsKey(consumedItemId)) throw new IllegalArgumentException("consumed item is absent: " + consumedItemId.value());
         if (items.containsKey(producedItem.id())) throw new IllegalArgumentException("produced item identity already exists: " + producedItem.id().value());
         if (!(producedItem.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("production output must enter a container slot");
+        requireContainerClaim(producedItem);
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.remove(consumedItemId);
         nextItems.put(producedItem.id(), producedItem);
@@ -150,7 +153,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         if (current.count() == 1) nextItems.remove(itemId);
-        else nextItems.put(itemId, new ExactItemStack(current.id(), current.itemKind(), current.count() - 1, current.custody()));
+        else nextItems.put(itemId, new ExactItemStack(current.id(), current.economicOwnerId(), current.itemKind(), current.count() - 1, current.custody()));
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
@@ -159,6 +162,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Objects.requireNonNull(item, "item");
         if (items.containsKey(item.id())) throw new IllegalArgumentException("stored item identity already exists: " + item.id().value());
         if (!(item.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("stored item must enter a container slot");
+        requireContainerClaim(item);
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.put(item.id(), item);
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
@@ -183,7 +187,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             if (container == null || !container.ownerId().equals(batch.ownerId())) {
                 throw new IllegalArgumentException("cargo item is not owned by the cargo sender: " + itemId.value());
             }
-            nextItems.put(itemId, new ExactItemStack(item.id(), item.itemKind(), item.count(), new InventoryCustody.Cargo(batch.id())));
+            if (!item.economicOwnerId().equals(batch.ownerId())) throw new IllegalArgumentException("cargo item claim does not belong to its sender");
+            nextItems.put(itemId, new ExactItemStack(item.id(), item.economicOwnerId(), item.itemKind(), item.count(), new InventoryCustody.Cargo(batch.id())));
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.put(batch.id(), batch);
@@ -204,7 +209,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             if (item == null || !item.custody().equals(new InventoryCustody.Cargo(cargoId))) {
                 throw new IllegalArgumentException("handoff item is not in its exact cargo batch: " + placement.itemId().value());
             }
-            nextItems.put(item.id(), new ExactItemStack(item.id(), item.itemKind(), item.count(), placement.receiverSlot()));
+            ContainerRecord receiver = containers.get(placement.receiverSlot().containerId());
+            if (receiver == null) throw new IllegalArgumentException("handoff receiver container is unknown");
+            nextItems.put(item.id(), new ExactItemStack(item.id(), receiver.ownerId(), item.itemKind(), item.count(), placement.receiverSlot()));
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.remove(cargoId);
@@ -229,7 +236,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         removeCarrierCustody(nextCarriers, from, itemId);
         addCarrierCustody(nextCarriers, to, itemId);
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
-        nextItems.put(itemId, new ExactItemStack(current.id(), current.itemKind(), current.count(), to));
+        SubjectId nextOwner = to instanceof InventoryCustody.ContainerSlot target ? containers.get(target.containerId()).ownerId() : current.economicOwnerId();
+        nextItems.put(itemId, new ExactItemStack(current.id(), nextOwner, current.itemKind(), current.count(), to));
         return new ExactInventory(containers, nextItems, cargo, nextPlayers, nextCarriers, conflicts, surfaces);
     }
 
@@ -285,5 +293,12 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
     private static void requireDistinct(List<SubjectId> values, String label) {
         if (values.stream().distinct().count() != values.size()) throw new IllegalArgumentException(label + " must contain distinct exact item identities");
+    }
+    private void requireContainerClaim(ExactItemStack item) {
+        InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) item.custody();
+        ContainerRecord container = containers.get(slot.containerId());
+        if (container == null || slot.slot() >= container.slotCount() || !container.ownerId().equals(item.economicOwnerId())) {
+            throw new IllegalArgumentException("stored item claim must belong to its target container owner");
+        }
     }
 }

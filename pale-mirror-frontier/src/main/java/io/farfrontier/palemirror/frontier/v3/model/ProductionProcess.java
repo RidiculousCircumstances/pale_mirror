@@ -45,7 +45,7 @@ final class ProductionProcess {
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.FACILITY_UNAVAILABLE);
         SubjectId depot = FrontierWorldState.depotId(settlement.id()); OptionalInt slot = state.inventory().firstFreeSlot(depot);
         if (slot.isEmpty()) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.OUTPUT_STORAGE_UNAVAILABLE);
-        ExactItemStack output = new ExactItemStack(job.outputItemId(), job.outputItemKind(), job.outputCount(), new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
+        ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), job.outputItemKind(), job.outputCount(), new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
         return List.of(new ProposedEvent(settlement.id(), new ProductionCompleted(job.id(), output)), transition(task, StrategicTaskStatus.COMPLETED));
     }
 
@@ -69,6 +69,7 @@ final class ProductionProcess {
         if (!(completed.output().custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) {
             throw new IllegalArgumentException("production output is not stored in its settlement depot");
         }
+        if (!completed.output().economicOwnerId().equals(settlement.id())) throw new IllegalArgumentException("production output claim does not belong to its settlement");
         if (state.inventory().firstFreeSlot(slot.containerId()).orElse(-1) != slot.slot()) throw new IllegalArgumentException("production output does not target the deterministic free depot slot");
         activeTask(state, settlement.id()); return state.completeProductionJob(completed.jobId(), completed.output());
     }

@@ -57,7 +57,7 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.assertValueEqual(chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY), container.value(),
                 "the fresh chest must carry its canonical receiver identity");
 
-        ExactItemStack item = new ExactItemStack(new SubjectId("item:frontier-v3-game-test-bread"), "minecraft:bread", 7,
+        ExactItemStack item = new ExactItemStack(new SubjectId("item:frontier-v3-game-test-bread"), new SubjectId("hive:frontier"), "minecraft:bread", 7,
                 new InventoryCustody.ContainerSlot(container, 0));
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(item));
         helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), item),
@@ -160,7 +160,7 @@ public final class FrontierV3CargoHandoffGameTests {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(22, 8, 0)); BlockPos chestPosition = target.east(2);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
-        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:repair-game-test"), "minecraft:gray_concrete", 2,
+        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:repair-game-test"), new SubjectId("route:frontier-network"), "minecraft:gray_concrete", 2,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:repair-game-test"), 0));
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(concrete));
         GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
@@ -179,7 +179,7 @@ public final class FrontierV3CargoHandoffGameTests {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0)); BlockPos chestPosition = target.east(2);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
-        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:construction-game-test"), "minecraft:gray_concrete", 2,
+        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:construction-game-test"), new SubjectId("route:frontier-network"), "minecraft:gray_concrete", 2,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:construction-game-test"), 0));
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(concrete));
         GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
@@ -350,7 +350,7 @@ public final class FrontierV3CargoHandoffGameTests {
     public static void playerInventoryObservationRequiresTheExactTaggedStack(GameTestHelper helper) {
         var player = helper.makeMockServerPlayerInLevel();
         SubjectId container = new SubjectId("container:frontier-v3-player-custody");
-        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-player-bread"), "minecraft:bread", 7,
+        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-player-bread"), new SubjectId("settlement:1"), "minecraft:bread", 7,
                 new InventoryCustody.ContainerSlot(container, 0));
         player.getInventory().setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
         helper.assertTrue(FrontierV3InventoryObservationExecutor.hasExactItem(player, expected),
@@ -365,7 +365,7 @@ public final class FrontierV3CargoHandoffGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void worldCarrierKeepsExactItemIdentityAndItsPersistedEntityUuid(GameTestHelper helper) {
         SubjectId container = new SubjectId("container:frontier-v3-world-carrier");
-        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-carrier-bread"), "minecraft:bread", 7,
+        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-carrier-bread"), new SubjectId("settlement:1"), "minecraft:bread", 7,
                 new InventoryCustody.ContainerSlot(container, 0));
         java.util.UUID carrier = java.util.UUID.fromString("00000000-0000-0000-0000-000000000045");
         net.minecraft.world.item.ItemStack physical = FrontierV3CargoHandoffExecutor.materializedStack(expected);
@@ -384,7 +384,7 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.getLevel().setBlock(position, Blocks.HOPPER.defaultBlockState(), 3);
         net.minecraft.world.level.block.entity.HopperBlockEntity hopper = (net.minecraft.world.level.block.entity.HopperBlockEntity) helper.getLevel().getBlockEntity(position);
         SubjectId container = new SubjectId("container:frontier-v3-hopper-carrier");
-        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-hopper-bread"), "minecraft:bread", 7,
+        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-hopper-bread"), new SubjectId("settlement:1"), "minecraft:bread", 7,
                 new InventoryCustody.ContainerSlot(container, 0));
         hopper.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
         FrontierV3HopperCarrierLedger ledger = FrontierV3HopperCarrierLedger.get(helper.getLevel());

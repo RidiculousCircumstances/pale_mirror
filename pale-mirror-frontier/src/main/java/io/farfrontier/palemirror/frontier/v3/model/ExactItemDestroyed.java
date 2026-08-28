@@ -10,8 +10,8 @@ public record ExactItemDestroyed(SubjectId itemId, InventoryCustody source, Stri
     public ExactItemDestroyed {
         Objects.requireNonNull(itemId, "item id");
         Objects.requireNonNull(source, "item source");
-        if (!(source instanceof InventoryCustody.ContainerSlot)) {
-            throw new IllegalArgumentException("destroyed exact item must have an owned container source");
+        if (!(source instanceof InventoryCustody.ContainerSlot) && !(source instanceof InventoryCustody.WorldCarrier)) {
+            throw new IllegalArgumentException("destroyed exact item must have a physical container or world-carrier source");
         }
         if (cause == null || cause.isBlank() || cause.length() > 256) throw new IllegalArgumentException("invalid item destruction cause");
     }

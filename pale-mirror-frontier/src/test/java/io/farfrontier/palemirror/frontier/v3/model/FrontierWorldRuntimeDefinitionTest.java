@@ -228,7 +228,7 @@ class FrontierWorldRuntimeDefinitionTest {
         ProductionJob job = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:bootstrap-1-wheat"),
                 new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
-        ProductionCompleted completed = new ProductionCompleted(job.id(), new ExactItemStack(job.outputItemId(), "minecraft:bread", 64,
+        ProductionCompleted completed = new ProductionCompleted(job.id(), new ExactItemStack(job.outputItemId(), job.settlementId(), "minecraft:bread", 64,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0)));
 
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();

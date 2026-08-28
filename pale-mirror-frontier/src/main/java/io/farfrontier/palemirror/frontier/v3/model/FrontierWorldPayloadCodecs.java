@@ -39,15 +39,15 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) {
                     throw new IllegalArgumentException("resource deposit must have container custody");
                 }
-                writeSubject(output, item.id()); writeString(output, item.itemKind()); output.writeByte(item.count());
+                writeSubject(output, item.id()); writeSubject(output, item.economicOwnerId()); writeString(output, item.itemKind()); output.writeByte(item.count());
                 writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
-                SubjectIdHolder item = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte();
+                SubjectIdHolder item = readSubject(input); SubjectIdHolder owner = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte();
                 SubjectIdHolder container = readSubject(input); int slot = input.readUnsignedByte();
-                return new ResourceDeposited(new ExactItemStack(item.value(), kind, count,
+                return new ResourceDeposited(new ExactItemStack(item.value(), owner.value(), kind, count,
                         new InventoryCustody.ContainerSlot(container.value(), slot)));
             });
         }
@@ -68,7 +68,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public String type() { return "frontier.production_completed"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionCompleted completed = (ProductionCompleted) payload;
             return encodeProduction(output -> {
-                writeSubject(output, completed.jobId()); writeSubject(output, completed.output().id()); writeString(output, completed.output().itemKind());
+                writeSubject(output, completed.jobId()); writeSubject(output, completed.output().id()); writeSubject(output, completed.output().economicOwnerId()); writeString(output, completed.output().itemKind());
                 output.writeByte(completed.output().count());
                 if (!(completed.output().custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("production output must have container custody");
                 writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
@@ -76,9 +76,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
-                SubjectIdHolder job = readSubject(input); SubjectIdHolder output = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte();
+                SubjectIdHolder job = readSubject(input); SubjectIdHolder output = readSubject(input); SubjectIdHolder owner = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte();
                 SubjectIdHolder container = readSubject(input); int slot = input.readUnsignedByte();
-                return new ProductionCompleted(job.value(), new ExactItemStack(output.value(), kind, count, new InventoryCustody.ContainerSlot(container.value(), slot)));
+                return new ProductionCompleted(job.value(), new ExactItemStack(output.value(), owner.value(), kind, count, new InventoryCustody.ContainerSlot(container.value(), slot)));
             });
         }
     }
@@ -458,11 +458,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(1); writeString(output, player.playerId().toString()); }
-        else throw new IllegalArgumentException("observed player custody payload cannot encode non-player/container custody");
+        else if (custody instanceof InventoryCustody.WorldCarrier carrier) { output.writeByte(2); writeString(output, carrier.carrierId().toString()); }
+        else throw new IllegalArgumentException("observed item custody payload cannot encode cargo custody");
     } static InventoryCustody readCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));
+            case 2 -> new InventoryCustody.WorldCarrier(java.util.UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown observed item custody kind");
         };
     } static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }

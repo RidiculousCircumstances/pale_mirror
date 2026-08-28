@@ -93,7 +93,7 @@ final class FrontierV3InventoryObservationExecutor {
             if (actual.isEmpty()) continue;
             Optional<SubjectId> taggedItem = FrontierV3CargoHandoffExecutor.itemId(actual);
             if (taggedItem.isEmpty() || FrontierV3CargoHandoffExecutor.pendingIngress(actual) && !state.inventory().items().containsKey(taggedItem.orElseThrow())) {
-                deposit(runtime, store.containerId(), slot, actual);
+                deposit(runtime, state, store.containerId(), slot, actual);
                 chest.setChanged();
                 return true;
             }
@@ -182,7 +182,7 @@ final class FrontierV3InventoryObservationExecutor {
      * the next observation retries that same pending identity instead of fabricating a second
      * stack. A tagged-but-unknown stack without the pending marker remains visible conflict evidence.
      */
-    private static void deposit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId container, int slot, ItemStack actual) {
+    private static void deposit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId container, int slot, ItemStack actual) {
         SubjectId itemId = FrontierV3CargoHandoffExecutor.itemId(actual).orElseGet(() -> {
             SubjectId created = new SubjectId("item:ingress-" + UUID.randomUUID());
             FrontierV3CargoHandoffExecutor.bindExactItemId(actual, created);
@@ -190,7 +190,9 @@ final class FrontierV3InventoryObservationExecutor {
             return created;
         });
         String kind = BuiltInRegistries.ITEM.getKey(actual.getItem()).toString();
-        ExactItemStack deposited = new ExactItemStack(itemId, kind, actual.getCount(), new InventoryCustody.ContainerSlot(container, slot));
+        var target = state.inventory().containers().get(container);
+        if (target == null) throw new IllegalArgumentException("physical deposit targets an unknown exact container");
+        ExactItemStack deposited = new ExactItemStack(itemId, target.ownerId(), kind, actual.getCount(), new InventoryCustody.ContainerSlot(container, slot));
         FrontierV3CommandSubmission.submit(runtime, "resource-deposit", itemId.value(), new ResourceDeposited(deposited));
         FrontierV3CargoHandoffExecutor.clearPendingIngress(actual);
     }

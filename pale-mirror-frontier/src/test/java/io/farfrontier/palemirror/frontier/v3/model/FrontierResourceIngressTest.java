@@ -22,7 +22,7 @@ class FrontierResourceIngressTest {
         SubjectId container = new SubjectId("container:1-depot");
         accept(engine, worldId, "command:ingress-prepared", new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
         accept(engine, worldId, "command:ingress-active", new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
-        ExactItemStack iron = new ExactItemStack(new SubjectId("item:ingress-test-iron"), "minecraft:iron_ingot", 64,
+        ExactItemStack iron = new ExactItemStack(new SubjectId("item:ingress-test-iron"), new SubjectId("settlement:1"), "minecraft:iron_ingot", 64,
                 new InventoryCustody.ContainerSlot(container, 4));
 
         ResourceDeposited deposited = new ResourceDeposited(iron);
@@ -36,6 +36,10 @@ class FrontierResourceIngressTest {
         WorldId inactiveWorld = new WorldId("frontier:resource-ingress-inactive");
         FrontierEngine<FrontierWorldProjection> inactive = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(inactiveWorld, 91L));
         assertInstanceOf(CommandResult.Rejected.class, inactive.submit(command(inactive, inactiveWorld, "command:ingress-inactive", deposited)));
+
+        ExactItemStack wrongClaim = new ExactItemStack(new SubjectId("item:ingress-wrong-claim"), new SubjectId("hive:frontier"), "minecraft:iron_ingot", 64,
+                new InventoryCustody.ContainerSlot(container, 5));
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, worldId, "command:ingress-wrong-claim", new ResourceDeposited(wrongClaim))));
     }
 
     private static void accept(FrontierEngine<FrontierWorldProjection> engine, WorldId worldId, String commandId, FrontierPayload payload) {

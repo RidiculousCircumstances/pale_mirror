@@ -2,8 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Comparator;
-import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Comparator; import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set;
     public record FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
         Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection, ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
         Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations, Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
@@ -22,6 +21,7 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
         Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(strategicPlans, "strategic plans"); strategicPlans.validate(bootstrap);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
         RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions); Objects.requireNonNull(hiveColony, "hive colony"); hiveColony.validateAgainst(bootstrap);
+        FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.actorIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet());
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only bootstrap actor");
         for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.position());
@@ -214,8 +214,8 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
                 containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
         containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27));
         Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>(); SubjectId firstDepot = depotId(bootstrap.settlements().getFirst().id());
-        SubjectId firstInput = new SubjectId("item:bootstrap-1-wheat"); items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
-        SubjectId hiveBiomass = new SubjectId("item:bootstrap-hive-biomass"); items.put(hiveBiomass, new ExactItemStack(hiveBiomass, "minecraft:rotten_flesh", 64,
+        SubjectId firstInput = new SubjectId("item:bootstrap-1-wheat"); items.put(firstInput, new ExactItemStack(firstInput, bootstrap.settlements().getFirst().id(), "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
+        SubjectId hiveBiomass = new SubjectId("item:bootstrap-hive-biomass"); items.put(hiveBiomass, new ExactItemStack(hiveBiomass, bootstrap.hive().id(), "minecraft:rotten_flesh", 64,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0)));
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));

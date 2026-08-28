@@ -76,22 +76,22 @@ final class FrontierWorldStateSupport {
     }
 
     static SubjectId itemOwner(FrontierWorldState state, ExactItemCustodyChanged changed) {
-        InventoryCustody.ContainerSlot slot;
-        if (changed.from() instanceof InventoryCustody.ContainerSlot source) slot = source;
-        else if (changed.to() instanceof InventoryCustody.ContainerSlot target) slot = target;
-        else throw new IllegalArgumentException("item custody observation has no owned container boundary");
-        ContainerRecord container = state.inventory().containers().get(slot.containerId());
-        if (container == null) throw new IllegalArgumentException("item custody observation references an unknown container");
-        return container.ownerId();
+        ExactItemStack item = state.inventory().items().get(changed.itemId());
+        if (item == null || !item.custody().equals(changed.from())) throw new IllegalArgumentException("item custody observation has no matching exact item");
+        return item.economicOwnerId();
     }
 
     static SubjectId itemOwner(FrontierWorldState state, ExactItemDestroyed destroyed) {
-        if (!(destroyed.source() instanceof InventoryCustody.ContainerSlot slot)) {
-            throw new IllegalArgumentException("destroyed item has no owned container boundary");
-        }
-        ContainerRecord container = state.inventory().containers().get(slot.containerId());
-        if (container == null) throw new IllegalArgumentException("destroyed item references an unknown container");
-        return container.ownerId();
+        ExactItemStack item = state.inventory().items().get(destroyed.itemId());
+        if (item == null || !item.custody().equals(destroyed.source())) throw new IllegalArgumentException("destroyed item has no matching exact item");
+        return item.economicOwnerId();
+    }
+
+    static void validateEconomicClaims(FrontierBootstrap bootstrap, ExactInventory inventory) {
+        Set<SubjectId> owners = new HashSet<>();
+        bootstrap.settlements().forEach(settlement -> owners.add(settlement.id()));
+        owners.add(bootstrap.hive().id()); owners.add(FrontierRouteNetwork.OWNER);
+        if (inventory.items().values().stream().anyMatch(item -> !owners.contains(item.economicOwnerId()))) throw new IllegalArgumentException("item claim owner must be a canonical frontier economy actor");
     }
 
     static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label) {

@@ -18,6 +18,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -32,7 +33,7 @@ import java.util.UUID;
 /** Durable post-impact evidence for a real v3-owned explosion, never a replay queue. */
 final class FrontierV3ManagedExplosionLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_managed_explosions";
-    private static final int FORMAT = 2, MAX_EFFECTS = 64, MAX_CELLS = 65_536, MAX_ENTITIES = 128, MAX_ITEMS = 256;
+    private static final int FORMAT = 3, MAX_EFFECTS = 64, MAX_CELLS = 65_536, MAX_ENTITIES = 128, MAX_ITEMS = 256;
     private final LinkedHashMap<String, Pending> pending;
 
     private FrontierV3ManagedExplosionLedger() { this(new LinkedHashMap<>()); }
@@ -56,9 +57,9 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         if (pending.size() >= MAX_EFFECTS) throw new IllegalStateException("v3 managed explosion retention exceeded");
         List<BlockCandidate> blocks = affected.stream().distinct().sorted(Comparator.comparingLong(BlockPos::asLong)).filter(inFrontier)
                 .map(position -> block(level, provenance, infection, position)).flatMap(Optional::stream).toList();
-        List<EntityCandidate> entityCandidates = entities.stream().distinct().sorted(Comparator.comparing(Entity::getUUID))
+        List<EntityCandidate> entityCandidates = entities.stream().filter(entity -> !(entity instanceof ItemEntity)).distinct().sorted(Comparator.comparing(Entity::getUUID))
                 .map(FrontierV3ManagedExplosionLedger::entity).toList();
-        List<ItemCandidate> itemCandidates = state == null ? List.of() : items(state, affected);
+        List<ItemCandidate> itemCandidates = state == null ? List.of() : items(state, affected, entities);
         if (blocks.size() > MAX_CELLS || entityCandidates.size() > MAX_ENTITIES || itemCandidates.size() > MAX_ITEMS) {
             throw new IllegalStateException("v3 managed explosion retained evidence exceeds bounds");
         }
@@ -149,16 +150,25 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         try { return value.isBlank() ? Optional.empty() : Optional.of(new SubjectId(value)); }
         catch (IllegalArgumentException ignored) { return Optional.empty(); }
     }
-    private static List<ItemCandidate> items(FrontierWorldState state, List<BlockPos> affected) {
+    private static List<ItemCandidate> items(FrontierWorldState state, List<BlockPos> affected, List<Entity> entities) {
         java.util.Set<Long> positions = affected.stream().map(BlockPos::asLong).collect(java.util.stream.Collectors.toSet());
-        return state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot)
-                .map(item -> item(state, item)).flatMap(Optional::stream)
-                .filter(candidate -> positions.contains(candidate.position())).sorted(Comparator.comparing(ItemCandidate::itemId)).toList();
+        java.util.Map<UUID, ItemEntity> carriers = entities.stream().filter(ItemEntity.class::isInstance).map(ItemEntity.class::cast)
+                .collect(java.util.stream.Collectors.toMap(ItemEntity::getUUID, value -> value, (left, right) -> left));
+        return state.inventory().items().values().stream().map(item -> item(state, item, carriers)).flatMap(Optional::stream)
+                .filter(candidate -> !(candidate.source() instanceof InventoryCustody.ContainerSlot) || positions.contains(candidate.position()))
+                .sorted(Comparator.comparing(ItemCandidate::itemId)).toList();
     }
-    private static Optional<ItemCandidate> item(FrontierWorldState state, ExactItemStack item) {
-        InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) item.custody();
-        return Optional.ofNullable(state.inventory().surfaces().get(source.containerId())).map(surface ->
-                new ItemCandidate(item.id(), source.containerId(), source.slot(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()).asLong()));
+    private static Optional<ItemCandidate> item(FrontierWorldState state, ExactItemStack item, java.util.Map<UUID, ItemEntity> carriers) {
+        if (item.custody() instanceof InventoryCustody.ContainerSlot source) {
+            return Optional.ofNullable(state.inventory().surfaces().get(source.containerId())).map(surface ->
+                    new ItemCandidate(item.id(), source, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()).asLong()));
+        }
+        if (item.custody() instanceof InventoryCustody.WorldCarrier source) {
+            ItemEntity carrier = carriers.get(source.carrierId());
+            return carrier != null && FrontierV3CargoHandoffExecutor.exactMatch(carrier.getItem(), item)
+                    ? Optional.of(new ItemCandidate(item.id(), source, carrier.blockPosition().asLong())) : Optional.empty();
+        }
+        return Optional.empty();
     }
     private static Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic(FrontierV3GrayboxLedger.Claim claim, BlockState baseline) {
         if (claim == null || claim.conflicted()) return Optional.empty();
@@ -170,7 +180,7 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
     }
 
     static FrontierV3ManagedExplosionLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        int format = tag.getInt("format"); if (format != 1 && format != FORMAT) throw new IllegalStateException("incompatible v3 managed explosion ledger");
+        int format = tag.getInt("format"); if (format != 1 && format != 2 && format != FORMAT) throw new IllegalStateException("incompatible v3 managed explosion ledger");
         ListTag values = tag.getList("pending", Tag.TAG_COMPOUND);
         if (values.size() > MAX_EFFECTS) throw new IllegalStateException("v3 managed explosion retention exceeded");
         LinkedHashMap<String, Pending> pending = new LinkedHashMap<>();
@@ -218,18 +228,31 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
             return new EntityCandidate(value.getUUID("id"), value.getString("type"), actor.isBlank() ? Optional.empty() : Optional.of(new SubjectId(actor)), value.getLong("pos"));
         }
     }
-    record ItemCandidate(SubjectId itemId, SubjectId containerId, int slot, long position) {
+    record ItemCandidate(SubjectId itemId, InventoryCustody source, long position) {
         ItemCandidate {
-            Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(containerId, "container id"); if (slot < 0 || slot > 255) throw new IllegalArgumentException("invalid item slot");
+            Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(source, "item source");
+            if (!(source instanceof InventoryCustody.ContainerSlot) && !(source instanceof InventoryCustody.WorldCarrier)) {
+                throw new IllegalArgumentException("invalid managed explosion item source");
+            }
         }
         BlockPos blockPos() { return BlockPos.of(position); }
         CompoundTag save() {
-            CompoundTag value = new CompoundTag(); value.putString("item", itemId.value()); value.putString("container", containerId.value()); value.putByte("slot", (byte) slot); value.putLong("pos", position); return value;
+            CompoundTag value = new CompoundTag(); value.putString("item", itemId.value()); value.putLong("pos", position);
+            if (source instanceof InventoryCustody.ContainerSlot slot) {
+                value.putByte("source", (byte) 0); value.putString("container", slot.containerId().value()); value.putByte("slot", (byte) slot.slot());
+            } else {
+                value.putByte("source", (byte) 1); value.putUUID("carrier", ((InventoryCustody.WorldCarrier) source).carrierId());
+            }
+            return value;
         }
-        static ItemCandidate load(CompoundTag value) {
-            if (!value.contains("item", Tag.TAG_STRING) || !value.contains("container", Tag.TAG_STRING)
-                    || !value.contains("slot", Tag.TAG_BYTE) || !value.contains("pos", Tag.TAG_LONG)) throw new IllegalStateException("incomplete managed explosion item");
-            return new ItemCandidate(new SubjectId(value.getString("item")), new SubjectId(value.getString("container")), value.getByte("slot") & 0xFF, value.getLong("pos"));
+        static ItemCandidate load(CompoundTag value, int format) {
+            if (!value.contains("item", Tag.TAG_STRING) || !value.contains("pos", Tag.TAG_LONG)) throw new IllegalStateException("incomplete managed explosion item");
+            if (format == 2 || value.getByte("source") == 0) {
+                if (!value.contains("container", Tag.TAG_STRING) || !value.contains("slot", Tag.TAG_BYTE)) throw new IllegalStateException("incomplete managed explosion container item");
+                return new ItemCandidate(new SubjectId(value.getString("item")), new InventoryCustody.ContainerSlot(new SubjectId(value.getString("container")), value.getByte("slot") & 0xFF), value.getLong("pos"));
+            }
+            if (value.getByte("source") != 1 || !value.hasUUID("carrier")) throw new IllegalStateException("incomplete managed explosion carrier item");
+            return new ItemCandidate(new SubjectId(value.getString("item")), new InventoryCustody.WorldCarrier(value.getUUID("carrier")), value.getLong("pos"));
         }
     }
     record Pending(String intentId, long capturedAtGameTime, List<BlockCandidate> blocks, List<EntityCandidate> entities, List<ItemCandidate> items,
@@ -255,7 +278,7 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
             if (!value.contains("intent", Tag.TAG_STRING) || !value.contains("capturedAt", Tag.TAG_LONG)
                     || !value.contains("total", Tag.TAG_INT) || !value.contains("changed", Tag.TAG_INT)) throw new IllegalStateException("incomplete managed explosion record");
             return new Pending(value.getString("intent"), value.getLong("capturedAt"), loadList(value, "blocks", BlockCandidate::load),
-                    loadList(value, "entities", EntityCandidate::load), loadList(value, "items", ItemCandidate::load),
+                    loadList(value, "entities", EntityCandidate::load), loadList(value, "items", item -> ItemCandidate.load(item, format)),
                     loadList(value, "entityImpacts", Pending::loadEntityImpact), loadList(value, "itemImpacts", Pending::loadItemImpact),
                     value.getInt("total"), value.getInt("changed"), value.getInt("infectionTotal"), value.getInt("infectionChanged"));
         }

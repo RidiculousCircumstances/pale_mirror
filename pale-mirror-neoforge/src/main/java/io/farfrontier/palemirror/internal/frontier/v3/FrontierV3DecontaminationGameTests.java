@@ -35,7 +35,7 @@ public final class FrontierV3DecontaminationGameTests {
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition); InfectionCell cell = new InfectionCell(7, 9);
         SubjectId container = new SubjectId("container:decontamination-game-test"), itemId = new SubjectId("item:decontamination-game-test");
-        ExactItemStack two = new ExactItemStack(itemId, DecontaminationPolicy.REAGENT, 2, new InventoryCustody.ContainerSlot(container, 0));
+        ExactItemStack two = new ExactItemStack(itemId, new SubjectId("settlement:1"), DecontaminationPolicy.REAGENT, 2, new InventoryCustody.ContainerSlot(container, 0));
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(two)); level.setBlock(marker, FrontierV3InfectionOverlayExecutor.material(InfectionOverlayStage.BLOOM), 3);
         FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level); ledger.applied(cell, marker, InfectionOverlayStage.BLOOM);
         FrontierV3DecontaminationExecutor.Target reduce = new FrontierV3DecontaminationExecutor.Target(cell, marker, two, container, 0, chestPosition,
@@ -48,7 +48,7 @@ public final class FrontierV3DecontaminationGameTests {
         helper.assertTrue(FrontierV3DecontaminationExecutor.recoverLedgerPostcondition(level, ledger, reduce)
                         && ledger.claim(cell).stage() == InfectionOverlayStage.INFESTED,
                 "restart reconstructs only the owned stage when the block and exact consumed stack prove the reduction");
-        ExactItemStack one = new ExactItemStack(itemId, DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(container, 0));
+        ExactItemStack one = new ExactItemStack(itemId, new SubjectId("settlement:1"), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(container, 0));
         FrontierV3DecontaminationExecutor.Target clear = new FrontierV3DecontaminationExecutor.Target(cell, marker, one, container, 0, chestPosition,
                 250_000L, 0L, InfectionOverlayStage.INFESTED, Optional.empty());
         CompoundTag beforeClear = ledger.save(new CompoundTag(), level.registryAccess());

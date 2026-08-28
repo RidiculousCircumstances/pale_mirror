@@ -141,11 +141,22 @@ final class FrontierV3ExplosionExecutor {
         FrontierV3ManagedExplosionLedger.ItemCandidate candidate = ready.candidate(); BlockPos position = candidate.blockPos();
         if (!level.hasChunkAt(position)) return;
         FrontierWorldState state = state(runtime); if (state == null) return;
-        var item = state.inventory().items().get(candidate.itemId()); InventoryCustody.ContainerSlot source = new InventoryCustody.ContainerSlot(candidate.containerId(), candidate.slot());
+        var item = state.inventory().items().get(candidate.itemId()); InventoryCustody source = candidate.source();
         if (item == null) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.DESTROYED); return; }
         if (!item.custody().equals(source)) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.TRANSFERRED); return; }
-        if (level.getBlockEntity(position) instanceof ChestBlockEntity chest && candidate.slot() < chest.getContainerSize()
-                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(candidate.slot()), item)) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.RETAINED); return; }
+        if (source instanceof InventoryCustody.WorldCarrier carrier) {
+            Entity actual = level.getEntity(carrier.carrierId());
+            if (actual instanceof ItemEntity drop && !drop.isRemoved()) {
+                ledger.resolveItem(ready, FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), item)
+                        ? ExplosionItemImpact.Outcome.RETAINED : ExplosionItemImpact.Outcome.CONFLICT);
+                return;
+            }
+            if (actual != null && !actual.isRemoved()) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.CONFLICT); return; }
+            ledger.resolveItem(ready, destroy(runtime, item.id(), source, "explosion")); return;
+        }
+        InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) source;
+        if (level.getBlockEntity(position) instanceof ChestBlockEntity chest && slot.slot() < chest.getContainerSize()
+                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot.slot()), item)) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.RETAINED); return; }
         List<ItemEntity> carriers = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(16.0D), entity -> FrontierV3CargoHandoffExecutor.exactMatch(entity.getItem(), item));
         List<Player> holders = level.players().stream().filter(player -> FrontierV3InventoryObservationExecutor.hasExactItem(player, item)).map(player -> (Player) player).toList();
         if (carriers.size() + holders.size() != 1) { ledger.resolveItem(ready, carriers.isEmpty() && holders.isEmpty() ? destroy(runtime, item.id(), source, "explosion") : ExplosionItemImpact.Outcome.CONFLICT); return; }

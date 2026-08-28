@@ -45,6 +45,9 @@ final class FrontierWorldPhysicalObservationProcess {
         if (container == null || !subject.equals(container.ownerId())) {
             throw new IllegalArgumentException("resource deposit lacks the owned container subject");
         }
+        if (!deposited.item().economicOwnerId().equals(container.ownerId())) {
+            throw new IllegalArgumentException("resource deposit claim does not belong to its receiving container owner");
+        }
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) {
             throw new IllegalArgumentException("resource deposit needs an active owned container surface");

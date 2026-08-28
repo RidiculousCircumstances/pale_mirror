@@ -37,15 +37,15 @@ class ExactInventoryTest {
         SubjectId transported = new SubjectId("item:transported");
         SubjectId cargo = new SubjectId("cargo:one");
         UUID player = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        ExactItemStack storedStack = new ExactItemStack(stored, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0));
-        ExactItemStack cargoStack = new ExactItemStack(transported, "minecraft:bread", 8, new InventoryCustody.Cargo(cargo));
+        ExactItemStack storedStack = new ExactItemStack(stored, owner, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0));
+        ExactItemStack cargoStack = new ExactItemStack(transported, owner, "minecraft:bread", 8, new InventoryCustody.Cargo(cargo));
         assertDoesNotThrow(() -> new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 27)),
                 Map.of(stored, storedStack, transported, cargoStack), Map.of(cargo, new CargoBatch(cargo, owner, List.of(transported))), Map.of(), Map.of(), Map.of(), surfaceFor(container)));
         assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 27)),
                 Map.of(stored, storedStack), Map.of(), Map.of(player, List.of(stored)), Map.of(), Map.of(), surfaceFor(container)));
         assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 27)),
                 Map.of(stored, storedStack, new SubjectId("item:duplicate"),
-                        new ExactItemStack(new SubjectId("item:duplicate"), "minecraft:stone", 1, new InventoryCustody.ContainerSlot(container, 0))),
+                        new ExactItemStack(new SubjectId("item:duplicate"), owner, "minecraft:stone", 1, new InventoryCustody.ContainerSlot(container, 0))),
                 Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container)));
         assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 27)),
                 Map.of(new SubjectId("item:wrong-key"), storedStack), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container)));
@@ -55,7 +55,7 @@ class ExactInventoryTest {
     void worldCarrierCustodyRequiresTheExactCarrierReverseIndex() {
         SubjectId item = new SubjectId("item:carrier-bread");
         UUID carrier = UUID.fromString("00000000-0000-0000-0000-000000000042");
-        ExactItemStack stack = new ExactItemStack(item, "minecraft:bread", 64, new InventoryCustody.WorldCarrier(carrier));
+        ExactItemStack stack = new ExactItemStack(item, new SubjectId("hive:frontier"), "minecraft:bread", 64, new InventoryCustody.WorldCarrier(carrier));
 
         ExactInventory inventory = new ExactInventory(Map.of(), Map.of(item, stack), Map.of(), Map.of(), Map.of(carrier, List.of(item)));
         assertEquals(new InventoryCustody.WorldCarrier(carrier), inventory.items().get(item).custody());
@@ -71,11 +71,11 @@ class ExactInventoryTest {
         SubjectId input = new SubjectId("item:input");
         SubjectId output = new SubjectId("item:output");
         ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 2)),
-                Map.of(input, new ExactItemStack(input, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+                Map.of(input, new ExactItemStack(input, owner, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
 
-        ExactInventory stored = inventory.withoutItem(input).store(new ExactItemStack(output, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0)));
+        ExactInventory stored = inventory.withoutItem(input).store(new ExactItemStack(output, owner, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0)));
         assertEquals(output, stored.itemAt(container, 0).orElseThrow().id());
-        assertThrows(IllegalArgumentException.class, () -> inventory.store(new ExactItemStack(output, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0))));
+        assertThrows(IllegalArgumentException.class, () -> inventory.store(new ExactItemStack(output, owner, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0))));
     }
 
     @Test
@@ -85,7 +85,7 @@ class ExactInventoryTest {
         SubjectId item = new SubjectId("item:bread");
         SubjectId cargo = new SubjectId("cargo:supply");
         ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 2)),
-                Map.of(item, new ExactItemStack(item, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+                Map.of(item, new ExactItemStack(item, owner, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
 
         ExactInventory loaded = inventory.loadCargo(new CargoBatch(cargo, owner, List.of(item)));
 
@@ -103,7 +103,7 @@ class ExactInventoryTest {
         UUID player = UUID.fromString("00000000-0000-0000-0000-000000000012");
         InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 3);
         ExactInventory stored = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 9)),
-                Map.of(item, new ExactItemStack(item, "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+                Map.of(item, new ExactItemStack(item, owner, "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
 
         ExactInventory withdrawn = stored.moveObservedItem(item, slot, new InventoryCustody.Player(player));
         assertEquals(new InventoryCustody.Player(player), withdrawn.items().get(item).custody());
@@ -120,15 +120,38 @@ class ExactInventoryTest {
         InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 3);
         UUID carrier = UUID.fromString("00000000-0000-0000-0000-000000000043");
         ExactInventory stored = new ExactInventory(Map.of(container, new ContainerRecord(container, new SubjectId("hive:frontier"), 9)),
-                Map.of(item, new ExactItemStack(item, "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+                Map.of(item, new ExactItemStack(item, new SubjectId("hive:frontier"), "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
 
         ExactInventory carried = stored.moveObservedItem(item, slot, new InventoryCustody.WorldCarrier(carrier));
         assertEquals(new InventoryCustody.WorldCarrier(carrier), carried.items().get(item).custody());
+        assertEquals(new SubjectId("hive:frontier"), carried.items().get(item).economicOwnerId(), "physical transport must not silently change the economic claim");
         assertEquals(List.of(item), carried.worldCarrierItems().get(carrier));
         ExactInventory returned = carried.moveObservedItem(item, new InventoryCustody.WorldCarrier(carrier), slot);
         assertEquals(slot, returned.items().get(item).custody());
         assertThrows(IllegalArgumentException.class, () -> new ExactItemCustodyChanged(item,
                 new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000044")), new InventoryCustody.WorldCarrier(carrier)));
+    }
+
+    @Test
+    void cargoRetainsTheSenderClaimUntilObservedReceiptTransfersItToTheReceiver() {
+        SubjectId senderContainer = new SubjectId("container:sender");
+        SubjectId receiverContainer = new SubjectId("container:receiver");
+        SubjectId sender = new SubjectId("settlement:one");
+        SubjectId receiver = new SubjectId("hive:frontier");
+        SubjectId item = new SubjectId("item:claimed-bread");
+        SubjectId cargo = new SubjectId("cargo:claimed-bread");
+        ExactInventory inventory = new ExactInventory(
+                Map.of(senderContainer, new ContainerRecord(senderContainer, sender, 2), receiverContainer, new ContainerRecord(receiverContainer, receiver, 2)),
+                Map.of(item, new ExactItemStack(item, sender, "minecraft:bread", 8, new InventoryCustody.ContainerSlot(senderContainer, 0))),
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(
+                        senderContainer, new ContainerSurface(senderContainer, new BlockPosition(0, 64, 0), ContainerSurfaceStatus.ACTIVE),
+                        receiverContainer, new ContainerSurface(receiverContainer, new BlockPosition(4, 64, 0), ContainerSurfaceStatus.ACTIVE)));
+
+        ExactInventory loaded = inventory.loadCargo(new CargoBatch(cargo, sender, List.of(item)));
+        assertEquals(sender, loaded.items().get(item).economicOwnerId());
+        ExactInventory received = loaded.completeCargoHandoff(cargo, List.of(new CargoHandoffPlacement(item, new InventoryCustody.ContainerSlot(receiverContainer, 1))));
+        assertEquals(receiver, received.items().get(item).economicOwnerId());
+        assertEquals(new InventoryCustody.ContainerSlot(receiverContainer, 1), received.items().get(item).custody());
     }
 
     @Test
@@ -138,7 +161,7 @@ class ExactInventoryTest {
         SubjectId item = new SubjectId("item:bread");
         InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 3);
         ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 9)),
-                Map.of(item, new ExactItemStack(item, "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+                Map.of(item, new ExactItemStack(item, owner, "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
         InventoryConflict conflict = new InventoryConflict(new SubjectId("conflict:inventory-bread"), item, container, 3, InventoryConflictKind.MISSING);
 
         ExactInventory observed = inventory.recordConflict(conflict);

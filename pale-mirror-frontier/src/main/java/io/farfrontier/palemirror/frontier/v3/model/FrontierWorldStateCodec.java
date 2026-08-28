@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 32, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 33, MAX_ENTRIES = 65_535;
     @Override public byte[] encode(FrontierWorldState state) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -229,7 +229,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, inventory.items().size());
         for (ExactItemStack value : inventory.items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id)).toList()) {
-            writeString(output, value.id().value()); writeString(output, value.itemKind()); output.writeByte(value.count()); writeCustody(output, value.custody());
+            writeString(output, value.id().value()); writeString(output, value.economicOwnerId().value()); writeString(output, value.itemKind()); output.writeByte(value.count()); writeCustody(output, value.custody());
         }
         writeCount(output, inventory.cargo().size());
         for (CargoBatch value : inventory.cargo().values().stream().sorted(java.util.Comparator.comparing(CargoBatch::id)).toList()) {
@@ -266,7 +266,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
-            if (items.put(id, new ExactItemStack(id, readString(input), input.readUnsignedByte(), readCustody(input))) != null) throw new IllegalArgumentException("duplicate item stack id");
+            if (items.put(id, new ExactItemStack(id, new SubjectId(readString(input)), readString(input), input.readUnsignedByte(), readCustody(input))) != null) throw new IllegalArgumentException("duplicate item stack id");
         }
         Map<SubjectId, CargoBatch> cargo = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {

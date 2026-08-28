@@ -49,7 +49,7 @@ class ProductionProcessTest {
         SubjectId depot = new SubjectId("container:1-depot"); Map<SubjectId, ExactItemStack> fullItems = new LinkedHashMap<>();
         for (int slot = 0; slot < 27; slot++) {
             SubjectId id = new SubjectId("item:storage-" + slot);
-            fullItems.put(id, new ExactItemStack(id, "minecraft:cobblestone", 64, new InventoryCustody.ContainerSlot(depot, slot)));
+            fullItems.put(id, new ExactItemStack(id, new SubjectId("settlement:1"), "minecraft:cobblestone", 64, new InventoryCustody.ContainerSlot(depot, slot)));
         }
         ExactInventory fullInventory = new ExactInventory(baseline.inventory().containers(), fullItems, Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
         ProductionJob job = new ProductionJob(new SubjectId("job:production-1-99"), new SubjectId("settlement:1"),

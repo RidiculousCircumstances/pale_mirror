@@ -65,7 +65,7 @@ class FrontierWorldStateTest {
         SubjectId container = new SubjectId("container:1-depot");
         SubjectId item = new SubjectId("item:codec");
         ExactInventory inventory = new ExactInventory(baseline.inventory().containers(), Map.of(item,
-                new ExactItemStack(item, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
+                new ExactItemStack(item, new SubjectId("settlement:1"), "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
         inventory = inventory.recordConflict(new InventoryConflict(new SubjectId("conflict:codec-item"), item, container, 0, InventoryConflictKind.MISSING));
         ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:bootstrap-1-wheat"),

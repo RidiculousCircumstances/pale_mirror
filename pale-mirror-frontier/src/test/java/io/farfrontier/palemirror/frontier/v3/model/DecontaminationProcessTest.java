@@ -32,7 +32,7 @@ class DecontaminationProcessTest {
         InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
         FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, DecontaminationPolicy.REAGENT, 2, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 2, new InventoryCustody.ContainerSlot(depot, 1))));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
@@ -77,7 +77,7 @@ class DecontaminationProcessTest {
         InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
         FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
@@ -100,7 +100,7 @@ class DecontaminationProcessTest {
         InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
         FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
         state = state.withInfection(cell, new FixedRatio(new FixedScalar(DecontaminationPolicy.REDUCTION_RAW)));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
