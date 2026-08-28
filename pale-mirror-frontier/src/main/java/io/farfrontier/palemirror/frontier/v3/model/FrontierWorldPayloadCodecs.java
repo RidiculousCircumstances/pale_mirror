@@ -4,8 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload; import io.farf
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import java.nio.ByteBuffer; import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream; import java.io.DataInputStream;
-import java.io.DataOutputStream; import java.io.IOException;
-import java.util.List;
+import java.io.DataOutputStream; import java.io.IOException; import java.util.List;
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() {
@@ -443,6 +442,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         } else if (observation instanceof RouteConstructionObservation construction) {
             output.writeByte(2); writeString(output, construction.id().value()); writeString(output, construction.intentId().value());
             writeSubject(output, construction.projectId()); writeSubject(output, construction.itemId()); writePosition(output, construction.position());
+        } else if (observation instanceof SceneStrikeObservation strike) {
+            output.writeByte(4); writeString(output, strike.id().value()); writeString(output, strike.intentId().value()); writeSubject(output, strike.attackerId());
+            writeSubject(output, strike.targetId()); output.writeLong(strike.targetHealthBefore().raw()); output.writeLong(strike.targetHealthAfter().raw());
         } else throw new IllegalArgumentException("unknown physical effect observation");
     }
     private static PhysicalEffectObservation readPhysicalEffectObservation(DataInputStream input) throws IOException {
@@ -454,6 +456,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                     new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readSubject(input).value(), readPosition(input));
             case 3 -> new DecontaminationObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
                     new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
+            case 4 -> new SceneStrikeObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
+                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readSubject(input).value(),
+                    new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()));
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }
@@ -471,30 +476,25 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
         java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMember(readSubject(input).value(), java.util.UUID.fromString(readString(input))));
-        return new SceneLease(id, operation.value(), cargo.value(), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision, SceneLeaseStatus.values()[status], engagement, members);
-    }
+        return new SceneLease(id, operation.value(), cargo.value(), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision, SceneLeaseStatus.values()[status], engagement, members); }
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(1); writeString(output, player.playerId().toString()); }
         else throw new IllegalArgumentException("observed player custody payload cannot encode non-player/container custody");
-    }
-    private static InventoryCustody readCustody(DataInputStream input) throws IOException {
+    } private static InventoryCustody readCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown observed item custody kind");
         };
-    }
-    static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
+    } static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
     static void writeString(DataOutputStream output, String value) throws IOException {
         byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long");
         output.writeShort(encoded.length); output.write(encoded);
-    }
-    static String readString(DataInputStream input) throws IOException {
+    } static String readString(DataInputStream input) throws IOException {
         int length = input.readUnsignedShort(); if (length > 256) throw new IllegalArgumentException("production payload field is too long");
         byte[] encoded = input.readNBytes(length);
         if (encoded.length != length) throw new IOException("truncated production payload field");
-        return new String(encoded, java.nio.charset.StandardCharsets.UTF_8);
-    }
+        return new String(encoded, java.nio.charset.StandardCharsets.UTF_8); }
 }

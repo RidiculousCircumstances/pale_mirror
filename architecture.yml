@@ -238,7 +238,7 @@ critical_flows:
   - id: "frontier-v3-physical-feedback"
     lifecycle: "active-development"
     path: "canonical physical intent or observed owned custody surface -> DURABLE_BEFORE_EFFECT fact -> exact Minecraft entity, block or item observation -> deduplicated reconciliation -> semantic consequence or bounded unresolved physical delta -> immediate projection"
-    owner: "Frontier v3 canonical observations/conflicts plus NeoForge causal executors and observation bridges; current implementation covers exact item custody, loss/scar reconciliation, one-cell exact-material repair, reagent-backed infection-cell decontamination with an owned overlay recovery lease, all-twelve topology projection and deterministic candidate/physical cutover of route reroutes"
+    owner: "Frontier v3 canonical observations/conflicts plus NeoForge causal executors and observation bridges; current implementation covers exact item custody, loss/scar reconciliation, one-cell exact-material repair, reagent-backed infection-cell decontamination with an owned overlay recovery lease, all-twelve topology projection, deterministic route-reroute cutover and prepared/observed exact HOT scene strikes"
     verification: "critical-code"
   - id: "frontier-v3-restart-recovery"
     lifecycle: "planned"

@@ -1,5 +1,4 @@
 package io.farfrontier.palemirror.frontier.v3.model;
-
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
@@ -18,10 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 30, MAX_ENTRIES = 65_535;
-
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 31, MAX_ENTRIES = 65_535;
     @Override public byte[] encode(FrontierWorldState state) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -436,6 +433,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             } else if (observation instanceof RouteConstructionObservation construction) {
                 output.writeByte(2); writeString(output, construction.id().value()); writeString(output, construction.intentId().value());
                 writeString(output, construction.projectId().value()); writeString(output, construction.itemId().value()); writePosition(output, construction.position());
+            } else if (observation instanceof SceneStrikeObservation strike) {
+                output.writeByte(4); writeString(output, strike.id().value()); writeString(output, strike.intentId().value()); writeString(output, strike.attackerId().value());
+                writeString(output, strike.targetId().value()); output.writeLong(strike.targetHealthBefore().raw()); output.writeLong(strike.targetHealthAfter().raw());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -457,6 +457,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 case 1 -> new StructuralRepairObservation(id, intentId, new SubjectId(readString(input)), readPosition(input));
                 case 2 -> new RouteConstructionObservation(id, intentId, new SubjectId(readString(input)), new SubjectId(readString(input)), readPosition(input));
                 case 3 -> new DecontaminationObservation(id, intentId, new SubjectId(readString(input)), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
+                case 4 -> new SceneStrikeObservation(id, intentId, new SubjectId(readString(input)), new SubjectId(readString(input)), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

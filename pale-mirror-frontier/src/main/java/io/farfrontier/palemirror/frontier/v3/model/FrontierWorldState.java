@@ -149,6 +149,8 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
             }
             if (observation instanceof CargoHandoffObservation cargo) {
                 FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
+            } else if (observation instanceof SceneStrikeObservation strike) {
+                SceneStrikeStateSupport.validateObservation(operations, sceneLeases, intent, strike);
             } else if (observation instanceof DecontaminationObservation decontamination) {
                 DecontaminationStateSupport.validateReceipt(bootstrap, infection, intent, decontamination);
             } else if (observation instanceof StructuralRepairObservation repair) {
@@ -200,8 +202,7 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
                 }
             }
         }
-    }
-
+        }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), new ActorLocation(resident.home()))));
@@ -347,6 +348,7 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
     public FrontierWorldState preparePhysicalIntent(PhysicalIntent intent) {
         Objects.requireNonNull(intent, "physical intent");
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
+        SceneStrikeStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
@@ -381,6 +383,14 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION) {
             if (!(evidence instanceof RouteConstructionObservation construction)) throw new IllegalArgumentException("route construction requires construction observation evidence");
             return RouteConstructionStateSupport.complete(this, current, construction, next);
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
+            if (!(evidence instanceof SceneStrikeObservation strike)) throw new IllegalArgumentException("scene strike requires exact hit evidence");
+            SceneStrikeStateSupport.validateObservation(this, current, strike);
+            next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(strike.id())));
+            Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(strike.id(), strike);
+            return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
+                    next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
         }
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
@@ -464,8 +474,7 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
         if (organ.containerId().isPresent() && !inventory.containers().containsKey(organ.containerId().orElseThrow())) throw new IllegalArgumentException("added store organ needs an exact canonical container");
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.addOrgan(organ), structureDamage, physicalDeltas, ambientLeases);
-    }
-    public FrontierWorldState spawnBioform(Bioform bioform) {
+    } public FrontierWorldState spawnBioform(Bioform bioform) {
         Objects.requireNonNull(bioform, "bioform"); if (actorLocations.containsKey(bioform.id())) throw new IllegalArgumentException("spawned bioform collides with actor identity");
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations); nextActors.put(bioform.id(), new ActorLocation(bioform.position()));
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,

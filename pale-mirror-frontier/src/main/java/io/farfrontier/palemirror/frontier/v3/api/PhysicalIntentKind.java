@@ -6,5 +6,6 @@ public enum PhysicalIntentKind {
     STRUCTURAL_REPAIR,
     ROUTE_CONSTRUCTION,
     DECONTAMINATION,
-    EXPLOSION
+    EXPLOSION,
+    SCENE_STRIKE
 }

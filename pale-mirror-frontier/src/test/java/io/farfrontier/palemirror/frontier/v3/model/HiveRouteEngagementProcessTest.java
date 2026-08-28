@@ -1,5 +1,13 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -131,6 +139,32 @@ class HiveRouteEngagementProcessTest {
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), sceneMembers);
         FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(RouteEngagementStatus.HOT, hot.strategicPlans().routeEngagements().get(engagementId).status());
+        SubjectId attacker = hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst();
+        SubjectId target = candidate.actorIds().stream().filter(actor -> !actor.equals(attacker) && !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
+        FixedPosition strikeOrigin = new FixedPosition(FixedScalar.whole(candidate.handoffPosition().x()), FixedScalar.whole(candidate.handoffPosition().y()), FixedScalar.whole(candidate.handoffPosition().z()));
+        PhysicalIntent strikeIntent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-test"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
+                operation.id(), List.of(attacker, target), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        PhysicalIntent foreignTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-foreign"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
+                operation.id(), List.of(attacker, new SubjectId("resident:12-1")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(foreignTarget));
+        PhysicalIntent unknownTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-unknown"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
+                operation.id(), List.of(attacker, new SubjectId("actor:unknown")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(unknownTarget));
+        SceneStrikeObservation strikeReceipt = new SceneStrikeObservation(new PhysicalObservationId("observation:scene-strike-test"), strikeIntent.id(), attacker, target,
+                FixedScalar.whole(20), FixedScalar.ZERO);
+        FrontierWorldState struck = hot.preparePhysicalIntent(strikeIntent)
+                .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
+                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).position(), "scene-strike-test"))
+                .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
+                .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
+        assertEquals(strikeReceipt, struck.physicalObservations().get(strikeReceipt.id()));
+        assertEquals(struck, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(struck)));
+        PhysicalIntentTransition strikeTransition = new PhysicalIntentTransition(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
+        assertEquals(strikeTransition, FrontierWorldRuntimeDefinition.payloadCodecs().decode(strikeTransition.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(strikeTransition)));
+        List<SceneMemberPosition> postStrikeSurvivors = candidate.actorIds().stream().filter(actor -> !actor.equals(target))
+                .map(actor -> new SceneMemberPosition(actor, struck.actorLocations().get(actor).position(), struck.actorLocations().get(actor).condition().health())).toList();
+        FrontierWorldState closedStrike = struck.releaseSceneLease(leaseId, postStrikeSurvivors);
+        assertEquals(strikeReceipt, closedStrike.physicalObservations().get(strikeReceipt.id()));
         FrontierWorldState recovered = hot.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());

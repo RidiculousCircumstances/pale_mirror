@@ -255,6 +255,12 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
+            SceneStrikeStateSupport.validateIntent(state, intent);
+            RouteOperation operation = state.operations().get(intent.causeSubjectId());
+            if (!subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene strike must be prepared by its operation settlement");
+            return state.preparePhysicalIntent(intent);
+        }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())) {
             throw new IllegalArgumentException("physical intent must be prepared by an arrived route operation owner");

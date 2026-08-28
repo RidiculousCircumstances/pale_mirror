@@ -48,6 +48,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("explosion must use positive radius and explosion postcondition");
                 }
             }
+            case SCENE_STRIKE -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.SCENE_STRIKE_OBSERVED || subjectIds.size() != 2) {
+                    throw new IllegalArgumentException("scene strike must bind one exact attacker and target without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");
