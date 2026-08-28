@@ -35,7 +35,7 @@ public final class FrontierV3ServerLifecycle {
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             try {
                 int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime);
-                int ambientUnknown = FrontierV3AmbientActorExecutor.quarantineActiveLeases(runtime);
+                int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
                 if (uninspectable > 0) {
                     PaleMirrorMod.LOGGER.error("Frontier v3 quarantined {} uninspectable running physical intent(s) after restart", uninspectable);
                 }

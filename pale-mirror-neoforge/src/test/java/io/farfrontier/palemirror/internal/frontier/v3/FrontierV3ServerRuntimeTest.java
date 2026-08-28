@@ -27,6 +27,11 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -158,12 +163,43 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(1, resumed.operations().get(operation.id()).routeIndex());
     }
 
+    @Test
+    void restartQuarantinesAmbientHotLeaseIdempotently(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:ambient-lease-recovery");
+        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        SubjectId resident = new SubjectId("resident:1-1");
+        CheckpointImage before = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(before.canonicalState());
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, resident, before.instant());
+        submitAmbient(runtime, world, new AmbientLeasePrepared(lease), "command:ambient-recovery-prepare");
+        submitAmbient(runtime, world, new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT), "command:ambient-recovery-hot");
+        runtime.shutdown();
+
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        assertEquals(1, FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(recovered));
+        assertEquals(0, FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(recovered));
+        FrontierWorldState unknown = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
+        assertEquals(AmbientLeaseStatus.UNKNOWN_AFTER_RESTART, unknown.ambientLeases().get(resident).status());
+        assertEquals(1, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownAmbientLeaseCount());
+        recovered.shutdown();
+    }
+
     private static void transitionScene(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
                                         WorldId world, SceneLeaseId leaseId, SceneLeaseStatus status, String command) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         CommandId commandId = new CommandId(command);
         assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new SceneLeaseTransition(leaseId, status))).orElseThrow());
+    }
+    private static void submitAmbient(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
+                                      WorldId world, FrontierPayload payload, String command) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(); CommandId commandId = new CommandId(command);
+        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload)).orElseThrow());
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {

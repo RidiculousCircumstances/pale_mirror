@@ -1,12 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
-import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
-import io.farfrontier.palemirror.frontier.v3.api.CommandId;
-import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorDied;
@@ -20,7 +15,6 @@ import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -170,19 +164,6 @@ final class FrontierV3AmbientActorExecutor {
         submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health));
         return true;
     }
-    /** Restarts are conservative: loaded-world evidence may reclaim a body, missing evidence remains visible UNKNOWN. */
-    static int quarantineActiveLeases(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
-        if (state == null) return 0;
-        int count = 0;
-        for (var lease : state.ambientLeases().values().stream().sorted(java.util.Comparator.comparing(value -> value.actorId().value())).toList()) {
-            if (lease.status() == AmbientLeaseStatus.PREPARED || lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING) {
-                submit(runtime, "ambient-restart-unknown", lease.actorId().value(), new AmbientLeaseTransition(lease.actorId(), AmbientLeaseStatus.UNKNOWN_AFTER_RESTART));
-                count++;
-            }
-        }
-        return count;
-    }
     private static boolean demand(ServerLevel level, BlockPosition position) {
         BlockPos target = new BlockPos(position.x(), position.y(), position.z());
         return level.hasChunkAt(target) && level.players().stream().filter(player -> !player.isSpectator())
@@ -214,12 +195,7 @@ final class FrontierV3AmbientActorExecutor {
         if (pending.isEmpty()) PENDING_ADMISSIONS.remove(runtime);
     }
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
-        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload))
-                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("ambient actor death was rejected: " + result);
+        FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
     private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
     enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT }
