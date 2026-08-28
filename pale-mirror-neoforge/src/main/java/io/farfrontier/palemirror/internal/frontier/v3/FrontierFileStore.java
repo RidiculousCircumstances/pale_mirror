@@ -114,7 +114,10 @@ public final class FrontierFileStore implements FrontierStore {
             Files.deleteIfExists(temporary);
             Files.write(temporary, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
             try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) { channel.force(true); }
-            try { Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE); }
+            // A snapshot may advance canonical time without a new WAL record. Replacing the
+            // same covered sequence is safe only as one atomic publication: recovery sees either
+            // the old verified checkpoint or the complete new one, never an absent checkpoint.
+            try { Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
             catch (AtomicMoveNotSupportedException unsupported) { throw new IllegalStateException("atomic filesystem move is required for Frontier v3", unsupported); }
         } catch (IOException error) { throw new IllegalStateException("unable to atomically write Frontier v3 record", error); }
     }

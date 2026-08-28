@@ -27,4 +27,10 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
         initialSchedules = List.copyOf(initialSchedules);
         Objects.requireNonNull(transactionCommitter, "transaction committer");
     }
+
+    /** Rebinds the pure aggregate to the owning server host's mandatory write-ahead boundary. */
+    public FrontierEngineConfiguration<S, P> withTransactionCommitter(TransactionCommitter replacement) {
+        return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, replacement);
+    }
 }

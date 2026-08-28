@@ -65,6 +65,20 @@ class FrontierFileStoreTest {
         assertThrows(IllegalArgumentException.class, () -> store.recover(WORLD));
     }
 
+    @Test
+    void replacesAnIdleSnapshotAtTheSameCoveredWalSequenceAtomically(@TempDir Path directory) {
+        FrontierFileStore store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
+        SnapshotRecord initial = new SnapshotRecord(new CheckpointImage(WORLD, Revision.ZERO, SimInstant.ZERO,
+                new byte[] {1}, List.of(), List.of()), 0L);
+        SnapshotRecord advancedTime = new SnapshotRecord(new CheckpointImage(WORLD, Revision.ZERO, new SimInstant(20L),
+                new byte[] {1}, List.of(), List.of()), 0L);
+
+        store.installSnapshot(initial);
+        store.installSnapshot(advancedTime);
+
+        assertEquals(advancedTime, store.recover(WORLD).checkpoint().orElseThrow());
+    }
+
     private static TransactionRecord transaction(long revision) {
         CommandId command = new CommandId("command:file-store-" + revision);
         TransactionId transaction = new TransactionId("transaction:file-store-" + revision);
