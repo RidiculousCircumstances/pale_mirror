@@ -28,14 +28,14 @@ public final class FrontierWorldRuntimeDefinition {
                 FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp()); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
-        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(HiveInfectionProcess.pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200),
+        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(productionStart(bootstrap.settlements().getFirst().id(), 1, 200),
                 contractDemand(1, 450), HiveGrowthProcess.start(1, 600), StructuralRepairProcess.scan(1, 800), RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
         }
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
     }
-    public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
+    public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
@@ -45,7 +45,10 @@ public final class FrontierWorldRuntimeDefinition {
             if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
             }
-            if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return new CommandPlan.Accepted(List.of(new ProposedEvent(DecontaminationProcess.owner(state, intent.causeSubjectId()).id(), transition)));
+            if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
+                try { return new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition)); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            }
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
             if (operation == null) return rejected("physical intent has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
@@ -120,7 +123,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
         return switch (action.kind()) {
-            case "frontier.infection.pulse" -> HiveInfectionProcess.plan(state, action);
+            case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
             case "frontier.settlement.production.start" -> planProductionStart(state, action);
             case "frontier.settlement.production.complete" -> planProductionCompletion(state, action);
             case "frontier.supply.contract.demand" -> planContractDemand(state, action);
@@ -254,6 +257,7 @@ public final class FrontierWorldRuntimeDefinition {
             case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);
             case StrategicObjectiveSelected selected -> StrategicObjectiveProcess.reduceObjective(state, event.subject(), selected);
             case StrategicTaskPlanned planned -> StrategicObjectiveProcess.reduceTask(state, event.subject(), planned);
+            case StrategicTaskTransition transition -> StrategicObjectiveProcess.reduceTaskTransition(state, event.subject(), transition);
             default -> fail(event.payload().type());
         };
     }
@@ -325,6 +329,7 @@ public final class FrontierWorldRuntimeDefinition {
             if (!subject.equals(owner)) {
                 throw new IllegalArgumentException("structural repair transition lacks its owning settlement");
             }
+            if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) DecontaminationProcess.taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());

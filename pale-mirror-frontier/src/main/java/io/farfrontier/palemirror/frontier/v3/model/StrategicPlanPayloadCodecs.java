@@ -24,6 +24,17 @@ final class StrategicPlanPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> writeTask(output, ((StrategicTaskPlanned) payload).task())); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new StrategicTaskPlanned(readTask(input))); }
     }; }
+    static PayloadCodec transition() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.strategic_task_transition"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            StrategicTaskTransition transition = (StrategicTaskTransition) payload; subject(output, transition.taskId()); output.writeByte(transition.status().ordinal());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
+            SubjectId task = subject(input); int status = input.readUnsignedByte();
+            if (status >= StrategicTaskStatus.values().length) throw new IllegalArgumentException("unknown strategic task transition");
+            return new StrategicTaskTransition(task, StrategicTaskStatus.values()[status]);
+        }); }
+    }; }
     private static void writeObjective(DataOutputStream output, StrategicObjective value) throws IOException {
         subject(output, value.id()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
         output.writeInt(value.decisionOrdinal()); output.writeByte(value.status().ordinal());

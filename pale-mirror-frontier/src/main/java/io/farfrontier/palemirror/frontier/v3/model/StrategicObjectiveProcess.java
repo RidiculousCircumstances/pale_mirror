@@ -14,7 +14,7 @@ import java.util.Optional;
 
 /** Event-triggered deterministic utility selection and first durable task expansion. */
 final class StrategicObjectiveProcess {
-    private static final long REVIEW_INTERVAL = 10_000L;
+    private static final long REVIEW_INTERVAL = 400L;
     private static final long LOCAL_INFECTION_RADIUS_SQUARED = 25_600L;
     private StrategicObjectiveProcess() { }
 
@@ -31,6 +31,10 @@ final class StrategicObjectiveProcess {
         Optional<Candidate> candidate = candidate(state, owner);
         if (candidate.isEmpty()) return List.of(next);
         Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal); StrategicTask task = task(objective);
+        if (task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL) {
+            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+                    new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, action.dueAt().ticks() + 100L))), next);
+        }
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
 
@@ -45,6 +49,12 @@ final class StrategicObjectiveProcess {
         return state.withStrategicPlans(state.strategicPlans().addTask(task));
     }
 
+    static FrontierWorldState reduceTaskTransition(FrontierWorldState state, SubjectId subject, StrategicTaskTransition transition) {
+        StrategicTask task = state.strategicPlans().tasks().get(transition.taskId());
+        if (task == null || !task.ownerId().equals(subject)) throw new IllegalArgumentException("strategic task transition has a foreign owner");
+        return state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), transition.status()));
+    }
+
     private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId owner) {
         return state.bootstrap().hive().id().equals(owner) ? hiveCandidate(state) : settlementCandidate(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner));
     }
@@ -56,12 +66,8 @@ final class StrategicObjectiveProcess {
                 entry.getKey(), entry.getValue().value().raw())).sorted(Candidate.HIGHEST_UTILITY).findFirst();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state) {
-        List<HiveOrgan> roots = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
-                .filter(organ -> organ.kind() == HiveOrganKind.HEART && state.isHiveOrganOperational(organ.id())).sorted(Comparator.comparing(HiveOrgan::id)).toList();
-        if (roots.isEmpty()) return Optional.empty();
-        if (state.infection().isEmpty()) return Optional.of(new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, InfectionCell.at(roots.getFirst().anchor()), FixedScalar.SCALE));
-        return state.infection().entrySet().stream().map(entry -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, entry.getKey(),
-                Math.subtractExact(FixedScalar.SCALE, entry.getValue().value().raw()))).sorted(Candidate.HIGHEST_UTILITY).findFirst();
+        return HiveInfectionProcess.expansionTarget(state).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, target,
+                Math.subtractExact(FixedScalar.SCALE, state.infection().getOrDefault(target, new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(FixedScalar.ZERO)).value().raw())));
     }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal) {
         String stem = owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal;

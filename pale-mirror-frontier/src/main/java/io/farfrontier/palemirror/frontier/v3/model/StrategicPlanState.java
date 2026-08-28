@@ -39,6 +39,13 @@ final class StrategicPlanState {
             if (task.dependencies().stream().anyMatch(dependency -> !this.tasks.containsKey(dependency) || dependency.equals(task.id()))) {
                 throw new IllegalArgumentException("strategic task dependency must name another retained task");
             }
+            if (objective.status() != StrategicObjectiveStatus.ACTIVE
+                    && (task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)) {
+                throw new IllegalArgumentException("terminal strategic objective has unfinished task");
+            }
+            if (objective.status() == StrategicObjectiveStatus.COMPLETED && task.status() == StrategicTaskStatus.BLOCKED) {
+                throw new IllegalArgumentException("completed strategic objective has blocked task");
+            }
         });
     }
 
@@ -61,22 +68,63 @@ final class StrategicPlanState {
 
     StrategicPlanState addObjective(StrategicObjective objective) {
         Objects.requireNonNull(objective, "strategic objective");
-        if (objectives.containsKey(objective.id()) || hasActiveObjective(objective.ownerId())) throw new IllegalArgumentException("strategic objective is duplicate or owner is already active");
-        Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(objectives); next.put(objective.id(), objective);
-        return new StrategicPlanState(next, tasks);
+        StrategicPlanState retained = compactFor(1, 0);
+        if (retained.objectives.containsKey(objective.id()) || retained.hasActiveObjective(objective.ownerId())) throw new IllegalArgumentException("strategic objective is duplicate or owner is already active");
+        Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);
+        return new StrategicPlanState(next, retained.tasks);
     }
 
     StrategicPlanState addTask(StrategicTask task) {
         Objects.requireNonNull(task, "strategic task");
-        if (tasks.containsKey(task.id())) throw new IllegalArgumentException("strategic task identity already exists");
-        Map<SubjectId, StrategicTask> next = new LinkedHashMap<>(tasks); next.put(task.id(), task);
-        return new StrategicPlanState(objectives, next);
+        StrategicPlanState retained = compactFor(0, 1);
+        StrategicObjective objective = retained.objectives.get(task.objectiveId());
+        if (retained.tasks.containsKey(task.id()) || objective == null || objective.status() != StrategicObjectiveStatus.ACTIVE) {
+            throw new IllegalArgumentException("strategic task identity or objective is invalid");
+        }
+        Map<SubjectId, StrategicTask> next = new LinkedHashMap<>(retained.tasks); next.put(task.id(), task);
+        return new StrategicPlanState(retained.objectives, next);
+    }
+
+    StrategicPlanState transitionTask(SubjectId taskId, StrategicTaskStatus nextStatus) {
+        StrategicTask current = tasks.get(Objects.requireNonNull(taskId, "strategic task id"));
+        if (current == null || !allowed(current.status(), nextStatus)) throw new IllegalArgumentException("strategic task transition is not allowed");
+        Map<SubjectId, StrategicTask> nextTasks = new LinkedHashMap<>(tasks); nextTasks.put(taskId, current.withStatus(nextStatus));
+        Map<SubjectId, StrategicObjective> nextObjectives = new LinkedHashMap<>(objectives);
+        if (nextStatus == StrategicTaskStatus.BLOCKED || nextStatus == StrategicTaskStatus.COMPLETED) {
+            StrategicObjective objective = objectives.get(current.objectiveId());
+            boolean terminal = nextTasks.values().stream().filter(task -> task.objectiveId().equals(objective.id()))
+                    .allMatch(task -> task.status() == StrategicTaskStatus.BLOCKED || task.status() == StrategicTaskStatus.COMPLETED);
+            if (terminal) {
+                boolean blocked = nextTasks.values().stream().filter(task -> task.objectiveId().equals(objective.id()))
+                        .anyMatch(task -> task.status() == StrategicTaskStatus.BLOCKED);
+                nextObjectives.put(objective.id(), objective.withStatus(blocked ? StrategicObjectiveStatus.BLOCKED : StrategicObjectiveStatus.COMPLETED));
+            }
+        }
+        return new StrategicPlanState(nextObjectives, nextTasks);
     }
 
     @Override public boolean equals(Object other) {
         return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks);
     }
     @Override public int hashCode() { return Objects.hash(objectives, tasks); }
+
+    private StrategicPlanState compactFor(int newObjectives, int newTasks) {
+        Map<SubjectId, StrategicObjective> retainedObjectives = new LinkedHashMap<>(objectives);
+        Map<SubjectId, StrategicTask> retainedTasks = new LinkedHashMap<>(tasks);
+        while (retainedObjectives.size() + newObjectives > MAX_OBJECTIVES || retainedTasks.size() + newTasks > MAX_TASKS) {
+            StrategicObjective discard = retainedObjectives.values().stream().filter(value -> value.status() != StrategicObjectiveStatus.ACTIVE)
+                    .sorted(java.util.Comparator.comparingInt(StrategicObjective::decisionOrdinal).thenComparing(StrategicObjective::id)).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("strategic plan retention capacity exhausted by active work"));
+            retainedObjectives.remove(discard.id());
+            retainedTasks.values().removeIf(task -> task.objectiveId().equals(discard.id()));
+        }
+        return retainedObjectives.equals(objectives) && retainedTasks.equals(tasks) ? this : new StrategicPlanState(retainedObjectives, retainedTasks);
+    }
+
+    private static boolean allowed(StrategicTaskStatus current, StrategicTaskStatus next) {
+        return current == StrategicTaskStatus.PENDING && (next == StrategicTaskStatus.ACTIVE || next == StrategicTaskStatus.BLOCKED)
+                || current == StrategicTaskStatus.ACTIVE && (next == StrategicTaskStatus.COMPLETED || next == StrategicTaskStatus.BLOCKED);
+    }
 
     private static <T> Map<SubjectId, T> immutable(Map<SubjectId, T> source, String name) {
         Objects.requireNonNull(source, name); LinkedHashMap<SubjectId, T> copy = new LinkedHashMap<>();

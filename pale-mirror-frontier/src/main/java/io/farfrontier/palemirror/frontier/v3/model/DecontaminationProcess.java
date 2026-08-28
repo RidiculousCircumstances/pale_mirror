@@ -34,33 +34,62 @@ final class DecontaminationProcess {
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal + 1, action.dueAt().ticks() + 200L)));
         if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.DECONTAMINATION
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
-        Optional<Candidate> candidate = candidate(state);
-        if (candidate.isEmpty()) return List.of(next);
+        Optional<StrategicTask> task = pendingTask(state);
+        if (task.isEmpty()) return List.of(next);
+        Optional<Candidate> candidate = candidate(state, task.orElseThrow());
+        if (candidate.isEmpty()) return List.of(new ProposedEvent(task.orElseThrow().ownerId(), new StrategicTaskTransition(task.orElseThrow().id(), StrategicTaskStatus.BLOCKED)), next);
         Candidate value = candidate.orElseThrow(); InfectionCell cell = value.cell();
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:decontamination-" + ordinal), PhysicalIntentKind.DECONTAMINATION,
                 PhysicalIntentStatus.PREPARED, value.facility().id(), List.of(value.facility().id(), value.material().id()),
                 new FixedPosition(FixedScalar.whole(cell.originAtY(0).x()), FixedScalar.whole(0), FixedScalar.whole(cell.originAtY(0).z())), 0,
                 PhysicalPostcondition.DECONTAMINATION_OBSERVED);
-        return List.of(new ProposedEvent(value.settlement().id(), new PhysicalIntentPrepared(intent)), next);
+        return List.of(new ProposedEvent(value.settlement().id(), new StrategicTaskTransition(value.task().id(), StrategicTaskStatus.ACTIVE)),
+                new ProposedEvent(value.settlement().id(), new PhysicalIntentPrepared(intent)), next);
     }
 
     static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.DECONTAMINATION) throw new IllegalArgumentException("decontamination intent kind is invalid");
         Settlement settlement = owner(state, intent.causeSubjectId());
         if (!subject.equals(settlement.id())) throw new IllegalArgumentException("decontamination intent has a foreign settlement owner");
+        taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
         DecontaminationStateSupport.validateIntent(state, intent);
         return state.preparePhysicalIntent(intent);
     }
 
-    private static Optional<Candidate> candidate(FrontierWorldState state) {
-        return state.bootstrap().settlements().stream().sorted(Comparator.comparing(Settlement::id)).flatMap(settlement -> {
-            Optional<SettlementStructure> facility = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
-                    .min(Comparator.comparing(SettlementStructure::id));
-            Optional<ExactItemStack> material = state.inventory().items().values().stream().filter(item -> item.itemKind().equals(DecontaminationPolicy.REAGENT))
-                    .filter(item -> ownedActiveMaterial(state, settlement, item)).sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
-            return facility.isPresent() && material.isPresent() ? state.infection().keySet().stream().sorted(Comparator.comparingInt(InfectionCell::x)
-                    .thenComparingInt(InfectionCell::z)).filter(cell -> nearby(facility.orElseThrow(), cell)).map(cell -> new Candidate(settlement, facility.orElseThrow(), material.orElseThrow(), cell)) : java.util.stream.Stream.empty();
-        }).findFirst();
+    static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        Settlement settlement = owner(state, intent.causeSubjectId());
+        StrategicTask task = taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
+        ProposedEvent physical = new ProposedEvent(settlement.id(), transition);
+        if (transition.status() == PhysicalIntentStatus.CONFIRMED) {
+            return List.of(physical, new ProposedEvent(settlement.id(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.COMPLETED)));
+        }
+        if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            return List.of(physical, new ProposedEvent(settlement.id(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED)));
+        }
+        return List.of(physical);
+    }
+
+    static StrategicTask taskForIntent(FrontierWorldState state, PhysicalIntent intent, StrategicTaskStatus requiredStatus) {
+        InfectionCell target = DecontaminationStateSupport.cell(intent); Settlement settlement = owner(state, intent.causeSubjectId());
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.DECONTAMINATE_INFECTION_CELL
+                && task.ownerId().equals(settlement.id()) && task.infectionTarget().equals(Optional.of(target)) && task.status() == requiredStatus)
+                .sorted(Comparator.comparing(StrategicTask::id)).reduce((left, right) -> { throw new IllegalArgumentException("decontamination task binding is ambiguous"); })
+                .orElseThrow(() -> new IllegalArgumentException("decontamination intent has no active strategic task"));
+    }
+
+    private static Optional<StrategicTask> pendingTask(FrontierWorldState state) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.DECONTAMINATE_INFECTION_CELL
+                && task.status() == StrategicTaskStatus.PENDING).sorted(Comparator.comparing(StrategicTask::id)).findFirst();
+    }
+    private static Optional<Candidate> candidate(FrontierWorldState state, StrategicTask task) {
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
+        Optional<SettlementStructure> facility = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
+                .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
+        Optional<ExactItemStack> material = state.inventory().items().values().stream().filter(item -> item.itemKind().equals(DecontaminationPolicy.REAGENT))
+                .filter(item -> ownedActiveMaterial(state, settlement, item)).sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
+        InfectionCell cell = task.infectionTarget().orElseThrow();
+        return facility.isPresent() && material.isPresent() && state.infection().containsKey(cell) && nearby(facility.orElseThrow(), cell)
+                ? Optional.of(new Candidate(task, settlement, facility.orElseThrow(), material.orElseThrow(), cell)) : Optional.empty();
     }
 
     private static boolean ownedActiveMaterial(FrontierWorldState state, Settlement settlement, ExactItemStack item) {
@@ -86,5 +115,5 @@ final class DecontaminationProcess {
         throw new IllegalArgumentException("decontamination facility is not a settlement infirmary: " + facilityId.value());
     }
 
-    record Candidate(Settlement settlement, SettlementStructure facility, ExactItemStack material, InfectionCell cell) { }
+    record Candidate(StrategicTask task, Settlement settlement, SettlementStructure facility, ExactItemStack material, InfectionCell cell) { }
 }

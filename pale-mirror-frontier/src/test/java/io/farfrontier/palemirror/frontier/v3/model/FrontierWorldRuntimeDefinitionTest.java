@@ -200,13 +200,15 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
-    void infectionPulseIsPersistedDeterministicScheduledWorldWork() {
+    void hiveExpansionTaskIsPersistedDeterministicScheduledWorldWork() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:pulse"), 91L));
-        engine.advanceTo(new SimInstant(100L), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 3_400L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
 
         FrontierWorldProjection projection = engine.projection(ProjectionQuery.summary());
         assertEquals(3, projection.infectedCellCount());
-        assertEquals(1L, projection.revision().value());
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().values().stream()
+                .filter(task -> task.ownerId().equals(state.bootstrap().hive().id())).findFirst().orElseThrow().status());
     }
 
     @Test

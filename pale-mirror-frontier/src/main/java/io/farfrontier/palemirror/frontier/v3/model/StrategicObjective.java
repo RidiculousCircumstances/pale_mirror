@@ -15,4 +15,7 @@ record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKin
         if (decisionOrdinal <= 0) throw new IllegalArgumentException("objective decision ordinal must be positive");
         if (infectionTarget.isEmpty()) throw new IllegalArgumentException("initial strategic objective requires an infection target");
     }
+    StrategicObjective withStatus(StrategicObjectiveStatus nextStatus) {
+        return new StrategicObjective(id, ownerId, kind, infectionTarget, decisionOrdinal, nextStatus);
+    }
 }

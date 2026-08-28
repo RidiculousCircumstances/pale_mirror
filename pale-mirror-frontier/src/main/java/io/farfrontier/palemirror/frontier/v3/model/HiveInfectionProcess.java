@@ -10,44 +10,67 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 
-/** Bounded infection metabolism rooted only in operational hive HEART organs. */
+/** Executes one durable hive infection-expansion task, never an ownerless metabolism pulse. */
 final class HiveInfectionProcess {
-    private static final SubjectId HIVE = new SubjectId("hive:frontier");
     private static final long PULSE_INTERVAL = 100L;
     private static final long PULSE_GAIN = 125_000L;
 
     private HiveInfectionProcess() { }
 
-    static ScheduledAction pulse(int ordinal, long due) {
-        return new ScheduledAction(new ScheduleId("schedule:infection-pulse-" + ordinal), new SimInstant(due), 0,
-                HIVE, "frontier.infection.pulse", 1);
+    static ScheduledAction task(StrategicTask task, int pulse, long dueAt) {
+        if (task.kind() != StrategicTaskKind.SPREAD_INFECTION_CELL || pulse <= 0) throw new IllegalArgumentException("invalid hive infection task schedule");
+        String id = task.id().value().replace(':', '-') + "-" + pulse;
+        return new ScheduledAction(new ScheduleId("schedule:hive-infection-task-" + id), new SimInstant(dueAt), 0,
+                task.id(), "frontier.hive.infection.task", 1);
     }
 
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
-        if (!HIVE.equals(action.subject())) throw new IllegalStateException("infection pulse has a foreign hive subject");
-        int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
-        ProposedEvent next = new ProposedEvent(HIVE, new ScheduleEffect.Created(pulse(ordinal + 1, action.dueAt().ticks() + PULSE_INTERVAL)));
-        List<HiveOrgan> roots = roots(state);
-        if (roots.isEmpty()) return List.of(next);
-        List<InfectionCell> cells = state.infection().keySet().stream().sorted(Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).toList();
-        InfectionCell source = cells.isEmpty() ? InfectionCell.at(roots.get(Math.floorMod(ordinal - 1, roots.size())).anchor())
-                : cells.get(Math.floorMod(ordinal - 1, cells.size()));
-        InfectionCell target = cells.isEmpty() ? source : adjacent(source, ordinal);
-        if (!state.bootstrap().bounds().contains(target.originAtY(64))) target = source;
+        StrategicTask task = state.strategicPlans().tasks().get(action.subject());
+        if (task == null || task.kind() != StrategicTaskKind.SPREAD_INFECTION_CELL || !task.ownerId().equals(state.bootstrap().hive().id())) {
+            throw new IllegalStateException("hive infection schedule has no owned expansion task");
+        }
+        if (task.status() == StrategicTaskStatus.BLOCKED || task.status() == StrategicTaskStatus.COMPLETED) return List.of();
+        if (!hasOperationalHeart(state)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        InfectionCell target = task.infectionTarget().orElseThrow();
+        if (!state.bootstrap().bounds().contains(target.originAtY(64))) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         FixedRatio prior = state.infection().getOrDefault(target, new FixedRatio(FixedScalar.ZERO));
         long raw = Math.min(FixedScalar.SCALE, Math.addExact(prior.value().raw(), PULSE_GAIN));
-        return List.of(new ProposedEvent(HIVE, new InfectionChanged(target, new FixedRatio(new FixedScalar(raw)))), next);
+        List<ProposedEvent> events = new java.util.ArrayList<>();
+        if (task.status() == StrategicTaskStatus.PENDING) events.add(transition(task, StrategicTaskStatus.ACTIVE));
+        events.add(new ProposedEvent(task.ownerId(), new InfectionChanged(target, new FixedRatio(new FixedScalar(raw)))));
+        if (raw == FixedScalar.SCALE) {
+            events.add(transition(task, StrategicTaskStatus.COMPLETED));
+        } else {
+            events.add(new ProposedEvent(task.ownerId(), new ScheduleEffect.Created(task(task, pulse(action) + 1, action.dueAt().ticks() + PULSE_INTERVAL))));
+        }
+        return List.copyOf(events);
     }
 
-    private static InfectionCell adjacent(InfectionCell source, int ordinal) {
-        return switch (Math.floorMod(ordinal - 1, 4)) {
-            case 0 -> new InfectionCell(source.x() + 1, source.z());
-            case 1 -> new InfectionCell(source.x(), source.z() + 1);
-            case 2 -> new InfectionCell(source.x() - 1, source.z());
-            default -> new InfectionCell(source.x(), source.z() - 1);
-        };
+    static Optional<InfectionCell> expansionTarget(FrontierWorldState state) {
+        if (!hasOperationalHeart(state)) return Optional.empty();
+        if (state.infection().isEmpty()) return roots(state).stream().map(organ -> InfectionCell.at(organ.anchor())).findFirst();
+        LinkedHashSet<InfectionCell> candidates = new LinkedHashSet<>();
+        state.infection().keySet().stream().sorted(Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z))
+                .forEach(source -> adjacent(source).stream().filter(cell -> state.bootstrap().bounds().contains(cell.originAtY(64))).forEach(candidates::add));
+        return candidates.stream().sorted(Comparator.comparingLong((InfectionCell cell) -> state.infection()
+                .getOrDefault(cell, new FixedRatio(FixedScalar.ZERO)).value().raw()).thenComparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).findFirst();
+    }
+
+    static boolean hasOperationalHeart(FrontierWorldState state) { return !roots(state).isEmpty(); }
+
+    private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) {
+        return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status));
+    }
+
+    private static int pulse(ScheduledAction action) { return FrontierWorldScheduleSupport.ordinal(action.id().value()); }
+
+    private static List<InfectionCell> adjacent(InfectionCell source) {
+        return List.of(new InfectionCell(source.x() + 1, source.z()), new InfectionCell(source.x(), source.z() + 1),
+                new InfectionCell(source.x() - 1, source.z()), new InfectionCell(source.x(), source.z() - 1));
     }
 
     private static List<HiveOrgan> roots(FrontierWorldState state) {

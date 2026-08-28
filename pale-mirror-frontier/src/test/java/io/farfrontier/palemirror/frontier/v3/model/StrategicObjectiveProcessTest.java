@@ -14,6 +14,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StrategicObjectiveProcessTest {
     @Test
@@ -22,7 +23,7 @@ class StrategicObjectiveProcessTest {
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(hive, 1, 60L));
 
-        assertEquals(3, planned.size());
+        assertEquals(4, planned.size());
         StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.getFirst().payload());
         StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
         assertEquals(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, selected.objective().kind());
@@ -63,6 +64,31 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
+    void terminalTaskOutcomesAreDurableAndOldTerminalObjectivesCompactBeforeNewWork() {
+        FrontierWorldState state = initial("frontier:strategic-terminal", 405L); SubjectId owner = state.bootstrap().hive().id();
+        InfectionCell target = InfectionCell.at(state.bootstrap().hive().seedNests().getFirst().anchor());
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:terminal"), owner, StrategicObjectiveKind.HIVE_EXPAND_INFECTION,
+                java.util.Optional.of(target), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask first = hiveTask("task:terminal-first", objective, StrategicTaskStatus.PENDING);
+        StrategicTask second = hiveTask("task:terminal-second", objective, StrategicTaskStatus.PENDING);
+        StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(first).addTask(second);
+        plans = plans.transitionTask(first.id(), StrategicTaskStatus.BLOCKED).transitionTask(second.id(), StrategicTaskStatus.ACTIVE)
+                .transitionTask(second.id(), StrategicTaskStatus.COMPLETED);
+        assertEquals(StrategicObjectiveStatus.BLOCKED, plans.objectives().get(objective.id()).status());
+        assertEquals(plans, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state.withStrategicPlans(plans))).strategicPlans());
+
+        StrategicPlanState retained = StrategicPlanState.empty();
+        for (int ordinal = 1; ordinal <= StrategicPlanState.MAX_OBJECTIVES; ordinal++) {
+            retained = retained.addObjective(new StrategicObjective(new SubjectId("objective:retained-" + ordinal), owner,
+                    StrategicObjectiveKind.HIVE_EXPAND_INFECTION, java.util.Optional.of(target), ordinal, StrategicObjectiveStatus.COMPLETED));
+        }
+        StrategicPlanState compacted = retained.addObjective(new StrategicObjective(new SubjectId("objective:next"), owner,
+                StrategicObjectiveKind.HIVE_EXPAND_INFECTION, java.util.Optional.of(target), 129, StrategicObjectiveStatus.ACTIVE));
+        assertEquals(StrategicPlanState.MAX_OBJECTIVES, compacted.objectives().size());
+        assertTrue(!compacted.objectives().containsKey(new SubjectId("objective:retained-1")) && compacted.objectives().containsKey(new SubjectId("objective:next")));
+    }
+
+    @Test
     void scheduledWorldWorkPersistsOneUtilityPlanPerEligibleSide() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:strategic-scheduled"), 404L));
 
@@ -81,5 +107,10 @@ class StrategicObjectiveProcessTest {
 
     private static FrontierWorldState initial(String world, long seed) {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId(world), seed));
+    }
+
+    private static StrategicTask hiveTask(String id, StrategicObjective objective, StrategicTaskStatus status) {
+        return new StrategicTask(new SubjectId(id), objective.id(), objective.ownerId(), StrategicTaskKind.SPREAD_INFECTION_CELL,
+                objective.infectionTarget(), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), status);
     }
 }

@@ -21,4 +21,7 @@ record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, Str
             throw new IllegalArgumentException("strategic task requirements and dependencies must be unique");
         }
     }
+    StrategicTask withStatus(StrategicTaskStatus nextStatus) {
+        return new StrategicTask(id, objectiveId, ownerId, kind, infectionTarget, requirements, dependencies, nextStatus);
+    }
 }
