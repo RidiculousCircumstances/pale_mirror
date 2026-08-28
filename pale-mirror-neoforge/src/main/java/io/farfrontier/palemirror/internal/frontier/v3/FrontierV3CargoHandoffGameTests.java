@@ -330,14 +330,29 @@ public final class FrontierV3CargoHandoffGameTests {
         ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-hopper-bread"), "minecraft:bread", 7,
                 new InventoryCustody.ContainerSlot(container, 0));
         hopper.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
-        java.util.UUID first = FrontierV3InventoryObservationExecutor.bindHopperCarrier(hopper, 0);
-        java.util.UUID second = FrontierV3InventoryObservationExecutor.bindHopperCarrier(hopper, 0);
+        FrontierV3HopperCarrierLedger ledger = FrontierV3HopperCarrierLedger.get(helper.getLevel());
+        java.util.UUID first = FrontierV3InventoryObservationExecutor.bindHopperCarrier(ledger, hopper, 0).carrierId();
+        java.util.UUID second = FrontierV3InventoryObservationExecutor.bindHopperCarrier(ledger, hopper, 0).carrierId();
         helper.assertValueEqual(second, first, "one loaded hopper keeps its stable carrier UUID across repeated observation");
         helper.assertValueEqual(FrontierV3CargoHandoffExecutor.worldCarrierId(hopper.getItem(0)).orElseThrow(), first,
                 "the exact stack and the hopper's persistent carrier identity agree");
+        net.minecraft.nbt.CompoundTag serialized = ledger.save(new net.minecraft.nbt.CompoundTag(), helper.getLevel().registryAccess());
+        ledger = FrontierV3HopperCarrierLedger.load(serialized, helper.getLevel().registryAccess());
+        helper.assertValueEqual(FrontierV3InventoryObservationExecutor.bindHopperCarrier(ledger, hopper, 0).status(),
+                FrontierV3InventoryObservationExecutor.HopperCarrierStatus.CURRENT,
+                "a reloaded hopper-carrier ledger preserves its one-to-one physical identity");
         hopper.setItem(1, net.minecraft.world.item.Items.DIAMOND.getDefaultInstance());
         helper.assertFalse(FrontierV3CargoHandoffExecutor.exactMatch(hopper.getItem(1), expected),
                 "foreign hopper contents are never confused with the canonical exact stack");
+        BlockPos copiedPosition = position.east(2); helper.getLevel().setBlock(copiedPosition, Blocks.HOPPER.defaultBlockState(), 3);
+        net.minecraft.world.level.block.entity.HopperBlockEntity copied = (net.minecraft.world.level.block.entity.HopperBlockEntity) helper.getLevel().getBlockEntity(copiedPosition);
+        copied.getPersistentData().putUUID(FrontierV3InventoryObservationExecutor.HOPPER_CARRIER_ID_KEY, first);
+        copied.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
+        helper.assertValueEqual(FrontierV3InventoryObservationExecutor.bindHopperCarrier(ledger, copied, 0).status(),
+                FrontierV3InventoryObservationExecutor.HopperCarrierStatus.CONFLICT,
+                "a copied hopper carrier UUID at another position is conflict evidence, never adopted identity");
+        helper.assertFalse(FrontierV3CargoHandoffExecutor.worldCarrierId(copied.getItem(0)).isPresent(),
+                "conflict observation must leave the copied hopper stack unmodified");
         helper.succeed();
     }
 }

@@ -37,22 +37,23 @@ import java.util.UUID;
  * becomes a bounded durable conflict rather than being adopted or repaired.
  */
 final class FrontierV3InventoryObservationExecutor {
-    private static final String HOPPER_CARRIER_ID_KEY = "pale_mirror_frontier_v3_hopper_carrier";
+    static final String HOPPER_CARRIER_ID_KEY = "pale_mirror_frontier_v3_hopper_carrier";
     private FrontierV3InventoryObservationExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = state(runtime);
         if (state == null) return;
+        FrontierV3HopperCarrierLedger hopperCarriers = FrontierV3HopperCarrierLedger.get(level);
         for (StoreChest store : stores(state)) {
             if (!level.hasChunkAt(store.position())) continue;
             if (!(level.getBlockEntity(store.position()) instanceof ChestBlockEntity chest)
                     || !store.containerId().value().equals(chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY))) continue;
-            if (observeOne(level, runtime, state, store, chest)) return;
+            if (observeOne(level, runtime, state, hopperCarriers, store, chest)) return;
         }
     }
 
     private static boolean observeOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                      FrontierWorldState state, StoreChest store, ChestBlockEntity chest) {
+                                      FrontierWorldState state, FrontierV3HopperCarrierLedger hopperCarriers, StoreChest store, ChestBlockEntity chest) {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             InventoryCustody.ContainerSlot custody = new InventoryCustody.ContainerSlot(store.containerId(), slot);
             Optional<ExactItemStack> canonical = state.inventory().itemAt(store.containerId(), slot);
@@ -70,8 +71,12 @@ final class FrontierV3InventoryObservationExecutor {
                 }
                 List<HopperCandidate> hoppers = nearbyHoppers(level, chest.getBlockPos(), expected);
                 if (actual.isEmpty() && hoppers.size() == 1) {
-                    HopperCandidate hopper = hoppers.getFirst(); UUID carrierId = bindHopperCarrier(hopper.hopper(), hopper.slot());
-                    submit(runtime, expected.id(), custody, new InventoryCustody.WorldCarrier(carrierId));
+                    HopperCandidate hopper = hoppers.getFirst(); HopperCarrierBinding binding = bindHopperCarrier(hopperCarriers, hopper.hopper(), hopper.slot());
+                    if (binding.status() == HopperCarrierStatus.CONFLICT) {
+                        recordConflict(runtime, state, expected.id(), store.containerId(), slot, InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+                        return true;
+                    }
+                    submit(runtime, expected.id(), custody, new InventoryCustody.WorldCarrier(binding.carrierId()));
                     return true;
                 }
                 List<ServerPlayer> holders = playersHolding(level, expected);
@@ -122,13 +127,22 @@ final class FrontierV3InventoryObservationExecutor {
                 .filter(candidate -> FrontierV3CargoHandoffExecutor.exactMatch(candidate.stack(), expected))
                 .sorted(Comparator.comparingLong(candidate -> candidate.hopper().getBlockPos().asLong())).toList();
     }
-    static UUID bindHopperCarrier(HopperBlockEntity hopper, int slot) {
+    static HopperCarrierBinding bindHopperCarrier(FrontierV3HopperCarrierLedger ledger, HopperBlockEntity hopper, int slot) {
         ItemStack stack = hopper.getItem(slot);
         if (stack.isEmpty()) throw new IllegalArgumentException("cannot bind an empty hopper slot");
-        UUID id = hopper.getPersistentData().hasUUID(HOPPER_CARRIER_ID_KEY)
-                ? hopper.getPersistentData().getUUID(HOPPER_CARRIER_ID_KEY) : UUID.randomUUID();
+        Optional<UUID> stackCarrier = FrontierV3CargoHandoffExecutor.worldCarrierId(stack);
+        UUID id = hopper.getPersistentData().hasUUID(HOPPER_CARRIER_ID_KEY) ? hopper.getPersistentData().getUUID(HOPPER_CARRIER_ID_KEY) : null;
+        if (id == null) {
+            if (stackCarrier.isPresent()) return new HopperCarrierBinding(stackCarrier.orElseThrow(), HopperCarrierStatus.CONFLICT);
+            id = UUID.randomUUID();
+        } else if (stackCarrier.isPresent() && !id.equals(stackCarrier.orElseThrow())) {
+            return new HopperCarrierBinding(id, HopperCarrierStatus.CONFLICT);
+        }
+        if (!ledger.claim(id, hopper.getBlockPos())) return new HopperCarrierBinding(id, HopperCarrierStatus.CONFLICT);
+        boolean current = stackCarrier.isPresent();
         hopper.getPersistentData().putUUID(HOPPER_CARRIER_ID_KEY, id);
-        FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, id); hopper.setItem(slot, stack); hopper.setChanged(); return id;
+        if (!current) { FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, id); hopper.setItem(slot, stack); }
+        hopper.setChanged(); return new HopperCarrierBinding(id, current ? HopperCarrierStatus.CURRENT : HopperCarrierStatus.APPLIED);
     }
     private static List<ServerPlayer> playersHolding(ServerLevel level, ExactItemStack expected) {
         return level.players().stream().filter(player -> hasExactItem(player, expected)).sorted(Comparator.comparing(ServerPlayer::getUUID)).toList();
@@ -171,4 +185,6 @@ final class FrontierV3InventoryObservationExecutor {
     }
     record StoreChest(BlockPos position, SubjectId containerId) { }
     record HopperCandidate(HopperBlockEntity hopper, int slot, ItemStack stack) { }
+    record HopperCarrierBinding(UUID carrierId, HopperCarrierStatus status) { }
+    enum HopperCarrierStatus { APPLIED, CURRENT, CONFLICT }
 }
