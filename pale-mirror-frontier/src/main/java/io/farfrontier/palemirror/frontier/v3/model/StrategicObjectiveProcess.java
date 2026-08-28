@@ -39,6 +39,10 @@ final class StrategicObjectiveProcess {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveGrowthProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
+        if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
+            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+                    new ProposedEvent(owner, new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 100L))), next);
+        }
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
 
@@ -65,9 +69,20 @@ final class StrategicObjectiveProcess {
     private static Optional<Candidate> settlementCandidate(FrontierWorldState state, Settlement settlement) {
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
                 .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
-        if (infirmary.isEmpty()) return Optional.empty(); SettlementStructure facility = infirmary.orElseThrow();
-        return state.infection().entrySet().stream().filter(entry -> local(facility, entry.getKey())).map(entry -> new Candidate(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION,
-                Optional.of(entry.getKey()), entry.getValue().value().raw())).sorted(Candidate.HIGHEST_UTILITY).findFirst();
+        if (infirmary.isPresent()) {
+            SettlementStructure facility = infirmary.orElseThrow();
+            Optional<Candidate> containment = state.infection().entrySet().stream().filter(entry -> local(facility, entry.getKey()))
+                    .map(entry -> new Candidate(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(entry.getKey()), entry.getValue().value().raw()))
+                    .sorted(Candidate.HIGHEST_UTILITY).findFirst();
+            if (containment.isPresent()) return containment;
+        }
+        boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
+                && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
+        return workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()
+                ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state) {
         Optional<Candidate> growth = hiveGrowthCandidate(state); if (growth.isPresent()) return growth;
@@ -90,11 +105,13 @@ final class StrategicObjectiveProcess {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY, StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT);
             case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
             case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
+            case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
         };
         StrategicTaskKind kind = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
             case HIVE_EXPAND_INFECTION -> StrategicTaskKind.SPREAD_INFECTION_CELL;
             case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
+            case SETTLEMENT_PRODUCE_BREAD -> StrategicTaskKind.PRODUCE_BREAD;
         };
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), requirements, List.of(), StrategicTaskStatus.PENDING);

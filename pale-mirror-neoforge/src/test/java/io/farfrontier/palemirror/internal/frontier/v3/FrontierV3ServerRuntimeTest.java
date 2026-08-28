@@ -107,7 +107,7 @@ class FrontierV3ServerRuntimeTest {
         var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        for (int tick = 0; tick < 1_500; tick++) runtime.tick(new WorkBudget(8, 64));
+        for (int tick = 0; tick < 4_000; tick++) runtime.tick(new WorkBudget(64, 512));
 
         PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
         CheckpointImage prepared = runtime.checkpointImage().orElseThrow();
@@ -131,7 +131,7 @@ class FrontierV3ServerRuntimeTest {
         var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        for (int tick = 0; tick < 550; tick++) runtime.tick(new WorkBudget(8, 64));
+        for (int tick = 0; tick < 2_550; tick++) runtime.tick(new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-1"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:recovery-supply-1-1");
@@ -146,7 +146,7 @@ class FrontierV3ServerRuntimeTest {
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(lease, restored.sceneLeases().get(leaseId));
-        for (int tick = 0; tick < 100; tick++) recovered.tick(new WorkBudget(8, 64));
+        for (int tick = 0; tick < 100; tick++) recovered.tick(new WorkBudget(64, 512));
         FrontierWorldState afterColdDue = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(0, afterColdDue.operations().get(operation.id()).routeIndex());
 

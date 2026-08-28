@@ -13,10 +13,10 @@ record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKin
         Objects.requireNonNull(kind, "objective kind"); Objects.requireNonNull(infectionTarget, "infection target");
         Objects.requireNonNull(status, "objective status");
         if (decisionOrdinal <= 0) throw new IllegalArgumentException("objective decision ordinal must be positive");
-        if (kind != StrategicObjectiveKind.HIVE_GROW_ORGANISM && infectionTarget.isEmpty()) {
+        if (kind != StrategicObjectiveKind.HIVE_GROW_ORGANISM && kind != StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD && infectionTarget.isEmpty()) {
             throw new IllegalArgumentException("infection strategic objective requires an infection target");
         }
-        if (kind == StrategicObjectiveKind.HIVE_GROW_ORGANISM && infectionTarget.isPresent()) {
+        if ((kind == StrategicObjectiveKind.HIVE_GROW_ORGANISM || kind == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD) && infectionTarget.isPresent()) {
             throw new IllegalArgumentException("hive growth objective cannot carry an infection target");
         }
     }

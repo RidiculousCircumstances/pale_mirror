@@ -15,10 +15,10 @@ record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, Str
         Objects.requireNonNull(ownerId, "task owner"); Objects.requireNonNull(kind, "task kind");
         Objects.requireNonNull(infectionTarget, "task infection target"); Objects.requireNonNull(status, "task status");
         requirements = List.copyOf(requirements); dependencies = List.copyOf(dependencies);
-        if (kind != StrategicTaskKind.GROW_HIVE_ORGANISM && infectionTarget.isEmpty()) {
+        if (kind != StrategicTaskKind.GROW_HIVE_ORGANISM && kind != StrategicTaskKind.PRODUCE_BREAD && infectionTarget.isEmpty()) {
             throw new IllegalArgumentException("infection strategic task requires an infection target");
         }
-        if (kind == StrategicTaskKind.GROW_HIVE_ORGANISM && infectionTarget.isPresent()) {
+        if ((kind == StrategicTaskKind.GROW_HIVE_ORGANISM || kind == StrategicTaskKind.PRODUCE_BREAD) && infectionTarget.isPresent()) {
             throw new IllegalArgumentException("hive growth task cannot carry an infection target");
         }
         if (requirements.isEmpty()) throw new IllegalArgumentException("strategic task requires an explicit precondition");

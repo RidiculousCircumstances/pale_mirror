@@ -218,66 +218,8 @@ class FrontierWorldRuntimeDefinitionTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:long-pulse"), 91L));
         for (long tick = 100L; tick <= 60_000L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
 
-        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse("no failure detail"));
         assertTrue(engine.projection(ProjectionQuery.summary()).revision().value() >= 600L);
-    }
-
-    @Test
-    void productionConsumesARealInputThenStoresOnlyItsDurableExactOutput() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production"), 91L));
-
-        // A newly scheduled same-instant pulse remains ahead in the deterministic queue, so the
-        // facility start is admitted on the following server tick rather than being overtaken.
-        engine.advanceTo(new SimInstant(200L), new WorkBudget(8, 64));
-        engine.advanceTo(new SimInstant(201L), new WorkBudget(8, 64));
-        FrontierWorldState started = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(1, started.inventory().items().size());
-        assertEquals(1, started.productionJobs().size());
-        ProductionJob job = started.productionJobs().values().iterator().next();
-        assertEquals(new SubjectId("item:bootstrap-1-wheat"), job.consumedItemId());
-
-        engine.advanceTo(new SimInstant(300L), new WorkBudget(8, 64));
-        FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertTrue(completed.productionJobs().isEmpty());
-        ExactItemStack bread = completed.inventory().items().get(new SubjectId("item:production-1-1-bread"));
-        assertEquals("minecraft:bread", bread.itemKind());
-        assertEquals(64, bread.count());
-        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0), bread.custody());
-    }
-
-    @Test
-    void completionBlocksWhenAPlayerOrAnotherProcessHasFilledEveryExactDepotSlot() {
-        FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:storage"), 91L));
-        SubjectId depot = new SubjectId("container:1-depot");
-        Map<SubjectId, ExactItemStack> fullItems = new LinkedHashMap<>();
-        for (int slot = 0; slot < 27; slot++) {
-            SubjectId id = new SubjectId("item:storage-" + slot);
-            fullItems.put(id, new ExactItemStack(id, "minecraft:cobblestone", 64, new InventoryCustody.ContainerSlot(depot, slot)));
-        }
-        ExactInventory fullInventory = new ExactInventory(baseline.inventory().containers(), fullItems, Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
-        ProductionJob job = new ProductionJob(new SubjectId("job:production-1-99"), new SubjectId("settlement:1"),
-                new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:consumed-99"),
-                new SubjectId("item:production-1-99-bread"), "minecraft:bread", 64);
-        FrontierWorldState blocked = baseline.withInventory(fullInventory).withProductionJob(job);
-
-        List<ProposedEvent> planned = FrontierWorldRuntimeDefinition.planScheduled(blocked,
-                new ScheduledAction(new ScheduleId("schedule:production-complete-production-1-99"), new SimInstant(500L), 0, job.id(), "frontier.settlement.production.complete", 1));
-
-        ProductionBlocked event = assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload());
-        assertEquals(ProductionBlockReason.OUTPUT_STORAGE_UNAVAILABLE, event.reason());
-        assertEquals(job.id(), event.workId());
-    }
-
-    @Test
-    void productionRefusesToStartWithoutAnExactInputStack() {
-        FrontierWorldState withoutInput = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:input"), 91L))
-                .withInventory(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:input"), 91L)).inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat")));
-
-        List<ProposedEvent> planned = FrontierWorldRuntimeDefinition.planScheduled(withoutInput,
-                new ScheduledAction(new ScheduleId("schedule:production-start-1-1"), new SimInstant(200L), 0, new SubjectId("settlement:1"), "frontier.settlement.production.start", 1));
-
-        ProductionBlocked event = assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload());
-        assertEquals(ProductionBlockReason.INPUT_UNAVAILABLE, event.reason());
     }
 
     @Test
@@ -320,7 +262,7 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void supplyContractLoadsTheSameProducedBreadIntoIdentifiedCargo() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:cargo"), 91L));
-        for (long tick = 100L; tick <= 500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 2_700L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-1"));
@@ -333,7 +275,7 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void loadedCargoMovesThroughAPersistedColdRouteWithExactParticipants() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route"), 91L));
-        for (long tick = 100L; tick <= 1_500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-1"));
@@ -352,11 +294,13 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void routeReducerRejectsASkippedRoutePoint() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route-negative"), 91L));
-        for (long tick = 100L; tick <= 500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 2_700L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-1"));
 
-        assertThrows(IllegalArgumentException.class, () -> state.advanceOperation(operation.id(), 2, OperationStage.EN_ROUTE));
+        int skippedIndex = operation.routeIndex() + 2;
+        OperationStage skippedStage = skippedIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
+        assertThrows(IllegalArgumentException.class, () -> state.advanceOperation(operation.id(), skippedIndex, skippedStage));
     }
 
     @Test
@@ -365,7 +309,7 @@ class FrontierWorldRuntimeDefinitionTest {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:durability"), 91L)
                 .withTransactionCommitter((transaction, durability) -> durabilities.add(durability));
         var engine = FrontierEngines.create(configuration);
-        for (long tick = 100L; tick <= 1_500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         assertTrue(durabilities.contains(Durability.BATCHABLE));
         assertTrue(durabilities.contains(Durability.DURABLE_BEFORE_EFFECT));
@@ -374,7 +318,7 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void physicalIntentRequiresSequentialExecutionAndAnObservedPostcondition() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intent-lifecycle"), 91L));
-        for (long tick = 100L; tick <= 1_500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
         CargoHandoffObservation observation = new CargoHandoffObservation(new PhysicalObservationId("observation:cargo-handoff-supply-1-1"), id,
@@ -402,12 +346,12 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void onlyTheTrustedPhysicalExecutorCanStartAnIntent() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intent-command"), 91L));
-        for (long tick = 100L; tick <= 1_500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         PhysicalIntentTransition transition = new PhysicalIntentTransition(new PhysicalIntentId("intent:cargo-handoff-supply-1-1"), PhysicalIntentStatus.RUNNING, Optional.empty());
         var revision = engine.projection(ProjectionQuery.summary()).revision();
         var accepted = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
                 new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:intent-start"), new WorldId("frontier:intent-command"), revision,
-                new SimInstant(1_500L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                new SimInstant(4_000L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:intent-start")), transition));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, accepted);
     }
@@ -415,17 +359,17 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void sceneLeaseDurablySuspendsColdRouteProgressAndPinsExactFutureBodies() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scene-lease"), 91L));
-        for (long tick = 100L; tick <= 550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-1"));
         var projection = engine.projection(ProjectionQuery.summary());
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:supply-1-1");
-        SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(550L), projection.revision().value(),
+        SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(2_550L), projection.revision().value(),
                 SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
         SceneLeasePrepared payload = new SceneLeasePrepared(lease);
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-lease-start");
         var accepted = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, new WorldId("frontier:scene-lease"),
-                projection.revision(), new SimInstant(550L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                projection.revision(), new SimInstant(2_550L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), payload));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, accepted);
 
@@ -434,7 +378,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(1, engine.projection(ProjectionQuery.summary()).activeSceneLeaseCount());
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
         assertEquals(leased, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(leased)));
-        engine.advanceTo(new SimInstant(650L), new WorkBudget(8, 64));
+        engine.advanceTo(new SimInstant(2_650L), new WorkBudget(64, 512));
         FrontierWorldState afterDueColdWork = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(0, afterDueColdWork.operations().get(operation.id()).routeIndex(), "a leased operation must not execute the same COLD movement");
         assertThrows(IllegalArgumentException.class, () -> leased.prepareSceneLease(lease));

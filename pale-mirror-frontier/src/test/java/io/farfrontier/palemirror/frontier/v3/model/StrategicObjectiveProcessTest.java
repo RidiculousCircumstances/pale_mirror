@@ -66,6 +66,22 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
+    void settlementWithoutLocalInfectionSelectsOneExactProductionTask() {
+        FrontierWorldState state = initial("frontier:strategic-production", 407L); Settlement settlement = state.bootstrap().settlements().getFirst();
+
+        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
+
+        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.getFirst().payload());
+        StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
+        assertEquals(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, selected.objective().kind());
+        assertEquals(StrategicTaskKind.PRODUCE_BREAD, task.task().kind());
+        assertEquals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT,
+                StrategicTaskRequirement.FREE_DEPOT_SLOT), task.task().requirements());
+        assertTrue(planned.stream().anyMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
+                && created.action().kind().equals("frontier.settlement.production.task.start")));
+    }
+
+    @Test
     void foreignPlannerIdentityAndForgedTaskDecompositionFailClosed() {
         FrontierWorldState state = initial("frontier:strategic-rejection", 403L);
         assertThrows(IllegalArgumentException.class, () -> StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(new SubjectId("settlement:foreign"), 1, 1L)));
@@ -113,10 +129,10 @@ class StrategicObjectiveProcessTest {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
         assertEquals(state.strategicPlans().objectives().size(), state.strategicPlans().tasks().size());
-        org.junit.jupiter.api.Assertions.assertTrue(state.strategicPlans().objectives().size() >= 1 && state.strategicPlans().objectives().size() <= 13,
+        org.junit.jupiter.api.Assertions.assertTrue(state.strategicPlans().objectives().size() >= 1 && state.strategicPlans().objectives().size() <= StrategicPlanState.MAX_OBJECTIVES,
                 () -> "strategic objectives=" + state.strategicPlans().objectives());
-        assertEquals(1, state.strategicPlans().objectives().values().stream().filter(value -> value.ownerId().equals(state.bootstrap().hive().id())).count(),
-                () -> "strategic objectives=" + state.strategicPlans().objectives());
+        assertTrue(state.strategicPlans().objectives().values().stream().filter(value -> value.status() == StrategicObjectiveStatus.ACTIVE)
+                .collect(java.util.stream.Collectors.groupingBy(StrategicObjective::ownerId)).values().stream().allMatch(values -> values.size() == 1));
     }
 
     private static FrontierWorldState initial(String world, long seed) {
