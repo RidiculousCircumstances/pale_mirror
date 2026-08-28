@@ -50,6 +50,7 @@ import java.util.Optional;
 final class FrontierV3CargoHandoffExecutor {
     static final String CONTAINER_ID_KEY = "pale_mirror_frontier_v3_container";
     static final String ITEM_ID_KEY = "pale_mirror_frontier_v3_item";
+    static final String PENDING_INGRESS_KEY = "pale_mirror_frontier_v3_pending_ingress";
     static final String WORLD_CARRIER_ID_KEY = "pale_mirror_frontier_v3_world_carrier";
 
     private FrontierV3CargoHandoffExecutor() { }
@@ -174,6 +175,27 @@ final class FrontierV3CargoHandoffExecutor {
         if (actual.getCount() != expected.count() || !BuiltInRegistries.ITEM.getKey(actual.getItem()).toString().equals(expected.itemKind())) return false;
         CustomData data = actual.get(DataComponents.CUSTOM_DATA);
         return data != null && expected.id().value().equals(data.copyTag().getString(ITEM_ID_KEY));
+    }
+    static Optional<SubjectId> itemId(ItemStack actual) {
+        CustomData data = actual.get(DataComponents.CUSTOM_DATA);
+        if (data == null) return Optional.empty();
+        String value = data.copyTag().getString(ITEM_ID_KEY);
+        if (value.isBlank()) return Optional.empty();
+        try { return Optional.of(new SubjectId(value)); }
+        catch (IllegalArgumentException invalid) { return Optional.empty(); }
+    }
+    static void bindExactItemId(ItemStack stack, SubjectId itemId) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putString(ITEM_ID_KEY, itemId.value()));
+    }
+    static void markPendingIngress(ItemStack stack) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putBoolean(PENDING_INGRESS_KEY, true));
+    }
+    static boolean pendingIngress(ItemStack stack) {
+        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        return data != null && data.copyTag().getBoolean(PENDING_INGRESS_KEY);
+    }
+    static void clearPendingIngress(ItemStack stack) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.remove(PENDING_INGRESS_KEY));
     }
     static void bindWorldCarrier(ItemStack stack, java.util.UUID carrierId) {
         CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putUUID(WORLD_CARRIER_ID_KEY, carrierId));

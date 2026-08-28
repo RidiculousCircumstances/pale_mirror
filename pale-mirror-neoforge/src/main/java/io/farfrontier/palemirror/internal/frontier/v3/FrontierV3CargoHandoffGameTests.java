@@ -402,6 +402,39 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-resource-ingress", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void activeChestAdmitsOneOrdinaryPlayerStackAsOneExactResource(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:resource-ingress-game-test");
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(60, 8, 0));
+        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
+        helper.assertTrue(chest != null, "the ingress fixture needs an owned chest");
+        FrontierV3CommandSubmission.submit(runtime, "ingress-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
+        FrontierV3CommandSubmission.submit(runtime, "ingress-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
+        ExactItemStack wheat = state(runtime).inventory().itemAt(container, 0).orElseThrow();
+        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(wheat));
+        SubjectId pendingId = new SubjectId("item:ingress-game-test-iron");
+        net.minecraft.world.item.ItemStack supplied = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 64);
+        FrontierV3CargoHandoffExecutor.bindExactItemId(supplied, pendingId);
+        FrontierV3CargoHandoffExecutor.markPendingIngress(supplied);
+        chest.setItem(4, supplied);
+
+        helper.assertTrue(FrontierV3InventoryObservationExecutor.observeOne(level, runtime, state(runtime), FrontierV3HopperCarrierLedger.get(level),
+                        new FrontierV3InventoryObservationExecutor.StoreChest(chestPosition, container), chest),
+                "the active chest must observe one ordinary supplied stack");
+        ExactItemStack admitted = state(runtime).inventory().itemAt(container, 4).orElseThrow();
+        helper.assertValueEqual(admitted.id(), pendingId, "a recovered admission must reuse its already marked physical identity");
+        helper.assertValueEqual(admitted.itemKind(), "minecraft:iron_ingot", "the canonical resource preserves its real Minecraft kind");
+        helper.assertValueEqual(admitted.count(), 64, "the canonical resource preserves the real stack count");
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(4), admitted),
+                "the physical supplied stack retains the one durable canonical identity after admission");
+        helper.assertFalse(FrontierV3CargoHandoffExecutor.pendingIngress(chest.getItem(4)),
+                "a WAL-acknowledged ingress clears its pending recovery marker");
+        helper.succeed();
+    }
+
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
     }

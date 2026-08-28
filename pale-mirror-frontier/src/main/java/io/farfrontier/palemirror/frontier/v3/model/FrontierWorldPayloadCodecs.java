@@ -1,5 +1,4 @@
 package io.farfrontier.palemirror.frontier.v3.model;
-
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
@@ -14,7 +13,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
-
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs {
     private FrontierWorldPayloadCodecs() { }
@@ -27,7 +25,7 @@ public final class FrontierWorldPayloadCodecs {
                 new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
-                new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
+                new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -39,6 +37,28 @@ public final class FrontierWorldPayloadCodecs {
             if (bytes.length != 16) throw new IllegalArgumentException("malformed infection change payload");
             ByteBuffer input = ByteBuffer.wrap(bytes);
             return new InfectionChanged(new InfectionCell(input.getInt(), input.getInt()), new FixedRatio(new FixedScalar(input.getLong())));
+        }
+    }
+    private static final class ResourceDepositedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.resource_deposited"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            ResourceDeposited deposited = (ResourceDeposited) payload;
+            return encodeProduction(output -> {
+                ExactItemStack item = deposited.item();
+                if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) {
+                    throw new IllegalArgumentException("resource deposit must have container custody");
+                }
+                writeSubject(output, item.id()); writeString(output, item.itemKind()); output.writeByte(item.count());
+                writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return decodeProduction(bytes, input -> {
+                SubjectIdHolder item = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte();
+                SubjectIdHolder container = readSubject(input); int slot = input.readUnsignedByte();
+                return new ResourceDeposited(new ExactItemStack(item.value(), kind, count,
+                        new InventoryCustody.ContainerSlot(container.value(), slot)));
+            });
         }
     }
     private static final class ProductionStartedCodec implements PayloadCodec {

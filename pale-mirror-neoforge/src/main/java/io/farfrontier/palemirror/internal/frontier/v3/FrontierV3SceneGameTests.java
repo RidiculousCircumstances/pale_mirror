@@ -105,6 +105,8 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, new SubjectId("resident:unknown"),
                         new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CONFLICT,
                 "an unknown canonical identity is never converted into a new Villager body");
+        level.getEntity(FrontierV3AmbientActorExecutor.entityId(resident)).discard();
+        level.getEntity(FrontierV3AmbientActorExecutor.entityId(bioform)).discard();
         helper.succeed();
     }
 

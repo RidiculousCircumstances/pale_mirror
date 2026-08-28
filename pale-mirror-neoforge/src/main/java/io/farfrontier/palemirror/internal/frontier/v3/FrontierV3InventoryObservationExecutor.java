@@ -17,10 +17,12 @@ import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflict;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictKind;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictObserved;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceDeposited;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
@@ -89,6 +91,12 @@ final class FrontierV3InventoryObservationExecutor {
                 return true;
             }
             if (actual.isEmpty()) continue;
+            Optional<SubjectId> taggedItem = FrontierV3CargoHandoffExecutor.itemId(actual);
+            if (taggedItem.isEmpty() || FrontierV3CargoHandoffExecutor.pendingIngress(actual) && !state.inventory().items().containsKey(taggedItem.orElseThrow())) {
+                deposit(runtime, store.containerId(), slot, actual);
+                chest.setChanged();
+                return true;
+            }
             ExactItemStack playerItem = playerOwnedExact(state, actual).orElse(null);
             ExactItemStack carrierItem = worldCarrierOwnedExact(state, actual).orElse(null);
             if (carrierItem != null) {
@@ -167,6 +175,24 @@ final class FrontierV3InventoryObservationExecutor {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new ExactItemCustodyChanged(itemId, from, to)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("exact item custody observation was rejected: " + result);
+    }
+    /**
+     * Admits one ordinary player-provided stack as one exact canonical resource.  The marker is
+     * deliberately written before the WAL command: should the JVM stop between those operations,
+     * the next observation retries that same pending identity instead of fabricating a second
+     * stack. A tagged-but-unknown stack without the pending marker remains visible conflict evidence.
+     */
+    private static void deposit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId container, int slot, ItemStack actual) {
+        SubjectId itemId = FrontierV3CargoHandoffExecutor.itemId(actual).orElseGet(() -> {
+            SubjectId created = new SubjectId("item:ingress-" + UUID.randomUUID());
+            FrontierV3CargoHandoffExecutor.bindExactItemId(actual, created);
+            FrontierV3CargoHandoffExecutor.markPendingIngress(actual);
+            return created;
+        });
+        String kind = BuiltInRegistries.ITEM.getKey(actual.getItem()).toString();
+        ExactItemStack deposited = new ExactItemStack(itemId, kind, actual.getCount(), new InventoryCustody.ContainerSlot(container, slot));
+        FrontierV3CommandSubmission.submit(runtime, "resource-deposit", itemId.value(), new ResourceDeposited(deposited));
+        FrontierV3CargoHandoffExecutor.clearPendingIngress(actual);
     }
     private static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId subject,
                                        SubjectId container, int slot, InventoryConflictKind kind) {

@@ -31,11 +31,8 @@ public final class FrontierWorldRuntimeDefinition {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
-        return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO,
-                FrontierWorldRuntimeDefinition::planCommand,
-                FrontierWorldRuntimeDefinition::planScheduled,
-                FrontierWorldRuntimeDefinition::reduce,
-                new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
+        return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
+                FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200), contractDemand(1, 450), HiveGrowthProcess.start(1, 600)), TransactionCommitter.noOp());
     }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
@@ -102,6 +99,9 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (command.payload() instanceof PhysicalDeltaObserved observed) {
             return FrontierWorldPhysicalObservationProcess.plan(state, observed);
+        }
+        if (command.payload() instanceof ResourceDeposited deposited) {
+            return FrontierWorldPhysicalObservationProcess.planResourceDeposit(state, deposited);
         }
         if (command.payload() instanceof ExactItemCustodyChanged changed) {
             ExactItemStack item = state.inventory().items().get(changed.itemId());
@@ -261,6 +261,7 @@ public final class FrontierWorldRuntimeDefinition {
             case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
+            case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
@@ -468,8 +469,7 @@ public final class FrontierWorldRuntimeDefinition {
                 List.of(hauler, guard), route, 0, OperationStage.EN_ROUTE);
     }
     private static PhysicalIntent cargoHandoffIntent(RouteOperation operation) {
-        BlockPosition destination = operation.route().getLast();
-        FixedPosition origin = new FixedPosition(FixedScalar.whole(destination.x()), FixedScalar.whole(destination.y()), FixedScalar.whole(destination.z()));
+        BlockPosition destination = operation.route().getLast(); FixedPosition origin = new FixedPosition(FixedScalar.whole(destination.x()), FixedScalar.whole(destination.y()), FixedScalar.whole(destination.z()));
         return new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-" + operation.id().value().substring("operation:".length())),
                 PhysicalIntentKind.CARGO_HANDOFF, PhysicalIntentStatus.PREPARED, operation.id(),
                 List.of(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
