@@ -14,6 +14,9 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrganKind;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryConflict;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictKind;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictObserved;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,7 +30,7 @@ import java.util.Optional;
 /**
  * Bounded loaded-chunk observation of exact items crossing an owned hive STORE chest and a
  * player's real inventory. It never writes a chest or player inventory: unverifiable drift
- * quarantines the v3 runtime rather than being adopted or repaired.
+ * becomes a bounded durable conflict rather than being adopted or repaired.
  */
 final class FrontierV3InventoryObservationExecutor {
     private FrontierV3InventoryObservationExecutor() { }
@@ -57,13 +60,16 @@ final class FrontierV3InventoryObservationExecutor {
                     submit(runtime, expected.id(), custody, new InventoryCustody.Player(holders.getFirst().getUUID()));
                     return true;
                 }
-                throw new IllegalStateException("unreconciled exact item drift at " + store.containerId().value() + " slot " + slot);
+                recordConflict(runtime, state, expected.id(), store.containerId(), slot,
+                        actual.isEmpty() ? InventoryConflictKind.MISSING : InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+                return true;
             }
             if (actual.isEmpty()) continue;
             ExactItemStack playerItem = playerOwnedExact(state, actual).orElse(null);
             if (playerItem == null || !(playerItem.custody() instanceof InventoryCustody.Player)
                     || !playersHolding(level, playerItem).isEmpty()) {
-                throw new IllegalStateException("foreign or duplicated item in owned v3 container " + store.containerId().value() + " slot " + slot);
+                recordConflict(runtime, state, store.containerId(), store.containerId(), slot, InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+                return true;
             }
             submit(runtime, playerItem.id(), playerItem.custody(), custody);
             return true;
@@ -98,6 +104,18 @@ final class FrontierV3InventoryObservationExecutor {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new ExactItemCustodyChanged(itemId, from, to)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("exact item custody observation was rejected: " + result);
+    }
+    private static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId subject,
+                                       SubjectId container, int slot, InventoryConflictKind kind) {
+        SubjectId id = new SubjectId("conflict:inventory-" + subject.value().replace(':', '-') + "-" + container.value().replace(':', '-') + "-" + slot + "-k" + kind.ordinal());
+        InventoryConflict conflict = new InventoryConflict(id, subject, container, slot, kind);
+        if (state.inventory().conflicts().containsKey(id)) return;
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        CommandId commandId = new CommandId("executor:inventory-conflict-" + id.value().replace(':', '-') + "-r" + checkpoint.revision().value());
+        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new InventoryConflictObserved(conflict)))
+                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("inventory conflict observation was rejected: " + result);
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);

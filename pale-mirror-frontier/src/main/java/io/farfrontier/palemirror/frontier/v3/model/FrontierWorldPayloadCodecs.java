@@ -24,7 +24,7 @@ public final class FrontierWorldPayloadCodecs {
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new OperationFailedCodec(),
-                new ExactItemCustodyChangedCodec())));
+                new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -208,6 +208,20 @@ public final class FrontierWorldPayloadCodecs {
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ExactItemCustodyChanged(
                 readSubject(input).value(), readCustody(input), readCustody(input))); }
+    }
+    private static final class InventoryConflictObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.inventory_conflict_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            InventoryConflict conflict = ((InventoryConflictObserved) payload).conflict();
+            writeSubject(output, conflict.id()); writeSubject(output, conflict.subjectId()); writeSubject(output, conflict.containerId());
+            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().ordinal());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var id = readSubject(input).value(); var item = readSubject(input).value(); var container = readSubject(input).value();
+            int slot = input.readUnsignedByte(); int kind = input.readUnsignedByte();
+            if (kind >= InventoryConflictKind.values().length) throw new IllegalArgumentException("unknown inventory conflict kind");
+            return new InventoryConflictObserved(new InventoryConflict(id, item, container, slot, InventoryConflictKind.values()[kind]));
+        }); }
     }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }

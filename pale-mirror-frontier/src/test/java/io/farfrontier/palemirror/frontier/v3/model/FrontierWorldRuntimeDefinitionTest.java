@@ -66,6 +66,36 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void durableInventoryConflictRetainsPhysicalDriftWithoutAdoptingOrRepairingIt() {
+        WorldId worldId = new WorldId("frontier:inventory-conflict");
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        SubjectId containerId = ((InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody()).containerId();
+        InventoryConflict conflict = new InventoryConflict(new SubjectId("conflict:inventory-bootstrap-wheat"), itemId, containerId, 0, InventoryConflictKind.MISSING);
+        var checkpoint = engine.checkpoint();
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:inventory-conflict");
+
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, worldId, checkpoint.revision(), checkpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId),
+                        new InventoryConflictObserved(conflict))));
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(conflict, after.inventory().conflicts().get(conflict.id()));
+        assertEquals(new InventoryCustody.ContainerSlot(containerId, 0), after.inventory().items().get(itemId).custody());
+        assertEquals(1, engine.projection(ProjectionQuery.summary()).inventoryConflictCount());
+
+        InventoryConflict foreign = new InventoryConflict(new SubjectId("conflict:foreign"), new SubjectId("item:untracked"), containerId, 1,
+                InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
+                engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
+                        new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:foreign-inventory-conflict"), worldId,
+                        engine.checkpoint().revision(), engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                        io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:foreign-inventory-conflict")),
+                        new InventoryConflictObserved(foreign))));
+    }
+
+    @Test
     void infectionPulseIsPersistedDeterministicScheduledWorldWork() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:pulse"), 91L));
         engine.advanceTo(new SimInstant(100L), new WorkBudget(8, 64));

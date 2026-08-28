@@ -93,4 +93,21 @@ class ExactInventoryTest {
         assertEquals(slot, returned.items().get(item).custody());
         assertThrows(IllegalArgumentException.class, () -> stored.moveObservedItem(item, slot, new InventoryCustody.ContainerSlot(container, 3)));
     }
+
+    @Test
+    void physicalInventoryConflictIsBoundedIdempotentEvidenceRatherThanAnInventoryRepair() {
+        SubjectId container = new SubjectId("container:store");
+        SubjectId owner = new SubjectId("hive:frontier");
+        SubjectId item = new SubjectId("item:bread");
+        InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 3);
+        ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 9)),
+                Map.of(item, new ExactItemStack(item, "minecraft:bread", 8, slot)), Map.of(), Map.of());
+        InventoryConflict conflict = new InventoryConflict(new SubjectId("conflict:inventory-bread"), item, container, 3, InventoryConflictKind.MISSING);
+
+        ExactInventory observed = inventory.recordConflict(conflict);
+        assertEquals(conflict, observed.conflicts().get(conflict.id()));
+        assertEquals(observed, observed.recordConflict(conflict));
+        assertEquals(slot, observed.items().get(item).custody(), "conflict evidence must not repair or move the canonical item");
+        assertThrows(IllegalArgumentException.class, () -> observed.recordConflict(new InventoryConflict(conflict.id(), item, container, 3, InventoryConflictKind.FOREIGN_OR_DUPLICATE)));
+    }
 }

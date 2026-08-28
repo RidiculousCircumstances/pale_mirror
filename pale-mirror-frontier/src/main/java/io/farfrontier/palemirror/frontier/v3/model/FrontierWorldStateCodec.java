@@ -29,7 +29,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 11;
+    private static final int VERSION = 12;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -137,6 +137,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, entry.getKey().toString()); writeCount(output, entry.getValue().size());
             for (SubjectId item : entry.getValue()) writeString(output, item.value());
         }
+        writeCount(output, inventory.conflicts().size());
+        for (InventoryConflict conflict : inventory.conflicts().values().stream().sorted(Comparator.comparing(InventoryConflict::id)).toList()) {
+            writeString(output, conflict.id().value()); writeString(output, conflict.subjectId().value()); writeString(output, conflict.containerId().value());
+            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().ordinal());
+        }
     }
     private static ExactInventory readInventory(DataInputStream input) throws IOException {
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
@@ -168,7 +173,16 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (int item = 0, itemCount = readCount(input); item < itemCount; item++) itemIds.add(new SubjectId(readString(input)));
             if (carriers.put(carrier, itemIds) != null) throw new IllegalArgumentException("duplicate world carrier custody id");
         }
-        return new ExactInventory(containers, items, cargo, players, carriers);
+        Map<SubjectId, InventoryConflict> conflicts = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); SubjectId container = new SubjectId(readString(input));
+            int slot = input.readUnsignedByte(); int kind = input.readUnsignedByte();
+            if (kind >= InventoryConflictKind.values().length
+                    || conflicts.put(id, new InventoryConflict(id, item, container, slot, InventoryConflictKind.values()[kind])) != null) {
+                throw new IllegalArgumentException("invalid or duplicate inventory conflict");
+            }
+        }
+        return new ExactInventory(containers, items, cargo, players, carriers, conflicts);
     }
     private static void writeProductionJobs(DataOutputStream output, Map<SubjectId, ProductionJob> jobs) throws IOException {
         writeCount(output, jobs.size());

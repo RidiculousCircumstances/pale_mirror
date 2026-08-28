@@ -64,6 +64,7 @@ class FrontierWorldStateTest {
         SubjectId item = new SubjectId("item:codec");
         ExactInventory inventory = new ExactInventory(baseline.inventory().containers(), Map.of(item,
                 new ExactItemStack(item, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of());
+        inventory = inventory.recordConflict(new InventoryConflict(new SubjectId("conflict:codec-item"), item, container, 0, InventoryConflictKind.MISSING));
         ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:bootstrap-1-wheat"),
                 new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
@@ -73,7 +74,8 @@ class FrontierWorldStateTest {
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
-        encoded[4] = 12;
+        assertEquals(1, codec.decode(encoded).inventory().conflicts().size());
+        encoded[4] = 13;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());

@@ -1,5 +1,4 @@
 package io.farfrontier.palemirror.frontier.v3.model;
-
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
@@ -96,6 +95,15 @@ public final class FrontierWorldRuntimeDefinition {
             ExactItemStack item = state.inventory().items().get(changed.itemId());
             if (item == null || !item.custody().equals(changed.from())) return rejected("observed item source differs from canonical custody");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(itemOwner(state, changed), changed)));
+        }
+        if (command.payload() instanceof InventoryConflictObserved observed) {
+            InventoryConflict conflict = observed.conflict();
+            ContainerRecord container = state.inventory().containers().get(conflict.containerId());
+            if (container == null || conflict.slot() >= container.slotCount()
+                    || (!state.inventory().items().containsKey(conflict.subjectId()) && !state.inventory().containers().containsKey(conflict.subjectId()))) {
+                return rejected("inventory conflict references an unknown exact surface");
+            }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(container.ownerId(), observed)));
         }
         return rejected("command is not a trusted physical transition or scene lease");
     }
@@ -230,6 +238,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
+            case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
             default -> fail(event.payload().type());
         };
     }
@@ -334,6 +343,12 @@ public final class FrontierWorldRuntimeDefinition {
         if (!subject.equals(itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
         return state.withInventory(state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));
     }
+    private static FrontierWorldState reduceInventoryConflict(FrontierWorldState state, SubjectId subject, InventoryConflictObserved observed) {
+        InventoryConflict conflict = observed.conflict();
+        ContainerRecord container = state.inventory().containers().get(conflict.containerId());
+        if (container == null || !subject.equals(container.ownerId())) throw new IllegalArgumentException("inventory conflict lacks its container owner");
+        return state.withInventory(state.inventory().recordConflict(conflict));
+    }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();
         requireProductionSubject(subject, job.settlementId());
@@ -397,11 +412,11 @@ public final class FrontierWorldRuntimeDefinition {
         return settlement.residents().stream().filter(value -> value.role() == ResidentRole.CRAFTER).sorted(Comparator.comparing(Resident::id)).findFirst()
                 .orElseThrow(() -> new IllegalStateException("settlement lacks crafter"));
     }
-    private static ProductionJob productionJob(io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId, io.farfrontier.palemirror.frontier.v3.api.SubjectId facilityId,
-                                                io.farfrontier.palemirror.frontier.v3.api.SubjectId workerId, ExactItemStack input, int ordinal) {
+    private static ProductionJob productionJob(io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId,
+                                                io.farfrontier.palemirror.frontier.v3.api.SubjectId facilityId, io.farfrontier.palemirror.frontier.v3.api.SubjectId workerId, ExactItemStack input, int ordinal) {
         String settlementNumber = settlementId.value().substring("settlement:".length());
-        return new ProductionJob(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("job:production-" + settlementNumber + "-" + ordinal), settlementId, facilityId, workerId,
-                input.id(), new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:production-" + settlementNumber + "-" + ordinal + "-bread"), "minecraft:bread", input.count());
+        return new ProductionJob(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("job:production-" + settlementNumber + "-" + ordinal), settlementId, facilityId, workerId, input.id(),
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:production-" + settlementNumber + "-" + ordinal + "-bread"), "minecraft:bread", input.count());
     }
     private static RouteOperation routeOperation(FrontierWorldState state, SupplyContract contract) {
         Settlement settlement = settlement(state, contract.settlementId());
@@ -411,8 +426,7 @@ public final class FrontierWorldRuntimeDefinition {
                 .orElseThrow(() -> new IllegalStateException("settlement lacks guard" )).id();
         BlockPosition origin = settlement.anchor();
         BlockPosition destination = state.bootstrap().hive().seedNests().getFirst().anchor();
-        List<BlockPosition> route = List.of(origin,
-                new BlockPosition(-375, origin.y(), -150), new BlockPosition(-390, origin.y(), 50),
+        List<BlockPosition> route = List.of(origin, new BlockPosition(-375, origin.y(), -150), new BlockPosition(-390, origin.y(), 50),
                 new BlockPosition(-405, origin.y(), 250), destination);
         int ordinal = ordinal(contract.id().value());
         return new RouteOperation(new SubjectId("operation:supply-1-" + ordinal), settlement.id(), contract.cargoId(), contract.recipientId(),
@@ -434,8 +448,7 @@ public final class FrontierWorldRuntimeDefinition {
         return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:production-start-" + settlementNumber + "-" + ordinal), new SimInstant(due), 0, settlementId, "frontier.settlement.production.start", 1);
     }
     private static ScheduledAction productionCompletion(ProductionJob job, long due) {
-        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(
-                "schedule:production-complete-" + job.id().value().substring("job:".length())),
+        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:production-complete-" + job.id().value().substring("job:".length())),
                 new SimInstant(due), 0, job.id(), "frontier.settlement.production.complete", 1);
     }
     private static ScheduledAction contractDemand(int ordinal, long due) {
@@ -467,9 +480,7 @@ public final class FrontierWorldRuntimeDefinition {
         return container.ownerId();
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
-
-    private static FrontierWorldProjection projection(
-            FrontierWorldState state, WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision revision,
+    private static FrontierWorldProjection projection(FrontierWorldState state, WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision revision,
             SimInstant instant, ProjectionQuery query
     ) {
         FrontierBootstrap bootstrap = state.bootstrap();
@@ -483,6 +494,7 @@ public final class FrontierWorldRuntimeDefinition {
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED).count(),
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count(),
                 (int) state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).count(),
-                (int) state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).count());
+                (int) state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).count(),
+                state.inventory().conflicts().size());
     }
 }
