@@ -52,8 +52,10 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null) return;
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
-                FrontierV3CargoHandoffExecutor.tick(server.overworld(), runtime);
+                // Observe player custody before passive surface drift inspection can classify it.
                 FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
+                FrontierV3ContainerSurfaceExecutor.tick(server.overworld(), runtime);
+                FrontierV3CargoHandoffExecutor.tick(server.overworld(), runtime);
                 FrontierV3SceneExecutor.tick(server.overworld(), runtime);
                 runtime.tick(TICK_BUDGET);
             }

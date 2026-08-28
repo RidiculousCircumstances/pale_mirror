@@ -2,7 +2,10 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -77,6 +80,46 @@ public final class FrontierV3CargoHandoffGameTests {
                 "recovery inspection must report the missing owned chest rather than recreating it");
         helper.assertTrue(level.getBlockState(receiver).isAir(),
                 "the missing surface remains world-owned conflict evidence until an explicit domain resolution");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-container-surface", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void containerSurfaceProjectsCanonicalSlotsOnlyOnce(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:game-test-container"), 91L));
+        SubjectId container = new SubjectId("container:1-depot");
+        BlockPos target = helper.absolutePos(new BlockPos(12, 8, 0));
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, target, container);
+
+        helper.assertTrue(chest != null, "a prepared exact depot may claim one fresh supported chest");
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.writeCanonicalSlots(chest, state, container),
+                "initial materialization must write every canonical slot with its exact item identity");
+        ExactItemStack wheat = state.inventory().itemAt(container, 0).orElseThrow();
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), wheat),
+                "the initial depot stack must retain its canonical item tag");
+        helper.assertTrue(chest.getItem(1).isEmpty(), "unowned canonical slots stay physically empty");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-container-recovery", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void alteredPreparedSurfaceIsConflictEvidenceNotRepairWork(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:game-test-conflict"), 91L));
+        SubjectId container = new SubjectId("container:1-depot");
+        BlockPos target = helper.absolutePos(new BlockPos(16, 8, 0));
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, target, container);
+        helper.assertTrue(chest != null && FrontierV3ContainerSurfaceExecutor.writeCanonicalSlots(chest, state, container),
+                "the test needs an owned prepared surface with exact initial contents");
+        chest.getItem(0).setCount(1);
+
+        helper.assertFalse(FrontierV3ContainerSurfaceExecutor.matchesCanonicalSlots(chest, state, container),
+                "recovery must detect altered exact contents instead of accepting an approximate stack");
+        helper.assertValueEqual(chest.getItem(0).getCount(), 1,
+                "inspection must leave player/world alteration untouched for visible conflict resolution");
         helper.succeed();
     }
 

@@ -16,7 +16,6 @@ import io.farfrontier.palemirror.frontier.v3.model.CargoHandoffObservation;
 import io.farfrontier.palemirror.frontier.v3.model.CargoHandoffPlacement;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
-import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -34,7 +33,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.ArrayList;
@@ -71,29 +69,25 @@ final class FrontierV3CargoHandoffExecutor {
         StoreTarget target = target(state, operation);
         if (!level.hasChunkAt(target.position())) return;
         ContainerSurface surface = state.inventory().surfaces().get(target.containerId());
-        if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
-            prepareAndClaim(level, runtime, target);
-            return;
-        }
-        if (surface.status() == ContainerSurfaceStatus.PREPARED) {
-            if (activeChest(level, target) == null) transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.CONFLICT);
-            else transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.ACTIVE);
-            return;
-        }
+        if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED || surface.status() == ContainerSurfaceStatus.PREPARED) return;
         if (surface.status() == ContainerSurfaceStatus.CONFLICT) {
             transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict");
             return;
         }
         ChestBlockEntity chest = activeChest(level, target);
         if (chest == null) {
-            transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.CONFLICT);
+            FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, target.containerId());
             return;
         }
         if (intent.status() == PhysicalIntentStatus.PREPARED) {
             if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
             if (!writeInitialCargo(chest, state, operation.cargoId())) {
                 transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict");
+                return;
             }
+            observation(chest, state, intent, operation.cargoId(), target.containerId())
+                    .ifPresentOrElse(observed -> transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed), "confirmed"),
+                            () -> transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict"));
             return;
         }
         Optional<CargoHandoffObservation> observed = observation(chest, state, intent, operation.cargoId(), target.containerId());
@@ -104,29 +98,16 @@ final class FrontierV3CargoHandoffExecutor {
         }
     }
 
-    private static void prepareAndClaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, StoreTarget target) {
-        if (!transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.PREPARED)) return;
-        if (claimFreshChest(level, target) == null) transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.CONFLICT);
-        else transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.ACTIVE);
-    }
-
-    /** Creates a fresh owned chest only after the caller has durably entered PREPARED. */
+    /** Compatibility test helper; container-surface ownership is implemented separately. */
     static ChestBlockEntity claimFreshChest(ServerLevel level, StoreTarget target) {
-        if (!level.getBlockState(target.position()).isAir() || level.getBlockState(target.position().below()).isAir()) return null;
-        if (!level.setBlock(target.position(), Blocks.CHEST.defaultBlockState(), 3)) return null;
-        if (!(level.getBlockEntity(target.position()) instanceof ChestBlockEntity chest)) return null;
-        String owner = chest.getPersistentData().getString(CONTAINER_ID_KEY);
-        if (!owner.isBlank() || !chest.isEmpty()) return null;
-        chest.getPersistentData().putString(CONTAINER_ID_KEY, target.containerId().value()); chest.setChanged();
-        return chest;
+        return FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, target.position(), target.containerId());
     }
 
     /** Compatibility test helper; production execution only calls it through PREPARED ownership. */
     static ChestBlockEntity ownedChest(ServerLevel level, StoreTarget target) { return claimFreshChest(level, target); }
 
     static ChestBlockEntity activeChest(ServerLevel level, StoreTarget target) {
-        if (!(level.getBlockEntity(target.position()) instanceof ChestBlockEntity chest)) return null;
-        return target.containerId().value().equals(chest.getPersistentData().getString(CONTAINER_ID_KEY)) ? chest : null;
+        return FrontierV3ContainerSurfaceExecutor.activeChest(level, target.position(), target.containerId());
     }
 
     private static boolean writeInitialCargo(ChestBlockEntity chest, FrontierWorldState state, SubjectId cargoId) {
@@ -165,15 +146,6 @@ final class FrontierV3CargoHandoffExecutor {
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
                 new PhysicalIntentTransition(intentId, status, observation))).orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        return result instanceof CommandResult.Accepted;
-    }
-
-    private static boolean transitionSurface(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId, ContainerSurfaceStatus status) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId commandId = new CommandId("executor:surface-" + status.name().toLowerCase(java.util.Locale.ROOT) + "-" + containerId.value().replace(':', '-'));
-        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new ContainerSurfaceTransition(containerId, status)))
-                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         return result instanceof CommandResult.Accepted;
     }
 

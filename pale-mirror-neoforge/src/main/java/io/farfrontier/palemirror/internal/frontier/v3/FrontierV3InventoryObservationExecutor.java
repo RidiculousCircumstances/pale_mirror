@@ -12,7 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinitio
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
-import io.farfrontier.palemirror.frontier.v3.model.HiveOrganKind;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflict;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictKind;
@@ -91,8 +91,8 @@ final class FrontierV3InventoryObservationExecutor {
         return false;
     }
     private static List<StoreChest> stores(FrontierWorldState state) {
-        return state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.STORE)
-                .map(organ -> new StoreChest(new BlockPos(organ.anchor().x(), organ.anchor().y() + 1, organ.anchor().z()), organ.containerId().orElseThrow()))
+        return state.inventory().surfaces().values().stream().filter(surface -> surface.status() == ContainerSurfaceStatus.ACTIVE)
+                .map(surface -> new StoreChest(new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), surface.containerId()))
                 .sorted(Comparator.comparing(StoreChest::containerId)).toList();
     }
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId itemId,
