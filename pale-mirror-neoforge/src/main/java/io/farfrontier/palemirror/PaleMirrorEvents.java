@@ -318,6 +318,15 @@ public final class PaleMirrorEvents {
     public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+                && player.level() instanceof net.minecraft.server.level.ServerLevel level
+                && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.isSealedCargoCarrier(level, event.getTarget())) {
+            player.sendSystemMessage(Component.literal("Frontier cargo is sealed while its custody is being tracked."));
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
                 && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
@@ -338,6 +347,15 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+                && player.level() instanceof net.minecraft.server.level.ServerLevel level
+                && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.isSealedCargoCarrier(level, event.getTarget())) {
+            player.sendSystemMessage(Component.literal("Frontier cargo is sealed while its custody is being tracked."));
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
                 && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {

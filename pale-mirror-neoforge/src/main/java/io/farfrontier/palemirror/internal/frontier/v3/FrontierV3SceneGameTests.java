@@ -241,6 +241,11 @@ public final class FrontierV3SceneGameTests {
         for (int index = 0; index < lease.members().size(); index++) {
             BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
         }
+        BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z());
+        level.getChunkAt(handoff); prepareFloor(level, cargoPosition(handoff, lease));
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state(runtime), lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "restart reclamation requires the exact observed cargo carrier as well as every exact body");
+        helper.runAfterDelay(1L, () -> {
         helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
                 "restart recovery must first retain the active scene as UNKNOWN");
         helper.assertTrue(FrontierV3SceneExecutor.reclaimObservedBodies(level, runtime, state(runtime), lease),
@@ -258,7 +263,9 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART,
                 "a missing exact scene body must remain visible UNKNOWN and never be recreated during reclaim");
         lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+        Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease)); if (carrier != null) carrier.discard();
         runtime.shutdown(); helper.succeed();
+        });
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
@@ -432,6 +439,10 @@ public final class FrontierV3SceneGameTests {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(position.above(), Blocks.AIR.defaultBlockState(), 3);
+    }
+    private static BlockPos cargoPosition(BlockPos anchor, SceneLease lease) {
+        int ordinal = lease.members().size();
+        return anchor.offset((ordinal % 2) * 2 + 1, 0, (ordinal / 2) * 2);
     }
     private static void addOwnedBody(GameTestHelper helper, ServerLevel level, SceneLease lease, SceneMember member, BlockPos position) {
         boolean bioform = member.actorId().value().startsWith("bioform:");

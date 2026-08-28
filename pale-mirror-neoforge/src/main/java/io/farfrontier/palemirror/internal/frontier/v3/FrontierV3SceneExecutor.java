@@ -50,7 +50,6 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -147,6 +146,7 @@ final class FrontierV3SceneExecutor {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> {
                 executeLocalGoals(level, state, lease);
+                if (!FrontierV3CargoCarrierExecutor.move(level, state, lease)) { unknown(runtime, lease); return; }
                 if (level.getGameTime() % 20L == 0L && !executeExplosion(level, runtime, state, lease)) executeStrike(level, runtime, state, lease);
                 if (!demandExists(level, lease.handoffPosition())) submit(runtime, "scene-draining", lease.id().value(),
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
@@ -159,9 +159,11 @@ final class FrontierV3SceneExecutor {
 
     private static void materializePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         BodyMaterialization result = materializeBodies(level, state, lease);
-        if (result == BodyMaterialization.COMPLETE) {
+        BodyMaterialization carrier = result == BodyMaterialization.COMPLETE
+                ? FrontierV3CargoCarrierExecutor.materialize(level, state, lease) : BodyMaterialization.DEFERRED;
+        if (result == BodyMaterialization.COMPLETE && carrier == BodyMaterialization.COMPLETE) {
             submit(runtime, "scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
-        } else if (result == BodyMaterialization.CONFLICT) {
+        } else if (result == BodyMaterialization.CONFLICT || carrier == BodyMaterialization.CONFLICT) {
             unknown(runtime, lease);
         }
     }
@@ -179,6 +181,7 @@ final class FrontierV3SceneExecutor {
             Entity entity = level.getEntity(member.entityId());
             if (!owned(entity, state, lease, member) || !(entity instanceof Mob body) || body.getHealth() <= 0.0F) return false;
         }
+        if (!FrontierV3CargoCarrierExecutor.intact(level, state, lease)) return false;
         boolean hasDeadMember = lease.members().stream()
                 .anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD);
         submit(runtime, hasDeadMember ? "scene-recovery-draining" : "scene-reclaimed", lease.id().value(),
@@ -364,6 +367,9 @@ final class FrontierV3SceneExecutor {
         if (state == null) return;
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
+        if (!FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
+            unknown(runtime, lease); return;
+        }
         List<SceneMemberPosition> positions = new ArrayList<>();
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
@@ -381,6 +387,8 @@ final class FrontierV3SceneExecutor {
             Entity entity = level.getEntity(member.entityId());
             if (owned(entity, state, lease, member)) entity.discard();
         }));
+        state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
+                .forEach(lease -> FrontierV3CargoCarrierExecutor.discardClosed(level, state, lease));
     }
 
     private static boolean demandExists(ServerLevel level, BlockPosition anchor) {

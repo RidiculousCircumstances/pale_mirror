@@ -123,6 +123,14 @@ public final class FrontierV3ServerLifecycle {
                 && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity);
     }
 
+    /** True while a HOT cargo crate has no durable player-custody/loss protocol to own an edit. */
+    public static boolean isSealedCargoCarrier(ServerLevel level, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && runtime.decodedState().map(state -> FrontierV3CargoCarrierExecutor.active(state, entity)).orElse(false);
+    }
+
     /** True means the v3-owned break was not durably accepted and Minecraft must not apply it. */
     public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");

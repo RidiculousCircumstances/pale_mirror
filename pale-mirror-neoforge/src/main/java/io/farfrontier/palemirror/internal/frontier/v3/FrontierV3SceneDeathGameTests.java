@@ -110,6 +110,13 @@ public final class FrontierV3SceneDeathGameTests {
         for (int index = 0; index < lease.members().size(); index++) {
             addOwnedBody(helper, level, lease, lease.members().get(index), handoff.offset(index & 1, 0, index / 2));
         }
+        int carrierOrdinal = lease.members().size();
+        BlockPos carrierPosition = handoff.offset((carrierOrdinal % 2) * 2 + 1, 0, (carrierOrdinal / 2) * 2);
+        level.setBlock(carrierPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(carrierPosition, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(carrierPosition.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state(runtime), lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "a released HOT scene must retain its exact physical cargo carrier");
 
         helper.runAfterDelay(1L, () -> {
             List<Entity> bodies = lease.members().stream().map(member -> level.getEntity(member.entityId())).toList();
@@ -131,8 +138,12 @@ public final class FrontierV3SceneDeathGameTests {
                         "release must refresh canonical death evidence and capture only survivors");
                 helper.assertValueEqual(state(runtime).actorLocations().get(survivor.actorId()).position(), survivorPosition,
                         "COLD continuation must retain the exact surviving HOT position rather than its old approach endpoint");
+                Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
+                if (carrier != null) carrier.discard();
                 cleanup(bodies); runtime.shutdown(); helper.succeed();
             } catch (RuntimeException failure) {
+                Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
+                if (carrier != null) carrier.discard();
                 cleanup(bodies); runtime.shutdown(); throw failure;
             }
         });
