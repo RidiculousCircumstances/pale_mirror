@@ -65,6 +65,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -147,6 +149,20 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(new SimInstant(3L), projection.instant());
         CommandResult duplicate = recovered.submit(command("command:increment", new Revision(1L), new SimInstant(3L), 5)).orElseThrow();
         assertEquals(RejectionCode.DUPLICATE_COMMAND, assertInstanceOf(CommandResult.Rejected.class, duplicate).rejection().code());
+    }
+
+    @Test
+    void decodedStateIsSharedUntilACommittedRevisionChangesIt(@TempDir Path directory) {
+        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
+        Counter first = runtime.decodedState().orElseThrow();
+        assertSame(first, runtime.decodedState().orElseThrow());
+
+        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(command("command:decoded-state-cache", Revision.ZERO, SimInstant.ZERO, 3)).orElseThrow());
+
+        Counter changed = runtime.decodedState().orElseThrow();
+        assertNotSame(first, changed);
+        assertEquals(3, changed.value());
+        assertSame(changed, runtime.decodedState().orElseThrow());
     }
 
     @Test

@@ -163,7 +163,7 @@ final class FrontierV3CargoHandoffExecutor {
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        return runtime.decodedState().orElse(null);
     }
     static ItemStack materializedStack(ExactItemStack item) {
         Item minecraftItem = BuiltInRegistries.ITEM.get(ResourceLocation.parse(item.itemKind()));

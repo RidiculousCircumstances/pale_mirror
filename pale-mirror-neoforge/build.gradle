@@ -75,6 +75,7 @@ neoForge {
     runs {
         configureEach {
             systemProperty 'pale_mirror.profile', 'core-only'
+            systemProperty 'pale_mirror.frontier_v3.enabled', providers.systemProperty('pale_mirror.frontier_v3.enabled').orElse('false').get()
         }
         server {
             server()

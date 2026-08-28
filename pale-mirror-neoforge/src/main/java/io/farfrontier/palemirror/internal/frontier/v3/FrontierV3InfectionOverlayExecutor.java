@@ -43,7 +43,8 @@ final class FrontierV3InfectionOverlayExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
         if (checkpoint == null) return;
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return;
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || !cursor.revision().equals(checkpoint.revision())) {
             FrontierInfectionOverlayPlan plan = FrontierInfectionOverlayPlan.compile(state);

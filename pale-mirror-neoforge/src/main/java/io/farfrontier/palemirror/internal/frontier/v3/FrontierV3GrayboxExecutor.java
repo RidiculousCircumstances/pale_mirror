@@ -50,7 +50,7 @@ final class FrontierV3GrayboxExecutor {
         if (checkpoint == null) return;
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || !cursor.revision().equals(checkpoint.revision())) {
-            FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(new FrontierWorldStateCodec().decode(checkpoint.canonicalState()));
+            FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive")));
             cursor = Cursor.from(checkpoint.revision(), plan, cursor);
             CURSORS.put(runtime, cursor);
         }

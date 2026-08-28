@@ -146,7 +146,7 @@ final class FrontierV3DecontaminationExecutor {
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        return runtime.decodedState().orElse(null);
     }
 
     record Target(InfectionCell cell, BlockPos marker, ExactItemStack material, SubjectId containerId, int slot, BlockPos chestPosition,

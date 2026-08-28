@@ -28,9 +28,8 @@ final class FrontierV3PhysicalObservationExecutor {
 
     static boolean captureExternalExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                             List<BlockPos> affected) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
-        if (checkpoint == null) return false;
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
         return FrontierV3PhysicalObservationLedger.get(level).captureExternalExplosion(level, level.getGameTime(), affected,
                 FrontierV3GrayboxLedger.get(level), position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ())));
     }
@@ -46,7 +45,7 @@ final class FrontierV3PhysicalObservationExecutor {
                 ledger.resolve(value); continue;
             }
             CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-            FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             BlockPosition canonicalPosition = new BlockPosition(position.getX(), position.getY(), position.getZ());
             if (state.physicalDeltas().containsKey(canonicalPosition)) {
                 ledger.resolve(value); continue; // crash/retry after a durable command append
@@ -66,7 +65,7 @@ final class FrontierV3PhysicalObservationExecutor {
                                            FrontierV3ManagedExplosionLedger.BlockCandidate candidate) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         BlockPos position = candidate.blockPos(); BlockPosition canonicalPosition = new BlockPosition(position.getX(), position.getY(), position.getZ());
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (state.physicalDeltas().containsKey(canonicalPosition)) return;
         Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic = candidate.semantic();
         PhysicalDelta delta = semantic.isEmpty() ? new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "explosion:" + intentId.value())

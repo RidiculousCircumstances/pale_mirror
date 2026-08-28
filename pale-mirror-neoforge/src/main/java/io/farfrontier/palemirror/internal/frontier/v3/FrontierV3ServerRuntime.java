@@ -34,6 +34,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private FrontierV3RuntimeStatus status;
     private SimInstant instant;
     private int ticksSinceCheckpoint;
+    private Revision decodedStateRevision;
+    private S decodedState;
 
     private FrontierV3ServerRuntime(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks
@@ -73,6 +75,22 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     Optional<CheckpointImage> checkpointImage() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         return Optional.of(engine.checkpoint());
+    }
+
+    /**
+     * Returns the one immutable canonical state object for the current revision on the owning
+     * server thread. Adapters may inspect it but must route every mutation through {@link #submit}.
+     * The cache is revision-bound, so a successful command or due action is immediately observed
+     * on the next read without repeatedly decoding a complete world for each executor.
+     */
+    Optional<S> decodedState() {
+        CheckpointImage image = checkpointImage().orElse(null);
+        if (image == null) return Optional.empty();
+        if (decodedState == null || !image.revision().equals(decodedStateRevision)) {
+            decodedState = Objects.requireNonNull(configuration.stateCodec().decode(image.canonicalState()), "decoded state");
+            decodedStateRevision = image.revision();
+        }
+        return Optional.of(decodedState);
     }
 
     Optional<CommandResult> submit(FrontierCommand command) {

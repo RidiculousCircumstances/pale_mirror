@@ -9,7 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 final class FrontierV3AmbientLeaseRestartSafety {
     private FrontierV3AmbientLeaseRestartSafety() { }
     static int quarantineActiveLeases(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return 0;
         int count = 0;
         for (var lease : state.ambientLeases().values().stream().sorted(java.util.Comparator.comparing(value -> value.actorId().value())).toList()) {

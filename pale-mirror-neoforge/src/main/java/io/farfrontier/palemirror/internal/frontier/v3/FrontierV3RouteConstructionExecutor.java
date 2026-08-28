@@ -129,7 +129,7 @@ final class FrontierV3RouteConstructionExecutor {
         return result instanceof CommandResult.Accepted;
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        return runtime.decodedState().orElse(null);
     }
     private record Target(BlockPos position, GrayboxCell cell, RouteConstruction project, ExactItemStack material, SubjectId containerId, int slot,
                           BlockPos chestPosition) { }

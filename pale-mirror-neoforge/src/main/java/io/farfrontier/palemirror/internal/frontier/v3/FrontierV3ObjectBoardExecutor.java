@@ -42,7 +42,7 @@ final class FrontierV3ObjectBoardExecutor {
         if (checkpoint == null) return;
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || !cursor.revision().equals(checkpoint.revision())) {
-            FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(new FrontierWorldStateCodec().decode(checkpoint.canonicalState()));
+            FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive")));
             cursor = new Cursor(checkpoint.revision(), plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList());
             CURSORS.put(runtime, cursor);
         }

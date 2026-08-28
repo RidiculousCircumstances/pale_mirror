@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -214,6 +215,30 @@ class InMemoryFrontierEngineTest {
         assertEquals(1, checkpoint.receipts().size());
         assertEquals("command:checkpoint", checkpoint.receipts().getFirst().commandId().value());
         assertEquals("transaction:revision-1", checkpoint.receipts().getFirst().transactionId().value());
+    }
+
+    @Test
+    void checkpointReusesTheEncodedStateUntilACommittedRevisionChangesIt() {
+        AtomicInteger encodes = new AtomicInteger();
+        StateCodec<Counter> codec = new StateCodec<>() {
+            @Override public byte[] encode(Counter state) {
+                encodes.incrementAndGet();
+                return ByteBuffer.allocate(4).putInt(state.value()).array();
+            }
+            @Override public Counter decode(byte[] bytes) { return new Counter(ByteBuffer.wrap(bytes).getInt()); }
+        };
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(action.weight()))),
+                (state, event) -> reduce(state, event, false), codec,
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of());
+
+        engine.checkpoint(); engine.checkpoint();
+        assertEquals(1, encodes.get());
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:cache", Revision.ZERO, 2)));
+        engine.checkpoint(); engine.checkpoint();
+        assertEquals(2, encodes.get());
     }
 
     @Test

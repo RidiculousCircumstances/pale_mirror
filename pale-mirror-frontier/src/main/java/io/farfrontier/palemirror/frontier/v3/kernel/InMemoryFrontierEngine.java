@@ -47,6 +47,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final Map<CommandId, CommandReceipt> receipts = new LinkedHashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
     private S state;
+    /** Immutable codec output for the current state revision; snapshots must not re-encode unchanged state. */
+    private byte[] encodedState;
     private Revision revision = Revision.ZERO;
     private SimInstant instant;
     private EngineStatus status = EngineStatus.active();
@@ -91,7 +93,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         this.limits = Objects.requireNonNull(limits, "limits");
         this.transactionCommitter = Objects.requireNonNull(transactionCommitter, "transaction committer");
         List.copyOf(initialSchedules).forEach(schedules::schedule);
-        stateCodec.encode(initialState);
+        encodedState = stateCodec.encode(initialState);
+        if (encodedState == null) throw new IllegalStateException("state codec returned null");
     }
 
     static <S, P extends FrontierProjection> InMemoryFrontierEngine<S, P> recovered(
@@ -203,7 +206,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     @Override
     public CheckpointImage checkpoint() {
         requireOwnerThread();
-        return new CheckpointImage(worldId, revision, instant, stateCodec.encode(state), schedules.snapshot(), List.copyOf(receipts.values()));
+        return new CheckpointImage(worldId, revision, instant, encodedState, schedules.snapshot(), List.copyOf(receipts.values()));
     }
 
     @Override
@@ -251,6 +254,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 ? Durability.DURABLE_BEFORE_EFFECT : Durability.BATCHABLE;
         transactionCommitter.commit(transaction, durability);
         state = nextState;
+        encodedState = encoded;
         revision = nextRevision;
         schedules = nextSchedules;
         transactions.add(transaction);

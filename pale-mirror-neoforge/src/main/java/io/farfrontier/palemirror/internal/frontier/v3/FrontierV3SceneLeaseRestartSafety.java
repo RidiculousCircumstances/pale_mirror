@@ -10,7 +10,7 @@ final class FrontierV3SceneLeaseRestartSafety {
     private FrontierV3SceneLeaseRestartSafety() { }
 
     static int quarantineActiveLeases(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return 0;
         int count = 0;
         for (var lease : state.sceneLeases().values().stream().sorted(java.util.Comparator.comparing(value -> value.id().value())).toList()) {

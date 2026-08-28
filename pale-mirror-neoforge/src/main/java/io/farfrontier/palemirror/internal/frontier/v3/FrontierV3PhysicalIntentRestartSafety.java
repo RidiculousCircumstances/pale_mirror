@@ -71,8 +71,7 @@ final class FrontierV3PhysicalIntentRestartSafety {
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        CheckpointImage checkpoint = runtime.checkpointImage()
+        return runtime.decodedState()
                 .orElseThrow(() -> new IllegalStateException("cannot inspect physical intents from inactive runtime"));
-        return new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
     }
 }

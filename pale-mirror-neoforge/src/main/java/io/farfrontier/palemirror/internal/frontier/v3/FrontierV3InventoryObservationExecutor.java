@@ -209,7 +209,7 @@ final class FrontierV3InventoryObservationExecutor {
         if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("inventory conflict observation was rejected: " + result);
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        return runtime.decodedState().orElse(null);
     }
     record StoreChest(BlockPos position, SubjectId containerId) { }
     record HopperCandidate(HopperBlockEntity hopper, int slot, ItemStack stack) { }

@@ -52,7 +52,7 @@ final class FrontierV3AmbientActorExecutor {
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         cleanPending(level, runtime);
-        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         int admitted = 0;
         for (var entry : state.actorLocations().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
@@ -114,7 +114,7 @@ final class FrontierV3AmbientActorExecutor {
 
     /** Retains only an exact expected body during the short join-to-index hand-off. */
     static boolean observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
-        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
         if (rawActorId.isBlank()) return false;
@@ -132,7 +132,7 @@ final class FrontierV3AmbientActorExecutor {
     }
     /** Accepts only a real loaded-world death for the exact HOT ambient body. */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {
-        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
         if (rawActorId.isBlank()) return false;
@@ -150,7 +150,7 @@ final class FrontierV3AmbientActorExecutor {
     }
     /** Captures a living HOT body before Minecraft releases it, never treating absence as death. */
     static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
-        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null || !(entity instanceof Mob body)) return false;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
         if (rawActorId.isBlank()) return false;
