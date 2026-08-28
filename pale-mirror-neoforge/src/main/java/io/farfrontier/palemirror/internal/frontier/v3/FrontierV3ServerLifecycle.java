@@ -16,8 +16,11 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.vehicle.MinecartChest;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.util.IdentityHashMap;
@@ -139,14 +142,17 @@ public final class FrontierV3ServerLifecycle {
      */
     public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
-        return releaseCargoCarrier(level, entity, java.util.Optional.of(player.getUUID()));
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
+        return releaseCargoCarrier(level, runtime, entity, java.util.Optional.of(player.getUUID()));
     }
 
     /** Makes a carrier physically accountable before a real world effect may destroy it. */
-    private static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
+    private static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(observerPlayerId, "observer player id");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
+        Objects.requireNonNull(runtime, "runtime");
+        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return CargoCarrierInteraction.REJECTED;
         var lease = FrontierV3CargoCarrierExecutor.activeLease(state, entity);
@@ -165,6 +171,32 @@ public final class FrontierV3ServerLifecycle {
     }
 
     public enum CargoCarrierInteraction { NOT_MANAGED, RELEASED, REJECTED }
+
+    /**
+     * Captures a fatal non-explosion vehicle hit before vanilla discards its chest inventory.
+     * Explosion detonation has a separate pre-effect bridge and must not create duplicate impact
+     * evidence through this general vehicle hook.
+     */
+    public static void observeTerminalVehicleDamage(ServerLevel level, Entity entity, DamageSource source) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
+        if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        observeTerminalVehicleDamage(level, runtime, entity, source);
+    }
+
+    /** Package-visible so the materialized consequence test uses the same pre-destruction path. */
+    static void observeTerminalVehicleDamage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                             Entity entity, DamageSource source) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
+        if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
+        CargoCarrierInteraction released = releaseCargoCarrier(level, runtime, entity, java.util.Optional.empty());
+        if (released == CargoCarrierInteraction.REJECTED) {
+            runtime.quarantine(new IllegalStateException("terminal vehicle damage cannot durably release one HOT cargo carrier"));
+            return;
+        }
+        captureCargoCarrierImpact(level, runtime, entity, "terminal vehicle damage");
+    }
 
     /** Admits one real world-drop pickup only after its exact custody receipt is durable. */
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
@@ -250,26 +282,33 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(affected, "affected blocks");
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent();
         for (Entity entity : entities) {
-            CargoCarrierInteraction released = releaseCargoCarrier(level, entity, java.util.Optional.empty());
+            CargoCarrierInteraction released = releaseCargoCarrier(level, runtime, entity, java.util.Optional.empty());
             if (released == CargoCarrierInteraction.REJECTED) {
                 runtime.quarantine(new IllegalStateException("explosion cannot durably release one HOT cargo carrier"));
                 return false;
             }
-            if (released == CargoCarrierInteraction.RELEASED && managed.isEmpty()) {
-                FrontierWorldState state = runtime.decodedState().orElse(null);
-                if (state == null) {
-                    runtime.quarantine(new IllegalStateException("explosion released cargo without a canonical state"));
-                    return false;
-                }
-                try {
-                    FrontierV3CargoCarrierImpactLedger.get(level).capture(level.getGameTime(), entity, state);
-                } catch (RuntimeException error) {
-                    runtime.quarantine(error); return false;
-                }
-            }
+            if (managed.isEmpty()) captureCargoCarrierImpact(level, runtime, entity, "external explosion");
+            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) return false;
         }
         return managed.isPresent() ? FrontierV3ExplosionExecutor.observeDetonation(level, runtime, managed.orElseThrow(), affected, entities)
                 : FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);
+    }
+
+    /** Retains a released chest cart even if its HOT lease was released by an earlier player interaction. */
+    private static void captureCargoCarrierImpact(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                  Entity entity, String cause) {
+        if (!(entity instanceof MinecartChest)) return;
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) {
+            runtime.quarantine(new IllegalStateException(cause + " has no canonical state"));
+            return;
+        }
+        if (!state.inventory().worldCarrierItems().containsKey(entity.getUUID())) return;
+        try {
+            FrontierV3CargoCarrierImpactLedger.get(level).capture(level.getGameTime(), entity, state);
+        } catch (RuntimeException error) {
+            runtime.quarantine(error);
+        }
     }
 
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }

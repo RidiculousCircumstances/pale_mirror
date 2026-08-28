@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "package": "io.farfrontier.palemirror.internal.frontier.v3.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "FrontierV3VehicleEntityMixin"
+  ]
+}

@@ -243,7 +243,8 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/internal/integration/journeymap/PaleMirrorJourneyMapPlugin.class',
                     'assets/pale_mirror/models/item/regional_ledger.json',
                     'ftb_quests_presentation/chapters/pale_mirror_first_living_region.snbt',
-                    'pale_mirror.item_firewall.mixins.json'
+                    'pale_mirror.item_firewall.mixins.json',
+                    'pale_mirror.frontier_v3.mixins.json'
             ].each { entry ->
                 if (jar.getEntry(entry) == null) throw new GradleException("${jarFile} is missing required PM safety entry ${entry}")
             }

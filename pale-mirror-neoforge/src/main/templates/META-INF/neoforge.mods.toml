@@ -17,6 +17,9 @@ requiredMods=["spore"]
 [[mixins]]
 config="pale_mirror.item_firewall.mixins.json"
 
+[[mixins]]
+config="pale_mirror.frontier_v3.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"

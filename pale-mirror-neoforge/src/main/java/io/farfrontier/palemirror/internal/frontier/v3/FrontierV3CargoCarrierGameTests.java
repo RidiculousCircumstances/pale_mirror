@@ -249,6 +249,51 @@ public final class FrontierV3CargoCarrierGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void terminalDamageCapturesCargoBeforeVanillaDestroysCart(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(8, 8, 8));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-terminal-damage");
+        FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLease lease = new SceneLease(new SceneLeaseId("lease:frontier-v3-cargo-terminal-damage"), initial.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(),
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()),
+                candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(initial.bootstrap().worldId(), actor))).toList());
+        prepareFloor(level, cargoPosition(origin, lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-cargo-terminal-prepare", lease.id().value(), new SceneLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-cargo-terminal-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        helper.runAfterDelay(1L, () -> {
+            try {
+                MinecartChest cart = EntityType.CHEST_MINECART.create(level);
+                helper.assertTrue(cart != null, "the terminal-damage cargo cart fixture must be constructible");
+                cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); BlockPos cartPosition = cargoPosition(origin, lease);
+                cart.setPos(cartPosition.getX() + 0.5D, cartPosition.getY(), cartPosition.getZ() + 0.5D);
+                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
+                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, lease.cargoId().value());
+                var cargo = state(runtime).inventory().cargo().get(lease.cargoId());
+                for (int slot = 0; slot < cargo.itemIds().size(); slot++) cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state(runtime).inventory().items().get(cargo.itemIds().get(slot))));
+                helper.assertTrue(level.addFreshEntity(cart), "the terminal-damage cargo cart fixture must enter the loaded world");
+                FrontierV3CargoCarrierImpactLedger ledger = FrontierV3CargoCarrierImpactLedger.get(level);
+                FrontierV3ServerLifecycle.observeTerminalVehicleDamage(level, runtime, cart, level.damageSources().generic());
+                var itemId = cargo.itemIds().getFirst();
+                helper.assertValueEqual(state(runtime).inventory().items().get(itemId).custody(), new InventoryCustody.WorldCarrier(cart.getUUID()),
+                        "a terminal hit must durably release exact cargo before vanilla destroys the cart");
+                helper.assertTrue(ledger.nextReady(Long.MAX_VALUE).isPresent(), "terminal damage must retain restart-safe pre-destruction evidence");
+                helper.assertTrue(cart.hurt(level.damageSources().generic(), 5.0F), "vanilla must still apply the unrestricted terminal minecart hit");
+                helper.runAfterDelay(2L, () -> {
+                    try {
+                        helper.assertTrue(cart.isRemoved(), "the test must observe real vanilla cart destruction rather than a protected vehicle");
+                        FrontierV3CargoCarrierImpactExecutor.tick(level, runtime, ledger, level.getGameTime() + 1L);
+                        var surviving = state(runtime).inventory().items().get(itemId);
+                        helper.assertTrue(surviving == null || (surviving.custody() instanceof InventoryCustody.WorldCarrier carrier
+                                        && !carrier.carrierId().equals(cart.getUUID())),
+                                "the exact cargo must either follow one real vanilla drop or be recorded destroyed, never retain the destroyed cart identity");
+                        runtime.shutdown(); helper.succeed();
+                    } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
+                });
+            } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
+        });
+    }
+
     private static FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime(String world) {
         return FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId(world), 91L), new EphemeralStore(), 20_000);
     }
