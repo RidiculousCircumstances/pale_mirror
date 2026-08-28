@@ -33,6 +33,16 @@ class FrontierGrayboxPlanTest {
         assertTrue(plan.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("structure:1-hall")));
     }
 
+    @Test
+    void cargoOperationUsesTheSameRouteNetworkAsTheVisibleCorridor() {
+        FrontierWorldState state = initial();
+        var waypoints = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id());
+        var plan = FrontierGrayboxPlan.compile(state);
+
+        assertTrue(waypoints.stream().skip(1).allMatch(position -> plan.cells().containsKey(position)));
+        assertTrue(waypoints.stream().skip(1).allMatch(position -> plan.cells().get(position).ownerId().equals(FrontierRouteNetwork.OWNER)));
+    }
+
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:graybox-plan"), 1234L));
     }

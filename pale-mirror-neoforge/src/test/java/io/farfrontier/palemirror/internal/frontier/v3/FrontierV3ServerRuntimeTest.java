@@ -102,7 +102,7 @@ class FrontierV3ServerRuntimeTest {
         var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        for (int tick = 0; tick < 900; tick++) runtime.tick(new WorkBudget(8, 64));
+        for (int tick = 0; tick < 1_500; tick++) runtime.tick(new WorkBudget(8, 64));
 
         PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
         CheckpointImage prepared = runtime.checkpointImage().orElseThrow();

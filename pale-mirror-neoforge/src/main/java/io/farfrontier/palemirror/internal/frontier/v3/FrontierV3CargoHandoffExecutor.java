@@ -150,8 +150,7 @@ final class FrontierV3CargoHandoffExecutor {
     }
 
     private static StoreTarget target(FrontierWorldState state, RouteOperation operation) {
-        var nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.anchor().equals(operation.route().getLast())).findFirst()
-                .orElseThrow(() -> new IllegalStateException("route destination is not a hive nest"));
+        var nest = state.bootstrap().hive().seedNests().getFirst();
         HiveOrgan store = state.bootstrap().hive().organs().stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.STORE)
                 .findFirst().orElseThrow(() -> new IllegalStateException("hive nest lacks a store organ"));
         SubjectId container = store.containerId().orElseThrow(() -> new IllegalStateException("store organ lacks receiver container"));

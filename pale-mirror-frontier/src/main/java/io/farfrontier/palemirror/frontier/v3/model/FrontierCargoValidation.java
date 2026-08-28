@@ -11,9 +11,7 @@ final class FrontierCargoValidation {
     private FrontierCargoValidation() { }
 
     static SubjectId receiverStore(FrontierBootstrap bootstrap, RouteOperation operation) {
-        BlockPosition destination = operation.route().getLast();
-        HiveNest nest = bootstrap.hive().seedNests().stream().filter(value -> value.anchor().equals(destination)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("route destination is not a hive nest"));
+        HiveNest nest = FrontierRouteNetwork.supplyNest(bootstrap);
         return bootstrap.hive().organs().stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.STORE)
                 .findFirst().flatMap(HiveOrgan::containerId).orElseThrow(() -> new IllegalArgumentException("hive nest has no exact store receiver"));
     }

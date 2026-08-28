@@ -32,7 +32,7 @@ public final class FrontierGrayboxPlan {
                 addStructure(cells, structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
-        addSettlementRoutes(cells, state);
+        addRoutes(cells, state.bootstrap());
         Map<InfectionCell, FixedRatio> infection = state.infection().entrySet().stream()
                 .filter(entry -> entry.getValue().value().raw() > 0L)
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -91,26 +91,9 @@ public final class FrontierGrayboxPlan {
         }
     }
 
-    private static void addSettlementRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierWorldState state) {
-        var settlements = state.bootstrap().settlements();
-        SubjectId network = new SubjectId("route:frontier-network");
-        for (int index = 0; index < settlements.size(); index++) {
-            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
-            int laneZ = anchor.z() + 36; int laneX = anchor.x() + 36;
-            line(cells, network, anchor.x(), laneZ, laneX, laneZ);
-            line(cells, network, laneX, anchor.z(), laneX, laneZ);
-            if (index % 4 != 3) line(cells, network, laneX, laneZ, settlements.get(index + 1).anchor().x() + 36, laneZ);
-            if (index < 8) line(cells, network, laneX, laneZ, laneX, settlements.get(index + 4).anchor().z() + 36);
-        }
-    }
-
-    private static void line(Map<BlockPosition, GrayboxCell> cells, SubjectId owner, int fromX, int fromZ, int toX, int toZ) {
-        if (fromX != toX && fromZ != toZ) throw new IllegalArgumentException("graybox route must be axis aligned");
-        int stepX = Integer.compare(toX, fromX), stepZ = Integer.compare(toZ, fromZ);
-        for (int x = fromX, z = fromZ;; x += stepX, z += stepZ) {
-            add(cells, new BlockPosition(x, 64, z), owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
-            if (x == toX && z == toZ) return;
-        }
+    private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap) {
+        FrontierRouteNetwork.surfaceCells(bootstrap).forEach(position ->
+                add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE));
     }
 
     private static void add(Map<BlockPosition, GrayboxCell> cells, BlockPosition position, SubjectId owner, GrayboxMaterial material,
