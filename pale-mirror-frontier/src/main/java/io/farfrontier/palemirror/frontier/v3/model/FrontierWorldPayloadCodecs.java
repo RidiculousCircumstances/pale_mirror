@@ -23,7 +23,7 @@ public final class FrontierWorldPayloadCodecs {
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
-                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
+                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new AmbientActorDiedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
@@ -195,6 +195,15 @@ public final class FrontierWorldPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ActorDied(
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)), readSubject(input).value(),
                 new BlockPosition(input.readInt(), input.readInt(), input.readInt()), readString(input))); }
+    }
+    private static final class AmbientActorDiedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.ambient_actor_died"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            AmbientActorDied death = (AmbientActorDied) payload; writeSubject(output, death.actorId());
+            output.writeInt(death.position().x()); output.writeInt(death.position().y()); output.writeInt(death.position().z()); writeString(output, death.cause());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new AmbientActorDied(
+                readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), readString(input))); }
     }
     private static final class StructureDamagedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.structure_damaged"; }

@@ -86,6 +86,9 @@ public final class FrontierWorldRuntimeDefinition {
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), death),
                     new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING))));
         }
+        if (command.payload() instanceof AmbientActorDied death) {
+            return AmbientActorProcess.plan(state, death);
+        }
         if (command.payload() instanceof StructureDamaged damage) {
             try {
                 state.recordStructureDamage(damage);
@@ -249,6 +252,7 @@ public final class FrontierWorldRuntimeDefinition {
             case SceneLeaseTransition transition -> reduceSceneLeaseTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
+            case AmbientActorDied death -> AmbientActorProcess.reduce(state, event.subject(), death);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
@@ -488,13 +492,8 @@ public final class FrontierWorldRuntimeDefinition {
     }
     private static int ordinal(String id) {
         int separator = id.lastIndexOf('-'); if (separator < 0 || separator == id.length() - 1) throw new IllegalArgumentException("scheduled work identity lacks ordinal: " + id);
-        try {
-            int value = Integer.parseInt(id.substring(separator + 1));
-            if (value <= 0) throw new IllegalArgumentException("scheduled work ordinal must be positive: " + id);
-            return value;
-        } catch (NumberFormatException error) {
-            throw new IllegalArgumentException("scheduled work identity has malformed ordinal: " + id, error);
-        }
+        try { int value = Integer.parseInt(id.substring(separator + 1)); if (value <= 0) throw new IllegalArgumentException("scheduled work ordinal must be positive: " + id); return value;
+        } catch (NumberFormatException error) { throw new IllegalArgumentException("scheduled work identity has malformed ordinal: " + id, error); }
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
 }

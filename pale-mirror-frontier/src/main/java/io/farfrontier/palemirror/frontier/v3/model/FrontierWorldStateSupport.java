@@ -47,6 +47,14 @@ final class FrontierWorldStateSupport {
                 .orElseThrow(() -> new IllegalArgumentException("unknown settlement structure: " + structureId.value()));
     }
 
+    static SubjectId actorOwner(FrontierWorldState state, SubjectId actorId) {
+        return state.bootstrap().settlements().stream()
+                .filter(settlement -> settlement.residents().stream().anyMatch(resident -> resident.id().equals(actorId)))
+                .map(Settlement::id).findFirst()
+                .orElseGet(() -> java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                        .anyMatch(bioform -> bioform.id().equals(actorId)) ? state.bootstrap().hive().id() : null);
+    }
+
     static Resident resident(Settlement settlement, SubjectId residentId) {
         return settlement.residents().stream().filter(value -> value.id().equals(residentId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown production worker: " + residentId.value()));

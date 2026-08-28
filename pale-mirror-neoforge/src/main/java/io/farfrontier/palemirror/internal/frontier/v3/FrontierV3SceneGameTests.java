@@ -8,6 +8,8 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -62,6 +64,30 @@ public final class FrontierV3SceneGameTests {
                 "an unowned body with a leased UUID is a visible conflict, never a body the executor claims");
         helper.assertTrue(level.getEntity(foreign.getUUID()) == foreign, "the foreign body must remain untouched");
         foreign.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-actors", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void ambientActorsKeepExactIdAndUseVillagerOrZombieKind(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:ambient-test"), 91L));
+        SubjectId resident = new SubjectId("resident:1-1"); SubjectId bioform = new SubjectId("bioform:west-0");
+        BlockPos residentSpot = helper.absolutePos(new BlockPos(4, 8, 0)); BlockPos bioformSpot = helper.absolutePos(new BlockPos(8, 8, 0));
+        prepareFloor(level, residentSpot); prepareFloor(level, bioformSpot);
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
+                        new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "an exact resident receives one owned Villager body");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, bioform,
+                        new BlockPosition(bioformSpot.getX(), bioformSpot.getY(), bioformSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "an exact hive bioform receives one owned Zombie body");
+        helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(resident)) instanceof Villager, "resident identity maps to Villager");
+        helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(bioform)) instanceof net.minecraft.world.entity.monster.Zombie, "bioform identity maps to Zombie");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
+                        new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
+                "a repeated loaded-chunk pass never duplicates the exact resident");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, new SubjectId("resident:unknown"),
+                        new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CONFLICT,
+                "an unknown canonical identity is never converted into a new Villager body");
         helper.succeed();
     }
 

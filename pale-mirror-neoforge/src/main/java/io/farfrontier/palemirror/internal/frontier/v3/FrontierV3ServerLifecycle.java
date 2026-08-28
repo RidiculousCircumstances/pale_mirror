@@ -57,6 +57,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
                 FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
+                FrontierV3AmbientActorExecutor.tick(server.overworld(), runtime);
                 // Observe player custody before passive surface drift inspection can classify it.
                 FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3ContainerSurfaceExecutor.tick(server.overworld(), runtime);
@@ -87,7 +88,8 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3SceneExecutor.observeDeath(runtime, entity, source);
+                && (FrontierV3SceneExecutor.observeDeath(runtime, entity, source)
+                || FrontierV3AmbientActorExecutor.observeDeath(runtime, entity, source));
     }
 
     /** True means the v3-owned break was not durably accepted and Minecraft must not apply it. */

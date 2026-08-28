@@ -492,4 +492,5 @@ class FrontierWorldRuntimeDefinitionTest {
         assertTrue(compacted.sceneLeases().containsKey(nextLeaseId));
         assertTrue(!compacted.sceneLeases().containsKey(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-0")));
     }
+
 }
