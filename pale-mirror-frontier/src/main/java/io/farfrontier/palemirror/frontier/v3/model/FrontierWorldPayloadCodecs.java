@@ -20,7 +20,8 @@ public final class FrontierWorldPayloadCodecs {
     private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), new PayloadCodecs(List.of(
-                new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(), new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec())));
+                new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
+                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(), new PhysicalIntentPreparedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -119,6 +120,11 @@ public final class FrontierWorldPayloadCodecs {
             return new OperationAdvanced(id.value(), routeIndex, OperationStage.values()[stage]);
         }); }
     }
+    private static final class PhysicalIntentPreparedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.physical_intent_prepared"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writePhysicalIntent(output, ((PhysicalIntentPrepared) payload).intent())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new PhysicalIntentPrepared(readPhysicalIntent(input))); }
+    }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
     @FunctionalInterface private interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
@@ -172,6 +178,30 @@ public final class FrontierWorldPayloadCodecs {
         int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
         if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
         return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.values()[stage]);
+    }
+    private static void writePhysicalIntent(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) throws IOException {
+        writeString(output, intent.id().value()); output.writeByte(intent.kind().ordinal()); output.writeByte(intent.status().ordinal());
+        writeSubject(output, intent.causeSubjectId()); output.writeByte(intent.subjectIds().size());
+        for (var subject : intent.subjectIds()) writeSubject(output, subject);
+        output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
+        output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().ordinal());
+    }
+    private static io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent readPhysicalIntent(DataInputStream input) throws IOException {
+        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
+        int kind = input.readUnsignedByte(); int status = input.readUnsignedByte(); SubjectIdHolder cause = readSubject(input);
+        java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> subjects = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) subjects.add(readSubject(input).value());
+        io.farfrontier.palemirror.frontier.v3.api.FixedPosition origin = new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
+                new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()));
+        int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte();
+        if (kind >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.values().length
+                || status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length
+                || postcondition >= io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.values().length) {
+            throw new IllegalArgumentException("unknown physical intent enum value");
+        }
+        return new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(id,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.values()[kind], io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status],
+                cause.value(), subjects, origin, radius, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.values()[postcondition]);
     }
     private static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     private static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }

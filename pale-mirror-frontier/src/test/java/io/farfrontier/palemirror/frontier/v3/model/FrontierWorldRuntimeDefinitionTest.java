@@ -1,6 +1,13 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
@@ -9,9 +16,11 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -136,6 +145,11 @@ class FrontierWorldRuntimeDefinitionTest {
         OperationAdvanced operationAdvanced = new OperationAdvanced(operation.id(), 1, OperationStage.ARRIVED);
         assertEquals(operationCreated, codecs.decode(operationCreated.type(), codecs.encode(operationCreated)));
         assertEquals(operationAdvanced, codecs.decode(operationAdvanced.type(), codecs.encode(operationAdvanced)));
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-supply-1-1"), PhysicalIntentKind.CARGO_HANDOFF,
+                PhysicalIntentStatus.PREPARED, operation.id(), List.of(operation.id(), operation.cargoId()), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
+                0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
+        PhysicalIntentPrepared prepared = new PhysicalIntentPrepared(intent);
+        assertEquals(prepared, codecs.decode(prepared.type(), codecs.encode(prepared)));
     }
 
     @Test
@@ -163,6 +177,10 @@ class FrontierWorldRuntimeDefinitionTest {
         BlockPosition destination = state.bootstrap().hive().seedNests().getFirst().anchor();
         assertTrue(operation.participantIds().stream().allMatch(participant -> destination.equals(state.actorLocations().get(participant).position())));
         assertEquals(1, engine.projection(ProjectionQuery.summary()).activeRouteOperationCount());
+        assertEquals(1, engine.projection(ProjectionQuery.summary()).preparedPhysicalIntentCount());
+        PhysicalIntent handoff = state.physicalIntents().get(new PhysicalIntentId("intent:cargo-handoff-supply-1-1"));
+        assertEquals(PhysicalIntentStatus.PREPARED, handoff.status());
+        assertEquals(List.of(operation.id(), operation.cargoId()), handoff.subjectIds());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
@@ -174,5 +192,17 @@ class FrontierWorldRuntimeDefinitionTest {
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-1"));
 
         assertThrows(IllegalArgumentException.class, () -> state.advanceOperation(operation.id(), 2, OperationStage.EN_ROUTE));
+    }
+
+    @Test
+    void physicalIntentTransactionIsFlushedBeforeAnExecutorCouldObserveIt() {
+        List<Durability> durabilities = new ArrayList<>();
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:durability"), 91L)
+                .withTransactionCommitter((transaction, durability) -> durabilities.add(durability));
+        var engine = FrontierEngines.create(configuration);
+        for (long tick = 100L; tick <= 1_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+
+        assertTrue(durabilities.contains(Durability.BATCHABLE));
+        assertTrue(durabilities.contains(Durability.DURABLE_BEFORE_EFFECT));
     }
 }

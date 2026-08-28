@@ -2,6 +2,12 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
@@ -21,7 +27,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 5;
+    private static final int VERSION = 6;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -37,6 +43,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeProductionJobs(output, state.productionJobs());
                 writeContracts(output, state.contracts());
                 writeOperations(output, state.operations());
+                writePhysicalIntents(output, state.physicalIntents());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -47,7 +54,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
-            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input));
+            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input),
+                    readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input), readPhysicalIntents(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -204,6 +212,31 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         return operations;
+    }
+    private static void writePhysicalIntents(DataOutputStream output, Map<PhysicalIntentId, PhysicalIntent> intents) throws IOException {
+        writeCount(output, intents.size());
+        for (PhysicalIntent intent : intents.values().stream().sorted(Comparator.comparing(PhysicalIntent::id)).toList()) {
+            writeString(output, intent.id().value()); output.writeByte(intent.kind().ordinal()); output.writeByte(intent.status().ordinal());
+            writeString(output, intent.causeSubjectId().value()); writeCount(output, intent.subjectIds().size());
+            for (SubjectId subject : intent.subjectIds()) writeString(output, subject.value());
+            output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
+            output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().ordinal());
+        }
+    }
+    private static Map<PhysicalIntentId, PhysicalIntent> readPhysicalIntents(DataInputStream input) throws IOException {
+        Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            PhysicalIntentId id = new PhysicalIntentId(readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
+            SubjectId cause = new SubjectId(readString(input)); java.util.ArrayList<SubjectId> subjects = new java.util.ArrayList<>();
+            for (int subject = 0, subjectCount = readCount(input); subject < subjectCount; subject++) subjects.add(new SubjectId(readString(input)));
+            FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
+            int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte();
+            if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length
+                    || intents.put(id, new PhysicalIntent(id, PhysicalIntentKind.values()[kind], PhysicalIntentStatus.values()[status], cause, subjects, origin, radius, PhysicalPostcondition.values()[postcondition])) != null) {
+                throw new IllegalArgumentException("invalid or duplicate physical intent");
+            }
+        }
+        return intents;
     }
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

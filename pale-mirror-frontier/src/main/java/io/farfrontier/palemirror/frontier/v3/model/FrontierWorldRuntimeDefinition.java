@@ -2,6 +2,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -133,6 +140,9 @@ public final class FrontierWorldRuntimeDefinition {
         OperationStage nextStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(operation.settlementId(), new OperationAdvanced(operation.id(), nextRouteIndex, nextStage)));
+        if (nextStage == OperationStage.ARRIVED) {
+            events.add(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
+        }
         if (nextStage == OperationStage.EN_ROUTE) {
             events.add(new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(operationProgress(operation, action.dueAt().ticks() + 100L))));
         }
@@ -148,6 +158,7 @@ public final class FrontierWorldRuntimeDefinition {
             case CargoLoaded loaded -> reduceCargoLoaded(state, event.subject(), loaded);
             case OperationCreated created -> reduceOperationCreated(state, event.subject(), created);
             case OperationAdvanced advanced -> reduceOperationAdvanced(state, event.subject(), advanced);
+            case PhysicalIntentPrepared prepared -> reducePhysicalIntentPrepared(state, event.subject(), prepared);
             default -> fail(event.payload().type());
         };
     }
@@ -187,6 +198,16 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = state.operations().get(advanced.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("route advancement subject does not own operation");
         return state.advanceOperation(advanced.operationId(), advanced.routeIndex(), advanced.stage());
+    }
+    private static FrontierWorldState reducePhysicalIntentPrepared(FrontierWorldState state, SubjectId subject, PhysicalIntentPrepared prepared) {
+        PhysicalIntent intent = prepared.intent();
+        RouteOperation operation = state.operations().get(intent.causeSubjectId());
+        if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())) {
+            throw new IllegalArgumentException("physical intent must be prepared by an arrived route operation owner");
+        }
+        if (intent.kind() != PhysicalIntentKind.CARGO_HANDOFF || !intent.subjectIds().contains(operation.cargoId())
+                || !intent.subjectIds().contains(operation.id())) throw new IllegalArgumentException("physical intent does not own arrived cargo hand-off");
+        return state.preparePhysicalIntent(intent);
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();
@@ -272,6 +293,13 @@ public final class FrontierWorldRuntimeDefinition {
         return new RouteOperation(new SubjectId("operation:supply-1-" + ordinal), settlement.id(), contract.cargoId(), contract.recipientId(),
                 List.of(hauler, guard), route, 0, OperationStage.EN_ROUTE);
     }
+    private static PhysicalIntent cargoHandoffIntent(RouteOperation operation) {
+        BlockPosition destination = operation.route().getLast();
+        FixedPosition origin = new FixedPosition(FixedScalar.whole(destination.x()), FixedScalar.whole(destination.y()), FixedScalar.whole(destination.z()));
+        return new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-" + operation.id().value().substring("operation:".length())),
+                PhysicalIntentKind.CARGO_HANDOFF, PhysicalIntentStatus.PREPARED, operation.id(),
+                List.of(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
+    }
     private static ScheduledAction pulse(int ordinal, long due) {
         return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:infection-pulse-" + ordinal),
                 new SimInstant(due), 0, new io.farfrontier.palemirror.frontier.v3.api.SubjectId("hive:frontier"), "frontier.infection.pulse", 1);
@@ -315,6 +343,7 @@ public final class FrontierWorldRuntimeDefinition {
         FrontierBootstrap bootstrap = state.bootstrap();
         int residents = bootstrap.settlements().stream().mapToInt(settlement -> settlement.residents().size()).sum();
         return new FrontierWorldProjection(worldId, revision, instant, bootstrap.canonicalSha256(), bootstrap.settlements().size(),
-                residents, bootstrap.hive().bioforms().size(), state.infection().size(), state.inventory().items().size(), state.productionJobs().size(), state.operations().size());
+                residents, bootstrap.hive().bioforms().size(), state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
+                state.operations().size(), state.physicalIntents().size());
     }
 }

@@ -247,10 +247,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         }
         TransactionRecord transaction = new TransactionRecord(transactionId, worldId, nextRevision, eventInstant, events,
                 acceptedCommandReceipt);
-        // No v3 physical intent exists yet. Future physical leases and effects choose
-        // DURABLE_BEFORE_EFFECT before they are released to Minecraft; canonical progression is
-        // still written before its in-memory acknowledgement.
-        transactionCommitter.commit(transaction, Durability.BATCHABLE);
+        Durability durability = events.stream().anyMatch(event -> event.payload().requiresDurableBeforeEffect())
+                ? Durability.DURABLE_BEFORE_EFFECT : Durability.BATCHABLE;
+        transactionCommitter.commit(transaction, durability);
         state = nextState;
         revision = nextRevision;
         schedules = nextSchedules;
