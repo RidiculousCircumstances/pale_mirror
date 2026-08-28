@@ -61,6 +61,24 @@ final class FrontierV3PhysicalObservationExecutor {
         }
     }
 
+    static void recordManagedExplosionDelta(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                           io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId,
+                                           FrontierV3ManagedExplosionLedger.Candidate candidate) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        BlockPos position = candidate.blockPos(); BlockPosition canonicalPosition = new BlockPosition(position.getX(), position.getY(), position.getZ());
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        if (state.physicalDeltas().containsKey(canonicalPosition)) return;
+        Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic = candidate.semantic();
+        PhysicalDelta delta = semantic.isEmpty() ? new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "explosion:" + intentId.value())
+                : new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new SubjectId(semantic.orElseThrow().owner())),
+                Optional.of(GrayboxSemanticPart.valueOf(semantic.orElseThrow().semanticPart())), "explosion:" + intentId.value());
+        CommandId id = new CommandId("executor:managed-explosion:" + intentId.value().replace(':', '-') + ":" + Long.toUnsignedString(position.asLong()));
+        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta)))
+                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("managed explosion observation command was rejected: " + result);
+    }
+
     private static PhysicalDelta delta(FrontierV3PhysicalObservationLedger.Ready ready, BlockPosition position) {
         String cause = "explosion:" + ready.effectId();
         Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic = ready.candidate().semantic();

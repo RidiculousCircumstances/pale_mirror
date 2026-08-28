@@ -34,7 +34,7 @@ public final class FrontierV3ServerLifecycle {
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             try {
-                int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime);
+                int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, server.overworld());
                 int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
                 int sceneUnknown = FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime);
                 if (uninspectable > 0) {
@@ -63,6 +63,7 @@ public final class FrontierV3ServerLifecycle {
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
+                FrontierV3ExplosionExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
                 FrontierV3DecontaminationExecutor.tick(server.overworld(), runtime);
                 FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
@@ -132,12 +133,14 @@ public final class FrontierV3ServerLifecycle {
                 == FrontierV3GrayboxExecutor.BlockBreakObservation.REJECTED;
     }
 
-    /** Captures real explosion candidates for next-tick postcondition inspection without altering the blast. */
-    public static boolean observeExternalExplosion(ServerLevel level, java.util.List<BlockPos> affected) {
+    /** Routes a real blast either to its active v3 intent or to the ordinary external-effect observer. */
+    public static boolean observeExplosion(ServerLevel level, java.util.List<BlockPos> affected) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent();
+        return managed.isPresent() ? FrontierV3ExplosionExecutor.observeDetonation(level, runtime, managed.orElseThrow(), affected)
+                : FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);
     }
 
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }

@@ -66,12 +66,20 @@ public final class FrontierWorldRuntimeDefinition {
                 try { return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition)); }
                 catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             }
+            if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
+            }
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
             if (operation == null) return rejected("physical intent has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
         }
         if (command.payload() instanceof PhysicalIntentPrepared prepared) {
             PhysicalIntent intent = prepared.intent();
+            if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
+                try { ExplosionStateSupport.validateIntent(state, intent); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)));
+            }
             if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
             if (operation == null) return rejected("scene strike has no owning operation");
@@ -290,6 +298,11 @@ public final class FrontierWorldRuntimeDefinition {
             if (!subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene strike must be prepared by its operation settlement");
             return state.preparePhysicalIntent(intent);
         }
+        if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
+            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion intent must be prepared by the hive");
+            ExplosionStateSupport.validateIntent(state, intent);
+            return state.preparePhysicalIntent(intent);
+        }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())) {
             throw new IllegalArgumentException("physical intent must be prepared by an arrived route operation owner");
@@ -308,6 +321,10 @@ public final class FrontierWorldRuntimeDefinition {
                 throw new IllegalArgumentException("structural repair transition lacks its owning settlement");
             }
             if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) DecontaminationProcess.taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
+        if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
+            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());

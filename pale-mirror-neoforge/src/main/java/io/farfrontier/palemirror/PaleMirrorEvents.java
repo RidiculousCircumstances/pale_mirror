@@ -105,7 +105,7 @@ public final class PaleMirrorEvents {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
-            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeExternalExplosion(level, event.getAffectedBlocks());
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeExplosion(level, event.getAffectedBlocks());
             SourceGrayboxRuntime.forServer(level.getServer()).captureExternalExplosion(level, event.getAffectedBlocks());
         }
     }

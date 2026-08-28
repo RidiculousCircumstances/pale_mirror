@@ -18,6 +18,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.Bioform;
+import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
@@ -116,7 +118,7 @@ final class FrontierV3SceneExecutor {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> {
                 executeLocalGoals(level, state, lease);
-                if (level.getGameTime() % 20L == 0L) executeStrike(level, runtime, state, lease);
+                if (level.getGameTime() % 20L == 0L && !executeExplosion(level, runtime, state, lease)) executeStrike(level, runtime, state, lease);
                 if (!demandExists(level, lease.handoffPosition())) submit(runtime, "scene-draining", lease.id().value(),
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             }
@@ -195,6 +197,27 @@ final class FrontierV3SceneExecutor {
     }
 
     /** Executes one durable effect phase; HOT scheduling supplies the twenty-tick cadence. */
+    static boolean executeExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                    FrontierWorldState state, SceneLease lease) {
+        if (lease.engagementId().isEmpty()) return false;
+        SubjectId engagement = lease.engagementId().orElseThrow();
+        Optional<PhysicalIntent> unresolved = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.EXPLOSION)
+                .filter(intent -> intent.subjectIds().size() == 2 && intent.subjectIds().getLast().equals(engagement))
+                .filter(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED).min(Comparator.comparing(PhysicalIntent::id));
+        if (unresolved.isPresent()) return true;
+        List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
+        Body bomber = bodies.stream().filter(value -> bomber(state, value.member().actorId())).min(Comparator.comparing(value -> value.member().actorId())).orElse(null);
+        Body target = bomber == null ? null : bodies.stream().filter(value -> !value.bioform()).min(Comparator.comparingDouble((Body value) -> bomber.entity().distanceToSqr(value.entity()))
+                .thenComparing(value -> value.member().actorId())).orElse(null);
+        if (bomber == null || target == null || bomber.entity().distanceToSqr(target.entity()) > 36.0D) return false;
+        BlockPos origin = target.entity().blockPosition();
+        String key = lease.id().value().replace(':', '-') + "-" + bomber.member().actorId().value().replace(':', '-');
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-" + key), PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED,
+                bomber.member().actorId(), List.of(bomber.member().actorId(), engagement), position(origin), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
+        submit(runtime, "explosion-prepare", key, new PhysicalIntentPrepared(intent));
+        return true;
+    }
+
     static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         if (lease.engagementId().isEmpty()) return;
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
@@ -231,6 +254,9 @@ final class FrontierV3SceneExecutor {
     private static FixedPosition position(Entity entity) {
         return new FixedPosition(new FixedScalar(Math.round(entity.getX() * FixedScalar.SCALE)),
                 new FixedScalar(Math.round(entity.getY() * FixedScalar.SCALE)), new FixedScalar(Math.round(entity.getZ() * FixedScalar.SCALE)));
+    }
+    private static FixedPosition position(BlockPos position) {
+        return new FixedPosition(FixedScalar.whole(position.getX()), FixedScalar.whole(position.getY()), FixedScalar.whole(position.getZ()));
     }
     private static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
 
@@ -324,6 +350,19 @@ final class FrontierV3SceneExecutor {
         return position;
     }
 
+    static Optional<Entity> explosionCause(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.kind() != PhysicalIntentKind.EXPLOSION || intent.subjectIds().size() != 2 || !bomber(state, intent.causeSubjectId())) return Optional.empty();
+        return state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.HOT)
+                .filter(lease -> lease.engagementId().filter(intent.subjectIds().getLast()::equals).isPresent())
+                .flatMap(lease -> lease.members().stream().filter(member -> member.actorId().equals(intent.causeSubjectId()))
+                        .map(member -> new LeaseMember(lease, member))).filter(value -> owned(level.getEntity(value.member().entityId()), state, value.lease(), value.member()))
+                .map(value -> level.getEntity(value.member().entityId())).filter(entity -> entity instanceof Mob).filter(Entity::isAlive).findFirst();
+    }
+
+    private static boolean bomber(FrontierWorldState state, SubjectId actorId) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .filter(bioform -> bioform.id().equals(actorId)).map(Bioform::role).anyMatch(BioformRole.BOMBER::equals);
+    }
     private static boolean owned(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
         return (bioform(state, member.actorId()) ? entity instanceof Zombie : entity instanceof Villager) && !entity.isRemoved() && member.entityId().equals(entity.getUUID())
                 && lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
@@ -357,4 +396,5 @@ final class FrontierV3SceneExecutor {
         return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
     }
     private record Body(SceneMember member, Mob entity, boolean bioform) { }
+    private record LeaseMember(SceneLease lease, SceneMember member) { }
 }

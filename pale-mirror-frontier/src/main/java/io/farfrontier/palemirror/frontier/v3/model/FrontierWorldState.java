@@ -128,6 +128,7 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
+                        && !strategicPlans.routeEngagements().containsKey(subject)
                         && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }

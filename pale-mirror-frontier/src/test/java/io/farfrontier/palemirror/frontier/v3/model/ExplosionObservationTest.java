@@ -2,6 +2,9 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
@@ -10,22 +13,45 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ExplosionObservationTest {
     @Test
+    void onlyALivingBomberMayDurablyPrepareAnExplosion() {
+        FrontierWorldState state = hotBomberState(new WorldId("frontier:explosion-planning"));
+        SubjectId engagement = state.sceneLeases().values().stream().findFirst().orElseThrow().engagementId().orElseThrow();
+        Bioform bomber = bomber(state, engagement);
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-planning"), PhysicalIntentKind.EXPLOSION,
+                PhysicalIntentStatus.PREPARED, bomber.id(), List.of(bomber.id(), engagement), position(state, bomber.id()), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
+        CommandId id = new CommandId("command:explosion-planning");
+        assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldRuntimeDefinition.planCommand(state, new FrontierCommand(1, id,
+                state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(0), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(0),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalIntentPrepared(intent))));
+        Bioform guard = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD).findFirst().orElseThrow();
+        PhysicalIntent invalid = new PhysicalIntent(new PhysicalIntentId("intent:explosion-non-bomber"), PhysicalIntentKind.EXPLOSION,
+                PhysicalIntentStatus.PREPARED, guard.id(), List.of(guard.id(), engagement), position(state, guard.id()), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldRuntimeDefinition.planCommand(state, new FrontierCommand(1,
+                new CommandId("command:explosion-non-bomber"), state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(0),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(0), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                CauseChain.root(new CommandId("command:explosion-non-bomber")), new PhysicalIntentPrepared(invalid))));
+    }
+
+    @Test
     void durableExplosionReceiptBindsExactGeometryAndRoundTrips() {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:explosion-receipt"), 91L));
-        SubjectId bomber = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.BOMBER).findFirst().orElseThrow().id();
+        FrontierWorldState state = hotBomberState(new WorldId("frontier:explosion-receipt"));
+        SubjectId engagement = state.sceneLeases().values().stream().findFirst().orElseThrow().engagementId().orElseThrow();
+        SubjectId bomber = bomber(state, engagement).id();
         FixedPosition origin = new FixedPosition(FixedScalar.whole(-400), FixedScalar.whole(64), FixedScalar.whole(400));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-test"), PhysicalIntentKind.EXPLOSION,
-                PhysicalIntentStatus.PREPARED, bomber, List.of(bomber), origin, 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
+                PhysicalIntentStatus.PREPARED, bomber, List.of(bomber, engagement), origin, 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
         ExplosionObservation receipt = new ExplosionObservation(new PhysicalObservationId("observation:explosion-test"), intent.id(), origin, 4, 12, 8);
 
         FrontierWorldState running = state.preparePhysicalIntent(intent)
@@ -40,5 +66,25 @@ class ExplosionObservationTest {
         PhysicalIntentTransition transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertEquals(transition, FrontierWorldRuntimeDefinition.payloadCodecs().decode(transition.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(transition)));
+    }
+
+    private static FixedPosition position(FrontierWorldState state, SubjectId actorId) {
+        BlockPosition value = state.actorLocations().get(actorId).position();
+        return new FixedPosition(FixedScalar.whole(value.x()), FixedScalar.whole(value.y()), FixedScalar.whole(value.z()));
+    }
+
+    private static FrontierWorldState hotBomberState(WorldId worldId) {
+        FrontierWorldState state = FrontierDevelopmentScenarios.hotSceneStrikeState(worldId, 91L);
+        SceneEngagementCandidate candidate = state.coldEngagementSceneCandidates().getFirst();
+        io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:explosion-test");
+        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(2_601L),
+                1L, SceneLeaseStatus.PREPARED, java.util.Optional.of(candidate.engagementId()), candidate.actorIds().stream()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        return state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+    }
+
+    private static Bioform bomber(FrontierWorldState state, SubjectId engagementId) {
+        java.util.Set<SubjectId> attackers = new java.util.HashSet<>(state.strategicPlans().routeEngagements().get(engagementId).attackerIds());
+        return state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.BOMBER && attackers.contains(value.id())).findFirst().orElseThrow();
     }
 }

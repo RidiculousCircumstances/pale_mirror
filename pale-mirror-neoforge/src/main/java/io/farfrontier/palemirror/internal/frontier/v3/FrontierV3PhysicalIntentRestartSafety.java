@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinitio
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import net.minecraft.server.level.ServerLevel;
 
 import java.util.Comparator;
 import java.util.List;
@@ -28,15 +29,26 @@ import java.util.Optional;
 final class FrontierV3PhysicalIntentRestartSafety {
     private FrontierV3PhysicalIntentRestartSafety() { }
 
+    static int quarantineUninspectableRunningIntents(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        return quarantineUninspectableRunningIntents(runtime, intent -> false);
+    }
+
     static int quarantineUninspectableRunningIntents(
-            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level
     ) {
+        return quarantineUninspectableRunningIntents(runtime, intent -> FrontierV3ManagedExplosionLedger.get(level).has(intent));
+    }
+
+    private static int quarantineUninspectableRunningIntents(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                              java.util.function.Predicate<PhysicalIntentId> hasManagedPostcondition) {
         List<PhysicalIntentId> running = state(runtime).physicalIntents().values().stream()
                 .filter(intent -> intent.status() == PhysicalIntentStatus.RUNNING)
                 .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
                         && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR
                         && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
                         && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION)
+                .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION
+                        || !hasManagedPostcondition.test(intent.id()))
                 .map(PhysicalIntent::id)
                 .sorted(Comparator.naturalOrder())
                 .toList();

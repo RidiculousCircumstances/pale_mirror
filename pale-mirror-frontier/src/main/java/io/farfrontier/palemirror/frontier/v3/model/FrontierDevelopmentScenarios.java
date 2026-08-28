@@ -25,7 +25,7 @@ final class FrontierDevelopmentScenarios {
                 .orElseThrow(() -> new IllegalStateException("development scene needs one en-route operation"));
         BlockPosition intercept = operation.route().get(operation.routeIndex());
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.role() == BioformRole.GUARD) state = state.withActorLocation(bioform.id(), intercept);
+            if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorLocation(bioform.id(), intercept);
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hot-strike"), hive,

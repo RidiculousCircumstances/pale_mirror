@@ -19,6 +19,25 @@ final class ExplosionStateSupport {
         }
     }
 
+    static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.kind() != PhysicalIntentKind.EXPLOSION || intent.status() != PhysicalIntentStatus.PREPARED) {
+            throw new IllegalArgumentException("explosion intent has invalid physical lifecycle");
+        }
+        Bioform bomber = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .filter(value -> value.id().equals(intent.causeSubjectId())).findFirst().orElseThrow(() -> new IllegalArgumentException("explosion cause is not one hive bioform"));
+        if (bomber.role() != BioformRole.BOMBER || state.actorLocations().get(bomber.id()).condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("explosion cause must be one living bomber bioform");
+        }
+        SceneLease lease = state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
+                .filter(value -> value.engagementId().isPresent()).filter(value -> value.members().stream().anyMatch(member -> member.actorId().equals(bomber.id())))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("explosion requires one HOT bomber scene"));
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(lease.engagementId().orElseThrow());
+        if (engagement == null || engagement.status() != RouteEngagementStatus.HOT || !engagement.attackerIds().contains(bomber.id())
+                || intent.subjectIds().size() != 2 || !intent.subjectIds().getFirst().equals(bomber.id()) || !intent.subjectIds().getLast().equals(engagement.id())) {
+            throw new IllegalArgumentException("explosion must bind its exact HOT bomber and engagement");
+        }
+    }
+
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ExplosionObservation observation,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         validateReceipt(intent, observation);

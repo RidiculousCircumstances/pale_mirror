@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
@@ -294,6 +295,40 @@ public final class FrontierV3SceneGameTests {
             if (body != null) body.discard();
         });
         runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotBomberPreparesOneExactExplosionFromItsOwnedZombieBody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(48, 8, 0));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-explosion-game-test"), 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-explosion-game-test");
+        var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the explosion fixture runtime must remain active"));
+        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        for (int index = 0; index < lease.members().size(); index++) {
+            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
+        }
+        SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
+                .anyMatch(bioform -> bioform.id().equals(actor) && bioform.role() == BioformRole.BOMBER)).findFirst().orElseThrow();
+        helper.runAfterDelay(1L, () -> {
+            Entity bomberBody = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(bomber)).findFirst().orElseThrow().entityId());
+            helper.assertTrue(bomberBody != null, "the exact HOT bomber body must be materialized");
+            bomberBody.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
+            lease.members().stream().filter(member -> member.actorId().value().startsWith("resident:")).findFirst().map(SceneMember::entityId).map(level::getEntity)
+                    .ifPresent(body -> body.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D));
+            helper.assertTrue(FrontierV3SceneExecutor.executeExplosion(level, runtime, state(runtime), lease), "a nearby owned HOT bomber must prepare a blast instead of inventing a non-durable hit");
+            PhysicalIntent intent = state(runtime).physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("the hot bomber did not retain its explosion intent"));
+            helper.assertValueEqual(intent.status(), PhysicalIntentStatus.PREPARED, "the blast must be durable before Minecraft receives it");
+            helper.assertValueEqual(intent.causeSubjectId(), bomber, "the receipt must retain the exact canonical bomber identity");
+            helper.assertValueEqual(FrontierV3SceneExecutor.explosionCause(level, state(runtime), intent).orElseThrow(), bomberBody,
+                    "only the matching tagged HOT zombie may become the Minecraft explosion source");
+            lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+            runtime.shutdown(); helper.succeed();
+        });
     }
 
     private static SceneLease lease(BlockPos origin) {

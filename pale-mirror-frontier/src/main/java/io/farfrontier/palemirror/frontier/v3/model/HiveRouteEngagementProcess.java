@@ -152,11 +152,15 @@ final class HiveRouteEngagementProcess {
                 && engagement.status() != RouteEngagementStatus.RESOLVED);
     }
     private static List<EngagementAttacker> attackers(FrontierWorldState state, BlockPosition intercept) {
-        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .filter(bioform -> bioform.role() == BioformRole.GUARD).filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE)
+        java.util.Comparator<Bioform> nearest = Comparator.comparingLong((Bioform bioform) -> distanceSquared(state.actorLocations().get(bioform.id()).position(), intercept))
+                .thenComparing(Bioform::id);
+        List<Bioform> eligible = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .filter(bioform -> state.ambientLeases().get(bioform.id()) == null || state.ambientLeases().get(bioform.id()).status() == AmbientLeaseStatus.CLOSED)
-                .sorted(Comparator.comparingLong((Bioform bioform) -> distanceSquared(state.actorLocations().get(bioform.id()).position(), intercept)).thenComparing(Bioform::id))
-                .limit(3).map(bioform -> new EngagementAttacker(bioform.id(), approach(state.actorLocations().get(bioform.id()).position(), intercept), 0)).toList();
+                .sorted(nearest).toList();
+        return java.util.stream.Stream.concat(eligible.stream().filter(bioform -> bioform.role() == BioformRole.BOMBER).limit(1),
+                        eligible.stream().filter(bioform -> bioform.role() == BioformRole.GUARD).limit(2))
+                .map(bioform -> new EngagementAttacker(bioform.id(), approach(state.actorLocations().get(bioform.id()).position(), intercept), 0)).toList();
     }
     private static List<BlockPosition> approach(BlockPosition start, BlockPosition end) {
         if (start.equals(end)) return List.of(start);
