@@ -75,4 +75,22 @@ class ExactInventoryTest {
         assertThrows(IllegalArgumentException.class, () -> loaded.loadCargo(new CargoBatch(new SubjectId("cargo:again"), owner, List.of(item))));
         assertThrows(IllegalArgumentException.class, () -> inventory.loadCargo(new CargoBatch(cargo, new SubjectId("settlement:other"), List.of(item))));
     }
+
+    @Test
+    void observedPlayerTransferMovesOneExactStackWithoutAdoptingOrDuplicatingIt() {
+        SubjectId container = new SubjectId("container:store");
+        SubjectId owner = new SubjectId("hive:frontier");
+        SubjectId item = new SubjectId("item:bread");
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000012");
+        InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 3);
+        ExactInventory stored = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 9)),
+                Map.of(item, new ExactItemStack(item, "minecraft:bread", 8, slot)), Map.of(), Map.of());
+
+        ExactInventory withdrawn = stored.moveObservedItem(item, slot, new InventoryCustody.Player(player));
+        assertEquals(new InventoryCustody.Player(player), withdrawn.items().get(item).custody());
+        assertEquals(List.of(item), withdrawn.playerItems().get(player));
+        ExactInventory returned = withdrawn.moveObservedItem(item, new InventoryCustody.Player(player), slot);
+        assertEquals(slot, returned.items().get(item).custody());
+        assertThrows(IllegalArgumentException.class, () -> stored.moveObservedItem(item, slot, new InventoryCustody.ContainerSlot(container, 3)));
+    }
 }

@@ -23,7 +23,8 @@ public final class FrontierWorldPayloadCodecs {
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
-                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new OperationFailedCodec())));
+                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new OperationFailedCodec(),
+                new ExactItemCustodyChangedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -199,6 +200,15 @@ public final class FrontierWorldPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationFailed failed = (OperationFailed) payload; writeSubject(output, failed.operationId()); writeString(output, failed.reason()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationFailed(readSubject(input).value(), readString(input))); }
     }
+    private static final class ExactItemCustodyChangedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.exact_item_custody_changed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            ExactItemCustodyChanged changed = (ExactItemCustodyChanged) payload;
+            writeSubject(output, changed.itemId()); writeCustody(output, changed.from()); writeCustody(output, changed.to());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ExactItemCustodyChanged(
+                readSubject(input).value(), readCustody(input), readCustody(input))); }
+    }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
     @FunctionalInterface private interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
@@ -310,6 +320,18 @@ public final class FrontierWorldPayloadCodecs {
         java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMember(readSubject(input).value(), java.util.UUID.fromString(readString(input))));
         return new SceneLease(id, operation.value(), cargo.value(), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision, SceneLeaseStatus.values()[status], members);
+    }
+    private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
+        if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
+        else if (custody instanceof InventoryCustody.Player player) { output.writeByte(1); writeString(output, player.playerId().toString()); }
+        else throw new IllegalArgumentException("observed player custody payload cannot encode non-player/container custody");
+    }
+    private static InventoryCustody readCustody(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte());
+            case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));
+            default -> throw new IllegalArgumentException("unknown observed item custody kind");
+        };
     }
     private static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     private static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }

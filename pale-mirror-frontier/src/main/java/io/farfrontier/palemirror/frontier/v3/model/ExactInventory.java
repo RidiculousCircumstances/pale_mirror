@@ -164,6 +164,43 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         nextCargo.remove(cargoId);
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems);
     }
+
+    /** Applies observed player/container custody only when the exact canonical stack still has its expected source. */
+    public ExactInventory moveObservedItem(SubjectId itemId, InventoryCustody from, InventoryCustody to) {
+        Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(from, "source custody"); Objects.requireNonNull(to, "target custody");
+        ExactItemStack current = items.get(itemId);
+        if (current == null || !current.custody().equals(from)) throw new IllegalArgumentException("observed item source does not match canonical custody");
+        if (to instanceof InventoryCustody.ContainerSlot target) {
+            ContainerRecord container = containers.get(target.containerId());
+            if (container == null || target.slot() >= container.slotCount() || itemAt(target.containerId(), target.slot()).isPresent()) {
+                throw new IllegalArgumentException("observed container target is unavailable");
+            }
+        }
+        Map<UUID, List<SubjectId>> nextPlayers = mutableCustody(playerItems);
+        removePlayerCustody(nextPlayers, from, itemId);
+        addPlayerCustody(nextPlayers, to, itemId);
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        nextItems.put(itemId, new ExactItemStack(current.id(), current.itemKind(), current.count(), to));
+        return new ExactInventory(containers, nextItems, cargo, nextPlayers, worldCarrierItems);
+    }
+
+    private static Map<UUID, List<SubjectId>> mutableCustody(Map<UUID, List<SubjectId>> values) {
+        Map<UUID, List<SubjectId>> mutable = new HashMap<>();
+        values.forEach((player, itemIds) -> mutable.put(player, new java.util.ArrayList<>(itemIds)));
+        return mutable;
+    }
+    private static void removePlayerCustody(Map<UUID, List<SubjectId>> players, InventoryCustody custody, SubjectId itemId) {
+        if (custody instanceof InventoryCustody.Player player) {
+            List<SubjectId> held = players.get(player.playerId());
+            if (held == null || !held.remove(itemId)) throw new IllegalArgumentException("observed player source is unavailable");
+            if (held.isEmpty()) players.remove(player.playerId());
+        }
+    }
+    private static void addPlayerCustody(Map<UUID, List<SubjectId>> players, InventoryCustody custody, SubjectId itemId) {
+        if (custody instanceof InventoryCustody.Player player) {
+            players.computeIfAbsent(player.playerId(), ignored -> new java.util.ArrayList<>()).add(itemId);
+        }
+    }
     private static void require(Object value, Object expected, String label) {
         if (value instanceof ExactItemStack item && item.custody().equals(expected)) return;
         throw new IllegalArgumentException("dangling or conflicting " + label);

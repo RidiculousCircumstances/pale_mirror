@@ -92,6 +92,11 @@ public final class FrontierWorldRuntimeDefinition {
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), death),
                     new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING))));
         }
+        if (command.payload() instanceof ExactItemCustodyChanged changed) {
+            ExactItemStack item = state.inventory().items().get(changed.itemId());
+            if (item == null || !item.custody().equals(changed.from())) return rejected("observed item source differs from canonical custody");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(itemOwner(state, changed), changed)));
+        }
         return rejected("command is not a trusted physical transition or scene lease");
     }
     private static CommandPlan.Rejected rejected(String message) {
@@ -224,6 +229,7 @@ public final class FrontierWorldRuntimeDefinition {
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
+            case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             default -> fail(event.payload().type());
         };
     }
@@ -323,6 +329,10 @@ public final class FrontierWorldRuntimeDefinition {
             throw new IllegalArgumentException("operation failure must retain an exact dead participant");
         }
         return state.failOperation(failed.operationId());
+    }
+    private static FrontierWorldState reduceExactItemCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
+        if (!subject.equals(itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
+        return state.withInventory(state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();
@@ -448,6 +458,13 @@ public final class FrontierWorldRuntimeDefinition {
         } catch (NumberFormatException error) {
             throw new IllegalArgumentException("scheduled work identity has malformed ordinal: " + id, error);
         }
+    }
+    private static SubjectId itemOwner(FrontierWorldState state, ExactItemCustodyChanged changed) {
+        InventoryCustody.ContainerSlot slot = changed.from() instanceof InventoryCustody.ContainerSlot source ? source
+                : (InventoryCustody.ContainerSlot) changed.to();
+        ContainerRecord container = state.inventory().containers().get(slot.containerId());
+        if (container == null) throw new IllegalArgumentException("item custody observation references an unknown container");
+        return container.ownerId();
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
 

@@ -47,6 +47,25 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void durableObservedItemTransferMovesOnlyTheNamedCanonicalStack() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:item-custody"), 91L));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
+        var player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000023");
+        ExactItemCustodyChanged changed = new ExactItemCustodyChanged(itemId, source, new InventoryCustody.Player(player));
+        var checkpoint = engine.checkpoint();
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:exact-item-withdraw");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, new WorldId("frontier:item-custody"), checkpoint.revision(), checkpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), changed)));
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(new InventoryCustody.Player(player), after.inventory().items().get(itemId).custody());
+        assertEquals(changed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(changed.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(changed)));
+        assertThrows(IllegalArgumentException.class, () -> after.inventory().moveObservedItem(itemId, source, new InventoryCustody.Player(player)));
+    }
+
+    @Test
     void infectionPulseIsPersistedDeterministicScheduledWorldWork() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:pulse"), 91L));
         engine.advanceTo(new SimInstant(100L), new WorkBudget(8, 64));

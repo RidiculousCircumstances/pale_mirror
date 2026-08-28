@@ -60,4 +60,20 @@ public final class FrontierV3CargoHandoffGameTests {
                 "the executor must leave a player/world chest unmodified");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-frontier-v3-player-custody", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void playerInventoryObservationRequiresTheExactTaggedStack(GameTestHelper helper) {
+        var player = helper.makeMockServerPlayerInLevel();
+        SubjectId container = new SubjectId("container:frontier-v3-player-custody");
+        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-player-bread"), "minecraft:bread", 7,
+                new InventoryCustody.ContainerSlot(container, 0));
+        player.getInventory().setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
+        helper.assertTrue(FrontierV3InventoryObservationExecutor.hasExactItem(player, expected),
+                "player custody observation accepts only the exact canonical NBT-tagged stack");
+        player.getInventory().getItem(0).setCount(6);
+        helper.assertFalse(FrontierV3InventoryObservationExecutor.hasExactItem(player, expected),
+                "a changed stack must not be adopted as the canonical player-held item");
+        helper.succeed();
+    }
 }

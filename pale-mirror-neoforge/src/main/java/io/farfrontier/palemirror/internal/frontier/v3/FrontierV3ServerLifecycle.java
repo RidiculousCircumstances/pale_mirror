@@ -53,6 +53,7 @@ public final class FrontierV3ServerLifecycle {
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 FrontierV3CargoHandoffExecutor.tick(server.overworld(), runtime);
+                FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3SceneExecutor.tick(server.overworld(), runtime);
                 runtime.tick(TICK_BUDGET);
             }
