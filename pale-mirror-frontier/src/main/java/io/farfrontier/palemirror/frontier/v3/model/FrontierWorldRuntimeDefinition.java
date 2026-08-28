@@ -134,7 +134,12 @@ public final class FrontierWorldRuntimeDefinition {
         };
     }
     private static FrontierWorldState reduceContractCreated(FrontierWorldState state, SubjectId subject, SupplyContractCreated created) {
-        if (!subject.equals(created.contract().settlementId())) throw new IllegalArgumentException("contract subject does not own settlement");
+        SupplyContract contract = created.contract();
+        if (!subject.equals(contract.settlementId())) throw new IllegalArgumentException("contract subject does not own settlement");
+        SubjectId depot = FrontierWorldState.depotId(contract.settlementId());
+        boolean backed = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals(contract.itemKind())
+                && item.count() == contract.itemCount() && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
+        if (!backed) throw new IllegalArgumentException("supply contract has no exact depot-backed item");
         return state.createSupplyContract(created.contract());
     }
     private static FrontierWorldState reduceCargoLoaded(FrontierWorldState state, SubjectId subject, CargoLoaded loaded) {
