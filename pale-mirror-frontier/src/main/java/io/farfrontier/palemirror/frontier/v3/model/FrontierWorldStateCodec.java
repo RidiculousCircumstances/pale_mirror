@@ -29,7 +29,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 15;
+    private static final int VERSION = 16;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -40,6 +40,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed());
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
+                writeStructureDamage(output, state.structureDamage());
                 writeInfection(output, state.infection());
                 writeHiveColony(output, state.hiveColony());
                 writeInventory(output, state.inventory());
@@ -60,9 +61,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
+            Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
-                    readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony);
+                    readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony, structureDamage);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -99,6 +101,33 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input));
             int ordinal = input.readUnsignedByte();
             if (ordinal >= StructureCondition.values().length || values.put(id, StructureCondition.values()[ordinal]) != null) throw new IllegalArgumentException("invalid or duplicate structure state");
+        }
+        return values;
+    }
+    private static void writeStructureDamage(DataOutputStream output, Map<SubjectId, StructureDamage> values) throws IOException {
+        writeCount(output, values.size());
+        for (StructureDamage damage : values.values().stream().sorted(Comparator.comparing(StructureDamage::structureId)).toList()) {
+            writeString(output, damage.structureId().value()); writeCount(output, damage.cells().size());
+            for (Map.Entry<BlockPosition, StructureDamage.DamageCell> entry : damage.cells().entrySet().stream()
+                    .sorted(Comparator.comparingInt((Map.Entry<BlockPosition, StructureDamage.DamageCell> entry) -> entry.getKey().x())
+                            .thenComparingInt(entry -> entry.getKey().y()).thenComparingInt(entry -> entry.getKey().z())).toList()) {
+                writePosition(output, entry.getKey()); output.writeByte(entry.getValue().semanticPart().ordinal()); writeString(output, entry.getValue().cause());
+            }
+        }
+    }
+    private static Map<SubjectId, StructureDamage> readStructureDamage(DataInputStream input) throws IOException {
+        Map<SubjectId, StructureDamage> values = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId structure = new SubjectId(readString(input)); Map<BlockPosition, StructureDamage.DamageCell> cells = new LinkedHashMap<>();
+            for (int cell = 0, cellCount = readCount(input); cell < cellCount; cell++) {
+                BlockPosition position = readPosition(input); int part = input.readUnsignedByte();
+                if (part >= GrayboxSemanticPart.values().length
+                        || cells.put(position, new StructureDamage.DamageCell(GrayboxSemanticPart.values()[part], readString(input))) != null) {
+                    throw new IllegalArgumentException("invalid or duplicate structure damage cell");
+                }
+            }
+            StructureDamage damage = new StructureDamage(structure, cells);
+            if (values.put(structure, damage) != null) throw new IllegalArgumentException("duplicate structure damage identity");
         }
         return values;
     }

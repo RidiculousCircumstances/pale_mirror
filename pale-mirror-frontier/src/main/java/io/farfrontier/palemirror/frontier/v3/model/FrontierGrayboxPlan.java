@@ -43,6 +43,21 @@ public final class FrontierGrayboxPlan {
     /** Sparse source cells; loaded-chunk materialization expands only the cells intersecting that chunk. */
     public Map<InfectionCell, FixedRatio> infection() { return infection; }
 
+    /** Full intact geometry, used to validate observed damage after the desired silhouette changes. */
+    public static GrayboxCell intactStructureCell(SettlementStructure structure, BlockPosition position) {
+        Objects.requireNonNull(structure, "structure"); Objects.requireNonNull(position, "position");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        addStructure(cells, structure, StructureCondition.INTACT);
+        return cells.get(position);
+    }
+
+    public static int intactStructureCellCount(SettlementStructure structure) {
+        Objects.requireNonNull(structure, "structure");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        addStructure(cells, structure, StructureCondition.INTACT);
+        return cells.size();
+    }
+
     private static void addStructure(Map<BlockPosition, GrayboxCell> cells, SettlementStructure structure, StructureCondition condition) {
         if (condition == StructureCondition.DESTROYED) return;
         int width = switch (structure.kind()) {

@@ -1,6 +1,10 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -8,6 +12,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.StructureDamaged;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -17,6 +23,7 @@ import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Bounded loaded-chunk executor for the immutable v3 structural graybox plan.
@@ -51,6 +58,49 @@ final class FrontierV3GrayboxExecutor {
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
+
+    /**
+     * Observes a real player break of a still-owned structural cell before Minecraft removes it.
+     * The command is durable first; regardless of command acceptance the claim becomes a conflict
+     * so desired-state projection can never restore the just-observed physical change.
+     */
+    static boolean observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
+                                     BlockPos position, String cause) {
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        Optional<StructureDamaged> damage = prepareStructureDamage(level, ledger, position, cause);
+        if (damage.isEmpty()) return false;
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        CommandId id = new CommandId("executor:structure-damage-r" + checkpoint.revision().value() + "-p" + position.asLong());
+        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), damage.orElseThrow()))
+                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        return result instanceof CommandResult.Accepted;
+    }
+
+    /** Converts only a still-owned exact cell into canonical evidence and terminally retires its claim. */
+    static Optional<StructureDamaged> prepareStructureDamage(ServerLevel level, FrontierV3GrayboxLedger ledger,
+                                                              BlockPos position, String cause) {
+        FrontierV3GrayboxLedger.Claim claim = ledger.claim(position);
+        if (claim == null || claim.conflicted()) return Optional.empty();
+        GrayboxMaterial material;
+        GrayboxSemanticPart part;
+        try {
+            material = GrayboxMaterial.valueOf(claim.material());
+            part = GrayboxSemanticPart.valueOf(claim.semanticPart());
+        } catch (IllegalArgumentException malformed) {
+            ledger.conflict(position);
+            return Optional.empty();
+        }
+        if (!level.getBlockState(position).equals(material(material))) {
+            ledger.conflict(position);
+            return Optional.empty();
+        }
+        ledger.conflict(position);
+        if (!claim.owner().startsWith("structure:")) return Optional.empty();
+        return Optional.of(new StructureDamaged(
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId(claim.owner()),
+                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(position.getX(), position.getY(), position.getZ()), part, cause));
+    }
 
     /** Applies exactly one loaded desired cell; exposed package-private for negative GameTests. */
     static ProjectionResult project(ServerLevel level, FrontierV3GrayboxLedger ledger, GrayboxCell cell) {

@@ -34,7 +34,7 @@ public final class FrontierWorldRuntimeDefinition {
                 FrontierWorldRuntimeDefinition::planCommand,
                 FrontierWorldRuntimeDefinition::planScheduled,
                 FrontierWorldRuntimeDefinition::reduce,
-                new FrontierWorldStateCodec(), FrontierWorldRuntimeDefinition::projection,
+                new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200), contractDemand(1, 450), HiveGrowthProcess.start(1, 600)), TransactionCommitter.noOp());
     }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
@@ -85,6 +85,14 @@ public final class FrontierWorldRuntimeDefinition {
             if (operation == null) return rejected("actor death has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), death),
                     new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING))));
+        }
+        if (command.payload() instanceof StructureDamaged damage) {
+            try {
+                state.recordStructureDamage(damage);
+            } catch (IllegalArgumentException invalid) {
+                return rejected(invalid.getMessage());
+            }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.structureSettlement(state.bootstrap(), damage.structureId()), damage)));
         }
         if (command.payload() instanceof ExactItemCustodyChanged changed) {
             ExactItemStack item = state.inventory().items().get(changed.itemId());
@@ -235,6 +243,7 @@ public final class FrontierWorldRuntimeDefinition {
             case SceneLeaseTransition transition -> reduceSceneLeaseTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
+            case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
@@ -333,6 +342,12 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("actor death lacks its owning operation");
         return state.recordActorDeath(death);
+    }
+    private static FrontierWorldState reduceStructureDamaged(FrontierWorldState state, SubjectId subject, StructureDamaged damage) {
+        if (!subject.equals(FrontierWorldStateSupport.structureSettlement(state.bootstrap(), damage.structureId()))) {
+            throw new IllegalArgumentException("structure damage lacks its owning settlement");
+        }
+        return state.recordStructureDamage(damage);
     }
     private static FrontierWorldState reduceOperationFailed(FrontierWorldState state, SubjectId subject, OperationFailed failed) {
         RouteOperation operation = state.operations().get(failed.operationId());
@@ -482,19 +497,4 @@ public final class FrontierWorldRuntimeDefinition {
         return container.ownerId();
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
-    private static FrontierWorldProjection projection(FrontierWorldState state, WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant instant, ProjectionQuery query) {
-        FrontierBootstrap bootstrap = state.bootstrap();
-        int residents = (int) bootstrap.settlements().stream().flatMap(settlement -> settlement.residents().stream())
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        int bioforms = (int) java.util.stream.Stream.concat(bootstrap.hive().bioforms().stream().map(Bioform::id), state.hiveColony().spawnedBioforms().keySet().stream())
-                .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE).count();
-        return new FrontierWorldProjection(worldId, revision, instant, bootstrap.canonicalSha256(), bootstrap.settlements().size(),
-                residents, bioforms, state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
-                state.operations().size(),
-                (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED).count(),
-                (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count(),
-                (int) state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).count(),
-                (int) state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).count(),
-                state.inventory().conflicts().size());
-    }
 }

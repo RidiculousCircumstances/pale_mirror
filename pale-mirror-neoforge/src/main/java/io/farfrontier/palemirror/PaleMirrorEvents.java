@@ -394,7 +394,10 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
-        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+        if (!event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            if (event.getPlayer() instanceof ServerPlayer player) {
+                io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeBlockBreak(level, event.getPos(), player);
+            }
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
             runtime.railTopologyChanged(level, event.getPos());
             runtime.gateBlockDestroyed(level, event.getPos());

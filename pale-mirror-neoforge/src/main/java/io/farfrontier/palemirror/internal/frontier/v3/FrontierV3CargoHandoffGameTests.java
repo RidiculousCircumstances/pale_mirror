@@ -190,6 +190,27 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-graybox-causality", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void ownedStructureBreakBecomesExactTypedDamageBeforeTheWorldMutation(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos position = helper.absolutePos(new BlockPos(36, 8, 0));
+        level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+        GrayboxCell cell = grayboxCell(position, "structure:1-hall", GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the causality test begins from a known owned structural cell");
+
+        var observed = FrontierV3GrayboxExecutor.prepareStructureDamage(level, ledger, position, "player:game-test").orElse(null);
+        helper.assertTrue(observed != null && observed.structureId().equals(cell.ownerId()) && observed.position().equals(cell.position())
+                        && observed.semanticPart() == GrayboxSemanticPart.FOUNDATION,
+                "a real break event receives exact owner, coordinate and semantic evidence before block removal");
+        helper.assertTrue(ledger.claim(position).conflicted(), "the impending physical change revokes desired-state repair authority immediately");
+        helper.assertTrue(level.getBlockState(position).is(Blocks.WHITE_CONCRETE),
+                "observation does not itself alter the live block; Minecraft remains the physical executor");
+        helper.succeed();
+    }
+
     private static GrayboxCell grayboxCell(BlockPos position, String owner, GrayboxMaterial material, GrayboxSemanticPart part) {
         return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()), new SubjectId(owner), material, part);
     }

@@ -8,6 +8,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinitio
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.storage.LevelResource;
 
@@ -83,6 +85,14 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && FrontierV3SceneExecutor.observeDeath(runtime, entity, source);
+    }
+
+    /** Returns true only when a still-owned v3 structure cell entered the canonical damage ledger. */
+    public static boolean observeBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, "player:" + player.getUUID());
     }
 
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }

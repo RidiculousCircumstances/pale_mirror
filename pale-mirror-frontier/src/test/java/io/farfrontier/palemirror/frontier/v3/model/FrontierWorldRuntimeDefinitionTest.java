@@ -47,6 +47,44 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void exactStructuralDamageIsDurableAndDerivesItsConditionFromKnownCells() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:structure-damage"), 91L));
+        SettlementStructure structure = state.bootstrap().settlements().getFirst().structures().getFirst();
+        List<GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.ownerId().equals(structure.id())).sorted(java.util.Comparator
+                        .comparingInt((GrayboxCell cell) -> cell.position().x()).thenComparingInt(cell -> cell.position().y())
+                        .thenComparingInt(cell -> cell.position().z())).toList();
+        int destructiveThreshold = (FrontierGrayboxPlan.intactStructureCellCount(structure) + 2) / 3;
+        StructureDamaged first = new StructureDamaged(structure.id(), cells.getFirst().position(), cells.getFirst().semanticPart(), "player:test");
+        state = state.recordStructureDamage(first);
+        assertEquals(StructureCondition.DAMAGED, state.structureConditions().get(structure.id()));
+        assertEquals(1, state.structureDamage().get(structure.id()).cells().size());
+        assertEquals(first, FrontierWorldRuntimeDefinition.payloadCodecs().decode(first.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(first)));
+
+        for (int index = 1; index < destructiveThreshold; index++) {
+            GrayboxCell cell = cells.get(index);
+            state = state.recordStructureDamage(new StructureDamaged(structure.id(), cell.position(), cell.semanticPart(), "player:test"));
+        }
+        assertEquals(StructureCondition.DESTROYED, state.structureConditions().get(structure.id()));
+        assertEquals(destructiveThreshold, state.structureDamage().get(structure.id()).cells().size());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        FrontierWorldState destroyed = state;
+        assertThrows(IllegalArgumentException.class, () -> destroyed.recordStructureDamage(new StructureDamaged(structure.id(),
+                new BlockPosition(0, 64, 0), GrayboxSemanticPart.WALL, "player:test")));
+
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:structure-command"), 91L));
+        FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        GrayboxCell acceptedCell = FrontierGrayboxPlan.compile(initial).cells().values().stream()
+                .filter(cell -> cell.ownerId().value().startsWith("structure:")).findFirst().orElseThrow();
+        var checkpoint = engine.checkpoint();
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:structure-damage");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId),
+                        new StructureDamaged(acceptedCell.ownerId(), acceptedCell.position(), acceptedCell.semanticPart(), "player:test"))));
+    }
+
+    @Test
     void sharedHiveGrowthConsumesEastStoreBiomassThenPublishesWestOrganAndBioform() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hive-growth"), 91L));
         for (long tick = 600L; tick <= 640L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));

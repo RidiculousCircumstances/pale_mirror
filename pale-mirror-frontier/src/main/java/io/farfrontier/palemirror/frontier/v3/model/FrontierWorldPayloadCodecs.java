@@ -23,7 +23,7 @@ public final class FrontierWorldPayloadCodecs {
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
-                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new OperationFailedCodec(),
+                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
                 new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
@@ -195,6 +195,23 @@ public final class FrontierWorldPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ActorDied(
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)), readSubject(input).value(),
                 new BlockPosition(input.readInt(), input.readInt(), input.readInt()), readString(input))); }
+    }
+    private static final class StructureDamagedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.structure_damaged"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            StructureDamaged damage = (StructureDamaged) payload;
+            return encodeProduction(output -> {
+                writeSubject(output, damage.structureId()); writePosition(output, damage.position());
+                output.writeByte(damage.semanticPart().ordinal()); writeString(output, damage.cause());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return decodeProduction(bytes, input -> {
+                SubjectIdHolder structure = readSubject(input); BlockPosition position = readPosition(input); int part = input.readUnsignedByte();
+                if (part >= GrayboxSemanticPart.values().length) throw new IllegalArgumentException("unknown structure damage semantic part");
+                return new StructureDamaged(structure.value(), position, GrayboxSemanticPart.values()[part], readString(input));
+            });
+        }
     }
     private static final class OperationFailedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_failed"; }
