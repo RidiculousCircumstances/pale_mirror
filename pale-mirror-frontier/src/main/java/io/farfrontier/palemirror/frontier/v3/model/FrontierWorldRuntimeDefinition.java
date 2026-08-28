@@ -78,6 +78,10 @@ public final class FrontierWorldRuntimeDefinition {
             if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
             }
+            if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
+                try { return new CommandPlan.Accepted(HiveGrowthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            }
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
             if (operation == null) return rejected("physical intent has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
@@ -337,6 +341,7 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) return HiveGrowthProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
             SceneStrikeStateSupport.validateIntent(state, intent);
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
@@ -370,6 +375,11 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
+        if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
+            HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
+            if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption transition lacks hive ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());

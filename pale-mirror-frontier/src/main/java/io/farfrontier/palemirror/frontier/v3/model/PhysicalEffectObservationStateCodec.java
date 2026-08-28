@@ -47,6 +47,9 @@ final class PhysicalEffectObservationStateCodec {
                 FrontierWorldStateCodec.writeCount(output, explosion.itemImpacts().size());
                 for (ExplosionItemImpact impact : explosion.itemImpacts()) { string(output, impact.itemId().value()); output.writeByte(impact.outcome().ordinal()); }
                 output.writeInt(explosion.affectedInfectionOverlayCount()); output.writeInt(explosion.changedInfectionOverlayCount());
+            } else if (observation instanceof ExactItemConsumedObservation consumed) {
+                output.writeByte(6); string(output, consumed.id().value()); string(output, consumed.intentId().value()); string(output, consumed.itemId().value());
+                output.writeByte(consumed.countBefore()); output.writeByte(consumed.countAfter());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -62,6 +65,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 3 -> new DecontaminationObservation(id, intentId, new SubjectId(text(input)), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
                 case 4 -> new SceneStrikeObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
                 case 5 -> explosion(input, id, intentId);
+                case 6 -> new ExactItemConsumedObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

@@ -370,16 +370,17 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 readSubject(input).value(), readSubject(input).value(), readString(input), input.readUnsignedByte());
     }
     private static void writeHiveGrowthJob(DataOutputStream output, HiveGrowthJob job) throws IOException {
-        writeSubject(output, job.id()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId()); writeSubject(output, job.consumedItemId());
+        writeSubject(output, job.id()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId()); writeSubject(output, job.consumedItemId()); writeString(output, job.consumptionIntentId().value());
         writeSubject(output, job.organ().id()); output.writeByte(job.organ().kind().ordinal()); writePosition(output, job.organ().anchor());
         writeSubject(output, job.bioform().id()); output.writeByte(job.bioform().role().ordinal()); writePosition(output, job.bioform().position());
     }
     private static HiveGrowthJob readHiveGrowthJob(DataInputStream input) throws IOException {
         SubjectIdHolder id = readSubject(input); SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input); SubjectIdHolder item = readSubject(input);
+        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
         SubjectIdHolder organId = readSubject(input); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
         SubjectIdHolder bioformId = readSubject(input); int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
         if (kind >= HiveOrganKind.values().length || role >= BioformRole.values().length) throw new IllegalArgumentException("unknown hive growth output enum");
-        return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), new HiveOrgan(organId.value(), hive.value(), nest.value(), HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
+        return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), consumption, new HiveOrgan(organId.value(), hive.value(), nest.value(), HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
                 new Bioform(bioformId.value(), hive.value(), nest.value(), BioformRole.values()[role], position));
     }
     static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {

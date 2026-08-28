@@ -136,7 +136,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
             PhysicalIntent intent = entry.getValue();
             if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
-            if (!expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId())
+            if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                    && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
                     && !expectedStructures.contains(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId()) && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
@@ -144,6 +145,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
+                        && !hiveColony.growthJobs().containsKey(subject)
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
                         && !strategicPlans.routeEngagements().containsKey(subject)
@@ -171,6 +173,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 DecontaminationStateSupport.validateReceipt(bootstrap, infection, intent, decontamination);
             } else if (observation instanceof StructuralRepairObservation repair) {
                 StructuralRepairStateSupport.validateReceipt(intent, repair);
+            } else if (observation instanceof ExactItemConsumedObservation consumed) {
+                ExactItemConsumptionStateSupport.validateReceipt(hiveColony, intent, consumed);
             } else if (observation instanceof RouteConstructionObservation construction) {
                 RouteConstructionStateSupport.validateReceipt(bootstrap, routeTopology, routeConstructions, intent, construction);
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
@@ -225,7 +229,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }
-    private FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures, Map<InfectionCell, FixedRatio> nextInfection, ExactInventory nextInventory,
+    FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures, Map<InfectionCell, FixedRatio> nextInfection, ExactInventory nextInventory,
                                     Map<SubjectId, ProductionJob> jobs, Map<SubjectId, SupplyContract> nextContracts, Map<SubjectId, RouteOperation> nextOperations, Map<PhysicalIntentId, PhysicalIntent> intents,
                                     Map<PhysicalObservationId, PhysicalEffectObservation> observations, Map<SceneLeaseId, SceneLease> leases, HiveColony colony, Map<SubjectId, StructureDamage> damage,
                                     Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
@@ -396,6 +400,22 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (!(evidence instanceof ExplosionObservation explosion)) throw new IllegalArgumentException("explosion requires post-impact observation evidence");
             return ExplosionStateSupport.complete(this, current, explosion, next);
         }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
+            if (!(evidence instanceof ExactItemConsumedObservation consumed)) throw new IllegalArgumentException("exact consumption requires item observation evidence");
+            SubjectId itemId = current.subjectIds().stream().filter(id -> !id.equals(current.causeSubjectId())).findFirst().orElseThrow();
+            ExactItemStack item = inventory.items().get(itemId);
+            if (!itemId.equals(consumed.itemId()) || item == null || item.count() != consumed.countBefore()
+                    || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("exact consumption receipt does not match current stack");
+            ContainerRecord container = inventory.containers().get(slot.containerId()); ContainerSurface surface = inventory.surfaces().get(slot.containerId());
+            SubjectId owner = ExactItemConsumptionStateSupport.owner(this, current);
+            if (container == null || !container.ownerId().equals(owner) || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) {
+                throw new IllegalArgumentException("exact consumption stack is not in an active owner container");
+            }
+            next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(consumed.id())));
+            Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(consumed.id(), consumed);
+            return next(actorLocations, structureConditions, infection, inventory.withoutItem(itemId), productionJobs, contracts, operations,
+                    next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        }
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
         }
@@ -444,16 +464,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState failOperation(SubjectId operationId) {
-        RouteOperation current = operations.get(Objects.requireNonNull(operationId, "operation id"));
-        if (current == null || current.stage() != OperationStage.EN_ROUTE) throw new IllegalArgumentException("only an en-route operation can fail");
-        if (sceneLeases.values().stream().anyMatch(lease -> lease.operationId().equals(operationId) && lease.status() != SceneLeaseStatus.CLOSED)) {
-            throw new IllegalArgumentException("operation cannot fail before its active scene lease closes");
-        }
-        Map<SubjectId, RouteOperation> next = new LinkedHashMap<>(operations);
-        next.put(operationId, new RouteOperation(current.id(), current.settlementId(), current.cargoId(), current.destinationId(),
-                current.participantIds(), current.route(), current.routeIndex(), OperationStage.FAILED));
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, next,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return FrontierOperationStateSupport.fail(this, operationId);
     }
     /**
      * Atomically turns an exact shipment into its real loaded-world carrier. The interrupted
@@ -475,19 +486,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.spawn(bioform), structureDamage, physicalDeltas, ambientLeases);
     }
-    public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { Objects.requireNonNull(job, "hive growth job"); ExactItemStack input = inventory.items().get(job.consumedItemId());
-        if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot slot) || !isHiveStore(slot.containerId())) throw new IllegalArgumentException("hive growth needs one exact hive-store input");
-        return next(actorLocations, structureConditions, infection, inventory.withoutItem(input.id()), productionJobs,
-                contracts, operations, physicalIntents, physicalObservations, sceneLeases, hiveColony.startGrowth(job), structureDamage, physicalDeltas, ambientLeases);
-    }
-    public FrontierWorldState completeHiveGrowth(SubjectId jobId) {
-        HiveGrowthJob job = hiveColony.growthJobs().get(Objects.requireNonNull(jobId, "hive growth job id"));
-        if (job == null || actorLocations.containsKey(job.bioform().id())) throw new IllegalArgumentException("hive growth completion is invalid");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(actorLocations); actors.put(job.bioform().id(), new ActorLocation(job.bioform().position()));
-        return next(actors, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony.completeGrowth(jobId), structureDamage, physicalDeltas, ambientLeases);
-    }
-    boolean isHiveStore(SubjectId containerId) { return HiveStorageSupport.isOperationalStore(this, containerId); }
+    public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.start(this, job); }
+    public FrontierWorldState completeHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.complete(this, jobId); }
+    public FrontierWorldState cancelHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.cancel(this, jobId); }
+    public boolean isHiveStore(SubjectId containerId) { return HiveStorageSupport.isOperationalStore(this, containerId); }
     public static SubjectId depotId(SubjectId settlementId) {
         Objects.requireNonNull(settlementId, "settlement id"); if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("settlement id must use settlement: namespace");
         return new SubjectId("container:" + settlementId.value().substring("settlement:".length()) + "-depot");

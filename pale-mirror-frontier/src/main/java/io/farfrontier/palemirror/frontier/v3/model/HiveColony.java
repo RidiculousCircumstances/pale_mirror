@@ -60,6 +60,12 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(organs, bioforms, next);
     }
 
+    public HiveColony cancelGrowth(SubjectId jobId) {
+        if (!growthJobs.containsKey(Objects.requireNonNull(jobId, "hive growth job id"))) throw new IllegalArgumentException("unknown hive growth job: " + jobId.value());
+        Map<SubjectId, HiveGrowthJob> next = new LinkedHashMap<>(growthJobs); next.remove(jobId);
+        return new HiveColony(addedOrgans, spawnedBioforms, next);
+    }
+
     void validateAgainst(FrontierBootstrap bootstrap) {
         var hive = bootstrap.hive();
         var organIds = hive.organs().stream().map(HiveOrgan::id).collect(java.util.stream.Collectors.toSet());
@@ -77,10 +83,11 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
             }
             bioformIds.add(bioform.id());
         }
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> consumptionIntents = new java.util.HashSet<>();
         for (HiveGrowthJob job : growthJobs.values()) {
             HiveOrgan organ = job.organ(); Bioform bioform = job.bioform();
             if (!hive.id().equals(job.hiveId()) || !nestIds.contains(job.nestId()) || organIds.contains(organ.id()) || bioformIds.contains(bioform.id())
-                    || !bootstrap.bounds().contains(organ.anchor()) || !bootstrap.bounds().contains(bioform.position())) {
+                    || !bootstrap.bounds().contains(organ.anchor()) || !bootstrap.bounds().contains(bioform.position()) || !consumptionIntents.add(job.consumptionIntentId())) {
                 throw new IllegalArgumentException("hive growth job does not belong to this colony");
             }
             organIds.add(organ.id()); bioformIds.add(bioform.id());

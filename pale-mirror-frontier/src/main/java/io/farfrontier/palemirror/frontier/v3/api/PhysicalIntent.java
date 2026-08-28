@@ -53,6 +53,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("scene strike must bind one exact attacker and target without an area radius");
                 }
             }
+            case EXACT_ITEM_CONSUMPTION -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED || subjectIds.size() != 2) {
+                    throw new IllegalArgumentException("exact item consumption must bind one owner and one exact stack without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");

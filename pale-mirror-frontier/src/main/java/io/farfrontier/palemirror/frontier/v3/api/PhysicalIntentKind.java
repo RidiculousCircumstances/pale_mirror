@@ -7,5 +7,7 @@ public enum PhysicalIntentKind {
     ROUTE_CONSTRUCTION,
     DECONTAMINATION,
     EXPLOSION,
-    SCENE_STRIKE
+    SCENE_STRIKE,
+    /** One exact unit is consumed from one active, identity-tagged physical container stack. */
+    EXACT_ITEM_CONSUMPTION
 }

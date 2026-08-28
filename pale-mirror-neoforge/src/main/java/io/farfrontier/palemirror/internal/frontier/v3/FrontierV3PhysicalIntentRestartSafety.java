@@ -46,7 +46,8 @@ final class FrontierV3PhysicalIntentRestartSafety {
                 .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
                         && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR
                         && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION)
+                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION
+                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION)
                 .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION
                         || !hasManagedPostcondition.test(intent.id()))
                 .map(PhysicalIntent::id)
