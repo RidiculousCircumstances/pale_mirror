@@ -269,6 +269,7 @@ class FrontierWorldRuntimeDefinitionTest {
         SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-2"));
         assertTrue(contract != null, () -> "plans=" + state.strategicPlans().objectives() + ", items=" + state.inventory().items());
         assertEquals(ContractStatus.LOADED, contract.status());
+        assertEquals(64, contract.itemCount(), "a supply obligation must retain the exact produced stack count, not its one-item template");
         CargoBatch cargo = state.inventory().cargo().get(contract.cargoId());
         assertEquals(List.of(new SubjectId("item:production-1-1-bread")), cargo.itemIds());
         assertEquals(new InventoryCustody.Cargo(cargo.id()), state.inventory().items().get(cargo.itemIds().getFirst()).custody());
