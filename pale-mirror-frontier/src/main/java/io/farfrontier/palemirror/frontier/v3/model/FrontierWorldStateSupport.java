@@ -85,6 +85,15 @@ final class FrontierWorldStateSupport {
         return container.ownerId();
     }
 
+    static SubjectId itemOwner(FrontierWorldState state, ExactItemDestroyed destroyed) {
+        if (!(destroyed.source() instanceof InventoryCustody.ContainerSlot slot)) {
+            throw new IllegalArgumentException("destroyed item has no owned container boundary");
+        }
+        ContainerRecord container = state.inventory().containers().get(slot.containerId());
+        if (container == null) throw new IllegalArgumentException("destroyed item references an unknown container");
+        return container.ownerId();
+    }
+
     static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label) {
         Objects.requireNonNull(input, label);
         LinkedHashMap<K, V> copy = new LinkedHashMap<>();

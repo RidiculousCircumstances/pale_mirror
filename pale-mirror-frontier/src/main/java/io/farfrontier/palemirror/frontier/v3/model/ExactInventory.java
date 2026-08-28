@@ -129,6 +129,18 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
+    /** Removes one exact stack only when its surviving canonical custody still matches physical evidence. */
+    public ExactInventory destroyObservedItem(SubjectId itemId, InventoryCustody source) {
+        Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(source, "item source");
+        ExactItemStack current = items.get(itemId);
+        if (current == null || !current.custody().equals(source)) throw new IllegalArgumentException("destroyed item source does not match canonical custody");
+        Map<UUID, List<SubjectId>> nextPlayers = mutableCustody(playerItems);
+        Map<UUID, List<SubjectId>> nextCarriers = mutableCustody(worldCarrierItems);
+        removePlayerCustody(nextPlayers, source, itemId); removeCarrierCustody(nextCarriers, source, itemId);
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items); nextItems.remove(itemId);
+        return new ExactInventory(containers, nextItems, cargo, nextPlayers, nextCarriers, conflicts, surfaces);
+    }
+
     /** Records one real item consumed from a physical stack; the stack identity remains stable. */
     public ExactInventory consumeOne(SubjectId itemId) {
         ExactItemStack current = items.get(Objects.requireNonNull(itemId, "item id"));

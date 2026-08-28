@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -52,12 +53,12 @@ class ExplosionObservationTest {
         FixedPosition origin = new FixedPosition(FixedScalar.whole(-400), FixedScalar.whole(64), FixedScalar.whole(400));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-test"), PhysicalIntentKind.EXPLOSION,
                 PhysicalIntentStatus.PREPARED, bomber, List.of(bomber, engagement), origin, 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
-        ExplosionObservation receipt = new ExplosionObservation(new PhysicalObservationId("observation:explosion-test"), intent.id(), origin, 4, 12, 8);
+        ExplosionObservation receipt = new ExplosionObservation(new PhysicalObservationId("observation:explosion-test"), intent.id(), origin, 4, 12, 8, List.of(), List.of(), 0, 0);
 
         FrontierWorldState running = state.preparePhysicalIntent(intent)
                 .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
-                Optional.of(new ExplosionObservation(receipt.id(), intent.id(), origin, 3, 12, 8))));
+                Optional.of(new ExplosionObservation(receipt.id(), intent.id(), origin, 3, 12, 8, List.of(), List.of(), 0, 0))));
 
         FrontierWorldState confirmed = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(intent.id()).status());
@@ -66,6 +67,19 @@ class ExplosionObservationTest {
         PhysicalIntentTransition transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertEquals(transition, FrontierWorldRuntimeDefinition.payloadCodecs().decode(transition.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(transition)));
+    }
+
+    @Test
+    void explosionReceiptRetainsExactEntityItemAndInfectionEvidence() {
+        FixedPosition origin = new FixedPosition(FixedScalar.whole(4), FixedScalar.whole(64), FixedScalar.whole(-4));
+        ExplosionObservation receipt = new ExplosionObservation(new PhysicalObservationId("observation:explosion-rich"), new PhysicalIntentId("intent:explosion-rich"), origin,
+                4, 9, 6, List.of(new ExplosionEntityImpact(UUID.fromString("00000000-0000-0000-0000-000000000055"), "minecraft:zombie",
+                Optional.of(new SubjectId("bioform:rich")), true)), List.of(new ExplosionItemImpact(new SubjectId("item:rich"), ExplosionItemImpact.Outcome.DESTROYED)), 2, 1);
+        PhysicalIntentTransition transition = new PhysicalIntentTransition(receipt.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertEquals(transition, FrontierWorldRuntimeDefinition.payloadCodecs().decode(transition.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(transition)));
+        assertThrows(IllegalArgumentException.class, () -> new ExplosionObservation(receipt.id(), receipt.intentId(), origin, 4, 9, 6,
+                List.of(new ExplosionEntityImpact(UUID.fromString("00000000-0000-0000-0000-000000000055"), "minecraft:zombie", Optional.empty(), false),
+                        new ExplosionEntityImpact(UUID.fromString("00000000-0000-0000-0000-000000000055"), "minecraft:zombie", Optional.empty(), false)), List.of(), 0, 0));
     }
 
     private static FixedPosition position(FrontierWorldState state, SubjectId actorId) {

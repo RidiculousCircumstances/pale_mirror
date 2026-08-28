@@ -134,12 +134,12 @@ public final class FrontierV3ServerLifecycle {
     }
 
     /** Routes a real blast either to its active v3 intent or to the ordinary external-effect observer. */
-    public static boolean observeExplosion(ServerLevel level, java.util.List<BlockPos> affected) {
+    public static boolean observeExplosion(ServerLevel level, java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent();
-        return managed.isPresent() ? FrontierV3ExplosionExecutor.observeDetonation(level, runtime, managed.orElseThrow(), affected)
+        return managed.isPresent() ? FrontierV3ExplosionExecutor.observeDetonation(level, runtime, managed.orElseThrow(), affected, entities)
                 : FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);
     }
 

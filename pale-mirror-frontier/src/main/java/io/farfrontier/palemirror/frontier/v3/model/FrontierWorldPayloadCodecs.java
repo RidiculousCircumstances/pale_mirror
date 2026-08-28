@@ -15,7 +15,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
                 new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
-                new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
+                new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
                 RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
@@ -274,6 +274,15 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ExactItemCustodyChanged(
                 readSubject(input).value(), readCustody(input), readCustody(input))); }
+    }
+    private static final class ExactItemDestroyedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.exact_item_destroyed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            ExactItemDestroyed destroyed = (ExactItemDestroyed) payload;
+            writeSubject(output, destroyed.itemId()); writeCustody(output, destroyed.source()); writeString(output, destroyed.cause());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ExactItemDestroyed(
+                readSubject(input).value(), readCustody(input), readString(input))); }
     }
     private static final class InventoryConflictObservedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.inventory_conflict_observed"; }

@@ -67,14 +67,43 @@ final class PhysicalEffectObservationPayloadCodec {
     private static void writeExplosion(DataOutputStream output, ExplosionObservation value) throws IOException {
         output.writeByte(5); ids(output, value); output.writeLong(value.origin().x().raw()); output.writeLong(value.origin().y().raw());
         output.writeLong(value.origin().z().raw()); output.writeByte(value.radiusBlocks()); output.writeInt(value.affectedBlockCount()); output.writeInt(value.changedBlockCount());
+        output.writeByte(1); output.writeByte(value.entityImpacts().size());
+        for (ExplosionEntityImpact impact : value.entityImpacts()) {
+            output.writeLong(impact.entityId().getMostSignificantBits()); output.writeLong(impact.entityId().getLeastSignificantBits());
+            FrontierWorldPayloadCodecs.writeString(output, impact.entityType()); output.writeBoolean(impact.frontierActorId().isPresent());
+            if (impact.frontierActorId().isPresent()) FrontierWorldPayloadCodecs.writeSubject(output, impact.frontierActorId().orElseThrow());
+            output.writeBoolean(impact.removed());
+        }
+        output.writeByte(value.itemImpacts().size());
+        for (ExplosionItemImpact impact : value.itemImpacts()) {
+            FrontierWorldPayloadCodecs.writeSubject(output, impact.itemId()); output.writeByte(impact.outcome().ordinal());
+        }
+        output.writeInt(value.affectedInfectionOverlayCount()); output.writeInt(value.changedInfectionOverlayCount());
     }
     private static SceneStrikeObservation strike(DataInputStream input) throws IOException {
         return new SceneStrikeObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                 FrontierWorldPayloadCodecs.readSubject(input).value(), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
     }
     private static ExplosionObservation explosion(DataInputStream input) throws IOException {
-        return new ExplosionObservation(id(input), intent(input), new FixedPosition(new FixedScalar(input.readLong()),
-                new FixedScalar(input.readLong()), new FixedScalar(input.readLong())), input.readUnsignedByte(), input.readInt(), input.readInt());
+        PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input);
+        FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
+        int radius = input.readUnsignedByte(), affected = input.readInt(), changed = input.readInt();
+        if (input.available() == 0) return new ExplosionObservation(id, intent, origin, radius, affected, changed, java.util.List.of(), java.util.List.of(), 0, 0);
+        if (input.readUnsignedByte() != 1) throw new IllegalArgumentException("unknown explosion receipt schema");
+        int entities = input.readUnsignedByte(); java.util.ArrayList<ExplosionEntityImpact> entityImpacts = new java.util.ArrayList<>();
+        for (int index = 0; index < entities; index++) {
+            java.util.UUID entity = new java.util.UUID(input.readLong(), input.readLong()); String type = FrontierWorldPayloadCodecs.readString(input);
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> actor = input.readBoolean()
+                    ? java.util.Optional.of(FrontierWorldPayloadCodecs.readSubject(input).value()) : java.util.Optional.empty();
+            entityImpacts.add(new ExplosionEntityImpact(entity, type, actor, input.readBoolean()));
+        }
+        int items = input.readUnsignedByte(); java.util.ArrayList<ExplosionItemImpact> itemImpacts = new java.util.ArrayList<>();
+        for (int index = 0; index < items; index++) {
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId item = FrontierWorldPayloadCodecs.readSubject(input).value(); int outcome = input.readUnsignedByte();
+            if (outcome >= ExplosionItemImpact.Outcome.values().length) throw new IllegalArgumentException("unknown explosion item outcome");
+            itemImpacts.add(new ExplosionItemImpact(item, ExplosionItemImpact.Outcome.values()[outcome]));
+        }
+        return new ExplosionObservation(id, intent, origin, radius, affected, changed, entityImpacts, itemImpacts, input.readInt(), input.readInt());
     }
     private static void ids(DataOutputStream output, PhysicalEffectObservation observation) throws IOException {
         FrontierWorldPayloadCodecs.writeString(output, observation.id().value()); FrontierWorldPayloadCodecs.writeString(output, observation.intentId().value());

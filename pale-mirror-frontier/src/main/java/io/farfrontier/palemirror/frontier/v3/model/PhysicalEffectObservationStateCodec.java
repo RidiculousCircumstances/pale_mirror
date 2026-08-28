@@ -39,6 +39,14 @@ final class PhysicalEffectObservationStateCodec {
                 output.writeByte(5); string(output, explosion.id().value()); string(output, explosion.intentId().value()); output.writeLong(explosion.origin().x().raw());
                 output.writeLong(explosion.origin().y().raw()); output.writeLong(explosion.origin().z().raw()); output.writeByte(explosion.radiusBlocks());
                 output.writeInt(explosion.affectedBlockCount()); output.writeInt(explosion.changedBlockCount());
+                FrontierWorldStateCodec.writeCount(output, explosion.entityImpacts().size());
+                for (ExplosionEntityImpact impact : explosion.entityImpacts()) {
+                    output.writeLong(impact.entityId().getMostSignificantBits()); output.writeLong(impact.entityId().getLeastSignificantBits()); string(output, impact.entityType());
+                    output.writeBoolean(impact.frontierActorId().isPresent()); if (impact.frontierActorId().isPresent()) string(output, impact.frontierActorId().orElseThrow().value()); output.writeBoolean(impact.removed());
+                }
+                FrontierWorldStateCodec.writeCount(output, explosion.itemImpacts().size());
+                for (ExplosionItemImpact impact : explosion.itemImpacts()) { string(output, impact.itemId().value()); output.writeByte(impact.outcome().ordinal()); }
+                output.writeInt(explosion.affectedInfectionOverlayCount()); output.writeInt(explosion.changedInfectionOverlayCount());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -53,8 +61,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 2 -> new RouteConstructionObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), FrontierWorldStateCodec.readPosition(input));
                 case 3 -> new DecontaminationObservation(id, intentId, new SubjectId(text(input)), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
                 case 4 -> new SceneStrikeObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
-                case 5 -> new ExplosionObservation(id, intentId, new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong())),
-                        input.readUnsignedByte(), input.readInt(), input.readInt());
+                case 5 -> explosion(input, id, intentId);
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
@@ -70,6 +77,23 @@ final class PhysicalEffectObservationStateCodec {
             placements.add(new CargoHandoffPlacement(itemId, receiver));
         }
         return new CargoHandoffObservation(id, intentId, cargoId, placements);
+    }
+    private static ExplosionObservation explosion(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
+        FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
+        int radius = input.readUnsignedByte(), affected = input.readInt(), changed = input.readInt();
+        java.util.ArrayList<ExplosionEntityImpact> entities = new java.util.ArrayList<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            java.util.UUID entity = new java.util.UUID(input.readLong(), input.readLong()); String type = text(input);
+            java.util.Optional<SubjectId> actor = input.readBoolean() ? java.util.Optional.of(new SubjectId(text(input))) : java.util.Optional.empty();
+            entities.add(new ExplosionEntityImpact(entity, type, actor, input.readBoolean()));
+        }
+        java.util.ArrayList<ExplosionItemImpact> items = new java.util.ArrayList<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId item = new SubjectId(text(input)); int outcome = input.readUnsignedByte();
+            if (outcome >= ExplosionItemImpact.Outcome.values().length) throw new IllegalArgumentException("invalid explosion item outcome");
+            items.add(new ExplosionItemImpact(item, ExplosionItemImpact.Outcome.values()[outcome]));
+        }
+        return new ExplosionObservation(id, intentId, origin, radius, affected, changed, entities, items, input.readInt(), input.readInt());
     }
 
     private static void string(DataOutputStream output, String value) throws IOException { FrontierWorldStateCodec.writeString(output, value); }

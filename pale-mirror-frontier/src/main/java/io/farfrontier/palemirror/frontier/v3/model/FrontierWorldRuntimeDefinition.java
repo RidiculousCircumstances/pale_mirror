@@ -146,6 +146,11 @@ public final class FrontierWorldRuntimeDefinition {
             if (item == null || !item.custody().equals(changed.from())) return rejected("observed item source differs from canonical custody");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, changed), changed)));
         }
+        if (command.payload() instanceof ExactItemDestroyed destroyed) {
+            ExactItemStack item = state.inventory().items().get(destroyed.itemId());
+            if (item == null || !item.custody().equals(destroyed.source())) return rejected("destroyed item source differs from canonical custody");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, destroyed), destroyed)));
+        }
         if (command.payload() instanceof InventoryConflictObserved observed) {
             InventoryConflict conflict = observed.conflict();
             ContainerRecord container = state.inventory().containers().get(conflict.containerId());
@@ -219,6 +224,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
+            case ExactItemDestroyed destroyed -> reduceExactItemDestroyed(state, event.subject(), destroyed);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
             case ContainerSurfaceTransition transition -> ContainerSurfaceProcess.reduce(state, event.subject(), transition);
             case HiveGrowthStarted started -> HiveGrowthProcess.reduceStarted(state, event.subject(), started);
@@ -377,6 +383,14 @@ public final class FrontierWorldRuntimeDefinition {
     private static FrontierWorldState reduceExactItemCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
         if (!subject.equals(FrontierWorldStateSupport.itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
         return state.withInventory(state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));
+    }
+    private static FrontierWorldState reduceExactItemDestroyed(FrontierWorldState state, SubjectId subject, ExactItemDestroyed destroyed) {
+        ExactItemStack item = state.inventory().items().get(destroyed.itemId());
+        if (item == null || !item.custody().equals(destroyed.source())
+                || !subject.equals(FrontierWorldStateSupport.itemOwner(state, destroyed))) {
+            throw new IllegalArgumentException("item destruction lacks its canonical owner");
+        }
+        return state.withInventory(state.inventory().destroyObservedItem(destroyed.itemId(), destroyed.source()));
     }
     private static FrontierWorldState reduceInventoryConflict(FrontierWorldState state, SubjectId subject, InventoryConflictObserved observed) {
         InventoryConflict conflict = observed.conflict();

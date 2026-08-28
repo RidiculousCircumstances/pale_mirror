@@ -63,7 +63,7 @@ final class FrontierV3PhysicalObservationExecutor {
 
     static void recordManagedExplosionDelta(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId,
-                                           FrontierV3ManagedExplosionLedger.Candidate candidate) {
+                                           FrontierV3ManagedExplosionLedger.BlockCandidate candidate) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         BlockPos position = candidate.blockPos(); BlockPosition canonicalPosition = new BlockPosition(position.getX(), position.getY(), position.getZ());
         FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
