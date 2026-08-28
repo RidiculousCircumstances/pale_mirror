@@ -87,7 +87,7 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
-    void restartQuarantinesAnUninspectableRunningPhysicalIntentWithoutBlindReplay(@TempDir Path directory) {
+    void restartLeavesCargoHandoffRunningForItsLoadedChunkPostconditionInspector(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:restart-safety");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
         var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
@@ -104,11 +104,10 @@ class FrontierV3ServerRuntimeTest {
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        assertEquals(1, FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(recovered));
+        assertEquals(0, FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(recovered));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, state.physicalIntents().get(intentId).status());
-        assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().preparedPhysicalIntentCount());
-        assertEquals(1, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
+        assertEquals(PhysicalIntentStatus.RUNNING, state.physicalIntents().get(intentId).status());
+        assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {

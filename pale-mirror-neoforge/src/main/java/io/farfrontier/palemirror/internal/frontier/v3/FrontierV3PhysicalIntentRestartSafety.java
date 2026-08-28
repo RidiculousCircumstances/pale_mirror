@@ -20,10 +20,10 @@ import java.util.Optional;
 /**
  * Fail-closed restart boundary for non-replayable Frontier effects.
  *
- * <p>There is not yet a v3 Minecraft effect executor, therefore a persisted RUNNING intent has
- * no supported real-world postcondition inspector. It must be made visibly unknown rather than
- * replayed or assumed successful. Once an executor exists, its kind-specific inspector replaces
- * this conservative path with evidence-backed completion.</p>
+ * <p>Each unrecognised effect kind has no supported real-world postcondition inspector. It must
+ * be made visibly unknown rather than replayed or assumed successful. Supported kinds are left
+ * for their loaded-chunk executor to inspect; that executor either submits immutable evidence or
+ * records the same visible unknown outcome.</p>
  */
 final class FrontierV3PhysicalIntentRestartSafety {
     private FrontierV3PhysicalIntentRestartSafety() { }
@@ -33,6 +33,7 @@ final class FrontierV3PhysicalIntentRestartSafety {
     ) {
         List<PhysicalIntentId> running = state(runtime).physicalIntents().values().stream()
                 .filter(intent -> intent.status() == PhysicalIntentStatus.RUNNING)
+                .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF)
                 .map(PhysicalIntent::id)
                 .sorted(Comparator.naturalOrder())
                 .toList();

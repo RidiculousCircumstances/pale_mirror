@@ -48,7 +48,14 @@ public final class FrontierV3ServerLifecycle {
     public static void tick(MinecraftServer server) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
-        runtime.tick(TICK_BUDGET);
+        try {
+            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+                FrontierV3CargoHandoffExecutor.tick(server.overworld(), runtime);
+                runtime.tick(TICK_BUDGET);
+            }
+        } catch (RuntimeException error) {
+            runtime.quarantine(error);
+        }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
             RUNTIMES.remove(server);
