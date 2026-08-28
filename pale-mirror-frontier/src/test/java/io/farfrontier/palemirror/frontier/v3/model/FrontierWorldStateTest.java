@@ -73,7 +73,7 @@ class FrontierWorldStateTest {
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
-        encoded[4] = 9;
+        encoded[4] = 10;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());

@@ -229,7 +229,7 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent == null) throw new IllegalArgumentException("physical intent transition has no prepared intent");
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("physical intent transition subject does not own operation");
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observationId());
+        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();

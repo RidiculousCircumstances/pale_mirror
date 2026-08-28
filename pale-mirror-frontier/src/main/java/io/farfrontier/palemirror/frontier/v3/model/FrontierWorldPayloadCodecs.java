@@ -130,11 +130,12 @@ public final class FrontierWorldPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) {
             PhysicalIntentTransition transition = (PhysicalIntentTransition) payload;
             return encodeProduction(output -> { writeString(output, transition.intentId().value()); output.writeByte(transition.status().ordinal());
-                output.writeBoolean(transition.observationId().isPresent()); if (transition.observationId().isPresent()) writeString(output, transition.observationId().orElseThrow().value()); });
+                output.writeBoolean(transition.observation().isPresent());
+                if (transition.observation().isPresent()) writeCargoHandoffObservation(output, transition.observation().orElseThrow()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)); int status = input.readUnsignedByte(); boolean observed = input.readBoolean();
-            var observation = observed ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input))) : java.util.Optional.<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId>empty();
+            var observation = observed ? java.util.Optional.of(readCargoHandoffObservation(input)) : java.util.Optional.<CargoHandoffObservation>empty();
             if (status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length) throw new IllegalArgumentException("unknown physical intent status");
             return new PhysicalIntentTransition(id, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status], observation);
         }); }
@@ -218,6 +219,24 @@ public final class FrontierWorldPayloadCodecs {
         return new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(id,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.values()[kind], io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status],
                 cause.value(), subjects, origin, radius, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.values()[postcondition], observation);
+    }
+    private static void writeCargoHandoffObservation(DataOutputStream output, CargoHandoffObservation observation) throws IOException {
+        writeString(output, observation.id().value()); writeString(output, observation.intentId().value()); writeSubject(output, observation.cargoId());
+        output.writeByte(observation.placements().size());
+        for (CargoHandoffPlacement placement : observation.placements()) {
+            writeSubject(output, placement.itemId()); writeSubject(output, placement.receiverSlot().containerId()); output.writeByte(placement.receiverSlot().slot());
+        }
+    }
+    private static CargoHandoffObservation readCargoHandoffObservation(DataInputStream input) throws IOException {
+        var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input));
+        var intentId = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
+        SubjectIdHolder cargoId = readSubject(input);
+        java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            SubjectIdHolder itemId = readSubject(input); SubjectIdHolder receiver = readSubject(input);
+            placements.add(new CargoHandoffPlacement(itemId.value(), new InventoryCustody.ContainerSlot(receiver.value(), input.readUnsignedByte())));
+        }
+        return new CargoHandoffObservation(id, intentId, cargoId.value(), placements);
     }
     private static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     private static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }

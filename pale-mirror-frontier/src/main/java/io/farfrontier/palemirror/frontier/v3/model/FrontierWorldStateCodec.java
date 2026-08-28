@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
@@ -27,7 +28,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 8;
+    private static final int VERSION = 9;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -44,6 +45,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeContracts(output, state.contracts());
                 writeOperations(output, state.operations());
                 writePhysicalIntents(output, state.physicalIntents());
+                writePhysicalObservations(output, state.physicalObservations());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -55,7 +57,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
             FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input),
-                    readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input), readPhysicalIntents(input));
+                    readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -252,6 +254,34 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         return intents;
+    }
+    private static void writePhysicalObservations(DataOutputStream output, Map<PhysicalObservationId, CargoHandoffObservation> observations) throws IOException {
+        writeCount(output, observations.size());
+        for (CargoHandoffObservation observation : observations.values().stream().sorted(Comparator.comparing(CargoHandoffObservation::id)).toList()) {
+            writeString(output, observation.id().value()); writeString(output, observation.intentId().value()); writeString(output, observation.cargoId().value());
+            writeCount(output, observation.placements().size());
+            for (CargoHandoffPlacement placement : observation.placements()) {
+                writeString(output, placement.itemId().value()); writeCustody(output, placement.receiverSlot());
+            }
+        }
+    }
+    private static Map<PhysicalObservationId, CargoHandoffObservation> readPhysicalObservations(DataInputStream input) throws IOException {
+        Map<PhysicalObservationId, CargoHandoffObservation> observations = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            PhysicalObservationId id = new PhysicalObservationId(readString(input));
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
+            SubjectId cargoId = new SubjectId(readString(input));
+            java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
+            for (int placement = 0, placementCount = readCount(input); placement < placementCount; placement++) {
+                SubjectId itemId = new SubjectId(readString(input));
+                InventoryCustody custody = readCustody(input);
+                if (!(custody instanceof InventoryCustody.ContainerSlot receiver)) throw new IllegalArgumentException("cargo hand-off placement must target a container slot");
+                placements.add(new CargoHandoffPlacement(itemId, receiver));
+            }
+            CargoHandoffObservation observation = new CargoHandoffObservation(id, intentId, cargoId, placements);
+            if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
+        }
+        return observations;
     }
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

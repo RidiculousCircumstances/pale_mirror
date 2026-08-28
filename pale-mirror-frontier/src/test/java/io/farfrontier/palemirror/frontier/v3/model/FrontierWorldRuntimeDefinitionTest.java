@@ -154,6 +154,10 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(prepared, codecs.decode(prepared.type(), codecs.encode(prepared)));
         PhysicalIntentTransition transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         assertEquals(transition, codecs.decode(transition.type(), codecs.encode(transition)));
+        CargoHandoffObservation observation = new CargoHandoffObservation(new PhysicalObservationId("observation:supply-1-1"), intent.id(), contract.cargoId(),
+                List.of(new CargoHandoffPlacement(job.outputItemId(), new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
+        PhysicalIntentTransition confirmed = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+        assertEquals(confirmed, codecs.decode(confirmed.type(), codecs.encode(confirmed)));
     }
 
     @Test
@@ -216,14 +220,26 @@ class FrontierWorldRuntimeDefinitionTest {
         for (long tick = 100L; tick <= 900L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
         FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
+        CargoHandoffObservation observation = new CargoHandoffObservation(new PhysicalObservationId("observation:cargo-handoff-supply-1-1"), id,
+                new SubjectId("cargo:supply-1-1"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
 
         assertThrows(IllegalArgumentException.class, () -> prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
-                Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1"))));
+                Optional.of(observation)));
         FrontierWorldState running = prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.RUNNING, Optional.empty());
+        CargoHandoffObservation foreignStore = new CargoHandoffObservation(new PhysicalObservationId("observation:cargo-handoff-foreign-store"), id,
+                new SubjectId("cargo:supply-1-1"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0))));
+        assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED, Optional.of(foreignStore)));
         FrontierWorldState confirmed = running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
-                Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1")));
+                Optional.of(observation));
         assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(id).status());
         assertEquals(Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1")), confirmed.physicalIntents().get(id).postconditionObservationId());
+        assertEquals(ContractStatus.DELIVERED, confirmed.contracts().get(new SubjectId("contract:supply-1-1")).status());
+        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0),
+                confirmed.inventory().items().get(new SubjectId("item:production-1-1-bread")).custody());
+        assertEquals(observation, confirmed.physicalObservations().get(observation.id()));
+        assertEquals(confirmed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmed)));
     }
 
     @Test

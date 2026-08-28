@@ -143,6 +143,27 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         nextCargo.put(batch.id(), batch);
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems);
     }
+
+    /** Moves every exact cargo item into observed receiver slots and removes the completed batch. */
+    public ExactInventory completeCargoHandoff(SubjectId cargoId, List<CargoHandoffPlacement> placements) {
+        CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
+        if (batch == null) throw new IllegalArgumentException("completed cargo is absent: " + cargoId.value());
+        List<SubjectId> observedItems = placements.stream().map(CargoHandoffPlacement::itemId).sorted().toList();
+        if (!observedItems.equals(batch.itemIds().stream().sorted().toList())) {
+            throw new IllegalArgumentException("cargo hand-off observation does not place every exact cargo item");
+        }
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        for (CargoHandoffPlacement placement : placements) {
+            ExactItemStack item = nextItems.get(placement.itemId());
+            if (item == null || !item.custody().equals(new InventoryCustody.Cargo(cargoId))) {
+                throw new IllegalArgumentException("handoff item is not in its exact cargo batch: " + placement.itemId().value());
+            }
+            nextItems.put(item.id(), new ExactItemStack(item.id(), item.itemKind(), item.count(), placement.receiverSlot()));
+        }
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
+        nextCargo.remove(cargoId);
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems);
+    }
     private static void require(Object value, Object expected, String label) {
         if (value instanceof ExactItemStack item && item.custody().equals(expected)) return;
         throw new IllegalArgumentException("dangling or conflicting " + label);
