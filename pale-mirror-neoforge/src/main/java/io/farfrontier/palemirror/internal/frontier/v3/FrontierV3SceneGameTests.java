@@ -4,12 +4,28 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -21,6 +37,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
+import java.util.Optional;
 
 /** Materialized ownership and conflict evidence for exact v3 HOT scene bodies. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
@@ -91,6 +108,42 @@ public final class FrontierV3SceneGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void restoredOwnedBodyReclaimsUnknownAmbientLeaseWithoutDuplication(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(12, 8, 0)); prepareFloor(level, origin);
+        WorldId world = new WorldId("frontier:ambient-reclaim-game-test");
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+        SubjectId resident = new SubjectId("resident:1-1");
+        FrontierWorldState initial = state(runtime);
+        AmbientActorLease lease = AmbientActorProcess.nextLease(initial, resident, runtime.checkpointImage().orElseThrow().instant());
+        FrontierV3CommandSubmission.submit(runtime, "ambient-game-test-prepare", resident.value(), new AmbientLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "ambient-game-test-hot", resident.value(), new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
+        helper.assertValueEqual(FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
+                "restart recovery must make an active ambient lease UNKNOWN before any body is accepted");
+
+        Villager restored = EntityType.VILLAGER.create(level);
+        helper.assertTrue(restored != null, "the restored owned-body fixture must be constructible");
+        restored.setUUID(FrontierV3AmbientActorExecutor.entityId(resident));
+        restored.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
+        restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
+        restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        helper.assertTrue(level.addFreshEntity(restored), "the restored body fixture must enter the loaded world");
+
+        helper.assertTrue(FrontierV3AmbientActorExecutor.observeJoin(runtime, restored),
+                "only the exact loaded owned body may reclaim an UNKNOWN ambient lease");
+        helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
+                "loaded-world reclaim must make the same canonical lease HOT");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
+                        new BlockPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
+                "reclaim must retain the existing body instead of creating another one");
+        helper.assertTrue(level.getEntity(restored.getUUID()) == restored, "the observed restored body remains the sole UUID owner");
+        FrontierV3AmbientActorExecutor.forget(runtime);
+        restored.discard();
+        helper.succeed();
+    }
+
     private static SceneLease lease(BlockPos origin) {
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-game-test");
         List<SceneMember> members = List.of(member(id, "resident:frontier-v3-test-hauler"), member(id, "resident:frontier-v3-test-guard"));
@@ -105,5 +158,19 @@ public final class FrontierV3SceneGameTests {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(position.above(), Blocks.AIR.defaultBlockState(), 3);
+    }
+    private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+    }
+    /** GameTest-only memory port: the filesystem restart proof lives in FrontierV3ServerRuntimeTest. */
+    private static final class EphemeralStore implements FrontierStore {
+        @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }
+        @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) {
+            return new AppendReceipt(transaction.id(), transaction.revision(), durability, transaction.revision().value());
+        }
+        @Override public SnapshotReceipt installSnapshot(SnapshotRecord snapshot) { throw new UnsupportedOperationException("GameTest does not checkpoint"); }
+        @Override public CompactionReceipt compact(WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision coveredRevision) {
+            throw new UnsupportedOperationException("GameTest does not compact");
+        }
     }
 }
