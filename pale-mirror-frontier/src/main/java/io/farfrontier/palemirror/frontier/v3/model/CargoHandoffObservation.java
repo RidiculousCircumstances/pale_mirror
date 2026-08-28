@@ -9,7 +9,7 @@ import java.util.Objects;
 
 /** Immutable actual placement evidence produced by a real cargo hand-off. */
 public record CargoHandoffObservation(PhysicalObservationId id, PhysicalIntentId intentId, SubjectId cargoId,
-                                      List<CargoHandoffPlacement> placements) {
+                                      List<CargoHandoffPlacement> placements) implements PhysicalEffectObservation {
     public CargoHandoffObservation {
         Objects.requireNonNull(id, "physical observation id");
         Objects.requireNonNull(intentId, "physical observation intent id");

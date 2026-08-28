@@ -37,6 +37,16 @@ public record StructureDamage(SubjectId structureId, Map<BlockPosition, DamageCe
         return new StructureDamage(structureId, next);
     }
 
+    /** Removes only an already-recorded exact cell after a verified physical repair. */
+    public StructureDamage repair(BlockPosition position, GrayboxSemanticPart part) {
+        DamageCell current = cells.get(Objects.requireNonNull(position, "repair position"));
+        if (current == null || current.semanticPart() != Objects.requireNonNull(part, "repair semantic part")) {
+            throw new IllegalArgumentException("repair does not match recorded structure damage");
+        }
+        Map<BlockPosition, DamageCell> next = new LinkedHashMap<>(cells); next.remove(position);
+        return new StructureDamage(structureId, next);
+    }
+
     /** One exact affected block and its first immutable observed cause. */
     public record DamageCell(GrayboxSemanticPart semanticPart, String cause) {
         public DamageCell {

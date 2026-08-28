@@ -12,5 +12,22 @@ public enum GrayboxMaterial {
     HIVE_BROOD,
     HIVE_STORE,
     ROUTE,
-    INFECTION
+    INFECTION;
+
+    /** One repair unit is one ordinary Minecraft concrete item, never an aggregate resource. */
+    public String repairItemKind() {
+        return switch (this) {
+            case HALL -> "minecraft:white_concrete";
+            case HOUSING -> "minecraft:orange_concrete";
+            case FARM -> "minecraft:lime_concrete";
+            case WORKSHOP -> "minecraft:blue_concrete";
+            case DEPOT -> "minecraft:yellow_concrete";
+            case INFIRMARY -> "minecraft:pink_concrete";
+            case HIVE_HEART -> "minecraft:red_concrete";
+            case HIVE_BROOD -> "minecraft:purple_concrete";
+            case HIVE_STORE -> "minecraft:magenta_concrete";
+            case ROUTE -> "minecraft:gray_concrete";
+            case INFECTION -> throw new IllegalArgumentException("infection is not a structural repair material");
+        };
+    }
 }

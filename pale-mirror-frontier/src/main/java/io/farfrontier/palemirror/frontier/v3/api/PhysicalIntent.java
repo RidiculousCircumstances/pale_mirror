@@ -38,6 +38,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("cargo hand-off must use zero radius and cargo postcondition");
                 }
             }
+            case STRUCTURAL_REPAIR -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED) {
+                    throw new IllegalArgumentException("structural repair must use zero radius and repair postcondition");
+                }
+            }
             case EXPLOSION -> {
                 if (radiusBlocks == 0 || postcondition != PhysicalPostcondition.EXPLOSION_OBSERVED) {
                     throw new IllegalArgumentException("explosion must use positive radius and explosion postcondition");

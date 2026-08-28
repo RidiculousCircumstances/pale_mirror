@@ -23,6 +23,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrganKind;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -94,7 +95,7 @@ final class FrontierV3CargoHandoffExecutor {
         }
         Optional<CargoHandoffObservation> observed = observation(chest, state, intent, operation.cargoId(), target.containerId());
         if (observed.isPresent()) {
-            transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, observed, "confirmed");
+            transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, observed.map(value -> (PhysicalEffectObservation) value), "confirmed");
         } else {
             transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict");
         }
@@ -142,7 +143,7 @@ final class FrontierV3CargoHandoffExecutor {
     }
 
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId,
-                                      PhysicalIntentStatus status, Optional<CargoHandoffObservation> observation, String phase) {
+                                      PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation, String phase) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = new CommandId("executor:" + phase + "-" + intentId.value().replace(':', '-'));
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),

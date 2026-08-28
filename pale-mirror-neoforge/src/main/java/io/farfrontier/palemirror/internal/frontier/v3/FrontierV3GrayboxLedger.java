@@ -55,6 +55,16 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (prior == null || prior.conflicted()) return;
         claims.put(position.asLong(), new Claim(prior.owner(), prior.material(), prior.semanticPart(), true)); setDirty();
     }
+    /** Restores an exact previously claimed semantic cell after its separately durable repair receipt. */
+    void repaired(BlockPos position, String owner, String material, String semanticPart) {
+        Claim prior = claims.get(position.asLong());
+        Claim restored = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), false);
+        if (prior == null || !prior.owner().equals(restored.owner()) || !prior.material().equals(restored.material())
+                || !prior.semanticPart().equals(restored.semanticPart())) {
+            throw new IllegalStateException("v3 repair does not match its original graybox claim");
+        }
+        if (!prior.equals(restored)) { claims.put(position.asLong(), restored); setDirty(); }
+    }
     static FrontierV3GrayboxLedger load(CompoundTag tag, HolderLookup.Provider registries) {
         if (tag.getInt("format") != FORMAT) throw new IllegalStateException("incompatible v3 graybox ledger");
         Map<Long, Claim> claims = new HashMap<>(); ListTag entries = tag.getList("claims", Tag.TAG_COMPOUND);

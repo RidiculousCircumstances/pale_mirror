@@ -33,7 +33,8 @@ final class FrontierV3PhysicalIntentRestartSafety {
     ) {
         List<PhysicalIntentId> running = state(runtime).physicalIntents().values().stream()
                 .filter(intent -> intent.status() == PhysicalIntentStatus.RUNNING)
-                .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF)
+                .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
+                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR)
                 .map(PhysicalIntent::id)
                 .sorted(Comparator.naturalOrder())
                 .toList();

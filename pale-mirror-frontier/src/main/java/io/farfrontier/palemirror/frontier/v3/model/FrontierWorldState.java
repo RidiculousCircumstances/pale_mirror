@@ -14,43 +14,27 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
     public record FrontierWorldState(
-        FrontierBootstrap bootstrap,
-        Map<SubjectId, ActorLocation> actorLocations,
-        Map<SubjectId, StructureCondition> structureConditions,
-        Map<InfectionCell, FixedRatio> infection,
-        ExactInventory inventory,
-        Map<SubjectId, ProductionJob> productionJobs,
-        Map<SubjectId, SupplyContract> contracts,
-        Map<SubjectId, RouteOperation> operations,
-        Map<PhysicalIntentId, PhysicalIntent> physicalIntents,
-        Map<PhysicalObservationId, CargoHandoffObservation> physicalObservations,
-        Map<SceneLeaseId, SceneLease> sceneLeases,
-        HiveColony hiveColony,
-        Map<SubjectId, StructureDamage> structureDamage,
-        Map<BlockPosition, PhysicalDelta> physicalDeltas,
+        FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
+        Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection,
+        ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
+        Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations,
+        Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
+        Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony,
+        Map<SubjectId, StructureDamage> structureDamage, Map<BlockPosition, PhysicalDelta> physicalDeltas,
         Map<SubjectId, AmbientActorLease> ambientLeases
 ) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO);
-    private static final int MAX_OPERATIONS = 1_024;
-    private static final int MAX_PHYSICAL_INTENTS = 4_096;
-    private static final int MAX_PHYSICAL_OBSERVATIONS = 4_096;
-    private static final int MAX_SCENE_LEASES = 1_024;
-    private static final int MAX_AMBIENT_LEASES = 4_096;
-    private static final int MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
+    private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
+    private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     public FrontierWorldState {
         Objects.requireNonNull(bootstrap, "bootstrap");
-        actorLocations = FrontierWorldStateSupport.immutableMap(actorLocations, "actor locations");
-        structureConditions = FrontierWorldStateSupport.immutableMap(structureConditions, "structure conditions");
+        actorLocations = FrontierWorldStateSupport.immutableMap(actorLocations, "actor locations"); structureConditions = FrontierWorldStateSupport.immutableMap(structureConditions, "structure conditions");
         infection = FrontierWorldStateSupport.immutableMap(infection, "infection");
         Objects.requireNonNull(inventory, "inventory");
-        productionJobs = FrontierWorldStateSupport.immutableMap(productionJobs, "production jobs");
-        contracts = FrontierWorldStateSupport.immutableMap(contracts, "supply contracts");
-        operations = FrontierWorldStateSupport.immutableMap(operations, "route operations");
-        physicalIntents = FrontierWorldStateSupport.immutableMap(physicalIntents, "physical intents");
-        physicalObservations = FrontierWorldStateSupport.immutableMap(physicalObservations, "physical observations");
-        sceneLeases = FrontierWorldStateSupport.immutableMap(sceneLeases, "scene leases");
-        structureDamage = FrontierWorldStateSupport.immutableMap(structureDamage, "structure damage");
-        physicalDeltas = FrontierWorldStateSupport.immutableMap(physicalDeltas, "physical deltas");
+        productionJobs = FrontierWorldStateSupport.immutableMap(productionJobs, "production jobs"); contracts = FrontierWorldStateSupport.immutableMap(contracts, "supply contracts");
+        operations = FrontierWorldStateSupport.immutableMap(operations, "route operations"); physicalIntents = FrontierWorldStateSupport.immutableMap(physicalIntents, "physical intents");
+        physicalObservations = FrontierWorldStateSupport.immutableMap(physicalObservations, "physical observations"); sceneLeases = FrontierWorldStateSupport.immutableMap(sceneLeases, "scene leases");
+        structureDamage = FrontierWorldStateSupport.immutableMap(structureDamage, "structure damage"); physicalDeltas = FrontierWorldStateSupport.immutableMap(physicalDeltas, "physical deltas");
         ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases");
         Objects.requireNonNull(hiveColony, "hive colony");
         hiveColony.validateAgainst(bootstrap);
@@ -153,26 +137,32 @@ import java.util.Set;
             PhysicalIntent intent = entry.getValue();
             if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
             if (!expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId())
-                    && !operations.containsKey(intent.causeSubjectId())) {
+                    && !operations.containsKey(intent.causeSubjectId()) && !expectedStructures.contains(intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
             for (SubjectId subject : intent.subjectIds()) {
+                if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
+                        && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }
             }
         }
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
-        for (Map.Entry<PhysicalObservationId, CargoHandoffObservation> entry : physicalObservations.entrySet()) {
-            CargoHandoffObservation observation = entry.getValue();
+        for (Map.Entry<PhysicalObservationId, PhysicalEffectObservation> entry : physicalObservations.entrySet()) {
+            PhysicalEffectObservation observation = entry.getValue();
             if (!entry.getKey().equals(observation.id())) throw new IllegalArgumentException("physical observation map key must match observation identity");
             PhysicalIntent intent = physicalIntents.get(observation.intentId());
             if (intent == null || intent.status() != PhysicalIntentStatus.CONFIRMED
                     || !intent.postconditionObservationId().equals(java.util.Optional.of(observation.id()))) {
                 throw new IllegalArgumentException("physical observation must be the confirmed intent receipt");
             }
-            FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, observation);
+            if (observation instanceof CargoHandoffObservation cargo) {
+                FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
+            } else if (observation instanceof StructuralRepairObservation repair) {
+                StructuralRepairStateSupport.validateReceipt(intent, repair);
+            } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
         }
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
@@ -342,7 +332,7 @@ import java.util.Set;
                 next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState transitionPhysicalIntent(PhysicalIntentId intentId, PhysicalIntentStatus nextStatus,
-                                                       java.util.Optional<CargoHandoffObservation> observation) {
+                                                       java.util.Optional<PhysicalEffectObservation> observation) {
         PhysicalIntent current = physicalIntents.get(Objects.requireNonNull(intentId, "physical intent id"));
         if (current == null) throw new IllegalArgumentException("unknown physical intent: " + intentId.value());
         boolean allowed = current.status() == PhysicalIntentStatus.PREPARED
@@ -356,29 +346,37 @@ import java.util.Set;
             return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
         }
-        CargoHandoffObservation evidence = observation.orElseThrow(() -> new IllegalArgumentException("confirmed physical intent requires observation evidence"));
-        if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
-                || !current.id().equals(evidence.intentId()) || physicalObservations.containsKey(evidence.id())) {
+        PhysicalEffectObservation evidence = observation.orElseThrow(() -> new IllegalArgumentException("confirmed physical intent requires observation evidence"));
+        if (!current.id().equals(evidence.intentId()) || physicalObservations.containsKey(evidence.id())) {
             throw new IllegalArgumentException("cargo hand-off observation does not match a unique confirmed intent");
         }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR) {
+            if (!(evidence instanceof StructuralRepairObservation repair)) throw new IllegalArgumentException("structural repair requires repair observation evidence");
+            return StructuralRepairStateSupport.complete(this, current, repair, next);
+        }
+        if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
+            throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
+        }
+        CargoHandoffObservation cargoEvidence = cargo;
         RouteOperation operation = operations.get(current.causeSubjectId());
-        if (operation == null || !operation.cargoId().equals(evidence.cargoId())) throw new IllegalArgumentException("cargo hand-off observation does not match its route operation");
+        if (operation == null || !operation.cargoId().equals(cargoEvidence.cargoId())) throw new IllegalArgumentException("cargo hand-off observation does not match its route operation");
         SubjectId receiver = FrontierCargoValidation.receiverStore(bootstrap, operation);
-        if (evidence.placements().stream().anyMatch(placement -> !receiver.equals(placement.receiverSlot().containerId()))) {
+        if (cargoEvidence.placements().stream().anyMatch(placement -> !receiver.equals(placement.receiverSlot().containerId()))) {
             throw new IllegalArgumentException("cargo hand-off observation targets a foreign hive receiver");
         }
-        SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(evidence.cargoId())).findFirst()
+        SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(cargoEvidence.cargoId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("cargo hand-off has no supply contract"));
         if (contract.status() != ContractStatus.LOADED) throw new IllegalArgumentException("only loaded cargo can complete hand-off");
         Map<SubjectId, SupplyContract> nextContracts = new LinkedHashMap<>(contracts);
         nextContracts.put(contract.id(), new SupplyContract(contract.id(), contract.settlementId(), contract.recipientId(), contract.cargoId(),
                 contract.itemKind(), contract.itemCount(), ContractStatus.DELIVERED));
-        next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(evidence.id())));
-        Map<PhysicalObservationId, CargoHandoffObservation> nextObservations = new LinkedHashMap<>(physicalObservations);
-        nextObservations.put(evidence.id(), evidence);
+        next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(cargoEvidence.id())));
+        Map<PhysicalObservationId, PhysicalEffectObservation> nextObservations = new LinkedHashMap<>(physicalObservations);
+        nextObservations.put(cargoEvidence.id(), cargoEvidence);
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection,
-                inventory.completeCargoHandoff(evidence.cargoId(), evidence.placements()), productionJobs, nextContracts, operations, next, nextObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+                inventory.completeCargoHandoff(cargoEvidence.cargoId(), cargoEvidence.placements()), productionJobs, nextContracts, operations, next, nextObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
+
     public FrontierWorldState prepareSceneLease(SceneLease lease) {
         Objects.requireNonNull(lease, "scene lease");
         if (sceneLeases.containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());

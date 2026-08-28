@@ -9,7 +9,7 @@ import java.util.Optional;
 
 /** Durable state change after executor admission, postcondition observation or restart inspection. */
 public record PhysicalIntentTransition(PhysicalIntentId intentId, PhysicalIntentStatus status,
-                                       Optional<CargoHandoffObservation> observation) implements FrontierPayload {
+                                       Optional<PhysicalEffectObservation> observation) implements FrontierPayload {
     public PhysicalIntentTransition {
         Objects.requireNonNull(intentId, "physical intent id");
         Objects.requireNonNull(status, "physical intent status");

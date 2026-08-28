@@ -129,6 +129,19 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
+    /** Records one real item consumed from a physical stack; the stack identity remains stable. */
+    public ExactInventory consumeOne(SubjectId itemId) {
+        ExactItemStack current = items.get(Objects.requireNonNull(itemId, "item id"));
+        if (current == null) throw new IllegalArgumentException("consumed item is absent: " + itemId.value());
+        if (!(current.custody() instanceof InventoryCustody.ContainerSlot)) {
+            throw new IllegalArgumentException("repair material must remain in an owned container slot");
+        }
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        if (current.count() == 1) nextItems.remove(itemId);
+        else nextItems.put(itemId, new ExactItemStack(current.id(), current.itemKind(), current.count() - 1, current.custody()));
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
+    }
+
     /** Stores a new exact stack only in an actual currently-free owned container slot. */
     public ExactInventory store(ExactItemStack item) {
         Objects.requireNonNull(item, "item");

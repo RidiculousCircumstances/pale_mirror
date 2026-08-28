@@ -27,10 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
-    private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 18;
-    private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 19, MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {
@@ -425,30 +422,39 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         return intents;
     }
-    private static void writePhysicalObservations(DataOutputStream output, Map<PhysicalObservationId, CargoHandoffObservation> observations) throws IOException {
+    private static void writePhysicalObservations(DataOutputStream output, Map<PhysicalObservationId, PhysicalEffectObservation> observations) throws IOException {
         writeCount(output, observations.size());
-        for (CargoHandoffObservation observation : observations.values().stream().sorted(Comparator.comparing(CargoHandoffObservation::id)).toList()) {
-            writeString(output, observation.id().value()); writeString(output, observation.intentId().value()); writeString(output, observation.cargoId().value());
-            writeCount(output, observation.placements().size());
-            for (CargoHandoffPlacement placement : observation.placements()) {
-                writeString(output, placement.itemId().value()); writeCustody(output, placement.receiverSlot());
-            }
+        for (PhysicalEffectObservation observation : observations.values().stream().sorted(Comparator.comparing(PhysicalEffectObservation::id)).toList()) {
+            if (observation instanceof CargoHandoffObservation cargo) {
+                output.writeByte(0); writeString(output, cargo.id().value()); writeString(output, cargo.intentId().value()); writeString(output, cargo.cargoId().value());
+                writeCount(output, cargo.placements().size());
+                for (CargoHandoffPlacement placement : cargo.placements()) {
+                    writeString(output, placement.itemId().value()); writeCustody(output, placement.receiverSlot());
+                }
+            } else if (observation instanceof StructuralRepairObservation repair) {
+                output.writeByte(1); writeString(output, repair.id().value()); writeString(output, repair.intentId().value());
+                writeString(output, repair.itemId().value()); writePosition(output, repair.position());
+            } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
-    private static Map<PhysicalObservationId, CargoHandoffObservation> readPhysicalObservations(DataInputStream input) throws IOException {
-        Map<PhysicalObservationId, CargoHandoffObservation> observations = new LinkedHashMap<>();
+    private static Map<PhysicalObservationId, PhysicalEffectObservation> readPhysicalObservations(DataInputStream input) throws IOException {
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            PhysicalObservationId id = new PhysicalObservationId(readString(input));
+            int kind = input.readUnsignedByte(); PhysicalObservationId id = new PhysicalObservationId(readString(input));
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
-            SubjectId cargoId = new SubjectId(readString(input));
-            java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
-            for (int placement = 0, placementCount = readCount(input); placement < placementCount; placement++) {
-                SubjectId itemId = new SubjectId(readString(input));
-                InventoryCustody custody = readCustody(input);
-                if (!(custody instanceof InventoryCustody.ContainerSlot receiver)) throw new IllegalArgumentException("cargo hand-off placement must target a container slot");
-                placements.add(new CargoHandoffPlacement(itemId, receiver));
-            }
-            CargoHandoffObservation observation = new CargoHandoffObservation(id, intentId, cargoId, placements);
+            PhysicalEffectObservation observation = switch (kind) {
+                case 0 -> {
+                    SubjectId cargoId = new SubjectId(readString(input)); java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
+                    for (int placement = 0, placementCount = readCount(input); placement < placementCount; placement++) {
+                        SubjectId itemId = new SubjectId(readString(input)); InventoryCustody custody = readCustody(input);
+                        if (!(custody instanceof InventoryCustody.ContainerSlot receiver)) throw new IllegalArgumentException("cargo hand-off placement must target a container slot");
+                        placements.add(new CargoHandoffPlacement(itemId, receiver));
+                    }
+                    yield new CargoHandoffObservation(id, intentId, cargoId, placements);
+                }
+                case 1 -> new StructuralRepairObservation(id, intentId, new SubjectId(readString(input)), readPosition(input));
+                default -> throw new IllegalArgumentException("unknown physical observation kind");
+            };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
         }
         return observations;
