@@ -74,6 +74,7 @@ final class StructuralRepairProcess {
 
     private static boolean repairableOwner(FrontierWorldState state, SubjectId ownerId) {
         if (ownerId.value().startsWith("structure:")) return state.structureConditions().get(ownerId) != StructureCondition.DESTROYED;
+        if (FrontierRouteNetwork.OWNER.equals(ownerId)) return true;
         return FrontierWorldStateSupport.isHiveOrgan(state.bootstrap(), state.hiveColony(), ownerId);
     }
 }

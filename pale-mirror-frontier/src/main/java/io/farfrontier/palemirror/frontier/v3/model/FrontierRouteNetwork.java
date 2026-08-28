@@ -17,6 +17,7 @@ import java.util.Set;
  */
 final class FrontierRouteNetwork {
     static final SubjectId OWNER = new SubjectId("route:frontier-network");
+    static final SubjectId MAINTENANCE_CONTAINER = new SubjectId("container:frontier-route-maintenance");
 
     private FrontierRouteNetwork() { }
 
@@ -36,6 +37,16 @@ final class FrontierRouteNetwork {
     static HiveNest supplyNest(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
         return bootstrap.hive().seedNests().getFirst();
+    }
+
+    /**
+     * The route's exact maintenance stock has a real, separately claimed surface. A player or a
+     * settlement can fund it through normal item custody, but gray concrete elsewhere never
+     * becomes route authority.
+     */
+    static BlockPosition maintenanceContainerPosition(FrontierBootstrap bootstrap) {
+        Objects.requireNonNull(bootstrap, "bootstrap");
+        return new BlockPosition(-405, 65, 250);
     }
 
     static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap) {

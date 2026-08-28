@@ -29,7 +29,8 @@ class FrontierWorldStateTest {
 
         assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount(), state.actorLocations().size());
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
-        assertEquals(14, state.inventory().containers().size());
+        assertEquals(15, state.inventory().containers().size());
+        assertEquals(FrontierRouteNetwork.OWNER, state.inventory().containers().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).ownerId());
         assertEquals(2, state.inventory().items().size());
         assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
         assertTrue(state.productionJobs().isEmpty());

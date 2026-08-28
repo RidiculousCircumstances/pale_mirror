@@ -136,9 +136,8 @@ import java.util.Set;
         for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
             PhysicalIntent intent = entry.getValue();
             if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
-            if (!expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId())
-                    && !operations.containsKey(intent.causeSubjectId()) && !expectedStructures.contains(intent.causeSubjectId())
-                    && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())) {
+            if (!expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId())
+                    && !expectedStructures.contains(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId()) && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
             for (SubjectId subject : intent.subjectIds()) {
@@ -146,6 +145,7 @@ import java.util.Set;
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
+                        && !FrontierRouteNetwork.OWNER.equals(subject)
                         && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }
@@ -211,8 +211,8 @@ import java.util.Set;
                 new ContainerRecord(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"), settlement.id(), 27)));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container ->
                 containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
-        Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
-        SubjectId firstDepot = depotId(bootstrap.settlements().getFirst().id());
+        containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27));
+        Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>(); SubjectId firstDepot = depotId(bootstrap.settlements().getFirst().id());
         SubjectId firstInput = new SubjectId("item:bootstrap-1-wheat"); items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
         SubjectId hiveBiomass = new SubjectId("item:bootstrap-hive-biomass"); items.put(hiveBiomass, new ExactItemStack(hiveBiomass, "minecraft:rotten_flesh", 64,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0)));

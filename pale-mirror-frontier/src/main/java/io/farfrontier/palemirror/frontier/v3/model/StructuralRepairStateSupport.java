@@ -36,7 +36,7 @@ final class StructuralRepairStateSupport {
         }
         if (!(material.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !state.inventory().containers().get(slot.containerId()).ownerId().equals(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), current.causeSubjectId()))) {
-            throw new IllegalArgumentException("repair material is not in its structure owner's container");
+            throw new IllegalArgumentException("repair material is not in its semantic owner's container");
         }
         if (!current.causeSubjectId().value().startsWith("structure:")) return completeHiveOrgan(state, current, repair, nextIntents);
         StructureDamage damage = state.structureDamage().get(current.causeSubjectId());
@@ -58,12 +58,23 @@ final class StructuralRepairStateSupport {
 
     private static FrontierWorldState completeHiveOrgan(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
                                                          Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
+        if (FrontierRouteNetwork.OWNER.equals(current.causeSubjectId())) return completeRoute(state, current, repair, nextIntents);
         if (!FrontierWorldStateSupport.isHiveOrgan(state.bootstrap(), state.hiveColony(), current.causeSubjectId())) {
             throw new IllegalArgumentException("repair owner is neither a settlement structure nor hive organ");
         }
         Map<BlockPosition, PhysicalDelta> deltas = new LinkedHashMap<>(state.physicalDeltas()); deltas.remove(repair.position());
         nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(repair.id(), repair);
+        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeOne(repair.itemId()),
+                state.productionJobs(), state.contracts(), state.operations(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
+                state.structureDamage(), deltas, state.ambientLeases());
+    }
+
+    private static FrontierWorldState completeRoute(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
+                                                     Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
+        Map<BlockPosition, PhysicalDelta> deltas = new LinkedHashMap<>(state.physicalDeltas()); deltas.remove(repair.position());
+        nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(); observations.putAll(state.physicalObservations()); observations.put(repair.id(), repair);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeOne(repair.itemId()),
                 state.productionJobs(), state.contracts(), state.operations(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), deltas, state.ambientLeases());

@@ -156,17 +156,17 @@ public final class FrontierV3CargoHandoffGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-structural-repair", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void structuralRepairUsesTheExactConcreteStackAndRestoresOnlyItsOwnedCell(GameTestHelper helper) {
+    public static void semanticRouteRepairUsesTheExactConcreteStackAndRestoresOnlyItsOwnedCell(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(22, 8, 0)); BlockPos chestPosition = target.east(2);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
-        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:repair-game-test"), "minecraft:yellow_concrete", 2,
+        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:repair-game-test"), "minecraft:gray_concrete", 2,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:repair-game-test"), 0));
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(concrete));
-        GrayboxCell cell = grayboxCell(target, "structure:repair-game-test", GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
+        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level); ledger.applied(target, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
         helper.assertTrue(FrontierV3StructuralRepairExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete), "an empty owned loss consumes exactly one matching concrete item");
-        helper.assertTrue(level.getBlockState(target).is(Blocks.YELLOW_CONCRETE) && chest.getItem(0).getCount() == 1 && !ledger.claim(target).conflicted(),
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && chest.getItem(0).getCount() == 1 && !ledger.claim(target).conflicted(),
                 "the live block, exact stack and provenance claim converge together");
         level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3StructuralRepairExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete), "foreign post-loss geometry is never overwritten by repair");

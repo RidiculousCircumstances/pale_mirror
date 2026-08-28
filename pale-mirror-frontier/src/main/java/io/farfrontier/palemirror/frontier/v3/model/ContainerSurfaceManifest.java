@@ -18,6 +18,9 @@ final class ContainerSurfaceManifest {
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container ->
                 surfaces.put(container, unmaterialized(container, organ.anchor()))));
+        surfaces.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER,
+                new ContainerSurface(FrontierRouteNetwork.MAINTENANCE_CONTAINER,
+                        FrontierRouteNetwork.maintenanceContainerPosition(bootstrap), ContainerSurfaceStatus.UNMATERIALIZED));
         return Map.copyOf(surfaces);
     }
 

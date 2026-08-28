@@ -54,6 +54,7 @@ final class FrontierWorldStateSupport {
     static SubjectId semanticOwner(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
         if (ownerId.value().startsWith("structure:")) return structureSettlement(bootstrap, ownerId);
         if (isHiveOrgan(bootstrap, colony, ownerId)) return bootstrap.hive().id();
+        if (FrontierRouteNetwork.OWNER.equals(ownerId)) return ownerId;
         throw new IllegalArgumentException("unknown repairable semantic owner: " + ownerId.value());
     }
 

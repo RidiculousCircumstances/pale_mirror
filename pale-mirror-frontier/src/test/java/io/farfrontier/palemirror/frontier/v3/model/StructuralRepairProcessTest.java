@@ -66,4 +66,30 @@ class StructuralRepairProcessTest {
         assertTrue(!repaired.physicalDeltas().containsKey(cell.position()) && repaired.isHiveOrganOperational(organ.id()));
         assertTrue(!repaired.inventory().items().containsKey(materialId), "the final real concrete item is consumed exactly once");
     }
+
+    @Test
+    void routeRepairRequiresDedicatedActiveMaintenanceStockAndRestoresOnlyTheKnownHole() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:route-repair"), 91L));
+        BlockPosition routeCell = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id()).get(2);
+        state = state.recordPhysicalDelta(new PhysicalDelta(routeCell, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "explosion:test"));
+        SubjectId materialId = new SubjectId("item:route-repair-gray-concrete");
+        FrontierWorldState noStock = state.withInventory(state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE));
+        assertTrue(StructuralRepairProcess.plan(noStock, StructuralRepairProcess.scan(1, 800L)).stream().noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared));
+        state = noStock.withInventory(noStock.inventory().store(new ExactItemStack(materialId, "minecraft:gray_concrete", 1,
+                new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
+        assertTrue(StructuralRepairProcess.plan(state, StructuralRepairProcess.scan(1, 800L)).stream()
+                .anyMatch(event -> event.subject().equals(FrontierRouteNetwork.OWNER) && event.payload() instanceof PhysicalIntentPrepared));
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-repair"), PhysicalIntentKind.STRUCTURAL_REPAIR, PhysicalIntentStatus.PREPARED,
+                FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, materialId), new FixedPosition(FixedScalar.whole(routeCell.x()), FixedScalar.whole(routeCell.y()), FixedScalar.whole(routeCell.z())),
+                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED);
+        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState repaired = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new StructuralRepairObservation(new PhysicalObservationId("observation:route-repair"), intent.id(), materialId, routeCell)));
+        assertTrue(!repaired.physicalDeltas().containsKey(routeCell));
+        assertTrue(!repaired.inventory().items().containsKey(materialId));
+        assertTrue(FrontierRouteNetwork.isPassable(repaired.bootstrap(), FrontierRouteNetwork.supplyWaypoints(repaired.bootstrap(), repaired.bootstrap().settlements().getFirst().id()), repaired.physicalDeltas()));
+        assertEquals(repaired, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(repaired)));
+    }
 }
