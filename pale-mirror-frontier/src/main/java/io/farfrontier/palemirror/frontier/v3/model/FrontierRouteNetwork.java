@@ -34,6 +34,20 @@ final class FrontierRouteNetwork {
                 new BlockPosition(-405, destination.y(), destination.z()), destination);
     }
 
+    static void validateSupplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id"); Objects.requireNonNull(route, "route");
+        Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
+        if (route.size() < 3 || route.size() > 127 || !route.getFirst().equals(settlement.anchor())
+                || !route.getLast().equals(supplyNest(bootstrap).anchor().offset(4, 0, -4))) throw new IllegalArgumentException("replacement route has invalid endpoints or size");
+        for (int index = 1; index < route.size(); index++) {
+            BlockPosition from = route.get(index - 1), to = route.get(index);
+            if (!bootstrap.bounds().contains(to) || from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) {
+                throw new IllegalArgumentException("replacement route segment is outside bounds or not axis aligned");
+            }
+        }
+    }
+
     static HiveNest supplyNest(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
         return bootstrap.hive().seedNests().getFirst();
