@@ -107,6 +107,22 @@ public final class FrontierV3SceneGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void preparedEngagementSceneKeepsBothSidesAsExactBodies(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(24, 8, 0)); prepareFloor(level, origin); prepareFloor(level, origin.east(2));
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:engagement-scene-bodies"), 91L));
+        SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-engagement-bodies"); SubjectId resident = new SubjectId("resident:1-1"), bioform = new SubjectId("bioform:west-0");
+        SceneLease lease = new SceneLease(id, new SubjectId("operation:frontier-v3-engagement-bodies"), new SubjectId("cargo:frontier-v3-engagement-bodies"),
+                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
+                Optional.of(new SubjectId("engagement:frontier-v3-game-test")), List.of(new SceneMember(resident, SceneLease.deterministicEntityId(id, resident)),
+                        new SceneMember(bioform, SceneLease.deterministicEntityId(id, bioform))));
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "a loaded engagement scene must materialize both exact human and hive members without a second actor set");
+        helper.assertTrue(level.getEntity(lease.members().getFirst().entityId()) instanceof Villager, "engagement resident remains one Villager");
+        helper.assertTrue(level.getEntity(lease.members().getLast().entityId()) instanceof Zombie, "engagement bioform remains one Zombie");
+        lease.members().forEach(member -> level.getEntity(member.entityId()).discard()); helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-ambient-actors", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void ambientActorsKeepExactIdAndUseVillagerOrZombieKind(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinitio
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
@@ -58,6 +59,11 @@ final class FrontierV3SceneExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = state(runtime);
         if (state == null) return;
+        Optional<SceneEngagementCandidate> engagement = state.coldEngagementSceneCandidates().stream()
+                .filter(candidate -> state.sceneLeases().values().stream().noneMatch(lease -> lease.engagementId().filter(candidate.engagementId()::equals).isPresent()
+                        && lease.status() != SceneLeaseStatus.CLOSED))
+                .filter(candidate -> demandExists(level, candidate.handoffPosition())).findFirst();
+        if (engagement.isPresent()) { prepare(runtime, state, engagement.orElseThrow()); return; }
         Optional<RouteOperation> demand = state.operations().values().stream().sorted(Comparator.comparing(RouteOperation::id))
                 .filter(operation -> operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.EN_ROUTE)
                 .filter(operation -> state.sceneLeases().values().stream().noneMatch(lease -> lease.operationId().equals(operation.id())
@@ -81,6 +87,15 @@ final class FrontierV3SceneExecutor {
         submit(runtime, "scene-prepare", id.value(), new SceneLeasePrepared(lease));
     }
 
+    private static void prepare(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneEngagementCandidate candidate) {
+        CheckpointImage checkpoint = checkpoint(runtime);
+        SceneLeaseId id = new SceneLeaseId("lease:" + candidate.engagementId().value().substring("engagement:".length()) + "-r" + checkpoint.revision().value());
+        List<SceneMember> members = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(id, actor))).toList();
+        SceneLease lease = new SceneLease(id, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members);
+        submit(runtime, "engagement-scene-prepare", id.value(), new SceneLeasePrepared(lease));
+    }
+
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         switch (lease.status()) {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
@@ -89,7 +104,8 @@ final class FrontierV3SceneExecutor {
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             }
             case DRAINING -> release(level, runtime, state, lease);
-            case UNKNOWN_AFTER_RESTART, CLOSED -> { }
+            case UNKNOWN_AFTER_RESTART -> reclaim(level, runtime, state, lease);
+            case CLOSED -> { }
         }
     }
 
@@ -100,6 +116,15 @@ final class FrontierV3SceneExecutor {
         } else if (result == BodyMaterialization.CONFLICT) {
             unknown(runtime, lease);
         }
+    }
+
+    /** Reclaims only a complete observed body set; missing bodies remain explicit UNKNOWN. */
+    private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        if (!demandExists(level, lease.handoffPosition())) return;
+        for (SceneMember member : lease.members()) {
+            if (!owned(level.getEntity(member.entityId()), state, lease, member)) return;
+        }
+        submit(runtime, "scene-reclaimed", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
     }
 
     static BodyMaterialization materializeBodies(ServerLevel level, FrontierWorldState state, SceneLease lease) {
@@ -148,6 +173,7 @@ final class FrontierV3SceneExecutor {
     private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         List<SceneMemberPosition> positions = new ArrayList<>();
         for (SceneMember member : lease.members()) {
+            if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
             if (!owned(entity, state, lease, member)) { unknown(runtime, lease); return; }
             if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) { unknown(runtime, lease); return; }

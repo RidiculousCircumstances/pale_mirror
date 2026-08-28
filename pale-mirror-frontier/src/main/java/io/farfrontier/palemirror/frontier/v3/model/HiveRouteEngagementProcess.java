@@ -171,7 +171,7 @@ final class HiveRouteEngagementProcess {
             new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.progress", 1); }
     private static ScheduledAction readiness(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-readiness-" + engagement.id().value().substring("engagement:".length())),
             new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.readiness", 1); }
-    private static ScheduledAction combat(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-combat-" + engagement.id().value().substring("engagement:".length())),
+    static ScheduledAction combat(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-combat-" + engagement.id().value().substring("engagement:".length())),
             new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.combat", 1); }
     private static List<ProposedEvent> beginOrWait(FrontierWorldState state, RouteEngagement engagement, long now) {
         RouteOperation operation = state.operations().get(engagement.operationId());

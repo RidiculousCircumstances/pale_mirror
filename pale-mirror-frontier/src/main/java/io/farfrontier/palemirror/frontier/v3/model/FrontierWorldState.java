@@ -181,7 +181,17 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
                 throw new IllegalArgumentException("operation cannot have multiple active scene leases");
             }
             Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
-            if (!members.equals(Set.copyOf(operation.participantIds()))) throw new IllegalArgumentException("scene lease members must exactly match route participants");
+            Set<SubjectId> expectedMembers = lease.engagementId().map(engagementId -> {
+                RouteEngagement engagement = strategicPlans.routeEngagements().get(engagementId);
+                if (engagement == null || !engagement.operationId().equals(operation.id())
+                        || !lease.handoffPosition().equals(engagement.intercept())
+                        || (lease.status() != SceneLeaseStatus.CLOSED && engagement.status() != RouteEngagementStatus.COLD_COMBAT
+                        && engagement.status() != RouteEngagementStatus.HOT && engagement.status() != RouteEngagementStatus.UNKNOWN_AFTER_RESTART)) {
+                    throw new IllegalArgumentException("scene lease must bind one active canonical engagement");
+                }
+                Set<SubjectId> values = new HashSet<>(operation.participantIds()); values.addAll(engagement.attackerIds()); return Set.copyOf(values);
+            }).orElse(Set.copyOf(operation.participantIds()));
+            if (!members.equals(expectedMembers)) throw new IllegalArgumentException("scene lease members must exactly match its canonical scene actors");
             for (SubjectId actor : members) {
                 if (lease.status() != SceneLeaseStatus.CLOSED && !leasedActors.add(actor)) throw new IllegalArgumentException("actor cannot belong to multiple active scene leases");
                 if (lease.status() != SceneLeaseStatus.CLOSED && activelyAmbientLeased.contains(actor)) throw new IllegalArgumentException("actor cannot have both scene and ambient execution leases");
@@ -228,6 +238,7 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans);
     }
+    public List<SceneEngagementCandidate> coldEngagementSceneCandidates() { return FrontierSceneEngagementSupport.candidates(this); }
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) { return withActorLocation(actor, position, strategicPlans); }
     FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position, StrategicPlanState nextPlans) {
         Objects.requireNonNull(actor, "actor");
@@ -415,30 +426,10 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
                 physicalIntents, physicalObservations, next, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {
-        SceneLease current = sceneLeases.get(Objects.requireNonNull(leaseId, "scene lease id"));
-        if (current == null) throw new IllegalArgumentException("unknown scene lease: " + leaseId.value());
-        boolean allowed = current.status().canTransitionTo(nextStatus);
-        if (!allowed) throw new IllegalArgumentException("scene lease transition is not allowed");
-        Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases); next.put(leaseId, current.withStatus(nextStatus));
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                physicalIntents, physicalObservations, next, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return FrontierSceneLeaseStateSupport.transition(this, Objects.requireNonNull(leaseId, "scene lease id"), nextStatus);
     }
     public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) {
-        SceneLease current = sceneLeases.get(Objects.requireNonNull(leaseId, "scene lease id"));
-        if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
-        Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId)
-                .filter(actor -> actorLocations.get(actor).condition().status() == ActorLifeStatus.ALIVE).collect(java.util.stream.Collectors.toSet());
-        Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
-        if (!expected.equals(observed) || observed.size() != positions.size()) throw new IllegalArgumentException("scene release must capture exactly its leased actors");
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        for (SceneMemberPosition position : positions) {
-            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position.position());
-            ActorLocation currentActor = actorLocations.get(position.actorId());
-            nextActors.put(position.actorId(), new ActorLocation(position.position(), currentActor.condition().withHealth(position.health())));
-        }
-        Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases); next.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                physicalIntents, physicalObservations, next, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return FrontierSceneLeaseStateSupport.release(this, Objects.requireNonNull(leaseId, "scene lease id"), positions);
     }
     public FrontierWorldState recordActorDeath(ActorDied death) {
         Objects.requireNonNull(death, "actor death");

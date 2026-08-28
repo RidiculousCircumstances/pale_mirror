@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -112,6 +113,31 @@ class HiveRouteEngagementProcessTest {
             if (event.payload() instanceof RouteEngagementTransition transition) state = HiveRouteEngagementProcess.reduceTransition(state, hive, transition);
         }
         SubjectId engagementId = new SubjectId("engagement:hive-cold-combat");
+        assertEquals(RouteEngagementStatus.COLD_COMBAT, state.strategicPlans().routeEngagements().get(engagementId).status());
+        SceneEngagementCandidate candidate = state.coldEngagementSceneCandidates().getFirst();
+        assertEquals(engagementId, candidate.engagementId());
+        assertEquals(operation.id(), candidate.operationId());
+        assertEquals(intercept, candidate.handoffPosition());
+        assertEquals(5, candidate.actorIds().size());
+        SceneLeaseId leaseId = new SceneLeaseId("lease:hive-cold-combat-r1");
+        List<SceneMember> sceneMembers = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList();
+        SceneLeaseId incompleteLeaseId = new SceneLeaseId("lease:hive-cold-combat-incomplete");
+        List<SceneMember> incompleteMembers = candidate.actorIds().stream().limit(2).map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(incompleteLeaseId, actor))).toList();
+        SceneLease incomplete = new SceneLease(incompleteLeaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
+                new SimInstant(3_001L), 1L, SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), incompleteMembers);
+        FrontierWorldState coldBeforeLease = state;
+        assertThrows(IllegalArgumentException.class, () -> coldBeforeLease.prepareSceneLease(incomplete));
+        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(3_001L), 1L,
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), sceneMembers);
+        FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        assertEquals(RouteEngagementStatus.HOT, hot.strategicPlans().routeEngagements().get(engagementId).status());
+        FrontierWorldState recovered = hot.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
+                .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());
+        assertEquals(SceneLeaseStatus.HOT, recovered.sceneLeases().get(leaseId).status());
+        List<SceneMemberPosition> captured = candidate.actorIds().stream().map(actor -> new SceneMemberPosition(actor, hot.actorLocations().get(actor).position(),
+                hot.actorLocations().get(actor).condition().health())).toList();
+        state = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, captured);
         assertEquals(RouteEngagementStatus.COLD_COMBAT, state.strategicPlans().routeEngagements().get(engagementId).status());
 
         RouteEngagementStrike first = (RouteEngagementStrike) HiveRouteEngagementProcess.planCombat(state,

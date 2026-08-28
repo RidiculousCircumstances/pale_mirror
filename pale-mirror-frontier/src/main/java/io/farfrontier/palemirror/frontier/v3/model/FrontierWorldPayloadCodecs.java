@@ -459,17 +459,19 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static void writeSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
         writeString(output, lease.id().value()); writeSubject(output, lease.operationId()); writeSubject(output, lease.cargoId());
+        output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeSubject(output, lease.engagementId().orElseThrow());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
         output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal()); output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) { writeSubject(output, member.actorId()); writeString(output, member.entityId().toString()); }
     }
     private static SceneLease readSceneLease(DataInputStream input) throws IOException {
         var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input);
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(readSubject(input).value()) : java.util.Optional.empty();
         BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); long handoff = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
         if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
         java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMember(readSubject(input).value(), java.util.UUID.fromString(readString(input))));
-        return new SceneLease(id, operation.value(), cargo.value(), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision, SceneLeaseStatus.values()[status], members);
+        return new SceneLease(id, operation.value(), cargo.value(), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision, SceneLeaseStatus.values()[status], engagement, members);
     }
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
@@ -486,13 +488,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
     static void writeString(DataOutputStream output, String value) throws IOException {
-        byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long");
+        byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long");
         output.writeShort(encoded.length); output.write(encoded);
     }
     static String readString(DataInputStream input) throws IOException {
-        int length = input.readUnsignedShort();
-        if (length > 256) throw new IllegalArgumentException("production payload field is too long");
+        int length = input.readUnsignedShort(); if (length > 256) throw new IllegalArgumentException("production payload field is too long");
         byte[] encoded = input.readNBytes(length);
         if (encoded.length != length) throw new IOException("truncated production payload field");
         return new String(encoded, java.nio.charset.StandardCharsets.UTF_8);

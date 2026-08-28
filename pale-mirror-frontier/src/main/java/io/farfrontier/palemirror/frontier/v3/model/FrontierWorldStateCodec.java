@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 29, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 30, MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {
@@ -365,6 +365,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, leases.size());
         for (SceneLease lease : leases.values().stream().sorted(Comparator.comparing(SceneLease::id)).toList()) {
             writeString(output, lease.id().value()); writeString(output, lease.operationId().value()); writeString(output, lease.cargoId().value());
+            output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeString(output, lease.engagementId().orElseThrow().value());
             writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
             writeCount(output, lease.members().size());
             for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); }
@@ -374,6 +375,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SceneLeaseId id = new SceneLeaseId(readString(input)); SubjectId operation = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
+            java.util.Optional<SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
             BlockPosition handoff = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
             java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
@@ -381,7 +383,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 members.add(new SceneMember(new SubjectId(readString(input)), UUID.fromString(readString(input))));
             }
             SceneLease lease = new SceneLease(id, operation, cargo, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
-                    SceneLeaseStatus.values()[status], members);
+                    SceneLeaseStatus.values()[status], engagement, members);
             if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
         }
         return leases;
@@ -486,15 +488,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     }
     private static int readCount(DataInputStream input) throws IOException { return input.readUnsignedShort(); }
     static void writeString(DataOutputStream output, String value) throws IOException {
-        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length > 256) throw new IllegalArgumentException("state identifier is too long");
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8); if (bytes.length > 256) throw new IllegalArgumentException("state identifier is too long");
         output.writeShort(bytes.length); output.write(bytes);
     }
     static String readString(DataInputStream input) throws IOException {
-        int length = input.readUnsignedShort();
-        if (length > 256) throw new IllegalArgumentException("state identifier is too long");
-        byte[] bytes = input.readNBytes(length);
-        if (bytes.length != length) throw new IOException("truncated state identifier");
+        int length = input.readUnsignedShort(); if (length > 256) throw new IllegalArgumentException("state identifier is too long");
+        byte[] bytes = input.readNBytes(length); if (bytes.length != length) throw new IOException("truncated state identifier");
         return new String(bytes, StandardCharsets.UTF_8);
     }
 }

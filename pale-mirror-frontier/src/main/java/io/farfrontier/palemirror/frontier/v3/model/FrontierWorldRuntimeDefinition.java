@@ -70,6 +70,13 @@ public final class FrontierWorldRuntimeDefinition {
             SceneLease lease = state.sceneLeases().get(released.leaseId()); if (lease == null) return rejected("scene lease is unknown");
             RouteOperation operation = state.operations().get(lease.operationId());
             if (operation == null) return rejected("scene lease has no owning operation");
+            if (lease.engagementId().isPresent()) {
+                RouteEngagement engagement = state.strategicPlans().routeEngagements().get(lease.engagementId().orElseThrow());
+                if (engagement == null || engagement.status() != RouteEngagementStatus.HOT) return rejected("scene lease has no HOT engagement to resume");
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
+                        new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                                HiveRouteEngagementProcess.combat(engagement, command.submittedAt().ticks() + 20L)))));
+            }
             if (operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
                 List<ProposedEvent> events = new java.util.ArrayList<>(); events.add(new ProposedEvent(operation.settlementId(), released));
                 events.addAll(SupplyOperationProcess.failed(state, operation, "actor-death")); return new CommandPlan.Accepted(List.copyOf(events));
