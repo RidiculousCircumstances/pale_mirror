@@ -24,6 +24,8 @@ final class FrontierWorldProjectionCompiler {
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count(),
                 (int) state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).count(),
                 (int) state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).count(),
+                (int) state.ambientLeases().values().stream().filter(lease -> lease.status() != AmbientLeaseStatus.CLOSED).count(),
+                (int) state.ambientLeases().values().stream().filter(lease -> lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART).count(),
                 state.inventory().conflicts().size());
     }
 }

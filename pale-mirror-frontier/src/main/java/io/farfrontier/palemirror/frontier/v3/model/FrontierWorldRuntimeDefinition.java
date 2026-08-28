@@ -91,6 +91,7 @@ public final class FrontierWorldRuntimeDefinition {
             return AmbientActorProcess.plan(state, death);
         }
         if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);
+        if (command.payload() instanceof AmbientLeasePrepared || command.payload() instanceof AmbientLeaseTransition || command.payload() instanceof AmbientLeaseReleased) return AmbientActorProcess.planLease(state, command.payload());
         if (command.payload() instanceof StructureDamaged damage) {
             try {
                 state.recordStructureDamage(damage);
@@ -121,8 +122,7 @@ public final class FrontierWorldRuntimeDefinition {
         }
         return rejected("command is not a trusted physical transition or scene lease");
     }
-    private static CommandPlan.Rejected rejected(String message) {
-        return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+    private static CommandPlan.Rejected rejected(String message) { return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                 io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, message));
     }
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
@@ -238,6 +238,9 @@ public final class FrontierWorldRuntimeDefinition {
         return List.copyOf(events);
     }
     private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+        if (event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition || event.payload() instanceof AmbientLeaseReleased) {
+            return AmbientActorProcess.reduceLease(state, event.subject(), event.instant(), event.payload());
+        }
         return switch (event.payload()) {
             case InfectionChanged changed -> state.withInfection(changed.cell(), changed.intensity());
             case ProductionStarted started -> reduceProductionStarted(state, event.subject(), started);

@@ -25,6 +25,7 @@ public final class FrontierWorldPayloadCodecs {
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
                 new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
+                AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
@@ -321,17 +322,17 @@ public final class FrontierWorldPayloadCodecs {
         }); }
     }
 
-    @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
-    @FunctionalInterface private interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
-    private record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { }
-    private static byte[] encodeProduction(ProductionEncoder encoder) {
+    @FunctionalInterface interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
+    @FunctionalInterface interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
+    record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { }
+    static byte[] encodeProduction(ProductionEncoder encoder) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) { encoder.write(output); }
             return bytes.toByteArray();
         } catch (IOException error) { throw new IllegalStateException("in-memory production payload encoding failed", error); }
     }
-    private static FrontierPayload decodeProduction(byte[] bytes, ProductionDecoder decoder) {
+    static FrontierPayload decodeProduction(byte[] bytes, ProductionDecoder decoder) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes))) {
             FrontierPayload payload = decoder.read(input);
             if (input.available() != 0) throw new IllegalArgumentException("trailing production payload bytes");
@@ -359,10 +360,10 @@ public final class FrontierWorldPayloadCodecs {
         return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), new HiveOrgan(organId.value(), hive.value(), nest.value(), HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
                 new Bioform(bioformId.value(), hive.value(), nest.value(), BioformRole.values()[role], position));
     }
-    private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
+    static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
     }
-    private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
+    static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeContract(DataOutputStream output, SupplyContract contract) throws IOException {
         writeSubject(output, contract.id()); writeSubject(output, contract.settlementId()); writeSubject(output, contract.recipientId());
         writeSubject(output, contract.cargoId()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());
@@ -461,14 +462,14 @@ public final class FrontierWorldPayloadCodecs {
             default -> throw new IllegalArgumentException("unknown observed item custody kind");
         };
     }
-    private static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
-    private static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
-    private static void writeString(DataOutputStream output, String value) throws IOException {
+    static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
+    static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
+    static void writeString(DataOutputStream output, String value) throws IOException {
         byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long");
         output.writeShort(encoded.length); output.write(encoded);
     }
-    private static String readString(DataInputStream input) throws IOException {
+    static String readString(DataInputStream input) throws IOException {
         int length = input.readUnsignedShort();
         if (length > 256) throw new IllegalArgumentException("production payload field is too long");
         byte[] encoded = input.readNBytes(length);

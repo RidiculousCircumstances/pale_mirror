@@ -43,6 +43,31 @@ class AmbientActorProcessTest {
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class, engine.submit(command(worldId, duplicate, duplicateId, death)));
     }
 
+    @Test
+    void persistedLeaseOwnsHotExecutionAndClosesOnExactCapture() {
+        var worldId = new WorldId("frontier:ambient-lease");
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
+        SubjectId resident = new SubjectId("resident:1-1");
+        FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        AmbientActorLease lease = AmbientActorProcess.nextLease(initial, resident, engine.checkpoint().instant());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-prepare"), new AmbientLeasePrepared(lease))));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-hot"), new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT))));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
+                engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-bad-observation"),
+                        new AmbientActorObserved(resident, lease.handoffPosition(), FixedScalar.whole(8)))));
+        AmbientLeaseReleased release = new AmbientLeaseReleased(resident, new BlockPosition(65, 64, 64), FixedScalar.whole(8));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-draining"), new AmbientLeaseTransition(resident, AmbientLeaseStatus.DRAINING))));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-release"), release)));
+        FrontierWorldState closed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(AmbientLeaseStatus.CLOSED, closed.ambientLeases().get(resident).status());
+        assertEquals(release.position(), closed.actorLocations().get(resident).position());
+        assertEquals(closed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(closed)));
+    }
+
     private static io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command(WorldId worldId,
                                                                                        io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint,
                                                                                        io.farfrontier.palemirror.frontier.v3.api.CommandId commandId,

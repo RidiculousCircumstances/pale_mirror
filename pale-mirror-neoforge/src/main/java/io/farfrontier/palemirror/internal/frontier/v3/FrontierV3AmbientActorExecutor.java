@@ -11,6 +11,11 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -33,7 +38,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Materializes exact ordinary residents and hive bioforms near real players.
+ * Materializes exact ordinary residents and hive bioforms through persisted per-actor HOT leases.
  *
  * <p>It owns no canonical mutation and never interprets an unloaded/missing body as death. A
  * deterministic UUID prevents a second body after ordinary unload/reload; an untagged body with
@@ -59,7 +64,31 @@ final class FrontierV3AmbientActorExecutor {
         for (var entry : state.actorLocations().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             if (admitted >= MAX_ACTORS_PER_TICK) return;
             if (entry.getValue().condition().status() != ActorLifeStatus.ALIVE || !demand(level, entry.getValue().position())) continue;
-            if (materialize(level, runtime, state, entry.getKey(), entry.getValue().position()) == Result.APPLIED) admitted++;
+            var lease = state.ambientLeases().get(entry.getKey());
+            if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
+                submit(runtime, "ambient-prepare", entry.getKey().value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, entry.getKey(), runtime.checkpointImage().orElseThrow().instant())));
+                admitted++;
+                continue;
+            }
+            if (lease.status() == AmbientLeaseStatus.PREPARED) {
+                Result result = materialize(level, runtime, state, entry.getKey(), lease.handoffPosition());
+                if (result == Result.APPLIED || result == Result.CURRENT || result == Result.PENDING) {
+                    if (result != Result.PENDING) submit(runtime, "ambient-hot", entry.getKey().value(), new AmbientLeaseTransition(entry.getKey(), AmbientLeaseStatus.HOT));
+                    admitted++;
+                }
+                continue;
+            }
+            Entity body = level.getEntity(entityId(entry.getKey()));
+            if (lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
+                if (body != null && owned(body, entry.getKey(), bioform(state, entry.getKey()))) {
+                    submit(runtime, "ambient-recovered", entry.getKey().value(), new AmbientLeaseTransition(entry.getKey(), AmbientLeaseStatus.HOT));
+                    admitted++;
+                }
+                continue;
+            }
+            if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, entry.getKey(), bioform(state, entry.getKey()))) {
+                pursueLocalGoal(mob, lease.goalPosition());
+            }
         }
     }
 
@@ -100,9 +129,12 @@ final class FrontierV3AmbientActorExecutor {
         Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         if (pending.size() >= MAX_PENDING_ADMISSIONS && !pending.containsKey(entity.getUUID())) return false;
         pending.put(entity.getUUID(), new PendingAdmission(entity, entity.level().getGameTime() + PENDING_ADMISSION_TICKS));
+        if (state.ambientLeases().get(actorId) != null && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
+            submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
+        }
         return true;
     }
-    /** Accepts only a real loaded-world death for the exact non-leased ambient body. */
+    /** Accepts only a real loaded-world death for the exact HOT ambient body. */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {
         FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
         if (state == null) return false;
@@ -113,13 +145,14 @@ final class FrontierV3AmbientActorExecutor {
         if (!state.actorLocations().containsKey(actorId) || state.actorLocations().get(actorId).condition().status() != ActorLifeStatus.ALIVE
                 || state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
+                || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT
                 || !entityId(actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         submit(runtime, "ambient-death", actorId.value(),
                 new AmbientActorDied(actorId, new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
         return true;
     }
-    /** Captures a living owned body before Minecraft releases it, never treating absence as death. */
+    /** Captures a living HOT body before Minecraft releases it, never treating absence as death. */
     static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
         if (state == null || !(entity instanceof Mob body)) return false;
@@ -129,12 +162,26 @@ final class FrontierV3AmbientActorExecutor {
         try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
         var current = state.actorLocations().get(actorId);
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(actorId).equals(entity.getUUID())
-                || !owned(entity, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F) return false;
+                || !owned(entity, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
+                || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
         BlockPosition position = new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ());
         FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
-        if (current.position().equals(position) && current.condition().health().equals(health)) return false;
-        submit(runtime, "ambient-observed", actorId.value(), new AmbientActorObserved(actorId, position, health));
+        submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
+        submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health));
         return true;
+    }
+    /** Restarts are conservative: loaded-world evidence may reclaim a body, missing evidence remains visible UNKNOWN. */
+    static int quarantineActiveLeases(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        if (state == null) return 0;
+        int count = 0;
+        for (var lease : state.ambientLeases().values().stream().sorted(java.util.Comparator.comparing(value -> value.actorId().value())).toList()) {
+            if (lease.status() == AmbientLeaseStatus.PREPARED || lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING) {
+                submit(runtime, "ambient-restart-unknown", lease.actorId().value(), new AmbientLeaseTransition(lease.actorId(), AmbientLeaseStatus.UNKNOWN_AFTER_RESTART));
+                count++;
+            }
+        }
+        return count;
     }
     private static boolean demand(ServerLevel level, BlockPosition position) {
         BlockPos target = new BlockPos(position.x(), position.y(), position.z());
@@ -149,6 +196,10 @@ final class FrontierV3AmbientActorExecutor {
         return !entity.isRemoved() && actorId.value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && (bioform ? entity instanceof Zombie : entity instanceof Villager)
                 && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY));
+    }
+    private static void pursueLocalGoal(Mob body, BlockPosition goal) {
+        if (body.tickCount % 20 != 0) return;
+        body.getNavigation().moveTo(goal.x() + 0.5D, goal.y(), goal.z() + 0.5D, body instanceof Zombie ? 0.85D : 0.70D);
     }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { PENDING_ADMISSIONS.remove(runtime); }
     private static PendingAdmission pending(FrontierV3ServerRuntime<?, ?> runtime, UUID entityId) {

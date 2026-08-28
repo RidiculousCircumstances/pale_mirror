@@ -10,5 +10,5 @@ public record FrontierWorldProjection(
         WorldId worldId, Revision revision, SimInstant instant, String bootstrapHash,
         int settlementCount, int residentCount, int bioformCount, int infectedCellCount, int itemStackCount, int activeProductionJobCount,
         int activeRouteOperationCount, int preparedPhysicalIntentCount, int unknownPhysicalIntentCount,
-        int activeSceneLeaseCount, int unknownSceneLeaseCount, int inventoryConflictCount
+        int activeSceneLeaseCount, int unknownSceneLeaseCount, int activeAmbientLeaseCount, int unknownAmbientLeaseCount, int inventoryConflictCount
 ) implements FrontierProjection { }
