@@ -22,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinitio
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
@@ -184,31 +185,38 @@ final class FrontierV3SceneExecutor {
     private static void executeLocalGoals(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream)
                 .sorted(Comparator.comparing(value -> value.member().actorId())).toList();
-        for (Body actor : bodies) moveToward(level, actor.entity(), localTarget(actor, bodies, lease));
+        for (Body actor : bodies) moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
     }
 
     /** Executes one durable effect phase; HOT scheduling supplies the twenty-tick cadence. */
     static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         if (lease.engagementId().isEmpty()) return;
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
-        Body attacker = bodies.stream().filter(Body::bioform).findFirst().orElse(null);
-        Body target = attacker == null ? null : bodies.stream().filter(value -> !value.bioform()).min(Comparator.comparingDouble(value -> attacker.entity().distanceToSqr(value.entity()))).orElse(null);
-        if (attacker == null || target == null || attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
-        Optional<PhysicalIntent> existing = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                && intent.causeSubjectId().equals(lease.operationId()) && intent.subjectIds().equals(List.of(attacker.member().actorId(), target.member().actorId()))
-                && intent.status() != PhysicalIntentStatus.CONFIRMED).findFirst();
-        if (existing.filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).isPresent()) return;
-        if (existing.isEmpty()) {
+        Optional<PhysicalIntent> pending = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                && intent.causeSubjectId().equals(lease.operationId()) && intent.status() != PhysicalIntentStatus.CONFIRMED).min(Comparator.comparing(PhysicalIntent::id));
+        if (pending.filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).isPresent()) return;
+        if (pending.isEmpty()) {
+            boolean hiveTurn = confirmedStrikeCount(state, lease) % 2L == 0L;
+            List<Body> attackers = bodies.stream().filter(body -> hiveTurn ? body.bioform() : residentGuard(state, body.member().actorId())).toList();
+            List<Body> targets = bodies.stream().filter(body -> hiveTurn ? !body.bioform() : body.bioform()).toList();
+            if (attackers.isEmpty() || targets.isEmpty()) return;
+            Body attacker = attackers.stream().min(Comparator.comparing(body -> body.member().actorId())).orElseThrow();
+            Body target = targets.stream().min(Comparator.comparingDouble((Body body) -> attacker.entity().distanceToSqr(body.entity()))
+                    .thenComparing(body -> body.member().actorId())).orElseThrow();
+            if (attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
             String key = lease.id().value().replace(':', '-') + "-" + attacker.member().actorId().value().replace(':', '-')
                     + "-" + target.member().actorId().value().replace(':', '-') + "-t" + level.getGameTime();
             PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-" + key), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
                     lease.operationId(), List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }
-        PhysicalIntent intent = existing.orElseThrow();
+        PhysicalIntent intent = pending.orElseThrow();
+        Body attacker = bodies.stream().filter(body -> body.member().actorId().equals(intent.subjectIds().getFirst())).findFirst().orElse(null);
+        Body target = bodies.stream().filter(body -> body.member().actorId().equals(intent.subjectIds().getLast())).findFirst().orElse(null);
+        if (attacker == null || target == null || attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
         if (intent.status() == PhysicalIntentStatus.PREPARED) { submit(runtime, "scene-strike-running", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())); return; }
         float before = target.entity().getHealth(); attacker.entity().swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-        target.entity().hurt(level.damageSources().mobAttack(attacker.entity()), 2.0F);
+        target.entity().hurt(level.damageSources().mobAttack(attacker.entity()), attacker.bioform() ? 2.0F : 1.5F);
         SceneStrikeObservation receipt = new SceneStrikeObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(),
                 attacker.member().actorId(), target.member().actorId(), fixed(before), fixed(target.entity().getHealth()));
         submit(runtime, "scene-strike-confirm", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
@@ -225,16 +233,26 @@ final class FrontierV3SceneExecutor {
         return owned(entity, state, lease, member) && entity instanceof Mob mob && mob.isAlive() ? Optional.of(new Body(member, mob, bioform(state, member.actorId()))) : Optional.empty();
     }
 
-    private static Vec3 localTarget(Body actor, List<Body> bodies, SceneLease lease) {
+    private static Vec3 localTarget(FrontierWorldState state, Body actor, List<Body> bodies, SceneLease lease) {
         Optional<Body> opponent = bodies.stream().filter(other -> other.bioform() != actor.bioform()).min(Comparator.comparingDouble(other -> actor.entity().distanceToSqr(other.entity())));
         if (opponent.isPresent()) {
             Vec3 delta = opponent.orElseThrow().entity().position().subtract(actor.entity().position());
-            if (actor.bioform()) return opponent.orElseThrow().entity().position();
+            if (actor.bioform() || residentGuard(state, actor.member().actorId())) return opponent.orElseThrow().entity().position();
             if (delta.horizontalDistanceSqr() > 0.0001D) return actor.entity().position().subtract(delta.normalize().scale(5.0D));
         }
         int phase = Math.floorMod(actor.member().actorId().value().hashCode(), 8);
         double angle = phase * Math.PI / 4.0D;
         return new Vec3(lease.handoffPosition().x() + 0.5D + Math.cos(angle) * 2.0D, actor.entity().getY(), lease.handoffPosition().z() + 0.5D + Math.sin(angle) * 2.0D);
+    }
+
+    private static long confirmedStrikeCount(FrontierWorldState state, SceneLease lease) {
+        return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                && intent.causeSubjectId().equals(lease.operationId()) && intent.status() == PhysicalIntentStatus.CONFIRMED).count();
+    }
+
+    private static boolean residentGuard(FrontierWorldState state, SubjectId actorId) {
+        return state.bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
+                .anyMatch(resident -> resident.id().equals(actorId) && resident.role() == ResidentRole.GUARD);
     }
 
     private static void moveToward(ServerLevel level, Mob actor, Vec3 target) {

@@ -24,6 +24,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
@@ -215,8 +216,13 @@ public final class FrontierV3SceneGameTests {
 
         Zombie attacker = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Zombie.class::isInstance).map(Zombie.class::cast)
                 .findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one Zombie attacker"));
-        Villager target = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
+        SubjectId guardId = state(runtime).bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
+                .filter(resident -> resident.role() == ResidentRole.GUARD).map(resident -> resident.id()).filter(actor -> lease.members().stream()
+                        .anyMatch(member -> member.actorId().equals(actor))).findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one resident guard"));
+        Villager target = lease.members().stream().filter(member -> !member.actorId().equals(guardId)).map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
                 .findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one Villager target"));
+        Villager guard = (Villager) level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(guardId)).findFirst().orElseThrow().entityId());
+        helper.assertTrue(guard != null, "the exact scene fixture must materialize its resident guard");
         attacker.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D); target.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D);
 
         FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
@@ -234,11 +240,12 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(receipt.targetHealthBefore(), new FixedScalar(Math.round(healthBefore * FixedScalar.SCALE)), "receipt must retain the exact physical pre-hit health");
         helper.assertValueEqual(receipt.targetHealthAfter(), new FixedScalar(Math.round(target.getHealth() * FixedScalar.SCALE)), "receipt must retain the exact physical post-hit health");
 
-        Villager retryTarget = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
-                .filter(body -> body != target).findFirst().orElseThrow(() -> new IllegalStateException("the scene fixture needs a second exact resident"));
         target.setPos(origin.getX() + 8.5D, origin.getY(), origin.getZ() + 0.5D);
-        retryTarget.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D);
+        guard.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D);
         FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
+        PhysicalIntent counterStrike = pendingStrike(state(runtime), lease);
+        helper.assertTrue(counterStrike.subjectIds().getFirst().value().startsWith("resident:"),
+                "the exact resident guard must receive the alternating defensive HOT strike");
         FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
         helper.assertValueEqual(FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime), 1,
                 "restart recovery must quarantine one unresolved physical strike");
@@ -283,6 +290,11 @@ public final class FrontierV3SceneGameTests {
     private static PhysicalIntent onlyStrike(FrontierWorldState state) {
         return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE).reduce((left, right) -> right)
                 .orElseThrow(() -> new IllegalStateException("the HOT strike executor did not retain a physical intent"));
+    }
+    private static PhysicalIntent pendingStrike(FrontierWorldState state, SceneLease lease) {
+        return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                && intent.causeSubjectId().equals(lease.operationId()) && intent.status() == PhysicalIntentStatus.PREPARED).findFirst()
+                .orElseThrow(() -> new IllegalStateException("the HOT scene did not prepare its exact next strike"));
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage()
