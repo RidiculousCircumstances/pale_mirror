@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition; import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
@@ -14,10 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
-import static io.farfrontier.palemirror.frontier.v3.model.FrontierWorldScheduleSupport.ordinal;
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
@@ -27,7 +23,7 @@ public final class FrontierWorldRuntimeDefinition {
                 FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp()); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
-        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(SupplyOperationProcess.demand(bootstrap.settlements().getFirst().id(), 1, 2_500), StructuralRepairProcess.scan(1, 800),
+        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
                 RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
@@ -46,6 +42,10 @@ public final class FrontierWorldRuntimeDefinition {
             }
             if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
                 try { return new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition)); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            }
+            if (intent.kind() == PhysicalIntentKind.CARGO_HANDOFF) {
+                try { return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition)); }
                 catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             }
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
@@ -67,12 +67,12 @@ public final class FrontierWorldRuntimeDefinition {
             RouteOperation operation = state.operations().get(lease.operationId());
             if (operation == null) return rejected("scene lease has no owning operation");
             if (operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
-                        new ProposedEvent(operation.settlementId(), new OperationFailed(operation.id(), "actor-death"))));
+                List<ProposedEvent> events = new java.util.ArrayList<>(); events.add(new ProposedEvent(operation.settlementId(), released));
+                events.addAll(SupplyOperationProcess.failed(state, operation, "actor-death")); return new CommandPlan.Accepted(List.copyOf(events));
             }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
                     new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
-                            operationProgress(operation, command.submittedAt().ticks() + 100L)))));
+                            SupplyOperationProcess.operationProgress(operation, command.submittedAt().ticks() + 100L)))));
         }
         if (command.payload() instanceof ActorDied death) {
             SceneLease lease = state.sceneLeases().get(death.leaseId());
@@ -125,7 +125,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
             case "frontier.settlement.production.task.start" -> ProductionProcess.planStart(state, action);
             case "frontier.settlement.production.task.complete" -> ProductionProcess.planCompletion(state, action);
-            case "frontier.supply.contract.demand" -> SupplyOperationProcess.planDemand(state, action);
+            case "frontier.supply.task.start" -> SupplyOperationProcess.planStart(state, action);
             case "frontier.supply.cargo.load" -> SupplyOperationProcess.planCargoLoad(state, action);
             case "frontier.operation.progress" -> SupplyOperationProcess.planProgress(state, action);
             case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
@@ -137,50 +137,7 @@ public final class FrontierWorldRuntimeDefinition {
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
     }
-    private static List<ProposedEvent> planContractDemand(FrontierWorldState state, ScheduledAction action) {
-        Settlement settlement = settlement(state, new SubjectId("settlement:1"));
-        ExactItemStack bread = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
-                .filter(item -> item.itemKind().equals("minecraft:bread") && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(FrontierWorldState.depotId(settlement.id())))
-                .findFirst().orElseThrow(() -> new IllegalStateException("supply demand has no exact bread output"));
-        int ordinal = ordinal(action.id().value());
-        SupplyContract contract = new SupplyContract(new SubjectId("contract:supply-1-" + ordinal), settlement.id(), state.bootstrap().hive().id(),
-                new SubjectId("cargo:supply-1-" + ordinal), bread.itemKind(), bread.count(), ContractStatus.ORDERED);
-        return List.of(new ProposedEvent(settlement.id(), new SupplyContractCreated(contract)),
-                new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(cargoLoad(contract, action.dueAt().ticks() + 50L))));
-    }
-    private static List<ProposedEvent> planCargoLoad(FrontierWorldState state, ScheduledAction action) {
-        SupplyContract contract = state.contracts().get(action.subject());
-        if (contract == null || contract.status() != ContractStatus.ORDERED) throw new IllegalStateException("cargo load has no ordered contract");
-        SubjectId depot = FrontierWorldState.depotId(contract.settlementId());
-        ExactItemStack item = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
-                .filter(value -> value.itemKind().equals(contract.itemKind()) && value.count() == contract.itemCount()
-                        && value.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
-                .findFirst().orElseThrow(() -> new IllegalStateException("contract cargo is unavailable in its depot"));
-        RouteOperation operation = routeOperation(state, contract);
-        return List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
-                new ProposedEvent(contract.settlementId(), new OperationCreated(operation)),
-                new ProposedEvent(contract.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(operationProgress(operation, action.dueAt().ticks() + 100L))));
-    }
-    private static List<ProposedEvent> planOperationProgress(FrontierWorldState state, ScheduledAction action) {
-        RouteOperation operation = state.operations().get(action.subject());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) return List.of();
-        Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
-                && value.status() != SceneLeaseStatus.CLOSED).findFirst();
-        if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
-        if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) {
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationFailed(operation.id(), "route-obstructed")));
-        }
-        int nextRouteIndex = operation.routeIndex() + 1;
-        OperationStage nextStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
-        List<ProposedEvent> events = new java.util.ArrayList<>(); events.add(new ProposedEvent(operation.settlementId(), new OperationAdvanced(operation.id(), nextRouteIndex, nextStage)));
-        if (nextStage == OperationStage.ARRIVED) {
-            events.add(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
-        }
-        if (nextStage == OperationStage.EN_ROUTE) {
-            events.add(new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(operationProgress(operation, action.dueAt().ticks() + 100L))));
-        }
-        return List.copyOf(events);
-    } private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+    private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         if (event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition || event.payload() instanceof AmbientLeaseReleased) {
             return AmbientActorProcess.reduceLease(state, event.subject(), event.instant(), event.payload());
         }
@@ -246,7 +203,7 @@ public final class FrontierWorldRuntimeDefinition {
         if (contract.status() != ContractStatus.LOADED || !contract.settlementId().equals(operation.settlementId()) || !contract.recipientId().equals(operation.destinationId())) {
             throw new IllegalArgumentException("route operation does not match its loaded supply contract");
         }
-        Settlement settlement = settlement(state, operation.settlementId());
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), operation.settlementId());
         if (!operation.route().equals(state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()))) {
             throw new IllegalArgumentException("route operation must use the deterministic settlement-to-nest route");
         }
@@ -347,37 +304,6 @@ public final class FrontierWorldRuntimeDefinition {
         ContainerRecord container = state.inventory().containers().get(conflict.containerId());
         if (container == null || !subject.equals(container.ownerId())) throw new IllegalArgumentException("inventory conflict lacks its container owner");
         return state.withInventory(state.inventory().recordConflict(conflict));
-    }
-    private static Settlement settlement(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId) {
-        return state.bootstrap().settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("unknown production settlement: " + settlementId.value()));
-    }
-    private static RouteOperation routeOperation(FrontierWorldState state, SupplyContract contract) {
-        Settlement settlement = settlement(state, contract.settlementId());
-        SubjectId hauler = settlement.residents().stream().filter(resident -> resident.role() == ResidentRole.HAULER).sorted(Comparator.comparing(Resident::id)).findFirst()
-                .orElseThrow(() -> new IllegalStateException("settlement lacks hauler" )).id();
-        SubjectId guard = settlement.residents().stream().filter(resident -> resident.role() == ResidentRole.GUARD).sorted(Comparator.comparing(Resident::id)).findFirst()
-                .orElseThrow(() -> new IllegalStateException("settlement lacks guard" )).id();
-        List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
-        int ordinal = ordinal(contract.id().value());
-        return new RouteOperation(new SubjectId("operation:supply-1-" + ordinal), settlement.id(), contract.cargoId(), contract.recipientId(),
-                List.of(hauler, guard), route, 0, OperationStage.EN_ROUTE);
-    }
-    private static PhysicalIntent cargoHandoffIntent(RouteOperation operation) {
-        BlockPosition destination = operation.route().getLast(); FixedPosition origin = new FixedPosition(FixedScalar.whole(destination.x()), FixedScalar.whole(destination.y()), FixedScalar.whole(destination.z()));
-        return new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-" + operation.id().value().substring("operation:".length())),
-                PhysicalIntentKind.CARGO_HANDOFF, PhysicalIntentStatus.PREPARED, operation.id(),
-                List.of(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
-    }
-    private static ScheduledAction contractDemand(int ordinal, long due) {
-        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:contract-demand-" + ordinal), new SimInstant(due), 0, new SubjectId("settlement:1"), "frontier.supply.contract.demand", 1);
-    }
-    private static ScheduledAction cargoLoad(SupplyContract contract, long due) {
-        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:cargo-load-" + contract.id().value().substring("contract:".length())), new SimInstant(due), 0, contract.id(), "frontier.supply.cargo.load", 1);
-    }
-    private static ScheduledAction operationProgress(RouteOperation operation, long due) {
-        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:operation-progress-" + operation.id().value().substring("operation:".length())),
-                new SimInstant(due), 0, operation.id(), "frontier.operation.progress", 1);
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
 }

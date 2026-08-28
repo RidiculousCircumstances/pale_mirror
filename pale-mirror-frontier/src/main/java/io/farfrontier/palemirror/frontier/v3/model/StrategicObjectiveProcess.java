@@ -43,6 +43,10 @@ final class StrategicObjectiveProcess {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
+        if (task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE) {
+            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+                    new ProposedEvent(owner, new ScheduleEffect.Created(SupplyOperationProcess.start(task, action.dueAt().ticks() + 100L))), next);
+        }
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
 
@@ -81,8 +85,10 @@ final class StrategicObjectiveProcess {
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
-        return workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()
-                ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
+        if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), FixedScalar.SCALE));
+        boolean bread = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:bread")
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
+        return bread ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state) {
         Optional<Candidate> growth = hiveGrowthCandidate(state); if (growth.isPresent()) return growth;
@@ -106,12 +112,15 @@ final class StrategicObjectiveProcess {
             case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
             case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
             case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
+            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO, StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE,
+                    StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD);
         };
         StrategicTaskKind kind = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
             case HIVE_EXPAND_INFECTION -> StrategicTaskKind.SPREAD_INFECTION_CELL;
             case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
             case SETTLEMENT_PRODUCE_BREAD -> StrategicTaskKind.PRODUCE_BREAD;
+            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> StrategicTaskKind.DELIVER_BREAD_TO_HIVE;
         };
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), requirements, List.of(), StrategicTaskStatus.PENDING);

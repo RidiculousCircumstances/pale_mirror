@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -262,10 +263,12 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void supplyContractLoadsTheSameProducedBreadIntoIdentifiedCargo() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:cargo"), 91L));
-        for (long tick = 100L; tick <= 2_700L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-1"));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
+        SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-2"));
+        assertTrue(contract != null, () -> "plans=" + state.strategicPlans().objectives() + ", items=" + state.inventory().items());
         assertEquals(ContractStatus.LOADED, contract.status());
         CargoBatch cargo = state.inventory().cargo().get(contract.cargoId());
         assertEquals(List.of(new SubjectId("item:production-1-1-bread")), cargo.itemIds());
@@ -278,16 +281,17 @@ class FrontierWorldRuntimeDefinitionTest {
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-1"));
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
         assertEquals(OperationStage.ARRIVED, operation.stage());
         assertEquals(operation.route().size() - 1, operation.routeIndex());
         BlockPosition destination = operation.route().getLast();
         assertTrue(operation.participantIds().stream().allMatch(participant -> destination.equals(state.actorLocations().get(participant).position())));
         assertEquals(1, engine.projection(ProjectionQuery.summary()).activeRouteOperationCount());
         assertEquals(1, engine.projection(ProjectionQuery.summary()).preparedPhysicalIntentCount());
-        PhysicalIntent handoff = state.physicalIntents().get(new PhysicalIntentId("intent:cargo-handoff-supply-1-1"));
+        PhysicalIntent handoff = state.physicalIntents().get(new PhysicalIntentId("intent:cargo-handoff-supply-1-2"));
         assertEquals(PhysicalIntentStatus.PREPARED, handoff.status());
         assertEquals(List.of(operation.id(), operation.cargoId()), handoff.subjectIds());
+        assertEquals(StrategicTaskStatus.ACTIVE, supplyTask(state).status());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
@@ -296,7 +300,7 @@ class FrontierWorldRuntimeDefinitionTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route-negative"), 91L));
         for (long tick = 100L; tick <= 2_700L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-1"));
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
 
         int skippedIndex = operation.routeIndex() + 2;
         OperationStage skippedStage = skippedIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
@@ -320,23 +324,23 @@ class FrontierWorldRuntimeDefinitionTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intent-lifecycle"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
+        PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
         CargoHandoffObservation observation = new CargoHandoffObservation(new PhysicalObservationId("observation:cargo-handoff-supply-1-1"), id,
-                new SubjectId("cargo:supply-1-1"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
+                new SubjectId("cargo:supply-1-2"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
                 new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
 
         assertThrows(IllegalArgumentException.class, () -> prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
                 Optional.of(observation)));
         FrontierWorldState running = prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.RUNNING, Optional.empty());
         CargoHandoffObservation foreignStore = new CargoHandoffObservation(new PhysicalObservationId("observation:cargo-handoff-foreign-store"), id,
-                new SubjectId("cargo:supply-1-1"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
+                new SubjectId("cargo:supply-1-2"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
                 new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0))));
         assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED, Optional.of(foreignStore)));
         FrontierWorldState confirmed = running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
                 Optional.of(observation));
         assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(id).status());
         assertEquals(Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1")), confirmed.physicalIntents().get(id).postconditionObservationId());
-        assertEquals(ContractStatus.DELIVERED, confirmed.contracts().get(new SubjectId("contract:supply-1-1")).status());
+        assertEquals(ContractStatus.DELIVERED, confirmed.contracts().get(new SubjectId("contract:supply-1-2")).status());
         assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0),
                 confirmed.inventory().items().get(new SubjectId("item:production-1-1-bread")).custody());
         assertEquals(observation, confirmed.physicalObservations().get(observation.id()));
@@ -347,7 +351,7 @@ class FrontierWorldRuntimeDefinitionTest {
     void onlyTheTrustedPhysicalExecutorCanStartAnIntent() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intent-command"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
-        PhysicalIntentTransition transition = new PhysicalIntentTransition(new PhysicalIntentId("intent:cargo-handoff-supply-1-1"), PhysicalIntentStatus.RUNNING, Optional.empty());
+        PhysicalIntentTransition transition = new PhysicalIntentTransition(new PhysicalIntentId("intent:cargo-handoff-supply-1-2"), PhysicalIntentStatus.RUNNING, Optional.empty());
         var revision = engine.projection(ProjectionQuery.summary()).revision();
         var accepted = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
                 new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:intent-start"), new WorldId("frontier:intent-command"), revision,
@@ -357,13 +361,35 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void observedCargoHandoffCompletesItsTaskAndUnknownRecoveryBlocksIt() {
+        var completedEngine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:supply-task-completed"), 91L));
+        for (long tick = 100L; tick <= 4_000L; tick += 50L) completedEngine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
+        submitPhysicalTransition(completedEngine, "frontier:supply-task-completed", "command:supply-running", intentId, PhysicalIntentStatus.RUNNING, Optional.empty());
+        CargoHandoffObservation observation = new CargoHandoffObservation(new PhysicalObservationId("observation:supply-task-completed"), intentId,
+                new SubjectId("cargo:supply-1-2"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
+        submitPhysicalTransition(completedEngine, "frontier:supply-task-completed", "command:supply-confirmed", intentId, PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+        FrontierWorldState completed = new FrontierWorldStateCodec().decode(completedEngine.checkpoint().canonicalState());
+        assertEquals(StrategicTaskStatus.COMPLETED, supplyTask(completed).status());
+        assertEquals(StrategicObjectiveStatus.COMPLETED, completed.strategicPlans().objectives().get(supplyTask(completed).objectiveId()).status());
+
+        var unknownEngine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:supply-task-unknown"), 91L));
+        for (long tick = 100L; tick <= 4_000L; tick += 50L) unknownEngine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        submitPhysicalTransition(unknownEngine, "frontier:supply-task-unknown", "command:supply-unknown", intentId, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        FrontierWorldState unknown = new FrontierWorldStateCodec().decode(unknownEngine.checkpoint().canonicalState());
+        assertEquals(StrategicTaskStatus.BLOCKED, supplyTask(unknown).status());
+        assertEquals(StrategicObjectiveStatus.BLOCKED, unknown.strategicPlans().objectives().get(supplyTask(unknown).objectiveId()).status());
+    }
+
+    @Test
     void sceneLeaseDurablySuspendsColdRouteProgressAndPinsExactFutureBodies() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scene-lease"), 91L));
         for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-1"));
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         var projection = engine.projection(ProjectionQuery.summary());
-        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:supply-1-1");
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:supply-1-2");
         SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(2_550L), projection.revision().value(),
                 SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
         SceneLeasePrepared payload = new SceneLeasePrepared(lease);
@@ -410,6 +436,7 @@ class FrontierWorldRuntimeDefinitionTest {
                         FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(releaseCommand), new SceneLeaseReleased(leaseId, surviving))));
         FrontierWorldState afterDeathRelease = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(OperationStage.FAILED, afterDeathRelease.operations().get(operation.id()).stage());
+        assertEquals(StrategicTaskStatus.BLOCKED, supplyTask(afterDeathRelease).status());
 
         FrontierWorldState hot = leased.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
@@ -441,4 +468,16 @@ class FrontierWorldRuntimeDefinitionTest {
         assertTrue(!compacted.sceneLeases().containsKey(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-0")));
     }
 
+    private static StrategicTask supplyTask(FrontierWorldState state) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE)
+                .reduce((left, right) -> { throw new AssertionError("supply task must be unique in this fixture"); }).orElseThrow();
+    }
+
+    private static void submitPhysicalTransition(FrontierEngine<FrontierWorldProjection> engine, String world, String command, PhysicalIntentId intentId,
+                                                 PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation) {
+        var checkpoint = engine.checkpoint(); var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId(command);
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
+                commandId, new WorldId(world), checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), new PhysicalIntentTransition(intentId, status, observation))));
+    }
 }

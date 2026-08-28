@@ -45,6 +45,11 @@ final class StrategicPlanState {
                     StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT)))) {
                 throw new IllegalArgumentException("settlement production task has an invalid decomposition");
             }
+            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE
+                    && (task.kind() != StrategicTaskKind.DELIVER_BREAD_TO_HIVE || !task.requirements().equals(List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO,
+                    StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE, StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD)))) {
+                throw new IllegalArgumentException("settlement delivery task has an invalid decomposition");
+            }
             if (task.dependencies().stream().anyMatch(dependency -> !this.tasks.containsKey(dependency) || dependency.equals(task.id()))) {
                 throw new IllegalArgumentException("strategic task dependency must name another retained task");
             }

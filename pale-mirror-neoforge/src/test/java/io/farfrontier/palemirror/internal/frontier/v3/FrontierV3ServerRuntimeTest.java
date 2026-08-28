@@ -109,7 +109,7 @@ class FrontierV3ServerRuntimeTest {
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         for (int tick = 0; tick < 4_000; tick++) runtime.tick(new WorkBudget(64, 512));
 
-        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
         CheckpointImage prepared = runtime.checkpointImage().orElseThrow();
         CommandId runningCommand = new CommandId("test:mark-running");
         assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, runningCommand, world,
@@ -133,8 +133,8 @@ class FrontierV3ServerRuntimeTest {
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         for (int tick = 0; tick < 2_550; tick++) runtime.tick(new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-1"));
-        SceneLeaseId leaseId = new SceneLeaseId("lease:recovery-supply-1-1");
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        SceneLeaseId leaseId = new SceneLeaseId("lease:recovery-supply-1-2");
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), checkpoint.instant(), checkpoint.revision().value(),
                 SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
