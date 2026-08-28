@@ -52,8 +52,8 @@ final class FrontierV3InventoryObservationExecutor {
         }
     }
 
-    private static boolean observeOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                      FrontierWorldState state, FrontierV3HopperCarrierLedger hopperCarriers, StoreChest store, ChestBlockEntity chest) {
+    static boolean observeOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                              FrontierWorldState state, FrontierV3HopperCarrierLedger hopperCarriers, StoreChest store, ChestBlockEntity chest) {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             InventoryCustody.ContainerSlot custody = new InventoryCustody.ContainerSlot(store.containerId(), slot);
             Optional<ExactItemStack> canonical = state.inventory().itemAt(store.containerId(), slot);

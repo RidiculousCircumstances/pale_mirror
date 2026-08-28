@@ -3,10 +3,15 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
@@ -14,6 +19,13 @@ import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.InfectionCell;
 import io.farfrontier.palemirror.frontier.v3.model.InfectionOverlayCell;
 import io.farfrontier.palemirror.frontier.v3.model.InfectionOverlayStage;
+import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -22,6 +34,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+import java.util.List;
+import java.util.Optional;
 
 /** Physical ownership and exact-stack postconditions for the first v3 executor. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
@@ -354,5 +369,51 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.assertFalse(FrontierV3CargoHandoffExecutor.worldCarrierId(copied.getItem(0)).isPresent(),
                 "conflict observation must leave the copied hopper stack unmodified");
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-hopper-return", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void activeChestObservesExactHopperReturnIntoCanonicalCustody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:hopper-return-game-test");
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(56, 8, 0));
+        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
+        helper.assertTrue(chest != null, "the active owned chest fixture must be constructible");
+        FrontierV3CommandSubmission.submit(runtime, "hopper-return-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
+        FrontierV3CommandSubmission.submit(runtime, "hopper-return-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
+        ExactItemStack expected = state(runtime).inventory().itemAt(container, 0).orElseThrow();
+        BlockPos hopperPosition = chestPosition.east(); level.setBlock(hopperPosition, Blocks.HOPPER.defaultBlockState(), 3);
+        net.minecraft.world.level.block.entity.HopperBlockEntity hopper = (net.minecraft.world.level.block.entity.HopperBlockEntity) level.getBlockEntity(hopperPosition);
+        hopper.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
+        FrontierV3HopperCarrierLedger ledger = FrontierV3HopperCarrierLedger.get(level);
+        java.util.UUID carrierId = FrontierV3InventoryObservationExecutor.bindHopperCarrier(ledger, hopper, 0).carrierId();
+        FrontierV3CommandSubmission.submit(runtime, "hopper-return-outbound", expected.id().value(),
+                new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(expected.id(), expected.custody(), new InventoryCustody.WorldCarrier(carrierId)));
+        chest.setItem(0, hopper.getItem(0)); hopper.setItem(0, net.minecraft.world.item.ItemStack.EMPTY);
+
+        helper.assertTrue(FrontierV3InventoryObservationExecutor.observeOne(level, runtime, state(runtime), ledger,
+                        new FrontierV3InventoryObservationExecutor.StoreChest(chestPosition, container), chest),
+                "the active chest must observe the exact tagged hopper stack rather than recreate or approximate it");
+        helper.assertValueEqual(state(runtime).inventory().items().get(expected.id()).custody(), new InventoryCustody.ContainerSlot(container, 0),
+                "hopper return must durably restore the same canonical exact item to its owned slot");
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), expected),
+                "custody reconciliation must leave the physical returned stack untouched");
+        helper.succeed();
+    }
+
+    private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+    }
+    /** GameTest-only store; filesystem restart behavior is covered by the server-runtime test. */
+    private static final class EphemeralStore implements FrontierStore {
+        @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }
+        @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) {
+            return new AppendReceipt(transaction.id(), transaction.revision(), durability, transaction.revision().value());
+        }
+        @Override public SnapshotReceipt installSnapshot(SnapshotRecord snapshot) { throw new UnsupportedOperationException("GameTest does not checkpoint"); }
+        @Override public CompactionReceipt compact(WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision coveredRevision) {
+            throw new UnsupportedOperationException("GameTest does not compact");
+        }
     }
 }
