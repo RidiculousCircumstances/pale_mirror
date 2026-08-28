@@ -21,6 +21,7 @@ import java.util.Optional;
 /** Plans at most one exact-material replacement-route cell at a time. */
 final class RouteConstructionProcess {
     private static final SubjectId SYSTEM = new SubjectId("system:route-construction");
+    private static final int[] DETOUR_SPINES = {-300, -260, -220, -180, -80, -40, 40, 80, 180, 220, 260, 300};
     private RouteConstructionProcess() { }
 
     static ScheduledAction scan(int ordinal, long dueAt) {
@@ -38,7 +39,11 @@ final class RouteConstructionProcess {
         if (ready.isPresent()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteTopologyCutover(ready.orElseThrow().id())), next);
         Optional<RouteConstruction> project = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.BUILDING)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
-        if (project.isEmpty()) return List.of(next);
+        if (project.isEmpty()) {
+            Optional<RouteConstruction> candidate = candidate(state);
+            return candidate.<List<ProposedEvent>>map(value -> List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                    new RouteConstructionStarted(value)), next)).orElseGet(() -> List.of(next));
+        }
         List<BlockPosition> cells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.orElseThrow().settlementId(), project.orElseThrow().waypoints());
         BlockPosition position = cells.get(project.orElseThrow().confirmedCells());
         Optional<ExactItemStack> material = state.inventory().items().values().stream()
@@ -53,6 +58,55 @@ final class RouteConstructionProcess {
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
                 PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED);
         return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new PhysicalIntentPrepared(intent)), next);
+    }
+
+    /**
+     * Proposes one bounded canonical bypass for the first blocked settlement route.  The fixed
+     * spine catalogue is intentional: observations can obstruct a route, but never turn an
+     * arbitrary player road or a Minecraft pathfinding result into canonical topology.
+     */
+    private static Optional<RouteConstruction> candidate(FrontierWorldState state) {
+        return state.bootstrap().settlements().stream().sorted(Comparator.comparing(Settlement::id)).filter(settlement ->
+                !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas()))
+                .filter(settlement -> state.routeConstructions().values().stream().noneMatch(project -> project.settlementId().equals(settlement.id())))
+                .flatMap(settlement -> candidate(state, settlement).stream()).findFirst();
+    }
+
+    private static Optional<RouteConstruction> candidate(FrontierWorldState state, Settlement settlement) {
+        List<BlockPosition> current = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
+        BlockPosition origin = current.getFirst(), destination = current.getLast();
+        BlockPosition detourEgress = origin.offset(-36, 0, 0), detourLane = detourEgress.offset(0, 0, 36);
+        for (int spineX : DETOUR_SPINES) {
+            List<BlockPosition> route = List.of(origin, detourEgress, detourLane, new BlockPosition(spineX, detourLane.y(), detourLane.z()),
+                    new BlockPosition(spineX, destination.y(), destination.z()), destination);
+            if (accepts(state, settlement.id(), route)) {
+                return Optional.of(new RouteConstruction(projectId(settlement.id(), state), settlement.id(), route, 0, RouteConstructionStatus.BUILDING));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean accepts(FrontierWorldState state, SubjectId settlementId, List<BlockPosition> route) {
+        try {
+            RouteTopology topology = state.routeTopology().replaceSupplyRoute(state.bootstrap(), settlementId, route);
+            return FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas())
+                    && !FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), settlementId, route).isEmpty()
+                    && FrontierGrayboxPlan.compile(state.withRouteTopology(topology)).cells().size() > 0;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    private static SubjectId projectId(SubjectId settlementId, FrontierWorldState state) {
+        String prefix = "construction:route-reroute-" + settlementId.value().replace(':', '-');
+        Optional<BlockPosition> cause = state.physicalDeltas().keySet().stream().sorted(Comparator.comparingInt(BlockPosition::x)
+                .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z)).filter(position -> routeContains(state, settlementId, position)).findFirst();
+        BlockPosition position = cause.orElseThrow();
+        return new SubjectId(prefix + "-" + position.x() + "-" + position.y() + "-" + position.z());
+    }
+
+    private static boolean routeContains(FrontierWorldState state, SubjectId settlementId, BlockPosition position) {
+        return FrontierRouteNetwork.containsOperationSurfaceCell(state.routeTopology().supplyWaypoints(state.bootstrap(), settlementId), position);
     }
 
     static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {

@@ -120,4 +120,51 @@ class RouteTopologyTest {
         assertTrue(cutOver.routeConstructions().isEmpty());
         assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.cutover(state, new SubjectId("construction:missing")));
     }
+
+    @Test
+    void observedRouteLossDeterministicallyStartsACanonicalPassableBypass() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-reroute"), 97L);
+        SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
+        BlockPosition lossPosition = baseline.get(1);
+        FrontierWorldState damaged = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(lossPosition,
+                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test"));
+        var first = RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L));
+        var second = RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L));
+        assertEquals(first, second);
+        RouteConstructionStarted started = first.stream().map(event -> event.payload()).filter(RouteConstructionStarted.class::isInstance)
+                .map(RouteConstructionStarted.class::cast).findFirst().orElseThrow();
+        RouteConstruction candidate = started.project();
+        assertEquals(settlement, candidate.settlementId());
+        assertEquals(baseline, damaged.routeTopology().supplyWaypoints(bootstrap, settlement));
+        assertTrue(!FrontierGrayboxPlan.routeConstructionCells(damaged, candidate).isEmpty());
+        assertTrue(FrontierRouteNetwork.isPassable(bootstrap, candidate.waypoints(), damaged.physicalDeltas()));
+        FrontierWorldState startedState = RouteConstructionStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER, started);
+        assertEquals(candidate, startedState.routeConstructions().get(candidate.id()));
+        RouteTopology cutover = damaged.routeTopology().replaceSupplyRoute(bootstrap, settlement, candidate.waypoints());
+        assertTrue(FrontierGrayboxPlan.compile(damaged.withRouteTopology(cutover)).cells().size() > 0);
+    }
+
+    @Test
+    void everySettlementCanBypassItsMaterializedEgressWithoutAdoptingWorldGeometry() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-reroute-all"), 98L);
+        for (Settlement settlement : bootstrap.settlements()) {
+            BlockPosition lossPosition = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()).get(1);
+            FrontierWorldState damaged = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(lossPosition,
+                    PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test"));
+            RouteConstructionStarted started = RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L)).stream()
+                    .map(event -> event.payload()).filter(RouteConstructionStarted.class::isInstance).map(RouteConstructionStarted.class::cast).findFirst().orElseThrow();
+            assertEquals(settlement.id(), started.project().settlementId());
+            assertTrue(FrontierRouteNetwork.isPassable(bootstrap, started.project().waypoints(), damaged.physicalDeltas()));
+        }
+    }
+
+    @Test
+    void blockedRequiredDestinationDoesNotProduceAFictitiousReroute() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-reroute-destination"), 99L);
+        SubjectId settlement = bootstrap.settlements().getFirst().id(); BlockPosition destination = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement).getLast();
+        FrontierWorldState damaged = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(destination,
+                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test"));
+        assertTrue(RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L)).stream()
+                .noneMatch(event -> event.payload() instanceof RouteConstructionStarted));
+    }
 }

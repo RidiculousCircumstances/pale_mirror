@@ -108,8 +108,12 @@ final class FrontierRouteNetwork {
     static boolean isPassable(FrontierBootstrap bootstrap, List<BlockPosition> waypoints,
                               Map<BlockPosition, PhysicalDelta> deltas) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(waypoints, "waypoints"); Objects.requireNonNull(deltas, "physical deltas");
-        Set<BlockPosition> corridor = operationSurfaceCells(waypoints);
-        return deltas.keySet().stream().noneMatch(corridor::contains);
+        return deltas.keySet().stream().noneMatch(position -> containsOperationSurfaceCell(waypoints, position));
+    }
+
+    static boolean containsOperationSurfaceCell(List<BlockPosition> waypoints, BlockPosition position) {
+        Objects.requireNonNull(waypoints, "waypoints"); Objects.requireNonNull(position, "position");
+        return operationSurfaceCells(waypoints).contains(position);
     }
 
     private static Set<BlockPosition> operationSurfaceCells(List<BlockPosition> waypoints) {
