@@ -47,4 +47,23 @@ class StructuralRepairProcessTest {
                 .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
                 .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation)));
     }
+
+    @Test
+    void exactHiveStoreMaterialCanRestoreAnOrganWithoutSettlementConditionSideEffects() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-organ-repair"), 91L));
+        HiveOrgan organ = state.bootstrap().hive().organs().getFirst();
+        GrayboxCell cell = FrontierGrayboxPlan.compile(state).cells().values().stream().filter(value -> value.ownerId().equals(organ.id())).findFirst().orElseThrow();
+        state = state.recordPhysicalDelta(new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(organ.id()), Optional.of(cell.semanticPart()), "explosion:test"));
+        SubjectId store = new SubjectId("container:hive-east-store"), materialId = new SubjectId("item:hive-repair-red-concrete");
+        state = state.withInventory(state.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(materialId, cell.material().repairItemKind(), 1, new InventoryCustody.ContainerSlot(store, 4))));
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:hive-organ-repair"), PhysicalIntentKind.STRUCTURAL_REPAIR, PhysicalIntentStatus.PREPARED,
+                organ.id(), List.of(organ.id(), materialId), new FixedPosition(FixedScalar.whole(cell.position().x()), FixedScalar.whole(cell.position().y()), FixedScalar.whole(cell.position().z())),
+                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED);
+        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState repaired = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new StructuralRepairObservation(new PhysicalObservationId("observation:hive-organ-repair"), intent.id(), materialId, cell.position())));
+        assertTrue(!repaired.physicalDeltas().containsKey(cell.position()) && repaired.isHiveOrganOperational(organ.id()));
+        assertTrue(!repaired.inventory().items().containsKey(materialId), "the final real concrete item is consumed exactly once");
+    }
 }

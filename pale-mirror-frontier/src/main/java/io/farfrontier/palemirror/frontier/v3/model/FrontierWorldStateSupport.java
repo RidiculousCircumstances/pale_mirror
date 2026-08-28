@@ -47,6 +47,16 @@ final class FrontierWorldStateSupport {
                 .orElseThrow(() -> new IllegalArgumentException("unknown settlement structure: " + structureId.value()));
     }
 
+    static boolean isHiveOrgan(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
+        return bootstrap.hive().organs().stream().anyMatch(organ -> organ.id().equals(ownerId)) || colony.addedOrgans().containsKey(ownerId);
+    }
+
+    static SubjectId semanticOwner(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
+        if (ownerId.value().startsWith("structure:")) return structureSettlement(bootstrap, ownerId);
+        if (isHiveOrgan(bootstrap, colony, ownerId)) return bootstrap.hive().id();
+        throw new IllegalArgumentException("unknown repairable semantic owner: " + ownerId.value());
+    }
+
     static SubjectId actorOwner(FrontierWorldState state, SubjectId actorId) {
         return state.bootstrap().settlements().stream()
                 .filter(settlement -> settlement.residents().stream().anyMatch(resident -> resident.id().equals(actorId)))

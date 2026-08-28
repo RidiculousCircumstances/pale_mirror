@@ -35,14 +35,14 @@ final class StructuralRepairProcess {
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<PhysicalDelta> repairable = state.physicalDeltas().values().stream()
                 .filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
-                .filter(delta -> delta.ownerId().orElseThrow().value().startsWith("structure:"))
-                .filter(delta -> state.structureConditions().get(delta.ownerId().orElseThrow()) != StructureCondition.DESTROYED)
+                .filter(delta -> repairableOwner(state, delta.ownerId().orElseThrow()))
                 .sorted(Comparator.comparingInt((PhysicalDelta delta) -> delta.position().x()).thenComparingInt(delta -> delta.position().y())
                         .thenComparingInt(delta -> delta.position().z())).findFirst();
         if (repairable.isEmpty()) return List.of(next);
         PhysicalDelta loss = repairable.orElseThrow(); SubjectId structureId = loss.ownerId().orElseThrow();
         GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), structureId, loss.position());
-        SubjectId settlementId = FrontierWorldStateSupport.structureSettlement(state.bootstrap(), structureId);
+        if (expected == null) return List.of(next);
+        SubjectId settlementId = FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), structureId);
         Optional<ExactItemStack> material = state.inventory().items().values().stream()
                 .filter(item -> item.itemKind().equals(expected.material().repairItemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
@@ -58,10 +58,10 @@ final class StructuralRepairProcess {
     }
 
     static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
-        if (intent.kind() != PhysicalIntentKind.STRUCTURAL_REPAIR || !intent.causeSubjectId().value().startsWith("structure:")) {
+        if (intent.kind() != PhysicalIntentKind.STRUCTURAL_REPAIR || !repairableOwner(state, intent.causeSubjectId())) {
             throw new IllegalArgumentException("structural repair intent has an invalid owner");
         }
-        if (!subject.equals(FrontierWorldStateSupport.structureSettlement(state.bootstrap(), intent.causeSubjectId()))
+        if (!subject.equals(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()))
                 || intent.subjectIds().size() != 2 || !intent.subjectIds().contains(intent.causeSubjectId())) {
             throw new IllegalArgumentException("structural repair intent lacks its settlement owner or material");
         }
@@ -70,5 +70,10 @@ final class StructuralRepairProcess {
             throw new IllegalArgumentException("only one structural repair may be physically active");
         }
         return state.preparePhysicalIntent(intent);
+    }
+
+    private static boolean repairableOwner(FrontierWorldState state, SubjectId ownerId) {
+        if (ownerId.value().startsWith("structure:")) return state.structureConditions().get(ownerId) != StructureCondition.DESTROYED;
+        return FrontierWorldStateSupport.isHiveOrgan(state.bootstrap(), state.hiveColony(), ownerId);
     }
 }
