@@ -319,4 +319,25 @@ public final class FrontierV3CargoHandoffGameTests {
                 "the item carries its persisted carrier UUID for later loaded-chunk reconciliation");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-frontier-v3-hopper-carrier", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hopperCarrierBindsOnlyItsExactStackAndRetainsUuid(GameTestHelper helper) {
+        BlockPos position = helper.absolutePos(new BlockPos(52, 8, 0));
+        helper.getLevel().setBlock(position, Blocks.HOPPER.defaultBlockState(), 3);
+        net.minecraft.world.level.block.entity.HopperBlockEntity hopper = (net.minecraft.world.level.block.entity.HopperBlockEntity) helper.getLevel().getBlockEntity(position);
+        SubjectId container = new SubjectId("container:frontier-v3-hopper-carrier");
+        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-hopper-bread"), "minecraft:bread", 7,
+                new InventoryCustody.ContainerSlot(container, 0));
+        hopper.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
+        java.util.UUID first = FrontierV3InventoryObservationExecutor.bindHopperCarrier(hopper, 0);
+        java.util.UUID second = FrontierV3InventoryObservationExecutor.bindHopperCarrier(hopper, 0);
+        helper.assertValueEqual(second, first, "one loaded hopper keeps its stable carrier UUID across repeated observation");
+        helper.assertValueEqual(FrontierV3CargoHandoffExecutor.worldCarrierId(hopper.getItem(0)).orElseThrow(), first,
+                "the exact stack and the hopper's persistent carrier identity agree");
+        hopper.setItem(1, net.minecraft.world.item.Items.DIAMOND.getDefaultInstance());
+        helper.assertFalse(FrontierV3CargoHandoffExecutor.exactMatch(hopper.getItem(1), expected),
+                "foreign hopper contents are never confused with the canonical exact stack");
+        helper.succeed();
+    }
 }

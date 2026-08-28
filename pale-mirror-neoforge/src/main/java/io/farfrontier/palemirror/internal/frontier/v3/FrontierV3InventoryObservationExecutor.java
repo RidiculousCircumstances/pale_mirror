@@ -24,10 +24,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Bounded loaded-chunk observation of exact items crossing an owned hive STORE chest and a
@@ -35,6 +37,7 @@ import java.util.Optional;
  * becomes a bounded durable conflict rather than being adopted or repaired.
  */
 final class FrontierV3InventoryObservationExecutor {
+    private static final String HOPPER_CARRIER_ID_KEY = "pale_mirror_frontier_v3_hopper_carrier";
     private FrontierV3InventoryObservationExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -63,6 +66,12 @@ final class FrontierV3InventoryObservationExecutor {
                     FrontierV3CargoHandoffExecutor.bindWorldCarrier(carrier.getItem(), carrier.getUUID());
                     carrier.setItem(carrier.getItem());
                     submit(runtime, expected.id(), custody, new InventoryCustody.WorldCarrier(carrier.getUUID()));
+                    return true;
+                }
+                List<HopperCandidate> hoppers = nearbyHoppers(level, chest.getBlockPos(), expected);
+                if (actual.isEmpty() && hoppers.size() == 1) {
+                    HopperCandidate hopper = hoppers.getFirst(); UUID carrierId = bindHopperCarrier(hopper.hopper(), hopper.slot());
+                    submit(runtime, expected.id(), custody, new InventoryCustody.WorldCarrier(carrierId));
                     return true;
                 }
                 List<ServerPlayer> holders = playersHolding(level, expected);
@@ -106,6 +115,21 @@ final class FrontierV3InventoryObservationExecutor {
         return level.getEntitiesOfClass(ItemEntity.class, new AABB(source).inflate(4.0D), entity -> FrontierV3CargoHandoffExecutor.exactMatch(entity.getItem(), expected))
                 .stream().sorted(Comparator.comparing(ItemEntity::getUUID)).toList();
     }
+    private static List<HopperCandidate> nearbyHoppers(ServerLevel level, BlockPos source, ExactItemStack expected) {
+        return java.util.stream.Stream.of(source.above(), source.below(), source.north(), source.south(), source.east(), source.west())
+                .filter(level::hasChunkAt).map(level::getBlockEntity).filter(HopperBlockEntity.class::isInstance).map(HopperBlockEntity.class::cast)
+                .flatMap(hopper -> java.util.stream.IntStream.range(0, hopper.getContainerSize()).mapToObj(slot -> new HopperCandidate(hopper, slot, hopper.getItem(slot))))
+                .filter(candidate -> FrontierV3CargoHandoffExecutor.exactMatch(candidate.stack(), expected))
+                .sorted(Comparator.comparingLong(candidate -> candidate.hopper().getBlockPos().asLong())).toList();
+    }
+    static UUID bindHopperCarrier(HopperBlockEntity hopper, int slot) {
+        ItemStack stack = hopper.getItem(slot);
+        if (stack.isEmpty()) throw new IllegalArgumentException("cannot bind an empty hopper slot");
+        UUID id = hopper.getPersistentData().hasUUID(HOPPER_CARRIER_ID_KEY)
+                ? hopper.getPersistentData().getUUID(HOPPER_CARRIER_ID_KEY) : UUID.randomUUID();
+        hopper.getPersistentData().putUUID(HOPPER_CARRIER_ID_KEY, id);
+        FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, id); hopper.setItem(slot, stack); hopper.setChanged(); return id;
+    }
     private static List<ServerPlayer> playersHolding(ServerLevel level, ExactItemStack expected) {
         return level.players().stream().filter(player -> hasExactItem(player, expected)).sorted(Comparator.comparing(ServerPlayer::getUUID)).toList();
     }
@@ -146,4 +170,5 @@ final class FrontierV3InventoryObservationExecutor {
         return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
     }
     record StoreChest(BlockPos position, SubjectId containerId) { }
+    record HopperCandidate(HopperBlockEntity hopper, int slot, ItemStack stack) { }
 }
