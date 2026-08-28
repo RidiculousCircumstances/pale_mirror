@@ -196,6 +196,40 @@ public final class FrontierV3SceneGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void completeOwnedSceneReclaimsAfterRestartAndMissingBodyStaysUnknown(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(20, 8, 0));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-reclaim-game-test"), 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-reclaim-game-test");
+        var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the scene reclaim fixture runtime must remain active"));
+        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        for (int index = 0; index < lease.members().size(); index++) {
+            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
+        }
+        helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
+                "restart recovery must first retain the active scene as UNKNOWN");
+        helper.assertTrue(FrontierV3SceneExecutor.reclaimObservedBodies(level, runtime, state(runtime), lease),
+                "the loaded complete exact scene body set must be eligible for reclaim after demand admission");
+        helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.HOT,
+                "only the complete exact owned scene body set may reclaim HOT");
+        for (SceneMember member : lease.members()) helper.assertTrue(level.getEntity(member.entityId()) != null,
+                "scene reclaim must retain each original UUID instead of creating a substitute body");
+
+        helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
+                "the reclaimed scene must return to UNKNOWN exactly once on a later restart");
+        Entity missing = level.getEntity(lease.members().getLast().entityId()); helper.assertTrue(missing != null, "fixture must retain a body to remove"); missing.discard();
+        helper.assertTrue(!FrontierV3SceneExecutor.reclaimObservedBodies(level, runtime, state(runtime), lease),
+                "a partial observed body set must be ineligible for scene reclaim");
+        helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART,
+                "a missing exact scene body must remain visible UNKNOWN and never be recreated during reclaim");
+        lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+        runtime.shutdown(); helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void durableHotStrikeHurtsExactBodyAndNeverReplaysUnknownEffect(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

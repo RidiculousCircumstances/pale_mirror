@@ -138,15 +138,21 @@ final class FrontierV3SceneExecutor {
     /** Reclaims only a complete observed body set; missing bodies remain explicit UNKNOWN. */
     private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         if (!demandExists(level, lease.handoffPosition())) return;
+        reclaimObservedBodies(level, runtime, state, lease);
+    }
+
+    /** Accepts only the already observed exact body set; player demand remains the caller's responsibility. */
+    static boolean reclaimObservedBodies(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
-            if (!owned(entity, state, lease, member) || !(entity instanceof Mob body) || body.getHealth() <= 0.0F) return;
+            if (!owned(entity, state, lease, member) || !(entity instanceof Mob body) || body.getHealth() <= 0.0F) return false;
         }
         boolean hasDeadMember = lease.members().stream()
                 .anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD);
         submit(runtime, hasDeadMember ? "scene-recovery-draining" : "scene-reclaimed", lease.id().value(),
                 new SceneLeaseTransition(lease.id(), hasDeadMember ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT));
+        return true;
     }
 
     static BodyMaterialization materializeBodies(ServerLevel level, FrontierWorldState state, SceneLease lease) {
