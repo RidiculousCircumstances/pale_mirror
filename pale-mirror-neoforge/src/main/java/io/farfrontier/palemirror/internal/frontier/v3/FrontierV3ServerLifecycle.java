@@ -138,6 +138,14 @@ public final class FrontierV3ServerLifecycle {
                 && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity);
     }
 
+    /** Keeps an exact owned field on the canonical growth clock rather than Vanilla random ticks. */
+    public static boolean blocksNativeCropGrowth(ServerLevel level, BlockPos position) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(runtime, level, position);
+    }
+
     /**
      * Durably releases an exact HOT shipment before vanilla opens its chest-minecart UI. The cart
      * remains in the world and each later player/drop/hopper move is observed from its stable

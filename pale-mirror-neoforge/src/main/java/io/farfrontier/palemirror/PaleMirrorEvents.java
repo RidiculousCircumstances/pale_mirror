@@ -50,6 +50,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.common.util.TriState;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.BlockGrowFeatureEvent;
+import net.neoforged.neoforge.event.level.block.CropGrowEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -119,6 +120,15 @@ public final class PaleMirrorEvents {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onBlockGrowFeature(BlockGrowFeatureEvent event) {
         SettlementTerritoryPolicy.evaluate(event);
+    }
+
+    /** Exact Frontier fields grow only when their persisted canonical stage advances. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onFrontierCropGrow(CropGrowEvent.Pre event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.blocksNativeCropGrowth(level, event.getPos())) {
+            event.setResult(CropGrowEvent.Pre.Result.DO_NOT_GROW);
+        }
     }
 
     /** Source adapters may reject unmanaged native forms at the server boundary. */

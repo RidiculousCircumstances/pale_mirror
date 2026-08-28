@@ -81,6 +81,18 @@ final class FrontierV3ResourceSiteExecutor {
         }
     }
 
+    static boolean blocksNativeCropGrowth(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level, BlockPos position) {
+        FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return false;
+        Target target = target(state, position); if (target == null || !target.site().cropSlots().contains(canonical(position))) return false;
+        return blocksNativeCropGrowth(level, FrontierV3ResourceSiteLedger.get(level), target.site(), position);
+    }
+
+    static boolean blocksNativeCropGrowth(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, BlockPos position) {
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE && site.cropSlots().contains(canonical(position))
+                && level.getBlockState(position).equals(crop(claim.stage()));
+    }
+
     private static void projectOneGrowthStage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         List<ResourceSiteLifecycle> candidates = state.resourceSites().sites().values().stream().filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage)
                 .sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList();

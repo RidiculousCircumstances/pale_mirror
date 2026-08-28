@@ -42,11 +42,15 @@ public final class FrontierV3ResourceSiteGameTests {
                     "a canonical COLD growth stage updates only the owned field cells");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3) && ledger.claim(site.id()).stage() == 3,
                     "the ledger retains the observed physical stage needed for later drift detection");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(level, ledger, site, minecraft(site.cropSlots().getFirst())),
+                    "an exact owned crop suppresses Vanilla random growth until its next canonical stage");
             BlockPos changed = minecraft(site.cropSlots().getFirst()); level.setBlock(changed, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 4), FrontierV3ResourceSiteExecutor.StageProjectionResult.CONFLICT,
                     "a foreign crop change is conflict evidence, never authority to advance or repair the field");
             helper.assertTrue(level.getBlockState(changed).is(Blocks.DIAMOND_BLOCK) && ledger.claim(site.id()).stage() == 3,
                     "a conflict leaves both the player/world block and the last confirmed field stage intact for reconciliation");
+            helper.assertFalse(FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(level, ledger, site, changed),
+                    "a foreign replacement is not captured by the canonical crop-growth guard");
             helper.succeed();
         });
     }
