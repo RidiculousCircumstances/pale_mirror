@@ -51,12 +51,13 @@
 - Recovery-capable state codecs and the public pure engine factory now restore checkpoint plus WAL tails without a new-world fallback. Accepted-command receipts are atomically part of each WAL transaction (kernel transaction schema 2), preserving restart idempotency; schema 1 transactions are rejected.
 - `FrontierWorldState` is now the immutable mutable-state owner for every bootstrap actor location, every functional structure condition and sparse 4×4 infection intensity. Its versioned codec reconstructs the deterministic profile and rejects incomplete/foreign indexes before reducer recovery.
 - Exact inventory is now canonical and persisted: each settlement starts with one named 27-slot depot, every stack has exactly one container-slot/cargo/player-UUID custody, and state codec v2 round-trips container, item, cargo and player records fail-closed.
+- The pure kernel now has an explicit write-ahead transaction committer: it assembles and validates a complete transaction, appends it through the NeoForge v3 store adapter, and only then installs state/revision/schedules/receipt. An append failure visibly quarantines with no acknowledged or partial canonical mutation; a mismatched storage receipt fails closed.
 - `9c28c1f` records the cross-JVM deterministic replay proof. Wave 1 is complete at automated kernel-evidence level; it is not gameplay, persistence-host or product validation evidence.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
-- Wave 2 now has checked recovery boundaries, restartable kernel state, exact bootstrap ownership and persisted sparse spatial/economic state. It still lacks the NeoForge lifecycle host and physical-intent durability boundary.
+- Wave 2 now has checked recovery boundaries, restartable kernel state, exact bootstrap ownership, persisted sparse spatial/economic state and a true write-ahead canonical commit boundary. It still lacks the NeoForge lifecycle host and physical-intent durability boundary.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next

@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,6 +42,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final StateCodec<S> stateCodec;
     private final ProjectionMapper<S, P> projectionMapper;
     private final EngineLimits limits;
+    private final TransactionCommitter transactionCommitter;
     private ScheduledActionQueue schedules = new ScheduledActionQueue();
     private final Map<CommandId, CommandReceipt> receipts = new LinkedHashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
@@ -61,6 +63,23 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             EngineLimits limits,
             List<ScheduledAction> initialSchedules
     ) {
+        this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
+                projectionMapper, limits, initialSchedules, TransactionCommitter.noOp());
+    }
+
+    InMemoryFrontierEngine(
+            WorldId worldId,
+            S initialState,
+            SimInstant initialInstant,
+            CommandPlanner<S> commandPlanner,
+            ScheduledActionPlanner<S> scheduledPlanner,
+            EventReducer<S> reducer,
+            StateCodec<S> stateCodec,
+            ProjectionMapper<S, P> projectionMapper,
+            EngineLimits limits,
+            List<ScheduledAction> initialSchedules,
+            TransactionCommitter transactionCommitter
+    ) {
         this.worldId = Objects.requireNonNull(worldId, "world id");
         this.state = Objects.requireNonNull(initialState, "initial state");
         this.instant = Objects.requireNonNull(initialInstant, "initial instant");
@@ -70,6 +89,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         this.stateCodec = Objects.requireNonNull(stateCodec, "state codec");
         this.projectionMapper = Objects.requireNonNull(projectionMapper, "projection mapper");
         this.limits = Objects.requireNonNull(limits, "limits");
+        this.transactionCommitter = Objects.requireNonNull(transactionCommitter, "transaction committer");
         List.copyOf(initialSchedules).forEach(schedules::schedule);
         stateCodec.encode(initialState);
     }
@@ -80,7 +100,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     ) {
         InMemoryFrontierEngine<S, P> engine = new InMemoryFrontierEngine<>(configuration.worldId(), replay.state(), replay.instant(),
                 configuration.commandPlanner(), configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(),
-                configuration.projectionMapper(), configuration.limits(), replay.schedules());
+                configuration.projectionMapper(), configuration.limits(), replay.schedules(), configuration.transactionCommitter());
         engine.revision = replay.revision();
         for (CommandReceipt receipt : receipts) {
             if (engine.receipts.put(receipt.commandId(), receipt) != null) throw new IllegalArgumentException("duplicate recovered command receipt");
@@ -225,10 +245,16 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (encoded == null) {
             throw new IllegalStateException("state codec returned null");
         }
+        TransactionRecord transaction = new TransactionRecord(transactionId, worldId, nextRevision, eventInstant, events,
+                acceptedCommandReceipt);
+        // No v3 physical intent exists yet. Future physical leases and effects choose
+        // DURABLE_BEFORE_EFFECT before they are released to Minecraft; canonical progression is
+        // still written before its in-memory acknowledgement.
+        transactionCommitter.commit(transaction, Durability.BATCHABLE);
         state = nextState;
         revision = nextRevision;
         schedules = nextSchedules;
-        transactions.add(new TransactionRecord(transactionId, worldId, revision, eventInstant, events, acceptedCommandReceipt));
+        transactions.add(transaction);
         return transactionId;
     }
 

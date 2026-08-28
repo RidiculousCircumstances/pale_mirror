@@ -12,7 +12,7 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
         WorldId worldId, S initialState, SimInstant initialInstant,
         CommandPlanner<S> commandPlanner, ScheduledActionPlanner<S> scheduledPlanner,
         EventReducer<S> reducer, StateCodec<S> stateCodec, ProjectionMapper<S, P> projectionMapper,
-        EngineLimits limits, List<ScheduledAction> initialSchedules
+        EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter
 ) {
     public FrontierEngineConfiguration {
         Objects.requireNonNull(worldId, "world id");
@@ -25,5 +25,6 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
         Objects.requireNonNull(projectionMapper, "projection mapper");
         Objects.requireNonNull(limits, "limits");
         initialSchedules = List.copyOf(initialSchedules);
+        Objects.requireNonNull(transactionCommitter, "transaction committer");
     }
 }

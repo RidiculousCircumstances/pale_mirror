@@ -19,7 +19,7 @@ public final class FrontierEngines {
         Objects.requireNonNull(configuration, "configuration");
         return new InMemoryFrontierEngine<>(configuration.worldId(), configuration.initialState(), configuration.initialInstant(),
                 configuration.commandPlanner(), configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(),
-                configuration.projectionMapper(), configuration.limits(), configuration.initialSchedules());
+                configuration.projectionMapper(), configuration.limits(), configuration.initialSchedules(), configuration.transactionCommitter());
     }
 
     public static <S, P extends FrontierProjection> FrontierEngine<P> recover(

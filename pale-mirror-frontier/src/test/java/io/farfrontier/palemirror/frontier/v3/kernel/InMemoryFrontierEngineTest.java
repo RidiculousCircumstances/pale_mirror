@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -65,6 +66,39 @@ class InMemoryFrontierEngineTest {
         assertEquals(Revision.ZERO, engine.projection(ProjectionQuery.summary()).revision());
         assertEquals(0, engine.transactions().size());
         assertEquals("QUARANTINED", engine.status().kind().name());
+    }
+
+    @Test
+    void failedWriteAheadCommitQuarantinesWithoutAcknowledgingOrMutatingCanonicalState() {
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false,
+                (transaction, durability) -> { throw new IllegalStateException("synthetic WAL failure"); });
+
+        assertRejected(engine.submit(command("command:wal-failure", Revision.ZERO, 2)), RejectionCode.INVARIANT_FAILURE);
+
+        CounterProjection projection = engine.projection(ProjectionQuery.summary());
+        assertEquals(0, projection.value());
+        assertEquals(Revision.ZERO, projection.revision());
+        assertEquals(0, engine.transactions().size());
+        assertEquals(0, engine.checkpoint().receipts().size());
+        assertEquals("QUARANTINED", engine.status().kind().name());
+    }
+
+    @Test
+    void writeAheadCommitReceivesTheCompleteTransactionBeforeAcknowledgement() {
+        List<TransactionRecord> committed = new ArrayList<>();
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false,
+                (transaction, durability) -> {
+                    assertEquals(io.farfrontier.palemirror.frontier.v3.persistence.Durability.BATCHABLE, durability);
+                    committed.add(transaction);
+                });
+
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:durable", Revision.ZERO, 2)));
+
+        assertEquals(engine.transactions(), committed);
+        TransactionRecord transaction = committed.getFirst();
+        assertEquals("transaction:revision-1", transaction.id().value());
+        assertEquals("command:durable", transaction.acceptedCommandReceipt().orElseThrow().commandId().value());
+        assertEquals(new Revision(1L), engine.projection(ProjectionQuery.summary()).revision());
     }
 
     @Test
@@ -203,6 +237,12 @@ class InMemoryFrontierEngineTest {
     private static InMemoryFrontierEngine<Counter, CounterProjection> engine(
             List<ScheduledAction> schedules, boolean failOnNine
     ) {
+        return engine(schedules, failOnNine, TransactionCommitter.noOp());
+    }
+
+    private static InMemoryFrontierEngine<Counter, CounterProjection> engine(
+            List<ScheduledAction> schedules, boolean failOnNine, TransactionCommitter transactionCommitter
+    ) {
         return new InMemoryFrontierEngine<>(
                 WORLD,
                 new Counter(0),
@@ -213,7 +253,8 @@ class InMemoryFrontierEngineTest {
                 state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
                 (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
                 new EngineLimits(8, 100L, 8),
-                schedules);
+                schedules,
+                transactionCommitter);
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {
@@ -229,7 +270,7 @@ class InMemoryFrontierEngineTest {
                 (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(action.weight()))),
                 (state, event) -> reduce(state, event, false), codec,
                 (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
-                new EngineLimits(8, 100L, 8), List.of());
+                new EngineLimits(8, 100L, 8), List.of(), TransactionCommitter.noOp());
     }
 
     private static Counter reduce(Counter state, FrontierEvent event, boolean failOnNine) {
