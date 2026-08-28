@@ -222,6 +222,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.population.birth.review" -> PopulationBirthProcess.planReview(state, action);
             case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
+            case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
             case "frontier.route_construction.start" -> RouteConstructionProcess.planStart(state, action);
@@ -264,6 +265,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ResidentMigrated migration -> reduceResidentMigrated(state, event.subject(), migration);
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
             case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
+            case ResourceSiteGrowthAdvanced advanced -> ResourceSiteProcess.reduceGrowth(state, event.subject(), advanced);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);

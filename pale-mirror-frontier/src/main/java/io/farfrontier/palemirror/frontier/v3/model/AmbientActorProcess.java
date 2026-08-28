@@ -71,7 +71,8 @@ public final class AmbientActorProcess {
         nextActors.put(death.actorId(), state.actorLocations().get(death.actorId()).deadAt(death.position()));
         return new FrontierWorldState(state.bootstrap(), nextActors, state.structureConditions(), state.infection(), state.inventory(),
                 state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(),
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation());
+                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
+                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
 
     static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorObserved observation) {
@@ -82,7 +83,8 @@ public final class AmbientActorProcess {
         nextActors.put(observation.actorId(), new ActorLocation(observation.position(), state.actorLocations().get(observation.actorId()).condition().withHealth(observation.health())));
         return new FrontierWorldState(state.bootstrap(), nextActors, state.structureConditions(), state.infection(), state.inventory(),
                 state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(),
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation());
+                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
+                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
     static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, SimInstant instant, AmbientLeasePrepared prepared) {
         if (!subject.equals(owner(state, prepared.lease().actorId())) || !prepared.lease().handoffInstant().equals(instant)) {

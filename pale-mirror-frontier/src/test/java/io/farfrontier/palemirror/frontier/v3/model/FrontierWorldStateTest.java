@@ -85,7 +85,7 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
                 source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations(), source.physicalIntents(),
                 source.physicalObservations(), source.sceneLeases(), source.hiveColony(), source.structureDamage(), source.physicalDeltas(),
-                source.ambientLeases(), source.routeConstructions(), source.routeTopology(), source.strategicPlans(), source.humanPopulation()));
+                source.ambientLeases(), source.routeConstructions(), source.routeTopology(), source.strategicPlans(), source.humanPopulation(), source.resourceSites()));
     }
 
     @Test
@@ -138,7 +138,8 @@ class FrontierWorldStateTest {
 
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(),
                 state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), Map.of(intent.id(), intent), state.physicalObservations(),
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation()));
+                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
+                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites()));
     }
 
     @Test

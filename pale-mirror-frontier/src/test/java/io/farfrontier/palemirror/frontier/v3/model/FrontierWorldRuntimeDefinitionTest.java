@@ -465,13 +465,13 @@ class FrontierWorldRuntimeDefinitionTest {
         }
         FrontierWorldState retentionState = new FrontierWorldState(before.bootstrap(), before.actorLocations(), released.structureConditions(), released.infection(),
                 released.inventory(), released.productionJobs(), released.contracts(), released.operations(), released.physicalIntents(), released.physicalObservations(), retained,
-                released.hiveColony(), released.structureDamage(), released.physicalDeltas(), released.ambientLeases(), released.routeConstructions(), released.routeTopology(), released.strategicPlans(), released.humanPopulation());
+                released.hiveColony(), released.structureDamage(), released.physicalDeltas(), released.ambientLeases(), released.routeConstructions(),
+                released.routeTopology(), released.strategicPlans(), released.humanPopulation(), released.resourceSites());
         var nextLeaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:after-compaction");
         SceneLease nextLease = new SceneLease(nextLeaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(551L), 2_000L,
                 SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
         FrontierWorldState compacted = retentionState.prepareSceneLease(nextLease);
-        assertEquals(1_024, compacted.sceneLeases().size());
-        assertTrue(compacted.sceneLeases().containsKey(nextLeaseId));
+        assertEquals(1_024, compacted.sceneLeases().size()); assertTrue(compacted.sceneLeases().containsKey(nextLeaseId));
         assertTrue(!compacted.sceneLeases().containsKey(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-0")));
     }
 

@@ -29,6 +29,7 @@ final class FrontierWorldInitialState {
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new FixedScalar(500_000L))));
         return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of(), Map.of(), ContainerSurfaceManifest.initial(bootstrap)),
-                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), HiveColony.empty(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.empty(), population);
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), HiveColony.empty(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.empty(), population,
+                ResourceSiteState.initial(bootstrap));
     }
 }

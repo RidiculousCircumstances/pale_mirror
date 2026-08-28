@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 38, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 39, MAX_ENTRIES = 65_535;
     @Override public byte[] encode(FrontierWorldState state) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -43,6 +43,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 RouteTopologyStateCodec.write(output, state.routeTopology());
                 StrategicPlanStateCodec.write(output, state.strategicPlans());
                 HumanPopulationStateCodec.write(output, state.humanPopulation());
+                ResourceSiteStateCodec.write(output, state.resourceSites());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -59,7 +60,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
                     readContracts(input), readOperations(input), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input), colony, structureDamage, physicalDeltas,
-                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap), StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input));
+                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap), StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input),
+                    ResourceSiteStateCodec.read(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

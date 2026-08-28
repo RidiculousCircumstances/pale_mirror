@@ -18,6 +18,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
+                ResourceSitePayloadCodecs.growthAdvanced(),
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
                 RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
                 StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }
@@ -495,6 +496,5 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long"); output.writeShort(encoded.length); output.write(encoded);
     } static String readString(DataInputStream input) throws IOException {
         int length = input.readUnsignedShort(); if (length > 256) throw new IllegalArgumentException("production payload field is too long");
-        byte[] encoded = input.readNBytes(length); if (encoded.length != length) throw new IOException("truncated production payload field");
-        return new String(encoded, java.nio.charset.StandardCharsets.UTF_8); }
+        byte[] encoded = input.readNBytes(length); if (encoded.length != length) throw new IOException("truncated production payload field"); return new String(encoded, java.nio.charset.StandardCharsets.UTF_8); }
 }
