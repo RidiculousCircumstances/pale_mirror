@@ -62,7 +62,9 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         if (blocks.size() > MAX_CELLS || entityCandidates.size() > MAX_ENTITIES || itemCandidates.size() > MAX_ITEMS) {
             throw new IllegalStateException("v3 managed explosion retained evidence exceeds bounds");
         }
-        pending.put(key, new Pending(key, gameTime, blocks, entityCandidates, itemCandidates, List.of(), List.of(), blocks.size(), 0, 0, 0));
+        int affectedOverlays = Math.toIntExact(blocks.stream().filter(candidate -> candidate.infectionCell().isPresent()).count());
+        pending.put(key, new Pending(key, gameTime, blocks, entityCandidates, itemCandidates, List.of(), List.of(), blocks.size(), 0,
+                affectedOverlays, 0));
         setDirty(); return true;
     }
 
