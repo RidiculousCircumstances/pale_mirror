@@ -41,7 +41,7 @@ final class FrontierWorldPhysicalDeltaSupport {
         Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas()); next.put(delta.position(), delta);
         FrontierWorldState changed = new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(),
                 state.inventory(), state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(),
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), next, state.ambientLeases(), state.routeConstructions(), state.routeTopology());
+                state.sceneLeases(), state.hiveColony(), state.structureDamage(), next, state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans());
         if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.ownerId().orElseThrow().value().startsWith("structure:")) return changed;
         return changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
     }
@@ -70,7 +70,7 @@ final class FrontierWorldPhysicalDeltaSupport {
         Map<SubjectId, StructureCondition> nextConditions = new LinkedHashMap<>(state.structureConditions()); nextConditions.put(damage.structureId(), nextCondition);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), nextConditions, state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                nextDamageIndex, state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology());
+                nextDamageIndex, state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans());
     }
 
     static boolean organOperational(FrontierBootstrap bootstrap, HiveColony colony, Map<BlockPosition, PhysicalDelta> deltas, SubjectId organId) {
