@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HumanPopulationProcessTest {
     @Test
@@ -58,6 +60,29 @@ class HumanPopulationProcessTest {
         assertEquals(ActorLifeStatus.DEAD, dead.actorLocations().get(newborn.id()).condition().status());
         assertEquals(newborn.id(), dead.humanPopulation().resident(newborn.id()).id());
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:migration-dead", migration)));
+    }
+
+    @Test
+    void housingIsAPhysicalCapacityGateRatherThanASecondMutablePopulationCounter() {
+        WorldId world = new WorldId("frontier:housing-capacity");
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SettlementStructure housing = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow();
+
+        assertEquals(SettlementFacilityCapability.INTACT_HOUSING_BEDS, SettlementFacilityCapability.housingCapacity(state, settlement.id()));
+        assertEquals(settlement.residents().size(), SettlementFacilityCapability.livingResidents(state, settlement.id()));
+        assertEquals(SettlementFacilityCapability.DAMAGED_HOUSING_BEDS,
+                SettlementFacilityCapability.forCondition(StructureKind.HOUSING, StructureCondition.DAMAGED).residentCapacity());
+
+        FrontierWorldState destroyed = state.withStructureCondition(housing.id(), StructureCondition.DESTROYED);
+        assertEquals(0, SettlementFacilityCapability.housingCapacity(destroyed, settlement.id()));
+        ResidentProfile parent = destroyed.humanPopulation().resident(settlement.residents().getFirst().id());
+        ResidentBorn birth = new ResidentBorn(new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
+                ResidentRole.FARMER, 0L, parent.skills()), settlement.anchor());
+        assertThrows(IllegalArgumentException.class, () -> destroyed.recordResidentBirth(birth));
+
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(housing.id());
+        assertTrue(board.text().contains(settlement.residents().size() + " / " + SettlementFacilityCapability.INTACT_HOUSING_BEDS + " RESIDENTS"));
     }
 
     private static FrontierWorldState state(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {

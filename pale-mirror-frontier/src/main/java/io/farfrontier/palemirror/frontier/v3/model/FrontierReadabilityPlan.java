@@ -22,7 +22,7 @@ public final class FrontierReadabilityPlan {
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure -> {
             StructureCondition condition = state.structureConditions().get(structure.id());
             add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition),
-                    settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + conditionText(condition)));
+                    settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + facilityText(state, settlement, structure, condition)));
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ));
@@ -79,6 +79,13 @@ public final class FrontierReadabilityPlan {
             case DAMAGED -> "DAMAGED · REPAIR NEEDED";
             case DESTROYED -> "DESTROYED · SITE LOST";
         };
+    }
+
+    private static String facilityText(FrontierWorldState state, Settlement settlement, SettlementStructure structure, StructureCondition condition) {
+        if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
+        int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());
+        int beds = SettlementFacilityCapability.forStructure(state, structure).residentCapacity();
+        return conditionText(condition) + "\n" + residents + " / " + beds + " RESIDENTS";
     }
 
     private static void add(Map<SubjectId, FrontierObjectBoard> values, FrontierObjectBoard board) {

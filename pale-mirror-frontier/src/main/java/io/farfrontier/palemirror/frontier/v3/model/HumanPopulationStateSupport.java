@@ -15,6 +15,9 @@ final class HumanPopulationStateSupport {
         if (state.bootstrap().settlements().stream().noneMatch(settlement -> settlement.id().equals(birth.resident().settlementId()))) {
             throw new IllegalArgumentException("resident birth settlement is unknown");
         }
+        int occupants = SettlementFacilityCapability.livingResidents(state, birth.resident().settlementId());
+        int beds = SettlementFacilityCapability.housingCapacity(state, birth.resident().settlementId());
+        if (occupants >= beds) throw new IllegalArgumentException("resident birth requires available operational housing");
         var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(birth.resident().id(), new ActorLocation(birth.position()));
         return copy(state, actors, state.humanPopulation().add(birth.resident()));
     }
@@ -26,6 +29,12 @@ final class HumanPopulationStateSupport {
         if (state.humanPopulation().resident(migration.residentId()) == null) throw new IllegalArgumentException("migration subject is not a resident");
         if (state.operations().values().stream().anyMatch(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)
                 && operation.participantIds().contains(migration.residentId()))) throw new IllegalArgumentException("resident assigned to an active operation cannot migrate");
+        ResidentProfile current = state.humanPopulation().resident(migration.residentId());
+        if (!current.settlementId().equals(migration.destinationSettlementId())) {
+            int occupants = SettlementFacilityCapability.livingResidents(state, migration.destinationSettlementId());
+            int beds = SettlementFacilityCapability.housingCapacity(state, migration.destinationSettlementId());
+            if (occupants >= beds) throw new IllegalArgumentException("resident migration requires available operational housing");
+        }
         var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(migration.residentId(), actor.withPosition(migration.destination()));
         return copy(state, actors, state.humanPopulation().migrate(migration.residentId(), migration.destinationHouseholdId(), migration.destinationSettlementId()));
     }
