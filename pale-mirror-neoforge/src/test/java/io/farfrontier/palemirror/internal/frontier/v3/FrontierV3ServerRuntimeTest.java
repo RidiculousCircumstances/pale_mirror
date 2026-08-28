@@ -8,6 +8,10 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
@@ -35,7 +39,10 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
@@ -44,6 +51,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -122,6 +130,29 @@ class FrontierV3ServerRuntimeTest {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(PhysicalIntentStatus.RUNNING, state.physicalIntents().get(intentId).status());
         assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
+    }
+
+    @Test
+    void restartRetainsManagedExplosionForItsPersistedPostconditionInspector(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:managed-explosion-restart"); FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var configuration = FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(world, 91L);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        FrontierWorldState initial = worldState(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:managed-explosion-restart");
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, java.util.Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        submitWorld(runtime, "prepare-explosion-lease", new SceneLeasePrepared(lease)); submitWorld(runtime, "hot-explosion-lease", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.BOMBER)
+                .filter(value -> candidate.actorIds().contains(value.id())).findFirst().orElseThrow().id();
+        var point = hot.actorLocations().get(bomber).position(); PhysicalIntentId intentId = new PhysicalIntentId("intent:managed-explosion-restart");
+        PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED, bomber, List.of(bomber, candidate.engagementId()),
+                new FixedPosition(FixedScalar.whole(point.x()), FixedScalar.whole(point.y()), FixedScalar.whole(point.z())), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
+        submitWorld(runtime, "prepare-explosion", new PhysicalIntentPrepared(intent)); submitWorld(runtime, "run-explosion", new PhysicalIntentTransition(intentId, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered = FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        assertEquals(0, FrontierV3PhysicalIntentRestartSafety.quarantineWithManagedPostcondition(recovered, intentId::equals));
+        assertEquals(PhysicalIntentStatus.RUNNING, worldState(recovered).physicalIntents().get(intentId).status());
+        assertEquals(1, FrontierV3PhysicalIntentRestartSafety.quarantineWithManagedPostcondition(recovered, ignored -> false));
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, worldState(recovered).physicalIntents().get(intentId).status());
     }
 
     @Test
@@ -234,6 +265,17 @@ class FrontierV3ServerRuntimeTest {
                 return new Delta(ByteBuffer.wrap(bytes).getInt());
             }
         }));
+    }
+
+    private static FrontierWorldState worldState(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+    }
+
+    private static void submitWorld(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, FrontierPayload payload) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(); CommandId commandId = new CommandId("test:" + phase);
+        FrontierCommand command = new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload);
+        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(command).orElseThrow());
     }
 
     private record Counter(int value) { }
