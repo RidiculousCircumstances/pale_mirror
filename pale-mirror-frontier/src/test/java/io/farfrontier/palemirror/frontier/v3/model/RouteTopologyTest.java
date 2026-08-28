@@ -92,6 +92,9 @@ class RouteTopologyTest {
         PhysicalIntentPrepared prepared = events.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         assertTrue(prepared.intent().subjectIds().contains(project.id()));
+        FrontierWorldState conflicted = RouteConstructionProcess.reducePrepared(state, FrontierRouteNetwork.OWNER, prepared.intent())
+                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        assertEquals(RouteConstructionStatus.CONFLICT, conflicted.routeConstructions().get(project.id()).status());
         state = RouteConstructionProcess.reducePrepared(state, FrontierRouteNetwork.OWNER, prepared.intent())
                 .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         BlockPosition position = FrontierGrayboxPlan.routeConstructionCells(state, project).getFirst();

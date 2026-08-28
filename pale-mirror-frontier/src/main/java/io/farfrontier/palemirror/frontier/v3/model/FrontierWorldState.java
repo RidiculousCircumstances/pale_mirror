@@ -340,8 +340,7 @@ import java.util.Set;
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
-    public FrontierWorldState transitionPhysicalIntent(PhysicalIntentId intentId, PhysicalIntentStatus nextStatus,
-                                                       java.util.Optional<PhysicalEffectObservation> observation) {
+    public FrontierWorldState transitionPhysicalIntent(PhysicalIntentId intentId, PhysicalIntentStatus nextStatus, java.util.Optional<PhysicalEffectObservation> observation) {
         PhysicalIntent current = physicalIntents.get(Objects.requireNonNull(intentId, "physical intent id"));
         if (current == null) throw new IllegalArgumentException("unknown physical intent: " + intentId.value());
         boolean allowed = current.status() == PhysicalIntentStatus.PREPARED && (nextStatus == PhysicalIntentStatus.RUNNING || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
@@ -350,6 +349,8 @@ import java.util.Set;
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         if (nextStatus != PhysicalIntentStatus.CONFIRMED) {
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.empty()));
+            if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
+                    && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteConstructionStateSupport.conflict(this, current, next);
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
         }
@@ -474,8 +475,7 @@ import java.util.Set;
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.spawn(bioform), structureDamage, physicalDeltas, ambientLeases);
     }
-    public FrontierWorldState startHiveGrowth(HiveGrowthJob job) {
-        Objects.requireNonNull(job, "hive growth job"); ExactItemStack input = inventory.items().get(job.consumedItemId());
+    public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { Objects.requireNonNull(job, "hive growth job"); ExactItemStack input = inventory.items().get(job.consumedItemId());
         if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot slot) || !isHiveStore(slot.containerId())) throw new IllegalArgumentException("hive growth needs one exact hive-store input");
         return next(actorLocations, structureConditions, infection, inventory.withoutItem(input.id()), productionJobs,
                 contracts, operations, physicalIntents, physicalObservations, sceneLeases, hiveColony.startGrowth(job), structureDamage, physicalDeltas, ambientLeases);

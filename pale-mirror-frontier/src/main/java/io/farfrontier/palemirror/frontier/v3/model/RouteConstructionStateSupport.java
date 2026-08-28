@@ -75,6 +75,18 @@ final class RouteConstructionStateSupport {
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology());
     }
 
+    static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,
+                                       Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
+        RouteConstruction project = intent.subjectIds().stream().map(state.routeConstructions()::get).filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("route construction conflict lacks its project"));
+        Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
+        projects.put(project.id(), project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
+        intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
+        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
+                state.contracts(), state.operations(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(),
+                state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology());
+    }
+
     static void validateReceipt(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> projects,
                                 PhysicalIntent intent, RouteConstructionObservation observation) {
         if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION || !intent.subjectIds().contains(observation.projectId())
