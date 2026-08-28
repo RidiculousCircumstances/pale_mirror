@@ -326,6 +326,12 @@ hive silhouettes. One board belongs to one object. Geometry and motion must
 communicate function before text; labels explain state, cause, risk and possible
 action without exposing opaque IDs to ordinary players.
 
+Boards are a pure projection, not a second state store: their deterministic
+identity, position and content come from the current canonical object. The
+loaded-chunk executor owns a bounded provenance record. A moved, replaced or
+missing claimed board is a visible presentation conflict; it is never silently
+recreated over an unknown world entity.
+
 Evidence is graded separately:
 
 1. contract/types and architecture exist;
