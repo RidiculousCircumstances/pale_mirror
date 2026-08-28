@@ -159,6 +159,7 @@ public final class FrontierWorldRuntimeDefinition {
             case OperationCreated created -> reduceOperationCreated(state, event.subject(), created);
             case OperationAdvanced advanced -> reduceOperationAdvanced(state, event.subject(), advanced);
             case PhysicalIntentPrepared prepared -> reducePhysicalIntentPrepared(state, event.subject(), prepared);
+            case PhysicalIntentTransition transition -> reducePhysicalIntentTransition(state, event.subject(), transition);
             default -> fail(event.payload().type());
         };
     }
@@ -208,6 +209,13 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() != PhysicalIntentKind.CARGO_HANDOFF || !intent.subjectIds().contains(operation.cargoId())
                 || !intent.subjectIds().contains(operation.id())) throw new IllegalArgumentException("physical intent does not own arrived cargo hand-off");
         return state.preparePhysicalIntent(intent);
+    }
+    private static FrontierWorldState reducePhysicalIntentTransition(FrontierWorldState state, SubjectId subject, PhysicalIntentTransition transition) {
+        PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
+        if (intent == null) throw new IllegalArgumentException("physical intent transition has no prepared intent");
+        RouteOperation operation = state.operations().get(intent.causeSubjectId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("physical intent transition subject does not own operation");
+        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observationId());
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();

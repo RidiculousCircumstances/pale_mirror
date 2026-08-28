@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
@@ -23,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -150,6 +152,8 @@ class FrontierWorldRuntimeDefinitionTest {
                 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
         PhysicalIntentPrepared prepared = new PhysicalIntentPrepared(intent);
         assertEquals(prepared, codecs.decode(prepared.type(), codecs.encode(prepared)));
+        PhysicalIntentTransition transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        assertEquals(transition, codecs.decode(transition.type(), codecs.encode(transition)));
     }
 
     @Test
@@ -204,5 +208,21 @@ class FrontierWorldRuntimeDefinitionTest {
 
         assertTrue(durabilities.contains(Durability.BATCHABLE));
         assertTrue(durabilities.contains(Durability.DURABLE_BEFORE_EFFECT));
+    }
+
+    @Test
+    void physicalIntentRequiresSequentialExecutionAndAnObservedPostcondition() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intent-lifecycle"), 91L));
+        for (long tick = 100L; tick <= 900L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
+
+        assertThrows(IllegalArgumentException.class, () -> prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1"))));
+        FrontierWorldState running = prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState confirmed = running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1")));
+        assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(id).status());
+        assertEquals(Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1")), confirmed.physicalIntents().get(id).postconditionObservationId());
     }
 }

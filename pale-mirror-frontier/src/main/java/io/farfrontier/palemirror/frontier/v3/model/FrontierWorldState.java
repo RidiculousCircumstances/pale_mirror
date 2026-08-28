@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.HashSet;
@@ -236,6 +238,20 @@ public record FrontierWorldState(
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next);
+    }
+
+    public FrontierWorldState transitionPhysicalIntent(PhysicalIntentId intentId, PhysicalIntentStatus nextStatus,
+                                                       java.util.Optional<PhysicalObservationId> observationId) {
+        PhysicalIntent current = physicalIntents.get(Objects.requireNonNull(intentId, "physical intent id"));
+        if (current == null) throw new IllegalArgumentException("unknown physical intent: " + intentId.value());
+        boolean allowed = current.status() == PhysicalIntentStatus.PREPARED
+                && (nextStatus == PhysicalIntentStatus.RUNNING || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                || current.status() == PhysicalIntentStatus.RUNNING
+                && (nextStatus == PhysicalIntentStatus.CONFIRMED || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART);
+        if (!allowed) throw new IllegalArgumentException("physical intent transition is not allowed");
+        Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
+        next.put(intentId, current.withStatus(nextStatus, observationId));
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next);
     }
 

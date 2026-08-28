@@ -27,7 +27,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 6;
+    private static final int VERSION = 7;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -221,6 +221,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (SubjectId subject : intent.subjectIds()) writeString(output, subject.value());
             output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
             output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().ordinal());
+            output.writeBoolean(intent.postconditionObservationId().isPresent());
+            if (intent.postconditionObservationId().isPresent()) writeString(output, intent.postconditionObservationId().orElseThrow().value());
         }
     }
     private static Map<PhysicalIntentId, PhysicalIntent> readPhysicalIntents(DataInputStream input) throws IOException {
@@ -230,9 +232,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId cause = new SubjectId(readString(input)); java.util.ArrayList<SubjectId> subjects = new java.util.ArrayList<>();
             for (int subject = 0, subjectCount = readCount(input); subject < subjectCount; subject++) subjects.add(new SubjectId(readString(input)));
             FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
-            int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte();
+            int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId> observation = observed
+                    ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input))) : java.util.Optional.empty();
             if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length
-                    || intents.put(id, new PhysicalIntent(id, PhysicalIntentKind.values()[kind], PhysicalIntentStatus.values()[status], cause, subjects, origin, radius, PhysicalPostcondition.values()[postcondition])) != null) {
+                    || intents.put(id, new PhysicalIntent(id, PhysicalIntentKind.values()[kind], PhysicalIntentStatus.values()[status], cause, subjects, origin, radius, PhysicalPostcondition.values()[postcondition], observation)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }
         }

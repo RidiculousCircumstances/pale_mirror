@@ -21,7 +21,7 @@ public final class FrontierWorldPayloadCodecs {
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(), new PhysicalIntentPreparedCodec())));
+                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -125,6 +125,20 @@ public final class FrontierWorldPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writePhysicalIntent(output, ((PhysicalIntentPrepared) payload).intent())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new PhysicalIntentPrepared(readPhysicalIntent(input))); }
     }
+    private static final class PhysicalIntentTransitionCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.physical_intent_transition"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            PhysicalIntentTransition transition = (PhysicalIntentTransition) payload;
+            return encodeProduction(output -> { writeString(output, transition.intentId().value()); output.writeByte(transition.status().ordinal());
+                output.writeBoolean(transition.observationId().isPresent()); if (transition.observationId().isPresent()) writeString(output, transition.observationId().orElseThrow().value()); });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)); int status = input.readUnsignedByte(); boolean observed = input.readBoolean();
+            var observation = observed ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input))) : java.util.Optional.<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId>empty();
+            if (status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length) throw new IllegalArgumentException("unknown physical intent status");
+            return new PhysicalIntentTransition(id, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status], observation);
+        }); }
+    }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
     @FunctionalInterface private interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
@@ -184,7 +198,8 @@ public final class FrontierWorldPayloadCodecs {
         writeSubject(output, intent.causeSubjectId()); output.writeByte(intent.subjectIds().size());
         for (var subject : intent.subjectIds()) writeSubject(output, subject);
         output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
-        output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().ordinal());
+        output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().ordinal()); output.writeBoolean(intent.postconditionObservationId().isPresent());
+        if (intent.postconditionObservationId().isPresent()) writeString(output, intent.postconditionObservationId().orElseThrow().value());
     }
     private static io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent readPhysicalIntent(DataInputStream input) throws IOException {
         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
@@ -193,7 +208,8 @@ public final class FrontierWorldPayloadCodecs {
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) subjects.add(readSubject(input).value());
         io.farfrontier.palemirror.frontier.v3.api.FixedPosition origin = new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
                 new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()));
-        int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte();
+        int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
+        var observation = observed ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input))) : java.util.Optional.<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId>empty();
         if (kind >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.values().length
                 || status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length
                 || postcondition >= io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.values().length) {
@@ -201,7 +217,7 @@ public final class FrontierWorldPayloadCodecs {
         }
         return new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(id,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.values()[kind], io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status],
-                cause.value(), subjects, origin, radius, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.values()[postcondition]);
+                cause.value(), subjects, origin, radius, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.values()[postcondition], observation);
     }
     private static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     private static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }

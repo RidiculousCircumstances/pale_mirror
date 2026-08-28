@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.api;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Durable, exact request for one external physical action. Its executor may run only after the
@@ -15,7 +16,8 @@ public record PhysicalIntent(
         List<SubjectId> subjectIds,
         FixedPosition origin,
         int radiusBlocks,
-        PhysicalPostcondition postcondition
+        PhysicalPostcondition postcondition,
+        Optional<PhysicalObservationId> postconditionObservationId
 ) {
     public PhysicalIntent {
         Objects.requireNonNull(id, "physical intent id");
@@ -25,6 +27,7 @@ public record PhysicalIntent(
         subjectIds = List.copyOf(subjectIds);
         Objects.requireNonNull(origin, "physical intent origin");
         Objects.requireNonNull(postcondition, "physical intent postcondition");
+        postconditionObservationId = Objects.requireNonNull(postconditionObservationId, "physical intent postcondition observation");
         if (subjectIds.isEmpty() || subjectIds.size() > 32 || subjectIds.stream().distinct().count() != subjectIds.size()) {
             throw new IllegalArgumentException("physical intent must name one to thirty-two distinct subjects");
         }
@@ -41,5 +44,17 @@ public record PhysicalIntent(
                 }
             }
         }
+        if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
+            throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");
+        }
+    }
+
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition) {
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty());
+    }
+
+    public PhysicalIntent withStatus(PhysicalIntentStatus nextStatus, Optional<PhysicalObservationId> observationId) {
+        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId);
     }
 }
