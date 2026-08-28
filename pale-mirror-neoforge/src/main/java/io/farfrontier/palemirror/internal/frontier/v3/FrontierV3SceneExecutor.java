@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDied;
@@ -146,7 +147,9 @@ final class FrontierV3SceneExecutor {
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             if (!owned(entity, lease, member)) { unknown(runtime, lease); return; }
-            positions.add(new SceneMemberPosition(member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ())));
+            if (!(entity instanceof Villager villager) || villager.getHealth() <= 0.0F) { unknown(runtime, lease); return; }
+            long health = Math.round((double) villager.getHealth() * FixedScalar.SCALE);
+            positions.add(new SceneMemberPosition(member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
         }
         submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions));
     }

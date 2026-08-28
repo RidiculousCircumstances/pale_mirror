@@ -15,6 +15,6 @@ public record SceneLeaseReleased(SceneLeaseId leaseId, List<SceneMemberPosition>
             throw new IllegalArgumentException("scene release must capture at most thirty-two distinct surviving actors");
         }
     }
-    @Override public String type() { return "frontier.scene_lease_released"; }
+    @Override public String type() { return "frontier.scene_lease_released_v2"; }
     @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

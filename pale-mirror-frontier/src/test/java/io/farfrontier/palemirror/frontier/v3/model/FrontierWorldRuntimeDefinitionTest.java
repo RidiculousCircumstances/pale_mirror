@@ -313,10 +313,11 @@ class FrontierWorldRuntimeDefinitionTest {
         FrontierWorldState hot = leased.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         List<SceneMemberPosition> captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                new BlockPosition(lease.handoffPosition().x() + 1, lease.handoffPosition().y(), lease.handoffPosition().z()))).toList();
+                new BlockPosition(lease.handoffPosition().x() + 1, lease.handoffPosition().y(), lease.handoffPosition().z()), FixedScalar.whole(7))).toList();
         FrontierWorldState released = draining.releaseSceneLease(leaseId, captured);
         assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(leaseId).status());
         assertEquals(captured.getFirst().position(), released.actorLocations().get(captured.getFirst().actorId()).position());
+        assertEquals(FixedScalar.whole(7), released.actorLocations().get(captured.getFirst().actorId()).condition().health());
         SceneLeaseReleased releasePayload = new SceneLeaseReleased(leaseId, captured);
         assertEquals(releasePayload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(releasePayload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(releasePayload)));
         assertThrows(IllegalArgumentException.class, () -> hot.releaseSceneLease(leaseId, captured));

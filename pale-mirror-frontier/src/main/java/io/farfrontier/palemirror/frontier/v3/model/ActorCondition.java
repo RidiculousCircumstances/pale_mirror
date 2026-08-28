@@ -20,4 +20,9 @@ public record ActorCondition(ActorLifeStatus status, FixedScalar health) {
     }
 
     public static ActorCondition dead() { return new ActorCondition(ActorLifeStatus.DEAD, FixedScalar.ZERO); }
+
+    public ActorCondition withHealth(FixedScalar observedHealth) {
+        if (status != ActorLifeStatus.ALIVE) throw new IllegalStateException("dead actor cannot receive a living health observation");
+        return new ActorCondition(ActorLifeStatus.ALIVE, observedHealth);
+    }
 }

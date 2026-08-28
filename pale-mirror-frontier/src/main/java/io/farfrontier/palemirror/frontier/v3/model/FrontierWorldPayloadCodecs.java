@@ -165,14 +165,22 @@ public final class FrontierWorldPayloadCodecs {
         }); }
     }
     private static final class SceneLeaseReleasedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.scene_lease_released"; }
+        @Override public String type() { return "frontier.scene_lease_released_v2"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             SceneLeaseReleased released = (SceneLeaseReleased) payload; writeString(output, released.leaseId().value()); output.writeByte(released.members().size());
-            for (SceneMemberPosition member : released.members()) { writeSubject(output, member.actorId()); output.writeInt(member.position().x()); output.writeInt(member.position().y()); output.writeInt(member.position().z()); }
+            for (SceneMemberPosition member : released.members()) {
+                writeSubject(output, member.actorId());
+                output.writeInt(member.position().x()); output.writeInt(member.position().y()); output.writeInt(member.position().z());
+                output.writeLong(member.health().raw());
+            }
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); java.util.ArrayList<SceneMemberPosition> members = new java.util.ArrayList<>();
-            for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMemberPosition(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt())));
+            for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+                var actor = readSubject(input).value();
+                BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+                members.add(new SceneMemberPosition(actor, position, new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
+            }
             return new SceneLeaseReleased(id, members);
         }); }
     }

@@ -409,7 +409,8 @@ public record FrontierWorldState(
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         for (SceneMemberPosition position : positions) {
             requirePosition(bootstrap.bounds(), position.position());
-            nextActors.put(position.actorId(), actorLocations.get(position.actorId()).withPosition(position.position()));
+            ActorLocation currentActor = actorLocations.get(position.actorId());
+            nextActors.put(position.actorId(), new ActorLocation(position.position(), currentActor.condition().withHealth(position.health())));
         }
         Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
         next.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
