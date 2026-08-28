@@ -36,6 +36,10 @@ final class StrategicPlanState {
                     && (task.kind() != StrategicTaskKind.SPREAD_INFECTION_CELL || !task.requirements().equals(List.of(StrategicTaskRequirement.OPERATIONAL_HEART)))) {
                 throw new IllegalArgumentException("hive expansion task has an invalid decomposition");
             }
+            if (objective.kind() == StrategicObjectiveKind.HIVE_GROW_ORGANISM
+                    && (task.kind() != StrategicTaskKind.GROW_HIVE_ORGANISM || !task.requirements().equals(List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS)))) {
+                throw new IllegalArgumentException("hive growth task has an invalid decomposition");
+            }
             if (task.dependencies().stream().anyMatch(dependency -> !this.tasks.containsKey(dependency) || dependency.equals(task.id()))) {
                 throw new IllegalArgumentException("strategic task dependency must name another retained task");
             }

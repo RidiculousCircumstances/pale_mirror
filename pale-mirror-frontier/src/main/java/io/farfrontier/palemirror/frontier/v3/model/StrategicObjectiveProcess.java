@@ -35,6 +35,10 @@ final class StrategicObjectiveProcess {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, action.dueAt().ticks() + 100L))), next);
         }
+        if (task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM) {
+            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+                    new ProposedEvent(owner, new ScheduleEffect.Created(HiveGrowthProcess.start(task, action.dueAt().ticks() + 100L))), next);
+        }
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
 
@@ -63,21 +67,35 @@ final class StrategicObjectiveProcess {
                 .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
         if (infirmary.isEmpty()) return Optional.empty(); SettlementStructure facility = infirmary.orElseThrow();
         return state.infection().entrySet().stream().filter(entry -> local(facility, entry.getKey())).map(entry -> new Candidate(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION,
-                entry.getKey(), entry.getValue().value().raw())).sorted(Candidate.HIGHEST_UTILITY).findFirst();
+                Optional.of(entry.getKey()), entry.getValue().value().raw())).sorted(Candidate.HIGHEST_UTILITY).findFirst();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state) {
-        return HiveInfectionProcess.expansionTarget(state).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, target,
+        Optional<Candidate> growth = hiveGrowthCandidate(state); if (growth.isPresent()) return growth;
+        return HiveInfectionProcess.expansionTarget(state).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),
                 Math.subtractExact(FixedScalar.SCALE, state.infection().getOrDefault(target, new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(FixedScalar.ZERO)).value().raw())));
+    }
+    private static Optional<Candidate> hiveGrowthCandidate(FrontierWorldState state) {
+        boolean capacity = state.hiveColony().growthJobs().isEmpty() && state.hiveColony().addedOrgans().size() < HiveColony.MAX_ADDED_ORGANS
+                && state.hiveColony().spawnedBioforms().size() < HiveColony.MAX_SPAWNED_BIOFORMS;
+        boolean biomass = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:rotten_flesh")
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && state.isHiveStore(slot.containerId()));
+        return capacity && biomass ? Optional.of(new Candidate(StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal) {
         String stem = owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal;
-        return new StrategicObjective(new SubjectId("objective:" + stem), owner, candidate.kind(), Optional.of(candidate.target()), ordinal, StrategicObjectiveStatus.ACTIVE);
+        return new StrategicObjective(new SubjectId("objective:" + stem), owner, candidate.kind(), candidate.target(), ordinal, StrategicObjectiveStatus.ACTIVE);
     }
     private static StrategicTask task(StrategicObjective objective) {
-        List<StrategicTaskRequirement> requirements = objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION
-                ? List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY, StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT) : List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
-        StrategicTaskKind kind = objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION
-                ? StrategicTaskKind.DECONTAMINATE_INFECTION_CELL : StrategicTaskKind.SPREAD_INFECTION_CELL;
+        List<StrategicTaskRequirement> requirements = switch (objective.kind()) {
+            case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY, StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT);
+            case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
+            case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
+        };
+        StrategicTaskKind kind = switch (objective.kind()) {
+            case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
+            case HIVE_EXPAND_INFECTION -> StrategicTaskKind.SPREAD_INFECTION_CELL;
+            case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
+        };
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), requirements, List.of(), StrategicTaskStatus.PENDING);
     }
@@ -90,8 +108,9 @@ final class StrategicObjectiveProcess {
             throw new IllegalArgumentException("strategic review has a foreign owner");
         }
     }
-    private record Candidate(StrategicObjectiveKind kind, InfectionCell target, long utility) {
+    private record Candidate(StrategicObjectiveKind kind, Optional<InfectionCell> target, long utility) {
         private static final Comparator<Candidate> HIGHEST_UTILITY = Comparator.comparingLong(Candidate::utility).reversed()
-                .thenComparingInt(value -> value.target().x()).thenComparingInt(value -> value.target().z());
+                .thenComparing(Candidate::kind).thenComparing(value -> value.target().map(InfectionCell::x).orElse(Integer.MIN_VALUE))
+                .thenComparing(value -> value.target().map(InfectionCell::z).orElse(Integer.MIN_VALUE));
     }
 }

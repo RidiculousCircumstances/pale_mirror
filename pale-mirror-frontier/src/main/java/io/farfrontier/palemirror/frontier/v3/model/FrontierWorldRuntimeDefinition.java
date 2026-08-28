@@ -29,7 +29,7 @@ public final class FrontierWorldRuntimeDefinition {
                 new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp()); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(productionStart(bootstrap.settlements().getFirst().id(), 1, 200),
-                contractDemand(1, 450), HiveGrowthProcess.start(1, 600), StructuralRepairProcess.scan(1, 800), RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
+                contractDemand(1, 450), StructuralRepairProcess.scan(1, 800), RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
         }
@@ -129,8 +129,8 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.supply.contract.demand" -> planContractDemand(state, action);
             case "frontier.supply.cargo.load" -> planCargoLoad(state, action);
             case "frontier.operation.progress" -> planOperationProgress(state, action);
-            case "frontier.hive.growth.start" -> HiveGrowthProcess.planStart(state, action);
-            case "frontier.hive.growth.complete" -> HiveGrowthProcess.planCompletion(state, action);
+            case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
+            case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);

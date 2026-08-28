@@ -20,6 +20,7 @@ class StrategicObjectiveProcessTest {
     @Test
     void hiveUtilitySelectsOneExactExpansionObjectiveAndDurableTask() {
         FrontierWorldState state = initial("frontier:strategic-hive", 401L); SubjectId hive = state.bootstrap().hive().id();
+        state = state.withInventory(state.inventory().withoutItem(new SubjectId("item:bootstrap-hive-biomass")));
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(hive, 1, 60L));
 
@@ -49,6 +50,19 @@ class StrategicObjectiveProcessTest {
         state = StrategicObjectiveProcess.reduceObjective(state, settlement.id(), selected);
         state = StrategicObjectiveProcess.reduceTask(state, settlement.id(), assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload()));
         assertEquals(1, StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 2, 240L)).size());
+    }
+
+    @Test
+    void hiveBiomassSelectsOneExactGrowthTaskBeforeFurtherExpansion() {
+        FrontierWorldState state = initial("frontier:strategic-growth", 406L); SubjectId hive = state.bootstrap().hive().id();
+
+        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(hive, 1, 60L));
+
+        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.getFirst().payload());
+        StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
+        assertEquals(StrategicObjectiveKind.HIVE_GROW_ORGANISM, selected.objective().kind());
+        assertEquals(StrategicTaskKind.GROW_HIVE_ORGANISM, task.task().kind());
+        assertEquals(List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), task.task().requirements());
     }
 
     @Test

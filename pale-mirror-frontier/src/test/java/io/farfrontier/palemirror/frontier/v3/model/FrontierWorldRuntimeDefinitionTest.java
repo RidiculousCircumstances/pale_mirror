@@ -109,16 +109,18 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void sharedHiveGrowthConsumesEastStoreBiomassThenPublishesWestOrganAndBioform() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hive-growth"), 91L));
-        for (long tick = 600L; tick <= 640L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
-        FrontierWorldState active = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        HiveGrowthJob job = active.hiveColony().growthJobs().get(new SubjectId("job:hive-growth-1"));
-        assertEquals(new SubjectId("item:bootstrap-hive-biomass"), job.consumedItemId());
-        assertTrue(!active.inventory().items().containsKey(job.consumedItemId()));
+        for (long tick = 100L; tick <= 3_600L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
+        FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId biomass = new SubjectId("item:bootstrap-hive-biomass");
+        assertTrue(!completed.inventory().items().containsKey(biomass));
+        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), completed.bootstrap().hive().id(),
+                completed.bootstrap().hive().seedNests().getFirst().id(), biomass,
+                new HiveOrgan(new SubjectId("organ:west-grown-heart-1"), completed.bootstrap().hive().id(), completed.bootstrap().hive().seedNests().getFirst().id(),
+                        HiveOrganKind.HEART, new BlockPosition(-408, 64, 432), java.util.Optional.empty()),
+                new Bioform(new SubjectId("bioform:west-grown-1"), completed.bootstrap().hive().id(), completed.bootstrap().hive().seedNests().getFirst().id(),
+                        BioformRole.GUARD, new BlockPosition(-404, 64, 432)));
         HiveGrowthStarted started = new HiveGrowthStarted(job);
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
-
-        for (long tick = 800L; tick <= 840L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
-        FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(completed.hiveColony().growthJobs().isEmpty());
         assertEquals(job.organ(), completed.hiveColony().addedOrgans().get(job.organ().id()));
         assertEquals(job.bioform(), completed.hiveColony().spawnedBioforms().get(job.bioform().id()));
@@ -200,15 +202,15 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
-    void hiveExpansionTaskIsPersistedDeterministicScheduledWorldWork() {
+    void hiveGrowthTaskIsPersistedDeterministicScheduledWorldWork() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:pulse"), 91L));
-        for (long tick = 100L; tick <= 3_400L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 3_600L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
 
         FrontierWorldProjection projection = engine.projection(ProjectionQuery.summary());
-        assertEquals(3, projection.infectedCellCount());
+        assertEquals(2, projection.infectedCellCount());
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().values().stream()
-                .filter(task -> task.ownerId().equals(state.bootstrap().hive().id())).findFirst().orElseThrow().status());
+        assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().values().stream()
+                .filter(task -> task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM).findFirst().orElseThrow().status());
     }
 
     @Test

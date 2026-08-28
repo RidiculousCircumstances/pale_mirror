@@ -172,7 +172,7 @@ class FrontierWorldStateTest {
         assertEquals(active, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(active)));
         assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-bad"), hive, west,
                 new SubjectId("item:bootstrap-1-wheat"), job.organ(), job.bioform())));
-        assertThrows(IllegalArgumentException.class, () -> HiveGrowthProcess.reduceBlocked(baseline, hive,
+        assertEquals(baseline, HiveGrowthProcess.reduceBlocked(baseline, hive,
                 new HiveGrowthBlocked(hive, west, new SubjectId("work:hive-growth-1"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE)));
         FrontierWorldState completed = active.completeHiveGrowth(job.id());
         assertTrue(completed.hiveColony().growthJobs().isEmpty());
