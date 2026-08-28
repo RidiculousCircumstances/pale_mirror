@@ -20,8 +20,8 @@ class RouteTopologyTest {
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
         List<BlockPosition> replacement = new ArrayList<>();
         replacement.add(baseline.get(0)); replacement.add(baseline.get(1));
-        replacement.add(baseline.get(1).offset(0, 0, 10)); replacement.add(new BlockPosition(-375, baseline.get(1).y(), baseline.get(1).z() + 10));
-        replacement.add(new BlockPosition(-375, baseline.get(1).y(), baseline.get(1).z())); replacement.addAll(baseline.subList(2, baseline.size()));
+        replacement.add(baseline.get(1).offset(-10, 0, 0)); replacement.add(baseline.get(2).offset(-10, 0, 0));
+        replacement.add(baseline.get(2)); replacement.addAll(baseline.subList(3, baseline.size()));
         RouteTopology topology = RouteTopology.initial().replaceSupplyRoute(bootstrap, settlement, replacement);
         assertEquals(replacement, topology.supplyWaypoints(bootstrap, settlement));
         assertEquals(0, RouteTopology.initial().replacementSupplyRoutes().size());
@@ -47,5 +47,15 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-topology-codec"), 92L);
         assertThrows(IllegalArgumentException.class, () -> RouteTopologyStateCodec.read(
                 new DataInputStream(new ByteArrayInputStream(new byte[] {(byte) (RouteTopology.MAX_REPLACEMENTS + 1)})), bootstrap));
+    }
+
+    @Test
+    void topologyProjectsEverySettlementSupplyCorridor() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-topology-network"), 93L);
+        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        for (var settlement : bootstrap.settlements()) {
+            BlockPosition corridor = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()).get(2);
+            assertEquals(GrayboxMaterial.ROUTE, FrontierGrayboxPlan.compile(state).cells().get(corridor).material());
+        }
     }
 }

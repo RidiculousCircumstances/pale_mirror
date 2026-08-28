@@ -27,10 +27,8 @@ final class FrontierRouteNetwork {
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
         BlockPosition origin = settlement.anchor();
         BlockPosition destination = supplyNest(bootstrap).anchor().offset(4, 0, -4);
-        return List.of(origin, origin.offset(-6, 0, 0),
-                new BlockPosition(-375, origin.y(), origin.z()), new BlockPosition(-375, origin.y(), -150),
-                new BlockPosition(-390, origin.y(), -150), new BlockPosition(-390, origin.y(), 50),
-                new BlockPosition(-405, origin.y(), 50), new BlockPosition(-405, origin.y(), 250),
+        BlockPosition egress = origin.offset(-6, 0, 0), lane = egress.offset(0, 0, 36);
+        return List.of(origin, egress, lane, new BlockPosition(-405, origin.y(), lane.z()), new BlockPosition(-405, origin.y(), 250),
                 new BlockPosition(-405, destination.y(), destination.z()), destination);
     }
 
@@ -81,8 +79,10 @@ final class FrontierRouteNetwork {
             if (index < 8) addSegment(cells, new BlockPosition(laneX, 64, laneZ),
                     new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36));
         }
-        List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlements.getFirst().id());
-        for (int index = 2; index < supply.size(); index++) addSegment(cells, supply.get(index - 1), supply.get(index));
+        for (Settlement settlement : settlements) {
+            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
+            for (int index = 2; index < supply.size(); index++) addSegment(cells, supply.get(index - 1), supply.get(index));
+        }
         return Set.copyOf(cells);
     }
 
