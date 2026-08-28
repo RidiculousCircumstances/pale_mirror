@@ -24,7 +24,7 @@ public final class FrontierWorldPayloadCodecs {
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new OperationFailedCodec(),
-                new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec())));
+                new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -223,6 +223,26 @@ public final class FrontierWorldPayloadCodecs {
             return new InventoryConflictObserved(new InventoryConflict(id, item, container, slot, InventoryConflictKind.values()[kind]));
         }); }
     }
+    private static final class HiveGrowthStartedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_growth_started"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveGrowthJob(output, ((HiveGrowthStarted) payload).job())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveGrowthStarted(readHiveGrowthJob(input))); }
+    }
+    private static final class HiveGrowthCompletedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_growth_completed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((HiveGrowthCompleted) payload).jobId())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveGrowthCompleted(readSubject(input).value())); }
+    }
+    private static final class HiveGrowthBlockedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_growth_blocked"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveGrowthBlocked blocked = (HiveGrowthBlocked) payload;
+            writeSubject(output, blocked.hiveId()); writeSubject(output, blocked.nestId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().ordinal()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input); SubjectIdHolder work = readSubject(input); int reason = input.readUnsignedByte();
+            if (reason >= HiveGrowthBlockReason.values().length) throw new IllegalArgumentException("unknown hive growth block reason");
+            return new HiveGrowthBlocked(hive.value(), nest.value(), work.value(), HiveGrowthBlockReason.values()[reason]);
+        }); }
+    }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
     @FunctionalInterface private interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
@@ -249,6 +269,23 @@ public final class FrontierWorldPayloadCodecs {
         return new ProductionJob(readSubject(input).value(), readSubject(input).value(), readSubject(input).value(), readSubject(input).value(),
                 readSubject(input).value(), readSubject(input).value(), readString(input), input.readUnsignedByte());
     }
+    private static void writeHiveGrowthJob(DataOutputStream output, HiveGrowthJob job) throws IOException {
+        writeSubject(output, job.id()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId()); writeSubject(output, job.consumedItemId());
+        writeSubject(output, job.organ().id()); output.writeByte(job.organ().kind().ordinal()); writePosition(output, job.organ().anchor());
+        writeSubject(output, job.bioform().id()); output.writeByte(job.bioform().role().ordinal()); writePosition(output, job.bioform().position());
+    }
+    private static HiveGrowthJob readHiveGrowthJob(DataInputStream input) throws IOException {
+        SubjectIdHolder id = readSubject(input); SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input); SubjectIdHolder item = readSubject(input);
+        SubjectIdHolder organId = readSubject(input); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
+        SubjectIdHolder bioformId = readSubject(input); int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
+        if (kind >= HiveOrganKind.values().length || role >= BioformRole.values().length) throw new IllegalArgumentException("unknown hive growth output enum");
+        return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), new HiveOrgan(organId.value(), hive.value(), nest.value(), HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
+                new Bioform(bioformId.value(), hive.value(), nest.value(), BioformRole.values()[role], position));
+    }
+    private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
+        output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
+    }
+    private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeContract(DataOutputStream output, SupplyContract contract) throws IOException {
         writeSubject(output, contract.id()); writeSubject(output, contract.settlementId()); writeSubject(output, contract.recipientId());
         writeSubject(output, contract.cargoId()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());

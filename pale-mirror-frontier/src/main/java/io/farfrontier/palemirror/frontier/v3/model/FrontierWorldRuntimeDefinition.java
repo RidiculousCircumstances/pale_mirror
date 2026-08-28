@@ -24,12 +24,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
-
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
     private FrontierWorldRuntimeDefinition() { }
-
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
@@ -38,9 +36,8 @@ public final class FrontierWorldRuntimeDefinition {
                 FrontierWorldRuntimeDefinition::planScheduled,
                 FrontierWorldRuntimeDefinition::reduce,
                 new FrontierWorldStateCodec(), FrontierWorldRuntimeDefinition::projection,
-                new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200), contractDemand(1, 450)), TransactionCommitter.noOp());
+                new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200), contractDemand(1, 450), HiveGrowthProcess.start(1, 600)), TransactionCommitter.noOp());
     }
-
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
 
     private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
@@ -111,7 +108,6 @@ public final class FrontierWorldRuntimeDefinition {
         return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                 io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, message));
     }
-
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
         return switch (action.kind()) {
             case "frontier.infection.pulse" -> planInfectionPulse(state, action);
@@ -120,6 +116,8 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.supply.contract.demand" -> planContractDemand(state, action);
             case "frontier.supply.cargo.load" -> planCargoLoad(state, action);
             case "frontier.operation.progress" -> planOperationProgress(state, action);
+            case "frontier.hive.growth.start" -> HiveGrowthProcess.planStart(state, action);
+            case "frontier.hive.growth.complete" -> HiveGrowthProcess.planCompletion(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
     }
@@ -239,6 +237,9 @@ public final class FrontierWorldRuntimeDefinition {
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
+            case HiveGrowthStarted started -> HiveGrowthProcess.reduceStarted(state, event.subject(), started);
+            case HiveGrowthCompleted completed -> HiveGrowthProcess.reduceCompleted(state, event.subject(), completed);
+            case HiveGrowthBlocked blocked -> HiveGrowthProcess.reduceBlocked(state, event.subject(), blocked);
             default -> fail(event.payload().type());
         };
     }
@@ -480,14 +481,12 @@ public final class FrontierWorldRuntimeDefinition {
         return container.ownerId();
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
-    private static FrontierWorldProjection projection(FrontierWorldState state, WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision revision,
-            SimInstant instant, ProjectionQuery query
-    ) {
+    private static FrontierWorldProjection projection(FrontierWorldState state, WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision revision, SimInstant instant, ProjectionQuery query) {
         FrontierBootstrap bootstrap = state.bootstrap();
         int residents = (int) bootstrap.settlements().stream().flatMap(settlement -> settlement.residents().stream())
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        int bioforms = (int) bootstrap.hive().bioforms().stream()
-                .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE).count();
+        int bioforms = (int) java.util.stream.Stream.concat(bootstrap.hive().bioforms().stream().map(Bioform::id), state.hiveColony().spawnedBioforms().keySet().stream())
+                .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE).count();
         return new FrontierWorldProjection(worldId, revision, instant, bootstrap.canonicalSha256(), bootstrap.settlements().size(),
                 residents, bioforms, state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
                 state.operations().size(),

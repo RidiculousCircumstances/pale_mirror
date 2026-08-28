@@ -41,9 +41,30 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(12, projection.settlementCount());
         assertEquals(48, projection.bioformCount());
         org.junit.jupiter.api.Assertions.assertTrue(projection.residentCount() >= 240 && projection.residentCount() <= 480);
-        assertEquals(1, projection.itemStackCount());
+        assertEquals(2, projection.itemStackCount());
         assertEquals(0, projection.activeProductionJobCount());
         assertEquals(2, projection.infectedCellCount());
+    }
+
+    @Test
+    void sharedHiveGrowthConsumesEastStoreBiomassThenPublishesWestOrganAndBioform() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hive-growth"), 91L));
+        for (long tick = 600L; tick <= 640L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
+        FrontierWorldState active = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        HiveGrowthJob job = active.hiveColony().growthJobs().get(new SubjectId("job:hive-growth-1"));
+        assertEquals(new SubjectId("item:bootstrap-hive-biomass"), job.consumedItemId());
+        assertTrue(!active.inventory().items().containsKey(job.consumedItemId()));
+        HiveGrowthStarted started = new HiveGrowthStarted(job);
+        assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+
+        for (long tick = 800L; tick <= 840L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
+        FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(completed.hiveColony().growthJobs().isEmpty());
+        assertEquals(job.organ(), completed.hiveColony().addedOrgans().get(job.organ().id()));
+        assertEquals(job.bioform(), completed.hiveColony().spawnedBioforms().get(job.bioform().id()));
+        assertEquals(49, engine.projection(ProjectionQuery.summary()).bioformCount());
+        HiveGrowthBlocked blocked = new HiveGrowthBlocked(job.hiveId(), job.nestId(), new SubjectId("work:hive-growth-2"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE);
+        assertEquals(blocked, FrontierWorldRuntimeDefinition.payloadCodecs().decode(blocked.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(blocked)));
     }
 
     @Test
@@ -123,7 +144,7 @@ class FrontierWorldRuntimeDefinitionTest {
         engine.advanceTo(new SimInstant(200L), new WorkBudget(8, 64));
         engine.advanceTo(new SimInstant(201L), new WorkBudget(8, 64));
         FrontierWorldState started = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(0, started.inventory().items().size());
+        assertEquals(1, started.inventory().items().size());
         assertEquals(1, started.productionJobs().size());
         ProductionJob job = started.productionJobs().values().iterator().next();
         assertEquals(new SubjectId("item:bootstrap-1-wheat"), job.consumedItemId());

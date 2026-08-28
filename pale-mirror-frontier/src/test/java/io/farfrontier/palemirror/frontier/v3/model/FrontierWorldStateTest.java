@@ -30,7 +30,7 @@ class FrontierWorldStateTest {
         assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount(), state.actorLocations().size());
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
         assertEquals(14, state.inventory().containers().size());
-        assertEquals(1, state.inventory().items().size());
+        assertEquals(2, state.inventory().items().size());
         assertTrue(state.productionJobs().isEmpty());
         assertTrue(state.operations().isEmpty());
         assertTrue(state.physicalIntents().isEmpty());
@@ -75,7 +75,7 @@ class FrontierWorldStateTest {
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
         assertEquals(1, codec.decode(encoded).inventory().conflicts().size());
-        encoded[4] = 14;
+        encoded[4] = 15;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
@@ -113,6 +113,27 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> grown.spawnBioform(bioform));
         assertThrows(IllegalArgumentException.class, () -> baseline.addHiveOrgan(new HiveOrgan(organ.id(), hive, eastNest, HiveOrganKind.HEART,
                 new BlockPosition(520, 64, 432), java.util.Optional.empty())));
+    }
+
+    @Test
+    void hiveGrowthConsumesOneExactStoreItemBeforeItPublishesItsNewIdentities() {
+        FrontierWorldState baseline = initial(); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId west = new SubjectId("nest:seed-west");
+        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), hive, west, new SubjectId("item:bootstrap-hive-biomass"),
+                new HiveOrgan(new SubjectId("organ:west-grown-heart-1"), hive, west, HiveOrganKind.HEART, new BlockPosition(-408, 64, 432), java.util.Optional.empty()),
+                new Bioform(new SubjectId("bioform:west-grown-1"), hive, west, BioformRole.GUARD, new BlockPosition(-404, 64, 432)));
+        FrontierWorldState active = baseline.startHiveGrowth(job);
+        assertTrue(!active.inventory().items().containsKey(job.consumedItemId()));
+        assertEquals(job, active.hiveColony().growthJobs().get(job.id()));
+        assertEquals(active, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(active)));
+        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-bad"), hive, west,
+                new SubjectId("item:bootstrap-1-wheat"), job.organ(), job.bioform())));
+        assertThrows(IllegalArgumentException.class, () -> HiveGrowthProcess.reduceBlocked(baseline, hive,
+                new HiveGrowthBlocked(hive, west, new SubjectId("work:hive-growth-1"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE)));
+        FrontierWorldState completed = active.completeHiveGrowth(job.id());
+        assertTrue(completed.hiveColony().growthJobs().isEmpty());
+        assertEquals(job.organ(), completed.hiveColony().addedOrgans().get(job.organ().id()));
+        assertEquals(job.bioform(), completed.hiveColony().spawnedBioforms().get(job.bioform().id()));
+        assertEquals(job.bioform().position(), completed.actorLocations().get(job.bioform().id()).position());
     }
 
     private static FrontierWorldState initial() {
