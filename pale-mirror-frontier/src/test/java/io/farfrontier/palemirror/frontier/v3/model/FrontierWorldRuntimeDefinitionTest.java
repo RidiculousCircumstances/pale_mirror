@@ -109,7 +109,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void sharedHiveGrowthConsumesEastStoreBiomassThenPublishesWestOrganAndBioform() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hive-growth"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:hive-growth"), 91L));
         for (long tick = 100L; tick <= 3_600L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
         FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId biomass = new SubjectId("item:bootstrap-hive-biomass");
@@ -204,7 +204,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void hiveGrowthTaskIsPersistedDeterministicScheduledWorldWork() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:pulse"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:pulse"), 91L));
         for (long tick = 100L; tick <= 3_600L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
 
         FrontierWorldProjection projection = engine.projection(ProjectionQuery.summary());
@@ -216,7 +216,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void longLivedPulsesKeepTheirBoundedWorkCostInsteadOfGrowingIntoTheSchedulerBudget() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:long-pulse"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:long-pulse"), 91L));
         for (long tick = 100L; tick <= 60_000L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
 
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse("no failure detail"));
@@ -262,7 +262,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void supplyContractLoadsTheSameProducedBreadIntoIdentifiedCargo() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:cargo"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:cargo"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -277,7 +277,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void loadedCargoMovesThroughAPersistedColdRouteWithExactParticipants() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:route"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -299,7 +299,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void routeReducerRejectsASkippedRoutePoint() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route-negative"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:route-negative"), 91L));
         for (long tick = 100L; tick <= 2_700L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
@@ -312,7 +312,7 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void physicalIntentTransactionIsFlushedBeforeAnExecutorCouldObserveIt() {
         List<Durability> durabilities = new ArrayList<>();
-        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:durability"), 91L)
+        var configuration = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:durability"), 91L)
                 .withTransactionCommitter((transaction, durability) -> durabilities.add(durability));
         var engine = FrontierEngines.create(configuration);
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
@@ -323,7 +323,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void physicalIntentRequiresSequentialExecutionAndAnObservedPostcondition() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intent-lifecycle"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:intent-lifecycle"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
@@ -351,7 +351,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void onlyTheTrustedPhysicalExecutorCanStartAnIntent() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intent-command"), 91L));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:intent-command"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         PhysicalIntentTransition transition = new PhysicalIntentTransition(new PhysicalIntentId("intent:cargo-handoff-supply-1-2"), PhysicalIntentStatus.RUNNING, Optional.empty());
         var revision = engine.projection(ProjectionQuery.summary()).revision();
@@ -364,7 +364,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void observedCargoHandoffCompletesItsTaskAndUnknownRecoveryBlocksIt() {
-        var completedEngine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:supply-task-completed"), 91L));
+        var completedEngine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:supply-task-completed"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) completedEngine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
         submitPhysicalTransition(completedEngine, "frontier:supply-task-completed", "command:supply-running", intentId, PhysicalIntentStatus.RUNNING, Optional.empty());
@@ -376,7 +376,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(StrategicTaskStatus.COMPLETED, supplyTask(completed).status());
         assertEquals(StrategicObjectiveStatus.COMPLETED, completed.strategicPlans().objectives().get(supplyTask(completed).objectiveId()).status());
 
-        var unknownEngine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:supply-task-unknown"), 91L));
+        var unknownEngine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:supply-task-unknown"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) unknownEngine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         submitPhysicalTransition(unknownEngine, "frontier:supply-task-unknown", "command:supply-unknown", intentId, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
         FrontierWorldState unknown = new FrontierWorldStateCodec().decode(unknownEngine.checkpoint().canonicalState());

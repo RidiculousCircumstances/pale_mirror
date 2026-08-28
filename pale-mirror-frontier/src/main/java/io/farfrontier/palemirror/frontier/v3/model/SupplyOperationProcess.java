@@ -41,6 +41,10 @@ final class SupplyOperationProcess {
     }
 
     static List<ProposedEvent> planCargoLoad(FrontierWorldState state, ScheduledAction action) {
+        return planCargoLoad(state, action, true);
+    }
+
+    static List<ProposedEvent> planCargoLoad(FrontierWorldState state, ScheduledAction action, boolean autonomousInterception) {
         SupplyContract contract = state.contracts().get(action.subject());
         if (contract == null || contract.status() != ContractStatus.ORDERED) throw new IllegalStateException("cargo load has no ordered contract");
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), contract.settlementId());
@@ -51,9 +55,12 @@ final class SupplyOperationProcess {
                 && slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))).findFirst().orElse(null);
         if (item == null || !participantsAvailable(state, settlement)) return blockPreparation(state, preparation);
         RouteOperation operation = routeOperation(state, contract, settlement);
-        return List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
                 transition(preparation, StrategicTaskStatus.COMPLETED), transition(delivery, StrategicTaskStatus.ACTIVE),
-                new ProposedEvent(contract.settlementId(), new OperationCreated(operation)), schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+                new ProposedEvent(contract.settlementId(), new OperationCreated(operation))));
+        if (autonomousInterception) events.add(schedule(StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), operation, action.dueAt().ticks() + 20L)));
+        events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+        return List.copyOf(events);
     }
 
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {

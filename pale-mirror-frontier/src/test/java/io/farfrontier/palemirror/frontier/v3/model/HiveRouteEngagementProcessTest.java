@@ -183,20 +183,47 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState afterFirst = state;
         assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceStrike(afterFirst, hive, first));
 
+        boolean cancelledFailedOperationProgress = false;
         for (int step = 1; step < 64 && state.strategicPlans().routeEngagements().get(engagementId).status() != RouteEngagementStatus.RESOLVED; step++) {
             List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveRouteEngagementProcess.planCombat(state,
                     new ScheduledAction(new ScheduleId("schedule:test-" + step), new SimInstant(3_020L + step * 20L), 0, engagementId, "frontier.hive_route_engagement.combat", 1));
             for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : events) {
                 if (event.payload() instanceof RouteEngagementStrike strike) state = HiveRouteEngagementProcess.reduceStrike(state, hive, strike);
                 if (event.payload() instanceof RouteEngagementResolved resolved) state = HiveRouteEngagementProcess.reduceResolved(state, hive, resolved);
+                if (event.payload() instanceof ScheduleEffect.Cancelled cancelled
+                        && cancelled.scheduleId().equals(SupplyOperationProcess.operationProgress(operation, 0L).id())) cancelledFailedOperationProgress = true;
             }
         }
         RouteEngagement resolved = state.strategicPlans().routeEngagements().get(engagementId);
         assertEquals(RouteEngagementStatus.RESOLVED, resolved.status());
         assertEquals(Optional.of(RouteEngagementOutcome.HIVE_VICTORY), resolved.outcome());
+        assertTrue(cancelledFailedOperationProgress);
         assertEquals(OperationStage.FAILED, state.operations().get(operation.id()).stage());
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
+    @Test void productionProfileAutonomouslyHoldsARealCaravanUntilHiveGuardsReachItsCurrentPosition() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-intercept"), 91L));
+        boolean heldAtCurrentIntercept = false;
+        boolean reachedColdCombat = false;
+        FrontierWorldState latest = null;
+
+        for (long tick = 20L; tick <= 10_000L; tick += 20L) {
+            engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            latest = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            for (RouteEngagement engagement : latest.strategicPlans().routeEngagements().values()) {
+                RouteOperation operation = latest.operations().get(engagement.operationId());
+                if (operation == null || operation.stage() != OperationStage.EN_ROUTE) continue;
+                if (operation.route().get(operation.routeIndex()).equals(engagement.intercept())) heldAtCurrentIntercept = true;
+                if (engagement.status() == RouteEngagementStatus.COLD_COMBAT) reachedColdCombat = true;
+            }
+        }
+
+        FrontierWorldState finalState = latest;
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
+        assertTrue(heldAtCurrentIntercept, () -> "normal profile never held an EN_ROUTE caravan at its intercept: " + finalState.strategicPlans().routeEngagements());
+        assertTrue(reachedColdCombat, () -> "normal profile never reached COLD combat: " + finalState.strategicPlans().routeEngagements());
     }
 
     private static FrontierWorldState enRouteState() {

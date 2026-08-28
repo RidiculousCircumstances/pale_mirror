@@ -136,6 +136,29 @@ class StrategicObjectiveProcessTest {
                 .collect(java.util.stream.Collectors.groupingBy(StrategicObjective::ownerId)).values().stream().allMatch(values -> values.size() == 1));
     }
 
+    @Test
+    void operationInterruptPreemptsHiveWorkWithoutForkingItsPeriodicReviewCadence() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:strategic-interrupt"), 408L));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
+        InfectionCell infection = InfectionCell.at(state.bootstrap().hive().seedNests().getFirst().anchor());
+        StrategicObjective active = new StrategicObjective(new SubjectId("objective:hive-active-infection"), hive,
+                StrategicObjectiveKind.HIVE_EXPAND_INFECTION, java.util.Optional.of(infection), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask activeTask = new StrategicTask(new SubjectId("task:hive-active-infection"), active.id(), hive,
+                StrategicTaskKind.SPREAD_INFECTION_CELL, active.infectionTarget(), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), StrategicTaskStatus.ACTIVE);
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(active).addTask(activeTask));
+
+        List<ProposedEvent> planned = StrategicObjectiveProcess.planOpportunity(state, StrategicObjectiveProcess.interceptOpportunity(hive, operation, 100L));
+
+        StrategicTaskTransition preempted = assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload());
+        assertEquals(activeTask.id(), preempted.taskId()); assertEquals(StrategicTaskStatus.BLOCKED, preempted.status());
+        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.get(1).payload());
+        assertEquals(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, selected.objective().kind());
+        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
+                && created.action().kind().equals("frontier.objective.review")));
+    }
+
     private static FrontierWorldState initial(String world, long seed) {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId(world), seed));
     }

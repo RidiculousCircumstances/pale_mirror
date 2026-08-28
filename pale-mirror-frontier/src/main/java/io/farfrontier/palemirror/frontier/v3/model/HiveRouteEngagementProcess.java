@@ -100,7 +100,9 @@ final class HiveRouteEngagementProcess {
         if (after.compareTo(FixedScalar.ZERO) <= 0 && ((hiveTurn && defenders.size() == 1) || (!hiveTurn && attackers.size() == 1))) {
             RouteEngagementOutcome outcome = hiveTurn ? RouteEngagementOutcome.HIVE_VICTORY : RouteEngagementOutcome.SETTLEMENT_VICTORY;
             events.add(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome)));
-            if (outcome == RouteEngagementOutcome.SETTLEMENT_VICTORY) {
+            if (outcome == RouteEngagementOutcome.HIVE_VICTORY) {
+                events.add(cancelOperationProgress(state.operations().get(engagement.operationId())));
+            } else {
                 events.add(schedule(SupplyOperationProcess.operationProgress(state.operations().get(engagement.operationId()), action.dueAt().ticks() + STEP_INTERVAL)));
             }
         } else events.add(schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
@@ -189,12 +191,17 @@ final class HiveRouteEngagementProcess {
         List<SubjectId> defenders = RouteEngagementCombatRules.livingDefenders(state, engagement);
         RouteEngagementOutcome outcome = attackers.isEmpty() && defenders.isEmpty() ? RouteEngagementOutcome.ABORTED
                 : attackers.isEmpty() ? RouteEngagementOutcome.SETTLEMENT_VICTORY : RouteEngagementOutcome.HIVE_VICTORY;
-        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome)));
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome))));
+        if (outcome == RouteEngagementOutcome.HIVE_VICTORY) events.add(cancelOperationProgress(state.operations().get(engagement.operationId())));
+        return List.copyOf(events);
     }
     private static List<ProposedEvent> abort(RouteEngagement engagement) {
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), RouteEngagementOutcome.ABORTED)));
     }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+    private static ProposedEvent cancelOperationProgress(RouteOperation operation) {
+        return new ProposedEvent(operation.settlementId(), new ScheduleEffect.Cancelled(SupplyOperationProcess.operationProgress(operation, 0L).id()));
+    }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
     private static SubjectId engagementId(StrategicTask task) { return new SubjectId("engagement:" + task.id().value().substring("task:".length())); }
     private static StrategicTask task(FrontierWorldState state, SubjectId id, StrategicTaskStatus status) {

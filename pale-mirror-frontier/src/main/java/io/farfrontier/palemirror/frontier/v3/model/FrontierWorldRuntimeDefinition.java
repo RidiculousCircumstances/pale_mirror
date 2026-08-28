@@ -17,16 +17,24 @@ import java.util.List;
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
-    private FrontierWorldRuntimeDefinition() { } public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
+    private FrontierWorldRuntimeDefinition() { }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
+        return configuration(worldId, seed, true);
+    }
+    /** Development-only uncontested logistics fixture; production always uses {@link #configuration(WorldId, long)}. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentUncontestedSupplyConfiguration(WorldId worldId, long seed) {
+        return configuration(worldId, seed, false);
+    }
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
-                FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
+                (state, action) -> planScheduled(state, action, autonomousInterception), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp()); }
     /** Development-only deterministic scene fixture; production always uses {@link #configuration(WorldId, long)}. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHotSceneStrikeConfiguration(WorldId worldId, long seed) {
         FrontierWorldState initial = FrontierDevelopmentScenarios.hotSceneStrikeState(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, initial, new SimInstant(2_600L), FrontierWorldRuntimeDefinition::planCommand,
-                FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
+                (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), List.of(), TransactionCommitter.noOp()); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
@@ -148,12 +156,16 @@ public final class FrontierWorldRuntimeDefinition {
                 io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, message));
     }
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
+        return planScheduled(state, action, true);
+    }
+    private static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
+                                                                                               boolean autonomousInterception) {
         return switch (action.kind()) {
             case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
             case "frontier.settlement.production.task.start" -> ProductionProcess.planStart(state, action);
             case "frontier.settlement.production.task.complete" -> ProductionProcess.planCompletion(state, action);
             case "frontier.supply.task.start" -> SupplyOperationProcess.planStart(state, action);
-            case "frontier.supply.cargo.load" -> SupplyOperationProcess.planCargoLoad(state, action);
+            case "frontier.supply.cargo.load" -> SupplyOperationProcess.planCargoLoad(state, action, autonomousInterception);
             case "frontier.operation.progress" -> SupplyOperationProcess.planProgress(state, action);
             case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
@@ -168,6 +180,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive_route_engagement.combat" -> HiveRouteEngagementProcess.planCombat(state, action);
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
             case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action);
+            case "frontier.objective.interrupt" -> StrategicObjectiveProcess.planOpportunity(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
     }

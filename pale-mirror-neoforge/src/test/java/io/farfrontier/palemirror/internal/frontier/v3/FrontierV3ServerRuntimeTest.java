@@ -104,7 +104,7 @@ class FrontierV3ServerRuntimeTest {
     void restartLeavesCargoHandoffRunningForItsLoadedChunkPostconditionInspector(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:restart-safety");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var configuration = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         for (int tick = 0; tick < 4_000; tick++) runtime.tick(new WorkBudget(64, 512));
@@ -128,7 +128,7 @@ class FrontierV3ServerRuntimeTest {
     void restartRetainsPreparedSceneLeaseAndKeepsItsColdRouteSuspended(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-lease-recovery");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var configuration = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         for (int tick = 0; tick < 2_550; tick++) runtime.tick(new WorkBudget(64, 512));
