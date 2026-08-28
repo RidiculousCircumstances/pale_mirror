@@ -11,7 +11,7 @@ public enum SceneLeaseStatus {
             case DRAINING -> next == UNKNOWN_AFTER_RESTART;
             case CLOSED -> false;
             // Reclaim is observation-only: the adapter must find every already-owned body.
-            case UNKNOWN_AFTER_RESTART -> next == HOT;
+            case UNKNOWN_AFTER_RESTART -> next == HOT || next == DRAINING;
         };
     }
 }

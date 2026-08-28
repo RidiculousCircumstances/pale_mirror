@@ -135,6 +135,14 @@ class HiveRouteEngagementProcessTest {
                 .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());
         assertEquals(SceneLeaseStatus.HOT, recovered.sceneLeases().get(leaseId).status());
+        SubjectId deadActor = candidate.actorIds().stream().filter(actor -> !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
+        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).position(), "restart-fixture"));
+        List<SceneMemberPosition> surviving = candidate.actorIds().stream().filter(actor -> !actor.equals(deadActor))
+                .map(actor -> new SceneMemberPosition(actor, afterRecordedDeath.actorLocations().get(actor).position(), afterRecordedDeath.actorLocations().get(actor).condition().health())).toList();
+        FrontierWorldState drainedRecovery = afterRecordedDeath.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
+                .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, surviving);
+        assertEquals(RouteEngagementStatus.COLD_COMBAT, drainedRecovery.strategicPlans().routeEngagements().get(engagementId).status());
+        assertEquals(SceneLeaseStatus.CLOSED, drainedRecovery.sceneLeases().get(leaseId).status());
         List<SceneMemberPosition> captured = candidate.actorIds().stream().map(actor -> new SceneMemberPosition(actor, hot.actorLocations().get(actor).position(),
                 hot.actorLocations().get(actor).condition().health())).toList();
         state = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, captured);

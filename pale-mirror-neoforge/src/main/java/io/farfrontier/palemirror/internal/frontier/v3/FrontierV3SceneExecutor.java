@@ -122,9 +122,14 @@ final class FrontierV3SceneExecutor {
     private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         if (!demandExists(level, lease.handoffPosition())) return;
         for (SceneMember member : lease.members()) {
-            if (!owned(level.getEntity(member.entityId()), state, lease, member)) return;
+            if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
+            Entity entity = level.getEntity(member.entityId());
+            if (!owned(entity, state, lease, member) || !(entity instanceof Mob body) || body.getHealth() <= 0.0F) return;
         }
-        submit(runtime, "scene-reclaimed", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        boolean hasDeadMember = lease.members().stream()
+                .anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD);
+        submit(runtime, hasDeadMember ? "scene-recovery-draining" : "scene-reclaimed", lease.id().value(),
+                new SceneLeaseTransition(lease.id(), hasDeadMember ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT));
     }
 
     static BodyMaterialization materializeBodies(ServerLevel level, FrontierWorldState state, SceneLease lease) {
@@ -132,7 +137,7 @@ final class FrontierV3SceneExecutor {
             SceneMember member = lease.members().get(index);
             Entity existing = level.getEntity(member.entityId());
             if (existing != null) {
-                if (!owned(existing, state, lease, member)) return BodyMaterialization.CONFLICT;
+                if (!owned(existing, state, lease, member) || !(existing instanceof Mob body) || body.getHealth() <= 0.0F) return BodyMaterialization.CONFLICT;
                 continue;
             }
             BlockPos candidate = spawnCandidate(lease.handoffPosition(), index);
