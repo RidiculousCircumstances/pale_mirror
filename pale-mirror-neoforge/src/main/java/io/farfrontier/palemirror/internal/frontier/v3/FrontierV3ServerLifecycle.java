@@ -71,6 +71,7 @@ public final class FrontierV3ServerLifecycle {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3ExplosionExecutor.tick(server.overworld(), runtime);
+                FrontierV3CargoCarrierImpactExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
                 FrontierV3DecontaminationExecutor.tick(server.overworld(), runtime);
                 FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
@@ -138,6 +139,12 @@ public final class FrontierV3ServerLifecycle {
      */
     public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
+        return releaseCargoCarrier(level, entity, java.util.Optional.of(player.getUUID()));
+    }
+
+    /** Makes a carrier physically accountable before a real world effect may destroy it. */
+    private static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(observerPlayerId, "observer player id");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
         FrontierWorldState state = runtime.decodedState().orElse(null);
@@ -147,11 +154,12 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) return CargoCarrierInteraction.REJECTED;
         CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
         if (checkpoint == null) return CargoCarrierInteraction.REJECTED;
+        String observer = observerPlayerId.map(java.util.UUID::toString).orElse("physical-effect");
         CommandId commandId = new CommandId("executor:cargo-carrier-release-" + lease.orElseThrow().id().value().replace(':', '-')
-                + "-player-" + player.getUUID() + "-r" + checkpoint.revision().value());
+                + "-observer-" + observer + "-r" + checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
-                new CargoCarrierReleased(lease.orElseThrow().id(), lease.orElseThrow().cargoId(), entity.getUUID(), player.getUUID())))
+                new CargoCarrierReleased(lease.orElseThrow().id(), lease.orElseThrow().cargoId(), entity.getUUID(), observerPlayerId)))
                 .orElse(null);
         return result instanceof CommandResult.Accepted ? CargoCarrierInteraction.RELEASED : CargoCarrierInteraction.REJECTED;
     }
@@ -241,6 +249,25 @@ public final class FrontierV3ServerLifecycle {
                                     java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(affected, "affected blocks");
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent();
+        for (Entity entity : entities) {
+            CargoCarrierInteraction released = releaseCargoCarrier(level, entity, java.util.Optional.empty());
+            if (released == CargoCarrierInteraction.REJECTED) {
+                runtime.quarantine(new IllegalStateException("explosion cannot durably release one HOT cargo carrier"));
+                return false;
+            }
+            if (released == CargoCarrierInteraction.RELEASED && managed.isEmpty()) {
+                FrontierWorldState state = runtime.decodedState().orElse(null);
+                if (state == null) {
+                    runtime.quarantine(new IllegalStateException("explosion released cargo without a canonical state"));
+                    return false;
+                }
+                try {
+                    FrontierV3CargoCarrierImpactLedger.get(level).capture(level.getGameTime(), entity, state);
+                } catch (RuntimeException error) {
+                    runtime.quarantine(error); return false;
+                }
+            }
+        }
         return managed.isPresent() ? FrontierV3ExplosionExecutor.observeDetonation(level, runtime, managed.orElseThrow(), affected, entities)
                 : FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);
     }

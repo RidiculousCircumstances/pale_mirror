@@ -19,6 +19,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -152,23 +153,30 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
     }
     private static List<ItemCandidate> items(FrontierWorldState state, List<BlockPos> affected, List<Entity> entities) {
         java.util.Set<Long> positions = affected.stream().map(BlockPos::asLong).collect(java.util.stream.Collectors.toSet());
-        java.util.Map<UUID, ItemEntity> carriers = entities.stream().filter(ItemEntity.class::isInstance).map(ItemEntity.class::cast)
-                .collect(java.util.stream.Collectors.toMap(ItemEntity::getUUID, value -> value, (left, right) -> left));
+        java.util.Map<UUID, Entity> carriers = entities.stream().collect(java.util.stream.Collectors.toMap(Entity::getUUID, value -> value, (left, right) -> left));
         return state.inventory().items().values().stream().map(item -> item(state, item, carriers)).flatMap(Optional::stream)
                 .filter(candidate -> !(candidate.source() instanceof InventoryCustody.ContainerSlot) || positions.contains(candidate.position()))
                 .sorted(Comparator.comparing(ItemCandidate::itemId)).toList();
     }
-    private static Optional<ItemCandidate> item(FrontierWorldState state, ExactItemStack item, java.util.Map<UUID, ItemEntity> carriers) {
+    private static Optional<ItemCandidate> item(FrontierWorldState state, ExactItemStack item, java.util.Map<UUID, Entity> carriers) {
         if (item.custody() instanceof InventoryCustody.ContainerSlot source) {
             return Optional.ofNullable(state.inventory().surfaces().get(source.containerId())).map(surface ->
                     new ItemCandidate(item.id(), source, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()).asLong()));
         }
         if (item.custody() instanceof InventoryCustody.WorldCarrier source) {
-            ItemEntity carrier = carriers.get(source.carrierId());
-            return carrier != null && FrontierV3CargoHandoffExecutor.exactMatch(carrier.getItem(), item)
-                    ? Optional.of(new ItemCandidate(item.id(), source, carrier.blockPosition().asLong())) : Optional.empty();
+            Entity carrier = carriers.get(source.carrierId());
+            boolean exactDrop = carrier instanceof ItemEntity drop && FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), item);
+            boolean exactCart = carrier instanceof MinecartChest cart && contains(cart, item, source.carrierId());
+            return exactDrop || exactCart ? Optional.of(new ItemCandidate(item.id(), source, carrier.blockPosition().asLong())) : Optional.empty();
         }
         return Optional.empty();
+    }
+    private static boolean contains(MinecartChest cart, ExactItemStack item, UUID carrierId) {
+        for (int slot = 0; slot < cart.getContainerSize(); slot++) {
+            if (FrontierV3CargoHandoffExecutor.exactMatch(cart.getItem(slot), item)
+                    && FrontierV3CargoHandoffExecutor.worldCarrierId(cart.getItem(slot)).filter(carrierId::equals).isPresent()) return true;
+        }
+        return false;
     }
     private static Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic(FrontierV3GrayboxLedger.Claim claim, BlockState baseline) {
         if (claim == null || claim.conflicted()) return Optional.empty();

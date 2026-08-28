@@ -29,7 +29,7 @@ class CargoCarrierReleaseStateTest {
                 operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         UUID carrier = CargoCarrierIdentity.id(lease);
-        CargoCarrierReleased release = new CargoCarrierReleased(leaseId, operation.cargoId(), carrier, UUID.fromString("00000000-0000-0000-0000-000000000051"));
+        CargoCarrierReleased release = new CargoCarrierReleased(leaseId, operation.cargoId(), carrier, Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000051")));
         FrontierWorldState interrupted = hot.releaseCargoCarrier(release);
 
         SubjectId itemId = hot.inventory().cargo().get(operation.cargoId()).itemIds().getFirst();
@@ -46,6 +46,23 @@ class CargoCarrierReleaseStateTest {
     }
 
     @Test
+    void releasePayloadRecoversThePriorRequiredObserverFormat() {
+        SceneLeaseId leaseId = new SceneLeaseId("lease:cargo-release-legacy-payload");
+        SubjectId cargoId = new SubjectId("cargo:legacy-payload");
+        UUID carrierId = UUID.fromString("00000000-0000-0000-0000-000000000053");
+        UUID observerId = UUID.fromString("00000000-0000-0000-0000-000000000054");
+        byte[] legacy = FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            FrontierWorldPayloadCodecs.writeString(output, leaseId.value());
+            FrontierWorldPayloadCodecs.writeSubject(output, cargoId);
+            FrontierWorldPayloadCodecs.writeString(output, carrierId.toString());
+            FrontierWorldPayloadCodecs.writeString(output, observerId.toString());
+        });
+
+        assertEquals(new CargoCarrierReleased(leaseId, cargoId, carrierId, Optional.of(observerId)),
+                new CargoCarrierReleasedPayloadCodec().decode(legacy));
+    }
+
+    @Test
     void interruptedCargoSceneRecoversOnlyToDrainOriginalBodies() {
         FrontierWorldState before = FrontierDevelopmentScenarios.hotSceneStrikeState(new WorldId("frontier:cargo-release-recovery"), 91L);
         SceneEngagementCandidate candidate = before.coldEngagementSceneCandidates().getFirst();
@@ -53,7 +70,7 @@ class CargoCarrierReleaseStateTest {
         SceneLease lease = new SceneLease(leaseId, before.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(2_600L), 1L,
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
-        FrontierWorldState interrupted = hot.releaseCargoCarrier(new CargoCarrierReleased(leaseId, lease.cargoId(), CargoCarrierIdentity.id(lease), UUID.fromString("00000000-0000-0000-0000-000000000052")));
+        FrontierWorldState interrupted = hot.releaseCargoCarrier(new CargoCarrierReleased(leaseId, lease.cargoId(), CargoCarrierIdentity.id(lease), Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000052"))));
 
         assertEquals(RouteEngagementStatus.RESOLVED, interrupted.strategicPlans().routeEngagements().get(candidate.engagementId()).status());
         assertEquals(RouteEngagementOutcome.ABORTED, interrupted.strategicPlans().routeEngagements().get(candidate.engagementId()).outcome().orElseThrow());

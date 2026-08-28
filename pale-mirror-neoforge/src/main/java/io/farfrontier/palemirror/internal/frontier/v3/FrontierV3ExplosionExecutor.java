@@ -26,6 +26,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
@@ -151,7 +152,19 @@ final class FrontierV3ExplosionExecutor {
                         ? ExplosionItemImpact.Outcome.RETAINED : ExplosionItemImpact.Outcome.CONFLICT);
                 return;
             }
+            if (actual instanceof MinecartChest cart && !cart.isRemoved()) {
+                if (contains(cart, item, carrier.carrierId())) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.RETAINED); return; }
+                ledger.resolveItem(ready, ExplosionItemImpact.Outcome.CONFLICT); return;
+            }
             if (actual != null && !actual.isRemoved()) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.CONFLICT); return; }
+            List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(16.0D), drop ->
+                    FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), item)
+                            && FrontierV3CargoHandoffExecutor.worldCarrierId(drop.getItem()).filter(carrier.carrierId()::equals).isPresent());
+            if (drops.size() == 1) {
+                ItemEntity drop = drops.getFirst(); ItemStack stack = drop.getItem(); FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, drop.getUUID()); drop.setItem(stack);
+                move(runtime, item.id(), source, new InventoryCustody.WorldCarrier(drop.getUUID())); ledger.resolveItem(ready, ExplosionItemImpact.Outcome.TRANSFERRED); return;
+            }
+            if (drops.size() > 1) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.CONFLICT); return; }
             ledger.resolveItem(ready, destroy(runtime, item.id(), source, "explosion")); return;
         }
         InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) source;
@@ -169,6 +182,13 @@ final class FrontierV3ExplosionExecutor {
 
     private static ExplosionItemImpact.Outcome destroy(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId, InventoryCustody source, String cause) {
         submit(runtime, "item-destroyed", itemId.value(), new ExactItemDestroyed(itemId, source, cause)); return ExplosionItemImpact.Outcome.DESTROYED;
+    }
+    private static boolean contains(MinecartChest cart, io.farfrontier.palemirror.frontier.v3.model.ExactItemStack item, java.util.UUID carrierId) {
+        for (int slot = 0; slot < cart.getContainerSize(); slot++) {
+            if (FrontierV3CargoHandoffExecutor.exactMatch(cart.getItem(slot), item)
+                    && FrontierV3CargoHandoffExecutor.worldCarrierId(cart.getItem(slot)).filter(carrierId::equals).isPresent()) return true;
+        }
+        return false;
     }
     private static void move(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId, InventoryCustody from, InventoryCustody to) {
         submit(runtime, "item-moved", itemId.value(), new ExactItemCustodyChanged(itemId, from, to));
