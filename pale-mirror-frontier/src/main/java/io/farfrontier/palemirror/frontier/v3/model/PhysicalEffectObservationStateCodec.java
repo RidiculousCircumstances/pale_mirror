@@ -1,0 +1,77 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** Snapshot binary codec for the bounded physical receipt union. */
+final class PhysicalEffectObservationStateCodec {
+    private PhysicalEffectObservationStateCodec() { }
+
+    static void write(DataOutputStream output, Map<PhysicalObservationId, PhysicalEffectObservation> observations) throws IOException {
+        FrontierWorldStateCodec.writeCount(output, observations.size());
+        for (PhysicalEffectObservation observation : observations.values().stream().sorted(Comparator.comparing(PhysicalEffectObservation::id)).toList()) {
+            if (observation instanceof CargoHandoffObservation cargo) {
+                output.writeByte(0); string(output, cargo.id().value()); string(output, cargo.intentId().value()); string(output, cargo.cargoId().value());
+                FrontierWorldStateCodec.writeCount(output, cargo.placements().size());
+                for (CargoHandoffPlacement placement : cargo.placements()) { string(output, placement.itemId().value()); FrontierWorldStateCodec.writeCustody(output, placement.receiverSlot()); }
+            } else if (observation instanceof StructuralRepairObservation repair) {
+                output.writeByte(1); string(output, repair.id().value()); string(output, repair.intentId().value()); string(output, repair.itemId().value()); FrontierWorldStateCodec.writePosition(output, repair.position());
+            } else if (observation instanceof RouteConstructionObservation construction) {
+                output.writeByte(2); string(output, construction.id().value()); string(output, construction.intentId().value()); string(output, construction.projectId().value());
+                string(output, construction.itemId().value()); FrontierWorldStateCodec.writePosition(output, construction.position());
+            } else if (observation instanceof DecontaminationObservation decontamination) {
+                output.writeByte(3); string(output, decontamination.id().value()); string(output, decontamination.intentId().value()); string(output, decontamination.itemId().value());
+                output.writeInt(decontamination.cell().x()); output.writeInt(decontamination.cell().z()); output.writeLong(decontamination.priorRaw()); output.writeLong(decontamination.remainingRaw());
+            } else if (observation instanceof SceneStrikeObservation strike) {
+                output.writeByte(4); string(output, strike.id().value()); string(output, strike.intentId().value()); string(output, strike.attackerId().value()); string(output, strike.targetId().value());
+                output.writeLong(strike.targetHealthBefore().raw()); output.writeLong(strike.targetHealthAfter().raw());
+            } else if (observation instanceof ExplosionObservation explosion) {
+                output.writeByte(5); string(output, explosion.id().value()); string(output, explosion.intentId().value()); output.writeLong(explosion.origin().x().raw());
+                output.writeLong(explosion.origin().y().raw()); output.writeLong(explosion.origin().z().raw()); output.writeByte(explosion.radiusBlocks());
+                output.writeInt(explosion.affectedBlockCount()); output.writeInt(explosion.changedBlockCount());
+            } else throw new IllegalArgumentException("unknown physical effect observation");
+        }
+    }
+
+    static Map<PhysicalObservationId, PhysicalEffectObservation> read(DataInputStream input) throws IOException {
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            int kind = input.readUnsignedByte(); PhysicalObservationId id = new PhysicalObservationId(text(input)); PhysicalIntentId intentId = new PhysicalIntentId(text(input));
+            PhysicalEffectObservation observation = switch (kind) {
+                case 0 -> cargo(input, id, intentId);
+                case 1 -> new StructuralRepairObservation(id, intentId, new SubjectId(text(input)), FrontierWorldStateCodec.readPosition(input));
+                case 2 -> new RouteConstructionObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), FrontierWorldStateCodec.readPosition(input));
+                case 3 -> new DecontaminationObservation(id, intentId, new SubjectId(text(input)), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
+                case 4 -> new SceneStrikeObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
+                case 5 -> new ExplosionObservation(id, intentId, new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong())),
+                        input.readUnsignedByte(), input.readInt(), input.readInt());
+                default -> throw new IllegalArgumentException("unknown physical observation kind");
+            };
+            if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
+        }
+        return observations;
+    }
+
+    private static CargoHandoffObservation cargo(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
+        SubjectId cargoId = new SubjectId(text(input)); java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
+        for (int placement = 0, count = FrontierWorldStateCodec.readCount(input); placement < count; placement++) {
+            SubjectId itemId = new SubjectId(text(input)); InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
+            if (!(custody instanceof InventoryCustody.ContainerSlot receiver)) throw new IllegalArgumentException("cargo hand-off placement must target a container slot");
+            placements.add(new CargoHandoffPlacement(itemId, receiver));
+        }
+        return new CargoHandoffObservation(id, intentId, cargoId, placements);
+    }
+
+    private static void string(DataOutputStream output, String value) throws IOException { FrontierWorldStateCodec.writeString(output, value); }
+    private static String text(DataInputStream input) throws IOException { return FrontierWorldStateCodec.readString(input); }
+}

@@ -146,11 +146,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             PhysicalIntentTransition transition = (PhysicalIntentTransition) payload;
             return encodeProduction(output -> { writeString(output, transition.intentId().value()); output.writeByte(transition.status().ordinal());
                 output.writeBoolean(transition.observation().isPresent());
-                if (transition.observation().isPresent()) writePhysicalEffectObservation(output, transition.observation().orElseThrow()); });
+                if (transition.observation().isPresent()) PhysicalEffectObservationPayloadCodec.write(output, transition.observation().orElseThrow()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)); int status = input.readUnsignedByte(); boolean observed = input.readBoolean();
-            var observation = observed ? java.util.Optional.of(readPhysicalEffectObservation(input)) : java.util.Optional.<PhysicalEffectObservation>empty();
+            var observation = observed ? java.util.Optional.of(PhysicalEffectObservationPayloadCodec.read(input)) : java.util.Optional.<PhysicalEffectObservation>empty();
             if (status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length) throw new IllegalArgumentException("unknown physical intent status");
             return new PhysicalIntentTransition(id, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status], observation);
         }); }
@@ -431,37 +431,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }
         return new CargoHandoffObservation(id, intentId, cargoId.value(), placements);
     }
-    private static void writePhysicalEffectObservation(DataOutputStream output, PhysicalEffectObservation observation) throws IOException {
-        if (observation instanceof CargoHandoffObservation cargo) { output.writeByte(0); writeCargoHandoffObservation(output, cargo); }
-        else if (observation instanceof DecontaminationObservation decontamination) {
-            output.writeByte(3); writeString(output, decontamination.id().value()); writeString(output, decontamination.intentId().value()); writeSubject(output, decontamination.itemId());
-            output.writeInt(decontamination.cell().x()); output.writeInt(decontamination.cell().z()); output.writeLong(decontamination.priorRaw()); output.writeLong(decontamination.remainingRaw());
-        } else if (observation instanceof StructuralRepairObservation repair) {
-            output.writeByte(1); writeString(output, repair.id().value()); writeString(output, repair.intentId().value());
-            writeSubject(output, repair.itemId()); writePosition(output, repair.position());
-        } else if (observation instanceof RouteConstructionObservation construction) {
-            output.writeByte(2); writeString(output, construction.id().value()); writeString(output, construction.intentId().value());
-            writeSubject(output, construction.projectId()); writeSubject(output, construction.itemId()); writePosition(output, construction.position());
-        } else if (observation instanceof SceneStrikeObservation strike) {
-            output.writeByte(4); writeString(output, strike.id().value()); writeString(output, strike.intentId().value()); writeSubject(output, strike.attackerId());
-            writeSubject(output, strike.targetId()); output.writeLong(strike.targetHealthBefore().raw()); output.writeLong(strike.targetHealthAfter().raw());
-        } else throw new IllegalArgumentException("unknown physical effect observation");
-    }
-    private static PhysicalEffectObservation readPhysicalEffectObservation(DataInputStream input) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> readCargoHandoffObservation(input);
-            case 1 -> new StructuralRepairObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
-                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readPosition(input));
-            case 2 -> new RouteConstructionObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
-                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readSubject(input).value(), readPosition(input));
-            case 3 -> new DecontaminationObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
-                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
-            case 4 -> new SceneStrikeObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
-                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readSubject(input).value(),
-                    new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()));
-            default -> throw new IllegalArgumentException("unknown physical effect observation kind");
-        };
-    }
     private static void writeSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
         writeString(output, lease.id().value()); writeSubject(output, lease.operationId()); writeSubject(output, lease.cargoId());
         output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeSubject(output, lease.engagementId().orElseThrow());
@@ -477,11 +446,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMember(readSubject(input).value(), java.util.UUID.fromString(readString(input))));
         return new SceneLease(id, operation.value(), cargo.value(), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision, SceneLeaseStatus.values()[status], engagement, members); }
-    private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
+    static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(1); writeString(output, player.playerId().toString()); }
         else throw new IllegalArgumentException("observed player custody payload cannot encode non-player/container custody");
-    } private static InventoryCustody readCustody(DataInputStream input) throws IOException {
+    } static InventoryCustody readCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));

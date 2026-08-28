@@ -4,16 +4,11 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.far
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Comparator;
 import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set;
-    public record FrontierWorldState(
-        FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
-        Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection,
-        ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
-        Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations,
-        Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
-        Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony,
-        Map<SubjectId, StructureDamage> structureDamage, Map<BlockPosition, PhysicalDelta> physicalDeltas,
-        Map<SubjectId, AmbientActorLease> ambientLeases, Map<SubjectId, RouteConstruction> routeConstructions, RouteTopology routeTopology, StrategicPlanState strategicPlans
-) {
+    public record FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
+        Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection, ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
+        Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations, Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
+        Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony, Map<SubjectId, StructureDamage> structureDamage, Map<BlockPosition, PhysicalDelta> physicalDeltas,
+        Map<SubjectId, AmbientActorLease> ambientLeases, Map<SubjectId, RouteConstruction> routeConstructions, RouteTopology routeTopology, StrategicPlanState strategicPlans) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     public FrontierWorldState { Objects.requireNonNull(bootstrap, "bootstrap");
@@ -149,6 +144,8 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
             }
             if (observation instanceof CargoHandoffObservation cargo) {
                 FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
+            } else if (observation instanceof ExplosionObservation explosion) {
+                ExplosionStateSupport.validateReceipt(intent, explosion);
             } else if (observation instanceof SceneStrikeObservation strike) {
                 SceneStrikeStateSupport.validateObservation(operations, sceneLeases, intent, strike);
             } else if (observation instanceof DecontaminationObservation decontamination) {
@@ -258,9 +255,7 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState recordStructureDamage(StructureDamaged damage) { return FrontierWorldPhysicalDeltaSupport.recordStructureDamage(this, damage); }
-    /** Records real post-effect evidence; the support owns bounds, exact-semantic validation and consequences. */
     public FrontierWorldState recordPhysicalDelta(PhysicalDelta delta) { return FrontierWorldPhysicalDeltaSupport.record(this, delta); }
-    /** A disabled organ cannot authorize its store or future growth work until a repair process exists. */
     public boolean isHiveOrganOperational(SubjectId organId) { return FrontierWorldPhysicalDeltaSupport.organOperational(bootstrap, hiveColony, physicalDeltas, organId); }
     public FrontierWorldState withInfection(InfectionCell cell, FixedRatio intensity) {
         Objects.requireNonNull(cell, "infection cell"); Objects.requireNonNull(intensity, "infection intensity");
@@ -391,6 +386,10 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(strike.id(), strike);
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION) {
+            if (!(evidence instanceof ExplosionObservation explosion)) throw new IllegalArgumentException("explosion requires post-impact observation evidence");
+            return ExplosionStateSupport.complete(this, current, explosion, next);
         }
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");

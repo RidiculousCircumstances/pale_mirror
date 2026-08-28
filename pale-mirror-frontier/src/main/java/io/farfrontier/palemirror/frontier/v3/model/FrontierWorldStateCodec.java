@@ -36,7 +36,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeContracts(output, state.contracts());
                 writeOperations(output, state.operations());
                 writePhysicalIntents(output, state.physicalIntents());
-                writePhysicalObservations(output, state.physicalObservations());
+                PhysicalEffectObservationStateCodec.write(output, state.physicalObservations());
                 writeSceneLeases(output, state.sceneLeases());
                 AmbientLeaseStateCodec.write(output, state.ambientLeases());
                 RouteConstructionStateCodec.write(output, state.routeConstructions());
@@ -57,7 +57,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
-                    readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony, structureDamage, physicalDeltas,
+                    readContracts(input), readOperations(input), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap), StrategicPlanStateCodec.read(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
@@ -414,63 +414,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         return intents;
     }
-    private static void writePhysicalObservations(DataOutputStream output, Map<PhysicalObservationId, PhysicalEffectObservation> observations) throws IOException {
-        writeCount(output, observations.size());
-        for (PhysicalEffectObservation observation : observations.values().stream().sorted(Comparator.comparing(PhysicalEffectObservation::id)).toList()) {
-            if (observation instanceof CargoHandoffObservation cargo) {
-                output.writeByte(0); writeString(output, cargo.id().value()); writeString(output, cargo.intentId().value()); writeString(output, cargo.cargoId().value());
-                writeCount(output, cargo.placements().size());
-                for (CargoHandoffPlacement placement : cargo.placements()) {
-                    writeString(output, placement.itemId().value()); writeCustody(output, placement.receiverSlot());
-                }
-            } else if (observation instanceof DecontaminationObservation decontamination) {
-                output.writeByte(3); writeString(output, decontamination.id().value()); writeString(output, decontamination.intentId().value());
-                writeString(output, decontamination.itemId().value()); output.writeInt(decontamination.cell().x()); output.writeInt(decontamination.cell().z());
-                output.writeLong(decontamination.priorRaw()); output.writeLong(decontamination.remainingRaw());
-            } else if (observation instanceof StructuralRepairObservation repair) {
-                output.writeByte(1); writeString(output, repair.id().value()); writeString(output, repair.intentId().value());
-                writeString(output, repair.itemId().value()); writePosition(output, repair.position());
-            } else if (observation instanceof RouteConstructionObservation construction) {
-                output.writeByte(2); writeString(output, construction.id().value()); writeString(output, construction.intentId().value());
-                writeString(output, construction.projectId().value()); writeString(output, construction.itemId().value()); writePosition(output, construction.position());
-            } else if (observation instanceof SceneStrikeObservation strike) {
-                output.writeByte(4); writeString(output, strike.id().value()); writeString(output, strike.intentId().value()); writeString(output, strike.attackerId().value());
-                writeString(output, strike.targetId().value()); output.writeLong(strike.targetHealthBefore().raw()); output.writeLong(strike.targetHealthAfter().raw());
-            } else throw new IllegalArgumentException("unknown physical effect observation");
-        }
-    }
-    private static Map<PhysicalObservationId, PhysicalEffectObservation> readPhysicalObservations(DataInputStream input) throws IOException {
-        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            int kind = input.readUnsignedByte(); PhysicalObservationId id = new PhysicalObservationId(readString(input));
-            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
-            PhysicalEffectObservation observation = switch (kind) {
-                case 0 -> {
-                    SubjectId cargoId = new SubjectId(readString(input)); java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
-                    for (int placement = 0, placementCount = readCount(input); placement < placementCount; placement++) {
-                        SubjectId itemId = new SubjectId(readString(input)); InventoryCustody custody = readCustody(input);
-                        if (!(custody instanceof InventoryCustody.ContainerSlot receiver)) throw new IllegalArgumentException("cargo hand-off placement must target a container slot");
-                        placements.add(new CargoHandoffPlacement(itemId, receiver));
-                    }
-                    yield new CargoHandoffObservation(id, intentId, cargoId, placements);
-                }
-                case 1 -> new StructuralRepairObservation(id, intentId, new SubjectId(readString(input)), readPosition(input));
-                case 2 -> new RouteConstructionObservation(id, intentId, new SubjectId(readString(input)), new SubjectId(readString(input)), readPosition(input));
-                case 3 -> new DecontaminationObservation(id, intentId, new SubjectId(readString(input)), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
-                case 4 -> new SceneStrikeObservation(id, intentId, new SubjectId(readString(input)), new SubjectId(readString(input)), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
-                default -> throw new IllegalArgumentException("unknown physical observation kind");
-            };
-            if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
-        }
-        return observations;
-    }
-    private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
+    static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Cargo cargo) { output.writeByte(1); writeString(output, cargo.cargoId().value()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(2); writeString(output, player.playerId().toString()); }
         else { output.writeByte(3); writeString(output, ((InventoryCustody.WorldCarrier) custody).carrierId().toString()); }
     }
-    private static InventoryCustody readCustody(DataInputStream input) throws IOException {
+    static InventoryCustody readCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new InventoryCustody.ContainerSlot(new SubjectId(readString(input)), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Cargo(new SubjectId(readString(input)));
@@ -483,11 +433,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
     }
     static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
-    private static void writeCount(DataOutputStream output, int count) throws IOException {
+    static void writeCount(DataOutputStream output, int count) throws IOException {
         if (count > MAX_ENTRIES) throw new IllegalArgumentException("too many Frontier v3 state entries");
         output.writeShort(count);
     }
-    private static int readCount(DataInputStream input) throws IOException { return input.readUnsignedShort(); }
+    static int readCount(DataInputStream input) throws IOException { return input.readUnsignedShort(); }
     static void writeString(DataOutputStream output, String value) throws IOException {
         byte[] bytes = value.getBytes(StandardCharsets.UTF_8); if (bytes.length > 256) throw new IllegalArgumentException("state identifier is too long");
         output.writeShort(bytes.length); output.write(bytes);
