@@ -49,6 +49,15 @@ public final class FrontierWorldRuntimeDefinition {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
         }
+        if (command.payload() instanceof ResidentBorn birth) {
+            if (birth.resident().birthTick() > command.submittedAt().ticks()) return rejected("resident birth tick cannot be in the future");
+            try { state.recordResidentBirth(birth); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(birth.resident().settlementId(), birth)));
+        }
+        if (command.payload() instanceof ResidentMigrated migration) {
+            try { state.recordResidentMigration(migration); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(migration.destinationSettlementId(), migration)));
+        }
         if (command.payload() instanceof PhysicalIntentTransition transition) {
             PhysicalIntent intent = state.physicalIntents().get(transition.intentId()); if (intent == null) return rejected("physical intent is unknown");
             if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) {
@@ -238,6 +247,8 @@ public final class FrontierWorldRuntimeDefinition {
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
             case AmbientActorDied death -> AmbientActorProcess.reduce(state, event.subject(), death);
             case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
+            case ResidentBorn birth -> reduceResidentBorn(state, event.subject(), birth);
+            case ResidentMigrated migration -> reduceResidentMigrated(state, event.subject(), migration);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
@@ -266,6 +277,14 @@ public final class FrontierWorldRuntimeDefinition {
             case StrategicTaskTransition transition -> StrategicObjectiveProcess.reduceTaskTransition(state, event.subject(), transition);
             default -> fail(event.payload().type());
         };
+    }
+    private static FrontierWorldState reduceResidentBorn(FrontierWorldState state, SubjectId subject, ResidentBorn birth) {
+        if (!subject.equals(birth.resident().settlementId())) throw new IllegalArgumentException("resident birth lacks its settlement owner");
+        return state.recordResidentBirth(birth);
+    }
+    private static FrontierWorldState reduceResidentMigrated(FrontierWorldState state, SubjectId subject, ResidentMigrated migration) {
+        if (!subject.equals(migration.destinationSettlementId())) throw new IllegalArgumentException("resident migration lacks destination settlement owner");
+        return state.recordResidentMigration(migration);
     }
     private static FrontierWorldState reduceContractCreated(FrontierWorldState state, SubjectId subject, SupplyContractCreated created) {
         SupplyContract contract = created.contract();

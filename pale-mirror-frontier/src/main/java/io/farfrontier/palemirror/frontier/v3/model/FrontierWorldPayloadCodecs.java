@@ -14,6 +14,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
                 new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(), new CargoCarrierReleasedPayloadCodec(),
+                HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(),
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
@@ -490,11 +491,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     } static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
     static void writeString(DataOutputStream output, String value) throws IOException {
-        byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long");
-        output.writeShort(encoded.length); output.write(encoded);
+        byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long"); output.writeShort(encoded.length); output.write(encoded);
     } static String readString(DataInputStream input) throws IOException {
         int length = input.readUnsignedShort(); if (length > 256) throw new IllegalArgumentException("production payload field is too long");
-        byte[] encoded = input.readNBytes(length);
-        if (encoded.length != length) throw new IOException("truncated production payload field");
+        byte[] encoded = input.readNBytes(length); if (encoded.length != length) throw new IOException("truncated production payload field");
         return new String(encoded, java.nio.charset.StandardCharsets.UTF_8); }
 }

@@ -13,8 +13,8 @@ final class FrontierWorldProjectionCompiler {
     static FrontierWorldProjection compile(FrontierWorldState state, WorldId worldId, Revision revision,
                                            SimInstant instant, ProjectionQuery query) {
         FrontierBootstrap bootstrap = state.bootstrap();
-        int residents = (int) bootstrap.settlements().stream().flatMap(settlement -> settlement.residents().stream())
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
+        int residents = (int) state.humanPopulation().residentIds().stream()
+                .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE).count();
         int bioforms = (int) java.util.stream.Stream.concat(bootstrap.hive().bioforms().stream().map(Bioform::id), state.hiveColony().spawnedBioforms().keySet().stream())
                 .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE).count();
         return new FrontierWorldProjection(worldId, revision, instant, bootstrap.canonicalSha256(), bootstrap.settlements().size(),

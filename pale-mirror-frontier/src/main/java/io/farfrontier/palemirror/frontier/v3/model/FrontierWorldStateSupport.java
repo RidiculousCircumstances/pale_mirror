@@ -12,9 +12,8 @@ import java.util.Set;
 final class FrontierWorldStateSupport {
     private FrontierWorldStateSupport() { }
 
-    static Set<SubjectId> actorIds(FrontierBootstrap bootstrap) {
+    static Set<SubjectId> bioformIds(FrontierBootstrap bootstrap) {
         Set<SubjectId> ids = new HashSet<>();
-        bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> ids.add(resident.id())));
         bootstrap.hive().bioforms().forEach(bioform -> ids.add(bioform.id()));
         return ids;
     }
@@ -59,11 +58,16 @@ final class FrontierWorldStateSupport {
     }
 
     static SubjectId actorOwner(FrontierWorldState state, SubjectId actorId) {
-        return state.bootstrap().settlements().stream()
-                .filter(settlement -> settlement.residents().stream().anyMatch(resident -> resident.id().equals(actorId)))
-                .map(Settlement::id).findFirst()
-                .orElseGet(() -> java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                        .anyMatch(bioform -> bioform.id().equals(actorId)) ? state.bootstrap().hive().id() : null);
+        ResidentProfile resident = state.humanPopulation().resident(actorId);
+        if (resident != null) return resident.settlementId();
+        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .anyMatch(bioform -> bioform.id().equals(actorId)) ? state.bootstrap().hive().id() : null;
+    }
+
+    static ResidentProfile resident(FrontierWorldState state, SubjectId residentId) {
+        ResidentProfile resident = state.humanPopulation().resident(residentId);
+        if (resident == null) throw new IllegalArgumentException("unknown canonical resident: " + residentId.value());
+        return resident;
     }
 
     static Resident resident(Settlement settlement, SubjectId residentId) {

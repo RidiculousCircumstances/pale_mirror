@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 35, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 36, MAX_ENTRIES = 65_535;
     @Override public byte[] encode(FrontierWorldState state) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -42,6 +42,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 RouteConstructionStateCodec.write(output, state.routeConstructions());
                 RouteTopologyStateCodec.write(output, state.routeTopology());
                 StrategicPlanStateCodec.write(output, state.strategicPlans());
+                writeHumanPopulation(output, state.humanPopulation());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -58,7 +59,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
                     readContracts(input), readOperations(input), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input), colony, structureDamage, physicalDeltas,
-                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap), StrategicPlanStateCodec.read(input));
+                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap), StrategicPlanStateCodec.read(input), readHumanPopulation(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -82,6 +83,36 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         return values;
+    }
+    private static void writeHumanPopulation(DataOutputStream output, HumanPopulation population) throws IOException {
+        writeCount(output, population.households().size());
+        for (Household household : population.households().values().stream().sorted(Comparator.comparing(Household::id)).toList()) {
+            writeString(output, household.id().value()); writeString(output, household.settlementId().value());
+        }
+        writeCount(output, population.residents().size());
+        for (ResidentProfile resident : population.residents().values().stream().sorted(Comparator.comparing(ResidentProfile::id)).toList()) {
+            writeString(output, resident.id().value()); writeString(output, resident.householdId().value()); writeString(output, resident.settlementId().value());
+            output.writeByte(resident.role().ordinal()); output.writeLong(resident.birthTick());
+            for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
+        }
+    }
+    private static HumanPopulation readHumanPopulation(DataInputStream input) throws IOException {
+        Map<SubjectId, Household> households = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input));
+            if (households.put(id, new Household(id, new SubjectId(readString(input)))) != null) throw new IllegalArgumentException("duplicate household id");
+        }
+        Map<SubjectId, ResidentProfile> residents = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId household = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input));
+            int role = input.readUnsignedByte(); long birthTick = input.readLong(); java.util.EnumMap<ResidentSkill, Integer> skills = new java.util.EnumMap<>(ResidentSkill.class);
+            if (role >= ResidentRole.values().length) throw new IllegalArgumentException("unknown resident role");
+            for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
+            if (residents.put(id, new ResidentProfile(id, household, settlement, ResidentRole.values()[role], birthTick, skills)) != null) {
+                throw new IllegalArgumentException("duplicate resident id");
+            }
+        }
+        return new HumanPopulation(households, residents);
     }
     private static void writeStructures(DataOutputStream output, Map<SubjectId, StructureCondition> values) throws IOException {
         writeCount(output, values.size());
