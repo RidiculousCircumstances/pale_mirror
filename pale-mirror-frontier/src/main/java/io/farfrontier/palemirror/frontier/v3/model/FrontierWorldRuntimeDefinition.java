@@ -33,17 +33,17 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200),
-                contractDemand(1, 450), HiveGrowthProcess.start(1, 600), StructuralRepairProcess.scan(1, 800)), TransactionCommitter.noOp());
-    }
-    public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
-    private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
+                contractDemand(1, 450), HiveGrowthProcess.start(1, 600), StructuralRepairProcess.scan(1, 800), RouteConstructionProcess.scan(1, 900)), TransactionCommitter.noOp()); }
+    public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
         }
         if (command.payload() instanceof PhysicalIntentTransition transition) {
             PhysicalIntent intent = state.physicalIntents().get(transition.intentId()); if (intent == null) return rejected("physical intent is unknown");
-            if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
+            if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
+            }
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
             if (operation == null) return rejected("physical intent has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
@@ -127,6 +127,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.growth.start" -> HiveGrowthProcess.planStart(state, action);
             case "frontier.hive.growth.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
+            case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
     }
@@ -219,8 +220,7 @@ public final class FrontierWorldRuntimeDefinition {
         }
         int nextRouteIndex = operation.routeIndex() + 1;
         OperationStage nextStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
-        List<ProposedEvent> events = new java.util.ArrayList<>();
-        events.add(new ProposedEvent(operation.settlementId(), new OperationAdvanced(operation.id(), nextRouteIndex, nextStage)));
+        List<ProposedEvent> events = new java.util.ArrayList<>(); events.add(new ProposedEvent(operation.settlementId(), new OperationAdvanced(operation.id(), nextRouteIndex, nextStage)));
         if (nextStage == OperationStage.ARRIVED) {
             events.add(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
         }
@@ -313,6 +313,7 @@ public final class FrontierWorldRuntimeDefinition {
     private static FrontierWorldState reducePhysicalIntentPrepared(FrontierWorldState state, SubjectId subject, PhysicalIntentPrepared prepared) {
         PhysicalIntent intent = prepared.intent();
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())) {
             throw new IllegalArgumentException("physical intent must be prepared by an arrived route operation owner");
@@ -324,7 +325,7 @@ public final class FrontierWorldRuntimeDefinition {
     private static FrontierWorldState reducePhysicalIntentTransition(FrontierWorldState state, SubjectId subject, PhysicalIntentTransition transition) {
         PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
         if (intent == null) throw new IllegalArgumentException("physical intent transition has no prepared intent");
-        if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) {
+        if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
             if (!subject.equals(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()))) {
                 throw new IllegalArgumentException("structural repair transition lacks its owning settlement");
             }

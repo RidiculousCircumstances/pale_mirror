@@ -316,8 +316,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public String type() { return "frontier.hive_growth_completed"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((HiveGrowthCompleted) payload).jobId())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveGrowthCompleted(readSubject(input).value())); }
-    }
-    private static final class HiveGrowthBlockedCodec implements PayloadCodec {
+    } private static final class HiveGrowthBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_growth_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveGrowthBlocked blocked = (HiveGrowthBlocked) payload;
             writeSubject(output, blocked.hiveId()); writeSubject(output, blocked.nestId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().ordinal()); }); }
@@ -326,12 +325,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (reason >= HiveGrowthBlockReason.values().length) throw new IllegalArgumentException("unknown hive growth block reason");
             return new HiveGrowthBlocked(hive.value(), nest.value(), work.value(), HiveGrowthBlockReason.values()[reason]);
         }); }
-    }
-
-    @FunctionalInterface interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
-    @FunctionalInterface interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
-    record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { }
-    static byte[] encodeProduction(ProductionEncoder encoder) {
+    } @FunctionalInterface interface ProductionEncoder { void write(DataOutputStream output) throws IOException; } @FunctionalInterface interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
+    record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { } static byte[] encodeProduction(ProductionEncoder encoder) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) { encoder.write(output); }
@@ -447,6 +442,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         else if (observation instanceof StructuralRepairObservation repair) {
             output.writeByte(1); writeString(output, repair.id().value()); writeString(output, repair.intentId().value());
             writeSubject(output, repair.itemId()); writePosition(output, repair.position());
+        } else if (observation instanceof RouteConstructionObservation construction) {
+            output.writeByte(2); writeString(output, construction.id().value()); writeString(output, construction.intentId().value());
+            writeSubject(output, construction.projectId()); writeSubject(output, construction.itemId()); writePosition(output, construction.position());
         } else throw new IllegalArgumentException("unknown physical effect observation");
     }
     private static PhysicalEffectObservation readPhysicalEffectObservation(DataInputStream input) throws IOException {
@@ -454,6 +452,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             case 0 -> readCargoHandoffObservation(input);
             case 1 -> new StructuralRepairObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
                     new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readPosition(input));
+            case 2 -> new RouteConstructionObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
+                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readSubject(input).value(), readPosition(input));
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

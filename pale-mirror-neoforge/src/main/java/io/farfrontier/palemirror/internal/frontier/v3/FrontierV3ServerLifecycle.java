@@ -67,6 +67,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3ContainerSurfaceExecutor.tick(server.overworld(), runtime);
                 FrontierV3CargoHandoffExecutor.tick(server.overworld(), runtime);
                 FrontierV3StructuralRepairExecutor.tick(server.overworld(), runtime);
+                FrontierV3RouteConstructionExecutor.tick(server.overworld(), runtime);
                 FrontierV3SceneExecutor.tick(server.overworld(), runtime);
                 runtime.tick(TICK_BUDGET);
             }

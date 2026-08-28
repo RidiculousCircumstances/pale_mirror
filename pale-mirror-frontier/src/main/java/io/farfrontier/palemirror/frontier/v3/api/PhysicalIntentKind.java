@@ -4,5 +4,6 @@ package io.farfrontier.palemirror.frontier.v3.api;
 public enum PhysicalIntentKind {
     CARGO_HANDOFF,
     STRUCTURAL_REPAIR,
+    ROUTE_CONSTRUCTION,
     EXPLOSION
 }

@@ -174,6 +174,29 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-route-construction", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void inactiveRouteConstructionConsumesOneExactConcreteAndNeverAdoptsWorldGeometry(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0)); BlockPos chestPosition = target.east(2);
+        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
+        ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
+        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:construction-game-test"), "minecraft:gray_concrete", 2,
+                new InventoryCustody.ContainerSlot(new SubjectId("container:construction-game-test"), 0));
+        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(concrete));
+        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        helper.assertTrue(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete),
+                "one fresh inactive corridor cell consumes one exact supplied concrete item");
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && chest.getItem(0).getCount() == 1 && ledger.claim(target) != null,
+                "the exact live block, stack and newly claimed route provenance must converge together");
+        BlockPos foreign = target.south(); level.setBlock(foreign, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+        helper.assertFalse(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, foreign, grayboxCell(foreign, "route:frontier-network",
+                GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE), chest, 0, concrete),
+                "construction must never adopt or overwrite a player/world block");
+        helper.assertTrue(level.getBlockState(foreign).is(Blocks.DIAMOND_BLOCK) && chest.getItem(0).getCount() == 1,
+                "a rejected foreign cell leaves both world geometry and exact maintenance stock untouched");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-graybox-projection", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void grayboxProjectsOnlyAFreshSupportedCellWithSemanticProvenance(GameTestHelper helper) {

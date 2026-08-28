@@ -47,6 +47,11 @@ public final class FrontierGrayboxPlan {
     /** Sparse source cells; the dedicated overlay projects one owned marker for each loaded 4×4 cell. */
     public Map<InfectionCell, FixedRatio> infection() { return infection; }
 
+    /** Deterministic inactive cells that an exact-material replacement project must build. */
+    public static java.util.List<BlockPosition> routeConstructionCells(FrontierWorldState state, RouteConstruction project) {
+        return FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.settlementId(), project.waypoints());
+    }
+
     /** Full intact geometry, used to validate observed damage after the desired silhouette changes. */
     public static GrayboxCell intactStructureCell(SettlementStructure structure, BlockPosition position) {
         Objects.requireNonNull(structure, "structure"); Objects.requireNonNull(position, "position");

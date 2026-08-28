@@ -13,7 +13,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -27,7 +26,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 21, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 22, MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {
@@ -324,15 +323,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
         }
         return jobs;
-    }
-    private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
-        writeCount(output, contracts.size());
-        for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {
+    } private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
+        writeCount(output, contracts.size()); for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {
             writeString(output, contract.id().value()); writeString(output, contract.settlementId().value()); writeString(output, contract.recipientId().value());
             writeString(output, contract.cargoId().value()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());
         }
-    }
-    private static Map<SubjectId, SupplyContract> readContracts(DataInputStream input) throws IOException {
+    } private static Map<SubjectId, SupplyContract> readContracts(DataInputStream input) throws IOException {
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId recipient = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
@@ -436,6 +432,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             } else if (observation instanceof StructuralRepairObservation repair) {
                 output.writeByte(1); writeString(output, repair.id().value()); writeString(output, repair.intentId().value());
                 writeString(output, repair.itemId().value()); writePosition(output, repair.position());
+            } else if (observation instanceof RouteConstructionObservation construction) {
+                output.writeByte(2); writeString(output, construction.id().value()); writeString(output, construction.intentId().value());
+                writeString(output, construction.projectId().value()); writeString(output, construction.itemId().value()); writePosition(output, construction.position());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -455,6 +454,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     yield new CargoHandoffObservation(id, intentId, cargoId, placements);
                 }
                 case 1 -> new StructuralRepairObservation(id, intentId, new SubjectId(readString(input)), readPosition(input));
+                case 2 -> new RouteConstructionObservation(id, intentId, new SubjectId(readString(input)), new SubjectId(readString(input)), readPosition(input));
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -38,5 +40,60 @@ final class RouteConstructionStateSupport {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), next, state.routeTopology());
+    }
+
+    static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION) throw new IllegalArgumentException("route construction intent kind is invalid");
+        RouteConstruction project = intent.subjectIds().stream().map(state.routeConstructions()::get).filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("route construction intent lacks an active project"));
+        SubjectId materialId = intent.subjectIds().stream().filter(id -> !id.equals(FrontierRouteNetwork.OWNER) && !id.equals(project.id()))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("route construction intent lacks its exact material"));
+        ExactItemStack material = state.inventory().items().get(materialId);
+        if (project.status() != RouteConstructionStatus.BUILDING || material == null || !material.itemKind().equals(GrayboxMaterial.ROUTE.repairItemKind())
+                || !(material.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER)
+                || state.inventory().surfaces().get(slot.containerId()).status() != ContainerSurfaceStatus.ACTIVE) {
+            throw new IllegalArgumentException("route construction intent lacks active exact maintenance material");
+        }
+        if (!wholeBlock(intent).equals(nextCell(state, project))) throw new IllegalArgumentException("route construction intent does not target its next cell");
+    }
+
+    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, RouteConstructionObservation observation,
+                                       Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
+        validateIntent(state, intent);
+        RouteConstruction project = state.routeConstructions().get(observation.projectId());
+        if (project == null || !intent.subjectIds().contains(observation.projectId()) || !intent.subjectIds().contains(observation.itemId())
+                || !observation.position().equals(nextCell(state, project))) throw new IllegalArgumentException("route construction receipt differs from active work");
+        Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
+        int confirmed = project.confirmedCells() + 1;
+        int required = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.settlementId(), project.waypoints()).size();
+        projects.put(project.id(), project.withConfirmedCells(confirmed, confirmed == required ? RouteConstructionStatus.READY : RouteConstructionStatus.BUILDING));
+        intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
+        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
+        observations.put(observation.id(), observation);
+        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeOne(observation.itemId()),
+                state.productionJobs(), state.contracts(), state.operations(), intents, observations, state.sceneLeases(), state.hiveColony(),
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology());
+    }
+
+    static void validateReceipt(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> projects,
+                                PhysicalIntent intent, RouteConstructionObservation observation) {
+        if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION || !intent.subjectIds().contains(observation.projectId())
+                || !intent.subjectIds().contains(observation.itemId())) throw new IllegalArgumentException("route construction receipt has foreign subjects");
+        RouteConstruction project = projects.get(observation.projectId());
+        if (project == null || !FrontierRouteNetwork.constructionCells(bootstrap, topology, project.settlementId(), project.waypoints())
+                .contains(observation.position())) throw new IllegalArgumentException("route construction receipt is outside its replacement corridor");
+    }
+
+    private static BlockPosition nextCell(FrontierWorldState state, RouteConstruction project) {
+        return FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.settlementId(), project.waypoints()).get(project.confirmedCells());
+    }
+
+    private static BlockPosition wholeBlock(PhysicalIntent intent) {
+        long scale = io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE;
+        if (intent.origin().x().raw() % scale != 0L || intent.origin().y().raw() % scale != 0L || intent.origin().z().raw() % scale != 0L) {
+            throw new IllegalArgumentException("route construction origin must be a whole block position");
+        }
+        return new BlockPosition(Math.toIntExact(intent.origin().x().raw() / scale), Math.toIntExact(intent.origin().y().raw() / scale),
+                Math.toIntExact(intent.origin().z().raw() / scale));
     }
 }

@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +14,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteTopologyTest {
     @Test
@@ -71,5 +74,32 @@ class RouteTopologyTest {
         assertEquals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement), state.routeTopology().supplyWaypoints(bootstrap, settlement));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
         assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.begin(state, project));
+    }
+
+    @Test
+    void inactiveConstructionConsumesOneExactRouteMaterialPerConfirmedCell() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction-work"), 95L);
+        SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
+        RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-work"), settlement,
+                List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4), baseline.get(5), baseline.get(6)),
+                0, RouteConstructionStatus.BUILDING);
+        SubjectId materialId = new SubjectId("item:route-work-concrete");
+        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project).withInventory(FrontierWorldState.initial(bootstrap).inventory());
+        state = state.withInventory(state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(materialId, "minecraft:gray_concrete", 2, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
+        var events = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 900L));
+        PhysicalIntentPrepared prepared = events.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        assertTrue(prepared.intent().subjectIds().contains(project.id()));
+        state = RouteConstructionProcess.reducePrepared(state, FrontierRouteNetwork.OWNER, prepared.intent())
+                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        BlockPosition position = FrontierGrayboxPlan.routeConstructionCells(state, project).getFirst();
+        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(new RouteConstructionObservation(
+                new PhysicalObservationId("observation:route-work"), prepared.intent().id(), project.id(), materialId, position)));
+        assertEquals(1, state.routeConstructions().get(project.id()).confirmedCells());
+        assertEquals(1, state.inventory().items().get(materialId).count());
+        assertEquals(RouteTopology.initial(), state.routeTopology());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 }

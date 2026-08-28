@@ -4,5 +4,6 @@ package io.farfrontier.palemirror.frontier.v3.api;
 public enum PhysicalPostcondition {
     CARGO_HANDOFF_OBSERVED,
     STRUCTURAL_REPAIR_OBSERVED,
+    ROUTE_CONSTRUCTION_OBSERVED,
     EXPLOSION_OBSERVED
 }

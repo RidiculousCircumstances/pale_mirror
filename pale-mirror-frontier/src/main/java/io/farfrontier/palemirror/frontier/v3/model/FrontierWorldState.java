@@ -23,8 +23,7 @@ import java.util.Set;
         Map<SubjectId, StructureDamage> structureDamage, Map<BlockPosition, PhysicalDelta> physicalDeltas,
         Map<SubjectId, AmbientActorLease> ambientLeases, Map<SubjectId, RouteConstruction> routeConstructions, RouteTopology routeTopology
 ) {
-    private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO);
-    private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
+    private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     public FrontierWorldState {
         Objects.requireNonNull(bootstrap, "bootstrap");
@@ -37,14 +36,11 @@ import java.util.Set;
         structureDamage = FrontierWorldStateSupport.immutableMap(structureDamage, "structure damage"); physicalDeltas = FrontierWorldStateSupport.immutableMap(physicalDeltas, "physical deltas");
         ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases"); routeConstructions = FrontierWorldStateSupport.immutableMap(routeConstructions, "route constructions");
         Objects.requireNonNull(routeTopology, "route topology"); routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
-        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions);
-        Objects.requireNonNull(hiveColony, "hive colony");
-        hiveColony.validateAgainst(bootstrap);
+        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions); Objects.requireNonNull(hiveColony, "hive colony"); hiveColony.validateAgainst(bootstrap);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.actorIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet());
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only bootstrap actor");
         for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.position());
-        if (ambientLeases.size() > MAX_AMBIENT_LEASES) throw new IllegalArgumentException("ambient lease retention limit exceeded");
-        Set<SubjectId> activelyAmbientLeased = new HashSet<>();
+        if (ambientLeases.size() > MAX_AMBIENT_LEASES) throw new IllegalArgumentException("ambient lease retention limit exceeded"); Set<SubjectId> activelyAmbientLeased = new HashSet<>();
         for (Map.Entry<SubjectId, AmbientActorLease> entry : ambientLeases.entrySet()) {
             AmbientActorLease lease = entry.getValue();
             if (!entry.getKey().equals(lease.actorId()) || !expectedActors.contains(lease.actorId())) {
@@ -53,8 +49,7 @@ import java.util.Set;
             if (actorLocations.get(lease.actorId()).condition().status() != ActorLifeStatus.ALIVE && lease.status() != AmbientLeaseStatus.CLOSED) {
                 throw new IllegalArgumentException("dead actor cannot retain an active ambient lease");
             }
-            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.handoffPosition());
-            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.goalPosition());
+            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.handoffPosition()); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.goalPosition());
             if (lease.status() != AmbientLeaseStatus.CLOSED && !activelyAmbientLeased.add(lease.actorId())) {
                 throw new IllegalArgumentException("actor cannot retain multiple active ambient leases");
             }
@@ -76,8 +71,7 @@ import java.util.Set;
             }
             damageCellCount = Math.addExact(damageCellCount, damage.cells().size());
         }
-        FrontierWorldPhysicalDeltaSupport.validate(bootstrap, hiveColony, physicalDeltas);
-        if (damageCellCount > MAX_STRUCTURE_DAMAGE_CELLS) throw new IllegalArgumentException("structure damage retention limit exceeded");
+        FrontierWorldPhysicalDeltaSupport.validate(bootstrap, hiveColony, physicalDeltas); if (damageCellCount > MAX_STRUCTURE_DAMAGE_CELLS) throw new IllegalArgumentException("structure damage retention limit exceeded");
         inventory.surfaces().values().forEach(surface -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), surface.position()));
         for (Map.Entry<InfectionCell, FixedRatio> entry : infection.entrySet()) {
             if (entry.getValue().equals(ZERO_INFECTION)) throw new IllegalArgumentException("sparse infection index must not retain zero cells");
@@ -147,7 +141,7 @@ import java.util.Set;
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
-                        && !FrontierRouteNetwork.OWNER.equals(subject)
+                        && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
                         && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }
@@ -166,6 +160,8 @@ import java.util.Set;
                 FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
             } else if (observation instanceof StructuralRepairObservation repair) {
                 StructuralRepairStateSupport.validateReceipt(intent, repair);
+            } else if (observation instanceof RouteConstructionObservation construction) {
+                RouteConstructionStateSupport.validateReceipt(bootstrap, routeTopology, routeConstructions, intent, construction);
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
         }
         for (PhysicalIntent intent : physicalIntents.values()) {
@@ -364,6 +360,10 @@ import java.util.Set;
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR) {
             if (!(evidence instanceof StructuralRepairObservation repair)) throw new IllegalArgumentException("structural repair requires repair observation evidence");
             return StructuralRepairStateSupport.complete(this, current, repair, next);
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION) {
+            if (!(evidence instanceof RouteConstructionObservation construction)) throw new IllegalArgumentException("route construction requires construction observation evidence");
+            return RouteConstructionStateSupport.complete(this, current, construction, next);
         }
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
