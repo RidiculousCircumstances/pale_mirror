@@ -29,7 +29,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 12;
+    private static final int VERSION = 13;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -41,6 +41,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
                 writeInfection(output, state.infection());
+                writeHiveColony(output, state.hiveColony());
                 writeInventory(output, state.inventory());
                 writeProductionJobs(output, state.productionJobs());
                 writeContracts(output, state.contracts());
@@ -58,8 +59,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
-            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input),
-                    readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input));
+            Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
+            Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
+            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
+                    readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -112,6 +115,39 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (values.put(cell, new FixedRatio(new FixedScalar(input.readLong()))) != null) throw new IllegalArgumentException("duplicate infection cell");
         }
         return values;
+    }
+    private static void writeHiveColony(DataOutputStream output, HiveColony colony) throws IOException {
+        writeCount(output, colony.addedOrgans().size());
+        for (HiveOrgan organ : colony.addedOrgans().values().stream().sorted(Comparator.comparing(HiveOrgan::id)).toList()) {
+            writeString(output, organ.id().value()); writeString(output, organ.hiveId().value()); writeString(output, organ.nestId().value());
+            output.writeByte(organ.kind().ordinal()); writePosition(output, organ.anchor()); output.writeBoolean(organ.containerId().isPresent());
+            if (organ.containerId().isPresent()) writeString(output, organ.containerId().orElseThrow().value());
+        }
+        writeCount(output, colony.spawnedBioforms().size());
+        for (Bioform bioform : colony.spawnedBioforms().values().stream().sorted(Comparator.comparing(Bioform::id)).toList()) {
+            writeString(output, bioform.id().value()); writeString(output, bioform.hiveId().value()); writeString(output, bioform.nestId().value());
+            output.writeByte(bioform.role().ordinal()); writePosition(output, bioform.position());
+        }
+    }
+    private static HiveColony readHiveColony(DataInputStream input) throws IOException {
+        Map<SubjectId, HiveOrgan> organs = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
+            int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input); boolean hasContainer = input.readBoolean();
+            java.util.Optional<SubjectId> container = hasContainer ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
+            if (kind >= HiveOrganKind.values().length || organs.put(id, new HiveOrgan(id, hive, nest, HiveOrganKind.values()[kind], anchor, container)) != null) {
+                throw new IllegalArgumentException("invalid or duplicate added hive organ");
+            }
+        }
+        Map<SubjectId, Bioform> bioforms = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
+            int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
+            if (role >= BioformRole.values().length || bioforms.put(id, new Bioform(id, hive, nest, BioformRole.values()[role], position)) != null) {
+                throw new IllegalArgumentException("invalid or duplicate spawned bioform");
+            }
+        }
+        return new HiveColony(organs, bioforms);
     }
     private static void writeInventory(DataOutputStream output, ExactInventory inventory) throws IOException {
         writeCount(output, inventory.containers().size());

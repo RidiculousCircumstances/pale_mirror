@@ -75,7 +75,7 @@ class FrontierWorldStateTest {
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
         assertEquals(1, codec.decode(encoded).inventory().conflicts().size());
-        encoded[4] = 13;
+        encoded[4] = 14;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
@@ -93,6 +93,26 @@ class FrontierWorldStateTest {
 
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(),
                 state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), Map.of(intent.id(), intent)));
+    }
+
+    @Test
+    void dynamicHiveColonyKeepsExactGrowthIdentitiesThroughLaterStateChangesAndRecovery() {
+        FrontierWorldState baseline = initial();
+        SubjectId hive = baseline.bootstrap().hive().id();
+        SubjectId eastNest = new SubjectId("nest:seed-east");
+        HiveOrgan organ = new HiveOrgan(new SubjectId("organ:east-grown-heart-1"), hive, eastNest, HiveOrganKind.HEART,
+                new BlockPosition(420, 64, 432), java.util.Optional.empty());
+        Bioform bioform = new Bioform(new SubjectId("bioform:east-grown-1"), hive, eastNest, BioformRole.GUARD, new BlockPosition(424, 64, 428));
+
+        FrontierWorldState grown = baseline.addHiveOrgan(organ).spawnBioform(bioform)
+                .withInfection(InfectionCell.at(new BlockPosition(420, 64, 428)), HALF);
+        assertEquals(organ, grown.hiveColony().addedOrgans().get(organ.id()));
+        assertEquals(bioform, grown.hiveColony().spawnedBioforms().get(bioform.id()));
+        assertEquals(bioform.position(), grown.actorLocations().get(bioform.id()).position());
+        assertEquals(grown, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(grown)));
+        assertThrows(IllegalArgumentException.class, () -> grown.spawnBioform(bioform));
+        assertThrows(IllegalArgumentException.class, () -> baseline.addHiveOrgan(new HiveOrgan(organ.id(), hive, eastNest, HiveOrganKind.HEART,
+                new BlockPosition(520, 64, 432), java.util.Optional.empty())));
     }
 
     private static FrontierWorldState initial() {
