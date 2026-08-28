@@ -29,6 +29,16 @@ public final class FrontierV3ServerLifecycle {
                 new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            try {
+                int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime);
+                if (uninspectable > 0) {
+                    PaleMirrorMod.LOGGER.error("Frontier v3 quarantined {} uninspectable running physical intent(s) after restart", uninspectable);
+                }
+            } catch (RuntimeException error) {
+                runtime.quarantine(error);
+            }
+        }
+        if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             PaleMirrorMod.LOGGER.info("Frontier v3 development runtime started for {}", server.getWorldPath(LevelResource.ROOT));
         } else {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined at startup: {}", runtime.status().detail().orElse("unknown"));

@@ -9,5 +9,5 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 public record FrontierWorldProjection(
         WorldId worldId, Revision revision, SimInstant instant, String bootstrapHash,
         int settlementCount, int residentCount, int bioformCount, int infectedCellCount, int itemStackCount, int activeProductionJobCount,
-        int activeRouteOperationCount, int preparedPhysicalIntentCount
+        int activeRouteOperationCount, int preparedPhysicalIntentCount, int unknownPhysicalIntentCount
 ) implements FrontierProjection { }

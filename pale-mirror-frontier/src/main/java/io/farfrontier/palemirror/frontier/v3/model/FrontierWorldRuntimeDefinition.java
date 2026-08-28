@@ -366,6 +366,8 @@ public final class FrontierWorldRuntimeDefinition {
         int residents = bootstrap.settlements().stream().mapToInt(settlement -> settlement.residents().size()).sum();
         return new FrontierWorldProjection(worldId, revision, instant, bootstrap.canonicalSha256(), bootstrap.settlements().size(),
                 residents, bootstrap.hive().bioforms().size(), state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
-                state.operations().size(), state.physicalIntents().size());
+                state.operations().size(),
+                (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED).count(),
+                (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count());
     }
 }

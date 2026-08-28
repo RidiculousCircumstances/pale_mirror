@@ -63,6 +63,18 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     FrontierV3RuntimeStatus status() { return status; }
 
+    /**
+     * Returns an immutable image of the current canonical revision for a server-thread adapter.
+     *
+     * <p>The image deliberately exposes bytes rather than mutable domain state. Adapters must
+     * decode only the data they need and route every resulting mutation back through
+     * {@link #submit(FrontierCommand)}.</p>
+     */
+    Optional<CheckpointImage> checkpointImage() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        return Optional.of(engine.checkpoint());
+    }
+
     Optional<CommandResult> submit(FrontierCommand command) {
         Objects.requireNonNull(command, "command");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
@@ -129,7 +141,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) status = FrontierV3RuntimeStatus.stopped();
     }
 
-    private void quarantine(RuntimeException error) {
+    void quarantine(RuntimeException error) {
         status = FrontierV3RuntimeStatus.quarantined(error);
     }
 }

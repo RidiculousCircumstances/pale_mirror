@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
@@ -23,6 +24,12 @@ import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -77,6 +84,31 @@ class FrontierV3ServerRuntimeTest {
 
         assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, failed.status().kind());
         assertTrue(failed.projection(ProjectionQuery.summary()).isEmpty());
+    }
+
+    @Test
+    void restartQuarantinesAnUninspectableRunningPhysicalIntentWithoutBlindReplay(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:restart-safety");
+        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        for (int tick = 0; tick < 900; tick++) runtime.tick(new WorkBudget(8, 64));
+
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-1");
+        CheckpointImage prepared = runtime.checkpointImage().orElseThrow();
+        CommandId runningCommand = new CommandId("test:mark-running");
+        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, runningCommand, world,
+                prepared.revision(), prepared.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(runningCommand),
+                new PhysicalIntentTransition(intentId, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()))).orElseThrow());
+
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        assertEquals(1, FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(recovered));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, state.physicalIntents().get(intentId).status());
+        assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().preparedPhysicalIntentCount());
+        assertEquals(1, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {
