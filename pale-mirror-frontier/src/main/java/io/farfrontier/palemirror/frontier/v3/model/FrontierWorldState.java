@@ -48,7 +48,9 @@ public record FrontierWorldState(
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> containers.put(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"),
                 new ContainerRecord(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"), settlement.id(), 27)));
-        return new FrontierWorldState(bootstrap, actors, structures, Map.of(), new ExactInventory(containers, Map.of(), Map.of(), Map.of()));
+        Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
+        bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));
+        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, Map.of(), Map.of(), Map.of()));
     }
 
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {

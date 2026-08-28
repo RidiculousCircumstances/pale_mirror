@@ -24,7 +24,7 @@ class FrontierWorldStateTest {
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
         assertEquals(12, state.inventory().containers().size());
         assertTrue(state.structureConditions().values().stream().allMatch(condition -> condition == StructureCondition.INTACT));
-        assertTrue(state.infection().isEmpty());
+        assertEquals(2, state.infection().size());
     }
 
     @Test
@@ -41,7 +41,7 @@ class FrontierWorldStateTest {
         assertEquals(StructureCondition.DAMAGED, changed.structureConditions().get(structure));
         assertEquals(HALF, changed.infection().get(cell));
         assertEquals(new InfectionCell(-1, -1), cell);
-        assertTrue(changed.withInfection(cell, new FixedRatio(FixedScalar.ZERO)).infection().isEmpty());
+        assertEquals(2, changed.withInfection(cell, new FixedRatio(FixedScalar.ZERO)).infection().size());
         assertThrows(IllegalArgumentException.class, () -> state.withActorLocation(resident, new BlockPosition(512, 64, 0)));
         assertThrows(IllegalArgumentException.class, () -> state.withStructureCondition(new SubjectId("structure:missing"), StructureCondition.DESTROYED));
     }
