@@ -21,7 +21,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -35,6 +35,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeInfection(output, state.infection());
                 writeInventory(output, state.inventory());
                 writeProductionJobs(output, state.productionJobs());
+                writeContracts(output, state.contracts());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -45,7 +46,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
-            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input), readProductionJobs(input));
+            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input), readProductionJobs(input), readContracts(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -157,6 +158,25 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
         }
         return jobs;
+    }
+    private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
+        writeCount(output, contracts.size());
+        for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {
+            writeString(output, contract.id().value()); writeString(output, contract.settlementId().value()); writeString(output, contract.recipientId().value());
+            writeString(output, contract.cargoId().value()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());
+        }
+    }
+    private static Map<SubjectId, SupplyContract> readContracts(DataInputStream input) throws IOException {
+        Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId recipient = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
+            String kind = readString(input); int itemCount = input.readUnsignedByte(); int status = input.readUnsignedByte();
+            if (status >= ContractStatus.values().length
+                    || contracts.put(id, new SupplyContract(id, settlement, recipient, cargo, kind, itemCount, ContractStatus.values()[status])) != null) {
+                throw new IllegalArgumentException("invalid or duplicate supply contract");
+            }
+        }
+        return contracts;
     }
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

@@ -32,7 +32,7 @@ public final class FrontierWorldRuntimeDefinition {
                 FrontierWorldRuntimeDefinition::planScheduled,
                 FrontierWorldRuntimeDefinition::reduce,
                 new FrontierWorldStateCodec(), FrontierWorldRuntimeDefinition::projection,
-                new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200)), TransactionCommitter.noOp());
+                new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200), contractDemand(1, 450)), TransactionCommitter.noOp());
     }
 
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
@@ -42,6 +42,8 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.infection.pulse" -> planInfectionPulse(state, action);
             case "frontier.settlement.production.start" -> planProductionStart(state, action);
             case "frontier.settlement.production.complete" -> planProductionCompletion(state, action);
+            case "frontier.supply.contract.demand" -> planContractDemand(state, action);
+            case "frontier.supply.cargo.load" -> planCargoLoad(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
     }
@@ -99,14 +101,48 @@ public final class FrontierWorldRuntimeDefinition {
         return List.of(new ProposedEvent(settlement.id(), new ProductionBlocked(settlement.id(), workshop.id(), workshop.id(), reason)),
                 new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(productionStart(settlement.id(), ordinal(action.id().value()) + 1, action.dueAt().ticks() + 200L))));
     }
+    private static List<ProposedEvent> planContractDemand(FrontierWorldState state, ScheduledAction action) {
+        Settlement settlement = settlement(state, new SubjectId("settlement:1"));
+        ExactItemStack bread = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
+                .filter(item -> item.itemKind().equals("minecraft:bread") && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(FrontierWorldState.depotId(settlement.id())))
+                .findFirst().orElseThrow(() -> new IllegalStateException("supply demand has no exact bread output"));
+        int ordinal = ordinal(action.id().value());
+        SupplyContract contract = new SupplyContract(new SubjectId("contract:supply-1-" + ordinal), settlement.id(), state.bootstrap().hive().id(),
+                new SubjectId("cargo:supply-1-" + ordinal), bread.itemKind(), bread.count(), ContractStatus.ORDERED);
+        return List.of(new ProposedEvent(settlement.id(), new SupplyContractCreated(contract)),
+                new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(cargoLoad(contract, action.dueAt().ticks() + 50L))));
+    }
+    private static List<ProposedEvent> planCargoLoad(FrontierWorldState state, ScheduledAction action) {
+        SupplyContract contract = state.contracts().get(action.subject());
+        if (contract == null || contract.status() != ContractStatus.ORDERED) throw new IllegalStateException("cargo load has no ordered contract");
+        SubjectId depot = FrontierWorldState.depotId(contract.settlementId());
+        ExactItemStack item = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
+                .filter(value -> value.itemKind().equals(contract.itemKind()) && value.count() == contract.itemCount()
+                        && value.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                .findFirst().orElseThrow(() -> new IllegalStateException("contract cargo is unavailable in its depot"));
+        return List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))));
+    }
     private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         return switch (event.payload()) {
             case InfectionChanged changed -> state.withInfection(changed.cell(), changed.intensity());
             case ProductionStarted started -> reduceProductionStarted(state, event.subject(), started);
             case ProductionCompleted completed -> reduceProductionCompleted(state, event.subject(), completed);
             case ProductionBlocked blocked -> reduceProductionBlocked(state, event.subject(), blocked);
+            case SupplyContractCreated created -> reduceContractCreated(state, event.subject(), created);
+            case CargoLoaded loaded -> reduceCargoLoaded(state, event.subject(), loaded);
             default -> fail(event.payload().type());
         };
+    }
+    private static FrontierWorldState reduceContractCreated(FrontierWorldState state, SubjectId subject, SupplyContractCreated created) {
+        if (!subject.equals(created.contract().settlementId())) throw new IllegalArgumentException("contract subject does not own settlement");
+        return state.createSupplyContract(created.contract());
+    }
+    private static FrontierWorldState reduceCargoLoaded(FrontierWorldState state, SubjectId subject, CargoLoaded loaded) {
+        SupplyContract contract = state.contracts().get(loaded.contractId());
+        if (contract == null || !subject.equals(contract.settlementId()) || !loaded.cargo().id().equals(contract.cargoId()) || loaded.cargo().itemIds().size() != 1) throw new IllegalArgumentException("cargo load does not match its contract");
+        ExactItemStack item = state.inventory().items().get(loaded.cargo().itemIds().getFirst());
+        if (item == null || !item.itemKind().equals(contract.itemKind()) || item.count() != contract.itemCount()) throw new IllegalArgumentException("cargo item does not match contract demand");
+        return state.loadContractCargo(loaded.contractId(), loaded.cargo());
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();
@@ -189,6 +225,12 @@ public final class FrontierWorldRuntimeDefinition {
         return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(
                 "schedule:production-complete-" + job.id().value().substring("job:".length())),
                 new SimInstant(due), 0, job.id(), "frontier.settlement.production.complete", 1);
+    }
+    private static ScheduledAction contractDemand(int ordinal, long due) {
+        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:contract-demand-" + ordinal), new SimInstant(due), 0, new SubjectId("settlement:1"), "frontier.supply.contract.demand", 1);
+    }
+    private static ScheduledAction cargoLoad(SupplyContract contract, long due) {
+        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:cargo-load-" + contract.id().value().substring("contract:".length())), new SimInstant(due), 0, contract.id(), "frontier.supply.cargo.load", 1);
     }
     private static int ordinal(String id) {
         int separator = id.lastIndexOf('-');

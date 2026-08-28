@@ -100,6 +100,32 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         nextItems.put(item.id(), item);
         return new ExactInventory(containers, nextItems, cargo, playerItems);
     }
+
+    /**
+     * Moves a complete named set of warehouse stacks into one new identified cargo batch. The
+     * stacks keep their identities and counts; only their one canonical custody changes.
+     */
+    public ExactInventory loadCargo(CargoBatch batch) {
+        Objects.requireNonNull(batch, "cargo batch");
+        if (cargo.containsKey(batch.id())) throw new IllegalArgumentException("cargo identity already exists: " + batch.id().value());
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        for (SubjectId itemId : batch.itemIds()) {
+            ExactItemStack item = nextItems.get(itemId);
+            if (item == null) throw new IllegalArgumentException("cargo item is absent: " + itemId.value());
+            if (!(item.custody() instanceof InventoryCustody.ContainerSlot)) {
+                throw new IllegalArgumentException("cargo item is not in a warehouse slot: " + itemId.value());
+            }
+            InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) item.custody();
+            ContainerRecord container = containers.get(slot.containerId());
+            if (container == null || !container.ownerId().equals(batch.ownerId())) {
+                throw new IllegalArgumentException("cargo item is not owned by the cargo sender: " + itemId.value());
+            }
+            nextItems.put(itemId, new ExactItemStack(item.id(), item.itemKind(), item.count(), new InventoryCustody.Cargo(batch.id())));
+        }
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
+        nextCargo.put(batch.id(), batch);
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems);
+    }
     private static void require(Object value, Object expected, String label) {
         if (value instanceof ExactItemStack item && item.custody().equals(expected)) return;
         throw new IllegalArgumentException("dangling or conflicting " + label);

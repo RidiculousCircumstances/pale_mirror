@@ -64,13 +64,13 @@ class FrontierWorldStateTest {
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
-        encoded[4] = 4;
+        encoded[4] = 5;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
         missingActor.remove(new SubjectId("resident:1-1"));
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
-                source.structureConditions(), source.infection(), source.inventory(), source.productionJobs()));
+                source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts()));
     }
 
     private static FrontierWorldState initial() {

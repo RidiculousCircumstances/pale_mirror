@@ -20,7 +20,7 @@ public final class FrontierWorldPayloadCodecs {
     private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), new PayloadCodecs(List.of(
-                new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec())));
+                new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(), new ContractCreatedCodec(), new CargoLoadedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -81,6 +81,27 @@ public final class FrontierWorldPayloadCodecs {
             });
         }
     }
+    private static final class ContractCreatedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.supply_contract_created"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeContract(output, ((SupplyContractCreated) payload).contract())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new SupplyContractCreated(readContract(input))); }
+    }
+    private static final class CargoLoadedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.cargo_loaded"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            CargoLoaded loaded = (CargoLoaded) payload;
+            return encodeProduction(output -> {
+                writeSubject(output, loaded.contractId()); writeSubject(output, loaded.cargo().id()); writeSubject(output, loaded.cargo().ownerId());
+                output.writeByte(loaded.cargo().itemIds().size());
+                for (var item : loaded.cargo().itemIds()) writeSubject(output, item);
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectIdHolder contract = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder owner = readSubject(input); int count = input.readUnsignedByte();
+            java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> items = new java.util.ArrayList<>(); for (int index = 0; index < count; index++) items.add(readSubject(input).value());
+            return new CargoLoaded(contract.value(), new CargoBatch(cargo.value(), owner.value(), items));
+        }); }
+    }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
     @FunctionalInterface private interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
@@ -106,6 +127,16 @@ public final class FrontierWorldPayloadCodecs {
     private static ProductionJob readJob(DataInputStream input) throws IOException {
         return new ProductionJob(readSubject(input).value(), readSubject(input).value(), readSubject(input).value(), readSubject(input).value(),
                 readSubject(input).value(), readSubject(input).value(), readString(input), input.readUnsignedByte());
+    }
+    private static void writeContract(DataOutputStream output, SupplyContract contract) throws IOException {
+        writeSubject(output, contract.id()); writeSubject(output, contract.settlementId()); writeSubject(output, contract.recipientId());
+        writeSubject(output, contract.cargoId()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());
+    }
+    private static SupplyContract readContract(DataInputStream input) throws IOException {
+        SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder recipient = readSubject(input);
+        SubjectIdHolder cargo = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte(); int status = input.readUnsignedByte();
+        if (status >= ContractStatus.values().length) throw new IllegalArgumentException("unknown contract status");
+        return new SupplyContract(id.value(), settlement.value(), recipient.value(), cargo.value(), kind, count, ContractStatus.values()[status]);
     }
     private static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     private static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }

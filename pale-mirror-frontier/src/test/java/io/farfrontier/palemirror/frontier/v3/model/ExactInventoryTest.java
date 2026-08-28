@@ -45,4 +45,21 @@ class ExactInventoryTest {
         assertEquals(output, stored.itemAt(container, 0).orElseThrow().id());
         assertThrows(IllegalArgumentException.class, () -> inventory.store(new ExactItemStack(output, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0))));
     }
+
+    @Test
+    void loadingCargoMovesTheSameExactStackWithoutDuplicatingIt() {
+        SubjectId container = new SubjectId("container:depot");
+        SubjectId owner = new SubjectId("settlement:one");
+        SubjectId item = new SubjectId("item:bread");
+        SubjectId cargo = new SubjectId("cargo:supply");
+        ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 2)),
+                Map.of(item, new ExactItemStack(item, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of());
+
+        ExactInventory loaded = inventory.loadCargo(new CargoBatch(cargo, owner, List.of(item)));
+
+        assertEquals(new InventoryCustody.Cargo(cargo), loaded.items().get(item).custody());
+        assertEquals(List.of(item), loaded.cargo().get(cargo).itemIds());
+        assertThrows(IllegalArgumentException.class, () -> loaded.loadCargo(new CargoBatch(new SubjectId("cargo:again"), owner, List.of(item))));
+        assertThrows(IllegalArgumentException.class, () -> inventory.loadCargo(new CargoBatch(cargo, new SubjectId("settlement:other"), List.of(item))));
+    }
 }

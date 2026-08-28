@@ -123,5 +123,24 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(completed, codecs.decode(completed.type(), codecs.encode(completed)));
         ProductionStarted started = new ProductionStarted(job, job.consumedItemId());
         assertEquals(started, codecs.decode(started.type(), codecs.encode(started)));
+        SupplyContract contract = new SupplyContract(new SubjectId("contract:supply-1-1"), new SubjectId("settlement:1"),
+                new SubjectId("hive:frontier"), new SubjectId("cargo:supply-1-1"), "minecraft:bread", 64, ContractStatus.ORDERED);
+        SupplyContractCreated created = new SupplyContractCreated(contract);
+        assertEquals(created, codecs.decode(created.type(), codecs.encode(created)));
+        CargoLoaded loaded = new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(job.outputItemId())));
+        assertEquals(loaded, codecs.decode(loaded.type(), codecs.encode(loaded)));
+    }
+
+    @Test
+    void supplyContractLoadsTheSameProducedBreadIntoIdentifiedCargo() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:cargo"), 91L));
+        for (long tick = 100L; tick <= 500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-1"));
+        assertEquals(ContractStatus.LOADED, contract.status());
+        CargoBatch cargo = state.inventory().cargo().get(contract.cargoId());
+        assertEquals(List.of(new SubjectId("item:production-1-1-bread")), cargo.itemIds());
+        assertEquals(new InventoryCustody.Cargo(cargo.id()), state.inventory().items().get(cargo.itemIds().getFirst()).custody());
     }
 }

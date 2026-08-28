@@ -19,7 +19,8 @@ public record FrontierWorldState(
         Map<SubjectId, StructureCondition> structureConditions,
         Map<InfectionCell, FixedRatio> infection,
         ExactInventory inventory,
-        Map<SubjectId, ProductionJob> productionJobs
+        Map<SubjectId, ProductionJob> productionJobs,
+        Map<SubjectId, SupplyContract> contracts
 ) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO);
 
@@ -30,6 +31,7 @@ public record FrontierWorldState(
         infection = immutableMap(infection, "infection");
         Objects.requireNonNull(inventory, "inventory");
         productionJobs = immutableMap(productionJobs, "production jobs");
+        contracts = immutableMap(contracts, "supply contracts");
         Set<SubjectId> expectedActors = actorIds(bootstrap);
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only bootstrap actor");
         for (ActorLocation location : actorLocations.values()) requirePosition(bootstrap.bounds(), location.position());
@@ -51,6 +53,14 @@ public record FrontierWorldState(
                 throw new IllegalArgumentException("active production job must own neither consumed nor output item stack");
             }
         }
+        for (Map.Entry<SubjectId, SupplyContract> entry : contracts.entrySet()) {
+            SupplyContract contract = entry.getValue();
+            if (!entry.getKey().equals(contract.id())) throw new IllegalArgumentException("contract map key must match contract identity");
+            settlement(bootstrap, contract.settlementId());
+            if (!bootstrap.hive().id().equals(contract.recipientId())) throw new IllegalArgumentException("contract recipient must be the frontier hive");
+            if (contract.status() == ContractStatus.LOADED && !inventory.cargo().containsKey(contract.cargoId())) throw new IllegalArgumentException("loaded contract must own its cargo");
+            if (contract.status() == ContractStatus.ORDERED && inventory.cargo().containsKey(contract.cargoId())) throw new IllegalArgumentException("ordered contract cannot already own cargo");
+        }
     }
 
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) {
@@ -68,7 +78,7 @@ public record FrontierWorldState(
         items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));
-        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of()), Map.of());
+        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of()), Map.of(), Map.of());
     }
 
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {
@@ -77,7 +87,7 @@ public record FrontierWorldState(
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations);
         next.put(actor, new ActorLocation(position));
-        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs);
+        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs, contracts);
     }
 
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {
@@ -86,7 +96,7 @@ public record FrontierWorldState(
         if (!structureConditions.containsKey(structure)) throw new IllegalArgumentException("unknown structure: " + structure.value());
         Map<SubjectId, StructureCondition> next = new LinkedHashMap<>(structureConditions);
         next.put(structure, condition);
-        return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory, productionJobs);
+        return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory, productionJobs, contracts);
     }
 
     public FrontierWorldState withInfection(InfectionCell cell, FixedRatio intensity) {
@@ -95,11 +105,11 @@ public record FrontierWorldState(
         requirePosition(bootstrap.bounds(), cell.originAtY(0));
         Map<InfectionCell, FixedRatio> next = new LinkedHashMap<>(infection);
         if (intensity.equals(ZERO_INFECTION)) next.remove(cell); else next.put(cell, intensity);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next, inventory, productionJobs);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next, inventory, productionJobs, contracts);
     }
 
     public FrontierWorldState withInventory(ExactInventory nextInventory) {
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, nextInventory, productionJobs);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, nextInventory, productionJobs, contracts);
     }
 
     public FrontierWorldState withProductionJob(ProductionJob job) {
@@ -110,7 +120,7 @@ public record FrontierWorldState(
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
         next.put(job.id(), job);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, next);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, next, contracts);
     }
 
     public FrontierWorldState startProductionJob(ProductionJob job, SubjectId inputItemId) {
@@ -123,7 +133,7 @@ public record FrontierWorldState(
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
         next.put(job.id(), job);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withoutItem(inputItemId), next);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withoutItem(inputItemId), next, contracts);
     }
 
     public FrontierWorldState completeProductionJob(SubjectId jobId, ExactItemStack output) {
@@ -134,7 +144,20 @@ public record FrontierWorldState(
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
         next.remove(jobId);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.store(output), next);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.store(output), next, contracts);
+    }
+
+    public FrontierWorldState createSupplyContract(SupplyContract contract) {
+        if (contracts.containsKey(contract.id())) throw new IllegalArgumentException("supply contract identity already exists");
+        Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts); next.put(contract.id(), contract);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, next);
+    }
+    public FrontierWorldState loadContractCargo(SubjectId contractId, CargoBatch cargo) {
+        SupplyContract contract = contracts.get(contractId);
+        if (contract == null || contract.status() != ContractStatus.ORDERED || !contract.cargoId().equals(cargo.id())) throw new IllegalArgumentException("cargo load does not match an ordered contract");
+        Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts);
+        next.put(contractId, new SupplyContract(contract.id(), contract.settlementId(), contract.recipientId(), contract.cargoId(), contract.itemKind(), contract.itemCount(), ContractStatus.LOADED));
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.loadCargo(cargo), productionJobs, next);
     }
 
     public static SubjectId depotId(SubjectId settlementId) {
