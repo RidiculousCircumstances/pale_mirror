@@ -13,11 +13,13 @@ record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKin
         Objects.requireNonNull(kind, "objective kind"); Objects.requireNonNull(infectionTarget, "infection target");
         Objects.requireNonNull(status, "objective status");
         if (decisionOrdinal <= 0) throw new IllegalArgumentException("objective decision ordinal must be positive");
-        if (kind != StrategicObjectiveKind.HIVE_GROW_ORGANISM && kind != StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD && kind != StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE
+        if (kind != StrategicObjectiveKind.HIVE_GROW_ORGANISM && kind != StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
+                && kind != StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD && kind != StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE
                 && kind != StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE && kind != StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS && infectionTarget.isEmpty()) {
             throw new IllegalArgumentException("infection strategic objective requires an infection target");
         }
-        if ((kind == StrategicObjectiveKind.HIVE_GROW_ORGANISM || kind == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD || kind == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE
+        if ((kind == StrategicObjectiveKind.HIVE_GROW_ORGANISM || kind == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
+                || kind == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD || kind == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE
                 || kind == StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE || kind == StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS) && infectionTarget.isPresent()) {
             throw new IllegalArgumentException("hive growth objective cannot carry an infection target");
         }

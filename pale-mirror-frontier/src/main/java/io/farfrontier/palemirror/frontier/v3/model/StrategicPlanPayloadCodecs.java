@@ -46,11 +46,13 @@ final class StrategicPlanPayloadCodecs {
     }
     private static void writeTask(DataOutputStream output, StrategicTask value) throws IOException {
         subject(output, value.id()); subject(output, value.objectiveId()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
+        optionalSubject(output, value.operationTarget());
         count(output, value.requirements().size()); for (StrategicTaskRequirement requirement : value.requirements()) output.writeByte(requirement.ordinal());
         count(output, value.dependencies().size()); for (SubjectId dependency : value.dependencies()) subject(output, dependency); output.writeByte(value.status().ordinal());
     }
     private static StrategicTask readTask(DataInputStream input) throws IOException {
         SubjectId id = subject(input), objective = subject(input), owner = subject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = target(input);
+        Optional<SubjectId> operationTarget = optionalSubject(input);
         List<StrategicTaskRequirement> requirements = new ArrayList<>();
         for (int index = 0, count = count(input); index < count; index++) {
             int value = input.readUnsignedByte();
@@ -59,12 +61,18 @@ final class StrategicPlanPayloadCodecs {
         }
         List<SubjectId> dependencies = new ArrayList<>(); for (int index = 0, count = count(input); index < count; index++) dependencies.add(subject(input)); int status = input.readUnsignedByte();
         if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length) throw new IllegalArgumentException("unknown strategic task value");
-        return new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, requirements, dependencies, StrategicTaskStatus.values()[status]);
+        return new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, requirements, dependencies, StrategicTaskStatus.values()[status]);
     }
     private static void target(DataOutputStream output, Optional<InfectionCell> target) throws IOException {
         output.writeBoolean(target.isPresent()); if (target.isPresent()) { output.writeInt(target.orElseThrow().x()); output.writeInt(target.orElseThrow().z()); }
     }
     private static Optional<InfectionCell> target(DataInputStream input) throws IOException { return input.readBoolean() ? Optional.of(new InfectionCell(input.readInt(), input.readInt())) : Optional.empty(); }
+    private static void optionalSubject(DataOutputStream output, Optional<SubjectId> value) throws IOException {
+        output.writeBoolean(value.isPresent()); if (value.isPresent()) subject(output, value.orElseThrow());
+    }
+    private static Optional<SubjectId> optionalSubject(DataInputStream input) throws IOException {
+        return input.readBoolean() ? Optional.of(subject(input)) : Optional.empty();
+    }
     private static void subject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }
     private static SubjectId subject(DataInputStream input) throws IOException { return FrontierWorldPayloadCodecs.readSubject(input).value(); }
     private static void count(DataOutputStream output, int value) throws IOException { if (value > 255) throw new IllegalArgumentException("too many strategic task entries"); output.writeByte(value); }

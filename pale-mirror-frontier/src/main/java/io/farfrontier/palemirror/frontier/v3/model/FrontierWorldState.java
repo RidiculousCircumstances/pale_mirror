@@ -228,13 +228,15 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans);
     }
-    public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {
+    public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) { return withActorLocation(actor, position, strategicPlans); }
+    FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position, StrategicPlanState nextPlans) {
         Objects.requireNonNull(actor, "actor");
         FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position);
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations);
         next.put(actor, actorLocations.get(actor).withPosition(position));
-        return next(next, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs, contracts, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans);
     }
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {
         Objects.requireNonNull(structure, "structure"); Objects.requireNonNull(condition, "structure condition");
@@ -490,10 +492,8 @@ import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List;
         return next(actors, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.completeGrowth(jobId), structureDamage, physicalDeltas, ambientLeases);
     }
-    boolean isHiveStore(SubjectId containerId) { return java.util.stream.Stream.concat(bootstrap.hive().organs().stream(), hiveColony.addedOrgans().values().stream())
-                .anyMatch(organ -> organ.kind() == HiveOrganKind.STORE && organ.containerId().equals(java.util.Optional.of(containerId))
-                        && isHiveOrganOperational(organ.id()));
-    } public static SubjectId depotId(SubjectId settlementId) {
+    boolean isHiveStore(SubjectId containerId) { return HiveStorageSupport.isOperationalStore(this, containerId); }
+    public static SubjectId depotId(SubjectId settlementId) {
         Objects.requireNonNull(settlementId, "settlement id"); if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("settlement id must use settlement: namespace");
         return new SubjectId("container:" + settlementId.value().substring("settlement:".length()) + "-depot");
     }

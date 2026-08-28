@@ -25,7 +25,7 @@ final class StrategicPlanStateCodec {
         writeCount(output, plans.tasks().size());
         for (StrategicTask task : plans.tasks().values().stream().sorted(Comparator.comparing(StrategicTask::id)).toList()) {
             writeSubject(output, task.id()); writeSubject(output, task.objectiveId()); writeSubject(output, task.ownerId()); output.writeByte(task.kind().ordinal());
-            writeTarget(output, task.infectionTarget()); writeCount(output, task.requirements().size());
+            writeTarget(output, task.infectionTarget()); writeOptionalSubject(output, task.operationTarget()); writeCount(output, task.requirements().size());
             for (StrategicTaskRequirement requirement : task.requirements()) output.writeByte(requirement.ordinal());
             writeCount(output, task.dependencies().size()); for (SubjectId dependency : task.dependencies()) writeSubject(output, dependency);
             output.writeByte(task.status().ordinal());
@@ -40,7 +40,12 @@ final class StrategicPlanStateCodec {
         writeCount(output, plans.routeEngagements().size());
         for (RouteEngagement engagement : plans.routeEngagements().values().stream().sorted(Comparator.comparing(RouteEngagement::id)).toList()) {
             writeSubject(output, engagement.id()); writeSubject(output, engagement.taskId()); writeSubject(output, engagement.operationId()); writeSubject(output, engagement.hiveId());
-            writeCount(output, engagement.attackerIds().size()); for (SubjectId attacker : engagement.attackerIds()) writeSubject(output, attacker);
+            writeCount(output, engagement.attackers().size());
+            for (EngagementAttacker attacker : engagement.attackers()) {
+                writeSubject(output, attacker.actorId()); writeCount(output, attacker.route().size());
+                for (BlockPosition position : attacker.route()) writePosition(output, position);
+                output.writeByte(attacker.routeIndex());
+            }
             writePosition(output, engagement.intercept()); output.writeByte(engagement.status().ordinal());
         }
     }
@@ -58,9 +63,10 @@ final class StrategicPlanStateCodec {
         Map<SubjectId, StrategicTask> tasks = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), objective = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
+            Optional<SubjectId> operationTarget = readOptionalSubject(input);
             List<StrategicTaskRequirement> requirements = readRequirements(input); List<SubjectId> dependencies = readDependencies(input); int status = input.readUnsignedByte();
             if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length
-                    || tasks.put(id, new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, requirements, dependencies, StrategicTaskStatus.values()[status])) != null) {
+                    || tasks.put(id, new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, requirements, dependencies, StrategicTaskStatus.values()[status])) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic task");
             }
         }
@@ -76,7 +82,12 @@ final class StrategicPlanStateCodec {
         Map<SubjectId, RouteEngagement> engagements = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), task = readSubject(input), operation = readSubject(input), hive = readSubject(input);
-            List<SubjectId> attackers = new ArrayList<>(); for (int attacker = 0, attackerCount = readCount(input); attacker < attackerCount; attacker++) attackers.add(readSubject(input));
+            List<EngagementAttacker> attackers = new ArrayList<>();
+            for (int attacker = 0, attackerCount = readCount(input); attacker < attackerCount; attacker++) {
+                SubjectId attackerId = readSubject(input); List<BlockPosition> route = new ArrayList<>();
+                for (int point = 0, routeSize = readCount(input); point < routeSize; point++) route.add(readPosition(input));
+                attackers.add(new EngagementAttacker(attackerId, route, input.readUnsignedByte()));
+            }
             BlockPosition intercept = readPosition(input); int status = input.readUnsignedByte();
             if (status >= RouteEngagementStatus.values().length || engagements.put(id, new RouteEngagement(id, task, operation, hive, attackers, intercept, RouteEngagementStatus.values()[status])) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route engagement");
@@ -101,6 +112,12 @@ final class StrategicPlanStateCodec {
     }
     private static Optional<InfectionCell> readTarget(DataInputStream input) throws IOException {
         return input.readBoolean() ? Optional.of(new InfectionCell(input.readInt(), input.readInt())) : Optional.empty();
+    }
+    private static void writeOptionalSubject(DataOutputStream output, Optional<SubjectId> value) throws IOException {
+        output.writeBoolean(value.isPresent()); if (value.isPresent()) writeSubject(output, value.orElseThrow());
+    }
+    private static Optional<SubjectId> readOptionalSubject(DataInputStream input) throws IOException {
+        return input.readBoolean() ? Optional.of(readSubject(input)) : Optional.empty();
     }
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }

@@ -12,6 +12,12 @@ final class FrontierRouteEngagementSupport {
 
     static void validate(FrontierBootstrap bootstrap, HiveColony hiveColony, Map<SubjectId, ActorLocation> actorLocations,
                          Map<SubjectId, RouteOperation> operations, StrategicPlanState strategicPlans) {
+        for (StrategicTask task : strategicPlans.tasks().values()) {
+            if (task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION && (!bootstrap.hive().id().equals(task.ownerId())
+                    || task.operationTarget().isEmpty() || !operations.containsKey(task.operationTarget().orElseThrow()))) {
+                throw new IllegalArgumentException("route-intercept task must retain one current hive-owned operation target");
+            }
+        }
         Set<SubjectId> hiveBioforms = new HashSet<>();
         bootstrap.hive().bioforms().forEach(bioform -> hiveBioforms.add(bioform.id()));
         hiveBioforms.addAll(hiveColony.spawnedBioforms().keySet());
@@ -29,10 +35,14 @@ final class FrontierRouteEngagementSupport {
             if (active && (operation.stage() != OperationStage.EN_ROUTE || !activeOperations.add(operation.id()))) {
                 throw new IllegalArgumentException("active route engagement must uniquely target an en-route operation");
             }
-            for (SubjectId attackerId : engagement.attackerIds()) {
+            for (EngagementAttacker attacker : engagement.attackers()) {
+                SubjectId attackerId = attacker.actorId();
                 ActorLocation location = actorLocations.get(attackerId);
                 if (!hiveBioforms.contains(attackerId) || location == null || location.condition().status() != ActorLifeStatus.ALIVE) {
                     throw new IllegalArgumentException("route engagement attacker must be one living hive bioform");
+                }
+                if (engagement.status() != RouteEngagementStatus.HOT && !location.position().equals(attacker.position())) {
+                    throw new IllegalArgumentException("COLD engagement attacker must retain its exact route position");
                 }
                 if (active && !activeAttackers.add(attackerId)) throw new IllegalArgumentException("bioform cannot join multiple active route engagements");
             }

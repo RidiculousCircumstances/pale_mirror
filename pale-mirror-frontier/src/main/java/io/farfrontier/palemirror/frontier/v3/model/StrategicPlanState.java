@@ -219,6 +219,13 @@ final class StrategicPlanState {
         return new StrategicPlanState(objectives, tasks, routePatrols, next);
     }
 
+    StrategicPlanState replaceEngagement(RouteEngagement engagement) {
+        Objects.requireNonNull(engagement, "route engagement");
+        if (!routeEngagements.containsKey(engagement.id())) throw new IllegalArgumentException("unknown route engagement");
+        Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagement.id(), engagement);
+        return new StrategicPlanState(objectives, tasks, routePatrols, next);
+    }
+
     @Override public boolean equals(Object other) {
         return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks) && routePatrols.equals(value.routePatrols) && routeEngagements.equals(value.routeEngagements);
     }
@@ -252,7 +259,7 @@ final class StrategicPlanState {
     }
 
     private static boolean allowed(RouteEngagementStatus current, RouteEngagementStatus next) {
-        return current == RouteEngagementStatus.APPROACHING && (next == RouteEngagementStatus.READY_FOR_SCENE || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
+        return current == RouteEngagementStatus.APPROACHING && (next == RouteEngagementStatus.READY_FOR_SCENE || next == RouteEngagementStatus.RESOLVED || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
                 || current == RouteEngagementStatus.READY_FOR_SCENE && (next == RouteEngagementStatus.HOT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
                 || current == RouteEngagementStatus.HOT && (next == RouteEngagementStatus.RESOLVED || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART);
     }

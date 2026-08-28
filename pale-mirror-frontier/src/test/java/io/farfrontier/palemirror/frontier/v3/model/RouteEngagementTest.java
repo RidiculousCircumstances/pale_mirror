@@ -72,13 +72,16 @@ class RouteEngagementTest {
         SubjectId attacker = initial.bootstrap().hive().bioforms().getFirst().id();
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task)
                 .startEngagement(new RouteEngagement(new SubjectId("engagement:missing-operation"), task.id(), new SubjectId("operation:missing"), hive,
-                        List.of(attacker), new BlockPosition(1, 64, 1), RouteEngagementStatus.APPROACHING));
+                        List.of(new EngagementAttacker(attacker, List.of(initial.actorLocations().get(attacker).position(), new BlockPosition(1, 64, 1)), 0)),
+                        new BlockPosition(1, 64, 1), RouteEngagementStatus.APPROACHING));
 
         assertThrows(IllegalArgumentException.class, () -> initial.withStrategicPlans(plans));
     }
 
     private static RouteEngagement engagement(List<SubjectId> attackers) {
+        BlockPosition intercept = new BlockPosition(1, 64, 1);
         return new RouteEngagement(new SubjectId("engagement:1"), new SubjectId("task:1"), new SubjectId("operation:1"),
-                new SubjectId("hive:frontier"), attackers, new BlockPosition(1, 64, 1), RouteEngagementStatus.APPROACHING);
+                new SubjectId("hive:frontier"), attackers.stream().map(attacker -> new EngagementAttacker(attacker,
+                        List.of(new BlockPosition(0, 64, 0), intercept), 0)).toList(), intercept, RouteEngagementStatus.APPROACHING);
     }
 }
