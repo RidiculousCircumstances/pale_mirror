@@ -254,4 +254,32 @@ class FrontierWorldRuntimeDefinitionTest {
                 io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:intent-start")), transition));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, accepted);
     }
+
+    @Test
+    void sceneLeaseDurablySuspendsColdRouteProgressAndPinsExactFutureBodies() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scene-lease"), 91L));
+        for (long tick = 100L; tick <= 550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-1"));
+        var projection = engine.projection(ProjectionQuery.summary());
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:supply-1-1");
+        SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(550L), projection.revision().value(),
+                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        SceneLeasePrepared payload = new SceneLeasePrepared(lease);
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-lease-start");
+        var accepted = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, new WorldId("frontier:scene-lease"),
+                projection.revision(), new SimInstant(550L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), payload));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, accepted);
+
+        FrontierWorldState leased = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(lease, leased.sceneLeases().get(leaseId));
+        assertEquals(1, engine.projection(ProjectionQuery.summary()).activeSceneLeaseCount());
+        assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
+        assertEquals(leased, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(leased)));
+        engine.advanceTo(new SimInstant(650L), new WorkBudget(8, 64));
+        FrontierWorldState afterDueColdWork = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(0, afterDueColdWork.operations().get(operation.id()).routeIndex(), "a leased operation must not execute the same COLD movement");
+        assertThrows(IllegalArgumentException.class, () -> leased.prepareSceneLease(lease));
+    }
 }

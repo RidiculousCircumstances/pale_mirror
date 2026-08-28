@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.HashSet;
@@ -27,12 +28,14 @@ public record FrontierWorldState(
         Map<SubjectId, SupplyContract> contracts,
         Map<SubjectId, RouteOperation> operations,
         Map<PhysicalIntentId, PhysicalIntent> physicalIntents,
-        Map<PhysicalObservationId, CargoHandoffObservation> physicalObservations
+        Map<PhysicalObservationId, CargoHandoffObservation> physicalObservations,
+        Map<SceneLeaseId, SceneLease> sceneLeases
 ) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO);
     private static final int MAX_OPERATIONS = 1_024;
     private static final int MAX_PHYSICAL_INTENTS = 4_096;
     private static final int MAX_PHYSICAL_OBSERVATIONS = 4_096;
+    private static final int MAX_SCENE_LEASES = 1_024;
 
     public FrontierWorldState {
         Objects.requireNonNull(bootstrap, "bootstrap");
@@ -45,6 +48,7 @@ public record FrontierWorldState(
         operations = immutableMap(operations, "route operations");
         physicalIntents = immutableMap(physicalIntents, "physical intents");
         physicalObservations = immutableMap(physicalObservations, "physical observations");
+        sceneLeases = immutableMap(sceneLeases, "scene leases");
         Set<SubjectId> expectedActors = actorIds(bootstrap);
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only bootstrap actor");
         for (ActorLocation location : actorLocations.values()) requirePosition(bootstrap.bounds(), location.position());
@@ -134,6 +138,25 @@ public record FrontierWorldState(
                 throw new IllegalArgumentException("confirmed physical intent must retain its exact observation");
             }
         }
+        if (sceneLeases.size() > MAX_SCENE_LEASES) throw new IllegalArgumentException("scene lease retention limit exceeded");
+        Set<SubjectId> leasedActors = new HashSet<>();
+        Set<SubjectId> leasedOperations = new HashSet<>();
+        for (Map.Entry<SceneLeaseId, SceneLease> entry : sceneLeases.entrySet()) {
+            SceneLease lease = entry.getValue();
+            if (!entry.getKey().equals(lease.id())) throw new IllegalArgumentException("scene lease map key must match lease identity");
+            RouteOperation operation = operations.get(lease.operationId());
+            if (operation == null || operation.stage() != OperationStage.EN_ROUTE || !operation.cargoId().equals(lease.cargoId())
+                    || !operation.route().get(operation.routeIndex()).equals(lease.handoffPosition())) {
+                throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
+            }
+            if (!leasedOperations.add(lease.operationId())) throw new IllegalArgumentException("operation cannot have multiple scene leases");
+            Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
+            if (!members.equals(Set.copyOf(operation.participantIds()))) throw new IllegalArgumentException("scene lease members must exactly match route participants");
+            for (SubjectId actor : members) {
+                if (!leasedActors.add(actor)) throw new IllegalArgumentException("actor cannot belong to multiple scene leases");
+                if (!actorLocations.get(actor).position().equals(lease.handoffPosition())) throw new IllegalArgumentException("scene lease actor must be at its handoff position");
+            }
+        }
     }
 
     public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
@@ -141,7 +164,16 @@ public record FrontierWorldState(
                               ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
                               Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations,
                               Map<PhysicalIntentId, PhysicalIntent> physicalIntents) {
-        this(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, Map.of());
+        this(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, Map.of(), Map.of());
+    }
+
+    public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
+                              Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection,
+                              ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
+                              Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations,
+                              Map<PhysicalIntentId, PhysicalIntent> physicalIntents,
+                              Map<PhysicalObservationId, CargoHandoffObservation> physicalObservations) {
+        this(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, Map.of());
     }
 
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) {
@@ -161,7 +193,7 @@ public record FrontierWorldState(
         items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));
-        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of()), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of()), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
     }
 
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {
@@ -170,7 +202,7 @@ public record FrontierWorldState(
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations);
         next.put(actor, new ActorLocation(position));
-        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {
@@ -179,7 +211,7 @@ public record FrontierWorldState(
         if (!structureConditions.containsKey(structure)) throw new IllegalArgumentException("unknown structure: " + structure.value());
         Map<SubjectId, StructureCondition> next = new LinkedHashMap<>(structureConditions);
         next.put(structure, condition);
-        return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState withInfection(InfectionCell cell, FixedRatio intensity) {
@@ -188,11 +220,11 @@ public record FrontierWorldState(
         requirePosition(bootstrap.bounds(), cell.originAtY(0));
         Map<InfectionCell, FixedRatio> next = new LinkedHashMap<>(infection);
         if (intensity.equals(ZERO_INFECTION)) next.remove(cell); else next.put(cell, intensity);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState withInventory(ExactInventory nextInventory) {
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, nextInventory, productionJobs, contracts, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, nextInventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState withProductionJob(ProductionJob job) {
@@ -203,7 +235,7 @@ public record FrontierWorldState(
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
         next.put(job.id(), job);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, next, contracts, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, next, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState startProductionJob(ProductionJob job, SubjectId inputItemId) {
@@ -216,7 +248,7 @@ public record FrontierWorldState(
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
         next.put(job.id(), job);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withoutItem(inputItemId), next, contracts, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withoutItem(inputItemId), next, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState completeProductionJob(SubjectId jobId, ExactItemStack output) {
@@ -227,20 +259,20 @@ public record FrontierWorldState(
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
         next.remove(jobId);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState createSupplyContract(SupplyContract contract) {
         if (contracts.containsKey(contract.id())) throw new IllegalArgumentException("supply contract identity already exists");
         Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts); next.put(contract.id(), contract);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, next, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, next, operations, physicalIntents, physicalObservations, sceneLeases);
     }
     public FrontierWorldState loadContractCargo(SubjectId contractId, CargoBatch cargo) {
         SupplyContract contract = contracts.get(contractId);
         if (contract == null || contract.status() != ContractStatus.ORDERED || !contract.cargoId().equals(cargo.id())) throw new IllegalArgumentException("cargo load does not match an ordered contract");
         Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts);
         next.put(contractId, new SupplyContract(contract.id(), contract.settlementId(), contract.recipientId(), contract.cargoId(), contract.itemKind(), contract.itemCount(), ContractStatus.LOADED));
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.loadCargo(cargo), productionJobs, next, operations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.loadCargo(cargo), productionJobs, next, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState createOperation(RouteOperation operation) {
@@ -251,7 +283,7 @@ public record FrontierWorldState(
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         BlockPosition position = operation.route().get(operation.routeIndex());
         operation.participantIds().forEach(participant -> nextActors.put(participant, new ActorLocation(position)));
-        return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, next, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, next, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState advanceOperation(SubjectId operationId, int nextRouteIndex, OperationStage nextStage) {
@@ -267,7 +299,7 @@ public record FrontierWorldState(
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         BlockPosition position = advanced.route().get(nextRouteIndex);
         advanced.participantIds().forEach(participant -> nextActors.put(participant, new ActorLocation(position)));
-        return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations);
+        return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState preparePhysicalIntent(PhysicalIntent intent) {
@@ -275,7 +307,7 @@ public record FrontierWorldState(
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations, sceneLeases);
     }
 
     public FrontierWorldState transitionPhysicalIntent(PhysicalIntentId intentId, PhysicalIntentStatus nextStatus,
@@ -290,7 +322,7 @@ public record FrontierWorldState(
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         if (nextStatus != PhysicalIntentStatus.CONFIRMED) {
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.empty()));
-            return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations);
+            return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations, sceneLeases);
         }
         CargoHandoffObservation evidence = observation.orElseThrow(() -> new IllegalArgumentException("confirmed physical intent requires observation evidence"));
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
@@ -313,7 +345,16 @@ public record FrontierWorldState(
         Map<PhysicalObservationId, CargoHandoffObservation> nextObservations = new LinkedHashMap<>(physicalObservations);
         nextObservations.put(evidence.id(), evidence);
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection,
-                inventory.completeCargoHandoff(evidence.cargoId(), evidence.placements()), productionJobs, nextContracts, operations, next, nextObservations);
+                inventory.completeCargoHandoff(evidence.cargoId(), evidence.placements()), productionJobs, nextContracts, operations, next, nextObservations, sceneLeases);
+    }
+
+    public FrontierWorldState prepareSceneLease(SceneLease lease) {
+        Objects.requireNonNull(lease, "scene lease");
+        if (sceneLeases.containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());
+        if (lease.status() != SceneLeaseStatus.PREPARED) throw new IllegalArgumentException("new scene lease must be prepared");
+        Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
+        next.put(lease.id(), lease);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, next);
     }
 
     public static SubjectId depotId(SubjectId settlementId) {

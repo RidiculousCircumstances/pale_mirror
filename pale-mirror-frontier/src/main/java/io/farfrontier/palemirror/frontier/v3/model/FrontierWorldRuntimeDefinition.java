@@ -45,17 +45,27 @@ public final class FrontierWorldRuntimeDefinition {
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
 
     private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
-        if (!(command.payload() instanceof PhysicalIntentTransition transition) || !PHYSICAL_EXECUTOR.equals(command.actor())) {
+        if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
-                    io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not a trusted physical intent transition"));
+                    io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
         }
-        PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
-        if (intent == null) return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
-                io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "physical intent is unknown"));
-        RouteOperation operation = state.operations().get(intent.causeSubjectId());
-        if (operation == null) return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
-                io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "physical intent has no owning operation"));
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
+        if (command.payload() instanceof PhysicalIntentTransition transition) {
+            PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
+            if (intent == null) return rejected("physical intent is unknown");
+            RouteOperation operation = state.operations().get(intent.causeSubjectId());
+            if (operation == null) return rejected("physical intent has no owning operation");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
+        }
+        if (command.payload() instanceof SceneLeasePrepared prepared) {
+            RouteOperation operation = state.operations().get(prepared.lease().operationId());
+            if (operation == null) return rejected("scene lease has no owning operation");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
+        }
+        return rejected("command is not a trusted physical transition or scene lease");
+    }
+    private static CommandPlan.Rejected rejected(String message) {
+        return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+                io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, message));
     }
 
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
@@ -150,6 +160,9 @@ public final class FrontierWorldRuntimeDefinition {
     private static List<ProposedEvent> planOperationProgress(FrontierWorldState state, ScheduledAction action) {
         RouteOperation operation = state.operations().get(action.subject());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE) throw new IllegalStateException("route operation is not available for progression");
+        Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
+                && value.status() != SceneLeaseStatus.CLOSED && value.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART).findFirst();
+        if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
         int nextRouteIndex = operation.routeIndex() + 1;
         OperationStage nextStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
         List<ProposedEvent> events = new java.util.ArrayList<>();
@@ -172,8 +185,10 @@ public final class FrontierWorldRuntimeDefinition {
             case CargoLoaded loaded -> reduceCargoLoaded(state, event.subject(), loaded);
             case OperationCreated created -> reduceOperationCreated(state, event.subject(), created);
             case OperationAdvanced advanced -> reduceOperationAdvanced(state, event.subject(), advanced);
+            case OperationColdSuspended suspended -> reduceOperationColdSuspended(state, event.subject(), suspended);
             case PhysicalIntentPrepared prepared -> reducePhysicalIntentPrepared(state, event.subject(), prepared);
             case PhysicalIntentTransition transition -> reducePhysicalIntentTransition(state, event.subject(), transition);
+            case SceneLeasePrepared prepared -> reduceSceneLeasePrepared(state, event.subject(), event.instant(), prepared);
             default -> fail(event.payload().type());
         };
     }
@@ -214,6 +229,15 @@ public final class FrontierWorldRuntimeDefinition {
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("route advancement subject does not own operation");
         return state.advanceOperation(advanced.operationId(), advanced.routeIndex(), advanced.stage());
     }
+    private static FrontierWorldState reduceOperationColdSuspended(FrontierWorldState state, SubjectId subject, OperationColdSuspended suspended) {
+        RouteOperation operation = state.operations().get(suspended.operationId());
+        SceneLease lease = state.sceneLeases().get(suspended.leaseId());
+        if (operation == null || !subject.equals(operation.settlementId()) || lease == null || !lease.operationId().equals(operation.id())
+                || lease.status() == SceneLeaseStatus.CLOSED || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART) {
+            throw new IllegalArgumentException("cold operation suspension lacks an active matching scene lease");
+        }
+        return state;
+    }
     private static FrontierWorldState reducePhysicalIntentPrepared(FrontierWorldState state, SubjectId subject, PhysicalIntentPrepared prepared) {
         PhysicalIntent intent = prepared.intent();
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
@@ -230,6 +254,14 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("physical intent transition subject does not own operation");
         return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+    }
+    private static FrontierWorldState reduceSceneLeasePrepared(FrontierWorldState state, SubjectId subject, SimInstant instant, SceneLeasePrepared prepared) {
+        SceneLease lease = prepared.lease();
+        RouteOperation operation = state.operations().get(lease.operationId());
+        if (operation == null || !subject.equals(operation.settlementId()) || !lease.handoffInstant().equals(instant)) {
+            throw new IllegalArgumentException("scene lease does not match its current operation hand-off");
+        }
+        return state.prepareSceneLease(lease);
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();
@@ -368,6 +400,8 @@ public final class FrontierWorldRuntimeDefinition {
                 residents, bootstrap.hive().bioforms().size(), state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
                 state.operations().size(),
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED).count(),
-                (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count());
+                (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count(),
+                (int) state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).count(),
+                (int) state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).count());
     }
 }

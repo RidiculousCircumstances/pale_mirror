@@ -30,6 +30,12 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -108,6 +114,33 @@ class FrontierV3ServerRuntimeTest {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(PhysicalIntentStatus.RUNNING, state.physicalIntents().get(intentId).status());
         assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
+    }
+
+    @Test
+    void restartRetainsPreparedSceneLeaseAndKeepsItsColdRouteSuspended(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:scene-lease-recovery");
+        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        for (int tick = 0; tick < 550; tick++) runtime.tick(new WorkBudget(8, 64));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-1"));
+        SceneLeaseId leaseId = new SceneLeaseId("lease:recovery-supply-1-1");
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        CommandId commandId = new CommandId("command:scene-lease-recovery");
+        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new SceneLeasePrepared(lease))).orElseThrow());
+
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        FrontierWorldState restored = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
+        assertEquals(lease, restored.sceneLeases().get(leaseId));
+        for (int tick = 0; tick < 100; tick++) recovered.tick(new WorkBudget(8, 64));
+        FrontierWorldState afterColdDue = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
+        assertEquals(0, afterColdDue.operations().get(operation.id()).routeIndex());
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {

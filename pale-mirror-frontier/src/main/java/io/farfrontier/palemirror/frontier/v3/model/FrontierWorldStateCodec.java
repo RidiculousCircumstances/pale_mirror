@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
@@ -28,7 +29,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 9;
+    private static final int VERSION = 10;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -46,6 +47,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeOperations(output, state.operations());
                 writePhysicalIntents(output, state.physicalIntents());
                 writePhysicalObservations(output, state.physicalObservations());
+                writeSceneLeases(output, state.sceneLeases());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -57,7 +59,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
             FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input),
-                    readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input));
+                    readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -225,6 +227,31 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         return operations;
+    }
+    private static void writeSceneLeases(DataOutputStream output, Map<SceneLeaseId, SceneLease> leases) throws IOException {
+        writeCount(output, leases.size());
+        for (SceneLease lease : leases.values().stream().sorted(Comparator.comparing(SceneLease::id)).toList()) {
+            writeString(output, lease.id().value()); writeString(output, lease.operationId().value()); writeString(output, lease.cargoId().value());
+            writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
+            writeCount(output, lease.members().size());
+            for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); }
+        }
+    }
+    private static Map<SceneLeaseId, SceneLease> readSceneLeases(DataInputStream input) throws IOException {
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SceneLeaseId id = new SceneLeaseId(readString(input)); SubjectId operation = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
+            BlockPosition handoff = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
+            if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
+            java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
+            for (int member = 0, memberCount = readCount(input); member < memberCount; member++) {
+                members.add(new SceneMember(new SubjectId(readString(input)), UUID.fromString(readString(input))));
+            }
+            SceneLease lease = new SceneLease(id, operation, cargo, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
+                    SceneLeaseStatus.values()[status], members);
+            if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
+        }
+        return leases;
     }
     private static void writePhysicalIntents(DataOutputStream output, Map<PhysicalIntentId, PhysicalIntent> intents) throws IOException {
         writeCount(output, intents.size());
