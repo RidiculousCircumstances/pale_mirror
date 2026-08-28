@@ -26,7 +26,7 @@ public final class FrontierWorldRuntimeDefinition {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200),
+                new EngineLimits(4_096, 1_200L, 4_096), List.of(HiveInfectionProcess.pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200),
                 contractDemand(1, 450), HiveGrowthProcess.start(1, 600), StructuralRepairProcess.scan(1, 800), RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)), TransactionCommitter.noOp()); }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
@@ -113,7 +113,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
         return switch (action.kind()) {
-            case "frontier.infection.pulse" -> planInfectionPulse(state, action);
+            case "frontier.infection.pulse" -> HiveInfectionProcess.plan(state, action);
             case "frontier.settlement.production.start" -> planProductionStart(state, action);
             case "frontier.settlement.production.complete" -> planProductionCompletion(state, action);
             case "frontier.supply.contract.demand" -> planContractDemand(state, action);
@@ -126,20 +126,6 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
-    }
-    private static List<ProposedEvent> planInfectionPulse(FrontierWorldState state, ScheduledAction action) {
-        int ordinal = ordinal(action.id().value());
-        List<InfectionCell> cells = state.infection().keySet().stream().sorted(java.util.Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).toList();
-        InfectionCell source = cells.get(Math.floorMod(ordinal - 1, cells.size()));
-        InfectionCell target = switch (Math.floorMod(ordinal - 1, 4)) {
-            case 0 -> new InfectionCell(source.x() + 1, source.z()); case 1 -> new InfectionCell(source.x(), source.z() + 1);
-            case 2 -> new InfectionCell(source.x() - 1, source.z()); default -> new InfectionCell(source.x(), source.z() - 1);
-        };
-        if (!state.bootstrap().bounds().contains(target.originAtY(64))) target = source;
-        FixedRatio prior = state.infection().getOrDefault(target, new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO));
-        long raw = Math.min(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE, Math.addExact(prior.value().raw(), 125_000L));
-        return List.of(new ProposedEvent(action.subject(), new InfectionChanged(target, new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(raw)))),
-                new ProposedEvent(action.subject(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(pulse(ordinal + 1, action.dueAt().ticks() + 100L))));
     }
     private static List<ProposedEvent> planProductionStart(FrontierWorldState state, ScheduledAction action) {
         int ordinal = ordinal(action.id().value());
@@ -473,10 +459,6 @@ public final class FrontierWorldRuntimeDefinition {
         return new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-" + operation.id().value().substring("operation:".length())),
                 PhysicalIntentKind.CARGO_HANDOFF, PhysicalIntentStatus.PREPARED, operation.id(),
                 List.of(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
-    }
-    private static ScheduledAction pulse(int ordinal, long due) {
-        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:infection-pulse-" + ordinal),
-                new SimInstant(due), 0, new io.farfrontier.palemirror.frontier.v3.api.SubjectId("hive:frontier"), "frontier.infection.pulse", 1);
     }
     private static ScheduledAction productionStart(io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId, int ordinal, long due) {
         String settlementNumber = settlementId.value().substring("settlement:".length());
