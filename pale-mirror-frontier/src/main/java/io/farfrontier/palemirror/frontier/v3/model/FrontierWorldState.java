@@ -427,9 +427,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState recordActorDeath(ActorDied death) {
         Objects.requireNonNull(death, "actor death");
         SceneLease lease = sceneLeases.get(death.leaseId());
-        if (lease == null || lease.status() != SceneLeaseStatus.HOT
+        if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
                 || lease.members().stream().noneMatch(member -> member.actorId().equals(death.actorId()))) {
-            throw new IllegalArgumentException("actor death is not evidence for an active HOT scene member");
+            throw new IllegalArgumentException("actor death is not evidence for an active scene member");
         }
         ActorLocation current = actorLocations.get(death.actorId());
         if (current.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("actor death is already recorded");

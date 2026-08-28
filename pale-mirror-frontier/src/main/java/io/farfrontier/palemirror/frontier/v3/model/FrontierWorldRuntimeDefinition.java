@@ -123,14 +123,18 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (command.payload() instanceof ActorDied death) {
             SceneLease lease = state.sceneLeases().get(death.leaseId());
-            if (lease == null || lease.status() != SceneLeaseStatus.HOT
+            if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
                     || lease.members().stream().noneMatch(member -> member.actorId().equals(death.actorId()))) {
-                return rejected("actor death is not evidence for an active HOT scene member");
+                return rejected("actor death is not evidence for an active scene member");
             }
             RouteOperation operation = state.operations().get(lease.operationId());
             if (operation == null) return rejected("actor death has no owning operation");
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), death),
-                    new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING))));
+            List<ProposedEvent> events = new java.util.ArrayList<>();
+            events.add(new ProposedEvent(operation.settlementId(), death));
+            if (lease.status() == SceneLeaseStatus.HOT) {
+                events.add(new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
+            }
+            return new CommandPlan.Accepted(List.copyOf(events));
         }
         if (command.payload() instanceof AmbientActorDied death) return AmbientActorProcess.plan(state, death);
         if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);

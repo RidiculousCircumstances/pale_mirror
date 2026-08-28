@@ -331,12 +331,18 @@ final class FrontierV3SceneExecutor {
         actor.setYRot((float) Math.toDegrees(Math.atan2(-step.x, step.z))); actor.yBodyRot = actor.getYRot(); actor.move(MoverType.SELF, step);
     }
 
-    /** Accepts only an actual loaded-world death of a body owned by the active HOT lease. */
+    /**
+     * Accepts an actual loaded-world death of an exact owned scene body.
+     *
+     * <p>The first fatality drains a HOT scene, but an ordinary single Minecraft explosion can
+     * kill several leased bodies in the same tick. Those later deaths are still evidence for
+     * the exact DRAINING lease and must be persisted before release captures its survivors.</p>
+     */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {
         FrontierWorldState state = state(runtime);
         if (state == null) return false;
         Optional<SceneLease> matchingLease = state.sceneLeases().values().stream()
-                .filter(lease -> lease.status() == SceneLeaseStatus.HOT)
+                .filter(lease -> lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING)
                 .filter(lease -> lease.members().stream().anyMatch(member -> member.entityId().equals(entity.getUUID()) && owned(entity, state, lease, member)))
                 .findFirst();
         if (matchingLease.isEmpty()) return false;
