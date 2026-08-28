@@ -105,4 +105,19 @@ class RouteTopologyTest {
         assertEquals(RouteTopology.initial(), state.routeTopology());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
+
+    @Test
+    void onlyAReadyCandidateCanCutOverTheCanonicalRouteTopology() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-cutover"), 96L);
+        SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
+        List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0),
+                baseline.get(2), baseline.get(3), baseline.get(4), baseline.get(5), baseline.get(6));
+        int required = FrontierRouteNetwork.constructionCells(bootstrap, RouteTopology.initial(), settlement, replacement).size();
+        RouteConstruction ready = new RouteConstruction(new SubjectId("construction:cutover"), settlement, replacement, required, RouteConstructionStatus.READY);
+        FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), ready);
+        FrontierWorldState cutOver = RouteConstructionStateSupport.cutover(state, ready.id());
+        assertEquals(replacement, cutOver.routeTopology().supplyWaypoints(bootstrap, settlement));
+        assertTrue(cutOver.routeConstructions().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.cutover(state, new SubjectId("construction:missing")));
+    }
 }

@@ -87,6 +87,28 @@ final class RouteConstructionStateSupport {
                 state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology());
     }
 
+    static FrontierWorldState cutover(FrontierWorldState state, SubjectId projectId) {
+        RouteConstruction project = state.routeConstructions().get(projectId);
+        if (project == null || project.status() != RouteConstructionStatus.READY) throw new IllegalArgumentException("route topology cutover requires ready construction");
+        List<BlockPosition> required = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.settlementId(), project.waypoints());
+        if (project.confirmedCells() != required.size()) throw new IllegalArgumentException("route topology cutover has incomplete physical construction");
+        Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions()); projects.remove(projectId);
+        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
+                state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects,
+                state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints()));
+    }
+
+    static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteConstructionStarted started) {
+        if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction must be owned by the route network");
+        return begin(state, started.project());
+    }
+
+    static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {
+        if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route topology cutover must be owned by the route network");
+        return cutover(state, cutover.projectId());
+    }
+
     static void validateReceipt(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> projects,
                                 PhysicalIntent intent, RouteConstructionObservation observation) {
         if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION || !intent.subjectIds().contains(observation.projectId())

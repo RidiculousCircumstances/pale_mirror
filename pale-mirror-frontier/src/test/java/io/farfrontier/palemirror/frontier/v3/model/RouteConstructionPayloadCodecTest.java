@@ -28,5 +28,9 @@ class RouteConstructionPayloadCodecTest {
         PhysicalIntentTransition transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(transition, codecs.decode(transition.type(), codecs.encode(transition)));
+        RouteConstruction routeProject = new RouteConstruction(project, new SubjectId("settlement:1"), List.of(new BlockPosition(0, 64, 0),
+                new BlockPosition(1, 64, 0), new BlockPosition(2, 64, 0)), 0, RouteConstructionStatus.BUILDING);
+        RouteConstructionStarted started = new RouteConstructionStarted(routeProject); RouteTopologyCutover cutover = new RouteTopologyCutover(routeProject.id());
+        assertEquals(started, codecs.decode(started.type(), codecs.encode(started))); assertEquals(cutover, codecs.decode(cutover.type(), codecs.encode(cutover)));
     }
 }

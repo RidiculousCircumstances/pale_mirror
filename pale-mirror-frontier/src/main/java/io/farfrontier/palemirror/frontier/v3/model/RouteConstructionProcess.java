@@ -33,6 +33,9 @@ final class RouteConstructionProcess {
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal, action.dueAt().ticks() + 100L)));
         if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
+        Optional<RouteConstruction> ready = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.READY)
+                .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
+        if (ready.isPresent()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteTopologyCutover(ready.orElseThrow().id())), next);
         Optional<RouteConstruction> project = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.BUILDING)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
         if (project.isEmpty()) return List.of(next);

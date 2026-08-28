@@ -27,8 +27,7 @@ import static io.farfrontier.palemirror.frontier.v3.model.FrontierWorldScheduleS
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
-    private FrontierWorldRuntimeDefinition() { }
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
+    private FrontierWorldRuntimeDefinition() { } public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
@@ -228,8 +227,7 @@ public final class FrontierWorldRuntimeDefinition {
             events.add(new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(operationProgress(operation, action.dueAt().ticks() + 100L))));
         }
         return List.copyOf(events);
-    }
-    private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+    } private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         if (event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition || event.payload() instanceof AmbientLeaseReleased) {
             return AmbientActorProcess.reduceLease(state, event.subject(), event.instant(), event.payload());
         }
@@ -261,6 +259,8 @@ public final class FrontierWorldRuntimeDefinition {
             case HiveGrowthStarted started -> HiveGrowthProcess.reduceStarted(state, event.subject(), started);
             case HiveGrowthCompleted completed -> HiveGrowthProcess.reduceCompleted(state, event.subject(), completed);
             case HiveGrowthBlocked blocked -> HiveGrowthProcess.reduceBlocked(state, event.subject(), blocked);
+            case RouteConstructionStarted started -> RouteConstructionStateSupport.reduceStarted(state, event.subject(), started);
+            case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);
             default -> fail(event.payload().type());
         };
     }
