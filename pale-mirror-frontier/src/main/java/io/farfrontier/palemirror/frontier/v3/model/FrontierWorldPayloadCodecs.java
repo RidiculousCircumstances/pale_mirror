@@ -20,7 +20,7 @@ public final class FrontierWorldPayloadCodecs {
     private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), new PayloadCodecs(List.of(
-                new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(), new ContractCreatedCodec(), new CargoLoadedCodec())));
+                new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(), new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -102,6 +102,23 @@ public final class FrontierWorldPayloadCodecs {
             return new CargoLoaded(contract.value(), new CargoBatch(cargo.value(), owner.value(), items));
         }); }
     }
+    private static final class OperationCreatedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.operation_created"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeOperation(output, ((OperationCreated) payload).operation())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationCreated(readOperation(input))); }
+    }
+    private static final class OperationAdvancedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.operation_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            OperationAdvanced advanced = (OperationAdvanced) payload;
+            return encodeProduction(output -> { writeSubject(output, advanced.operationId()); output.writeByte(advanced.routeIndex()); output.writeByte(advanced.stage().ordinal()); });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectIdHolder id = readSubject(input); int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
+            if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
+            return new OperationAdvanced(id.value(), routeIndex, OperationStage.values()[stage]);
+        }); }
+    }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }
     @FunctionalInterface private interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
@@ -137,6 +154,24 @@ public final class FrontierWorldPayloadCodecs {
         SubjectIdHolder cargo = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte(); int status = input.readUnsignedByte();
         if (status >= ContractStatus.values().length) throw new IllegalArgumentException("unknown contract status");
         return new SupplyContract(id.value(), settlement.value(), recipient.value(), cargo.value(), kind, count, ContractStatus.values()[status]);
+    }
+    private static void writeOperation(DataOutputStream output, RouteOperation operation) throws IOException {
+        writeSubject(output, operation.id()); writeSubject(output, operation.settlementId()); writeSubject(output, operation.cargoId()); writeSubject(output, operation.destinationId());
+        output.writeByte(operation.participantIds().size());
+        for (var participant : operation.participantIds()) writeSubject(output, participant);
+        output.writeByte(operation.route().size());
+        for (BlockPosition point : operation.route()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
+        output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+    }
+    private static RouteOperation readOperation(DataInputStream input) throws IOException {
+        SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
+        java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> participants = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) participants.add(readSubject(input).value());
+        java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
+        if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
+        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.values()[stage]);
     }
     private static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     private static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }

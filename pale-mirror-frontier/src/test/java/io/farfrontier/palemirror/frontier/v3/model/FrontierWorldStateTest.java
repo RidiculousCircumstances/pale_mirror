@@ -25,6 +25,7 @@ class FrontierWorldStateTest {
         assertEquals(12, state.inventory().containers().size());
         assertEquals(1, state.inventory().items().size());
         assertTrue(state.productionJobs().isEmpty());
+        assertTrue(state.operations().isEmpty());
         assertTrue(state.structureConditions().values().stream().allMatch(condition -> condition == StructureCondition.INTACT));
         assertEquals(2, state.infection().size());
     }
@@ -64,13 +65,13 @@ class FrontierWorldStateTest {
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
-        encoded[4] = 5;
+        encoded[4] = 6;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
         missingActor.remove(new SubjectId("resident:1-1"));
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
-                source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts()));
+                source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations()));
     }
 
     private static FrontierWorldState initial() {

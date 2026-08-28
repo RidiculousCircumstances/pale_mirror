@@ -21,7 +21,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -36,6 +36,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeInventory(output, state.inventory());
                 writeProductionJobs(output, state.productionJobs());
                 writeContracts(output, state.contracts());
+                writeOperations(output, state.operations());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -46,7 +47,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
-            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input), readProductionJobs(input), readContracts(input));
+            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input), readProductionJobs(input), readContracts(input), readOperations(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -177,6 +178,32 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         return contracts;
+    }
+    private static void writeOperations(DataOutputStream output, Map<SubjectId, RouteOperation> operations) throws IOException {
+        writeCount(output, operations.size());
+        for (RouteOperation operation : operations.values().stream().sorted(Comparator.comparing(RouteOperation::id)).toList()) {
+            writeString(output, operation.id().value()); writeString(output, operation.settlementId().value()); writeString(output, operation.cargoId().value());
+            writeString(output, operation.destinationId().value()); writeCount(output, operation.participantIds().size());
+            for (SubjectId participant : operation.participantIds()) writeString(output, participant.value());
+            writeCount(output, operation.route().size());
+            for (BlockPosition point : operation.route()) writePosition(output, point);
+            output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+        }
+    }
+    private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input) throws IOException {
+        Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
+            SubjectId destination = new SubjectId(readString(input)); java.util.ArrayList<SubjectId> participants = new java.util.ArrayList<>();
+            for (int participant = 0, participantCount = readCount(input); participant < participantCount; participant++) participants.add(new SubjectId(readString(input)));
+            java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
+            for (int point = 0, pointCount = readCount(input); point < pointCount; point++) route.add(readPosition(input));
+            int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
+            if (stage >= OperationStage.values().length || operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.values()[stage])) != null) {
+                throw new IllegalArgumentException("invalid or duplicate route operation");
+            }
+        }
+        return operations;
     }
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

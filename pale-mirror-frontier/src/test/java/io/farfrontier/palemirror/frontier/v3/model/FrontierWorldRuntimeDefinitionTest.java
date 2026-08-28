@@ -17,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierWorldRuntimeDefinitionTest {
@@ -129,6 +130,12 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(created, codecs.decode(created.type(), codecs.encode(created)));
         CargoLoaded loaded = new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(job.outputItemId())));
         assertEquals(loaded, codecs.decode(loaded.type(), codecs.encode(loaded)));
+        RouteOperation operation = new RouteOperation(new SubjectId("operation:supply-1-1"), contract.settlementId(), contract.cargoId(), contract.recipientId(),
+                List.of(new SubjectId("resident:1-6"), new SubjectId("resident:1-4")), List.of(new BlockPosition(-360, 64, -340), new BlockPosition(-420, 64, 420)), 0, OperationStage.EN_ROUTE);
+        OperationCreated operationCreated = new OperationCreated(operation);
+        OperationAdvanced operationAdvanced = new OperationAdvanced(operation.id(), 1, OperationStage.ARRIVED);
+        assertEquals(operationCreated, codecs.decode(operationCreated.type(), codecs.encode(operationCreated)));
+        assertEquals(operationAdvanced, codecs.decode(operationAdvanced.type(), codecs.encode(operationAdvanced)));
     }
 
     @Test
@@ -142,5 +149,30 @@ class FrontierWorldRuntimeDefinitionTest {
         CargoBatch cargo = state.inventory().cargo().get(contract.cargoId());
         assertEquals(List.of(new SubjectId("item:production-1-1-bread")), cargo.itemIds());
         assertEquals(new InventoryCustody.Cargo(cargo.id()), state.inventory().items().get(cargo.itemIds().getFirst()).custody());
+    }
+
+    @Test
+    void loadedCargoMovesThroughAPersistedColdRouteWithExactParticipants() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route"), 91L));
+        for (long tick = 100L; tick <= 1_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-1"));
+        assertEquals(OperationStage.ARRIVED, operation.stage());
+        assertEquals(operation.route().size() - 1, operation.routeIndex());
+        BlockPosition destination = state.bootstrap().hive().seedNests().getFirst().anchor();
+        assertTrue(operation.participantIds().stream().allMatch(participant -> destination.equals(state.actorLocations().get(participant).position())));
+        assertEquals(1, engine.projection(ProjectionQuery.summary()).activeRouteOperationCount());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
+    @Test
+    void routeReducerRejectsASkippedRoutePoint() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route-negative"), 91L));
+        for (long tick = 100L; tick <= 500L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-1"));
+
+        assertThrows(IllegalArgumentException.class, () -> state.advanceOperation(operation.id(), 2, OperationStage.EN_ROUTE));
     }
 }
