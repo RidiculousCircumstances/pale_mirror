@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,18 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /** Proves role consumers use the mutable exact-person register, never bootstrap residents. */
 class HumanRoleAssignmentTest {
+    @Test
+    void roleSelectionUsesTheRelevantExactSkillBeforeStableIdentity() {
+        FrontierWorldState state = initial("frontier:human-skills");
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        ResidentProfile lower = born(state, "resident:1-guard-skilled-low", ResidentRole.GUARD, ResidentSkill.SECURITY, 90);
+        state = state.recordResidentBirth(new ResidentBorn(lower, settlement.anchor()));
+        ResidentProfile higher = born(state, "resident:1-guard-skilled-high", ResidentRole.GUARD, ResidentSkill.SECURITY, 100);
+        state = state.recordResidentBirth(new ResidentBorn(higher, settlement.anchor()));
+
+        assertEquals(higher, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow());
+    }
+
     @Test
     void bornCrafterReplacesDeadBootstrapCrafterForProduction() {
         FrontierWorldState state = initial("frontier:human-crafter");
@@ -83,6 +96,13 @@ class HumanRoleAssignmentTest {
     private static ResidentProfile born(FrontierWorldState state, String id, ResidentRole role) {
         ResidentProfile parent = state.humanPopulation().resident(new SubjectId("resident:1-1"));
         return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, 0L, parent.skills());
+    }
+
+    private static ResidentProfile born(FrontierWorldState state, String id, ResidentRole role, ResidentSkill skill, int value) {
+        ResidentProfile parent = state.humanPopulation().resident(new SubjectId("resident:1-1"));
+        Map<ResidentSkill, Integer> skills = new EnumMap<>(parent.skills());
+        skills.put(skill, value);
+        return new ResidentProfile(new SubjectId(id), parent.householdId(), parent.settlementId(), role, 0L, skills);
     }
 
     private static ExactInventory withBread(ExactInventory inventory, SubjectId settlement) {

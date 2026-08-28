@@ -76,7 +76,7 @@ final class FrontierWorldStateSupport {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .min(Comparator.comparing(ResidentProfile::id));
+                .sorted(byRoleSkill(role)).findFirst();
     }
 
     static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
@@ -85,7 +85,7 @@ final class FrontierWorldStateSupport {
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .filter(resident -> state.operations().values().stream().noneMatch(operation -> retainsParticipantClaim(state, operation)
                         && operation.participantIds().contains(resident.id())))
-                .min(Comparator.comparing(ResidentProfile::id));
+                .sorted(byRoleSkill(role)).findFirst();
     }
 
     static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {
@@ -98,6 +98,22 @@ final class FrontierWorldStateSupport {
             case ARRIVED -> contracts.values().stream().anyMatch(contract -> contract.cargoId().equals(operation.cargoId())
                     && contract.status() == ContractStatus.LOADED);
             case FAILED, INTERRUPTED -> false;
+        };
+    }
+
+    private static Comparator<ResidentProfile> byRoleSkill(ResidentRole role) {
+        return Comparator.comparingInt((ResidentProfile resident) -> resident.skill(specialistSkill(role))).reversed()
+                .thenComparing(ResidentProfile::id);
+    }
+
+    private static ResidentSkill specialistSkill(ResidentRole role) {
+        return switch (role) {
+            case FARMER -> ResidentSkill.AGRICULTURE;
+            case BUILDER -> ResidentSkill.BUILDING;
+            case CRAFTER -> ResidentSkill.CRAFTING;
+            case GUARD -> ResidentSkill.SECURITY;
+            case MEDIC -> ResidentSkill.MEDICINE;
+            case HAULER -> ResidentSkill.LOGISTICS;
         };
     }
 
