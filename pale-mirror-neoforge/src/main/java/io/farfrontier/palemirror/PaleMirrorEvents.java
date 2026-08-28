@@ -125,6 +125,9 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeEntityJoin(level, event.getEntity());
+        }
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
                 && SourceGrayboxEntityAdmission.rejects(level, event.getEntity())) {
             event.setCanceled(true);

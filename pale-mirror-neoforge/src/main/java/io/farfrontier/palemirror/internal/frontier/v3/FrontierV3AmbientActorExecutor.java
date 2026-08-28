@@ -27,6 +27,9 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.nio.charset.StandardCharsets;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -41,17 +44,22 @@ final class FrontierV3AmbientActorExecutor {
     static final String KIND_KEY = "pale_mirror_frontier_v3_ambient_kind";
     private static final int MAX_ACTORS_PER_TICK = 16;
     private static final int DEMAND_RADIUS_BLOCKS = 96;
+    private static final int MAX_PENDING_ADMISSIONS = 4_096;
+    private static final long PENDING_ADMISSION_TICKS = 20L;
+    /** Noncanonical, short-lived bridge across EntityJoinLevelEvent and the UUID index. */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<UUID, PendingAdmission>> PENDING_ADMISSIONS = new IdentityHashMap<>();
 
     private FrontierV3AmbientActorExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        cleanPending(level, runtime);
         FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
         if (state == null) return;
         int admitted = 0;
         for (var entry : state.actorLocations().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             if (admitted >= MAX_ACTORS_PER_TICK) return;
             if (entry.getValue().condition().status() != ActorLifeStatus.ALIVE || !demand(level, entry.getValue().position())) continue;
-            if (materialize(level, state, entry.getKey(), entry.getValue().position()) == Result.APPLIED) admitted++;
+            if (materialize(level, runtime, state, entry.getKey(), entry.getValue().position()) == Result.APPLIED) admitted++;
         }
     }
 
@@ -71,7 +79,29 @@ final class FrontierV3AmbientActorExecutor {
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
     }
 
+    private static Result materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                      FrontierWorldState state, SubjectId actorId, BlockPosition canonicalPosition) {
+        PendingAdmission pending = pending(runtime, entityId(actorId));
+        if (pending != null && owned(pending.entity(), actorId, bioform(state, actorId))) return Result.PENDING;
+        return materialize(level, state, actorId, canonicalPosition);
+    }
+
     static UUID entityId(SubjectId actorId) { return UUID.nameUUIDFromBytes(("frontier-v3:ambient:" + actorId.value()).getBytes(StandardCharsets.UTF_8)); }
+    /** Retains only an exact expected body during the short join-to-index hand-off. */
+    static boolean observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        if (state == null) return false;
+        String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
+        if (rawActorId.isBlank()) return false;
+        SubjectId actorId;
+        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
+        if (!state.actorLocations().containsKey(actorId) || state.actorLocations().get(actorId).condition().status() != ActorLifeStatus.ALIVE
+                || !entityId(actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
+        Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+        if (pending.size() >= MAX_PENDING_ADMISSIONS && !pending.containsKey(entity.getUUID())) return false;
+        pending.put(entity.getUUID(), new PendingAdmission(entity, entity.level().getGameTime() + PENDING_ADMISSION_TICKS));
+        return true;
+    }
     /** Accepts only a real loaded-world death for the exact non-leased ambient body. */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {
         FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
@@ -120,6 +150,18 @@ final class FrontierV3AmbientActorExecutor {
                 && (bioform ? entity instanceof Zombie : entity instanceof Villager)
                 && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY));
     }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { PENDING_ADMISSIONS.remove(runtime); }
+    private static PendingAdmission pending(FrontierV3ServerRuntime<?, ?> runtime, UUID entityId) {
+        Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.get(runtime);
+        return pending == null ? null : pending.get(entityId);
+    }
+    private static void cleanPending(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime) {
+        Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.get(runtime);
+        if (pending == null) return;
+        pending.values().removeIf(candidate -> candidate.entity().isRemoved() || candidate.entity().isAddedToLevel()
+                || candidate.expiresAtGameTime() < level.getGameTime());
+        if (pending.isEmpty()) PENDING_ADMISSIONS.remove(runtime);
+    }
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
@@ -128,5 +170,6 @@ final class FrontierV3AmbientActorExecutor {
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("ambient actor death was rejected: " + result);
     }
-    enum Result { APPLIED, CURRENT, DEFERRED, CONFLICT }
+    private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
+    enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT }
 }

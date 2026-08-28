@@ -79,8 +79,17 @@ public final class FrontierV3ServerLifecycle {
         if (runtime != null) {
             FrontierV3GrayboxExecutor.forget(runtime);
             FrontierV3InfectionOverlayExecutor.forget(runtime);
+            FrontierV3AmbientActorExecutor.forget(runtime);
             runtime.shutdown();
         }
+    }
+
+    /** Retains an exact restored ambient body until ServerLevel publishes its UUID index. */
+    public static boolean observeEntityJoin(ServerLevel level, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3AmbientActorExecutor.observeJoin(runtime, entity);
     }
 
     /** Returns true only when this v3 runtime durably accepted the managed HOT death. */
