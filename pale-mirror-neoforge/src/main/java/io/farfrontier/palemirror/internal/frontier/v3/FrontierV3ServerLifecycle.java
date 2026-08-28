@@ -138,6 +138,13 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        return observeExplosion(level, runtime, affected, entities);
+    }
+
+    /** One shared server-thread bridge for the production host and real-world integration proofs. */
+    static boolean observeExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                    java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(affected, "affected blocks");
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent();
         return managed.isPresent() ? FrontierV3ExplosionExecutor.observeDetonation(level, runtime, managed.orElseThrow(), affected, entities)
                 : FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);

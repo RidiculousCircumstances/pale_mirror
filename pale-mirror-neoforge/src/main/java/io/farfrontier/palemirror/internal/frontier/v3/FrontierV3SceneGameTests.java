@@ -46,11 +46,16 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /** Materialized ownership and conflict evidence for exact v3 HOT scene bodies. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
@@ -328,6 +333,62 @@ public final class FrontierV3SceneGameTests {
                     "only the matching tagged HOT zombie may become the Minecraft explosion source");
             lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
             runtime.shutdown(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void hotBomberBlastUsesRealTntEventAndRetainsPostImpactInspection(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(56, 8, 0));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-real-explosion-game-test"), 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-real-explosion-game-test");
+        var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the real-blast fixture runtime must remain active"));
+        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        for (int index = 0; index < lease.members().size(); index++) {
+            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
+        }
+        BlockPos blastTarget = origin.east(3); prepareFloor(level, blastTarget); level.setBlock(blastTarget, Blocks.STONE.defaultBlockState(), 3);
+        AtomicBoolean active = new AtomicBoolean(true), captured = new AtomicBoolean();
+        Consumer<ExplosionEvent.Detonate> listener = event -> {
+            if (active.get() && event.getLevel() == level && FrontierV3ExplosionExecutionScope.currentIntent().isPresent()) {
+                captured.set(FrontierV3ServerLifecycle.observeExplosion(level, runtime, event.getAffectedBlocks(), event.getAffectedEntities()));
+            }
+        };
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, ExplosionEvent.Detonate.class, listener);
+        helper.runAfterDelay(1L, () -> {
+            try {
+                SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
+                        .anyMatch(bioform -> bioform.id().equals(actor) && bioform.role() == BioformRole.BOMBER)).findFirst().orElseThrow();
+                Entity bomberBody = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(bomber)).findFirst().orElseThrow().entityId());
+                helper.assertTrue(bomberBody != null, "the real TNT fixture must retain its exact bomber body"); bomberBody.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
+                lease.members().stream().filter(member -> member.actorId().value().startsWith("resident:")).findFirst().map(SceneMember::entityId).map(level::getEntity)
+                        .ifPresent(body -> body.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D));
+                helper.assertTrue(FrontierV3SceneExecutor.executeExplosion(level, runtime, state(runtime), lease), "the hot scene must durably prepare its real blast");
+                PhysicalIntent intent = state(runtime).physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION).findFirst().orElseThrow();
+                FrontierV3ExplosionExecutor.tick(level, runtime);
+                helper.assertTrue(captured.get(), "the actual Minecraft detonation event must enter the v3 observation bridge");
+                helper.assertTrue(FrontierV3ManagedExplosionLedger.get(level).has(intent.id()), "post-impact inspection must be persisted before receipt confirmation");
+                helper.assertValueEqual(state(runtime).physicalIntents().get(intent.id()).status(), PhysicalIntentStatus.RUNNING, "the blast stays running until real-world reconciliation completes");
+                helper.runAfterDelay(2L, () -> {
+                    try {
+                        FrontierV3ManagedExplosionLedger retained = FrontierV3ManagedExplosionLedger.get(level);
+                        var pendingEntity = retained.nextEntity(intent.id(), level.getGameTime());
+                        helper.assertTrue(pendingEntity.isPresent(), "a real unloaded post-impact entity remains explicit inspection work, never a guessed death");
+                        helper.assertValueEqual(state(runtime).physicalIntents().get(intent.id()).status(), PhysicalIntentStatus.RUNNING,
+                                "the out-of-profile test world cannot fabricate canonical confirmation");
+                        helper.assertTrue(!level.getBlockState(blastTarget).equals(Blocks.STONE.defaultBlockState()), "ordinary TNT geometry must alter an unprotected nearby block");
+                        lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+                        active.set(false); NeoForge.EVENT_BUS.unregister(listener); runtime.shutdown(); helper.succeed();
+                    } catch (RuntimeException failure) {
+                        active.set(false); NeoForge.EVENT_BUS.unregister(listener); runtime.shutdown(); throw failure;
+                    }
+                });
+            } catch (RuntimeException failure) {
+                active.set(false); NeoForge.EVENT_BUS.unregister(listener); runtime.shutdown(); throw failure;
+            }
         });
     }
 

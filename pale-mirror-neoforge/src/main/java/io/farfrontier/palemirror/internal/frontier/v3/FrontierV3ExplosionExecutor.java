@@ -37,6 +37,10 @@ import java.util.Optional;
 
 /** Executes one already-durable v3 blast; normal Minecraft geometry remains completely unrestricted. */
 final class FrontierV3ExplosionExecutor {
+    private static final int MAX_ITEM_RECONCILIATIONS = 16;
+    private static final int MAX_ENTITY_RECONCILIATIONS = 16;
+    private static final int MAX_BLOCK_RECONCILIATIONS = 64;
+
     private FrontierV3ExplosionExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -72,32 +76,64 @@ final class FrontierV3ExplosionExecutor {
 
     private static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
                                   FrontierV3ManagedExplosionLedger ledger) {
-        Optional<FrontierV3ManagedExplosionLedger.ItemReady> item = ledger.nextItem(intent.id(), level.getGameTime());
-        if (item.isPresent()) { reconcileItem(level, runtime, ledger, item.orElseThrow()); return; }
-        Optional<FrontierV3ManagedExplosionLedger.EntityReady> entity = ledger.nextEntity(intent.id(), level.getGameTime());
-        if (entity.isPresent()) { reconcileEntity(level, ledger, entity.orElseThrow()); return; }
-        Optional<FrontierV3ManagedExplosionLedger.BlockReady> block = ledger.nextBlock(intent.id(), level.getGameTime());
-        if (block.isEmpty()) {
-            FrontierV3ManagedExplosionLedger.Completion completion = ledger.completeIfResolved(intent.id(), level.getGameTime()).orElse(null);
-            if (completion == null) return;
-            ExplosionObservation receipt = new ExplosionObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
-                    intent.id(), intent.origin(), intent.radiusBlocks(), completion.affectedBlockCount(), completion.changedBlockCount(), completion.entityImpacts(),
-                    completion.itemImpacts(), completion.affectedInfectionOverlayCount(), completion.changedInfectionOverlayCount());
-            if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt), "confirmed")) throw new IllegalStateException("managed explosion confirmation was rejected");
-            return;
-        }
-        FrontierV3ManagedExplosionLedger.BlockReady value = block.orElseThrow(); BlockPos position = value.candidate().blockPos(); if (!level.hasChunkAt(position)) return;
-        boolean changed = !level.getBlockState(position).equals(value.candidate().baseline(level.registryAccess()));
-        if (changed) {
-            FrontierV3PhysicalObservationExecutor.recordManagedExplosionDelta(level, runtime, intent.id(), value.candidate());
-            value.candidate().infectionCell().ifPresent(cell -> FrontierV3InfectionOverlayLedger.get(level).conflict(cell));
-        }
-        ledger.resolveBlock(value, changed);
+        if (!reconcileItems(level, runtime, ledger, intent.id()) || !reconcileEntities(level, runtime, ledger, intent.id())
+                || !reconcileBlocks(level, runtime, ledger, intent.id())) return;
+        FrontierV3ManagedExplosionLedger.Completion completion = ledger.completeIfResolved(intent.id(), level.getGameTime()).orElse(null);
+        if (completion == null) return;
+        ExplosionObservation receipt = new ExplosionObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
+                intent.id(), intent.origin(), intent.radiusBlocks(), completion.affectedBlockCount(), completion.changedBlockCount(), completion.entityImpacts(),
+                completion.itemImpacts(), completion.affectedInfectionOverlayCount(), completion.changedInfectionOverlayCount());
+        if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt), "confirmed")) throw new IllegalStateException("managed explosion confirmation was rejected");
     }
 
-    private static void reconcileEntity(ServerLevel level, FrontierV3ManagedExplosionLedger ledger, FrontierV3ManagedExplosionLedger.EntityReady ready) {
-        if (!level.hasChunkAt(ready.candidate().blockPos())) return;
-        Entity actual = level.getEntity(ready.candidate().entityId()); ledger.resolveEntity(ready, actual == null || actual.isRemoved());
+    private static boolean reconcileItems(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                          FrontierV3ManagedExplosionLedger ledger, PhysicalIntentId intentId) {
+        for (int count = 0; count < MAX_ITEM_RECONCILIATIONS; count++) {
+            Optional<FrontierV3ManagedExplosionLedger.ItemReady> ready = ledger.nextItem(intentId, level.getGameTime());
+            if (ready.isEmpty()) return true;
+            reconcileItem(level, runtime, ledger, ready.orElseThrow());
+        }
+        return ledger.nextItem(intentId, level.getGameTime()).isEmpty();
+    }
+
+    private static boolean reconcileEntities(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                             FrontierV3ManagedExplosionLedger ledger, PhysicalIntentId intentId) {
+        for (int count = 0; count < MAX_ENTITY_RECONCILIATIONS; count++) {
+            Optional<FrontierV3ManagedExplosionLedger.EntityReady> ready = ledger.nextEntity(intentId, level.getGameTime());
+            if (ready.isEmpty()) return true;
+            reconcileEntity(level, runtime, ledger, ready.orElseThrow());
+        }
+        return ledger.nextEntity(intentId, level.getGameTime()).isEmpty();
+    }
+
+    private static boolean reconcileBlocks(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                           FrontierV3ManagedExplosionLedger ledger, PhysicalIntentId intentId) {
+        for (int count = 0; count < MAX_BLOCK_RECONCILIATIONS; count++) {
+            Optional<FrontierV3ManagedExplosionLedger.BlockReady> ready = ledger.nextBlock(intentId, level.getGameTime());
+            if (ready.isEmpty()) return true;
+            FrontierV3ManagedExplosionLedger.BlockReady value = ready.orElseThrow(); BlockPos position = value.candidate().blockPos();
+            if (!level.hasChunkAt(position)) return false;
+            boolean changed = !level.getBlockState(position).equals(value.candidate().baseline(level.registryAccess()));
+            if (changed) {
+                FrontierV3PhysicalObservationExecutor.recordManagedExplosionDelta(level, runtime, intentId, value.candidate());
+                value.candidate().infectionCell().ifPresent(cell -> FrontierV3InfectionOverlayLedger.get(level).conflict(cell));
+            }
+            ledger.resolveBlock(value, changed);
+        }
+        return ledger.nextBlock(intentId, level.getGameTime()).isEmpty();
+    }
+
+    private static void reconcileEntity(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                        FrontierV3ManagedExplosionLedger ledger, FrontierV3ManagedExplosionLedger.EntityReady ready) {
+        Entity actual = level.getEntity(ready.candidate().entityId());
+        if (actual != null && !actual.isRemoved()) { ledger.resolveEntity(ready, false); return; }
+        if (knownDead(runtime, ready.candidate().actorId())) { ledger.resolveEntity(ready, true); return; }
+        if (level.hasChunkAt(ready.candidate().blockPos())) ledger.resolveEntity(ready, true);
+    }
+
+    private static boolean knownDead(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> actorId) {
+        return actorId.map(id -> state(runtime).actorLocations().get(id)).filter(location -> location != null)
+                .map(location -> location.condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD).orElse(false);
     }
 
     private static void reconcileItem(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ManagedExplosionLedger ledger,
