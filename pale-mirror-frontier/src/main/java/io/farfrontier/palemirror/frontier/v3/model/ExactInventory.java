@@ -13,7 +13,8 @@ import java.util.UUID;
 /** Immutable exact custody ledger. Any dangling, duplicate or mixed custody is rejected. */
 public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
                              Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems,
-                             Map<UUID, List<SubjectId>> worldCarrierItems, Map<SubjectId, InventoryConflict> conflicts) {
+                             Map<UUID, List<SubjectId>> worldCarrierItems, Map<SubjectId, InventoryConflict> conflicts,
+                             Map<SubjectId, ContainerSurface> surfaces) {
     private static final int MAX_WORLD_CARRIERS = 4_096;
     private static final int MAX_CONFLICTS = 4_096;
     public ExactInventory {
@@ -21,11 +22,16 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         playerItems = playerItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
         worldCarrierItems = worldCarrierItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
         conflicts = Map.copyOf(conflicts);
+        surfaces = Map.copyOf(surfaces);
         if (worldCarrierItems.size() > MAX_WORLD_CARRIERS) throw new IllegalArgumentException("world carrier retention limit exceeded");
         if (conflicts.size() > MAX_CONFLICTS) throw new IllegalArgumentException("inventory conflict retention limit exceeded");
         Map<InventoryCustody.ContainerSlot, SubjectId> slots = new HashMap<>();
         for (Map.Entry<SubjectId, ContainerRecord> entry : containers.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("container map key does not match container identity");
+        }
+        if (!containers.keySet().equals(surfaces.keySet())) throw new IllegalArgumentException("every exact container requires one physical surface");
+        for (Map.Entry<SubjectId, ContainerSurface> entry : surfaces.entrySet()) {
+            if (!entry.getKey().equals(entry.getValue().containerId()) || !containers.containsKey(entry.getKey())) throw new IllegalArgumentException("container surface must own one known container");
         }
         for (Map.Entry<SubjectId, ExactItemStack> entry : items.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("item map key does not match item identity");
@@ -73,13 +79,13 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
     public ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
                           Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems) {
-        this(containers, items, cargo, playerItems, Map.of(), Map.of());
+        this(containers, items, cargo, playerItems, Map.of(), Map.of(), Map.of());
     }
     public ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
                           Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems, Map<UUID, List<SubjectId>> worldCarrierItems) {
-        this(containers, items, cargo, playerItems, worldCarrierItems, Map.of());
+        this(containers, items, cargo, playerItems, worldCarrierItems, Map.of(), Map.of());
     }
-    public static ExactInventory empty() { return new ExactInventory(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()); }
+    public static ExactInventory empty() { return new ExactInventory(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()); }
 
     /** Returns the exact stack occupying this physical container slot, if any. */
     public Optional<ExactItemStack> itemAt(SubjectId containerId, int slot) {
@@ -111,7 +117,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.remove(consumedItemId);
         nextItems.put(producedItem.id(), producedItem);
-        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts);
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
     /** Removes one exact item only after the caller has recorded the durable process which owns it. */
@@ -120,7 +126,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!items.containsKey(itemId)) throw new IllegalArgumentException("item is absent: " + itemId.value());
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.remove(itemId);
-        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts);
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
     /** Stores a new exact stack only in an actual currently-free owned container slot. */
@@ -130,7 +136,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!(item.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("stored item must enter a container slot");
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.put(item.id(), item);
-        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts);
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
     /**
@@ -156,7 +162,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.put(batch.id(), batch);
-        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts);
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
     /** Moves every exact cargo item into observed receiver slots and removes the completed batch. */
@@ -177,7 +183,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.remove(cargoId);
-        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts);
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
     /** Applies observed player/container custody only when the exact canonical stack still has its expected source. */
@@ -196,7 +202,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         addPlayerCustody(nextPlayers, to, itemId);
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.put(itemId, new ExactItemStack(current.id(), current.itemKind(), current.count(), to));
-        return new ExactInventory(containers, nextItems, cargo, nextPlayers, worldCarrierItems, conflicts);
+        return new ExactInventory(containers, nextItems, cargo, nextPlayers, worldCarrierItems, conflicts, surfaces);
     }
 
     public ExactInventory recordConflict(InventoryConflict conflict) {
@@ -207,7 +213,13 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<SubjectId, InventoryConflict> next = new HashMap<>(conflicts);
         if (next.size() >= MAX_CONFLICTS) throw new IllegalArgumentException("inventory conflict retention limit exceeded");
         next.put(conflict.id(), conflict);
-        return new ExactInventory(containers, items, cargo, playerItems, worldCarrierItems, next);
+        return new ExactInventory(containers, items, cargo, playerItems, worldCarrierItems, next, surfaces);
+    }
+    public ExactInventory withSurfaceStatus(SubjectId containerId, ContainerSurfaceStatus status) {
+        ContainerSurface current = surfaces.get(Objects.requireNonNull(containerId, "container id"));
+        if (current == null) throw new IllegalArgumentException("container has no physical surface: " + containerId.value());
+        Map<SubjectId, ContainerSurface> next = new HashMap<>(surfaces); next.put(containerId, current.transitionTo(status));
+        return new ExactInventory(containers, items, cargo, playerItems, worldCarrierItems, conflicts, next);
     }
 
     private static Map<UUID, List<SubjectId>> mutableCustody(Map<UUID, List<SubjectId>> values) {

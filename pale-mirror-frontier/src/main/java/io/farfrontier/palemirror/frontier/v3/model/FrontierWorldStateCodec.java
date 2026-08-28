@@ -29,7 +29,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 14;
+    private static final int VERSION = 15;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -169,6 +169,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (ContainerRecord value : inventory.containers().values().stream().sorted(java.util.Comparator.comparing(ContainerRecord::id)).toList()) {
             writeString(output, value.id().value()); writeString(output, value.ownerId().value()); output.writeByte(value.slotCount());
         }
+        writeCount(output, inventory.surfaces().size());
+        for (ContainerSurface surface : inventory.surfaces().values().stream().sorted(Comparator.comparing(ContainerSurface::containerId)).toList()) {
+            writeString(output, surface.containerId().value()); writePosition(output, surface.position()); output.writeByte(surface.status().ordinal());
+        }
         writeCount(output, inventory.items().size());
         for (ExactItemStack value : inventory.items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id)).toList()) {
             writeString(output, value.id().value()); writeString(output, value.itemKind()); output.writeByte(value.count()); writeCustody(output, value.custody());
@@ -199,6 +203,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
             if (containers.put(id, new ContainerRecord(id, new SubjectId(readString(input)), input.readUnsignedByte())) != null) throw new IllegalArgumentException("duplicate container id");
+        }
+        Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); BlockPosition position = readPosition(input); int status = input.readUnsignedByte();
+            if (status >= ContainerSurfaceStatus.values().length || surfaces.put(id, new ContainerSurface(id, position, ContainerSurfaceStatus.values()[status])) != null) throw new IllegalArgumentException("invalid or duplicate container surface");
         }
         Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
@@ -233,7 +242,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate inventory conflict");
             }
         }
-        return new ExactInventory(containers, items, cargo, players, carriers, conflicts);
+        return new ExactInventory(containers, items, cargo, players, carriers, conflicts, surfaces);
     }
     private static void writeProductionJobs(DataOutputStream output, Map<SubjectId, ProductionJob> jobs) throws IOException {
         writeCount(output, jobs.size());

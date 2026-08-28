@@ -25,6 +25,7 @@
 - Buildings/organs have stable IDs, semantic block parts and domain state. Infection uses a sparse 4×4 surface field; territory and actor positions use separate resolutions; baseline plus bounded sparse deltas retain physical aftermath.
 - Human and hive AI use event-triggered utility selection, durable HTN-like processes and bounded HOT local goals. The two seed nests belong to one hive economy.
 - Exact slot-owned resources, containers and cargo are the economy. There is no hidden aggregate stock; meaningful player supply may require tens or hundreds of stacks.
+- Each materialized container surface will have a durable canonical lifecycle (`UNMATERIALIZED`, prepared/owned, active, conflict) distinct from its exact slot inventory. A missing or altered previously active surface is a conflict, never permission to recreate it; a prepared surface recovers only by loaded-chunk postcondition inspection.
 - Evidence levels remain separate: architecture, automated correctness, real-world continuity and unbriefed player comprehension.
 
 ## State
@@ -78,10 +79,11 @@
 - Unknown, duplicate or altered inventory evidence is now a bounded (4,096) durable `InventoryConflict`, rather than an adapter quarantine, inventory repair or adoption. State schema 12, WAL payload codecs and the audit projection retain it immutably; the observation bridge records only naturally loaded owned chest/player surfaces and leaves the physical stack unchanged. Focused pure tests cover command acceptance, foreign-surface rejection, idempotency and state-codec recovery; the full critical gate passes with 173 `MATERIALIZED` GameTests, build and packaged-jar validation.
 - `HiveColony` is the bounded mutable owner of additions beyond the immutable two-nest bootstrap: exact new organs and bioforms have stable IDs, validated hive/nest/bounds ownership, independent actor locations and schema-13 snapshot recovery. The registry is deliberately not yet an autonomous process: its future growth event must consume exact hive storage before it can add either identity.
 - The first shared-hive autonomous process now turns one exact 64-item `minecraft:rotten_flesh` stack in the east nest `STORE` into a durable `HiveGrowthJob`; only its later completion publishes one named west-nest `HEART` and one exact `GUARD` bioform. Schema 14 retains pending growth across recovery, typed start/complete/blocked facts replay through the payload registry, missing biomass remains visibly scheduled as a durable block fact, and the projection counts the added living bioform. Growth cannot silently create a `STORE` without a separately owned exact container. Focused negative/recovery tests and the full critical gate pass with 173 NeoForge GameTests.
+- Exact inventory now carries one bounded canonical `ContainerSurface` for every exact container, with a persisted target and strict lifecycle (`UNMATERIALIZED → PREPARED → ACTIVE`, or visible terminal `CONFLICT`). Snapshot schema 15 round-trips it; an absent/altered formerly owned surface cannot be silently recreated. The executor and observation bridge do not yet submit these transitions.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Extend player/item observation from hive STORE chests to settlement depots, carriers, item entities, hoppers and loss/recovery; give retained conflicts a bounded domain-resolution lifecycle.
+- Add typed `ContainerSurface` transition events and a loaded-chunk executor/inspector that durably prepares, creates only a clean claimed surface, activates only an exact postcondition, and records a conflict for every unknown/missing/altered recovery result. Then extend exact observation from hive STORE chests to depots, carriers, item entities, hoppers and bounded conflict resolution.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.

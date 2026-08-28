@@ -167,7 +167,7 @@ class FrontierWorldRuntimeDefinitionTest {
             SubjectId id = new SubjectId("item:storage-" + slot);
             fullItems.put(id, new ExactItemStack(id, "minecraft:cobblestone", 64, new InventoryCustody.ContainerSlot(depot, slot)));
         }
-        ExactInventory fullInventory = new ExactInventory(baseline.inventory().containers(), fullItems, Map.of(), Map.of());
+        ExactInventory fullInventory = new ExactInventory(baseline.inventory().containers(), fullItems, Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
         ProductionJob job = new ProductionJob(new SubjectId("job:production-1-99"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:consumed-99"),
                 new SubjectId("item:production-1-99-bread"), "minecraft:bread", 64);

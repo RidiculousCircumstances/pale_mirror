@@ -31,6 +31,7 @@ class FrontierWorldStateTest {
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
         assertEquals(14, state.inventory().containers().size());
         assertEquals(2, state.inventory().items().size());
+        assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
         assertTrue(state.productionJobs().isEmpty());
         assertTrue(state.operations().isEmpty());
         assertTrue(state.physicalIntents().isEmpty());
@@ -63,7 +64,7 @@ class FrontierWorldStateTest {
         SubjectId container = new SubjectId("container:1-depot");
         SubjectId item = new SubjectId("item:codec");
         ExactInventory inventory = new ExactInventory(baseline.inventory().containers(), Map.of(item,
-                new ExactItemStack(item, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of());
+                new ExactItemStack(item, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
         inventory = inventory.recordConflict(new InventoryConflict(new SubjectId("conflict:codec-item"), item, container, 0, InventoryConflictKind.MISSING));
         ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:bootstrap-1-wheat"),
@@ -75,7 +76,7 @@ class FrontierWorldStateTest {
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
         assertEquals(1, codec.decode(encoded).inventory().conflicts().size());
-        encoded[4] = 15;
+        encoded[4] = 16;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());

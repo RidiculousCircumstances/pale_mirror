@@ -36,7 +36,6 @@ public record FrontierWorldState(
     private static final int MAX_PHYSICAL_INTENTS = 4_096;
     private static final int MAX_PHYSICAL_OBSERVATIONS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024;
-
     public FrontierWorldState {
         Objects.requireNonNull(bootstrap, "bootstrap");
         actorLocations = immutableMap(actorLocations, "actor locations");
@@ -56,6 +55,7 @@ public record FrontierWorldState(
         for (ActorLocation location : actorLocations.values()) requirePosition(bootstrap.bounds(), location.position());
         Set<SubjectId> expectedStructures = structureIds(bootstrap);
         if (!expectedStructures.equals(structureConditions.keySet())) throw new IllegalArgumentException("structure condition index must own every and only bootstrap structure");
+        inventory.surfaces().values().forEach(surface -> requirePosition(bootstrap.bounds(), surface.position()));
         for (Map.Entry<InfectionCell, FixedRatio> entry : infection.entrySet()) {
             if (entry.getValue().equals(ZERO_INFECTION)) throw new IllegalArgumentException("sparse infection index must not retain zero cells");
             requirePosition(bootstrap.bounds(), entry.getKey().originAtY(0));
@@ -204,14 +204,14 @@ public record FrontierWorldState(
                 containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
         Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         SubjectId firstDepot = depotId(bootstrap.settlements().getFirst().id());
-        SubjectId firstInput = new SubjectId("item:bootstrap-1-wheat");
-        items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
-        SubjectId hiveBiomass = new SubjectId("item:bootstrap-hive-biomass");
-        items.put(hiveBiomass, new ExactItemStack(hiveBiomass, "minecraft:rotten_flesh", 64,
+        SubjectId firstInput = new SubjectId("item:bootstrap-1-wheat"); items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
+        SubjectId hiveBiomass = new SubjectId("item:bootstrap-hive-biomass"); items.put(hiveBiomass, new ExactItemStack(hiveBiomass, "minecraft:rotten_flesh", 64,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0)));
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));
-        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of()), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), HiveColony.empty());
+        ExactInventory inventory = new ExactInventory(containers, items, Map.of(), Map.of(), Map.of(), Map.of(), ContainerSurfaceManifest.initial(bootstrap));
+        return new FrontierWorldState(bootstrap, actors, structures, infection, inventory,
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), HiveColony.empty());
     }
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {
         Objects.requireNonNull(actor, "actor");
