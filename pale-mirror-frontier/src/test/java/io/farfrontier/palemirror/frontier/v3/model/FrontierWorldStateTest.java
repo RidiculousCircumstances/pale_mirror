@@ -23,6 +23,8 @@ class FrontierWorldStateTest {
         assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount(), state.actorLocations().size());
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
         assertEquals(12, state.inventory().containers().size());
+        assertEquals(1, state.inventory().items().size());
+        assertTrue(state.productionJobs().isEmpty());
         assertTrue(state.structureConditions().values().stream().allMatch(condition -> condition == StructureCondition.INTACT));
         assertEquals(2, state.infection().size());
     }
@@ -53,19 +55,22 @@ class FrontierWorldStateTest {
         SubjectId item = new SubjectId("item:codec");
         ExactInventory inventory = new ExactInventory(baseline.inventory().containers(), Map.of(item,
                 new ExactItemStack(item, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of());
+        ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
+                new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:bootstrap-1-wheat"),
+                new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
         FrontierWorldState source = baseline.withInventory(inventory).withActorLocation(new SubjectId("bioform:west-0"), new BlockPosition(-400, 64, 400))
                 .withStructureCondition(new SubjectId("structure:2-depot"), StructureCondition.DESTROYED)
-                .withInfection(new InfectionCell(-100, 100), HALF);
+                .withInfection(new InfectionCell(-100, 100), HALF).withProductionJob(activeJob);
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
-        encoded[4] = 3;
+        encoded[4] = 4;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
         missingActor.remove(new SubjectId("resident:1-1"));
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
-                source.structureConditions(), source.infection(), source.inventory()));
+                source.structureConditions(), source.infection(), source.inventory(), source.productionJobs()));
     }
 
     private static FrontierWorldState initial() {

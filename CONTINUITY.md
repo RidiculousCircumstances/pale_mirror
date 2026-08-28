@@ -55,16 +55,17 @@
 - The isolated NeoForge v3 lifecycle host now owns fresh creation versus verified recovery, one monotonic simulation tick per running server tick, bounded checkpoint/install/compaction, orderly shutdown and visible startup/runtime quarantine. Replacing a checkpoint at the same covered WAL sequence is atomically safe, preserving idle canonical time. Focused tests prove write-ahead restart/idempotency and corrupt-history quarantine; it is not yet wired into the production event bridge or materialization.
 - The v3 world now has a concrete pure composition root and bounded audit projection for the deterministic 1024×1024/12-settlement/two-nest profile. A `pale_mirror.frontier_v3.enabled` opt-in NeoForge bridge starts/ticks/stops that isolated runtime without reading V2; the packaged jar now contains the frontier module and verifies that fact. The initial bridge exposes canonical bootstrap/recovery only; autonomous process events and materialization remain unimplemented.
 - The first autonomous v3 process is now canonical: both seed nests initialize sparse infection, and one bounded deterministic pulse every 100 simulation ticks emits a serialized `InfectionChanged` fact and schedules its successor. It never writes beyond the finite world bounds; only canonical state changes, not Minecraft blocks.
+- The first economic process is now an event-driven, two-phase exact custody flow: a named settlement workshop and exact crafter consume the bootstrap wheat stack into one durable `ProductionJob`, then only place its named bread output in a verified free depot slot. Typed durable blocked facts distinguish missing input, unavailable storage and unavailable facility; there is no aggregate stock or overwrite path. Codec/state tests cover the active job, payload replay, insufficient input and a fully occupied depot. Scheduler workload is now constant rather than using a growing ordinal as `weight`, with a 600-pulse regression proving continued admission under a bounded work budget.
 - `9c28c1f` records the cross-JVM deterministic replay proof. Wave 1 is complete at automated kernel-evidence level; it is not gameplay, persistence-host or product validation evidence.
 - Wave 1 focused negative/recovery tests and the full critical Gradle gate pass: architecture checks, build/package validation and 168 NeoForge GameTests. The benchmark is documented at `docs/benchmarks/frontier-v3-wave1-baseline.md`; repeated runs retain the same checkpoint input hash `00002710`.
 
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
-- Wave 2 now has checked recovery boundaries, restartable kernel state, exact bootstrap ownership, persisted sparse spatial/economic state, a true write-ahead canonical commit boundary, an opt-in v3-only lifecycle bridge and the first bounded autonomous infection process. It still lacks economic/actor processes and physical-intent durability.
+- Wave 2 now has checked recovery boundaries, restartable kernel state, exact bootstrap ownership, persisted sparse spatial/economic state, a true write-ahead canonical commit boundary, an opt-in v3-only lifecycle bridge, bounded infection propagation and the first exact economic job. It still lacks contracts/cargo/actor processes and physical-intent durability.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Add the first deterministic autonomous world processes and their fault-injection boundaries, then add physical-intent durability.
+- Add the first causal supply/contract/cargo process and its fault-injection boundaries, then add physical-intent durability.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.

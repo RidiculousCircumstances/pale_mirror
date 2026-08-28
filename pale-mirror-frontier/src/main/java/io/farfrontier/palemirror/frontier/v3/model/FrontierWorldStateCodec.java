@@ -21,7 +21,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -34,6 +34,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeStructures(output, state.structureConditions());
                 writeInfection(output, state.infection());
                 writeInventory(output, state.inventory());
+                writeProductionJobs(output, state.productionJobs());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -44,7 +45,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
-            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input));
+            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input), readProductionJobs(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -138,6 +139,24 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (players.put(player, itemIds) != null) throw new IllegalArgumentException("duplicate player custody id");
         }
         return new ExactInventory(containers, items, cargo, players);
+    }
+    private static void writeProductionJobs(DataOutputStream output, Map<SubjectId, ProductionJob> jobs) throws IOException {
+        writeCount(output, jobs.size());
+        for (ProductionJob job : jobs.values().stream().sorted(java.util.Comparator.comparing(ProductionJob::id)).toList()) {
+            writeString(output, job.id().value()); writeString(output, job.settlementId().value()); writeString(output, job.facilityId().value());
+            writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeString(output, job.outputItemId().value());
+            writeString(output, job.outputItemKind()); output.writeByte(job.outputCount());
+        }
+    }
+    private static Map<SubjectId, ProductionJob> readProductionJobs(DataInputStream input) throws IOException {
+        Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input));
+            ProductionJob job = new ProductionJob(id, new SubjectId(readString(input)), new SubjectId(readString(input)),
+                    new SubjectId(readString(input)), new SubjectId(readString(input)), new SubjectId(readString(input)), readString(input), input.readUnsignedByte());
+            if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
+        }
+        return jobs;
     }
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

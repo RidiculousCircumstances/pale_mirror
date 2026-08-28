@@ -18,7 +18,8 @@ public record FrontierWorldState(
         Map<SubjectId, ActorLocation> actorLocations,
         Map<SubjectId, StructureCondition> structureConditions,
         Map<InfectionCell, FixedRatio> infection,
-        ExactInventory inventory
+        ExactInventory inventory,
+        Map<SubjectId, ProductionJob> productionJobs
 ) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO);
 
@@ -28,6 +29,7 @@ public record FrontierWorldState(
         structureConditions = immutableMap(structureConditions, "structure conditions");
         infection = immutableMap(infection, "infection");
         Objects.requireNonNull(inventory, "inventory");
+        productionJobs = immutableMap(productionJobs, "production jobs");
         Set<SubjectId> expectedActors = actorIds(bootstrap);
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only bootstrap actor");
         for (ActorLocation location : actorLocations.values()) requirePosition(bootstrap.bounds(), location.position());
@@ -36,6 +38,18 @@ public record FrontierWorldState(
         for (Map.Entry<InfectionCell, FixedRatio> entry : infection.entrySet()) {
             if (entry.getValue().equals(ZERO_INFECTION)) throw new IllegalArgumentException("sparse infection index must not retain zero cells");
             requirePosition(bootstrap.bounds(), entry.getKey().originAtY(0));
+        }
+        for (Map.Entry<SubjectId, ProductionJob> entry : productionJobs.entrySet()) {
+            ProductionJob job = entry.getValue();
+            if (!entry.getKey().equals(job.id())) throw new IllegalArgumentException("production job map key must match job identity");
+            Settlement settlement = settlement(bootstrap, job.settlementId());
+            SettlementStructure facility = structure(settlement, job.facilityId());
+            if (facility.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("production job facility must be a workshop");
+            Resident worker = resident(settlement, job.workerId());
+            if (worker.role() != ResidentRole.CRAFTER) throw new IllegalArgumentException("production job worker must be a crafter");
+            if (inventory.items().containsKey(job.consumedItemId()) || inventory.items().containsKey(job.outputItemId())) {
+                throw new IllegalArgumentException("active production job must own neither consumed nor output item stack");
+            }
         }
     }
 
@@ -48,9 +62,13 @@ public record FrontierWorldState(
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> containers.put(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"),
                 new ContainerRecord(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"), settlement.id(), 27)));
+        Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
+        SubjectId firstDepot = depotId(bootstrap.settlements().getFirst().id());
+        SubjectId firstInput = new SubjectId("item:bootstrap-1-wheat");
+        items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));
-        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, Map.of(), Map.of(), Map.of()));
+        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of()), Map.of());
     }
 
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {
@@ -59,7 +77,7 @@ public record FrontierWorldState(
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations);
         next.put(actor, new ActorLocation(position));
-        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory);
+        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs);
     }
 
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {
@@ -68,7 +86,7 @@ public record FrontierWorldState(
         if (!structureConditions.containsKey(structure)) throw new IllegalArgumentException("unknown structure: " + structure.value());
         Map<SubjectId, StructureCondition> next = new LinkedHashMap<>(structureConditions);
         next.put(structure, condition);
-        return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory);
+        return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory, productionJobs);
     }
 
     public FrontierWorldState withInfection(InfectionCell cell, FixedRatio intensity) {
@@ -77,11 +95,52 @@ public record FrontierWorldState(
         requirePosition(bootstrap.bounds(), cell.originAtY(0));
         Map<InfectionCell, FixedRatio> next = new LinkedHashMap<>(infection);
         if (intensity.equals(ZERO_INFECTION)) next.remove(cell); else next.put(cell, intensity);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next, inventory);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next, inventory, productionJobs);
     }
 
     public FrontierWorldState withInventory(ExactInventory nextInventory) {
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, nextInventory);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, nextInventory, productionJobs);
+    }
+
+    public FrontierWorldState withProductionJob(ProductionJob job) {
+        Objects.requireNonNull(job, "production job");
+        if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
+        if (productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
+            throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
+        }
+        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
+        next.put(job.id(), job);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, next);
+    }
+
+    public FrontierWorldState startProductionJob(ProductionJob job, SubjectId inputItemId) {
+        Objects.requireNonNull(job, "production job");
+        Objects.requireNonNull(inputItemId, "production input item id");
+        if (!job.consumedItemId().equals(inputItemId)) throw new IllegalArgumentException("production job input identity differs");
+        if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
+        if (productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
+            throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
+        }
+        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
+        next.put(job.id(), job);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withoutItem(inputItemId), next);
+    }
+
+    public FrontierWorldState completeProductionJob(SubjectId jobId, ExactItemStack output) {
+        ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "production job id"));
+        if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
+        if (!job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind()) || job.outputCount() != output.count()) {
+            throw new IllegalArgumentException("production output does not match durable job result");
+        }
+        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs);
+        next.remove(jobId);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.store(output), next);
+    }
+
+    public static SubjectId depotId(SubjectId settlementId) {
+        Objects.requireNonNull(settlementId, "settlement id");
+        if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("settlement id must use settlement: namespace");
+        return new SubjectId("container:" + settlementId.value().substring("settlement:".length()) + "-depot");
     }
 
     private static Set<SubjectId> actorIds(FrontierBootstrap bootstrap) {
@@ -94,6 +153,18 @@ public record FrontierWorldState(
         Set<SubjectId> ids = new HashSet<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> ids.add(structure.id())));
         return ids;
+    }
+    private static Settlement settlement(FrontierBootstrap bootstrap, SubjectId settlementId) {
+        return bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown production settlement: " + settlementId.value()));
+    }
+    private static SettlementStructure structure(Settlement settlement, SubjectId structureId) {
+        return settlement.structures().stream().filter(value -> value.id().equals(structureId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown production facility: " + structureId.value()));
+    }
+    private static Resident resident(Settlement settlement, SubjectId residentId) {
+        return settlement.residents().stream().filter(value -> value.id().equals(residentId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown production worker: " + residentId.value()));
     }
     private static void requirePosition(WorldBounds bounds, BlockPosition position) {
         if (!bounds.contains(position)) throw new IllegalArgumentException("canonical state position is outside frontier bounds");

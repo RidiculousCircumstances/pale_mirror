@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ExactInventoryTest {
@@ -27,5 +28,21 @@ class ExactInventoryTest {
                 Map.of(stored, storedStack), Map.of(), Map.of(player, List.of(stored))));
         assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 27)),
                 Map.of(stored, storedStack, new SubjectId("item:duplicate"), new ExactItemStack(new SubjectId("item:duplicate"), "minecraft:stone", 1, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 27)),
+                Map.of(new SubjectId("item:wrong-key"), storedStack), Map.of(), Map.of()));
+    }
+
+    @Test
+    void productionStorageCannotOverwriteARealExactStack() {
+        SubjectId container = new SubjectId("container:depot");
+        SubjectId owner = new SubjectId("settlement:one");
+        SubjectId input = new SubjectId("item:input");
+        SubjectId output = new SubjectId("item:output");
+        ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 2)),
+                Map.of(input, new ExactItemStack(input, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of());
+
+        ExactInventory stored = inventory.withoutItem(input).store(new ExactItemStack(output, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0)));
+        assertEquals(output, stored.itemAt(container, 0).orElseThrow().id());
+        assertThrows(IllegalArgumentException.class, () -> inventory.store(new ExactItemStack(output, "minecraft:bread", 64, new InventoryCustody.ContainerSlot(container, 0))));
     }
 }
