@@ -105,6 +105,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.remove(server);
         if (runtime != null) {
             FrontierV3GrayboxExecutor.forget(runtime);
+            FrontierV3ResourceSiteExecutor.forget(runtime);
             FrontierV3InfectionOverlayExecutor.forget(runtime);
             FrontierV3ObjectBoardExecutor.forget(runtime);
             FrontierV3AmbientActorExecutor.forget(runtime);

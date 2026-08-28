@@ -19,6 +19,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePreparationObservation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -27,14 +29,20 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** Loaded-chunk, crash-safe preparation of a whole fixed field; it never adopts or rewrites a foreign cell. */
 final class FrontierV3ResourceSiteExecutor {
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Integer> STAGE_CURSORS = new IdentityHashMap<>();
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
+    enum StageProjectionResult { CURRENT, UPDATED, CONFLICT, DEFERRED }
 
     private FrontierV3ResourceSiteExecutor() { }
+
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { STAGE_CURSORS.remove(runtime); }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
@@ -43,6 +51,7 @@ final class FrontierV3ResourceSiteExecutor {
                 .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
                 .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
+        projectOneGrowthStage(level, runtime, state);
     }
 
     static BlockBreakObservation observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
@@ -53,8 +62,9 @@ final class FrontierV3ResourceSiteExecutor {
         if (target == null) return BlockBreakObservation.UNMANAGED;
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(target.site().id());
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !matches(level, target.site(), 0)) {
-            if (claim != null) ledger.conflict(target.site().id());
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return BlockBreakObservation.UNMANAGED;
+        if (!matches(level, target.site(), claim.stage())) {
+            recordConflict(runtime, ledger, target.site(), firstMismatch(level, target.site(), claim.stage()).orElse(canonical(position)), cause);
             return BlockBreakObservation.UNMANAGED;
         }
         try {
@@ -69,6 +79,32 @@ final class FrontierV3ResourceSiteExecutor {
         } catch (RuntimeException rejected) {
             return BlockBreakObservation.REJECTED;
         }
+    }
+
+    private static void projectOneGrowthStage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        List<ResourceSiteLifecycle> candidates = state.resourceSites().sites().values().stream().filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage)
+                .sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList();
+        if (candidates.isEmpty()) return;
+        int index = Math.floorMod(STAGE_CURSORS.getOrDefault(runtime, 0), candidates.size());
+        STAGE_CURSORS.put(runtime, (index + 1) % candidates.size()); ResourceSiteLifecycle lifecycle = candidates.get(index);
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId()); FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+        StageProjectionResult result = projectStage(level, ledger, site, lifecycle.growthStage());
+        if (result == StageProjectionResult.CONFLICT) {
+            FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id()); int observedStage = claim == null ? lifecycle.growthStage() : claim.stage();
+            recordConflict(runtime, ledger, site, firstMismatch(level, site, observedStage).orElse(site.cropSlots().getFirst()), "observed:resource-site-stage");
+        }
+    }
+
+    static StageProjectionResult projectStage(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, int desiredStage) {
+        if (desiredStage < 0 || desiredStage > 7) throw new IllegalArgumentException("resource-site crop stage is invalid");
+        if (!loaded(level, site)) return StageProjectionResult.DEFERRED;
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return StageProjectionResult.CONFLICT;
+        if (!matches(level, site, claim.stage())) return StageProjectionResult.CONFLICT;
+        if (claim.stage() == desiredStage) return StageProjectionResult.CURRENT;
+        for (BlockPosition crop : site.cropSlots()) level.setBlock(minecraft(crop), crop(desiredStage), 3);
+        if (!matches(level, site, desiredStage)) return StageProjectionResult.CONFLICT;
+        ledger.updateStage(site.id(), desiredStage); return StageProjectionResult.UPDATED;
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
@@ -137,6 +173,13 @@ final class FrontierV3ResourceSiteExecutor {
         return site.soilSlots().stream().allMatch(soil -> level.getBlockState(minecraft(soil)).is(Blocks.FARMLAND))
                 && site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).equals(crop(stage)));
     }
+    private static Optional<BlockPosition> firstMismatch(ServerLevel level, ResourceSite site, int stage) {
+        return java.util.stream.Stream.concat(site.soilSlots().stream().filter(soil -> !level.getBlockState(minecraft(soil)).is(Blocks.FARMLAND)),
+                site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(crop(stage)))).findFirst();
+    }
+    private static boolean projectsGrowthStage(ResourceSiteLifecycle lifecycle) {
+        return lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY;
+    }
     private static BlockState crop(int stage) { return Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, stage); }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
@@ -152,6 +195,16 @@ final class FrontierV3ResourceSiteExecutor {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), new PhysicalIntentTransition(id, status, observation)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         return result instanceof CommandResult.Accepted;
+    }
+    private static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger,
+                                       ResourceSite site, BlockPosition position, String cause) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());
+        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new ResourceSiteConflictObserved(site.id(), position, cause)))
+                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("resource-site conflict observation was rejected");
+        ledger.conflict(site.id());
     }
 
     record Target(ResourceSite site, PhysicalIntent intent) { }

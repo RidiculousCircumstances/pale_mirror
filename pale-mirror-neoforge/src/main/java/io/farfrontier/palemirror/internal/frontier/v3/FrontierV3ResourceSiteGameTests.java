@@ -38,6 +38,15 @@ public final class FrontierV3ResourceSiteGameTests {
             ledger.activate(site.id()); CompoundTag active = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(active, level.registryAccess());
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 0) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
                     "the exact 64 farmland and 64 wheat cells plus active provenance survive a SavedData reload");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 3), FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
+                    "a canonical COLD growth stage updates only the owned field cells");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3) && ledger.claim(site.id()).stage() == 3,
+                    "the ledger retains the observed physical stage needed for later drift detection");
+            BlockPos changed = minecraft(site.cropSlots().getFirst()); level.setBlock(changed, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 4), FrontierV3ResourceSiteExecutor.StageProjectionResult.CONFLICT,
+                    "a foreign crop change is conflict evidence, never authority to advance or repair the field");
+            helper.assertTrue(level.getBlockState(changed).is(Blocks.DIAMOND_BLOCK) && ledger.claim(site.id()).stage() == 3,
+                    "a conflict leaves both the player/world block and the last confirmed field stage intact for reconciliation");
             helper.succeed();
         });
     }
@@ -63,7 +72,10 @@ public final class FrontierV3ResourceSiteGameTests {
     }
     private static void prepareBaseline(ServerLevel level, ResourceSite site) {
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-            level.setBlock(position, Blocks.GRASS_BLOCK.defaultBlockState(), 3); level.setBlock(position.above(2), Blocks.GLOWSTONE.defaultBlockState(), 3); });
+            level.setBlock(position, Blocks.GRASS_BLOCK.defaultBlockState(), 3); });
+        int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow(), maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
+        site.cropSlots().stream().filter(crop -> crop.x() == minX).forEach(crop -> level.setBlock(minecraft(crop).west(), Blocks.GLOWSTONE.defaultBlockState(), 3));
+        site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
 }
