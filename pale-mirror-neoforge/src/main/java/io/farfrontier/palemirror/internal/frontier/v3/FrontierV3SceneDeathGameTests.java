@@ -91,6 +91,45 @@ public final class FrontierV3SceneDeathGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-deaths", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void releaseRefreshesAfterARealDeathChangesTheCanonicalScene(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        WorldId world = new WorldId("frontier:scene-death-release-refresh-game-test");
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(world, 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-death-release-refresh-game-test");
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLease lease = new SceneLease(leaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList());
+        FrontierV3CommandSubmission.submit(runtime, "scene-death-release-refresh-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-death-release-refresh-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z());
+        level.getChunkAt(handoff);
+        for (SceneMember member : lease.members()) addOwnedBody(helper, level, lease, member, handoff);
+
+        helper.runAfterDelay(1L, () -> {
+            List<Entity> bodies = lease.members().stream().map(member -> level.getEntity(member.entityId())).toList();
+            try {
+                bodies.forEach(body -> helper.assertTrue(body != null, "the exact scene body must remain indexed before release refresh"));
+                FrontierWorldState stale = state(runtime);
+                Entity victim = bodies.getFirst();
+                helper.assertTrue(victim != null && FrontierV3SceneExecutor.observeDeath(runtime, victim, null),
+                        "a real exact death must durably drain its HOT scene");
+                victim.discard();
+                lease.members().stream().skip(1).forEach(member -> helper.assertTrue(level.getEntity(member.entityId()) != null,
+                        "the surviving exact HOT body must remain indexed before executor release: " + member.actorId().value()));
+                FrontierV3SceneExecutor.release(level, runtime, stale.sceneLeases().get(leaseId));
+                helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
+                        "release must refresh canonical death evidence and capture only survivors");
+                cleanup(bodies); runtime.shutdown(); helper.succeed();
+            } catch (RuntimeException failure) {
+                cleanup(bodies); runtime.shutdown(); throw failure;
+            }
+        });
+    }
+
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
     }

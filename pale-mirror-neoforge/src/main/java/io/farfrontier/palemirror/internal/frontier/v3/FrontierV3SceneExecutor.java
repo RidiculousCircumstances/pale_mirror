@@ -151,7 +151,7 @@ final class FrontierV3SceneExecutor {
                 if (!demandExists(level, lease.handoffPosition())) submit(runtime, "scene-draining", lease.id().value(),
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             }
-            case DRAINING -> release(level, runtime, state, lease);
+            case DRAINING -> release(level, runtime, lease);
             case UNKNOWN_AFTER_RESTART -> reclaim(level, runtime, state, lease);
             case CLOSED -> { }
         }
@@ -354,7 +354,16 @@ final class FrontierV3SceneExecutor {
         return true;
     }
 
-    private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+    /**
+     * Releases a draining scene from the latest durable state, not the tick's earlier projection.
+     * A real death listener may have committed one or more member deaths between the initial scene
+     * selection and this release pass; those dead bodies are no longer release candidates.
+     */
+    static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease selectedLease) {
+        FrontierWorldState state = state(runtime);
+        if (state == null) return;
+        SceneLease lease = state.sceneLeases().get(selectedLease.id());
+        if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
         List<SceneMemberPosition> positions = new ArrayList<>();
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
