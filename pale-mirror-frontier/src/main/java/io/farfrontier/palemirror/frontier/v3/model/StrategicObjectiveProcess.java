@@ -53,6 +53,10 @@ final class StrategicObjectiveProcess {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(RoutePatrolProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
+        if (task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS) {
+            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+                    new ProposedEvent(owner, new ScheduleEffect.Created(RouteConstructionProcess.start(task, action.dueAt().ticks() + 100L))), next);
+        }
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
 
@@ -89,7 +93,11 @@ final class StrategicObjectiveProcess {
         boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
         boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
-        if (!constructionActive && !alreadyConfirmed && !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas())) {
+        boolean blockedRoute = !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas());
+        if (!constructionActive && alreadyConfirmed) {
+            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS, Optional.empty(), Long.MAX_VALUE));
+        }
+        if (!constructionActive && !alreadyConfirmed && blockedRoute) {
             return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), Long.MAX_VALUE));
         }
         boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
@@ -126,6 +134,7 @@ final class StrategicObjectiveProcess {
             case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> List.of(StrategicTaskRequirement.AVAILABLE_GUARD);
+            case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION, StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL);
         };
         StrategicTaskKind kind = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
@@ -134,11 +143,17 @@ final class StrategicObjectiveProcess {
             case SETTLEMENT_PRODUCE_BREAD -> StrategicTaskKind.PRODUCE_BREAD;
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;
+            case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS;
         };
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING);
     }
     private static List<SubjectId> dependencies(FrontierWorldState state, StrategicObjective objective) {
+        if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS) {
+            return state.strategicPlans().routePatrols().values().stream().filter(patrol -> patrol.settlementId().equals(objective.ownerId())
+                    && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey))
+                    .sorted(Comparator.comparing(RoutePatrol::taskId).reversed()).map(RoutePatrol::taskId).limit(1).toList();
+        }
         if (objective.kind() != StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) return List.of();
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(objective.ownerId())
                 && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.COMPLETED)

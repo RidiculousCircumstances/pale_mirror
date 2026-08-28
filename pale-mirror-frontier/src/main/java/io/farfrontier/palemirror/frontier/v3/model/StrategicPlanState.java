@@ -61,6 +61,11 @@ final class StrategicPlanState {
                     && (task.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE || !task.requirements().equals(List.of(StrategicTaskRequirement.AVAILABLE_GUARD)))) {
                 throw new IllegalArgumentException("settlement patrol task has an invalid decomposition");
             }
+            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS
+                    && (task.kind() != StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS || !task.requirements().equals(List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION,
+                    StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL)) || task.dependencies().size() != 1)) {
+                throw new IllegalArgumentException("settlement route construction task has an invalid decomposition");
+            }
             if (task.dependencies().stream().anyMatch(dependency -> !this.tasks.containsKey(dependency) || dependency.equals(task.id()))) {
                 throw new IllegalArgumentException("strategic task dependency must name another retained task");
             }
@@ -82,6 +87,11 @@ final class StrategicPlanState {
             if (task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE
                     && (predecessor.kind() != StrategicTaskKind.PREPARE_BREAD_CARGO || !predecessor.objectiveId().equals(task.objectiveId()))) {
                 throw new IllegalArgumentException("settlement delivery dependency must be its cargo preparation task");
+            }
+            if (task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS
+                    && (predecessor.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE || !predecessor.ownerId().equals(task.ownerId())
+                    || predecessor.status() != StrategicTaskStatus.COMPLETED)) {
+                throw new IllegalArgumentException("settlement route construction dependency must be its confirmed patrol");
             }
         }));
         objectives.values().stream().filter(objective -> objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE).forEach(objective ->

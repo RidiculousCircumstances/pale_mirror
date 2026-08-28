@@ -28,6 +28,22 @@ final class RouteConstructionProcess {
         return new ScheduledAction(new ScheduleId("schedule:route-construction-" + ordinal), new SimInstant(dueAt), 0,
                 SYSTEM, "frontier.route_construction.scan", 1);
     }
+    static ScheduledAction start(StrategicTask task, long dueAt) {
+        if (task.kind() != StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS) throw new IllegalArgumentException("invalid route construction task schedule");
+        return new ScheduledAction(new ScheduleId("schedule:route-construction-start-" + task.id().value().replace(':', '-')), new SimInstant(dueAt), 0,
+                task.id(), "frontier.route_construction.start", 1);
+    }
+
+    static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
+        StrategicTask task = constructionTaskById(state, action.subject(), StrategicTaskStatus.PENDING);
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
+        boolean confirmed = task.dependencies().stream().map(state.strategicPlans().routePatrols()::get).anyMatch(patrol -> patrol != null
+                && patrol.settlementId().equals(settlement.id()) && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED
+                && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
+        Optional<RouteConstruction> candidate = confirmed ? candidate(state, settlement) : Optional.empty();
+        if (candidate.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteConstructionStarted(candidate.orElseThrow())));
+    }
 
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value()) + 1;
@@ -36,14 +52,13 @@ final class RouteConstructionProcess {
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<RouteConstruction> ready = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.READY)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
-        if (ready.isPresent()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteTopologyCutover(ready.orElseThrow().id())), next);
+        if (ready.isPresent()) {
+            RouteConstruction value = ready.orElseThrow(); StrategicTask task = constructionTask(state, value.settlementId(), StrategicTaskStatus.ACTIVE);
+            return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteTopologyCutover(value.id())), transition(task, StrategicTaskStatus.COMPLETED), next);
+        }
         Optional<RouteConstruction> project = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.BUILDING)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
-        if (project.isEmpty()) {
-            Optional<RouteConstruction> candidate = candidate(state);
-            return candidate.<List<ProposedEvent>>map(value -> List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                    new RouteConstructionStarted(value)), next)).orElseGet(() -> List.of(next));
-        }
+        if (project.isEmpty()) return List.of(next);
         List<BlockPosition> cells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.orElseThrow().settlementId(), project.orElseThrow().waypoints());
         BlockPosition position = cells.get(project.orElseThrow().confirmedCells());
         Optional<ExactItemStack> material = state.inventory().items().values().stream()
@@ -65,15 +80,6 @@ final class RouteConstructionProcess {
      * spine catalogue is intentional: observations can obstruct a route, but never turn an
      * arbitrary player road or a Minecraft pathfinding result into canonical topology.
      */
-    private static Optional<RouteConstruction> candidate(FrontierWorldState state) {
-        return state.bootstrap().settlements().stream().sorted(Comparator.comparing(Settlement::id)).filter(settlement ->
-                !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas()))
-                .filter(settlement -> state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
-                        && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey)))
-                .filter(settlement -> state.routeConstructions().values().stream().noneMatch(project -> project.settlementId().equals(settlement.id())))
-                .flatMap(settlement -> candidate(state, settlement).stream()).findFirst();
-    }
-
     private static Optional<RouteConstruction> candidate(FrontierWorldState state, Settlement settlement) {
         List<BlockPosition> current = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
         BlockPosition origin = current.getFirst(), destination = current.getLast();
@@ -119,5 +125,28 @@ final class RouteConstructionProcess {
                 && (existing.status() == PhysicalIntentStatus.PREPARED || existing.status() == PhysicalIntentStatus.RUNNING))) throw new IllegalArgumentException("only one route construction cell may be active");
         RouteConstructionStateSupport.validateIntent(state, intent);
         return state.preparePhysicalIntent(intent);
+    }
+    static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        RouteConstruction project = intent.subjectIds().stream().map(state.routeConstructions()::get).filter(java.util.Objects::nonNull).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("route construction transition has no project"));
+        StrategicTask task = constructionTask(state, project.settlementId(), StrategicTaskStatus.ACTIVE);
+        ProposedEvent physical = new ProposedEvent(FrontierRouteNetwork.OWNER, transition);
+        return transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART ? List.of(physical, transition(task, StrategicTaskStatus.BLOCKED)) : List.of(physical);
+    }
+    static StrategicTask constructionTask(FrontierWorldState state, SubjectId settlementId, StrategicTaskStatus status) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId)
+                && task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS && task.status() == status).reduce((left, right) -> {
+                    throw new IllegalArgumentException("route construction task binding is ambiguous");
+                }).orElseThrow(() -> new IllegalArgumentException("route construction has no matching strategic task"));
+    }
+    private static StrategicTask constructionTaskById(FrontierWorldState state, SubjectId taskId, StrategicTaskStatus status) {
+        StrategicTask task = state.strategicPlans().tasks().get(taskId);
+        if (task == null || task.kind() != StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS || task.status() != status) {
+            throw new IllegalArgumentException("route construction has no matching task identity");
+        }
+        return task;
+    }
+    private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) {
+        return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status));
     }
 }

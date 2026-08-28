@@ -37,8 +37,12 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (command.payload() instanceof PhysicalIntentTransition transition) {
             PhysicalIntent intent = state.physicalIntents().get(transition.intentId()); if (intent == null) return rejected("physical intent is unknown");
-            if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
+            if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
+            }
+            if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
+                try { return new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition)); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             }
             if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
                 try { return new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition)); }
@@ -132,6 +136,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
+            case "frontier.route_construction.start" -> RouteConstructionProcess.planStart(state, action);
             case "frontier.route_patrol.start" -> RoutePatrolProcess.planStart(state, action);
             case "frontier.route_patrol.progress" -> RoutePatrolProcess.planProgress(state, action);
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);

@@ -37,6 +37,10 @@ class RoutePatrolProcessTest {
         assertEquals(Optional.of(obstruction), patrol.obstruction());
         assertEquals(StrategicTaskStatus.COMPLETED, after.strategicPlans().tasks().get(patrol.taskId()).status());
         assertTrue(after.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement)));
+        StrategicTask construction = after.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlement)
+                && task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS).findFirst().orElseThrow();
+        assertEquals(StrategicTaskStatus.ACTIVE, construction.status());
+        assertEquals(java.util.List.of(patrol.taskId()), construction.dependencies());
         assertEquals(patrol.route().get(patrol.routeIndex()), after.actorLocations().get(patrol.guardId()).position());
     }
 }
