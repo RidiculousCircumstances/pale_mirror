@@ -132,6 +132,13 @@ neoForge {
         coreClient {
             client()
             gameDirectory = layout.buildDirectory.dir('runs/core-client')
+            def auditServer = providers.gradleProperty('coreClientServer')
+            if (auditServer.isPresent()) {
+                programArgument '--username'
+                programArgument providers.gradleProperty('coreClientUsername').orElse('PMAudit').get()
+                programArgument '--quickPlayMultiplayer'
+                programArgument auditServer.get()
+            }
         }
         crimsonClient {
             client()
