@@ -30,7 +30,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -52,7 +54,8 @@ public final class FrontierV3SceneGameTests {
         prepareFloor(level, origin); prepareFloor(level, origin.east(2));
         SceneLease lease = lease(origin);
 
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-body-test"), 91L));
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded supported scene site must materialize each deterministic Villager body exactly once");
         for (SceneMember member : lease.members()) {
             Villager body = (Villager) level.getEntity(member.entityId());
@@ -77,10 +80,30 @@ public final class FrontierV3SceneGameTests {
         foreign.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
         helper.assertTrue(level.addFreshEntity(foreign), "the foreign body fixture must enter the loaded world");
 
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, lease), FrontierV3SceneExecutor.BodyMaterialization.CONFLICT,
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-conflict-test"), 91L));
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.CONFLICT,
                 "an unowned body with a leased UUID is a visible conflict, never a body the executor claims");
         helper.assertTrue(level.getEntity(foreign.getUUID()) == foreign, "the foreign body must remain untouched");
         foreign.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void preparedSceneUsesCanonicalBioformIdentityForZombieBodies(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(16, 8, 0)); prepareFloor(level, origin);
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-bioform-test"), 91L));
+        SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-bioform-test");
+        SubjectId bioform = new SubjectId("bioform:west-0");
+        SceneLease lease = new SceneLease(id, new SubjectId("operation:frontier-v3-bioform-test"), new SubjectId("cargo:frontier-v3-bioform-test"),
+                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(bioform, SceneLease.deterministicEntityId(id, bioform))));
+
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "a canonical hive participant must materialize as its graybox Zombie, never as a Villager");
+        Entity entity = level.getEntity(lease.members().getFirst().entityId());
+        helper.assertTrue(entity instanceof Zombie, "the scene body must retain the canonical bioform kind");
+        entity.discard();
         helper.succeed();
     }
 

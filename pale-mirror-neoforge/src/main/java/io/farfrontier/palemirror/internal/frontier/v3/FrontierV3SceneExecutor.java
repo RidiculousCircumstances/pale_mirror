@@ -29,6 +29,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 
 import java.util.ArrayList;
@@ -66,7 +68,7 @@ final class FrontierV3SceneExecutor {
             return;
         }
         state.sceneLeases().values().stream().sorted(Comparator.comparing(SceneLease::id)).filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
-                .findFirst().ifPresent(lease -> execute(level, runtime, lease));
+                .findFirst().ifPresent(lease -> execute(level, runtime, state, lease));
         cleanReleasedBodies(level, state);
     }
 
@@ -79,20 +81,20 @@ final class FrontierV3SceneExecutor {
         submit(runtime, "scene-prepare", id.value(), new SceneLeasePrepared(lease));
     }
 
-    private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+    private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         switch (lease.status()) {
-            case PREPARED -> materializePrepared(level, runtime, lease);
+            case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> {
                 if (!demandExists(level, lease.handoffPosition())) submit(runtime, "scene-draining", lease.id().value(),
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             }
-            case DRAINING -> release(level, runtime, lease);
+            case DRAINING -> release(level, runtime, state, lease);
             case UNKNOWN_AFTER_RESTART, CLOSED -> { }
         }
     }
 
-    private static void materializePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
-        BodyMaterialization result = materializeBodies(level, lease);
+    private static void materializePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        BodyMaterialization result = materializeBodies(level, state, lease);
         if (result == BodyMaterialization.COMPLETE) {
             submit(runtime, "scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         } else if (result == BodyMaterialization.CONFLICT) {
@@ -100,27 +102,28 @@ final class FrontierV3SceneExecutor {
         }
     }
 
-    static BodyMaterialization materializeBodies(ServerLevel level, SceneLease lease) {
+    static BodyMaterialization materializeBodies(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         for (int index = 0; index < lease.members().size(); index++) {
             SceneMember member = lease.members().get(index);
             Entity existing = level.getEntity(member.entityId());
             if (existing != null) {
-                if (!owned(existing, lease, member)) return BodyMaterialization.CONFLICT;
+                if (!owned(existing, state, lease, member)) return BodyMaterialization.CONFLICT;
                 continue;
             }
             BlockPos candidate = spawnCandidate(lease.handoffPosition(), index);
             if (!level.hasChunkAt(candidate)) return BodyMaterialization.DEFERRED;
             BlockPos position = spawnPosition(level, candidate);
             if (position == null) return BodyMaterialization.CONFLICT;
-            Villager villager = EntityType.VILLAGER.create(level);
-            if (villager == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 Villager");
-            villager.setUUID(member.entityId());
-            villager.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
-            villager.setPersistenceRequired();
-            villager.setCustomName(Component.literal("Frontier " + member.actorId().value()));
-            villager.setCustomNameVisible(true);
-            mark(villager, lease, member);
-            if (!level.addFreshEntity(villager)) return BodyMaterialization.CONFLICT;
+            boolean bioform = bioform(state, member.actorId());
+            Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
+            if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 scene body");
+            body.setUUID(member.entityId());
+            body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
+            body.setPersistenceRequired();
+            body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + member.actorId().value()));
+            body.setCustomNameVisible(true);
+            mark(body, lease, member);
+            if (!level.addFreshEntity(body)) return BodyMaterialization.CONFLICT;
         }
         return BodyMaterialization.COMPLETE;
     }
@@ -131,7 +134,7 @@ final class FrontierV3SceneExecutor {
         if (state == null) return false;
         Optional<SceneLease> matchingLease = state.sceneLeases().values().stream()
                 .filter(lease -> lease.status() == SceneLeaseStatus.HOT)
-                .filter(lease -> lease.members().stream().anyMatch(member -> member.entityId().equals(entity.getUUID()) && owned(entity, lease, member)))
+                .filter(lease -> lease.members().stream().anyMatch(member -> member.entityId().equals(entity.getUUID()) && owned(entity, state, lease, member)))
                 .findFirst();
         if (matchingLease.isEmpty()) return false;
         SceneLease lease = matchingLease.orElseThrow();
@@ -142,13 +145,13 @@ final class FrontierV3SceneExecutor {
         return true;
     }
 
-    private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+    private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         List<SceneMemberPosition> positions = new ArrayList<>();
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
-            if (!owned(entity, lease, member)) { unknown(runtime, lease); return; }
-            if (!(entity instanceof Villager villager) || villager.getHealth() <= 0.0F) { unknown(runtime, lease); return; }
-            long health = Math.round((double) villager.getHealth() * FixedScalar.SCALE);
+            if (!owned(entity, state, lease, member)) { unknown(runtime, lease); return; }
+            if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) { unknown(runtime, lease); return; }
+            long health = Math.round((double) body.getHealth() * FixedScalar.SCALE);
             positions.add(new SceneMemberPosition(member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
         }
         submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions));
@@ -157,7 +160,7 @@ final class FrontierV3SceneExecutor {
     private static void cleanReleasedBodies(ServerLevel level, FrontierWorldState state) {
         state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED).forEach(lease -> lease.members().forEach(member -> {
             Entity entity = level.getEntity(member.entityId());
-            if (owned(entity, lease, member)) entity.discard();
+            if (owned(entity, state, lease, member)) entity.discard();
         }));
     }
 
@@ -176,11 +179,15 @@ final class FrontierV3SceneExecutor {
         return position;
     }
 
-    private static boolean owned(Entity entity, SceneLease lease, SceneMember member) {
-        return entity instanceof Villager && !entity.isRemoved() && member.entityId().equals(entity.getUUID())
+    private static boolean owned(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
+        return (bioform(state, member.actorId()) ? entity instanceof Zombie : entity instanceof Villager) && !entity.isRemoved() && member.entityId().equals(entity.getUUID())
                 && lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
                 && member.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && lease.revision() == entity.getPersistentData().getLong(REVISION_KEY);
+    }
+    private static boolean bioform(FrontierWorldState state, SubjectId actorId) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .anyMatch(bioform -> bioform.id().equals(actorId));
     }
     private static void mark(Entity entity, SceneLease lease, SceneMember member) {
         entity.getPersistentData().putString(LEASE_KEY, lease.id().value());
