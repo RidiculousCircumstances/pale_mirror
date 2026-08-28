@@ -12,10 +12,14 @@ import java.util.UUID;
 
 /** Immutable exact custody ledger. Any dangling, duplicate or mixed custody is rejected. */
 public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
-                             Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems) {
+                             Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems,
+                             Map<UUID, List<SubjectId>> worldCarrierItems) {
+    private static final int MAX_WORLD_CARRIERS = 4_096;
     public ExactInventory {
         containers = Map.copyOf(containers); items = Map.copyOf(items); cargo = Map.copyOf(cargo);
         playerItems = playerItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
+        worldCarrierItems = worldCarrierItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
+        if (worldCarrierItems.size() > MAX_WORLD_CARRIERS) throw new IllegalArgumentException("world carrier retention limit exceeded");
         Map<InventoryCustody.ContainerSlot, SubjectId> slots = new HashMap<>();
         for (Map.Entry<SubjectId, ContainerRecord> entry : containers.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("container map key does not match container identity");
@@ -39,15 +43,28 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 List<SubjectId> value = playerItems.get(player.playerId());
                 if (value == null || !value.contains(item.id())) throw new IllegalArgumentException("dangling or conflicting player custody");
             }
+            case InventoryCustody.WorldCarrier carrier -> {
+                List<SubjectId> value = worldCarrierItems.get(carrier.carrierId());
+                if (value == null || !value.contains(item.id())) throw new IllegalArgumentException("dangling or conflicting world carrier custody");
+            }
         };
         for (CargoBatch batch : cargo.values()) {
             for (SubjectId item : batch.itemIds()) require(items.get(item), new InventoryCustody.Cargo(batch.id()), "cargo reverse custody");
         }
         for (Map.Entry<UUID, List<SubjectId>> player : playerItems.entrySet()) {
+            requireDistinct(player.getValue(), "player custody");
             for (SubjectId item : player.getValue()) require(items.get(item), new InventoryCustody.Player(player.getKey()), "player reverse custody");
         }
+        for (Map.Entry<UUID, List<SubjectId>> carrier : worldCarrierItems.entrySet()) {
+            requireDistinct(carrier.getValue(), "world carrier custody");
+            for (SubjectId item : carrier.getValue()) require(items.get(item), new InventoryCustody.WorldCarrier(carrier.getKey()), "world carrier reverse custody");
+        }
     }
-    public static ExactInventory empty() { return new ExactInventory(Map.of(), Map.of(), Map.of(), Map.of()); }
+    public ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
+                          Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems) {
+        this(containers, items, cargo, playerItems, Map.of());
+    }
+    public static ExactInventory empty() { return new ExactInventory(Map.of(), Map.of(), Map.of(), Map.of(), Map.of()); }
 
     /** Returns the exact stack occupying this physical container slot, if any. */
     public Optional<ExactItemStack> itemAt(SubjectId containerId, int slot) {
@@ -79,7 +96,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.remove(consumedItemId);
         nextItems.put(producedItem.id(), producedItem);
-        return new ExactInventory(containers, nextItems, cargo, playerItems);
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems);
     }
 
     /** Removes one exact item only after the caller has recorded the durable process which owns it. */
@@ -88,7 +105,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!items.containsKey(itemId)) throw new IllegalArgumentException("item is absent: " + itemId.value());
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.remove(itemId);
-        return new ExactInventory(containers, nextItems, cargo, playerItems);
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems);
     }
 
     /** Stores a new exact stack only in an actual currently-free owned container slot. */
@@ -98,7 +115,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (!(item.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("stored item must enter a container slot");
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.put(item.id(), item);
-        return new ExactInventory(containers, nextItems, cargo, playerItems);
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems);
     }
 
     /**
@@ -124,10 +141,13 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.put(batch.id(), batch);
-        return new ExactInventory(containers, nextItems, nextCargo, playerItems);
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems);
     }
     private static void require(Object value, Object expected, String label) {
         if (value instanceof ExactItemStack item && item.custody().equals(expected)) return;
         throw new IllegalArgumentException("dangling or conflicting " + label);
+    }
+    private static void requireDistinct(List<SubjectId> values, String label) {
+        if (values.stream().distinct().count() != values.size()) throw new IllegalArgumentException(label + " must contain distinct exact item identities");
     }
 }

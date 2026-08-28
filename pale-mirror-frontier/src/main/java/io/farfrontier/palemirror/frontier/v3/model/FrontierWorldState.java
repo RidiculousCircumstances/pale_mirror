@@ -118,13 +118,15 @@ public record FrontierWorldState(
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> containers.put(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"),
                 new ContainerRecord(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"), settlement.id(), 27)));
+        bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container ->
+                containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
         Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         SubjectId firstDepot = depotId(bootstrap.settlements().getFirst().id());
         SubjectId firstInput = new SubjectId("item:bootstrap-1-wheat");
         items.put(firstInput, new ExactItemStack(firstInput, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));
-        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of()), Map.of(), Map.of(), Map.of(), Map.of());
+        return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of()), Map.of(), Map.of(), Map.of(), Map.of());
     }
 
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {

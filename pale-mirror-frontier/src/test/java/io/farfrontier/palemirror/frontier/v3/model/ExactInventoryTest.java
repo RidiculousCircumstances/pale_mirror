@@ -33,6 +33,19 @@ class ExactInventoryTest {
     }
 
     @Test
+    void worldCarrierCustodyRequiresTheExactCarrierReverseIndex() {
+        SubjectId item = new SubjectId("item:carrier-bread");
+        UUID carrier = UUID.fromString("00000000-0000-0000-0000-000000000042");
+        ExactItemStack stack = new ExactItemStack(item, "minecraft:bread", 64, new InventoryCustody.WorldCarrier(carrier));
+
+        ExactInventory inventory = new ExactInventory(Map.of(), Map.of(item, stack), Map.of(), Map.of(), Map.of(carrier, List.of(item)));
+        assertEquals(new InventoryCustody.WorldCarrier(carrier), inventory.items().get(item).custody());
+        assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(), Map.of(item, stack), Map.of(), Map.of(), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(carrier, List.of(item))));
+        assertThrows(IllegalArgumentException.class, () -> new ExactInventory(Map.of(), Map.of(item, stack), Map.of(), Map.of(), Map.of(carrier, List.of(item, item))));
+    }
+
+    @Test
     void productionStorageCannotOverwriteARealExactStack() {
         SubjectId container = new SubjectId("container:depot");
         SubjectId owner = new SubjectId("settlement:one");

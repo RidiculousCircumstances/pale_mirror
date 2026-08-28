@@ -32,6 +32,16 @@ public final class FrontierBootstrapper {
         List<HiveNest> nests = List.of(
                 new HiveNest(new SubjectId("nest:seed-west"), hiveId, new BlockPosition(-420, 64, 420)),
                 new HiveNest(new SubjectId("nest:seed-east"), hiveId, new BlockPosition(420, 64, 420)));
+        List<HiveOrgan> organs = new ArrayList<>();
+        for (HiveNest nest : nests) {
+            String suffix = nest.id().value().substring("nest:seed-".length());
+            organs.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-heart"), hiveId, nest.id(), HiveOrganKind.HEART,
+                    nest.anchor(), java.util.Optional.empty()));
+            organs.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-brood"), hiveId, nest.id(), HiveOrganKind.BROOD,
+                    nest.anchor().offset(8, 0, 0), java.util.Optional.empty()));
+            organs.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-store"), hiveId, nest.id(), HiveOrganKind.STORE,
+                    nest.anchor().offset(-8, 0, 0), java.util.Optional.of(new SubjectId("container:hive-" + suffix + "-store"))));
+        }
         List<Bioform> bioforms = new ArrayList<>();
         for (int nestIndex = 0; nestIndex < nests.size(); nestIndex++) {
             HiveNest nest = nests.get(nestIndex);
@@ -43,7 +53,7 @@ public final class FrontierBootstrapper {
                         nest.id(), role, nest.anchor().offset(x, 0, z)));
             }
         }
-        return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, bioforms));
+        return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, organs, bioforms));
     }
 
     private static Settlement settlement(long seed, int index) {

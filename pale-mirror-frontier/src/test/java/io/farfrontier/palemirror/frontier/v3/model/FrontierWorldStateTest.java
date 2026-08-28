@@ -29,7 +29,7 @@ class FrontierWorldStateTest {
 
         assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount(), state.actorLocations().size());
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
-        assertEquals(12, state.inventory().containers().size());
+        assertEquals(14, state.inventory().containers().size());
         assertEquals(1, state.inventory().items().size());
         assertTrue(state.productionJobs().isEmpty());
         assertTrue(state.operations().isEmpty());
@@ -73,7 +73,7 @@ class FrontierWorldStateTest {
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
-        encoded[4] = 8;
+        encoded[4] = 9;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());

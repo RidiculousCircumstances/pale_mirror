@@ -27,7 +27,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 7;
+    private static final int VERSION = 8;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -123,6 +123,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, entry.getKey().toString()); writeCount(output, entry.getValue().size());
             for (SubjectId item : entry.getValue()) writeString(output, item.value());
         }
+        writeCount(output, inventory.worldCarrierItems().size());
+        for (Map.Entry<UUID, List<SubjectId>> entry : inventory.worldCarrierItems().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeString(output, entry.getKey().toString()); writeCount(output, entry.getValue().size());
+            for (SubjectId item : entry.getValue()) writeString(output, item.value());
+        }
     }
     private static ExactInventory readInventory(DataInputStream input) throws IOException {
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
@@ -148,7 +153,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (int item = 0, itemCount = readCount(input); item < itemCount; item++) itemIds.add(new SubjectId(readString(input)));
             if (players.put(player, itemIds) != null) throw new IllegalArgumentException("duplicate player custody id");
         }
-        return new ExactInventory(containers, items, cargo, players);
+        Map<UUID, List<SubjectId>> carriers = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            UUID carrier = UUID.fromString(readString(input)); java.util.ArrayList<SubjectId> itemIds = new java.util.ArrayList<>();
+            for (int item = 0, itemCount = readCount(input); item < itemCount; item++) itemIds.add(new SubjectId(readString(input)));
+            if (carriers.put(carrier, itemIds) != null) throw new IllegalArgumentException("duplicate world carrier custody id");
+        }
+        return new ExactInventory(containers, items, cargo, players, carriers);
     }
     private static void writeProductionJobs(DataOutputStream output, Map<SubjectId, ProductionJob> jobs) throws IOException {
         writeCount(output, jobs.size());
@@ -245,13 +256,15 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Cargo cargo) { output.writeByte(1); writeString(output, cargo.cargoId().value()); }
-        else { output.writeByte(2); writeString(output, ((InventoryCustody.Player) custody).playerId().toString()); }
+        else if (custody instanceof InventoryCustody.Player player) { output.writeByte(2); writeString(output, player.playerId().toString()); }
+        else { output.writeByte(3); writeString(output, ((InventoryCustody.WorldCarrier) custody).carrierId().toString()); }
     }
     private static InventoryCustody readCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new InventoryCustody.ContainerSlot(new SubjectId(readString(input)), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Cargo(new SubjectId(readString(input)));
             case 2 -> new InventoryCustody.Player(UUID.fromString(readString(input)));
+            case 3 -> new InventoryCustody.WorldCarrier(UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown inventory custody");
         };
     }

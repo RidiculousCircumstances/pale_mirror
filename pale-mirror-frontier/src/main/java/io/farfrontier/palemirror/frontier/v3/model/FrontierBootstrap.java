@@ -29,6 +29,7 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         }
         add(ids, hive.id());
         hive.seedNests().forEach(nest -> { add(ids, nest.id()); require(bounds, nest.anchor()); });
+        hive.organs().forEach(organ -> { add(ids, organ.id()); require(bounds, organ.anchor()); });
         hive.bioforms().forEach(bioform -> { add(ids, bioform.id()); require(bounds, bioform.position()); });
     }
 
@@ -56,6 +57,11 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         }
         text.append('|').append(hive.id().value());
         hive.seedNests().forEach(nest -> append(text, nest.id(), nest.anchor()));
+        hive.organs().forEach(organ -> {
+            append(text, organ.id(), organ.anchor());
+            text.append(':').append(organ.nestId().value()).append(':').append(organ.kind());
+            organ.containerId().ifPresent(container -> text.append(':').append(container.value()));
+        });
         hive.bioforms().forEach(bioform -> { append(text, bioform.id(), bioform.position()); text.append(':').append(bioform.nestId().value()).append(':').append(bioform.role()); });
         return text.toString();
     }
