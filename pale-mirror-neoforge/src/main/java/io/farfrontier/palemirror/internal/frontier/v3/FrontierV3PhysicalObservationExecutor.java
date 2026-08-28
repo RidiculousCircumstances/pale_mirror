@@ -51,7 +51,7 @@ final class FrontierV3PhysicalObservationExecutor {
                 ledger.resolve(value); continue; // crash/retry after a durable command append
             }
             PhysicalDelta delta = delta(value, canonicalPosition);
-            CommandId id = new CommandId("executor:" + value.effectId() + ":" + Long.toUnsignedString(position.asLong()));
+            CommandId id = FrontierV3CommandIds.externalExplosionObservation(value.effectId(), position.asLong());
             CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                     FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta)))
                     .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
@@ -71,7 +71,7 @@ final class FrontierV3PhysicalObservationExecutor {
         PhysicalDelta delta = semantic.isEmpty() ? new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "explosion:" + intentId.value())
                 : new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new SubjectId(semantic.orElseThrow().owner())),
                 Optional.of(GrayboxSemanticPart.valueOf(semantic.orElseThrow().semanticPart())), "explosion:" + intentId.value());
-        CommandId id = new CommandId("executor:managed-explosion:" + intentId.value().replace(':', '-') + ":" + Long.toUnsignedString(position.asLong()));
+        CommandId id = FrontierV3CommandIds.managedExplosionObservation(intentId, position.asLong());
         CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));

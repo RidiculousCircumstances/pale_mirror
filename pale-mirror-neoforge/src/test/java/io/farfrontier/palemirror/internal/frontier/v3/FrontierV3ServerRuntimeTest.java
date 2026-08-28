@@ -75,6 +75,19 @@ class FrontierV3ServerRuntimeTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
 
     @Test
+    void explosionObservationCommandsNormalizeNestedIdsIntoOneStrictCommandPath() {
+        long packedPosition = -1L;
+
+        CommandId external = FrontierV3CommandIds.externalExplosionObservation("effect:external-explosion:0", packedPosition);
+        CommandId managed = FrontierV3CommandIds.managedExplosionObservation(
+                new PhysicalIntentId("intent:managed-explosion-command-id-test"), packedPosition);
+
+        assertEquals("executor:external-explosion-effect-external-explosion-0-p" + Long.toUnsignedString(packedPosition), external.value());
+        assertEquals("executor:managed-explosion-intent-managed-explosion-command-id-test-p" + Long.toUnsignedString(packedPosition), managed.value());
+        assertThrows(IllegalArgumentException.class, () -> new CommandId("executor:effect:external-explosion:0:" + Long.toUnsignedString(packedPosition)));
+    }
+
+    @Test
     void sceneAdmissionDefersWhenAnExactParticipantAlreadyHasAnAmbientLease(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-ambient-handoff");
         var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L),
