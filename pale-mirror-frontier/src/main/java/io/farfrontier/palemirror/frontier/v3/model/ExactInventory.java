@@ -218,7 +218,30 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
-    /** Applies one observed container/player/carrier transfer only when its exact source still agrees. */
+    /**
+     * Releases one complete shipment to a single observed physical carrier. This is deliberately
+     * all-or-nothing: individual stacks may leave only after the batch no longer claims custody.
+     */
+    public ExactInventory releaseCargoToWorldCarrier(SubjectId cargoId, UUID carrierId) {
+        CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
+        Objects.requireNonNull(carrierId, "carrier id");
+        if (batch == null) throw new IllegalArgumentException("released cargo is absent: " + cargoId.value());
+        if (worldCarrierItems.containsKey(carrierId)) throw new IllegalArgumentException("released cargo carrier identity is already owned");
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        for (SubjectId itemId : batch.itemIds()) {
+            ExactItemStack item = nextItems.get(itemId);
+            if (item == null || !item.custody().equals(new InventoryCustody.Cargo(cargoId))) {
+                throw new IllegalArgumentException("released item is not in its exact cargo batch: " + itemId.value());
+            }
+            nextItems.put(item.id(), new ExactItemStack(item.id(), item.economicOwnerId(), item.itemKind(), item.count(), new InventoryCustody.WorldCarrier(carrierId)));
+        }
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.remove(cargoId);
+        Map<UUID, List<SubjectId>> nextCarriers = mutableCustody(worldCarrierItems);
+        nextCarriers.put(carrierId, new java.util.ArrayList<>(batch.itemIds()));
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems, nextCarriers, conflicts, surfaces);
+    }
+
+    /** Applies one observed trusted-surface transfer only when its exact source still agrees. */
     public ExactInventory moveObservedItem(SubjectId itemId, InventoryCustody from, InventoryCustody to) {
         Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(from, "source custody"); Objects.requireNonNull(to, "target custody");
         ExactItemStack current = items.get(itemId);

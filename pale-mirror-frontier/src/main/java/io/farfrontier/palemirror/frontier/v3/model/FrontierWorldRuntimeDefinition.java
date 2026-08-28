@@ -159,6 +159,16 @@ public final class FrontierWorldRuntimeDefinition {
             if (item == null || !item.custody().equals(destroyed.source())) return rejected("destroyed item source differs from canonical custody");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, destroyed), destroyed)));
         }
+        if (command.payload() instanceof CargoCarrierReleased released) {
+            SceneLease lease = state.sceneLeases().get(released.leaseId());
+            if (lease == null || !lease.cargoId().equals(released.cargoId()) || lease.status() != SceneLeaseStatus.HOT) {
+                return rejected("cargo carrier release lacks one HOT matching scene lease");
+            }
+            if (!CargoCarrierIdentity.id(lease).equals(released.carrierId())) return rejected("cargo carrier identity is not canonical for its scene");
+            RouteOperation operation = state.operations().get(lease.operationId());
+            if (operation == null) return rejected("cargo carrier release has no owning operation");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released)));
+        }
         if (command.payload() instanceof InventoryConflictObserved observed) {
             InventoryConflict conflict = observed.conflict();
             ContainerRecord container = state.inventory().containers().get(conflict.containerId());
@@ -234,6 +244,7 @@ public final class FrontierWorldRuntimeDefinition {
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             case ExactItemDestroyed destroyed -> reduceExactItemDestroyed(state, event.subject(), destroyed);
+            case CargoCarrierReleased released -> reduceCargoCarrierReleased(state, event.subject(), released);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
             case ContainerSurfaceTransition transition -> ContainerSurfaceProcess.reduce(state, event.subject(), transition);
             case HiveGrowthStarted started -> HiveGrowthProcess.reduceStarted(state, event.subject(), started);
@@ -408,6 +419,12 @@ public final class FrontierWorldRuntimeDefinition {
             throw new IllegalArgumentException("item destruction lacks its canonical owner");
         }
         return state.withInventory(state.inventory().destroyObservedItem(destroyed.itemId(), destroyed.source()));
+    }
+    private static FrontierWorldState reduceCargoCarrierReleased(FrontierWorldState state, SubjectId subject, CargoCarrierReleased released) {
+        SceneLease lease = state.sceneLeases().get(released.leaseId());
+        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("cargo carrier release lacks its owning settlement");
+        return state.releaseCargoCarrier(released);
     }
     private static FrontierWorldState reduceInventoryConflict(FrontierWorldState state, SubjectId subject, InventoryConflictObserved observed) {
         InventoryConflict conflict = observed.conflict();

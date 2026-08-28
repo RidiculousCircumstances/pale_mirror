@@ -318,12 +318,15 @@ public final class PaleMirrorEvents {
     public static void onExcludedEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
-                && player.level() instanceof net.minecraft.server.level.ServerLevel level
-                && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.isSealedCargoCarrier(level, event.getTarget())) {
-            player.sendSystemMessage(Component.literal("Frontier cargo is sealed while its custody is being tracked."));
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.FAIL);
-            return;
+                && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
+            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
+                player.sendSystemMessage(Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
+                event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
+            }
+            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED) {
+                player.sendSystemMessage(Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
+            }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
@@ -349,12 +352,15 @@ public final class PaleMirrorEvents {
     public static void onExcludedEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
-                && player.level() instanceof net.minecraft.server.level.ServerLevel level
-                && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.isSealedCargoCarrier(level, event.getTarget())) {
-            player.sendSystemMessage(Component.literal("Frontier cargo is sealed while its custody is being tracked."));
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.FAIL);
-            return;
+                && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
+            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
+                player.sendSystemMessage(Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
+                event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
+            }
+            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED) {
+                player.sendSystemMessage(Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
+            }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
@@ -386,6 +392,12 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onExcludedItemPickup(ItemEntityPickupEvent.Pre event) {
+        if (event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            var custody = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeExactItemPickup(level, player, event.getItemEntity());
+            if (custody == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.ExactCustodyObservation.REJECTED) {
+                event.setCanPickup(TriState.FALSE); return;
+            }
+        }
         if (event.getPlayer() instanceof ServerPlayer player && denyExcludedItem(player, event.getItemEntity().getItem(), "pickup")) {
             event.setCanPickup(TriState.FALSE);
         }
@@ -412,6 +424,12 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onReservedItemToss(ItemTossEvent event) {
+        if (event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            var custody = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeExactItemToss(level, player, event.getEntity());
+            if (custody == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.ExactCustodyObservation.REJECTED) {
+                event.setCanceled(true); return;
+            }
+        }
         if (event.getPlayer() instanceof ServerPlayer player && denyReservedTransfer(player, event.getEntity().getItem())) {
             event.setCanceled(true);
         }

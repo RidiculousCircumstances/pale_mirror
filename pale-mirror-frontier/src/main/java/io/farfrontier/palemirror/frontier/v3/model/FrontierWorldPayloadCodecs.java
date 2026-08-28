@@ -13,7 +13,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
-                new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
+                new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(), new CargoCarrierReleasedPayloadCodec(),
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),

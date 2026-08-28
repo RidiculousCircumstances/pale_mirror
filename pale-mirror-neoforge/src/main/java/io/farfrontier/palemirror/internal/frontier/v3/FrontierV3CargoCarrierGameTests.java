@@ -6,9 +6,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
+import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
@@ -124,6 +128,50 @@ public final class FrontierV3CargoCarrierGameTests {
                 discard(level, lease); lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
                 runtime.shutdown(); throw failure;
             }
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void playerOpeningCargoReleasesItsRouteThenObservesExactWithdrawal(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-player-release");
+        FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
+        BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z()); level.getChunkAt(handoff);
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLease lease = new SceneLease(new SceneLeaseId("lease:frontier-v3-cargo-player-release"), initial.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(),
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()),
+                candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(initial.bootstrap().worldId(), actor))).toList());
+        prepareFloor(level, cargoPosition(handoff, lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-prepare", lease.id().value(), new SceneLeasePrepared(lease));
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state(runtime), lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "the player release fixture must materialize one exact cargo cart");
+        FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        helper.runAfterDelay(1L, () -> {
+            try {
+                MinecartChest cart = (MinecartChest) level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
+                helper.assertTrue(cart != null, "the exact cargo cart must be UUID-indexed before interaction");
+                FrontierWorldState hot = state(runtime);
+                helper.assertTrue(FrontierV3CargoCarrierExecutor.markReleasedCarrier(hot, lease, cart),
+                        "release marks every exact stack with its live cart carrier before the durable fact");
+                FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-release", lease.id().value(),
+                        new CargoCarrierReleased(lease.id(), lease.cargoId(), cart.getUUID(), java.util.UUID.fromString("00000000-0000-0000-0000-000000000061")));
+                FrontierWorldState released = state(runtime);
+                var itemId = initial.inventory().cargo().get(lease.cargoId()).itemIds().getFirst();
+                helper.assertValueEqual(released.inventory().items().get(itemId).custody(), new InventoryCustody.WorldCarrier(cart.getUUID()),
+                        "a released shipment becomes the exact cart's physical custody, never an untracked aggregate");
+                helper.assertValueEqual(released.contracts().values().stream().filter(contract -> contract.cargoId().equals(lease.cargoId())).findFirst().orElseThrow().status(), ContractStatus.INTERRUPTED,
+                        "opening the cart interrupts the canonical supply contract");
+                helper.assertValueEqual(released.operations().get(lease.operationId()).stage(), OperationStage.INTERRUPTED,
+                        "the interrupted route cannot continue COLD progression");
+                helper.assertValueEqual(released.sceneLeases().get(lease.id()).status(), SceneLeaseStatus.DRAINING,
+                        "the HOT bodies must drain rather than keep escorting a released cart");
+                var player = helper.makeMockServerPlayerInLevel();
+                player.getInventory().setItem(0, cart.removeItemNoUpdate(0)); cart.setChanged();
+                FrontierV3CargoCarrierObservationExecutor.tick(level, runtime);
+                helper.assertValueEqual(state(runtime).inventory().items().get(itemId).custody(), new InventoryCustody.Player(player.getUUID()),
+                        "the first real cart withdrawal must retain its exact stack ID and player UUID");
+                cart.discard(); runtime.shutdown(); helper.succeed();
+            } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
         });
     }
 

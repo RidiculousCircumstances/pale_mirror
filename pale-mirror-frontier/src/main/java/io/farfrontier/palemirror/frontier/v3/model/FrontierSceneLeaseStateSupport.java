@@ -69,8 +69,15 @@ final class FrontierSceneLeaseStateSupport {
         StrategicPlanState plans = state.strategicPlans();
         if (current.engagementId().isPresent()) {
             SubjectId engagement = current.engagementId().orElseThrow();
-            if (nextStatus == SceneLeaseStatus.HOT) plans = plans.transitionEngagement(engagement, RouteEngagementStatus.HOT);
-            if (nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART) {
+            RouteEngagement currentEngagement = plans.routeEngagements().get(engagement);
+            if (currentEngagement == null) throw new IllegalArgumentException("scene lease has no canonical engagement");
+            if (nextStatus == SceneLeaseStatus.HOT) {
+                if (currentEngagement.status() == RouteEngagementStatus.RESOLVED) {
+                    throw new IllegalArgumentException("an aborted engagement cannot reclaim a HOT scene");
+                }
+                plans = plans.transitionEngagement(engagement, RouteEngagementStatus.HOT);
+            }
+            if (nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && currentEngagement.status() != RouteEngagementStatus.RESOLVED) {
                 plans = plans.transitionEngagement(engagement, RouteEngagementStatus.UNKNOWN_AFTER_RESTART);
             }
         }
@@ -90,7 +97,11 @@ final class FrontierSceneLeaseStateSupport {
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position.position());
             ActorLocation currentActor = actors.get(position.actorId()); actors.put(position.actorId(), new ActorLocation(position.position(), currentActor.condition().withHealth(position.health())));
         }
-        StrategicPlanState plans = current.engagementId().map(id -> state.strategicPlans().transitionEngagement(id, RouteEngagementStatus.COLD_COMBAT)).orElse(state.strategicPlans());
+        StrategicPlanState plans = current.engagementId().map(id -> {
+            RouteEngagement engagement = state.strategicPlans().routeEngagements().get(id);
+            return engagement != null && engagement.status() != RouteEngagementStatus.RESOLVED
+                    ? state.strategicPlans().transitionEngagement(id, RouteEngagementStatus.COLD_COMBAT) : state.strategicPlans();
+        }).orElse(state.strategicPlans());
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
         return copy(state, actors, leases, state.ambientLeases(), plans);
     }

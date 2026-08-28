@@ -17,9 +17,9 @@ import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Loaded-world exact cargo representation for one HOT route scene. */
@@ -81,8 +81,29 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     static UUID id(SceneLease lease) {
-        return UUID.nameUUIDFromBytes(("frontier-v3:cargo-carrier:" + lease.worldId().value() + ":" + lease.id().value() + ":" + lease.cargoId().value())
-                .getBytes(StandardCharsets.UTF_8));
+        return io.farfrontier.palemirror.frontier.v3.model.CargoCarrierIdentity.id(lease);
+    }
+
+    /** Finds the one still-atomic HOT shipment represented by this exact Minecraft cart. */
+    static Optional<SceneLease> activeLease(FrontierWorldState state, Entity entity) {
+        return state.sceneLeases().values().stream().filter(lease -> lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT)
+                .filter(lease -> intactEntity(state, entity, lease)).sorted(Comparator.comparing(SceneLease::id)).findFirst();
+    }
+
+    /** Applies stable world-carrier provenance before the durable release permits container use. */
+    static boolean markReleasedCarrier(FrontierWorldState state, SceneLease lease, Entity entity) {
+        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        if (cargo == null) return false;
+        List<ExactItemStack> items = items(state, cargo);
+        if (!owned(entity, lease, items)) return false;
+        MinecartChest cart = (MinecartChest) entity;
+        for (int index = 0; index < items.size(); index++) {
+            var stack = cart.getItem(index);
+            FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, cart.getUUID());
+            cart.setItem(index, stack);
+        }
+        cart.setChanged();
+        return true;
     }
 
     static boolean owned(Entity entity, SceneLease lease, List<ExactItemStack> items) {
@@ -95,8 +116,7 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     static boolean active(FrontierWorldState state, Entity entity) {
-        return state.sceneLeases().values().stream().filter(lease -> lease.status() != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED)
-                .anyMatch(lease -> intactEntity(state, entity, lease));
+        return activeLease(state, entity).isPresent();
     }
 
     private static boolean intactEntity(FrontierWorldState state, Entity entity, SceneLease lease) {

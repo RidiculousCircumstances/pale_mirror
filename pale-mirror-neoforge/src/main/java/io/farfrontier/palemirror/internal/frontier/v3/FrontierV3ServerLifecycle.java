@@ -2,7 +2,13 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -11,6 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.util.IdentityHashMap;
@@ -71,6 +78,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3AmbientActorExecutor.tick(server.overworld(), runtime);
                 // Observe player custody before passive surface drift inspection can classify it.
                 FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
+                FrontierV3CargoCarrierObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3ContainerSurfaceExecutor.tick(server.overworld(), runtime);
                 FrontierV3CargoHandoffExecutor.tick(server.overworld(), runtime);
                 FrontierV3StructuralRepairExecutor.tick(server.overworld(), runtime);
@@ -123,13 +131,90 @@ public final class FrontierV3ServerLifecycle {
                 && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity);
     }
 
-    /** True while a HOT cargo crate has no durable player-custody/loss protocol to own an edit. */
-    public static boolean isSealedCargoCarrier(ServerLevel level, Entity entity) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+    /**
+     * Durably releases an exact HOT shipment before vanilla opens its chest-minecart UI. The cart
+     * remains in the world and each later player/drop/hopper move is observed from its stable
+     * world-carrier identity; a rejected release must keep the interaction closed.
+     */
+    public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && runtime.decodedState().map(state -> FrontierV3CargoCarrierExecutor.active(state, entity)).orElse(false);
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return CargoCarrierInteraction.REJECTED;
+        var lease = FrontierV3CargoCarrierExecutor.activeLease(state, entity);
+        if (lease.isEmpty()) return CargoCarrierInteraction.NOT_MANAGED;
+        if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) return CargoCarrierInteraction.REJECTED;
+        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
+        if (checkpoint == null) return CargoCarrierInteraction.REJECTED;
+        CommandId commandId = new CommandId("executor:cargo-carrier-release-" + lease.orElseThrow().id().value().replace(':', '-')
+                + "-player-" + player.getUUID() + "-r" + checkpoint.revision().value());
+        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
+                new CargoCarrierReleased(lease.orElseThrow().id(), lease.orElseThrow().cargoId(), entity.getUUID(), player.getUUID())))
+                .orElse(null);
+        return result instanceof CommandResult.Accepted ? CargoCarrierInteraction.RELEASED : CargoCarrierInteraction.REJECTED;
     }
+
+    public enum CargoCarrierInteraction { NOT_MANAGED, RELEASED, REJECTED }
+
+    /** Admits one real world-drop pickup only after its exact custody receipt is durable. */
+    public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return ExactCustodyObservation.REJECTED;
+        var carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(itemEntity.getItem());
+        if (carrierId.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
+        var source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(carrierId.orElseThrow());
+        var item = state.inventory().items().values().stream().filter(value -> value.custody().equals(source))
+                .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
+        if (item.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
+        return submitExactCustody(runtime, "world-pickup", item.orElseThrow().id().value(),
+                new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), source,
+                        new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Player(player.getUUID())));
+    }
+
+    /** Captures a player toss as a new exact physical carrier before Minecraft releases the item entity. */
+    public static ExactCustodyObservation observeExactItemToss(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return ExactCustodyObservation.REJECTED;
+        var item = state.inventory().items().values().stream().filter(value -> value.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Player owner
+                        && owner.playerId().equals(player.getUUID()))
+                .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
+        if (item.isEmpty()) {
+            var carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(itemEntity.getItem());
+            if (carrierId.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
+            var source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(carrierId.orElseThrow());
+            item = state.inventory().items().values().stream().filter(value -> value.custody().equals(source))
+                    .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
+            if (item.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
+            FrontierV3CargoHandoffExecutor.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
+            return submitExactCustody(runtime, "world-retoss", item.orElseThrow().id().value(),
+                    new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), source,
+                            new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(itemEntity.getUUID())));
+        }
+        FrontierV3CargoHandoffExecutor.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
+        return submitExactCustody(runtime, "player-toss", item.orElseThrow().id().value(),
+                new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), item.orElseThrow().custody(),
+                        new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(itemEntity.getUUID())));
+    }
+
+    private static ExactCustodyObservation submitExactCustody(FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
+                                                               String phase, String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
+        if (checkpoint == null) return ExactCustodyObservation.REJECTED;
+        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
+        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload)).orElse(null);
+        return result instanceof CommandResult.Accepted ? ExactCustodyObservation.ACCEPTED : ExactCustodyObservation.REJECTED;
+    }
+
+    public enum ExactCustodyObservation { NOT_MANAGED, ACCEPTED, REJECTED }
 
     /** True means the v3-owned break was not durably accepted and Minecraft must not apply it. */
     public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {

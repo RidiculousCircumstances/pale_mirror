@@ -96,6 +96,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     .orElseThrow(() -> new IllegalArgumentException("route operation cargo has no contract"));
             if (operation.stage() == OperationStage.ARRIVED && contract.status() == ContractStatus.DELIVERED) {
                 if (cargo != null) throw new IllegalArgumentException("delivered operation cannot retain cargo");
+            } else if (operation.stage() == OperationStage.INTERRUPTED && contract.status() == ContractStatus.INTERRUPTED) {
+                if (cargo != null) throw new IllegalArgumentException("interrupted operation cannot retain cargo");
             } else if (cargo == null || !cargo.ownerId().equals(operation.settlementId())) {
                 throw new IllegalArgumentException("route operation must own settlement cargo");
             }
@@ -105,7 +107,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             for (SubjectId participant : operation.participantIds()) {
                 if (!settlementResidents.contains(participant)) throw new IllegalArgumentException("route operation participant must belong to its settlement");
                 if (!assignedParticipants.add(participant)) throw new IllegalArgumentException("resident cannot be assigned to multiple route operations");
-                if (operation.stage() != OperationStage.FAILED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
+                if (operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
                         && !leaseHistoryOperations.contains(operation.id())
                         && sceneLeases.values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.operationId().equals(operation.id())
                         && lease.members().stream().anyMatch(member -> member.actorId().equals(participant)))
@@ -176,8 +178,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (operation == null || !operation.cargoId().equals(lease.cargoId())) {
                 throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
             }
-            if (lease.status() != SceneLeaseStatus.CLOSED && (operation.stage() != OperationStage.EN_ROUTE
-                    || !operation.route().get(operation.routeIndex()).equals(lease.handoffPosition()))) {
+            boolean enRouteScene = operation.stage() == OperationStage.EN_ROUTE && operation.route().get(operation.routeIndex()).equals(lease.handoffPosition());
+            boolean interruptedScene = operation.stage() == OperationStage.INTERRUPTED
+                    && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+            if (lease.status() != SceneLeaseStatus.CLOSED && !enRouteScene && !interruptedScene) {
                 throw new IllegalArgumentException("active scene lease must bind its current en-route operation state");
             }
             if (lease.status() != SceneLeaseStatus.CLOSED && !leasedOperations.add(lease.operationId())) {
@@ -186,10 +190,15 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
             Set<SubjectId> expectedMembers = lease.engagementId().map(engagementId -> {
                 RouteEngagement engagement = strategicPlans.routeEngagements().get(engagementId);
+                boolean interruptedAbort = operation.stage() == OperationStage.INTERRUPTED
+                        && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
+                        && engagement != null && engagement.status() == RouteEngagementStatus.RESOLVED
+                        && engagement.outcome().filter(outcome -> outcome == RouteEngagementOutcome.ABORTED).isPresent();
                 if (engagement == null || !engagement.operationId().equals(operation.id())
                         || !lease.handoffPosition().equals(engagement.intercept())
                         || (lease.status() != SceneLeaseStatus.CLOSED && engagement.status() != RouteEngagementStatus.COLD_COMBAT
-                        && engagement.status() != RouteEngagementStatus.HOT && engagement.status() != RouteEngagementStatus.UNKNOWN_AFTER_RESTART)) {
+                        && engagement.status() != RouteEngagementStatus.HOT && engagement.status() != RouteEngagementStatus.UNKNOWN_AFTER_RESTART
+                        && !interruptedAbort)) {
                     throw new IllegalArgumentException("scene lease must bind one active canonical engagement");
                 }
                 Set<SubjectId> values = new HashSet<>(operation.participantIds()); values.addAll(engagement.attackerIds()); return Set.copyOf(values);
@@ -450,6 +459,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 current.participantIds(), current.route(), current.routeIndex(), OperationStage.FAILED));
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, next,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    /**
+     * Atomically turns an exact shipment into its real loaded-world carrier. The interrupted
+     * route can no longer progress or be delivered; its HOT bodies drain from their latest
+     * observed state while the cart itself remains ordinary physical world state.
+     */
+    public FrontierWorldState releaseCargoCarrier(CargoCarrierReleased released) {
+        return CargoCarrierReleaseStateSupport.release(this, released);
     }
     public FrontierWorldState addHiveOrgan(HiveOrgan organ) {
         Objects.requireNonNull(organ, "hive organ");

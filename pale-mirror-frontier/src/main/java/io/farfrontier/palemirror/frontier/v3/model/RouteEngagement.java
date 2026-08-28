@@ -68,4 +68,11 @@ record RouteEngagement(SubjectId id, SubjectId taskId, SubjectId operationId, Su
         return new RouteEngagement(id, taskId, operationId, hiveId, attackers, intercept, RouteEngagementStatus.RESOLVED,
                 nextStrikeEpoch, Optional.of(Objects.requireNonNull(result, "engagement outcome")));
     }
+
+    /** A third-party physical interruption ends an engagement without attributing victory. */
+    RouteEngagement abort() {
+        if (status == RouteEngagementStatus.RESOLVED) throw new IllegalArgumentException("resolved engagement cannot be aborted");
+        return new RouteEngagement(id, taskId, operationId, hiveId, attackers, intercept, RouteEngagementStatus.RESOLVED,
+                nextStrikeEpoch, Optional.of(RouteEngagementOutcome.ABORTED));
+    }
 }

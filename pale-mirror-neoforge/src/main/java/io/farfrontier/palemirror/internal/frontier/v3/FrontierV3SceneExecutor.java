@@ -181,7 +181,9 @@ final class FrontierV3SceneExecutor {
             Entity entity = level.getEntity(member.entityId());
             if (!owned(entity, state, lease, member) || !(entity instanceof Mob body) || body.getHealth() <= 0.0F) return false;
         }
-        if (!FrontierV3CargoCarrierExecutor.intact(level, state, lease)) return false;
+        RouteOperation operation = state.operations().get(lease.operationId());
+        boolean interrupted = operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
+        if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) return false;
         boolean hasDeadMember = lease.members().stream()
                 .anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD);
         submit(runtime, hasDeadMember ? "scene-recovery-draining" : "scene-reclaimed", lease.id().value(),
@@ -367,7 +369,9 @@ final class FrontierV3SceneExecutor {
         if (state == null) return;
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
-        if (!FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
+        RouteOperation operation = state.operations().get(lease.operationId());
+        boolean interrupted = operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
+        if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
             unknown(runtime, lease); return;
         }
         List<SceneMemberPosition> positions = new ArrayList<>();

@@ -128,8 +128,10 @@ class ExactInventoryTest {
         assertEquals(List.of(item), carried.worldCarrierItems().get(carrier));
         ExactInventory returned = carried.moveObservedItem(item, new InventoryCustody.WorldCarrier(carrier), slot);
         assertEquals(slot, returned.items().get(item).custody());
-        assertThrows(IllegalArgumentException.class, () -> new ExactItemCustodyChanged(item,
-                new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000044")), new InventoryCustody.WorldCarrier(carrier)));
+        InventoryCustody.Player player = new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000044"));
+        assertDoesNotThrow(() -> new ExactItemCustodyChanged(item, player, new InventoryCustody.WorldCarrier(carrier)));
+        assertThrows(IllegalArgumentException.class, () -> new ExactItemCustodyChanged(item, player,
+                new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000045"))));
     }
 
     @Test

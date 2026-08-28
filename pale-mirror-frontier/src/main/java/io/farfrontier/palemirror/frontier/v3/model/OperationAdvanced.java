@@ -11,7 +11,7 @@ public record OperationAdvanced(SubjectId operationId, int routeIndex, Operation
         Objects.requireNonNull(operationId, "operation id");
         Objects.requireNonNull(stage, "operation stage");
         if (routeIndex < 0) throw new IllegalArgumentException("operation route index must be non-negative");
-        if (stage == OperationStage.ASSEMBLING || stage == OperationStage.FAILED) throw new IllegalArgumentException("operation advancement must be en-route or arrived");
+        if (stage == OperationStage.ASSEMBLING || stage == OperationStage.FAILED || stage == OperationStage.INTERRUPTED) throw new IllegalArgumentException("operation advancement must be en-route or arrived");
     }
     @Override public String type() { return "frontier.operation_advanced"; }
 }

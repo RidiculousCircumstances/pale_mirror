@@ -273,6 +273,24 @@ final class StrategicPlanState {
         return new StrategicPlanState(objectives, tasks, routePatrols, next);
     }
 
+    /** Blocks the affected delivery and aborts any active hive interception after a player takes its cargo. */
+    StrategicPlanState interruptRouteOperation(SubjectId operationId, SubjectId settlementId) {
+        Objects.requireNonNull(operationId, "operation id"); Objects.requireNonNull(settlementId, "settlement id");
+        Map<SubjectId, StrategicTask> nextTasks = new LinkedHashMap<>(tasks);
+        for (StrategicTask task : tasks.values()) {
+            boolean intercept = task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION && task.operationTarget().equals(java.util.Optional.of(operationId));
+            boolean delivery = task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE && task.ownerId().equals(settlementId);
+            if ((intercept || delivery) && task.status() != StrategicTaskStatus.COMPLETED && task.status() != StrategicTaskStatus.BLOCKED) {
+                nextTasks.put(task.id(), task.withStatus(StrategicTaskStatus.BLOCKED));
+            }
+        }
+        Map<SubjectId, RouteEngagement> nextEngagements = new LinkedHashMap<>(routeEngagements);
+        routeEngagements.values().stream().filter(engagement -> engagement.operationId().equals(operationId))
+                .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
+                .forEach(engagement -> nextEngagements.put(engagement.id(), engagement.abort()));
+        return new StrategicPlanState(objectives, nextTasks, routePatrols, nextEngagements);
+    }
+
     private static boolean removable(StrategicObjective objective, Map<SubjectId, StrategicTask> tasks, List<SubjectId> protectedTaskIds) {
         java.util.Set<SubjectId> owned = tasks.values().stream().filter(task -> task.objectiveId().equals(objective.id())).map(StrategicTask::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
