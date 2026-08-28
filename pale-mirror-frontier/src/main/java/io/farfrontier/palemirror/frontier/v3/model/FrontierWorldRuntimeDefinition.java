@@ -27,7 +27,7 @@ public final class FrontierWorldRuntimeDefinition {
                 FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp()); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
-        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(contractDemand(1, 2_500), StructuralRepairProcess.scan(1, 800),
+        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(SupplyOperationProcess.demand(bootstrap.settlements().getFirst().id(), 1, 2_500), StructuralRepairProcess.scan(1, 800),
                 RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
@@ -125,9 +125,9 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
             case "frontier.settlement.production.task.start" -> ProductionProcess.planStart(state, action);
             case "frontier.settlement.production.task.complete" -> ProductionProcess.planCompletion(state, action);
-            case "frontier.supply.contract.demand" -> planContractDemand(state, action);
-            case "frontier.supply.cargo.load" -> planCargoLoad(state, action);
-            case "frontier.operation.progress" -> planOperationProgress(state, action);
+            case "frontier.supply.contract.demand" -> SupplyOperationProcess.planDemand(state, action);
+            case "frontier.supply.cargo.load" -> SupplyOperationProcess.planCargoLoad(state, action);
+            case "frontier.operation.progress" -> SupplyOperationProcess.planProgress(state, action);
             case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
