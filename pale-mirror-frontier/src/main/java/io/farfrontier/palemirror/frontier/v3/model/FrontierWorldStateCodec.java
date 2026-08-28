@@ -1,17 +1,11 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
-import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus; import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -26,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 22, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 23, MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {
@@ -429,6 +423,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 for (CargoHandoffPlacement placement : cargo.placements()) {
                     writeString(output, placement.itemId().value()); writeCustody(output, placement.receiverSlot());
                 }
+            } else if (observation instanceof DecontaminationObservation decontamination) {
+                output.writeByte(3); writeString(output, decontamination.id().value()); writeString(output, decontamination.intentId().value());
+                writeString(output, decontamination.itemId().value()); output.writeInt(decontamination.cell().x()); output.writeInt(decontamination.cell().z());
+                output.writeLong(decontamination.priorRaw()); output.writeLong(decontamination.remainingRaw());
             } else if (observation instanceof StructuralRepairObservation repair) {
                 output.writeByte(1); writeString(output, repair.id().value()); writeString(output, repair.intentId().value());
                 writeString(output, repair.itemId().value()); writePosition(output, repair.position());
@@ -455,6 +453,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 }
                 case 1 -> new StructuralRepairObservation(id, intentId, new SubjectId(readString(input)), readPosition(input));
                 case 2 -> new RouteConstructionObservation(id, intentId, new SubjectId(readString(input)), new SubjectId(readString(input)), readPosition(input));
+                case 3 -> new DecontaminationObservation(id, intentId, new SubjectId(readString(input)), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

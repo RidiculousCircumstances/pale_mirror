@@ -5,5 +5,6 @@ public enum PhysicalIntentKind {
     CARGO_HANDOFF,
     STRUCTURAL_REPAIR,
     ROUTE_CONSTRUCTION,
+    DECONTAMINATION,
     EXPLOSION
 }

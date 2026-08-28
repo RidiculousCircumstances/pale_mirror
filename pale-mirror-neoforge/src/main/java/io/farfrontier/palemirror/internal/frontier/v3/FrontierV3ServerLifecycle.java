@@ -60,6 +60,7 @@ public final class FrontierV3ServerLifecycle {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
+                FrontierV3DecontaminationExecutor.tick(server.overworld(), runtime);
                 FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
                 FrontierV3AmbientActorExecutor.tick(server.overworld(), runtime);
                 // Observe player custody before passive surface drift inspection can classify it.

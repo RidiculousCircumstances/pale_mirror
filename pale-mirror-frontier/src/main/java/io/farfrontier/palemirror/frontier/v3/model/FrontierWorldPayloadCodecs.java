@@ -1,17 +1,10 @@
 package io.farfrontier.palemirror.frontier.v3.model;
-import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
-import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
-import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
-import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
-
-import java.nio.ByteBuffer;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload; import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
+import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
+import java.nio.ByteBuffer; import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream; import java.io.DataInputStream;
+import java.io.DataOutputStream; import java.io.IOException;
 import java.util.List;
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
@@ -439,7 +432,10 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static void writePhysicalEffectObservation(DataOutputStream output, PhysicalEffectObservation observation) throws IOException {
         if (observation instanceof CargoHandoffObservation cargo) { output.writeByte(0); writeCargoHandoffObservation(output, cargo); }
-        else if (observation instanceof StructuralRepairObservation repair) {
+        else if (observation instanceof DecontaminationObservation decontamination) {
+            output.writeByte(3); writeString(output, decontamination.id().value()); writeString(output, decontamination.intentId().value()); writeSubject(output, decontamination.itemId());
+            output.writeInt(decontamination.cell().x()); output.writeInt(decontamination.cell().z()); output.writeLong(decontamination.priorRaw()); output.writeLong(decontamination.remainingRaw());
+        } else if (observation instanceof StructuralRepairObservation repair) {
             output.writeByte(1); writeString(output, repair.id().value()); writeString(output, repair.intentId().value());
             writeSubject(output, repair.itemId()); writePosition(output, repair.position());
         } else if (observation instanceof RouteConstructionObservation construction) {
@@ -454,6 +450,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                     new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readPosition(input));
             case 2 -> new RouteConstructionObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
                     new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), readSubject(input).value(), readPosition(input));
+            case 3 -> new DecontaminationObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input)),
+                    new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)), readSubject(input).value(), new InfectionCell(input.readInt(), input.readInt()), input.readLong(), input.readLong());
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

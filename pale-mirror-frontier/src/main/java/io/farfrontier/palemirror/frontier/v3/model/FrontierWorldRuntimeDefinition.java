@@ -1,14 +1,9 @@
 package io.farfrontier.palemirror.frontier.v3.model;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
-import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
-import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition; import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -32,7 +27,7 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 FrontierWorldRuntimeDefinition::planScheduled, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200),
-                contractDemand(1, 450), HiveGrowthProcess.start(1, 600), StructuralRepairProcess.scan(1, 800), RouteConstructionProcess.scan(1, 900)), TransactionCommitter.noOp()); }
+                contractDemand(1, 450), HiveGrowthProcess.start(1, 600), StructuralRepairProcess.scan(1, 800), RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)), TransactionCommitter.noOp()); }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
@@ -43,6 +38,7 @@ public final class FrontierWorldRuntimeDefinition {
             if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
             }
+            if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return new CommandPlan.Accepted(List.of(new ProposedEvent(DecontaminationProcess.owner(state, intent.causeSubjectId()).id(), transition)));
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
             if (operation == null) return rejected("physical intent has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
@@ -127,6 +123,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.growth.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
+            case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
     }
@@ -314,6 +311,7 @@ public final class FrontierWorldRuntimeDefinition {
         PhysicalIntent intent = prepared.intent();
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())) {
             throw new IllegalArgumentException("physical intent must be prepared by an arrived route operation owner");
@@ -325,8 +323,10 @@ public final class FrontierWorldRuntimeDefinition {
     private static FrontierWorldState reducePhysicalIntentTransition(FrontierWorldState state, SubjectId subject, PhysicalIntentTransition transition) {
         PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
         if (intent == null) throw new IllegalArgumentException("physical intent transition has no prepared intent");
-        if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
-            if (!subject.equals(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()))) {
+        if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION || intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
+            SubjectId owner = intent.kind() == PhysicalIntentKind.DECONTAMINATION ? DecontaminationProcess.owner(state, intent.causeSubjectId()).id()
+                    : FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId());
+            if (!subject.equals(owner)) {
                 throw new IllegalArgumentException("structural repair transition lacks its owning settlement");
             }
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());

@@ -1,16 +1,10 @@
 package io.farfrontier.palemirror.frontier.v3.model;
-import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
-import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Comparator;
+import java.util.HashSet; import java.util.LinkedHashMap;
+import java.util.List; import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
     public record FrontierWorldState(
@@ -158,6 +152,8 @@ import java.util.Set;
             }
             if (observation instanceof CargoHandoffObservation cargo) {
                 FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
+            } else if (observation instanceof DecontaminationObservation decontamination) {
+                DecontaminationStateSupport.validateReceipt(bootstrap, infection, intent, decontamination);
             } else if (observation instanceof StructuralRepairObservation repair) {
                 StructuralRepairStateSupport.validateReceipt(intent, repair);
             } else if (observation instanceof RouteConstructionObservation construction) {
@@ -357,6 +353,10 @@ import java.util.Set;
         PhysicalEffectObservation evidence = observation.orElseThrow(() -> new IllegalArgumentException("confirmed physical intent requires observation evidence"));
         if (!current.id().equals(evidence.intentId()) || physicalObservations.containsKey(evidence.id())) {
             throw new IllegalArgumentException("cargo hand-off observation does not match a unique confirmed intent");
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION) {
+            if (!(evidence instanceof DecontaminationObservation decontamination)) throw new IllegalArgumentException("decontamination requires observation evidence");
+            return DecontaminationStateSupport.complete(this, current, decontamination, next);
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR) {
             if (!(evidence instanceof StructuralRepairObservation repair)) throw new IllegalArgumentException("structural repair requires repair observation evidence");

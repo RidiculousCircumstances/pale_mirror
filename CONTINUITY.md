@@ -105,11 +105,11 @@
 - The ordinary v3 server-runtime recovery test now proves that a persisted ambient `HOT` lease becomes `UNKNOWN_AFTER_RESTART` exactly once after shutdown/start and survives the recovered projection. Restart policy is isolated from Minecraft classes: it cannot materialize or replay a body; only the loaded-world observation bridge may reclaim `HOT`. Direct loaded-body reclaim-after-restart evidence remains pending.
 - The ambient reclaim GameTest now supplies the physical half of that recovery path: an already loaded, exact tagged Villager reclaims its restart-`UNKNOWN` lease as `HOT` through the real entity join observer, retaining the sole deterministic UUID rather than creating a replacement. Together with the file-store shutdown/start test this is automated recovery evidence; an ordinary player-visible restart session remains a later product gate. The full critical gate passes with 187 GameTests.
 - `FrontierRouteNetwork` is now the one pure source for COLD/HOT cargo waypoints and the visible graybox route corridor. It adds a physical approach/landing point outside the seed-nest organ silhouette and removes the former independent hand-authored operation route. Focused tests and the full critical gate (architecture, style, package and 181 GameTests) pass.
+- Exact infection recovery now has its first physical operation: every 200 ticks a nearby active settlement infirmary can reserve one exact `minecraft:glowstone_dust` stack for one infected 4×4 cell, durably transition a `DECONTAMINATION` intent, reduce exactly 250,000 fixed-point intensity and consume that same stack only after an observed marker postcondition. The bounded format-2 overlay ledger retains a cleared-owned marker lease across a crash window; restart either inspects/finishes that exact effect or exposes `UNKNOWN_AFTER_RESTART`, never recreates a foreign block. Snapshot schema 23 and payload codecs retain the exact receipt. Focused pure negative/zero-removal tests and a materialized clear/reload/retraction GameTest pass; the full critical gate passes with 192 GameTests.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Add infection decontamination, then broader human/hive utility objectives and operations; each must become a normal bounded AI consequence rather than terminal loss.
-
+- Run the full decontamination verification/commit, then add broader human/hive utility objectives and operations; each must become a normal bounded AI consequence rather than terminal loss.
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.
 - Product validation remains unproven until real-display continuity audits, clean-room comprehension and cooperative-player gates are recorded for v3.
@@ -117,4 +117,4 @@
 ## Working set
 - `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `build.gradle`.
 - `docs/frontier-v3-contract.md`, `docs/frontier-v3-implementation-plan.md`, `docs/frontier-ai-contract.md`, and the archived pre-v3 ledger.
-- Current wave: `pale-mirror-frontier/` kernel, persistence and bootstrap-model sources/tests including exact structural-repair intents; NeoForge v3 file storage host, semantic graybox plan, structural repair and loaded-chunk projection.
+- Current wave: `pale-mirror-frontier/` kernel, persistence and bootstrap-model sources/tests including exact repair/decontamination intents; NeoForge v3 file storage host, semantic graybox plan and loaded-chunk recovery-aware projection.

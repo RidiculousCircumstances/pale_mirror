@@ -107,6 +107,12 @@ final class FrontierV3InfectionOverlayExecutor {
         if (claim.conflicted()) return ProjectionResult.CONFLICT;
         BlockPos position = BlockPos.of(claim.position());
         if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
+        if (claim.cleared()) {
+            if (!level.getBlockState(position).isAir()) { ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT; }
+            BlockState expected = material(desired.stage());
+            if (!level.setBlock(position, expected, 3) || !level.getBlockState(position).equals(expected)) return ProjectionResult.DEFERRED;
+            ledger.updateStage(desired.cell(), desired.stage()); return ProjectionResult.UPDATED;
+        }
         if (state.physicalDeltas().containsKey(canonical(position)) || !level.getBlockState(position).equals(material(claim.stage()))) {
             ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT;
         }
@@ -123,6 +129,10 @@ final class FrontierV3InfectionOverlayExecutor {
         if (claim.conflicted()) return ProjectionResult.CONFLICT;
         BlockPos position = BlockPos.of(claim.position());
         if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
+        if (claim.cleared()) {
+            if (!level.getBlockState(position).isAir()) { ledger.conflict(cell); return ProjectionResult.CONFLICT; }
+            ledger.forgetRetracted(cell); return ProjectionResult.RETRACTED;
+        }
         if (state.physicalDeltas().containsKey(canonical(position)) || !level.getBlockState(position).equals(material(claim.stage()))) {
             ledger.conflict(cell); return ProjectionResult.CONFLICT;
         }

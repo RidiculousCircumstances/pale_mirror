@@ -7,7 +7,7 @@ public enum InfectionOverlayStage {
     BLOOM,
     SATURATED;
 
-    static InfectionOverlayStage fromRaw(long intensity) {
+    public static InfectionOverlayStage fromRaw(long intensity) {
         if (intensity >= 750_000L) return SATURATED;
         if (intensity >= 500_000L) return BLOOM;
         if (intensity >= 250_000L) return INFESTED;
