@@ -37,6 +37,12 @@ final class StrategicPlanStateCodec {
             output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().ordinal()); output.writeBoolean(patrol.obstruction().isPresent());
             if (patrol.obstruction().isPresent()) writePosition(output, patrol.obstruction().orElseThrow());
         }
+        writeCount(output, plans.routeEngagements().size());
+        for (RouteEngagement engagement : plans.routeEngagements().values().stream().sorted(Comparator.comparing(RouteEngagement::id)).toList()) {
+            writeSubject(output, engagement.id()); writeSubject(output, engagement.taskId()); writeSubject(output, engagement.operationId()); writeSubject(output, engagement.hiveId());
+            writeCount(output, engagement.attackerIds().size()); for (SubjectId attacker : engagement.attackerIds()) writeSubject(output, attacker);
+            writePosition(output, engagement.intercept()); output.writeByte(engagement.status().ordinal());
+        }
     }
 
     static StrategicPlanState read(DataInputStream input) throws IOException {
@@ -67,7 +73,16 @@ final class StrategicPlanStateCodec {
                 throw new IllegalArgumentException("invalid or duplicate route patrol");
             }
         }
-        return new StrategicPlanState(objectives, tasks, patrols);
+        Map<SubjectId, RouteEngagement> engagements = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = readSubject(input), task = readSubject(input), operation = readSubject(input), hive = readSubject(input);
+            List<SubjectId> attackers = new ArrayList<>(); for (int attacker = 0, attackerCount = readCount(input); attacker < attackerCount; attacker++) attackers.add(readSubject(input));
+            BlockPosition intercept = readPosition(input); int status = input.readUnsignedByte();
+            if (status >= RouteEngagementStatus.values().length || engagements.put(id, new RouteEngagement(id, task, operation, hive, attackers, intercept, RouteEngagementStatus.values()[status])) != null) {
+                throw new IllegalArgumentException("invalid or duplicate route engagement");
+            }
+        }
+        return new StrategicPlanState(objectives, tasks, patrols, engagements);
     }
 
     private static List<StrategicTaskRequirement> readRequirements(DataInputStream input) throws IOException {

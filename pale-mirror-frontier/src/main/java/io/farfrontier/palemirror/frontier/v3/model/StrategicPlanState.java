@@ -12,14 +12,21 @@ final class StrategicPlanState {
     static final int MAX_OBJECTIVES = 128;
     static final int MAX_TASKS = 512;
     static final int MAX_ROUTE_PATROLS = 128;
+    static final int MAX_ROUTE_ENGAGEMENTS = 128;
     private final Map<SubjectId, StrategicObjective> objectives;
     private final Map<SubjectId, StrategicTask> tasks;
     private final Map<SubjectId, RoutePatrol> routePatrols;
+    private final Map<SubjectId, RouteEngagement> routeEngagements;
 
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols) {
+    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+                       Map<SubjectId, RouteEngagement> routeEngagements) {
         this.objectives = immutable(objectives, "strategic objectives"); this.tasks = immutable(tasks, "strategic tasks");
         this.routePatrols = immutable(routePatrols, "route patrols");
-        if (this.objectives.size() > MAX_OBJECTIVES || this.tasks.size() > MAX_TASKS || this.routePatrols.size() > MAX_ROUTE_PATROLS) throw new IllegalArgumentException("strategic plan retention limit exceeded");
+        this.routeEngagements = immutable(routeEngagements, "route engagements");
+        if (this.objectives.size() > MAX_OBJECTIVES || this.tasks.size() > MAX_TASKS
+                || this.routePatrols.size() > MAX_ROUTE_PATROLS || this.routeEngagements.size() > MAX_ROUTE_ENGAGEMENTS) {
+            throw new IllegalArgumentException("strategic plan retention limit exceeded");
+        }
         this.objectives.forEach((id, objective) -> {
             if (!id.equals(objective.id())) throw new IllegalArgumentException("strategic objective key must match identity");
         });
@@ -97,14 +104,18 @@ final class StrategicPlanState {
         objectives.values().stream().filter(objective -> objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE).forEach(objective ->
                 validateDeliveryDecomposition(objective, tasks));
         this.routePatrols.forEach((taskId, patrol) -> validatePatrol(taskId, patrol));
+        this.routeEngagements.forEach((id, engagement) -> {
+            if (!id.equals(engagement.id()) || !tasks.containsKey(engagement.taskId())) throw new IllegalArgumentException("route engagement must retain its task");
+        });
         tasks.keySet().forEach(id -> requireAcyclic(id, new java.util.HashSet<>(), new java.util.HashSet<>()));
     }
 
-    static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of(), Map.of()); }
+    static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of(), Map.of(), Map.of()); }
 
     Map<SubjectId, StrategicObjective> objectives() { return objectives; }
     Map<SubjectId, StrategicTask> tasks() { return tasks; }
     Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
+    Map<SubjectId, RouteEngagement> routeEngagements() { return routeEngagements; }
 
     void validate(FrontierBootstrap bootstrap) {
         objectives.values().forEach(objective -> {
@@ -131,7 +142,7 @@ final class StrategicPlanState {
         StrategicPlanState retained = compactFor(1, 0);
         if (retained.objectives.containsKey(objective.id()) || retained.hasActiveObjective(objective.ownerId())) throw new IllegalArgumentException("strategic objective is duplicate or owner is already active");
         Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);
-        return new StrategicPlanState(next, retained.tasks, retained.routePatrols);
+        return new StrategicPlanState(next, retained.tasks, retained.routePatrols, retained.routeEngagements);
     }
 
     StrategicPlanState addTask(StrategicTask task) {
@@ -142,7 +153,7 @@ final class StrategicPlanState {
             throw new IllegalArgumentException("strategic task identity or objective is invalid");
         }
         Map<SubjectId, StrategicTask> next = new LinkedHashMap<>(retained.tasks); next.put(task.id(), task);
-        return new StrategicPlanState(retained.objectives, next, retained.routePatrols);
+        return new StrategicPlanState(retained.objectives, next, retained.routePatrols, retained.routeEngagements);
     }
 
     StrategicPlanState transitionTask(SubjectId taskId, StrategicTaskStatus nextStatus) {
@@ -160,41 +171,58 @@ final class StrategicPlanState {
                 nextObjectives.put(objective.id(), objective.withStatus(blocked ? StrategicObjectiveStatus.BLOCKED : StrategicObjectiveStatus.COMPLETED));
             }
         }
-        return new StrategicPlanState(nextObjectives, nextTasks, routePatrols);
+        return new StrategicPlanState(nextObjectives, nextTasks, routePatrols, routeEngagements);
     }
 
     StrategicPlanState startPatrol(RoutePatrol patrol) {
         Objects.requireNonNull(patrol, "route patrol");
         if (routePatrols.containsKey(patrol.taskId())) throw new IllegalArgumentException("route patrol is already retained for its task");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(patrol.taskId(), patrol);
-        return new StrategicPlanState(objectives, tasks, next);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements);
     }
 
     StrategicPlanState advancePatrol(SubjectId taskId, int routeIndex) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.advance(routeIndex));
-        return new StrategicPlanState(objectives, tasks, next);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements);
     }
 
     StrategicPlanState confirmPatrolObstruction(SubjectId taskId, BlockPosition position) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.confirm(position));
-        return new StrategicPlanState(objectives, tasks, next);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements);
     }
 
     StrategicPlanState failPatrol(SubjectId taskId) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.fail());
-        return new StrategicPlanState(objectives, tasks, next);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements);
+    }
+
+    StrategicPlanState startEngagement(RouteEngagement engagement) {
+        Objects.requireNonNull(engagement, "route engagement");
+        if (routeEngagements.containsKey(engagement.id()) || routeEngagements.values().stream()
+                .anyMatch(value -> value.operationId().equals(engagement.operationId()) && value.status() != RouteEngagementStatus.RESOLVED)) {
+            throw new IllegalArgumentException("route engagement identity or active operation is already retained");
+        }
+        Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagement.id(), engagement);
+        return new StrategicPlanState(objectives, tasks, routePatrols, next);
+    }
+
+    StrategicPlanState transitionEngagement(SubjectId engagementId, RouteEngagementStatus nextStatus) {
+        RouteEngagement current = routeEngagements.get(Objects.requireNonNull(engagementId, "route engagement id"));
+        if (current == null || !allowed(current.status(), nextStatus)) throw new IllegalArgumentException("route engagement transition is not allowed");
+        Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagementId, current.withStatus(nextStatus));
+        return new StrategicPlanState(objectives, tasks, routePatrols, next);
     }
 
     @Override public boolean equals(Object other) {
-        return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks) && routePatrols.equals(value.routePatrols);
+        return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks) && routePatrols.equals(value.routePatrols) && routeEngagements.equals(value.routeEngagements);
     }
-    @Override public int hashCode() { return Objects.hash(objectives, tasks, routePatrols); }
+    @Override public int hashCode() { return Objects.hash(objectives, tasks, routePatrols, routeEngagements); }
 
     private StrategicPlanState compactFor(int newObjectives, int newTasks) { return compactFor(newObjectives, newTasks, List.of()); }
 
@@ -211,13 +239,22 @@ final class StrategicPlanState {
         }
         Map<SubjectId, RoutePatrol> retainedPatrols = new LinkedHashMap<>(routePatrols);
         retainedPatrols.keySet().removeIf(taskId -> !retainedTasks.containsKey(taskId));
-        return retainedObjectives.equals(objectives) && retainedTasks.equals(tasks) && retainedPatrols.equals(routePatrols) ? this
-                : new StrategicPlanState(retainedObjectives, retainedTasks, retainedPatrols);
+        Map<SubjectId, RouteEngagement> retainedEngagements = new LinkedHashMap<>(routeEngagements);
+        retainedEngagements.values().removeIf(engagement -> !retainedTasks.containsKey(engagement.taskId()));
+        return retainedObjectives.equals(objectives) && retainedTasks.equals(tasks) && retainedPatrols.equals(routePatrols)
+                && retainedEngagements.equals(routeEngagements) ? this
+                : new StrategicPlanState(retainedObjectives, retainedTasks, retainedPatrols, retainedEngagements);
     }
 
     private static boolean allowed(StrategicTaskStatus current, StrategicTaskStatus next) {
         return current == StrategicTaskStatus.PENDING && (next == StrategicTaskStatus.ACTIVE || next == StrategicTaskStatus.BLOCKED)
                 || current == StrategicTaskStatus.ACTIVE && (next == StrategicTaskStatus.COMPLETED || next == StrategicTaskStatus.BLOCKED);
+    }
+
+    private static boolean allowed(RouteEngagementStatus current, RouteEngagementStatus next) {
+        return current == RouteEngagementStatus.APPROACHING && (next == RouteEngagementStatus.READY_FOR_SCENE || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
+                || current == RouteEngagementStatus.READY_FOR_SCENE && (next == RouteEngagementStatus.HOT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
+                || current == RouteEngagementStatus.HOT && (next == RouteEngagementStatus.RESOLVED || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART);
     }
 
     private static boolean removable(StrategicObjective objective, Map<SubjectId, StrategicTask> tasks, List<SubjectId> protectedTaskIds) {
