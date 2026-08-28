@@ -1,10 +1,15 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
@@ -15,6 +20,10 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
+import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
@@ -186,6 +195,66 @@ public final class FrontierV3SceneGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void durableHotStrikeHurtsExactBodyAndNeverReplaysUnknownEffect(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(32, 8, 0)); prepareFloor(level, origin); prepareFloor(level, origin.east());
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-strike-game-test"), 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-strike-game-test");
+        var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the strike fixture runtime must remain active"));
+        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        for (int index = 0; index < lease.members().size(); index++) {
+            addOwnedBody(helper, level, lease, lease.members().get(index), origin.offset(index & 1, 0, index / 2));
+        }
+
+        Zombie attacker = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Zombie.class::isInstance).map(Zombie.class::cast)
+                .findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one Zombie attacker"));
+        Villager target = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
+                .findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one Villager target"));
+        attacker.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D); target.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D);
+
+        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
+        PhysicalIntent first = onlyStrike(state(runtime));
+        helper.assertValueEqual(first.status(), PhysicalIntentStatus.PREPARED, "a scene strike must be durable before any Minecraft damage");
+        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
+        helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.RUNNING, "the durable strike must enter RUNNING before its physical hit");
+        float healthBefore = target.getHealth();
+        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
+        PhysicalIntent confirmed = onlyStrike(state(runtime));
+        SceneStrikeObservation receipt = (SceneStrikeObservation) state(runtime).physicalObservations().get(confirmed.postconditionObservationId()
+                .orElseThrow(() -> new IllegalStateException("a confirmed physical scene strike must retain its receipt identity")));
+        helper.assertValueEqual(confirmed.status(), PhysicalIntentStatus.CONFIRMED, "the observed hit must durably confirm its exact intent");
+        helper.assertTrue(target.getHealth() < healthBefore, "only the real owned Villager must take the executor's Minecraft damage");
+        helper.assertValueEqual(receipt.targetHealthBefore(), new FixedScalar(Math.round(healthBefore * FixedScalar.SCALE)), "receipt must retain the exact physical pre-hit health");
+        helper.assertValueEqual(receipt.targetHealthAfter(), new FixedScalar(Math.round(target.getHealth() * FixedScalar.SCALE)), "receipt must retain the exact physical post-hit health");
+
+        Villager retryTarget = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
+                .filter(body -> body != target).findFirst().orElseThrow(() -> new IllegalStateException("the scene fixture needs a second exact resident"));
+        target.setPos(origin.getX() + 8.5D, origin.getY(), origin.getZ() + 0.5D);
+        retryTarget.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D);
+        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
+        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
+        helper.assertValueEqual(FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime), 1,
+                "restart recovery must quarantine one unresolved physical strike");
+        int retainedIntentCount = state(runtime).physicalIntents().size();
+        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
+        helper.assertValueEqual(state(runtime).physicalIntents().size(), retainedIntentCount,
+                "an unknown strike must remain visible and prevent a new same-pair hit after restart");
+        helper.assertTrue(state(runtime).physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART), "recovery must retain the unresolved strike as explicit canonical evidence");
+        lease.members().forEach(member -> {
+            Entity body = level.getEntity(member.entityId());
+            if (body != null) body.discard();
+        });
+        runtime.shutdown(); helper.succeed();
+    }
+
     private static SceneLease lease(BlockPos origin) {
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-game-test");
         List<SceneMember> members = List.of(member(id, "resident:frontier-v3-test-hauler"), member(id, "resident:frontier-v3-test-guard"));
@@ -201,8 +270,24 @@ public final class FrontierV3SceneGameTests {
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(position.above(), Blocks.AIR.defaultBlockState(), 3);
     }
+    private static void addOwnedBody(GameTestHelper helper, ServerLevel level, SceneLease lease, SceneMember member, BlockPos position) {
+        boolean bioform = member.actorId().value().startsWith("bioform:");
+        net.minecraft.world.entity.Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
+        helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
+        body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setNoAi(true);
+        body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
+        body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
+        body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
+        helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");
+    }
+    private static PhysicalIntent onlyStrike(FrontierWorldState state) {
+        return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE).reduce((left, right) -> right)
+                .orElseThrow(() -> new IllegalStateException("the HOT strike executor did not retain a physical intent"));
+    }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+        return new FrontierWorldStateCodec().decode(runtime.checkpointImage()
+                .orElseThrow(() -> new IllegalStateException("the v3 GameTest runtime must remain active: "
+                        + runtime.status().detail().orElse(runtime.status().kind().name()))).canonicalState());
     }
     /** GameTest-only memory port: the filesystem restart proof lives in FrontierV3ServerRuntimeTest. */
     private static final class EphemeralStore implements FrontierStore {

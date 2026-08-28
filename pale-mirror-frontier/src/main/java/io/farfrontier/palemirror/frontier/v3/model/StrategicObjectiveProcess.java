@@ -27,41 +27,42 @@ final class StrategicObjectiveProcess {
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
         ProposedEvent next = new ProposedEvent(owner, new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks() + REVIEW_INTERVAL)));
-        if (state.strategicPlans().hasActiveObjective(owner)) return List.of(next);
         Optional<Candidate> candidate = candidate(state, owner);
+        List<ProposedEvent> preempted = preemptForInterception(state, owner, candidate);
+        if (state.strategicPlans().hasActiveObjective(owner) && preempted.isEmpty()) return List.of(next);
         if (candidate.isEmpty()) return List.of(next);
         Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal);
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) {
             StrategicTask preparation = cargoPreparationTask(state, objective); StrategicTask delivery = deliveryTask(objective, preparation);
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(preparation)),
-                    new ProposedEvent(owner, new StrategicTaskPlanned(delivery)), new ProposedEvent(owner, new ScheduleEffect.Created(SupplyOperationProcess.start(preparation, action.dueAt().ticks() + 100L))), next);
+            List<ProposedEvent> events = new java.util.ArrayList<>(preempted); events.addAll(List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(preparation)),
+                    new ProposedEvent(owner, new StrategicTaskPlanned(delivery)), new ProposedEvent(owner, new ScheduleEffect.Created(SupplyOperationProcess.start(preparation, action.dueAt().ticks() + 100L))), next)); return List.copyOf(events);
         }
         StrategicTask task = task(state, objective);
         if (task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL) {
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, action.dueAt().ticks() + 100L))), next);
         }
         if (task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM) {
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveGrowthProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
         if (task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION) {
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveRouteEngagementProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
         if (task.kind() == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE) {
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(RoutePatrolProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
         if (task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS) {
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(RouteConstructionProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
-        return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
+        return withPreemption(preempted, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
 
     static FrontierWorldState reduceObjective(FrontierWorldState state, SubjectId subject, StrategicObjectiveSelected selected) {
@@ -83,6 +84,15 @@ final class StrategicObjectiveProcess {
 
     private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId owner) {
         return state.bootstrap().hive().id().equals(owner) ? hiveCandidate(state) : settlementCandidate(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner));
+    }
+    private static List<ProposedEvent> preemptForInterception(FrontierWorldState state, SubjectId owner, Optional<Candidate> candidate) {
+        if (!state.bootstrap().hive().id().equals(owner) || candidate.map(Candidate::kind).orElse(null) != StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION) return List.of();
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(owner))
+                .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
+                .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(owner, new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
+    }
+    private static List<ProposedEvent> withPreemption(List<ProposedEvent> preempted, ProposedEvent... events) {
+        List<ProposedEvent> result = new java.util.ArrayList<>(preempted); result.addAll(List.of(events)); return List.copyOf(result);
     }
     private static Optional<Candidate> settlementCandidate(FrontierWorldState state, Settlement settlement) {
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)

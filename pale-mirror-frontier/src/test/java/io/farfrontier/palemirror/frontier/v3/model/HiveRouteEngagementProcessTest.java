@@ -44,7 +44,7 @@ class HiveRouteEngagementProcessTest {
     @Test void taskBindsOneOperationAndMovesExactGuardsThroughPersistedColdRoutes() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.route().get(Math.max(operation.routeIndex(), operation.route().size() - 2));
+        BlockPosition intercept = operation.route().get(operation.routeIndex());
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD).toList()) {
             state = state.withActorLocation(bioform.id(), intercept.offset(-16, 0, 0));
         }
@@ -75,7 +75,7 @@ class HiveRouteEngagementProcessTest {
             }
         }
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(started.engagement().id());
-        assertEquals(RouteEngagementStatus.WAITING_FOR_INTERCEPT, engagement.status());
+        assertEquals(RouteEngagementStatus.COLD_COMBAT, engagement.status());
         FrontierWorldState completed = state;
         assertTrue(engagement.attackers().stream().allMatch(attacker -> completed.actorLocations().get(attacker.actorId()).position().equals(intercept)));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
@@ -97,13 +97,7 @@ class HiveRouteEngagementProcessTest {
     @Test void coldCombatPersistsEveryExactStrikeAndFailsTheRouteWithoutAPlayer() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        int interceptIndex = Math.max(operation.routeIndex(), operation.route().size() - 2);
-        while (operation.routeIndex() < interceptIndex) {
-            int next = operation.routeIndex() + 1;
-            state = state.advanceOperation(operation.id(), next, next == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE);
-            operation = state.operations().get(operation.id());
-        }
-        BlockPosition intercept = operation.route().get(interceptIndex);
+        BlockPosition intercept = operation.route().get(operation.routeIndex());
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
         }

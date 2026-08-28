@@ -60,10 +60,9 @@ final class SupplyOperationProcess {
         RouteOperation operation = state.operations().get(action.subject());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE) return List.of();
         boolean heldAtIntercept = state.strategicPlans().routeEngagements().values().stream()
-                .anyMatch(engagement -> engagement.operationId().equals(operation.id())
-                        && (engagement.status() == RouteEngagementStatus.WAITING_FOR_INTERCEPT || engagement.status() == RouteEngagementStatus.COLD_COMBAT)
+                .anyMatch(engagement -> engagement.operationId().equals(operation.id()) && engagement.status() != RouteEngagementStatus.RESOLVED
                         && operation.route().get(operation.routeIndex()).equals(engagement.intercept()));
-        if (heldAtIntercept) return List.of();
+        if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id()) && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) return failed(state, operation, "route-obstructed");

@@ -38,7 +38,9 @@ final class HiveRouteEngagementProcess {
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || activeForOperation(state, operation.id())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
-        BlockPosition intercept = operation.route().get(Math.max(operation.routeIndex(), operation.route().size() - 2));
+        // An interception claims the caravan's current COLD position. Selecting a future waypoint
+        // would let the independently scheduled caravan arrive before distant guards can reach it.
+        BlockPosition intercept = operation.route().get(operation.routeIndex());
         List<EngagementAttacker> attackers = attackers(state, intercept);
         if (attackers.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         RouteEngagement engagement = new RouteEngagement(engagementId(task), task.id(), operation.id(), task.ownerId(), attackers,
