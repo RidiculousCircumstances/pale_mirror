@@ -112,9 +112,9 @@ public final class FrontierV3SceneGameTests {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-bioform-test"), 91L));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-bioform-test");
         SubjectId bioform = new SubjectId("bioform:west-0");
-        SceneLease lease = new SceneLease(id, new SubjectId("operation:frontier-v3-bioform-test"), new SubjectId("cargo:frontier-v3-bioform-test"),
+        SceneLease lease = new SceneLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-bioform-test"), new SubjectId("cargo:frontier-v3-bioform-test"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
-                List.of(new SceneMember(bioform, SceneLease.deterministicEntityId(id, bioform))));
+                List.of(new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
 
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a canonical hive participant must materialize as its graybox Zombie, never as a Villager");
@@ -129,10 +129,10 @@ public final class FrontierV3SceneGameTests {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(24, 8, 0)); prepareFloor(level, origin); prepareFloor(level, origin.east(2));
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:engagement-scene-bodies"), 91L));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-engagement-bodies"); SubjectId resident = new SubjectId("resident:1-1"), bioform = new SubjectId("bioform:west-0");
-        SceneLease lease = new SceneLease(id, new SubjectId("operation:frontier-v3-engagement-bodies"), new SubjectId("cargo:frontier-v3-engagement-bodies"),
+        SceneLease lease = new SceneLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-engagement-bodies"), new SubjectId("cargo:frontier-v3-engagement-bodies"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
-                Optional.of(new SubjectId("engagement:frontier-v3-game-test")), List.of(new SceneMember(resident, SceneLease.deterministicEntityId(id, resident)),
-                        new SceneMember(bioform, SceneLease.deterministicEntityId(id, bioform))));
+                Optional.of(new SubjectId("engagement:frontier-v3-game-test")), List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)),
+                        new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded engagement scene must materialize both exact human and hive members without a second actor set");
         helper.assertTrue(level.getEntity(lease.members().getFirst().entityId()) instanceof Villager, "engagement resident remains one Villager");
@@ -153,17 +153,42 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, bioform,
                         new BlockPosition(bioformSpot.getX(), bioformSpot.getY(), bioformSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an exact hive bioform receives one owned Zombie body");
-        helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(resident)) instanceof Villager, "resident identity maps to Villager");
-        helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(bioform)) instanceof net.minecraft.world.entity.monster.Zombie, "bioform identity maps to Zombie");
+        helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident)) instanceof Villager, "resident identity maps to Villager");
+        helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform)) instanceof net.minecraft.world.entity.monster.Zombie, "bioform identity maps to Zombie");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
                         new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "a repeated loaded-chunk pass never duplicates the exact resident");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, new SubjectId("resident:unknown"),
                         new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CONFLICT,
                 "an unknown canonical identity is never converted into a new Villager body");
-        level.getEntity(FrontierV3AmbientActorExecutor.entityId(resident)).discard();
-        level.getEntity(FrontierV3AmbientActorExecutor.entityId(bioform)).discard();
+        level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident)).discard();
+        level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform)).discard();
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void ambientBodyTransfersIntoSceneWithoutCloneOrReplacement(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(20, 8, 0)); prepareFloor(level, origin);
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-handoff-body-test"), 91L));
+        SubjectId resident = new SubjectId("resident:1-1");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
+                        new BlockPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "the HOT ambient resident must be present before transfer");
+        Entity original = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident));
+        SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-ambient-transfer");
+        SceneLease lease = new SceneLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-ambient-transfer"), new SubjectId("cargo:frontier-v3-ambient-transfer"),
+                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident))));
+
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "a prepared scene must adopt its exact ambient body rather than recreate it");
+        Entity transferred = level.getEntity(lease.members().getFirst().entityId());
+        helper.assertTrue(transferred == original, "the transferred Villager must keep its exact Minecraft entity instance and UUID");
+        helper.assertValueEqual(transferred.getPersistentData().getString(FrontierV3SceneExecutor.LEASE_KEY), lease.id().value(),
+                "the same body must now carry scene authority");
+        helper.assertTrue(!FrontierV3AmbientActorExecutor.owned(transferred, resident, false), "ambient ownership markers must not survive the transfer");
+        helper.assertTrue(((Villager) transferred).isNoAi(), "the transferred body must enter controlled scene execution");
+        transferred.discard(); helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
@@ -183,7 +208,7 @@ public final class FrontierV3SceneGameTests {
 
         Villager restored = EntityType.VILLAGER.create(level);
         helper.assertTrue(restored != null, "the restored owned-body fixture must be constructible");
-        restored.setUUID(FrontierV3AmbientActorExecutor.entityId(resident));
+        restored.setUUID(FrontierV3AmbientActorExecutor.entityId(initial, resident));
         restored.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
@@ -209,8 +234,8 @@ public final class FrontierV3SceneGameTests {
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-reclaim-game-test"), 91L), new EphemeralStore(), 20_000);
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-reclaim-game-test");
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the scene reclaim fixture runtime must remain active"));
-        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        SceneLease lease = new SceneLease(leaseId, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
         FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         for (int index = 0; index < lease.members().size(); index++) {
@@ -245,9 +270,9 @@ public final class FrontierV3SceneGameTests {
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:scene-strike-game-test");
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the strike fixture runtime must remain active"));
-        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+        SceneLease lease = new SceneLease(leaseId, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream()
-                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
         FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         for (int index = 0; index < lease.members().size(); index++) {
@@ -309,8 +334,8 @@ public final class FrontierV3SceneGameTests {
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-explosion-game-test"), 91L), new EphemeralStore(), 20_000);
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-explosion-game-test");
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the explosion fixture runtime must remain active"));
-        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        SceneLease lease = new SceneLease(leaseId, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
         FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         for (int index = 0; index < lease.members().size(); index++) {
@@ -336,15 +361,15 @@ public final class FrontierV3SceneGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-scene-explosion-live", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void hotBomberBlastUsesRealTntEventAndRetainsPostImpactInspection(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(56, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-real-explosion-game-test"), 91L), new EphemeralStore(), 20_000);
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-real-explosion-game-test");
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the real-blast fixture runtime must remain active"));
-        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        SceneLease lease = new SceneLease(leaseId, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
         FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         for (int index = 0; index < lease.members().size(); index++) {
@@ -394,13 +419,14 @@ public final class FrontierV3SceneGameTests {
 
     private static SceneLease lease(BlockPos origin) {
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-game-test");
-        List<SceneMember> members = List.of(member(id, "resident:frontier-v3-test-hauler"), member(id, "resident:frontier-v3-test-guard"));
-        return new SceneLease(id, new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
+        WorldId world = new WorldId("frontier:scene-game-test");
+        List<SceneMember> members = List.of(member(world, "resident:frontier-v3-test-hauler"), member(world, "resident:frontier-v3-test-guard"));
+        return new SceneLease(id, world, new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, members);
     }
-    private static SceneMember member(SceneLeaseId leaseId, String actorId) {
+    private static SceneMember member(WorldId world, String actorId) {
         SubjectId actor = new SubjectId(actorId);
-        return new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor));
+        return new SceneMember(actor, SceneLease.deterministicEntityId(world, actor));
     }
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);

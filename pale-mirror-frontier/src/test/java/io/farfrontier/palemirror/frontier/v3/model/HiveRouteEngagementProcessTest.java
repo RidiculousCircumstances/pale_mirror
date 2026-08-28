@@ -121,15 +121,16 @@ class HiveRouteEngagementProcessTest {
         assertEquals(operation.id(), candidate.operationId());
         assertEquals(intercept, candidate.handoffPosition());
         assertEquals(5, candidate.actorIds().size());
+        var world = state.bootstrap().worldId();
         SceneLeaseId leaseId = new SceneLeaseId("lease:hive-cold-combat-r1");
-        List<SceneMember> sceneMembers = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList();
+        List<SceneMember> sceneMembers = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
         SceneLeaseId incompleteLeaseId = new SceneLeaseId("lease:hive-cold-combat-incomplete");
-        List<SceneMember> incompleteMembers = candidate.actorIds().stream().limit(2).map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(incompleteLeaseId, actor))).toList();
-        SceneLease incomplete = new SceneLease(incompleteLeaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
+        List<SceneMember> incompleteMembers = candidate.actorIds().stream().limit(2).map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
+        SceneLease incomplete = new SceneLease(incompleteLeaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
                 new SimInstant(3_001L), 1L, SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), incompleteMembers);
         FrontierWorldState coldBeforeLease = state;
         assertThrows(IllegalArgumentException.class, () -> coldBeforeLease.prepareSceneLease(incomplete));
-        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(3_001L), 1L,
+        SceneLease lease = new SceneLease(leaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(3_001L), 1L,
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), sceneMembers);
         FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(RouteEngagementStatus.HOT, hot.strategicPlans().routeEngagements().get(engagementId).status());

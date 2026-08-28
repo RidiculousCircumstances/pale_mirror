@@ -46,6 +46,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
@@ -64,6 +65,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ServerRuntimeTest {
@@ -86,6 +88,41 @@ class FrontierV3ServerRuntimeTest {
 
         assertFalse(FrontierSceneAdmission.available(overlapped, operation.participantIds()));
         assertTrue(FrontierSceneAdmission.reserved(overlapped, participant));
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+    }
+
+    @Test
+    void sceneHandoffAtomicallyCapturesAndClosesTheExactAmbientLease(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:scene-ambient-transfer");
+        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        for (int tick = 0; tick < 2_550; tick++) runtime.tick(new WorkBudget(64, 512));
+        FrontierWorldState before = worldState(runtime);
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        SubjectId participant = operation.participantIds().getFirst();
+        submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
+                runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-transfer-prepare");
+        submitAmbient(runtime, world, new AmbientLeaseTransition(participant, AmbientLeaseStatus.HOT), "command:ambient-scene-transfer-hot");
+        FrontierWorldState overlapped = worldState(runtime);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLease lease = new SceneLease(new SceneLeaseId("lease:ambient-transfer-r" + checkpoint.revision().value()), checkpoint.worldId(), operation.id(), operation.cargoId(),
+                operation.route().get(operation.routeIndex()), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
+                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
+        SceneMemberPosition capture = new SceneMemberPosition(participant, new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(12, 64, -12),
+                overlapped.actorLocations().get(participant).condition().health());
+        lease = lease.withAmbientHandoff(java.util.Set.of(participant));
+        SceneLeaseHandoff handoff = new SceneLeaseHandoff(lease, List.of(capture));
+        SceneLease handoffLease = lease;
+
+        assertEquals(handoff, FrontierWorldRuntimeDefinition.payloadCodecs().decode(handoff.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(handoff)));
+        assertThrows(IllegalArgumentException.class, () -> overlapped.handoffAmbientScene(new SceneLeaseHandoff(handoffLease,
+                List.of(new SceneMemberPosition(operation.participantIds().getLast(), capture.position(), capture.health())))));
+        submitAmbient(runtime, world, handoff, "command:ambient-scene-transfer");
+
+        FrontierWorldState transferred = worldState(runtime);
+        assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(participant).status());
+        assertEquals(capture.position(), transferred.actorLocations().get(participant).position());
+        assertEquals(lease, transferred.sceneLeases().get(lease.id()));
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
     }
 
@@ -160,8 +197,8 @@ class FrontierV3ServerRuntimeTest {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState initial = worldState(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:managed-explosion-restart");
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, java.util.Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        SceneLease lease = new SceneLease(leaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, java.util.Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList());
         submitWorld(runtime, "prepare-explosion-lease", new SceneLeasePrepared(lease)); submitWorld(runtime, "hot-explosion-lease", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.BOMBER)
                 .filter(value -> candidate.actorIds().contains(value.id())).findFirst().orElseThrow().id();
@@ -188,8 +225,8 @@ class FrontierV3ServerRuntimeTest {
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:recovery-supply-1-2");
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        SceneLease lease = new SceneLease(leaseId, world, operation.id(), operation.cargoId(), operation.route().getFirst(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList());
         CommandId commandId = new CommandId("command:scene-lease-recovery");
         assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new SceneLeasePrepared(lease))).orElseThrow());
@@ -250,8 +287,9 @@ class FrontierV3ServerRuntimeTest {
     private static void submitAmbient(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
                                       WorldId world, FrontierPayload payload, String command) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(); CommandId commandId = new CommandId(command);
-        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload)).orElseThrow());
+        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload)).orElseThrow();
+        assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {

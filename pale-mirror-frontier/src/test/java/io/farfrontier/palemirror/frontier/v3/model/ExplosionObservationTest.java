@@ -91,9 +91,9 @@ class ExplosionObservationTest {
         FrontierWorldState state = FrontierDevelopmentScenarios.hotSceneStrikeState(worldId, 91L);
         SceneEngagementCandidate candidate = state.coldEngagementSceneCandidates().getFirst();
         io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:explosion-test");
-        SceneLease lease = new SceneLease(leaseId, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(2_601L),
+        SceneLease lease = new SceneLease(leaseId, state.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(2_601L),
                 1L, SceneLeaseStatus.PREPARED, java.util.Optional.of(candidate.engagementId()), candidate.actorIds().stream()
-                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList());
         return state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
     }
 

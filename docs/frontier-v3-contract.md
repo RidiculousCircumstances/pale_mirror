@@ -201,9 +201,11 @@ states.
 - COLD-to-HOT first advances the scene to the lease instant, then reconstructs
   its current state. Dead actors and completed effects are never replayed to
   make a cinematic history.
-- Entity UUID plus canonical actor ID and lease revision enforce at most one
-  body per actor. Missing, duplicated or obstructed bodies fail visibly and do
-  not imply death.
+- A body UUID is deterministically derived from its canonical world and actor,
+  never from a scene or ambient lease. Lease revision/tags grant execution
+  authority, so an ambient-to-scene hand-off adopts the same body rather than
+  cloning or recreating it. Missing, duplicated or obstructed bodies fail
+  visibly and do not imply death.
 - Battles and operations use one scene-level lease so participants, terrain,
   cargo and effects cross the boundary atomically.
 

@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Comparator; import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set;
     public record FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
         Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection, ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
         Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations, Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
@@ -107,6 +107,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Com
                 if (!assignedParticipants.add(participant)) throw new IllegalArgumentException("resident cannot be assigned to multiple route operations");
                 if (operation.stage() != OperationStage.FAILED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
                         && !leaseHistoryOperations.contains(operation.id())
+                        && sceneLeases.values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.operationId().equals(operation.id())
+                        && lease.members().stream().anyMatch(member -> member.actorId().equals(participant)))
                         && !actorLocations.get(participant).position().equals(operation.route().get(operation.routeIndex()))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical route point");
                 }
@@ -169,6 +171,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Com
         for (Map.Entry<SceneLeaseId, SceneLease> entry : sceneLeases.entrySet()) {
             SceneLease lease = entry.getValue();
             if (!entry.getKey().equals(lease.id())) throw new IllegalArgumentException("scene lease map key must match lease identity");
+            if (!bootstrap.worldId().equals(lease.worldId())) throw new IllegalArgumentException("scene lease must belong to its canonical world");
             RouteOperation operation = operations.get(lease.operationId());
             if (operation == null || !operation.cargoId().equals(lease.cargoId())) {
                 throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
@@ -195,9 +198,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Com
             for (SubjectId actor : members) {
                 if (lease.status() != SceneLeaseStatus.CLOSED && !leasedActors.add(actor)) throw new IllegalArgumentException("actor cannot belong to multiple active scene leases");
                 if (lease.status() != SceneLeaseStatus.CLOSED && activelyAmbientLeased.contains(actor)) throw new IllegalArgumentException("actor cannot have both scene and ambient execution leases");
-                if (lease.status() == SceneLeaseStatus.PREPARED && !actorLocations.get(actor).position().equals(lease.handoffPosition())) {
-                    throw new IllegalArgumentException("prepared scene lease actor must be at its handoff position");
-                }
             }
         }
         }
@@ -412,28 +412,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Com
                 productionJobs, nextContracts, operations, next, nextObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState prepareSceneLease(SceneLease lease) {
-        Objects.requireNonNull(lease, "scene lease");
-        if (sceneLeases.containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());
-        if (lease.status() != SceneLeaseStatus.PREPARED) throw new IllegalArgumentException("new scene lease must be prepared");
-        if (lease.members().stream().anyMatch(member -> actorLocations.get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
-            throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
-        }
-        Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
-        // Closed leases have no further authority: history remains causal while checkpoints retain a bounded terminal index.
-        int requiredCompaction = next.size() - MAX_SCENE_LEASES + 1;
-        if (requiredCompaction > 0) {
-            List<SceneLease> terminal = next.values().stream()
-                    .filter(existing -> existing.status() == SceneLeaseStatus.CLOSED)
-                    .sorted(Comparator.comparing(SceneLease::handoffInstant).thenComparing(existing -> existing.id().value()))
-                    .toList();
-            if (terminal.size() < requiredCompaction) {
-                throw new IllegalArgumentException("scene lease retention limit has no terminal leases to compact");
-            }
-            terminal.stream().limit(requiredCompaction).forEach(existing -> next.remove(existing.id()));
-        }
-        next.put(lease.id(), lease);
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                physicalIntents, physicalObservations, next, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return FrontierSceneLeaseStateSupport.prepare(this, lease);
+    }
+    /** Atomically records loaded-body evidence, closes ambient authority and prepares one scene. */
+    public FrontierWorldState handoffAmbientScene(SceneLeaseHandoff handoff) {
+        return FrontierSceneLeaseStateSupport.handoff(this, handoff);
     }
     public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {
         return FrontierSceneLeaseStateSupport.transition(this, Objects.requireNonNull(leaseId, "scene lease id"), nextStatus);

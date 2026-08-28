@@ -26,7 +26,6 @@ import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.levelgen.Heightmap;
 
-import java.nio.charset.StandardCharsets;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -74,7 +73,7 @@ final class FrontierV3AmbientActorExecutor {
                 }
                 continue;
             }
-            Entity body = level.getEntity(entityId(entry.getKey()));
+            Entity body = level.getEntity(entityId(state, entry.getKey()));
             if (lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
                 if (body != null && owned(body, entry.getKey(), bioform(state, entry.getKey()))) {
                     submit(runtime, "ambient-recovered", entry.getKey().value(), new AmbientLeaseTransition(entry.getKey(), AmbientLeaseStatus.HOT));
@@ -90,7 +89,7 @@ final class FrontierV3AmbientActorExecutor {
 
     static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BlockPosition canonicalPosition) {
         if (!state.actorLocations().containsKey(actorId)) return Result.CONFLICT;
-        UUID entityId = entityId(actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
+        UUID entityId = entityId(state, actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
         if (existing != null) return owned(existing, actorId, bioform) ? Result.CURRENT : Result.CONFLICT;
         BlockPos anchor = new BlockPos(canonicalPosition.x(), canonicalPosition.y(), canonicalPosition.z());
         if (!level.hasChunkAt(anchor)) return Result.DEFERRED;
@@ -106,12 +105,12 @@ final class FrontierV3AmbientActorExecutor {
 
     private static Result materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                       FrontierWorldState state, SubjectId actorId, BlockPosition canonicalPosition) {
-        PendingAdmission pending = pending(runtime, entityId(actorId));
+        PendingAdmission pending = pending(runtime, entityId(state, actorId));
         if (pending != null && owned(pending.entity(), actorId, bioform(state, actorId))) return Result.PENDING;
         return materialize(level, state, actorId, canonicalPosition);
     }
 
-    static UUID entityId(SubjectId actorId) { return UUID.nameUUIDFromBytes(("frontier-v3:ambient:" + actorId.value()).getBytes(StandardCharsets.UTF_8)); }
+    static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
 
     /** Retains only an exact expected body during the short join-to-index hand-off. */
     static boolean observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
@@ -122,7 +121,7 @@ final class FrontierV3AmbientActorExecutor {
         SubjectId actorId;
         try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
         if (!state.actorLocations().containsKey(actorId) || state.actorLocations().get(actorId).condition().status() != ActorLifeStatus.ALIVE
-                || !entityId(actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
+                || !entityId(state, actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
         Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         if (pending.size() >= MAX_PENDING_ADMISSIONS && !pending.containsKey(entity.getUUID())) return false;
         pending.put(entity.getUUID(), new PendingAdmission(entity, entity.level().getGameTime() + PENDING_ADMISSION_TICKS));
@@ -143,7 +142,7 @@ final class FrontierV3AmbientActorExecutor {
                 || state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
                 || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT
-                || !entityId(actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
+                || !entityId(state, actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         submit(runtime, "ambient-death", actorId.value(),
                 new AmbientActorDied(actorId, new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
@@ -158,7 +157,7 @@ final class FrontierV3AmbientActorExecutor {
         SubjectId actorId;
         try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
         var current = state.actorLocations().get(actorId);
-        if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(actorId).equals(entity.getUUID())
+        if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(entity.getUUID())
                 || !owned(entity, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
                 || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
         BlockPosition position = new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ());

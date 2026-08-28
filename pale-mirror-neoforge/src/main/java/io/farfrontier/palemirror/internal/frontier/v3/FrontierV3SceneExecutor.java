@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDied;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
@@ -28,6 +29,7 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
@@ -83,7 +85,9 @@ final class FrontierV3SceneExecutor {
                 .filter(candidate -> demandExists(level, candidate.handoffPosition())).findFirst();
         if (engagement.isPresent()) {
             SceneEngagementCandidate candidate = engagement.orElseThrow();
-            if (FrontierSceneAdmission.available(state, candidate.actorIds())) prepare(runtime, state, candidate);
+            SceneLease lease = lease(runtime, candidate);
+            if (FrontierSceneAdmission.available(state, candidate.actorIds())) prepare(runtime, lease);
+            else handoff(level, runtime, state, lease);
             return;
         }
         Optional<RouteOperation> demand = state.operations().values().stream().sorted(Comparator.comparing(RouteOperation::id))
@@ -93,7 +97,9 @@ final class FrontierV3SceneExecutor {
                 .filter(operation -> demandExists(level, operation.route().get(operation.routeIndex()))).findFirst();
         if (demand.isPresent()) {
             RouteOperation operation = demand.orElseThrow();
-            if (FrontierSceneAdmission.available(state, operation.participantIds())) prepare(runtime, state, operation);
+            SceneLease lease = lease(runtime, operation);
+            if (FrontierSceneAdmission.available(state, operation.participantIds())) prepare(runtime, lease);
+            else handoff(level, runtime, state, lease);
             return;
         }
         state.sceneLeases().values().stream().sorted(Comparator.comparing(SceneLease::id)).filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
@@ -101,22 +107,39 @@ final class FrontierV3SceneExecutor {
         cleanReleasedBodies(level, state);
     }
 
-    private static void prepare(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, RouteOperation operation) {
+    private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, RouteOperation operation) {
         CheckpointImage checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + operation.id().value().substring("operation:".length()) + "-r" + checkpoint.revision().value());
-        List<SceneMember> members = operation.participantIds().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(id, actor))).toList();
-        SceneLease lease = new SceneLease(id, operation.id(), operation.cargoId(), operation.route().get(operation.routeIndex()), checkpoint.instant(), checkpoint.revision().value(),
+        List<SceneMember> members = operation.participantIds().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
+        return new SceneLease(id, checkpoint.worldId(), operation.id(), operation.cargoId(), operation.route().get(operation.routeIndex()), checkpoint.instant(), checkpoint.revision().value(),
                 SceneLeaseStatus.PREPARED, members);
-        submit(runtime, "scene-prepare", id.value(), new SceneLeasePrepared(lease));
     }
 
-    private static void prepare(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneEngagementCandidate candidate) {
+    private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneEngagementCandidate candidate) {
         CheckpointImage checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + candidate.engagementId().value().substring("engagement:".length()) + "-r" + checkpoint.revision().value());
-        List<SceneMember> members = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(id, actor))).toList();
-        SceneLease lease = new SceneLease(id, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+        List<SceneMember> members = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
+        return new SceneLease(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members);
-        submit(runtime, "engagement-scene-prepare", id.value(), new SceneLeasePrepared(lease));
+    }
+
+    private static void prepare(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+        submit(runtime, "scene-prepare", lease.id().value(), new SceneLeasePrepared(lease));
+    }
+
+    /** Transfers already-loaded exact ambient bodies without despawning, cloning or teleporting them. */
+    private static void handoff(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        List<SceneMemberPosition> captures = new ArrayList<>();
+        for (SceneMember member : lease.members()) {
+            var ambient = state.ambientLeases().get(member.actorId());
+            if (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED) continue;
+            if (ambient.status() != AmbientLeaseStatus.HOT) return;
+            Entity body = level.getEntity(member.entityId());
+            if (!(body instanceof Mob mob) || !mob.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), bioform(state, member.actorId()))) return;
+            captures.add(new SceneMemberPosition(member.actorId(), new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), fixed(mob.getHealth())));
+        }
+        if (!captures.isEmpty()) submit(runtime, "scene-handoff", lease.id().value(), new SceneLeaseHandoff(lease.withAmbientHandoff(
+                captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures));
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
@@ -168,9 +191,13 @@ final class FrontierV3SceneExecutor {
             SceneMember member = lease.members().get(index);
             Entity existing = level.getEntity(member.entityId());
             if (existing != null) {
-                if (!owned(existing, state, lease, member) || !(existing instanceof Mob body) || body.getHealth() <= 0.0F) return BodyMaterialization.CONFLICT;
+                if (!(existing instanceof Mob body) || body.getHealth() <= 0.0F) return BodyMaterialization.CONFLICT;
+                if (owned(existing, state, lease, member)) continue;
+                if (!FrontierV3AmbientActorExecutor.owned(existing, member.actorId(), bioform(state, member.actorId()))) return BodyMaterialization.CONFLICT;
+                body.getNavigation().stop(); body.setNoAi(true); body.setCustomNameVisible(true); mark(body, lease, member);
                 continue;
             }
+            if (lease.ambientHandoffActorIds().contains(member.actorId())) return BodyMaterialization.DEFERRED;
             BlockPos candidate = spawnCandidate(lease.handoffPosition(), index);
             if (!level.hasChunkAt(candidate)) return BodyMaterialization.DEFERRED;
             BlockPos position = spawnPosition(level, candidate);
@@ -380,6 +407,8 @@ final class FrontierV3SceneExecutor {
                 .anyMatch(bioform -> bioform.id().equals(actorId));
     }
     private static void mark(Entity entity, SceneLease lease, SceneMember member) {
+        entity.getPersistentData().remove(FrontierV3AmbientActorExecutor.ACTOR_KEY);
+        entity.getPersistentData().remove(FrontierV3AmbientActorExecutor.KIND_KEY);
         entity.getPersistentData().putString(LEASE_KEY, lease.id().value());
         entity.getPersistentData().putString(ACTOR_KEY, member.actorId().value());
         entity.getPersistentData().putLong(REVISION_KEY, lease.revision());

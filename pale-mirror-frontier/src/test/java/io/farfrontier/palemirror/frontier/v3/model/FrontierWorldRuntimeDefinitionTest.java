@@ -392,8 +392,13 @@ class FrontierWorldRuntimeDefinitionTest {
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         var projection = engine.projection(ProjectionQuery.summary());
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:supply-1-2");
-        SceneLease lease = new SceneLease(leaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(2_550L), projection.revision().value(),
-                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(leaseId, actor))).toList());
+        SceneLease lease = new SceneLease(leaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(2_550L), projection.revision().value(),
+                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
+        WorldId foreignWorld = new WorldId("frontier:foreign-scene-world");
+        SceneLease foreignLease = new SceneLease(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:foreign-scene-world"), foreignWorld,
+                operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(2_550L), projection.revision().value(), SceneLeaseStatus.PREPARED,
+                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(foreignWorld, actor))).toList());
+        assertThrows(IllegalArgumentException.class, () -> before.prepareSceneLease(foreignLease), "a scene lease from another world cannot share this world's canonical actors");
         SceneLeasePrepared payload = new SceneLeasePrepared(lease);
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-lease-start");
         var accepted = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, new WorldId("frontier:scene-lease"),
@@ -455,15 +460,15 @@ class FrontierWorldRuntimeDefinitionTest {
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> retained = new LinkedHashMap<>(released.sceneLeases());
         for (int index = 0; index < 1_023; index++) {
             var oldId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-" + index);
-            retained.put(oldId, new SceneLease(oldId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(index), index,
-                    SceneLeaseStatus.CLOSED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(oldId, actor))).toList()));
+            retained.put(oldId, new SceneLease(oldId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(index), index,
+                    SceneLeaseStatus.CLOSED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList()));
         }
         FrontierWorldState retentionState = new FrontierWorldState(before.bootstrap(), before.actorLocations(), released.structureConditions(), released.infection(),
                 released.inventory(), released.productionJobs(), released.contracts(), released.operations(), released.physicalIntents(), released.physicalObservations(), retained,
                 released.hiveColony(), released.structureDamage(), released.physicalDeltas(), released.ambientLeases(), released.routeConstructions(), released.routeTopology(), released.strategicPlans());
         var nextLeaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:after-compaction");
-        SceneLease nextLease = new SceneLease(nextLeaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(551L), 2_000L,
-                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(nextLeaseId, actor))).toList());
+        SceneLease nextLease = new SceneLease(nextLeaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(551L), 2_000L,
+                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
         FrontierWorldState compacted = retentionState.prepareSceneLease(nextLease);
         assertEquals(1_024, compacted.sceneLeases().size());
         assertTrue(compacted.sceneLeases().containsKey(nextLeaseId));

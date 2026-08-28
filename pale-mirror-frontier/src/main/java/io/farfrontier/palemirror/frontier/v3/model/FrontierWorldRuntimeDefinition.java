@@ -92,6 +92,10 @@ public final class FrontierWorldRuntimeDefinition {
             RouteOperation operation = state.operations().get(prepared.lease().operationId()); if (operation == null) return rejected("scene lease has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
         }
+        if (command.payload() instanceof SceneLeaseHandoff handoff) {
+            RouteOperation operation = state.operations().get(handoff.lease().operationId()); if (operation == null) return rejected("scene hand-off has no owning operation");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), handoff)));
+        }
         if (command.payload() instanceof SceneLeaseTransition transition) {
             SceneLease lease = state.sceneLeases().get(transition.leaseId()); if (lease == null) return rejected("scene lease is unknown");
             RouteOperation operation = state.operations().get(lease.operationId());
@@ -214,6 +218,7 @@ public final class FrontierWorldRuntimeDefinition {
             case PhysicalIntentPrepared prepared -> reducePhysicalIntentPrepared(state, event.subject(), prepared);
             case PhysicalIntentTransition transition -> reducePhysicalIntentTransition(state, event.subject(), transition);
             case SceneLeasePrepared prepared -> reduceSceneLeasePrepared(state, event.subject(), event.instant(), prepared);
+            case SceneLeaseHandoff handoff -> reduceSceneLeaseHandoff(state, event.subject(), event.instant(), handoff);
             case SceneLeaseTransition transition -> reduceSceneLeaseTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
@@ -344,6 +349,14 @@ public final class FrontierWorldRuntimeDefinition {
             throw new IllegalArgumentException("scene lease does not match its current operation hand-off");
         }
         return state.prepareSceneLease(lease);
+    }
+    private static FrontierWorldState reduceSceneLeaseHandoff(FrontierWorldState state, SubjectId subject, SimInstant instant, SceneLeaseHandoff handoff) {
+        SceneLease lease = handoff.lease();
+        RouteOperation operation = state.operations().get(lease.operationId());
+        if (operation == null || !subject.equals(operation.settlementId()) || !lease.handoffInstant().equals(instant)) {
+            throw new IllegalArgumentException("scene hand-off does not match its current operation hand-off");
+        }
+        return state.handoffAmbientScene(handoff);
     }
     private static FrontierWorldState reduceSceneLeaseTransition(FrontierWorldState state, SubjectId subject, SceneLeaseTransition transition) {
         SceneLease lease = state.sceneLeases().get(transition.leaseId());
