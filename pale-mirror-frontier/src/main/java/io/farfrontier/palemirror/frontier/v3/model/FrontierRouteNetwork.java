@@ -38,7 +38,7 @@ final class FrontierRouteNetwork {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id"); Objects.requireNonNull(route, "route");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
-        if (route.size() < 3 || route.size() > 127 || !route.getFirst().equals(settlement.anchor())
+        if (route.size() < RouteTopology.MIN_WAYPOINTS || route.size() > RouteTopology.MAX_WAYPOINTS || !route.getFirst().equals(settlement.anchor())
                 || !route.getLast().equals(supplyNest(bootstrap).anchor().offset(4, 0, -4))) throw new IllegalArgumentException("replacement route has invalid endpoints or size");
         for (int index = 1; index < route.size(); index++) {
             BlockPosition from = route.get(index - 1), to = route.get(index);
@@ -64,7 +64,11 @@ final class FrontierRouteNetwork {
     }
 
     static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap) {
-        Objects.requireNonNull(bootstrap, "bootstrap");
+        return surfaceCells(bootstrap, RouteTopology.initial());
+    }
+
+    static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology");
         Set<BlockPosition> cells = new LinkedHashSet<>();
         List<Settlement> settlements = bootstrap.settlements();
         for (int index = 0; index < settlements.size(); index++) {
@@ -77,7 +81,7 @@ final class FrontierRouteNetwork {
             if (index < 8) addSegment(cells, new BlockPosition(laneX, 64, laneZ),
                     new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36));
         }
-        List<BlockPosition> supply = supplyWaypoints(bootstrap, settlements.getFirst().id());
+        List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlements.getFirst().id());
         for (int index = 2; index < supply.size(); index++) addSegment(cells, supply.get(index - 1), supply.get(index));
         return Set.copyOf(cells);
     }

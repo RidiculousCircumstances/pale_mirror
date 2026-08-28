@@ -12,4 +12,8 @@ public record SupplyContract(SubjectId id, SubjectId settlementId, SubjectId rec
         if (itemCount <= 0 || itemCount > 64) throw new IllegalArgumentException("contract item count must be 1..64");
         Objects.requireNonNull(status);
     }
+
+    public SupplyContract withStatus(ContractStatus nextStatus) {
+        return new SupplyContract(id, settlementId, recipientId, cargoId, itemKind, itemCount, nextStatus);
+    }
 }

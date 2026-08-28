@@ -32,7 +32,7 @@ public final class FrontierGrayboxPlan {
                 addStructure(cells, structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
-        addRoutes(cells, state.bootstrap());
+        addRoutes(cells, state.bootstrap(), state.routeTopology());
         // Physical deltas are canonical aftermath, not executor-local provenance.  Once an
         // observed cell is gone, desired-state projection must not ask a later loaded chunk to
         // recreate it, including after the SavedData ledger has been compacted or lost.
@@ -68,15 +68,20 @@ public final class FrontierGrayboxPlan {
      * projection.  It deliberately covers every currently materializable owner kind.
      */
     public static GrayboxCell intactSemanticCell(FrontierBootstrap bootstrap, HiveColony colony, SubjectId owner, BlockPosition position) {
+        return intactSemanticCell(bootstrap, colony, RouteTopology.initial(), owner, position);
+    }
+
+    /** Resolves intact geometry against the accepted canonical route topology. */
+    public static GrayboxCell intactSemanticCell(FrontierBootstrap bootstrap, HiveColony colony, RouteTopology topology, SubjectId owner, BlockPosition position) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(colony, "hive colony");
-        Objects.requireNonNull(owner, "owner"); Objects.requireNonNull(position, "position");
+        Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(owner, "owner"); Objects.requireNonNull(position, "position");
         for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
             if (structure.id().equals(owner)) return intactStructureCell(structure, position);
         }
         for (HiveOrgan organ : bootstrap.hive().organs()) if (organ.id().equals(owner)) return intactOrganCell(organ, position);
         HiveOrgan added = colony.addedOrgans().get(owner);
         if (added != null) return intactOrganCell(added, position);
-        if (FrontierRouteNetwork.OWNER.equals(owner) && FrontierRouteNetwork.surfaceCells(bootstrap).contains(position)) {
+        if (FrontierRouteNetwork.OWNER.equals(owner) && FrontierRouteNetwork.surfaceCells(bootstrap, topology).contains(position)) {
             return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         }
         return null;
@@ -128,8 +133,8 @@ public final class FrontierGrayboxPlan {
         }
     }
 
-    private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap) {
-        FrontierRouteNetwork.surfaceCells(bootstrap).forEach(position ->
+    private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {
+        FrontierRouteNetwork.surfaceCells(bootstrap, topology).forEach(position ->
                 add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE));
     }
 

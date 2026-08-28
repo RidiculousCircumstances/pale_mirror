@@ -40,7 +40,7 @@ final class StructuralRepairProcess {
                         .thenComparingInt(delta -> delta.position().z())).findFirst();
         if (repairable.isEmpty()) return List.of(next);
         PhysicalDelta loss = repairable.orElseThrow(); SubjectId structureId = loss.ownerId().orElseThrow();
-        GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), structureId, loss.position());
+        GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), structureId, loss.position());
         if (expected == null) return List.of(next);
         SubjectId settlementId = FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), structureId);
         Optional<ExactItemStack> material = state.inventory().items().values().stream()

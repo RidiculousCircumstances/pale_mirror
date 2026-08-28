@@ -29,7 +29,7 @@ final class StructuralRepairStateSupport {
         if (delta == null || delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.ownerId().equals(java.util.Optional.of(current.causeSubjectId()))) {
             throw new IllegalArgumentException("repair has no matching known physical loss");
         }
-        GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), current.causeSubjectId(), repair.position());
+        GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), current.causeSubjectId(), repair.position());
         ExactItemStack material = state.inventory().items().get(repair.itemId());
         if (expected == null || material == null || !material.itemKind().equals(expected.material().repairItemKind())) {
             throw new IllegalArgumentException("repair material does not match its lost semantic cell");
@@ -53,7 +53,7 @@ final class StructuralRepairStateSupport {
         nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> nextObservations = new LinkedHashMap<>(state.physicalObservations()); nextObservations.put(repair.id(), repair);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), nextConditions, state.infection(), state.inventory().consumeOne(repair.itemId()), state.productionJobs(),
-                state.contracts(), state.operations(), nextIntents, nextObservations, state.sceneLeases(), state.hiveColony(), nextDamage, nextDeltas, state.ambientLeases());
+                state.contracts(), state.operations(), nextIntents, nextObservations, state.sceneLeases(), state.hiveColony(), nextDamage, nextDeltas, state.ambientLeases(), state.routeTopology());
     }
 
     private static FrontierWorldState completeHiveOrgan(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
@@ -67,7 +67,7 @@ final class StructuralRepairStateSupport {
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(repair.id(), repair);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeOne(repair.itemId()),
                 state.productionJobs(), state.contracts(), state.operations(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), deltas, state.ambientLeases());
+                state.structureDamage(), deltas, state.ambientLeases(), state.routeTopology());
     }
 
     private static FrontierWorldState completeRoute(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
@@ -77,7 +77,7 @@ final class StructuralRepairStateSupport {
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(); observations.putAll(state.physicalObservations()); observations.put(repair.id(), repair);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeOne(repair.itemId()),
                 state.productionJobs(), state.contracts(), state.operations(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), deltas, state.ambientLeases());
+                state.structureDamage(), deltas, state.ambientLeases(), state.routeTopology());
     }
 
     private static BlockPosition blockPosition(io.farfrontier.palemirror.frontier.v3.api.FixedPosition position) {

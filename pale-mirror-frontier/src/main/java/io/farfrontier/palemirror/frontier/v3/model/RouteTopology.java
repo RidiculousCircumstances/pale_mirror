@@ -12,14 +12,16 @@ import java.util.Objects;
  * only accepted replacement paths, never a scan or adoption of player-built blocks.
  */
 public record RouteTopology(Map<SubjectId, List<BlockPosition>> replacementSupplyRoutes) {
-    private static final int MAX_REPLACEMENTS = 12;
+    static final int MAX_REPLACEMENTS = 12;
+    static final int MIN_WAYPOINTS = 3;
+    static final int MAX_WAYPOINTS = 127;
     public RouteTopology {
         Objects.requireNonNull(replacementSupplyRoutes, "replacement supply routes");
         if (replacementSupplyRoutes.size() > MAX_REPLACEMENTS) throw new IllegalArgumentException("route replacement limit exceeded");
         Map<SubjectId, List<BlockPosition>> copy = new LinkedHashMap<>();
         replacementSupplyRoutes.forEach((settlement, path) -> {
             List<BlockPosition> immutablePath = List.copyOf(Objects.requireNonNull(path, "route path"));
-            if (immutablePath.size() < 3 || immutablePath.size() > 127) throw new IllegalArgumentException("replacement route path size is out of bounds");
+            if (immutablePath.size() < MIN_WAYPOINTS || immutablePath.size() > MAX_WAYPOINTS) throw new IllegalArgumentException("replacement route path size is out of bounds");
             if (copy.put(Objects.requireNonNull(settlement, "route settlement"), immutablePath) != null) {
                 throw new IllegalArgumentException("duplicate replacement route settlement");
             }

@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 19, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 20, MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {
@@ -49,6 +49,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writePhysicalObservations(output, state.physicalObservations());
                 writeSceneLeases(output, state.sceneLeases());
                 AmbientLeaseStateCodec.write(output, state.ambientLeases());
+                RouteTopologyStateCodec.write(output, state.routeTopology());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -65,7 +66,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
                     readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony, structureDamage, physicalDeltas,
-                    AmbientLeaseStateCodec.read(input));
+                    AmbientLeaseStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -474,23 +475,21 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             default -> throw new IllegalArgumentException("unknown inventory custody");
         };
     }
-    private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
+    static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
     }
-    private static BlockPosition readPosition(DataInputStream input) throws IOException {
-        return new BlockPosition(input.readInt(), input.readInt(), input.readInt());
-    }
+    static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeCount(DataOutputStream output, int count) throws IOException {
         if (count > MAX_ENTRIES) throw new IllegalArgumentException("too many Frontier v3 state entries");
         output.writeShort(count);
     }
     private static int readCount(DataInputStream input) throws IOException { return input.readUnsignedShort(); }
-    private static void writeString(DataOutputStream output, String value) throws IOException {
+    static void writeString(DataOutputStream output, String value) throws IOException {
         byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
         if (bytes.length > 256) throw new IllegalArgumentException("state identifier is too long");
         output.writeShort(bytes.length); output.write(bytes);
     }
-    private static String readString(DataInputStream input) throws IOException {
+    static String readString(DataInputStream input) throws IOException {
         int length = input.readUnsignedShort();
         if (length > 256) throw new IllegalArgumentException("state identifier is too long");
         byte[] bytes = input.readNBytes(length);

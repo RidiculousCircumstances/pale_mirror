@@ -84,7 +84,7 @@ class FrontierWorldStateTest {
         missingActor.remove(new SubjectId("resident:1-1"));
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
                 source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations(), source.physicalIntents(),
-                source.physicalObservations(), source.sceneLeases(), source.hiveColony(), source.structureDamage(), source.physicalDeltas(), source.ambientLeases()));
+                source.physicalObservations(), source.sceneLeases(), source.hiveColony(), source.structureDamage(), source.physicalDeltas(), source.ambientLeases(), source.routeTopology()));
     }
 
     @Test
@@ -137,7 +137,7 @@ class FrontierWorldStateTest {
 
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(),
                 state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), Map.of(intent.id(), intent), state.physicalObservations(),
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases()));
+                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeTopology()));
     }
 
     @Test

@@ -12,6 +12,7 @@ final class FrontierWorldPhysicalDeltaSupport {
 
     private FrontierWorldPhysicalDeltaSupport() { }
 
+    /** Validates retained evidence; a superseded route loss stays historical even after rerouting. */
     static void validate(FrontierBootstrap bootstrap, HiveColony colony, Map<BlockPosition, PhysicalDelta> deltas) {
         if (deltas.size() > MAX_PHYSICAL_DELTAS) throw new IllegalArgumentException("physical delta retention limit exceeded");
         for (Map.Entry<BlockPosition, PhysicalDelta> entry : deltas.entrySet()) {
@@ -19,6 +20,12 @@ final class FrontierWorldPhysicalDeltaSupport {
             if (!position.equals(delta.position())) throw new IllegalArgumentException("physical delta key differs from position evidence");
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position);
             if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) continue;
+            if (FrontierRouteNetwork.OWNER.equals(delta.ownerId().orElseThrow())) {
+                if (delta.semanticPart().orElseThrow() != GrayboxSemanticPart.ROUTE_SURFACE) {
+                    throw new IllegalArgumentException("route loss must name a route surface");
+                }
+                continue;
+            }
             GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(bootstrap, colony, delta.ownerId().orElseThrow(), position);
             if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
                 throw new IllegalArgumentException("known physical delta is not an exact semantic cell");
@@ -30,12 +37,22 @@ final class FrontierWorldPhysicalDeltaSupport {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(delta, "physical delta");
         if (state.physicalDeltas().containsKey(delta.position())) throw new IllegalArgumentException("physical delta is already recorded at this position");
         if (state.physicalDeltas().size() >= MAX_PHYSICAL_DELTAS) throw new IllegalArgumentException("physical delta retention limit exceeded");
+        validateCurrent(state, delta);
         Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas()); next.put(delta.position(), delta);
         FrontierWorldState changed = new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(),
                 state.inventory(), state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(),
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), next, state.ambientLeases());
+                state.sceneLeases(), state.hiveColony(), state.structureDamage(), next, state.ambientLeases(), state.routeTopology());
         if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.ownerId().orElseThrow().value().startsWith("structure:")) return changed;
         return changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
+    }
+
+    private static void validateCurrent(FrontierWorldState state, PhysicalDelta delta) {
+        if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) return;
+        GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(),
+                delta.ownerId().orElseThrow(), delta.position());
+        if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
+            throw new IllegalArgumentException("known physical delta is not an exact current semantic cell");
+        }
     }
 
     static FrontierWorldState recordStructureDamage(FrontierWorldState state, StructureDamaged damage) {
@@ -52,7 +69,7 @@ final class FrontierWorldPhysicalDeltaSupport {
                 ? StructureCondition.DESTROYED : StructureCondition.DAMAGED;
         Map<SubjectId, StructureCondition> nextConditions = new LinkedHashMap<>(state.structureConditions()); nextConditions.put(damage.structureId(), nextCondition);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), nextConditions, state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(), nextDamageIndex, state.physicalDeltas(), state.ambientLeases());
+                state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(), nextDamageIndex, state.physicalDeltas(), state.ambientLeases(), state.routeTopology());
     }
 
     static boolean organOperational(FrontierBootstrap bootstrap, HiveColony colony, Map<BlockPosition, PhysicalDelta> deltas, SubjectId organId) {

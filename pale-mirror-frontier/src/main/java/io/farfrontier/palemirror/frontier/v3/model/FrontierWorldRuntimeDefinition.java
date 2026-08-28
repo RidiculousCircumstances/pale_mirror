@@ -291,7 +291,7 @@ public final class FrontierWorldRuntimeDefinition {
             throw new IllegalArgumentException("route operation does not match its loaded supply contract");
         }
         Settlement settlement = settlement(state, operation.settlementId());
-        if (!operation.route().equals(FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), settlement.id()))) {
+        if (!operation.route().equals(state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()))) {
             throw new IllegalArgumentException("route operation must use the deterministic settlement-to-nest route");
         }
         return state.createOperation(operation);
@@ -462,7 +462,7 @@ public final class FrontierWorldRuntimeDefinition {
                 .orElseThrow(() -> new IllegalStateException("settlement lacks hauler" )).id();
         SubjectId guard = settlement.residents().stream().filter(resident -> resident.role() == ResidentRole.GUARD).sorted(Comparator.comparing(Resident::id)).findFirst()
                 .orElseThrow(() -> new IllegalStateException("settlement lacks guard" )).id();
-        List<BlockPosition> route = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), settlement.id());
+        List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
         int ordinal = ordinal(contract.id().value());
         return new RouteOperation(new SubjectId("operation:supply-1-" + ordinal), settlement.id(), contract.cargoId(), contract.recipientId(),
                 List.of(hauler, guard), route, 0, OperationStage.EN_ROUTE);
