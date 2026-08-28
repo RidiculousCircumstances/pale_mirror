@@ -31,8 +31,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -51,6 +54,7 @@ final class FrontierV3SceneExecutor {
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_scene_actor";
     static final String REVISION_KEY = "pale_mirror_frontier_v3_scene_revision";
     private static final int DEMAND_RADIUS_BLOCKS = 96;
+    private static final double RESIDENT_SPEED = 0.055D, BIOFORM_SPEED = 0.075D, ARRIVAL_DISTANCE = 0.35D;
 
     enum BodyMaterialization { COMPLETE, DEFERRED, CONFLICT }
 
@@ -100,6 +104,7 @@ final class FrontierV3SceneExecutor {
         switch (lease.status()) {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> {
+                executeLocalGoals(level, state, lease);
                 if (!demandExists(level, lease.handoffPosition())) submit(runtime, "scene-draining", lease.id().value(),
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             }
@@ -150,12 +155,53 @@ final class FrontierV3SceneExecutor {
             body.setUUID(member.entityId());
             body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
             body.setPersistenceRequired();
+            body.setNoAi(true);
             body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + member.actorId().value()));
             body.setCustomNameVisible(true);
             mark(body, lease, member);
             if (!level.addFreshEntity(body)) return BodyMaterialization.CONFLICT;
         }
         return BodyMaterialization.COMPLETE;
+    }
+
+    /**
+     * Bounded local motion for one loaded HOT lease. This intentionally owns no strategic
+     * decision and cannot inflict damage: a later durable SCENE_STRIKE executor is the sole
+     * effect boundary. Native AI stays disabled so neither a Zombie nor a Villager can invent
+     * an unaccounted target, attack, breeding decision, or path outside the canonical scene.
+     */
+    private static void executeLocalGoals(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream)
+                .sorted(Comparator.comparing(value -> value.member().actorId())).toList();
+        for (Body actor : bodies) moveToward(level, actor.entity(), localTarget(actor, bodies, lease));
+    }
+
+    private static Optional<Body> body(ServerLevel level, FrontierWorldState state, SceneLease lease, SceneMember member) {
+        Entity entity = level.getEntity(member.entityId());
+        return owned(entity, state, lease, member) && entity instanceof Mob mob && mob.isAlive() ? Optional.of(new Body(member, mob, bioform(state, member.actorId()))) : Optional.empty();
+    }
+
+    private static Vec3 localTarget(Body actor, List<Body> bodies, SceneLease lease) {
+        Optional<Body> opponent = bodies.stream().filter(other -> other.bioform() != actor.bioform()).min(Comparator.comparingDouble(other -> actor.entity().distanceToSqr(other.entity())));
+        if (opponent.isPresent()) {
+            Vec3 delta = opponent.orElseThrow().entity().position().subtract(actor.entity().position());
+            if (actor.bioform()) return opponent.orElseThrow().entity().position();
+            if (delta.horizontalDistanceSqr() > 0.0001D) return actor.entity().position().subtract(delta.normalize().scale(5.0D));
+        }
+        int phase = Math.floorMod(actor.member().actorId().value().hashCode(), 8);
+        double angle = phase * Math.PI / 4.0D;
+        return new Vec3(lease.handoffPosition().x() + 0.5D + Math.cos(angle) * 2.0D, actor.entity().getY(), lease.handoffPosition().z() + 0.5D + Math.sin(angle) * 2.0D);
+    }
+
+    private static void moveToward(ServerLevel level, Mob actor, Vec3 target) {
+        Vec3 delta = target.subtract(actor.position()); double distance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        if (distance <= ARRIVAL_DISTANCE) return;
+        double speed = actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED;
+        Vec3 direct = new Vec3(delta.x / distance * speed, 0.0D, delta.z / distance * speed);
+        Vec3 step = List.of(direct, new Vec3(-direct.z, 0.0D, direct.x), new Vec3(direct.z, 0.0D, -direct.x)).stream()
+                .filter(candidate -> level.noCollision(actor, actor.getBoundingBox().move(candidate))).findFirst().orElse(null);
+        if (step == null) return;
+        actor.setYRot((float) Math.toDegrees(Math.atan2(-step.x, step.z))); actor.yBodyRot = actor.getYRot(); actor.move(MoverType.SELF, step);
     }
 
     /** Accepts only an actual loaded-world death of a body owned by the active HOT lease. */
@@ -242,4 +288,5 @@ final class FrontierV3SceneExecutor {
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
     }
+    private record Body(SceneMember member, Mob entity, boolean bioform) { }
 }

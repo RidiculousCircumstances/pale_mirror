@@ -64,6 +64,7 @@ public final class FrontierV3SceneGameTests {
                     "materialized body must carry its scene lease ownership");
             helper.assertValueEqual(body.getPersistentData().getString(FrontierV3SceneExecutor.ACTOR_KEY), member.actorId().value(),
                     "materialized body must carry its canonical actor identity");
+            helper.assertTrue(body.isNoAi(), "a HOT body must not retain uncontrolled vanilla AI or combat authority");
             body.discard();
         }
         helper.succeed();
