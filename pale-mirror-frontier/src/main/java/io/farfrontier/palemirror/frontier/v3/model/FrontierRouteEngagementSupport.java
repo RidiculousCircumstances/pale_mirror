@@ -41,10 +41,16 @@ final class FrontierRouteEngagementSupport {
                 if (!hiveBioforms.contains(attackerId) || location == null) {
                     throw new IllegalArgumentException("route engagement attacker must be one canonical hive bioform");
                 }
-                // A real HOT death retains the physical death position and the exact historical
-                // attacker membership. COLD resolution then selects its outcome from the living
-                // subset; it must not reject the state before that durable consequence runs.
-                if (engagement.status() != RouteEngagementStatus.HOT && location.condition().status() == ActorLifeStatus.ALIVE
+                // The approach cursor owns an attacker's canonical position only until the scene
+                // reaches its intercept. A HOT scene then owns real movement; its durable release
+                // captures exact survivor positions before COLD combat resumes. Requiring the old
+                // approach endpoint after that hand-off would discard physical causality or reject
+                // a valid scene release. An unknown recovery has no such capture, so it retains
+                // the last deterministic approach position until observed loaded-world evidence.
+                boolean approachOwnsPosition = engagement.status() == RouteEngagementStatus.APPROACHING
+                        || engagement.status() == RouteEngagementStatus.WAITING_FOR_INTERCEPT
+                        || engagement.status() == RouteEngagementStatus.UNKNOWN_AFTER_RESTART;
+                if (approachOwnsPosition && location.condition().status() == ActorLifeStatus.ALIVE
                         && !location.position().equals(attacker.position())) {
                     throw new IllegalArgumentException("COLD engagement attacker must retain its exact route position");
                 }

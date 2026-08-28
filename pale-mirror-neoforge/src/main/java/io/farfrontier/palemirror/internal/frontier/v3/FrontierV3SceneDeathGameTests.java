@@ -107,7 +107,9 @@ public final class FrontierV3SceneDeathGameTests {
         FrontierV3CommandSubmission.submit(runtime, "scene-death-release-refresh-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z());
         level.getChunkAt(handoff);
-        for (SceneMember member : lease.members()) addOwnedBody(helper, level, lease, member, handoff);
+        for (int index = 0; index < lease.members().size(); index++) {
+            addOwnedBody(helper, level, lease, lease.members().get(index), handoff.offset(index & 1, 0, index / 2));
+        }
 
         helper.runAfterDelay(1L, () -> {
             List<Entity> bodies = lease.members().stream().map(member -> level.getEntity(member.entityId())).toList();
@@ -120,9 +122,15 @@ public final class FrontierV3SceneDeathGameTests {
                 victim.discard();
                 lease.members().stream().skip(1).forEach(member -> helper.assertTrue(level.getEntity(member.entityId()) != null,
                         "the surviving exact HOT body must remain indexed before executor release: " + member.actorId().value()));
+                SceneMember survivor = lease.members().get(1);
+                Entity survivorBody = level.getEntity(survivor.entityId());
+                helper.assertTrue(survivorBody != null, "one surviving exact HOT body must remain available for its position capture");
+                BlockPosition survivorPosition = new BlockPosition(survivorBody.getBlockX(), survivorBody.getBlockY(), survivorBody.getBlockZ());
                 FrontierV3SceneExecutor.release(level, runtime, stale.sceneLeases().get(leaseId));
                 helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
                         "release must refresh canonical death evidence and capture only survivors");
+                helper.assertValueEqual(state(runtime).actorLocations().get(survivor.actorId()).position(), survivorPosition,
+                        "COLD continuation must retain the exact surviving HOT position rather than its old approach endpoint");
                 cleanup(bodies); runtime.shutdown(); helper.succeed();
             } catch (RuntimeException failure) {
                 cleanup(bodies); runtime.shutdown(); throw failure;
