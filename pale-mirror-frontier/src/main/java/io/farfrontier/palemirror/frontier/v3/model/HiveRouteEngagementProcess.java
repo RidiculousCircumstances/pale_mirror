@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -15,6 +16,7 @@ import java.util.Optional;
 /** Starts one exact hive route interception and advances its COLD bodies along retained routes. */
 final class HiveRouteEngagementProcess {
     private static final long STEP_INTERVAL = 100L;
+    private static final long COMBAT_INTERVAL = 20L;
     private static final int COLD_STEP_BLOCKS = 16;
     private HiveRouteEngagementProcess() { }
 
@@ -40,9 +42,9 @@ final class HiveRouteEngagementProcess {
         List<EngagementAttacker> attackers = attackers(state, intercept);
         if (attackers.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         RouteEngagement engagement = new RouteEngagement(engagementId(task), task.id(), operation.id(), task.ownerId(), attackers,
-                intercept, RouteEngagementStatus.APPROACHING);
+                intercept, RouteEngagementStatus.APPROACHING, 0, Optional.empty());
         List<ProposedEvent> events = new ArrayList<>(List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(task.ownerId(), new RouteEngagementStarted(engagement))));
-        if (engagement.allAttackersAtIntercept()) events.add(new ProposedEvent(task.ownerId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.READY_FOR_SCENE)));
+        if (engagement.allAttackersAtIntercept()) events.addAll(beginOrWait(state, engagement, action.dueAt().ticks()));
         else events.add(schedule(progress(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
         return List.copyOf(events);
     }
@@ -54,8 +56,7 @@ final class HiveRouteEngagementProcess {
         RouteOperation operation = state.operations().get(engagement.operationId());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || engagement.attackerIds().stream()
                 .anyMatch(actor -> state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE)) {
-            return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.RESOLVED)),
-                    transition(task, StrategicTaskStatus.BLOCKED));
+            return abort(engagement);
         }
         List<ProposedEvent> events = new ArrayList<>();
         for (EngagementAttacker attacker : engagement.attackers()) {
@@ -63,8 +64,44 @@ final class HiveRouteEngagementProcess {
                     new RouteEngagementAttackerAdvanced(engagement.id(), attacker.actorId(), attacker.routeIndex() + 1)));
         }
         if (engagement.attackers().stream().allMatch(attacker -> attacker.routeIndex() + 1 >= attacker.route().size() - 1)) {
-            events.add(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.READY_FOR_SCENE)));
+            events.addAll(beginOrWait(state, engagement, action.dueAt().ticks()));
         } else events.add(schedule(progress(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        return List.copyOf(events);
+    }
+
+    static List<ProposedEvent> planReadiness(FrontierWorldState state, ScheduledAction action) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
+        if (engagement == null || engagement.status() != RouteEngagementStatus.WAITING_FOR_INTERCEPT) return List.of();
+        RouteOperation operation = state.operations().get(engagement.operationId());
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || !engagement.allAttackersAtIntercept()
+                || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
+            return abort(engagement);
+        }
+        if (!operation.route().get(operation.routeIndex()).equals(engagement.intercept())) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
+                schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
+    }
+
+    static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
+        if (engagement == null || engagement.status() != RouteEngagementStatus.COLD_COMBAT) return List.of();
+        List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);
+        List<SubjectId> defenders = RouteEngagementCombatRules.livingDefenders(state, engagement);
+        if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, engagement);
+        boolean hiveTurn = (engagement.nextStrikeEpoch() & 1) == 0;
+        SubjectId attacker = RouteEngagementCombatRules.choose(hiveTurn ? attackers : defenders, engagement.nextStrikeEpoch());
+        SubjectId target = RouteEngagementCombatRules.choose(hiveTurn ? defenders : attackers, engagement.nextStrikeEpoch());
+        RouteEngagementStrike strike = new RouteEngagementStrike(engagement.id(), attacker, target, engagement.nextStrikeEpoch(),
+                RouteEngagementCombatRules.damage(state, attacker));
+        FixedScalar after = state.actorLocations().get(target).condition().health().minus(strike.damage());
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(engagement.hiveId(), strike)));
+        if (after.compareTo(FixedScalar.ZERO) <= 0 && ((hiveTurn && defenders.size() == 1) || (!hiveTurn && attackers.size() == 1))) {
+            RouteEngagementOutcome outcome = hiveTurn ? RouteEngagementOutcome.HIVE_VICTORY : RouteEngagementOutcome.SETTLEMENT_VICTORY;
+            events.add(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome)));
+            if (outcome == RouteEngagementOutcome.SETTLEMENT_VICTORY) {
+                events.add(schedule(SupplyOperationProcess.operationProgress(state.operations().get(engagement.operationId()), action.dueAt().ticks() + STEP_INTERVAL)));
+            }
+        } else events.add(schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
         return List.copyOf(events);
     }
 
@@ -87,10 +124,23 @@ final class HiveRouteEngagementProcess {
     static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, RouteEngagementTransition transition) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(transition.engagementId());
         if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("route engagement transition has a foreign owner");
-        if (transition.status() == RouteEngagementStatus.READY_FOR_SCENE && !engagement.allAttackersAtIntercept()) {
-            throw new IllegalArgumentException("route engagement cannot enter a scene before all attackers arrive");
+        if ((transition.status() == RouteEngagementStatus.WAITING_FOR_INTERCEPT || transition.status() == RouteEngagementStatus.COLD_COMBAT)
+                && !engagement.allAttackersAtIntercept()) {
+            throw new IllegalArgumentException("route engagement cannot wait or fight before all attackers arrive");
         }
         return state.withStrategicPlans(state.strategicPlans().transitionEngagement(engagement.id(), transition.status()));
+    }
+
+    static FrontierWorldState reduceStrike(FrontierWorldState state, SubjectId subject, RouteEngagementStrike strike) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(strike.engagementId());
+        if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("COLD strike has a foreign owner");
+        return FrontierRouteEngagementStateSupport.strike(state, strike);
+    }
+
+    static FrontierWorldState reduceResolved(FrontierWorldState state, SubjectId subject, RouteEngagementResolved resolved) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(resolved.engagementId());
+        if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("route engagement resolution has a foreign owner");
+        return FrontierRouteEngagementStateSupport.resolve(state, resolved);
     }
 
     private static boolean activeForOperation(FrontierWorldState state, SubjectId operationId) {
@@ -119,6 +169,29 @@ final class HiveRouteEngagementProcess {
     private static long distanceSquared(BlockPosition left, BlockPosition right) { long dx = (long) left.x() - right.x(), dy = (long) left.y() - right.y(), dz = (long) left.z() - right.z(); return dx * dx + dy * dy + dz * dz; }
     private static ScheduledAction progress(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-progress-" + engagement.id().value().substring("engagement:".length())),
             new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.progress", 1); }
+    private static ScheduledAction readiness(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-readiness-" + engagement.id().value().substring("engagement:".length())),
+            new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.readiness", 1); }
+    private static ScheduledAction combat(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-combat-" + engagement.id().value().substring("engagement:".length())),
+            new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.combat", 1); }
+    private static List<ProposedEvent> beginOrWait(FrontierWorldState state, RouteEngagement engagement, long now) {
+        RouteOperation operation = state.operations().get(engagement.operationId());
+        if (operation.route().get(operation.routeIndex()).equals(engagement.intercept())) {
+            return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
+                    schedule(combat(engagement, now + COMBAT_INTERVAL)));
+        }
+        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.WAITING_FOR_INTERCEPT)),
+                schedule(readiness(engagement, now + STEP_INTERVAL)));
+    }
+    private static List<ProposedEvent> terminal(FrontierWorldState state, RouteEngagement engagement) {
+        List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);
+        List<SubjectId> defenders = RouteEngagementCombatRules.livingDefenders(state, engagement);
+        RouteEngagementOutcome outcome = attackers.isEmpty() && defenders.isEmpty() ? RouteEngagementOutcome.ABORTED
+                : attackers.isEmpty() ? RouteEngagementOutcome.SETTLEMENT_VICTORY : RouteEngagementOutcome.HIVE_VICTORY;
+        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome)));
+    }
+    private static List<ProposedEvent> abort(RouteEngagement engagement) {
+        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), RouteEngagementOutcome.ABORTED)));
+    }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
     private static SubjectId engagementId(StrategicTask task) { return new SubjectId("engagement:" + task.id().value().substring("task:".length())); }

@@ -66,7 +66,7 @@ class HiveRouteEngagementProcessTest {
             }
         }
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(started.engagement().id());
-        assertEquals(RouteEngagementStatus.READY_FOR_SCENE, engagement.status());
+        assertEquals(RouteEngagementStatus.WAITING_FOR_INTERCEPT, engagement.status());
         FrontierWorldState completed = state;
         assertTrue(engagement.attackers().stream().allMatch(attacker -> completed.actorLocations().get(attacker.actorId()).position().equals(intercept)));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
@@ -83,6 +83,58 @@ class HiveRouteEngagementProcessTest {
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task);
 
         assertThrows(IllegalArgumentException.class, () -> state.withStrategicPlans(plans));
+    }
+
+    @Test void coldCombatPersistsEveryExactStrikeAndFailsTheRouteWithoutAPlayer() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        int interceptIndex = Math.max(operation.routeIndex(), operation.route().size() - 2);
+        while (operation.routeIndex() < interceptIndex) {
+            int next = operation.routeIndex() + 1;
+            state = state.advanceOperation(operation.id(), next, next == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE);
+            operation = state.operations().get(operation.id());
+        }
+        BlockPosition intercept = operation.route().get(interceptIndex);
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD).toList()) {
+            state = state.withActorLocation(bioform.id(), intercept);
+        }
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-cold-combat"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:hive-cold-combat"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+
+        for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
+            if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
+            if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
+            if (event.payload() instanceof RouteEngagementTransition transition) state = HiveRouteEngagementProcess.reduceTransition(state, hive, transition);
+        }
+        SubjectId engagementId = new SubjectId("engagement:hive-cold-combat");
+        assertEquals(RouteEngagementStatus.COLD_COMBAT, state.strategicPlans().routeEngagements().get(engagementId).status());
+
+        RouteEngagementStrike first = (RouteEngagementStrike) HiveRouteEngagementProcess.planCombat(state,
+                new ScheduledAction(new ScheduleId("schedule:test-first"), new SimInstant(3_020L), 0, engagementId, "frontier.hive_route_engagement.combat", 1)).getFirst().payload();
+        assertEquals(first, FrontierWorldRuntimeDefinition.payloadCodecs().decode(first.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(first)));
+        state = HiveRouteEngagementProcess.reduceStrike(state, hive, first);
+        FrontierWorldState afterFirst = state;
+        assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceStrike(afterFirst, hive, first));
+
+        for (int step = 1; step < 64 && state.strategicPlans().routeEngagements().get(engagementId).status() != RouteEngagementStatus.RESOLVED; step++) {
+            List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveRouteEngagementProcess.planCombat(state,
+                    new ScheduledAction(new ScheduleId("schedule:test-" + step), new SimInstant(3_020L + step * 20L), 0, engagementId, "frontier.hive_route_engagement.combat", 1));
+            for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : events) {
+                if (event.payload() instanceof RouteEngagementStrike strike) state = HiveRouteEngagementProcess.reduceStrike(state, hive, strike);
+                if (event.payload() instanceof RouteEngagementResolved resolved) state = HiveRouteEngagementProcess.reduceResolved(state, hive, resolved);
+            }
+        }
+        RouteEngagement resolved = state.strategicPlans().routeEngagements().get(engagementId);
+        assertEquals(RouteEngagementStatus.RESOLVED, resolved.status());
+        assertEquals(Optional.of(RouteEngagementOutcome.HIVE_VICTORY), resolved.outcome());
+        assertEquals(OperationStage.FAILED, state.operations().get(operation.id()).stage());
+        assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
     private static FrontierWorldState enRouteState() {

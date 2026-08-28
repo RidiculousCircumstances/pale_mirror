@@ -59,6 +59,11 @@ final class SupplyOperationProcess {
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         RouteOperation operation = state.operations().get(action.subject());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE) return List.of();
+        boolean heldAtIntercept = state.strategicPlans().routeEngagements().values().stream()
+                .anyMatch(engagement -> engagement.operationId().equals(operation.id())
+                        && (engagement.status() == RouteEngagementStatus.WAITING_FOR_INTERCEPT || engagement.status() == RouteEngagementStatus.COLD_COMBAT)
+                        && operation.route().get(operation.routeIndex()).equals(engagement.intercept()));
+        if (heldAtIntercept) return List.of();
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id()) && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) return failed(state, operation, "route-obstructed");
@@ -111,7 +116,7 @@ final class SupplyOperationProcess {
                 .reduce((left, right) -> { throw new IllegalArgumentException("supply contract task binding is ambiguous"); })
                 .orElseThrow(() -> new IllegalArgumentException("supply contract has no active strategic task"));
     }
-    private static StrategicTask deliveryTaskForOperation(FrontierWorldState state, RouteOperation operation, StrategicTaskStatus status) {
+    static StrategicTask deliveryTaskForOperation(FrontierWorldState state, RouteOperation operation, StrategicTaskStatus status) {
         SupplyContract contract = state.contracts().values().stream().filter(value -> value.cargoId().equals(operation.cargoId())).reduce((left, right) -> {
             throw new IllegalArgumentException("supply operation cargo binding is ambiguous");
         }).orElseThrow(() -> new IllegalArgumentException("supply operation has no contract"));

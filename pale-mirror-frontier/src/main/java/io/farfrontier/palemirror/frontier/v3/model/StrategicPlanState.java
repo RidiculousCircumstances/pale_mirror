@@ -259,9 +259,17 @@ final class StrategicPlanState {
     }
 
     private static boolean allowed(RouteEngagementStatus current, RouteEngagementStatus next) {
-        return current == RouteEngagementStatus.APPROACHING && (next == RouteEngagementStatus.READY_FOR_SCENE || next == RouteEngagementStatus.RESOLVED || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
-                || current == RouteEngagementStatus.READY_FOR_SCENE && (next == RouteEngagementStatus.HOT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
-                || current == RouteEngagementStatus.HOT && (next == RouteEngagementStatus.RESOLVED || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART);
+        return current == RouteEngagementStatus.APPROACHING && (next == RouteEngagementStatus.WAITING_FOR_INTERCEPT || next == RouteEngagementStatus.COLD_COMBAT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
+                || current == RouteEngagementStatus.WAITING_FOR_INTERCEPT && (next == RouteEngagementStatus.COLD_COMBAT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
+                || current == RouteEngagementStatus.COLD_COMBAT && (next == RouteEngagementStatus.HOT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
+                || current == RouteEngagementStatus.HOT && next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART;
+    }
+
+    StrategicPlanState resolveEngagement(SubjectId engagementId, RouteEngagementOutcome outcome) {
+        RouteEngagement current = routeEngagements.get(Objects.requireNonNull(engagementId, "route engagement id"));
+        if (current == null) throw new IllegalArgumentException("unknown route engagement");
+        Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagementId, current.resolve(outcome));
+        return new StrategicPlanState(objectives, tasks, routePatrols, next);
     }
 
     private static boolean removable(StrategicObjective objective, Map<SubjectId, StrategicTask> tasks, List<SubjectId> protectedTaskIds) {

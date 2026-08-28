@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 28, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 29, MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {

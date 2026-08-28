@@ -9,7 +9,7 @@ import java.util.List;
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() {
-        return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), new PayloadCodecs(List.of(
+        return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
@@ -19,8 +19,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
-                RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(), RouteEngagementPayloadCodecs.started(), RouteEngagementPayloadCodecs.advanced(),
-                RouteEngagementPayloadCodecs.transition(), StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }
+                RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
+                StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; } @Override public byte[] encode(FrontierPayload payload) {
             InfectionChanged changed = (InfectionChanged) payload;

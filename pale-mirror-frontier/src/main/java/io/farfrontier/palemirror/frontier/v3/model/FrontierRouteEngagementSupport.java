@@ -38,8 +38,8 @@ final class FrontierRouteEngagementSupport {
             for (EngagementAttacker attacker : engagement.attackers()) {
                 SubjectId attackerId = attacker.actorId();
                 ActorLocation location = actorLocations.get(attackerId);
-                if (!hiveBioforms.contains(attackerId) || location == null || location.condition().status() != ActorLifeStatus.ALIVE) {
-                    throw new IllegalArgumentException("route engagement attacker must be one living hive bioform");
+                if (!hiveBioforms.contains(attackerId) || location == null || active && location.condition().status() != ActorLifeStatus.ALIVE) {
+                    throw new IllegalArgumentException("active route engagement attacker must be one living hive bioform");
                 }
                 if (engagement.status() != RouteEngagementStatus.HOT && !location.position().equals(attacker.position())) {
                     throw new IllegalArgumentException("COLD engagement attacker must retain its exact route position");

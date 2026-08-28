@@ -16,7 +16,7 @@ class RouteEngagementTest {
     @Test void retainsOnlyExactBoundedDistinctAttackers() {
         RouteEngagement engagement = engagement(List.of(new SubjectId("bioform:west-0"), new SubjectId("bioform:west-1")));
         assertEquals(RouteEngagementStatus.APPROACHING, engagement.status());
-        assertEquals(RouteEngagementStatus.READY_FOR_SCENE, engagement.withStatus(RouteEngagementStatus.READY_FOR_SCENE).status());
+        assertEquals(RouteEngagementStatus.WAITING_FOR_INTERCEPT, engagement.withStatus(RouteEngagementStatus.WAITING_FOR_INTERCEPT).status());
         assertThrows(IllegalArgumentException.class, () -> engagement(List.of(new SubjectId("bioform:west-0"), new SubjectId("bioform:west-0"))));
     }
 
@@ -33,7 +33,7 @@ class RouteEngagementTest {
         StrategicPlanState restored = StrategicPlanStateCodec.read(new java.io.DataInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray())));
         assertEquals(engagement, restored.routeEngagements().get(engagement.id()));
         assertThrows(IllegalArgumentException.class, () -> new StrategicPlanState(Map.of(objective.id(), objective), Map.of(), Map.of(), Map.of(engagement.id(), engagement)));
-        assertEquals(RouteEngagementStatus.READY_FOR_SCENE, restored.transitionEngagement(engagement.id(), RouteEngagementStatus.READY_FOR_SCENE)
+        assertEquals(RouteEngagementStatus.WAITING_FOR_INTERCEPT, restored.transitionEngagement(engagement.id(), RouteEngagementStatus.WAITING_FOR_INTERCEPT)
                 .routeEngagements().get(engagement.id()).status());
     }
 
@@ -73,7 +73,7 @@ class RouteEngagementTest {
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task)
                 .startEngagement(new RouteEngagement(new SubjectId("engagement:missing-operation"), task.id(), new SubjectId("operation:missing"), hive,
                         List.of(new EngagementAttacker(attacker, List.of(initial.actorLocations().get(attacker).position(), new BlockPosition(1, 64, 1)), 0)),
-                        new BlockPosition(1, 64, 1), RouteEngagementStatus.APPROACHING));
+                        new BlockPosition(1, 64, 1), RouteEngagementStatus.APPROACHING, 0, Optional.empty()));
 
         assertThrows(IllegalArgumentException.class, () -> initial.withStrategicPlans(plans));
     }
@@ -82,6 +82,6 @@ class RouteEngagementTest {
         BlockPosition intercept = new BlockPosition(1, 64, 1);
         return new RouteEngagement(new SubjectId("engagement:1"), new SubjectId("task:1"), new SubjectId("operation:1"),
                 new SubjectId("hive:frontier"), attackers.stream().map(attacker -> new EngagementAttacker(attacker,
-                        List.of(new BlockPosition(0, 64, 0), intercept), 0)).toList(), intercept, RouteEngagementStatus.APPROACHING);
+                List.of(new BlockPosition(0, 64, 0), intercept), 0)).toList(), intercept, RouteEngagementStatus.APPROACHING, 0, Optional.empty());
     }
 }

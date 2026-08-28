@@ -46,7 +46,8 @@ final class StrategicPlanStateCodec {
                 for (BlockPosition position : attacker.route()) writePosition(output, position);
                 output.writeByte(attacker.routeIndex());
             }
-            writePosition(output, engagement.intercept()); output.writeByte(engagement.status().ordinal());
+            writePosition(output, engagement.intercept()); output.writeByte(engagement.status().ordinal()); output.writeInt(engagement.nextStrikeEpoch());
+            output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().ordinal());
         }
     }
 
@@ -88,8 +89,9 @@ final class StrategicPlanStateCodec {
                 for (int point = 0, routeSize = readCount(input); point < routeSize; point++) route.add(readPosition(input));
                 attackers.add(new EngagementAttacker(attackerId, route, input.readUnsignedByte()));
             }
-            BlockPosition intercept = readPosition(input); int status = input.readUnsignedByte();
-            if (status >= RouteEngagementStatus.values().length || engagements.put(id, new RouteEngagement(id, task, operation, hive, attackers, intercept, RouteEngagementStatus.values()[status])) != null) {
+            BlockPosition intercept = readPosition(input); int status = input.readUnsignedByte(), epoch = input.readInt();
+            Optional<RouteEngagementOutcome> outcome = input.readBoolean() ? Optional.of(readOutcome(input)) : Optional.empty();
+            if (status >= RouteEngagementStatus.values().length || engagements.put(id, new RouteEngagement(id, task, operation, hive, attackers, intercept, RouteEngagementStatus.values()[status], epoch, outcome)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route engagement");
             }
         }
@@ -118,6 +120,10 @@ final class StrategicPlanStateCodec {
     }
     private static Optional<SubjectId> readOptionalSubject(DataInputStream input) throws IOException {
         return input.readBoolean() ? Optional.of(readSubject(input)) : Optional.empty();
+    }
+    private static RouteEngagementOutcome readOutcome(DataInputStream input) throws IOException {
+        int value = input.readUnsignedByte(); if (value >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");
+        return RouteEngagementOutcome.values()[value];
     }
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
