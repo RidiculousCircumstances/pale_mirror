@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 20, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 21, MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {
@@ -49,6 +49,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writePhysicalObservations(output, state.physicalObservations());
                 writeSceneLeases(output, state.sceneLeases());
                 AmbientLeaseStateCodec.write(output, state.ambientLeases());
+                RouteConstructionStateCodec.write(output, state.routeConstructions());
                 RouteTopologyStateCodec.write(output, state.routeTopology());
             }
             return bytes.toByteArray();
@@ -66,7 +67,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
                     readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony, structureDamage, physicalDeltas,
-                    AmbientLeaseStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap));
+                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

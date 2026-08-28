@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +86,18 @@ final class FrontierRouteNetwork {
             for (int index = 2; index < supply.size(); index++) addSegment(cells, supply.get(index - 1), supply.get(index));
         }
         return Set.copyOf(cells);
+    }
+
+    /** Cells that a replacement must physically create before the topology may become active. */
+    static List<BlockPosition> constructionCells(FrontierBootstrap bootstrap, RouteTopology active, SubjectId settlementId,
+                                                 List<BlockPosition> replacement) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(active, "active topology");
+        validateSupplyWaypoints(bootstrap, settlementId, replacement);
+        Set<BlockPosition> current = surfaceCells(bootstrap, active);
+        Set<BlockPosition> target = surfaceCells(bootstrap, active.replaceSupplyRoute(bootstrap, settlementId, replacement));
+        ArrayList<BlockPosition> required = new ArrayList<>(target); required.removeAll(current);
+        required.sort(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z));
+        return List.copyOf(required);
     }
 
     /**

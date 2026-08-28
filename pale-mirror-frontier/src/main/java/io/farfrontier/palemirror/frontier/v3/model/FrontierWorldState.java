@@ -21,7 +21,7 @@ import java.util.Set;
         Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
         Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony,
         Map<SubjectId, StructureDamage> structureDamage, Map<BlockPosition, PhysicalDelta> physicalDeltas,
-        Map<SubjectId, AmbientActorLease> ambientLeases, RouteTopology routeTopology
+        Map<SubjectId, AmbientActorLease> ambientLeases, Map<SubjectId, RouteConstruction> routeConstructions, RouteTopology routeTopology
 ) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO);
     private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
@@ -35,8 +35,9 @@ import java.util.Set;
         operations = FrontierWorldStateSupport.immutableMap(operations, "route operations"); physicalIntents = FrontierWorldStateSupport.immutableMap(physicalIntents, "physical intents");
         physicalObservations = FrontierWorldStateSupport.immutableMap(physicalObservations, "physical observations"); sceneLeases = FrontierWorldStateSupport.immutableMap(sceneLeases, "scene leases");
         structureDamage = FrontierWorldStateSupport.immutableMap(structureDamage, "structure damage"); physicalDeltas = FrontierWorldStateSupport.immutableMap(physicalDeltas, "physical deltas");
-        ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases"); Objects.requireNonNull(routeTopology, "route topology");
-        routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
+        ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases"); routeConstructions = FrontierWorldStateSupport.immutableMap(routeConstructions, "route constructions");
+        Objects.requireNonNull(routeTopology, "route topology"); routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
+        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions);
         Objects.requireNonNull(hiveColony, "hive colony");
         hiveColony.validateAgainst(bootstrap);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.actorIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet());
@@ -221,16 +222,16 @@ import java.util.Set;
         bootstrap.hive().seedNests().forEach(nest -> infection.put(InfectionCell.at(nest.anchor()), new FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(500_000L))));
         ExactInventory inventory = new ExactInventory(containers, items, Map.of(), Map.of(), Map.of(), Map.of(), ContainerSurfaceManifest.initial(bootstrap));
         return new FrontierWorldState(bootstrap, actors, structures, infection, inventory,
-                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), HiveColony.empty(), Map.of(), Map.of(), Map.of(), RouteTopology.initial());
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), HiveColony.empty(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial());
     }
     private FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures, Map<InfectionCell, FixedRatio> nextInfection, ExactInventory nextInventory,
                                     Map<SubjectId, ProductionJob> jobs, Map<SubjectId, SupplyContract> nextContracts, Map<SubjectId, RouteOperation> nextOperations, Map<PhysicalIntentId, PhysicalIntent> intents,
                                     Map<PhysicalObservationId, PhysicalEffectObservation> observations, Map<SceneLeaseId, SceneLease> leases, HiveColony colony, Map<SubjectId, StructureDamage> damage,
                                     Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
-        return new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, nextContracts, nextOperations, intents, observations, leases, colony, damage, deltas, ambient, routeTopology);
+        return new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, nextContracts, nextOperations, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeTopology);
     } public FrontierWorldState withRouteTopology(RouteTopology nextTopology) {
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, nextTopology);
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, nextTopology);
     }
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {
         Objects.requireNonNull(actor, "actor");

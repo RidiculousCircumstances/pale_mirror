@@ -62,6 +62,6 @@ final class AmbientLeaseStateProcess {
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors, Map<SubjectId, AmbientActorLease> leases) {
         return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), leases, state.routeTopology());
+                state.structureDamage(), state.physicalDeltas(), leases, state.routeConstructions(), state.routeTopology());
     }
 }
