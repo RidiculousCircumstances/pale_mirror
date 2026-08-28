@@ -5,7 +5,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -128,9 +132,66 @@ public final class FrontierV3CargoHandoffGameTests {
     public static void grayboxProvenanceDoesNotForgetAConflict(GameTestHelper helper) {
         BlockPos position = helper.absolutePos(new BlockPos(20, 8, 0));
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(helper.getLevel());
-        ledger.applied(position, "structure:test", "DEPOT"); ledger.conflict(position);
+        ledger.applied(position, "structure:test", "DEPOT", "FOUNDATION"); ledger.conflict(position);
         helper.assertTrue(ledger.claim(position).conflicted(), "a changed applied cell remains conflict evidence, not an invitation to rewrite it");
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-graybox-projection", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void grayboxProjectsOnlyAFreshSupportedCellWithSemanticProvenance(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos position = helper.absolutePos(new BlockPos(24, 8, 0));
+        level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+        GrayboxCell cell = grayboxCell(position, "structure:graybox-fresh", GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "an empty supported cell receives exactly its declared graybox block");
+        helper.assertTrue(level.getBlockState(position).is(Blocks.YELLOW_CONCRETE), "the depot palette is visibly and deterministically yellow");
+        FrontierV3GrayboxLedger.Claim claim = ledger.claim(position);
+        helper.assertTrue(claim != null && claim.owner().equals("structure:graybox-fresh")
+                        && claim.semanticPart().equals("FOUNDATION") && !claim.conflicted(),
+                "the successful block carries durable owner, material and semantic-part provenance");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-graybox-projection", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void grayboxRecordsForeignObstructionWithoutOverwritingIt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos position = helper.absolutePos(new BlockPos(28, 8, 0));
+        level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+        GrayboxCell cell = grayboxCell(position, "structure:graybox-obstructed", GrayboxMaterial.HALL, GrayboxSemanticPart.WALL);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.CONFLICT,
+                "a pre-existing world block is a durable obstruction, not materializer input");
+        helper.assertTrue(level.getBlockState(position).is(Blocks.DIAMOND_BLOCK), "the foreign block remains physically untouched");
+        helper.assertTrue(ledger.claim(position).conflicted(), "the obstruction is remembered so future passes cannot adopt it");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-graybox-projection", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void grayboxDriftBecomesTerminalConflictInsteadOfTemplateRepair(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos position = helper.absolutePos(new BlockPos(32, 8, 0));
+        GrayboxCell cell = grayboxCell(position, "structure:graybox-drift", GrayboxMaterial.HOUSING, GrayboxSemanticPart.WALL);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the test begins from an owned cell");
+        level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.CONFLICT,
+                "changed ownership never grants repair authority");
+        helper.assertTrue(level.getBlockState(position).is(Blocks.DIAMOND_BLOCK), "the materializer does not restore its template over the changed block");
+        helper.assertTrue(ledger.claim(position).conflicted(), "drift remains terminal provenance for later domain reconciliation");
+        helper.succeed();
+    }
+
+    private static GrayboxCell grayboxCell(BlockPos position, String owner, GrayboxMaterial material, GrayboxSemanticPart part) {
+        return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()), new SubjectId(owner), material, part);
     }
 
     @GameTest(batch = "pm-frontier-v3-player-custody", templateNamespace = "minecraft",

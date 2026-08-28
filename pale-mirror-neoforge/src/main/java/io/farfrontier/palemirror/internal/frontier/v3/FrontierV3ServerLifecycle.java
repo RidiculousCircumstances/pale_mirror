@@ -52,6 +52,7 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null) return;
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+                FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
                 // Observe player custody before passive surface drift inspection can classify it.
                 FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3ContainerSurfaceExecutor.tick(server.overworld(), runtime);
@@ -70,7 +71,10 @@ public final class FrontierV3ServerLifecycle {
 
     public static void stop(MinecraftServer server) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.remove(server);
-        if (runtime != null) runtime.shutdown();
+        if (runtime != null) {
+            FrontierV3GrayboxExecutor.forget(runtime);
+            runtime.shutdown();
+        }
     }
 
     /** Returns true only when this v3 runtime durably accepted the managed HOT death. */
