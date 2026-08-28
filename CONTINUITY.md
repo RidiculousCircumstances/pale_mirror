@@ -67,10 +67,11 @@
 ### Now
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
 - Wave 2 now has checked recovery boundaries, restartable kernel state, exact bootstrap ownership, persisted sparse spatial/economic state, a true write-ahead canonical commit boundary, an opt-in v3-only lifecycle bridge, bounded infection propagation, exact production, contract-to-cargo flow, one exact COLD cargo route and a durable physical-intent lifecycle with fail-closed restart handling. It still lacks an effect executor with a real-world postcondition inspector and HOT actor execution.
+- The first executor cannot be attached correctly yet: `CARGO_HANDOFF` records only an observation ID, not immutable physical evidence or the exact post-handoff item custody, and the hive has no canonical organ/container receiver. Confirming a dropped item, chest or number under that schema would violate exact economy and reverse causality.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Add the first CARGO_HANDOFF executor and its real-world postcondition evidence, replacing the temporary restart guard for that supported kind; then introduce HOT scene leases and execution.
+- Extend the pure model with stable hive organs/receiver containers, immutable typed physical observations and an exact world-carrier custody surface; make CARGO_HANDOFF reconcile that evidence atomically. Then add its NeoForge executor/postcondition inspector, replacing the temporary restart guard for that supported kind; then introduce HOT scene leases and execution.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.
