@@ -117,6 +117,29 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void physicalExecutorCanAdvanceOnlyAnOwnedKnownContainerSurface() {
+        WorldId worldId = new WorldId("frontier:container-surface");
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
+        SubjectId container = new SubjectId("container:hive-west-store");
+        var checkpoint = engine.checkpoint();
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:prepare-container-surface");
+        ContainerSurfaceTransition prepared = new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED);
+
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, worldId, checkpoint.revision(), checkpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), prepared)));
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(ContainerSurfaceStatus.PREPARED, after.inventory().surfaces().get(container).status());
+        assertEquals(prepared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(prepared.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(prepared)));
+        var rejected = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
+                new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:unknown-container-surface"), worldId,
+                engine.checkpoint().revision(), engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:unknown-container-surface")),
+                new ContainerSurfaceTransition(new SubjectId("container:unknown"), ContainerSurfaceStatus.PREPARED)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class, rejected);
+    }
+
+    @Test
     void infectionPulseIsPersistedDeterministicScheduledWorldWork() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:pulse"), 91L));
         engine.advanceTo(new SimInstant(100L), new WorkBudget(8, 64));

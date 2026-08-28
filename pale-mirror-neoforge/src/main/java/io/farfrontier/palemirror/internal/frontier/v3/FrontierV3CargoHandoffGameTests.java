@@ -61,6 +61,25 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-cargo-recovery", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void recoveryInspectionNeverRecreatesAMissingOwnedChest(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos receiver = helper.absolutePos(new BlockPos(8, 8, 0));
+        level.setBlock(receiver.below(), Blocks.STONE.defaultBlockState(), 3);
+        SubjectId container = new SubjectId("container:frontier-v3-recovery-store");
+        var target = new FrontierV3CargoHandoffExecutor.StoreTarget(receiver, container);
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.claimFreshChest(level, target) != null,
+                "the pre-crash executor may create one fresh owned chest after durable preparation");
+        level.setBlock(receiver, Blocks.AIR.defaultBlockState(), 3);
+
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.activeChest(level, target) == null,
+                "recovery inspection must report the missing owned chest rather than recreating it");
+        helper.assertTrue(level.getBlockState(receiver).isAir(),
+                "the missing surface remains world-owned conflict evidence until an explicit domain resolution");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-player-custody", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void playerInventoryObservationRequiresTheExactTaggedStack(GameTestHelper helper) {

@@ -14,6 +14,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.CargoBatch;
 import io.farfrontier.palemirror.frontier.v3.model.CargoHandoffObservation;
 import io.farfrontier.palemirror.frontier.v3.model.CargoHandoffPlacement;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -67,9 +70,23 @@ final class FrontierV3CargoHandoffExecutor {
         if (operation == null) throw new IllegalStateException("cargo hand-off intent has no operation");
         StoreTarget target = target(state, operation);
         if (!level.hasChunkAt(target.position())) return;
-        ChestBlockEntity chest = ownedChest(level, target);
-        if (chest == null) {
+        ContainerSurface surface = state.inventory().surfaces().get(target.containerId());
+        if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
+            prepareAndClaim(level, runtime, target);
+            return;
+        }
+        if (surface.status() == ContainerSurfaceStatus.PREPARED) {
+            if (activeChest(level, target) == null) transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.CONFLICT);
+            else transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.ACTIVE);
+            return;
+        }
+        if (surface.status() == ContainerSurfaceStatus.CONFLICT) {
             transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict");
+            return;
+        }
+        ChestBlockEntity chest = activeChest(level, target);
+        if (chest == null) {
+            transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.CONFLICT);
             return;
         }
         if (intent.status() == PhysicalIntentStatus.PREPARED) {
@@ -87,20 +104,28 @@ final class FrontierV3CargoHandoffExecutor {
         }
     }
 
-    static ChestBlockEntity ownedChest(ServerLevel level, StoreTarget target) {
-        boolean placed = false;
-        if (level.getBlockState(target.position()).isAir()) {
-            if (level.getBlockState(target.position().below()).isAir()) return null;
-            if (!level.setBlock(target.position(), Blocks.CHEST.defaultBlockState(), 3)) return null;
-            placed = true;
-        }
+    private static void prepareAndClaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, StoreTarget target) {
+        if (!transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.PREPARED)) return;
+        if (claimFreshChest(level, target) == null) transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.CONFLICT);
+        else transitionSurface(runtime, target.containerId(), ContainerSurfaceStatus.ACTIVE);
+    }
+
+    /** Creates a fresh owned chest only after the caller has durably entered PREPARED. */
+    static ChestBlockEntity claimFreshChest(ServerLevel level, StoreTarget target) {
+        if (!level.getBlockState(target.position()).isAir() || level.getBlockState(target.position().below()).isAir()) return null;
+        if (!level.setBlock(target.position(), Blocks.CHEST.defaultBlockState(), 3)) return null;
         if (!(level.getBlockEntity(target.position()) instanceof ChestBlockEntity chest)) return null;
         String owner = chest.getPersistentData().getString(CONTAINER_ID_KEY);
-        if (owner.isBlank()) {
-            if (!placed || !chest.isEmpty()) return null;
-            chest.getPersistentData().putString(CONTAINER_ID_KEY, target.containerId().value());
-            chest.setChanged();
-        }
+        if (!owner.isBlank() || !chest.isEmpty()) return null;
+        chest.getPersistentData().putString(CONTAINER_ID_KEY, target.containerId().value()); chest.setChanged();
+        return chest;
+    }
+
+    /** Compatibility test helper; production execution only calls it through PREPARED ownership. */
+    static ChestBlockEntity ownedChest(ServerLevel level, StoreTarget target) { return claimFreshChest(level, target); }
+
+    static ChestBlockEntity activeChest(ServerLevel level, StoreTarget target) {
+        if (!(level.getBlockEntity(target.position()) instanceof ChestBlockEntity chest)) return null;
         return target.containerId().value().equals(chest.getPersistentData().getString(CONTAINER_ID_KEY)) ? chest : null;
     }
 
@@ -143,13 +168,24 @@ final class FrontierV3CargoHandoffExecutor {
         return result instanceof CommandResult.Accepted;
     }
 
+    private static boolean transitionSurface(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId, ContainerSurfaceStatus status) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        CommandId commandId = new CommandId("executor:surface-" + status.name().toLowerCase(java.util.Locale.ROOT) + "-" + containerId.value().replace(':', '-'));
+        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new ContainerSurfaceTransition(containerId, status)))
+                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        return result instanceof CommandResult.Accepted;
+    }
+
     private static StoreTarget target(FrontierWorldState state, RouteOperation operation) {
         var nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.anchor().equals(operation.route().getLast())).findFirst()
                 .orElseThrow(() -> new IllegalStateException("route destination is not a hive nest"));
         HiveOrgan store = state.bootstrap().hive().organs().stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.STORE)
                 .findFirst().orElseThrow(() -> new IllegalStateException("hive nest lacks a store organ"));
         SubjectId container = store.containerId().orElseThrow(() -> new IllegalStateException("store organ lacks receiver container"));
-        return new StoreTarget(new BlockPos(store.anchor().x(), store.anchor().y() + 1, store.anchor().z()), container);
+        ContainerSurface surface = state.inventory().surfaces().get(container);
+        if (surface == null) throw new IllegalStateException("store container has no physical surface");
+        return new StoreTarget(new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), container);
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

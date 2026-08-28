@@ -19,7 +19,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -39,7 +38,6 @@ public final class FrontierWorldRuntimeDefinition {
                 new EngineLimits(4_096, 1_200L, 4_096), List.of(pulse(1, 100), productionStart(bootstrap.settlements().getFirst().id(), 1, 200), contractDemand(1, 450), HiveGrowthProcess.start(1, 600)), TransactionCommitter.noOp());
     }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
-
     private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
@@ -101,6 +99,9 @@ public final class FrontierWorldRuntimeDefinition {
                 return rejected("inventory conflict references an unknown exact surface");
             }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(container.ownerId(), observed)));
+        }
+        if (command.payload() instanceof ContainerSurfaceTransition transition) {
+            return ContainerSurfaceProcess.plan(state, transition);
         }
         return rejected("command is not a trusted physical transition or scene lease");
     }
@@ -237,6 +238,7 @@ public final class FrontierWorldRuntimeDefinition {
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
+            case ContainerSurfaceTransition transition -> ContainerSurfaceProcess.reduce(state, event.subject(), transition);
             case HiveGrowthStarted started -> HiveGrowthProcess.reduceStarted(state, event.subject(), started);
             case HiveGrowthCompleted completed -> HiveGrowthProcess.reduceCompleted(state, event.subject(), completed);
             case HiveGrowthBlocked blocked -> HiveGrowthProcess.reduceBlocked(state, event.subject(), blocked);
@@ -463,8 +465,7 @@ public final class FrontierWorldRuntimeDefinition {
                 new SimInstant(due), 0, operation.id(), "frontier.operation.progress", 1);
     }
     private static int ordinal(String id) {
-        int separator = id.lastIndexOf('-');
-        if (separator < 0 || separator == id.length() - 1) throw new IllegalArgumentException("scheduled work identity lacks ordinal: " + id);
+        int separator = id.lastIndexOf('-'); if (separator < 0 || separator == id.length() - 1) throw new IllegalArgumentException("scheduled work identity lacks ordinal: " + id);
         try {
             int value = Integer.parseInt(id.substring(separator + 1));
             if (value <= 0) throw new IllegalArgumentException("scheduled work ordinal must be positive: " + id);

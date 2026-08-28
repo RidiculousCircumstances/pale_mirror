@@ -24,7 +24,8 @@ public final class FrontierWorldPayloadCodecs {
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new OperationFailedCodec(),
-                new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
+                new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
+                new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -221,6 +222,18 @@ public final class FrontierWorldPayloadCodecs {
             int slot = input.readUnsignedByte(); int kind = input.readUnsignedByte();
             if (kind >= InventoryConflictKind.values().length) throw new IllegalArgumentException("unknown inventory conflict kind");
             return new InventoryConflictObserved(new InventoryConflict(id, item, container, slot, InventoryConflictKind.values()[kind]));
+        }); }
+    }
+    private static final class ContainerSurfaceTransitionCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.container_surface_transition"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            ContainerSurfaceTransition transition = (ContainerSurfaceTransition) payload;
+            writeSubject(output, transition.containerId()); output.writeByte(transition.status().ordinal());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var container = readSubject(input).value(); int status = input.readUnsignedByte();
+            if (status >= ContainerSurfaceStatus.values().length) throw new IllegalArgumentException("unknown container surface status");
+            return new ContainerSurfaceTransition(container, ContainerSurfaceStatus.values()[status]);
         }); }
     }
     private static final class HiveGrowthStartedCodec implements PayloadCodec {
