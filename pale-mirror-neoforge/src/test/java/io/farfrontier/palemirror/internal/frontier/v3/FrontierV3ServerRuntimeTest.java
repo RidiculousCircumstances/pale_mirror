@@ -31,6 +31,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
@@ -61,12 +62,32 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ServerRuntimeTest {
     private static final WorldId WORLD = new WorldId("frontier:runtime");
     private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
+
+    @Test
+    void sceneAdmissionDefersWhenAnExactParticipantAlreadyHasAnAmbientLease(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:scene-ambient-handoff");
+        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        for (int tick = 0; tick < 2_550; tick++) runtime.tick(new WorkBudget(64, 512));
+        FrontierWorldState before = worldState(runtime);
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        SubjectId participant = operation.participantIds().getFirst();
+        submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
+                runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-overlap-prepare");
+        submitAmbient(runtime, world, new AmbientLeaseTransition(participant, AmbientLeaseStatus.HOT), "command:ambient-scene-overlap-hot");
+        FrontierWorldState overlapped = worldState(runtime);
+
+        assertFalse(FrontierSceneAdmission.available(overlapped, operation.participantIds()));
+        assertTrue(FrontierSceneAdmission.reserved(overlapped, participant));
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+    }
 
     @Test
     void freshLifecycleWritesAheadTicksPersistsAndRecoversWithoutWorldTimeInput(@TempDir Path directory) {

@@ -21,6 +21,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
@@ -80,14 +81,19 @@ final class FrontierV3SceneExecutor {
                 .filter(candidate -> state.sceneLeases().values().stream().noneMatch(lease -> lease.engagementId().filter(candidate.engagementId()::equals).isPresent()
                         && lease.status() != SceneLeaseStatus.CLOSED))
                 .filter(candidate -> demandExists(level, candidate.handoffPosition())).findFirst();
-        if (engagement.isPresent()) { prepare(runtime, state, engagement.orElseThrow()); return; }
+        if (engagement.isPresent()) {
+            SceneEngagementCandidate candidate = engagement.orElseThrow();
+            if (FrontierSceneAdmission.available(state, candidate.actorIds())) prepare(runtime, state, candidate);
+            return;
+        }
         Optional<RouteOperation> demand = state.operations().values().stream().sorted(Comparator.comparing(RouteOperation::id))
                 .filter(operation -> operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.EN_ROUTE)
                 .filter(operation -> state.sceneLeases().values().stream().noneMatch(lease -> lease.operationId().equals(operation.id())
                         && lease.status() != SceneLeaseStatus.CLOSED))
                 .filter(operation -> demandExists(level, operation.route().get(operation.routeIndex()))).findFirst();
         if (demand.isPresent()) {
-            prepare(runtime, state, demand.orElseThrow());
+            RouteOperation operation = demand.orElseThrow();
+            if (FrontierSceneAdmission.available(state, operation.participantIds())) prepare(runtime, state, operation);
             return;
         }
         state.sceneLeases().values().stream().sorted(Comparator.comparing(SceneLease::id)).filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)

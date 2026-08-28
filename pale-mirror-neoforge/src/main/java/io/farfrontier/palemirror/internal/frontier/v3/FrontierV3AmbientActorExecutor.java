@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -57,7 +58,8 @@ final class FrontierV3AmbientActorExecutor {
         int admitted = 0;
         for (var entry : state.actorLocations().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             if (admitted >= MAX_ACTORS_PER_TICK) return;
-            if (entry.getValue().condition().status() != ActorLifeStatus.ALIVE || !demand(level, entry.getValue().position())) continue;
+            if (entry.getValue().condition().status() != ActorLifeStatus.ALIVE || FrontierSceneAdmission.reserved(state, entry.getKey())
+                    || !demand(level, entry.getValue().position())) continue;
             var lease = state.ambientLeases().get(entry.getKey());
             if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
                 submit(runtime, "ambient-prepare", entry.getKey().value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, entry.getKey(), runtime.checkpointImage().orElseThrow().instant())));
@@ -110,6 +112,7 @@ final class FrontierV3AmbientActorExecutor {
     }
 
     static UUID entityId(SubjectId actorId) { return UUID.nameUUIDFromBytes(("frontier-v3:ambient:" + actorId.value()).getBytes(StandardCharsets.UTF_8)); }
+
     /** Retains only an exact expected body during the short join-to-index hand-off. */
     static boolean observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
