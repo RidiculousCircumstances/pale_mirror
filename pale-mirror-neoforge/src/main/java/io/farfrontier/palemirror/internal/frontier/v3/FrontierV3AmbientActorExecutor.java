@@ -5,10 +5,12 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorDied;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -87,6 +89,23 @@ final class FrontierV3AmbientActorExecutor {
                 new AmbientActorDied(actorId, new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
         return true;
     }
+    /** Captures a living owned body before Minecraft releases it, never treating absence as death. */
+    static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        FrontierWorldState state = runtime.checkpointImage().map(image -> new FrontierWorldStateCodec().decode(image.canonicalState())).orElse(null);
+        if (state == null || !(entity instanceof Mob body)) return false;
+        String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
+        if (rawActorId.isBlank()) return false;
+        SubjectId actorId;
+        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
+        var current = state.actorLocations().get(actorId);
+        if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(actorId).equals(entity.getUUID())
+                || !owned(entity, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F) return false;
+        BlockPosition position = new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ());
+        FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
+        if (current.position().equals(position) && current.condition().health().equals(health)) return false;
+        submit(runtime, "ambient-observed", actorId.value(), new AmbientActorObserved(actorId, position, health));
+        return true;
+    }
     private static boolean demand(ServerLevel level, BlockPosition position) {
         BlockPos target = new BlockPos(position.x(), position.y(), position.z());
         return level.hasChunkAt(target) && level.players().stream().filter(player -> !player.isSpectator())
@@ -103,7 +122,7 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-'));
+        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));

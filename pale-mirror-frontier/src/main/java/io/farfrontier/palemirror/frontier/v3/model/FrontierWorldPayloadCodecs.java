@@ -23,7 +23,8 @@ public final class FrontierWorldPayloadCodecs {
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
-                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new AmbientActorDiedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
+                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
+                new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
@@ -204,6 +205,15 @@ public final class FrontierWorldPayloadCodecs {
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new AmbientActorDied(
                 readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), readString(input))); }
+    }
+    private static final class AmbientActorObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.ambient_actor_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            AmbientActorObserved observation = (AmbientActorObserved) payload; writeSubject(output, observation.actorId());
+            output.writeInt(observation.position().x()); output.writeInt(observation.position().y()); output.writeInt(observation.position().z()); output.writeLong(observation.health().raw());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new AmbientActorObserved(
+                readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong()))); }
     }
     private static final class StructureDamagedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.structure_damaged"; }

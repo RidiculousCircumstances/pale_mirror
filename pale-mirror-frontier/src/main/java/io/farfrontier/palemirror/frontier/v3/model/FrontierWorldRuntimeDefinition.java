@@ -23,6 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import static io.farfrontier.palemirror.frontier.v3.model.FrontierWorldScheduleSupport.ordinal;
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
@@ -89,6 +90,7 @@ public final class FrontierWorldRuntimeDefinition {
         if (command.payload() instanceof AmbientActorDied death) {
             return AmbientActorProcess.plan(state, death);
         }
+        if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);
         if (command.payload() instanceof StructureDamaged damage) {
             try {
                 state.recordStructureDamage(damage);
@@ -253,6 +255,7 @@ public final class FrontierWorldRuntimeDefinition {
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
             case AmbientActorDied death -> AmbientActorProcess.reduce(state, event.subject(), death);
+            case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
@@ -489,11 +492,6 @@ public final class FrontierWorldRuntimeDefinition {
     private static ScheduledAction operationProgress(RouteOperation operation, long due) {
         return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:operation-progress-" + operation.id().value().substring("operation:".length())),
                 new SimInstant(due), 0, operation.id(), "frontier.operation.progress", 1);
-    }
-    private static int ordinal(String id) {
-        int separator = id.lastIndexOf('-'); if (separator < 0 || separator == id.length() - 1) throw new IllegalArgumentException("scheduled work identity lacks ordinal: " + id);
-        try { int value = Integer.parseInt(id.substring(separator + 1)); if (value <= 0) throw new IllegalArgumentException("scheduled work ordinal must be positive: " + id); return value;
-        } catch (NumberFormatException error) { throw new IllegalArgumentException("scheduled work identity has malformed ordinal: " + id, error); }
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
 }

@@ -150,6 +150,9 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onEntityLeave(EntityLeaveLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeEntityLeave(level, event.getEntity());
+        }
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
                 && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
             SourceGrayboxRuntime.forServer(level.getServer()).observeEntityLeave(level, event.getEntity());

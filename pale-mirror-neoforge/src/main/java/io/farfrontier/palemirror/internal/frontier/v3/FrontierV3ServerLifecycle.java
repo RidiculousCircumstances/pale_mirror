@@ -92,6 +92,14 @@ public final class FrontierV3ServerLifecycle {
                 || FrontierV3AmbientActorExecutor.observeDeath(runtime, entity, source));
     }
 
+    /** Captures an ambient body on normal world departure; false means it is not v3-owned. */
+    public static boolean observeEntityLeave(ServerLevel level, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity);
+    }
+
     /** True means the v3-owned break was not durably accepted and Minecraft must not apply it. */
     public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
