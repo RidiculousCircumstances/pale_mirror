@@ -58,6 +58,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("exact item consumption must bind one owner and one exact stack without an area radius");
                 }
             }
+            case RESOURCE_SITE_PREPARATION -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED || subjectIds.size() != 2) {
+                    throw new IllegalArgumentException("resource-site preparation must bind one site and one job without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");

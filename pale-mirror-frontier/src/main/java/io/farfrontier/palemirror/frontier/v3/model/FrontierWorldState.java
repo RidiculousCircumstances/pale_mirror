@@ -139,7 +139,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                     && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
                     && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
-                    && !expectedStructures.contains(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId()) && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId())) {
+                    && !expectedStructures.contains(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
+                    && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
             for (SubjectId subject : intent.subjectIds()) {
@@ -150,7 +151,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
                         && !strategicPlans.routeEngagements().containsKey(subject)
-                        && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))) {
+                        && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))
+                        && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, subject)) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }
             }
@@ -178,8 +180,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 ExactItemConsumptionStateSupport.validateReceipt(intent, consumed);
             } else if (observation instanceof RouteConstructionObservation construction) {
                 RouteConstructionStateSupport.validateReceipt(bootstrap, routeTopology, routeConstructions, intent, construction);
+            } else if (observation instanceof ResourceSitePreparationObservation preparation) {
+                ResourceSitePhysicalIntentStateSupport.validateReceipt(intent, preparation);
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
         }
+        ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations);
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
                     && !physicalObservations.containsKey(intent.postconditionObservationId().orElseThrow())) {
@@ -356,7 +361,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState preparePhysicalIntent(PhysicalIntent intent) {
         Objects.requireNonNull(intent, "physical intent");
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
-        SceneStrikeStateSupport.validateIntent(this, intent);
+        SceneStrikeStateSupport.validateIntent(this, intent); ResourceSitePhysicalIntentStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
@@ -371,6 +376,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         if (nextStatus != PhysicalIntentStatus.CONFIRMED) {
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.empty()));
+            if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION
+                    && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return ResourceSitePhysicalIntentStateSupport.conflict(this, current, next);
             if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
                     && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteConstructionStateSupport.conflict(this, current, next);
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
@@ -383,6 +390,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION) {
             if (!(evidence instanceof DecontaminationObservation decontamination)) throw new IllegalArgumentException("decontamination requires observation evidence");
             return DecontaminationStateSupport.complete(this, current, decontamination, next);
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
+            if (!(evidence instanceof ResourceSitePreparationObservation preparation)) throw new IllegalArgumentException("resource-site preparation requires exact field evidence");
+            return ResourceSitePhysicalIntentStateSupport.complete(this, current, preparation, next);
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR) {
             if (!(evidence instanceof StructuralRepairObservation repair)) throw new IllegalArgumentException("structural repair requires repair observation evidence");
@@ -438,19 +449,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory.completeCargoHandoff(cargoEvidence.cargoId(), cargoEvidence.placements()),
                 productionJobs, nextContracts, operations, next, nextObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
-    public FrontierWorldState prepareSceneLease(SceneLease lease) {
-        return FrontierSceneLeaseStateSupport.prepare(this, lease);
-    }
+    public FrontierWorldState prepareSceneLease(SceneLease lease) { return FrontierSceneLeaseStateSupport.prepare(this, lease); }
     /** Atomically records loaded-body evidence, closes ambient authority and prepares one scene. */
-    public FrontierWorldState handoffAmbientScene(SceneLeaseHandoff handoff) {
-        return FrontierSceneLeaseStateSupport.handoff(this, handoff);
-    }
-    public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {
-        return FrontierSceneLeaseStateSupport.transition(this, Objects.requireNonNull(leaseId, "scene lease id"), nextStatus);
-    }
-    public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) {
-        return FrontierSceneLeaseStateSupport.release(this, Objects.requireNonNull(leaseId, "scene lease id"), positions);
-    }
+    public FrontierWorldState handoffAmbientScene(SceneLeaseHandoff handoff) { return FrontierSceneLeaseStateSupport.handoff(this, handoff); }
+    public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) { return FrontierSceneLeaseStateSupport.transition(this, Objects.requireNonNull(leaseId, "scene lease id"), nextStatus); }
+    public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) { return FrontierSceneLeaseStateSupport.release(this, Objects.requireNonNull(leaseId, "scene lease id"), positions); }
     public FrontierWorldState recordActorDeath(ActorDied death) {
         Objects.requireNonNull(death, "actor death");
         SceneLease lease = sceneLeases.get(death.leaseId());
@@ -469,14 +472,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState failOperation(SubjectId operationId) {
         return FrontierOperationStateSupport.fail(this, operationId);
     }
-    /**
-     * Atomically turns an exact shipment into its real loaded-world carrier. The interrupted
-     * route can no longer progress or be delivered; its HOT bodies drain from their latest
-     * observed state while the cart itself remains ordinary physical world state.
-     */
-    public FrontierWorldState releaseCargoCarrier(CargoCarrierReleased released) {
-        return CargoCarrierReleaseStateSupport.release(this, released);
-    }
+    /** Atomically exposes an exact shipment as its loaded-world carrier and interrupts its route. */
+    public FrontierWorldState releaseCargoCarrier(CargoCarrierReleased released) { return CargoCarrierReleaseStateSupport.release(this, released); }
     public FrontierWorldState addHiveOrgan(HiveOrgan organ) {
         Objects.requireNonNull(organ, "hive organ");
         if (bootstrap.hive().organs().stream().anyMatch(existing -> existing.id().equals(organ.id()))) throw new IllegalArgumentException("added organ collides with bootstrap identity");

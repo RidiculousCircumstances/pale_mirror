@@ -43,6 +43,7 @@ public final class FrontierWorldRuntimeDefinition {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
         }
+        FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted().forEach(site -> actions.add(ResourceSiteProcess.preparation(site, 4_000L)));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
     }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
@@ -70,6 +71,10 @@ public final class FrontierWorldRuntimeDefinition {
                 try { return new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition)); }
                 catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             }
+            if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
+                try { return new CommandPlan.Accepted(ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks())); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            }
             if (intent.kind() == PhysicalIntentKind.CARGO_HANDOFF) {
                 try { return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition)); }
                 catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
@@ -95,6 +100,10 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (command.payload() instanceof PhysicalIntentPrepared prepared) {
             PhysicalIntent intent = prepared.intent();
+            if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
+                try { return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared))); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            }
             if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
                 try { ExplosionStateSupport.validateIntent(state, intent); }
                 catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
@@ -223,6 +232,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.population.birth.review" -> PopulationBirthProcess.planReview(state, action);
             case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
             case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
+            case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
             case "frontier.route_construction.start" -> RouteConstructionProcess.planStart(state, action);
@@ -266,6 +276,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
             case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
             case ResourceSiteGrowthAdvanced advanced -> ResourceSiteProcess.reduceGrowth(state, event.subject(), advanced);
+            case ResourceSitePreparationStarted started -> ResourceSiteProcess.reducePreparationStarted(state, event.subject(), started);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
@@ -353,6 +364,7 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) return ResourceSiteProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);

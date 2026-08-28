@@ -50,6 +50,9 @@ final class PhysicalEffectObservationStateCodec {
             } else if (observation instanceof ExactItemConsumedObservation consumed) {
                 output.writeByte(6); string(output, consumed.id().value()); string(output, consumed.intentId().value()); string(output, consumed.itemId().value());
                 output.writeByte(consumed.countBefore()); output.writeByte(consumed.countAfter());
+            } else if (observation instanceof ResourceSitePreparationObservation preparation) {
+                output.writeByte(7); string(output, preparation.id().value()); string(output, preparation.intentId().value()); string(output, preparation.siteId().value());
+                output.writeByte(preparation.preparedSoilSlots()); output.writeByte(preparation.preparedCropSlots());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -66,6 +69,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 4 -> new SceneStrikeObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
                 case 5 -> explosion(input, id, intentId);
                 case 6 -> new ExactItemConsumedObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
+                case 7 -> new ResourceSitePreparationObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

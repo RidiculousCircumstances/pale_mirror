@@ -20,4 +20,9 @@ public record ResourceSite(SubjectId id, SubjectId settlementId, SubjectId facil
             throw new IllegalArgumentException("resource site must retain every distinct crop slot");
         }
     }
+
+    /** Each crop slot has one fixed soil capital cell immediately below it. */
+    public List<BlockPosition> soilSlots() {
+        return cropSlots.stream().map(slot -> slot.offset(0, -1, 0)).toList();
+    }
 }

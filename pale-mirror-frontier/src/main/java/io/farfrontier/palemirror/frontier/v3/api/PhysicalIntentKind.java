@@ -9,5 +9,7 @@ public enum PhysicalIntentKind {
     EXPLOSION,
     SCENE_STRIKE,
     /** One exact unit is consumed from one active, identity-tagged physical container stack. */
-    EXACT_ITEM_CONSUMPTION
+    EXACT_ITEM_CONSUMPTION,
+    /** Loaded-chunk preparation of the fixed soil and crop cells of one named renewable site. */
+    RESOURCE_SITE_PREPARATION
 }

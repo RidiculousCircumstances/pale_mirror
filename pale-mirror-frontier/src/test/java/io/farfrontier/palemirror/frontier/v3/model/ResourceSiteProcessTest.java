@@ -1,6 +1,9 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
@@ -8,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,9 +64,13 @@ class ResourceSiteProcessTest {
 
     private static FrontierWorldState prepared(FrontierWorldState state) {
         SubjectId site = new SubjectId("site:1-wheat-field");
-        ResourceSitePreparationJob job = new ResourceSitePreparationJob(new SubjectId("job:site-prepare-1-wheat-field"), site,
-                new PhysicalIntentId("intent:site-prepare-1-wheat-field"));
-        return state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site).preparing(job).prepared()));
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 4_000L));
+        state = ResourceSiteProcess.reducePreparationStarted(state, site, (ResourceSitePreparationStarted) planned.getFirst().payload());
+        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(1).payload()).intent();
+        state = ResourceSiteProcess.reducePrepared(state, site, intent);
+        state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        return state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(
+                new ResourceSitePreparationObservation(new PhysicalObservationId("observation:site-prepare-1"), intent.id(), site, 64, 64)));
     }
 
     private static FrontierWorldState initial() {

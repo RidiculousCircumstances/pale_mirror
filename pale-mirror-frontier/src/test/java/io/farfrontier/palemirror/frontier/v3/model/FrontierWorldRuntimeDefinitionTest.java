@@ -287,7 +287,7 @@ class FrontierWorldRuntimeDefinitionTest {
         BlockPosition destination = operation.route().getLast();
         assertTrue(operation.participantIds().stream().allMatch(participant -> destination.equals(state.actorLocations().get(participant).position())));
         assertEquals(1, engine.projection(ProjectionQuery.summary()).activeRouteOperationCount());
-        assertEquals(2, engine.projection(ProjectionQuery.summary()).preparedPhysicalIntentCount());
+        assertEquals(14, engine.projection(ProjectionQuery.summary()).preparedPhysicalIntentCount());
         PhysicalIntent handoff = state.physicalIntents().get(new PhysicalIntentId("intent:cargo-handoff-supply-1-2"));
         assertEquals(PhysicalIntentStatus.PREPARED, handoff.status());
         assertEquals(List.of(operation.id(), operation.cargoId()), handoff.subjectIds());

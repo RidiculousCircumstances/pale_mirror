@@ -23,6 +23,7 @@ class FrontierResourceSitePlanTest {
         assertEquals(first, second); assertEquals(12, first.size());
         for (ResourceSite site : first.values()) {
             assertEquals(ResourceSiteKind.WHEAT_FIELD, site.kind()); assertEquals(64, site.cropSlots().size());
+            assertEquals(site.cropSlots().stream().map(slot -> slot.offset(0, -1, 0)).toList(), site.soilSlots());
             assertTrue(site.cropSlots().stream().allMatch(bootstrap.bounds()::contains));
             assertTrue(site.cropSlots().stream().noneMatch(structureCells::contains));
             assertTrue(cropCells.addAll(site.cropSlots()), "crop sites must not overlap each other");
