@@ -18,9 +18,7 @@ import java.util.List;
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
     private FrontierWorldRuntimeDefinition() { }
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
-        return configuration(worldId, seed, true);
-    }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) { return configuration(worldId, seed, true); }
     /** Development-only uncontested logistics fixture; production always uses {@link #configuration(WorldId, long)}. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentUncontestedSupplyConfiguration(WorldId worldId, long seed) {
         return configuration(worldId, seed, false);
@@ -168,6 +166,8 @@ public final class FrontierWorldRuntimeDefinition {
         if (command.payload() instanceof AmbientActorDied death) return AmbientActorProcess.plan(state, death);
         if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);
         if (command.payload() instanceof AmbientLeasePrepared || command.payload() instanceof AmbientLeaseTransition || command.payload() instanceof AmbientLeaseReleased) return AmbientActorProcess.planLease(state, command.payload());
+        if (command.payload() instanceof ResourceSiteConflictObserved conflict) try { return new CommandPlan.Accepted(ResourceSiteProcess.planConflict(state, conflict)); }
+        catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
         if (command.payload() instanceof StructureDamaged damage) {
             try {
                 state.recordStructureDamage(damage);
@@ -277,6 +277,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
             case ResourceSiteGrowthAdvanced advanced -> ResourceSiteProcess.reduceGrowth(state, event.subject(), advanced);
             case ResourceSitePreparationStarted started -> ResourceSiteProcess.reducePreparationStarted(state, event.subject(), started);
+            case ResourceSiteConflictObserved conflict -> ResourceSiteProcess.reduceConflict(state, event.subject(), conflict);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);

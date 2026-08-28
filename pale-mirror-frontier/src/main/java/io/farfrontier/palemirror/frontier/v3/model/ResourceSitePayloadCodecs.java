@@ -45,6 +45,25 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
+    static PayloadCodec conflictObserved() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_site_conflict_observed"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                ResourceSiteConflictObserved conflict = (ResourceSiteConflictObserved) payload;
+                byte[] site = conflict.siteId().value().getBytes(StandardCharsets.UTF_8), cause = conflict.cause().getBytes(StandardCharsets.UTF_8);
+                if (site.length == 0 || cause.length == 0 || site.length > 255 || cause.length > 255) throw new IllegalArgumentException("resource-site conflict encoding is invalid");
+                return ByteBuffer.allocate(2 + site.length + cause.length + Integer.BYTES * 3).put((byte) site.length).put(site)
+                        .putInt(conflict.position().x()).putInt(conflict.position().y()).putInt(conflict.position().z()).put((byte) cause.length).put(cause).array();
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                ByteBuffer input = ByteBuffer.wrap(bytes); String site = read(input);
+                if (input.remaining() < Integer.BYTES * 3 + 1) throw new IllegalArgumentException("truncated resource-site conflict payload");
+                BlockPosition position = new BlockPosition(input.getInt(), input.getInt(), input.getInt()); String cause = read(input);
+                if (input.hasRemaining()) throw new IllegalArgumentException("trailing resource-site conflict payload");
+                return new ResourceSiteConflictObserved(new SubjectId(site), position, cause);
+            }
+        };
+    }
     private static String read(ByteBuffer input) {
         if (!input.hasRemaining()) throw new IllegalArgumentException("truncated resource-site preparation payload"); int length = Byte.toUnsignedInt(input.get());
         if (length == 0 || input.remaining() < length) throw new IllegalArgumentException("malformed resource-site preparation payload"); byte[] value = new byte[length]; input.get(value); return new String(value, StandardCharsets.UTF_8);

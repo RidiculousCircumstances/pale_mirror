@@ -80,6 +80,20 @@ class ResourceSitePreparationProcessTest {
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, resolved.physicalIntents().get(prepared.intent().id()).status());
     }
 
+    @Test
+    void oneObservedOwnedCropLossIsDurablySiteSpecificAndCannotNameForeignGeometry() {
+        Prepared prepared = prepared();
+        FrontierWorldState running = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState growing = running.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt(prepared.site(), prepared.intent())));
+        BlockPosition crop = FrontierResourceSitePlan.compile(growing.bootstrap()).get(prepared.site()).cropSlots().getFirst();
+        ResourceSiteConflictObserved loss = new ResourceSiteConflictObserved(prepared.site(), crop, "player:test");
+
+        assertEquals(ResourceSitePhase.CONFLICT, ResourceSiteProcess.reduceConflict(growing, prepared.site(), loss).resourceSites().site(prepared.site()).phase());
+        assertEquals(loss, FrontierWorldRuntimeDefinition.payloadCodecs().decode(loss.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(loss)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceConflict(growing, prepared.site(),
+                new ResourceSiteConflictObserved(prepared.site(), new BlockPosition(crop.x() - 1, crop.y(), crop.z()), "player:test")));
+    }
+
     private static Prepared prepared() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-preparation"), 77L));
         SubjectId site = new SubjectId("site:1-wheat-field");

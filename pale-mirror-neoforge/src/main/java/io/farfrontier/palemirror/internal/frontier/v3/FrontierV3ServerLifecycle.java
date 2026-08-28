@@ -76,6 +76,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3ExplosionExecutor.tick(server.overworld(), runtime);
                 FrontierV3CargoCarrierImpactExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
+                FrontierV3ResourceSiteExecutor.tick(server.overworld(), runtime);
                 FrontierV3DecontaminationExecutor.tick(server.overworld(), runtime);
                 FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
                 FrontierV3ObjectBoardExecutor.tick(server.overworld(), runtime);
@@ -265,6 +266,8 @@ public final class FrontierV3ServerLifecycle {
         String cause = "player:" + player.getUUID();
         if (FrontierV3InfectionOverlayExecutor.observeBlockBreak(runtime, level, position, cause)
                 == FrontierV3InfectionOverlayExecutor.BlockBreakObservation.REJECTED) return true;
+        if (FrontierV3ResourceSiteExecutor.observeBlockBreak(runtime, level, position, cause)
+                == FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED) return true;
         return FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, cause)
                 == FrontierV3GrayboxExecutor.BlockBreakObservation.REJECTED;
     }

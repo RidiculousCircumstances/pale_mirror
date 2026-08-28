@@ -18,7 +18,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
-                ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(),
+                ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.conflictObserved(),
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
                 RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
                 StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }

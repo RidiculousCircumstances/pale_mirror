@@ -95,4 +95,20 @@ final class ResourceSiteProcess {
         }
         return state.withResourceSites(state.resourceSites().replace(current.advanceGrowth()));
     }
+
+    static FrontierWorldState reduceConflict(FrontierWorldState state, SubjectId subject, ResourceSiteConflictObserved conflict) {
+        if (!subject.equals(conflict.siteId())) throw new IllegalArgumentException("resource-site conflict has a foreign event owner");
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(conflict.siteId());
+        if (site == null || !site.cropSlots().contains(conflict.position()) && !site.soilSlots().contains(conflict.position())) {
+            throw new IllegalArgumentException("resource-site conflict must name one exact field cell");
+        }
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
+        if (lifecycle.phase() == ResourceSitePhase.DESTROYED || lifecycle.phase() == ResourceSitePhase.CONFLICT) return state;
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.conflicted()));
+    }
+
+    static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {
+        reduceConflict(state, conflict.siteId(), conflict);
+        return List.of(new ProposedEvent(conflict.siteId(), conflict));
+    }
 }
