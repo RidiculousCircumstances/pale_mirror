@@ -24,7 +24,7 @@ final class HumanPopulationStateSupport {
         ActorLocation actor = state.actorLocations().get(migration.residentId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("only a living resident may migrate");
         if (state.humanPopulation().resident(migration.residentId()) == null) throw new IllegalArgumentException("migration subject is not a resident");
-        if (state.operations().values().stream().anyMatch(operation -> operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED
+        if (state.operations().values().stream().anyMatch(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)
                 && operation.participantIds().contains(migration.residentId()))) throw new IllegalArgumentException("resident assigned to an active operation cannot migrate");
         var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(migration.residentId(), actor.withPosition(migration.destination()));
         return copy(state, actors, state.humanPopulation().migrate(migration.residentId(), migration.destinationHouseholdId(), migration.destinationSettlementId()));

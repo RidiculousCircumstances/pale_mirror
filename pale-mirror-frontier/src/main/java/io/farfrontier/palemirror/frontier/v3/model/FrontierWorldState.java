@@ -19,7 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         physicalObservations = FrontierWorldStateSupport.immutableMap(physicalObservations, "physical observations"); sceneLeases = FrontierWorldStateSupport.immutableMap(sceneLeases, "scene leases");
         structureDamage = FrontierWorldStateSupport.immutableMap(structureDamage, "structure damage"); physicalDeltas = FrontierWorldStateSupport.immutableMap(physicalDeltas, "physical deltas");
         ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases"); routeConstructions = FrontierWorldStateSupport.immutableMap(routeConstructions, "route constructions");
-        Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(strategicPlans, "strategic plans"); Objects.requireNonNull(humanPopulation, "human population"); strategicPlans.validate(bootstrap);
+        Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(strategicPlans, "strategic plans"); Objects.requireNonNull(humanPopulation, "human population"); strategicPlans.validate(bootstrap, humanPopulation);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
         RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions); Objects.requireNonNull(hiveColony, "hive colony"); hiveColony.validateAgainst(bootstrap);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
@@ -73,8 +73,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, job.settlementId());
             SettlementStructure facility = FrontierWorldStateSupport.structure(settlement, job.facilityId());
             if (facility.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("production job facility must be a workshop");
-            Resident worker = FrontierWorldStateSupport.resident(settlement, job.workerId());
-            if (worker.role() != ResidentRole.CRAFTER) throw new IllegalArgumentException("production job worker must be a crafter");
+            ResidentProfile worker = humanPopulation.resident(job.workerId());
+            if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
+            if (!worker.settlementId().equals(settlement.id()) || worker.role() != ResidentRole.CRAFTER) throw new IllegalArgumentException("production job worker must be a settlement crafter");
             if (inventory.items().containsKey(job.consumedItemId()) || inventory.items().containsKey(job.outputItemId())) {
                 throw new IllegalArgumentException("active production job must own neither consumed nor output item stack");
             }
@@ -109,9 +110,17 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (!assignedCargo.add(operation.cargoId())) throw new IllegalArgumentException("cargo cannot be assigned to multiple route operations");
             Set<SubjectId> settlementResidents = humanPopulation.residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
                     .map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet());
+            if (operation.participantIds().size() != 2) throw new IllegalArgumentException("supply route operation must retain one hauler and one guard");
+            ResidentProfile hauler = humanPopulation.resident(operation.participantIds().getFirst());
+            ResidentProfile guard = humanPopulation.resident(operation.participantIds().get(1));
+            if (hauler == null || guard == null || hauler.role() != ResidentRole.HAULER || guard.role() != ResidentRole.GUARD) {
+                throw new IllegalArgumentException("supply route operation participants must retain hauler then guard roles");
+            }
             for (SubjectId participant : operation.participantIds()) {
                 if (!settlementResidents.contains(participant)) throw new IllegalArgumentException("route operation participant must belong to its settlement");
-                if (!assignedParticipants.add(participant)) throw new IllegalArgumentException("resident cannot be assigned to multiple route operations");
+                if (FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation) && !assignedParticipants.add(participant)) {
+                    throw new IllegalArgumentException("resident cannot be assigned to multiple active route operations");
+                }
                 if (operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
                         && !leaseHistoryOperations.contains(operation.id())
                         && sceneLeases.values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.operationId().equals(operation.id())

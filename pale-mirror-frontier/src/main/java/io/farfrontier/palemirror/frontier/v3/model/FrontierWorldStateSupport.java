@@ -2,10 +2,12 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /** Pure invariant helpers shared by the canonical frontier world state. */
@@ -70,9 +72,33 @@ final class FrontierWorldStateSupport {
         return resident;
     }
 
-    static Resident resident(Settlement settlement, SubjectId residentId) {
-        return settlement.residents().stream().filter(value -> value.id().equals(residentId)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("unknown production worker: " + residentId.value()));
+    static Optional<ResidentProfile> livingResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .min(Comparator.comparing(ResidentProfile::id));
+    }
+
+    static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(resident -> state.operations().values().stream().noneMatch(operation -> retainsParticipantClaim(state, operation)
+                        && operation.participantIds().contains(resident.id())))
+                .min(Comparator.comparing(ResidentProfile::id));
+    }
+
+    static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {
+        return retainsParticipantClaim(state.contracts(), operation);
+    }
+
+    static boolean retainsParticipantClaim(Map<SubjectId, SupplyContract> contracts, RouteOperation operation) {
+        return switch (operation.stage()) {
+            case ASSEMBLING, EN_ROUTE -> true;
+            case ARRIVED -> contracts.values().stream().anyMatch(contract -> contract.cargoId().equals(operation.cargoId())
+                    && contract.status() == ContractStatus.LOADED);
+            case FAILED, INTERRUPTED -> false;
+        };
     }
 
     static void requirePosition(WorldBounds bounds, BlockPosition position) {

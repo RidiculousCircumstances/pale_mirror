@@ -117,7 +117,7 @@ final class StrategicPlanState {
     Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
     Map<SubjectId, RouteEngagement> routeEngagements() { return routeEngagements; }
 
-    void validate(FrontierBootstrap bootstrap) {
+    void validate(FrontierBootstrap bootstrap, HumanPopulation humanPopulation) {
         objectives.values().forEach(objective -> {
             boolean knownOwner = bootstrap.hive().id().equals(objective.ownerId())
                     || bootstrap.settlements().stream().anyMatch(settlement -> settlement.id().equals(objective.ownerId()));
@@ -125,8 +125,8 @@ final class StrategicPlanState {
         });
         routePatrols.values().forEach(patrol -> {
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());
-            Resident guard = settlement.residents().stream().filter(resident -> resident.id().equals(patrol.guardId())).findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("route patrol guard is foreign"));
+            ResidentProfile guard = humanPopulation.resident(patrol.guardId());
+            if (guard == null || !guard.settlementId().equals(settlement.id())) throw new IllegalArgumentException("route patrol guard is foreign");
             if (guard.role() != ResidentRole.GUARD || !patrol.route().equals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()))) {
                 throw new IllegalArgumentException("route patrol does not retain its guard or canonical route");
             }

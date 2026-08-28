@@ -17,7 +17,7 @@ final class RouteEngagementCombatRules {
             case WORKER, SCOUT -> FixedScalar.whole(2);
             case BOMBER -> FixedScalar.whole(6);
         };
-        Resident resident = resident(state, actor);
+        ResidentProfile resident = resident(state, actor);
         if (resident == null) throw new IllegalArgumentException("COLD combat actor is neither resident nor bioform");
         return switch (resident.role()) {
             case GUARD -> FixedScalar.whole(3);
@@ -56,8 +56,7 @@ final class RouteEngagementCombatRules {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(actor)).findFirst().orElse(null);
     }
-    private static Resident resident(FrontierWorldState state, SubjectId actor) {
-        return state.bootstrap().settlements().stream().flatMap(value -> value.residents().stream())
-                .filter(value -> value.id().equals(actor)).findFirst().orElse(null);
+    private static ResidentProfile resident(FrontierWorldState state, SubjectId actor) {
+        return state.humanPopulation().resident(actor);
     }
 }

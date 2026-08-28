@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
-import java.util.Comparator;
 import java.util.List;
 
 /** COLD guard movement which turns existing physical deltas into bounded route evidence. */
@@ -24,9 +23,7 @@ final class RoutePatrolProcess {
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        Resident guard = settlement.residents().stream().filter(value -> value.role() == ResidentRole.GUARD)
-                .filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .min(Comparator.comparing(Resident::id)).orElse(null);
+        ResidentProfile guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElse(null);
         if (guard == null || FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }

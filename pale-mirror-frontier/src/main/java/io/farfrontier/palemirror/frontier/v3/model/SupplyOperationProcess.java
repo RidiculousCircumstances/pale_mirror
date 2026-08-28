@@ -140,18 +140,15 @@ final class SupplyOperationProcess {
                 .filter(item -> item.itemKind().equals("minecraft:bread") && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)).findFirst();
     }
     private static boolean participantsAvailable(FrontierWorldState state, Settlement settlement) {
-        return available(state, settlement, ResidentRole.HAULER) && available(state, settlement, ResidentRole.GUARD);
+        return FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.HAULER).isPresent()
+                && FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).isPresent();
     }
     private static boolean dependenciesCompleted(FrontierWorldState state, StrategicTask task) {
         return task.dependencies().stream().map(state.strategicPlans().tasks()::get).allMatch(value -> value.status() == StrategicTaskStatus.COMPLETED);
     }
-    private static boolean available(FrontierWorldState state, Settlement settlement, ResidentRole role) {
-        return settlement.residents().stream().filter(resident -> resident.role() == role).map(Resident::id)
-                .anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE);
-    }
     private static RouteOperation routeOperation(FrontierWorldState state, SupplyContract contract, Settlement settlement) {
-        SubjectId hauler = settlement.residents().stream().filter(value -> value.role() == ResidentRole.HAULER).sorted(Comparator.comparing(Resident::id)).findFirst().orElseThrow().id();
-        SubjectId guard = settlement.residents().stream().filter(value -> value.role() == ResidentRole.GUARD).sorted(Comparator.comparing(Resident::id)).findFirst().orElseThrow().id();
+        SubjectId hauler = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.HAULER).orElseThrow().id();
+        SubjectId guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
         int ordinal = FrontierWorldScheduleSupport.ordinal(contract.id().value());
         return new RouteOperation(new SubjectId("operation:supply-" + settlement.id().value().substring("settlement:".length()) + "-" + ordinal), settlement.id(), contract.cargoId(), contract.recipientId(),
                 List.of(hauler, guard), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.EN_ROUTE);
