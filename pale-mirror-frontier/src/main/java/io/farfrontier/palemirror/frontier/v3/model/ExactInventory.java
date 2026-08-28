@@ -186,7 +186,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
-    /** Applies observed player/container custody only when the exact canonical stack still has its expected source. */
+    /** Applies one observed container/player/carrier transfer only when its exact source still agrees. */
     public ExactInventory moveObservedItem(SubjectId itemId, InventoryCustody from, InventoryCustody to) {
         Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(from, "source custody"); Objects.requireNonNull(to, "target custody");
         ExactItemStack current = items.get(itemId);
@@ -200,9 +200,12 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<UUID, List<SubjectId>> nextPlayers = mutableCustody(playerItems);
         removePlayerCustody(nextPlayers, from, itemId);
         addPlayerCustody(nextPlayers, to, itemId);
+        Map<UUID, List<SubjectId>> nextCarriers = mutableCustody(worldCarrierItems);
+        removeCarrierCustody(nextCarriers, from, itemId);
+        addCarrierCustody(nextCarriers, to, itemId);
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.put(itemId, new ExactItemStack(current.id(), current.itemKind(), current.count(), to));
-        return new ExactInventory(containers, nextItems, cargo, nextPlayers, worldCarrierItems, conflicts, surfaces);
+        return new ExactInventory(containers, nextItems, cargo, nextPlayers, nextCarriers, conflicts, surfaces);
     }
 
     public ExactInventory recordConflict(InventoryConflict conflict) {
@@ -237,6 +240,18 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     private static void addPlayerCustody(Map<UUID, List<SubjectId>> players, InventoryCustody custody, SubjectId itemId) {
         if (custody instanceof InventoryCustody.Player player) {
             players.computeIfAbsent(player.playerId(), ignored -> new java.util.ArrayList<>()).add(itemId);
+        }
+    }
+    private static void removeCarrierCustody(Map<UUID, List<SubjectId>> carriers, InventoryCustody custody, SubjectId itemId) {
+        if (custody instanceof InventoryCustody.WorldCarrier carrier) {
+            List<SubjectId> held = carriers.get(carrier.carrierId());
+            if (held == null || !held.remove(itemId)) throw new IllegalArgumentException("observed world carrier source is unavailable");
+            if (held.isEmpty()) carriers.remove(carrier.carrierId());
+        }
+    }
+    private static void addCarrierCustody(Map<UUID, List<SubjectId>> carriers, InventoryCustody custody, SubjectId itemId) {
+        if (custody instanceof InventoryCustody.WorldCarrier carrier) {
+            carriers.computeIfAbsent(carrier.carrierId(), ignored -> new java.util.ArrayList<>()).add(itemId);
         }
     }
     private static void require(Object value, Object expected, String label) {

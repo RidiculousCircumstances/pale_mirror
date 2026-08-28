@@ -303,4 +303,20 @@ public final class FrontierV3CargoHandoffGameTests {
                 "a changed stack must not be adopted as the canonical player-held item");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-frontier-v3-world-carrier", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void worldCarrierKeepsExactItemIdentityAndItsPersistedEntityUuid(GameTestHelper helper) {
+        SubjectId container = new SubjectId("container:frontier-v3-world-carrier");
+        ExactItemStack expected = new ExactItemStack(new SubjectId("item:frontier-v3-carrier-bread"), "minecraft:bread", 7,
+                new InventoryCustody.ContainerSlot(container, 0));
+        java.util.UUID carrier = java.util.UUID.fromString("00000000-0000-0000-0000-000000000045");
+        net.minecraft.world.item.ItemStack physical = FrontierV3CargoHandoffExecutor.materializedStack(expected);
+        FrontierV3CargoHandoffExecutor.bindWorldCarrier(physical, carrier);
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(physical, expected),
+                "binding a physical carrier preserves the stack's canonical exact identity");
+        helper.assertValueEqual(FrontierV3CargoHandoffExecutor.worldCarrierId(physical).orElseThrow(), carrier,
+                "the item carries its persisted carrier UUID for later loaded-chunk reconciliation");
+        helper.succeed();
+    }
 }

@@ -50,6 +50,7 @@ import java.util.Optional;
 final class FrontierV3CargoHandoffExecutor {
     static final String CONTAINER_ID_KEY = "pale_mirror_frontier_v3_container";
     static final String ITEM_ID_KEY = "pale_mirror_frontier_v3_item";
+    static final String WORLD_CARRIER_ID_KEY = "pale_mirror_frontier_v3_world_carrier";
 
     private FrontierV3CargoHandoffExecutor() { }
 
@@ -173,6 +174,14 @@ final class FrontierV3CargoHandoffExecutor {
         if (actual.getCount() != expected.count() || !BuiltInRegistries.ITEM.getKey(actual.getItem()).toString().equals(expected.itemKind())) return false;
         CustomData data = actual.get(DataComponents.CUSTOM_DATA);
         return data != null && expected.id().value().equals(data.copyTag().getString(ITEM_ID_KEY));
+    }
+    static void bindWorldCarrier(ItemStack stack, java.util.UUID carrierId) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putUUID(WORLD_CARRIER_ID_KEY, carrierId));
+    }
+    static Optional<java.util.UUID> worldCarrierId(ItemStack stack) {
+        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        if (data == null || !data.copyTag().hasUUID(WORLD_CARRIER_ID_KEY)) return Optional.empty();
+        return Optional.of(data.copyTag().getUUID(WORLD_CARRIER_ID_KEY));
     }
     record StoreTarget(BlockPos position, SubjectId containerId) { }
 }

@@ -57,8 +57,10 @@ final class FrontierWorldStateSupport {
     }
 
     static SubjectId itemOwner(FrontierWorldState state, ExactItemCustodyChanged changed) {
-        InventoryCustody.ContainerSlot slot = changed.from() instanceof InventoryCustody.ContainerSlot source ? source
-                : (InventoryCustody.ContainerSlot) changed.to();
+        InventoryCustody.ContainerSlot slot;
+        if (changed.from() instanceof InventoryCustody.ContainerSlot source) slot = source;
+        else if (changed.to() instanceof InventoryCustody.ContainerSlot target) slot = target;
+        else throw new IllegalArgumentException("item custody observation has no owned container boundary");
         ContainerRecord container = state.inventory().containers().get(slot.containerId());
         if (container == null) throw new IllegalArgumentException("item custody observation references an unknown container");
         return container.ownerId();

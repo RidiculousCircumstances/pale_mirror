@@ -21,6 +21,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.Comparator;
@@ -55,6 +57,14 @@ final class FrontierV3InventoryObservationExecutor {
             if (canonical.isPresent()) {
                 ExactItemStack expected = canonical.orElseThrow();
                 if (FrontierV3CargoHandoffExecutor.exactMatch(actual, expected)) continue;
+                List<ItemEntity> carriers = nearbyCarriers(level, chest.getBlockPos(), expected);
+                if (actual.isEmpty() && carriers.size() == 1) {
+                    ItemEntity carrier = carriers.getFirst();
+                    FrontierV3CargoHandoffExecutor.bindWorldCarrier(carrier.getItem(), carrier.getUUID());
+                    carrier.setItem(carrier.getItem());
+                    submit(runtime, expected.id(), custody, new InventoryCustody.WorldCarrier(carrier.getUUID()));
+                    return true;
+                }
                 List<ServerPlayer> holders = playersHolding(level, expected);
                 if (actual.isEmpty() && holders.size() == 1) {
                     submit(runtime, expected.id(), custody, new InventoryCustody.Player(holders.getFirst().getUUID()));
@@ -66,8 +76,12 @@ final class FrontierV3InventoryObservationExecutor {
             }
             if (actual.isEmpty()) continue;
             ExactItemStack playerItem = playerOwnedExact(state, actual).orElse(null);
-            if (playerItem == null || !(playerItem.custody() instanceof InventoryCustody.Player)
-                    || !playersHolding(level, playerItem).isEmpty()) {
+            ExactItemStack carrierItem = worldCarrierOwnedExact(state, actual).orElse(null);
+            if (carrierItem != null) {
+                submit(runtime, carrierItem.id(), carrierItem.custody(), custody);
+                return true;
+            }
+            if (playerItem == null || !(playerItem.custody() instanceof InventoryCustody.Player) || !playersHolding(level, playerItem).isEmpty()) {
                 recordConflict(runtime, state, store.containerId(), store.containerId(), slot, InventoryConflictKind.FOREIGN_OR_DUPLICATE);
                 return true;
             }
@@ -80,6 +94,17 @@ final class FrontierV3InventoryObservationExecutor {
     private static Optional<ExactItemStack> playerOwnedExact(FrontierWorldState state, ItemStack stack) {
         return state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.Player)
                 .filter(item -> FrontierV3CargoHandoffExecutor.exactMatch(stack, item)).findFirst();
+    }
+    private static Optional<ExactItemStack> worldCarrierOwnedExact(FrontierWorldState state, ItemStack stack) {
+        Optional<java.util.UUID> carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(stack);
+        if (carrierId.isEmpty()) return Optional.empty();
+        InventoryCustody.WorldCarrier custody = new InventoryCustody.WorldCarrier(carrierId.orElseThrow());
+        return state.inventory().items().values().stream().filter(item -> item.custody().equals(custody))
+                .filter(item -> FrontierV3CargoHandoffExecutor.exactMatch(stack, item)).findFirst();
+    }
+    private static List<ItemEntity> nearbyCarriers(ServerLevel level, BlockPos source, ExactItemStack expected) {
+        return level.getEntitiesOfClass(ItemEntity.class, new AABB(source).inflate(4.0D), entity -> FrontierV3CargoHandoffExecutor.exactMatch(entity.getItem(), expected))
+                .stream().sorted(Comparator.comparing(ItemEntity::getUUID)).toList();
     }
     private static List<ServerPlayer> playersHolding(ServerLevel level, ExactItemStack expected) {
         return level.players().stream().filter(player -> hasExactItem(player, expected)).sorted(Comparator.comparing(ServerPlayer::getUUID)).toList();
@@ -98,7 +123,7 @@ final class FrontierV3InventoryObservationExecutor {
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId itemId,
                                InventoryCustody from, InventoryCustody to) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        String direction = from instanceof InventoryCustody.Player ? "deposit" : "withdraw";
+        String direction = from instanceof InventoryCustody.ContainerSlot ? "outbound" : "inbound";
         CommandId commandId = new CommandId("executor:item-" + direction + "-" + itemId.value().replace(':', '-') + "-r" + checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new ExactItemCustodyChanged(itemId, from, to)))

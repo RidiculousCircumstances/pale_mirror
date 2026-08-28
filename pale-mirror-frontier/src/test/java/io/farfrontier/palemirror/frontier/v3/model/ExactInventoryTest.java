@@ -114,6 +114,24 @@ class ExactInventoryTest {
     }
 
     @Test
+    void observedWorldCarrierTransferKeepsTheSameExactStackAndReverseIndex() {
+        SubjectId container = new SubjectId("container:store");
+        SubjectId item = new SubjectId("item:carrier-bread");
+        InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 3);
+        UUID carrier = UUID.fromString("00000000-0000-0000-0000-000000000043");
+        ExactInventory stored = new ExactInventory(Map.of(container, new ContainerRecord(container, new SubjectId("hive:frontier"), 9)),
+                Map.of(item, new ExactItemStack(item, "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+
+        ExactInventory carried = stored.moveObservedItem(item, slot, new InventoryCustody.WorldCarrier(carrier));
+        assertEquals(new InventoryCustody.WorldCarrier(carrier), carried.items().get(item).custody());
+        assertEquals(List.of(item), carried.worldCarrierItems().get(carrier));
+        ExactInventory returned = carried.moveObservedItem(item, new InventoryCustody.WorldCarrier(carrier), slot);
+        assertEquals(slot, returned.items().get(item).custody());
+        assertThrows(IllegalArgumentException.class, () -> new ExactItemCustodyChanged(item,
+                new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000044")), new InventoryCustody.WorldCarrier(carrier)));
+    }
+
+    @Test
     void physicalInventoryConflictIsBoundedIdempotentEvidenceRatherThanAnInventoryRepair() {
         SubjectId container = new SubjectId("container:store");
         SubjectId owner = new SubjectId("hive:frontier");
