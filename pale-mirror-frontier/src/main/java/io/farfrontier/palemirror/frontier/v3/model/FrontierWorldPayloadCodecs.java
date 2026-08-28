@@ -23,7 +23,7 @@ public final class FrontierWorldPayloadCodecs {
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
-                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec())));
+                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new OperationFailedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -175,6 +175,21 @@ public final class FrontierWorldPayloadCodecs {
             for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMemberPosition(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt())));
             return new SceneLeaseReleased(id, members);
         }); }
+    }
+    private static final class ActorDiedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.actor_died"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            ActorDied death = (ActorDied) payload; writeString(output, death.leaseId().value()); writeSubject(output, death.actorId());
+            output.writeInt(death.position().x()); output.writeInt(death.position().y()); output.writeInt(death.position().z()); writeString(output, death.cause());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ActorDied(
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)), readSubject(input).value(),
+                new BlockPosition(input.readInt(), input.readInt(), input.readInt()), readString(input))); }
+    }
+    private static final class OperationFailedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.operation_failed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationFailed failed = (OperationFailed) payload; writeSubject(output, failed.operationId()); writeString(output, failed.reason()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationFailed(readSubject(input).value(), readString(input))); }
     }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }

@@ -11,8 +11,8 @@ public record SceneLeaseReleased(SceneLeaseId leaseId, List<SceneMemberPosition>
     public SceneLeaseReleased {
         Objects.requireNonNull(leaseId, "scene lease id");
         members = List.copyOf(members);
-        if (members.isEmpty() || members.size() > 32 || members.stream().map(SceneMemberPosition::actorId).distinct().count() != members.size()) {
-            throw new IllegalArgumentException("scene release must capture one to thirty-two distinct actors");
+        if (members.size() > 32 || members.stream().map(SceneMemberPosition::actorId).distinct().count() != members.size()) {
+            throw new IllegalArgumentException("scene release must capture at most thirty-two distinct surviving actors");
         }
     }
     @Override public String type() { return "frontier.scene_lease_released"; }

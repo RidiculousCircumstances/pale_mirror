@@ -282,6 +282,34 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(0, afterDueColdWork.operations().get(operation.id()).routeIndex(), "a leased operation must not execute the same COLD movement");
         assertThrows(IllegalArgumentException.class, () -> leased.prepareSceneLease(lease));
 
+        var hotCheckpoint = engine.checkpoint();
+        var hotCommand = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-hot-death");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, hotCommand, new WorldId("frontier:scene-lease"), hotCheckpoint.revision(), hotCheckpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(hotCommand),
+                        new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT))));
+        SceneMember deadMember = lease.members().getFirst();
+        ActorDied death = new ActorDied(leaseId, deadMember.actorId(), lease.handoffPosition(), "entity:player-test");
+        var deathCheckpoint = engine.checkpoint();
+        var deathCommand = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-actor-death");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, deathCommand, new WorldId("frontier:scene-lease"), deathCheckpoint.revision(), deathCheckpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(deathCommand), death)));
+        FrontierWorldState afterDeath = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(ActorLifeStatus.DEAD, afterDeath.actorLocations().get(deadMember.actorId()).condition().status());
+        assertEquals(SceneLeaseStatus.DRAINING, afterDeath.sceneLeases().get(leaseId).status());
+        assertEquals(before.bootstrap().residentCount() - 1, engine.projection(ProjectionQuery.summary()).residentCount());
+        assertEquals(death, FrontierWorldRuntimeDefinition.payloadCodecs().decode(death.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(death)));
+        List<SceneMemberPosition> surviving = lease.members().stream().filter(member -> !member.equals(deadMember)).map(member ->
+                new SceneMemberPosition(member.actorId(), lease.handoffPosition())).toList();
+        var releaseCheckpoint = engine.checkpoint();
+        var releaseCommand = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-death-release");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, releaseCommand, new WorldId("frontier:scene-lease"), releaseCheckpoint.revision(), releaseCheckpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(releaseCommand), new SceneLeaseReleased(leaseId, surviving))));
+        FrontierWorldState afterDeathRelease = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(OperationStage.FAILED, afterDeathRelease.operations().get(operation.id()).stage());
+
         FrontierWorldState hot = leased.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         List<SceneMemberPosition> captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),

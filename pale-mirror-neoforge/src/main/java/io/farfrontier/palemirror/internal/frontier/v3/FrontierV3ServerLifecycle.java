@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.util.IdentityHashMap;
@@ -66,6 +68,14 @@ public final class FrontierV3ServerLifecycle {
     public static void stop(MinecraftServer server) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.remove(server);
         if (runtime != null) runtime.shutdown();
+    }
+
+    /** Returns true only when this v3 runtime durably accepted the managed HOT death. */
+    public static boolean observeLivingDeath(ServerLevel level, Entity entity, Entity source) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3SceneExecutor.observeDeath(runtime, entity, source);
     }
 
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }

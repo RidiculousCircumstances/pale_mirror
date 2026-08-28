@@ -73,11 +73,11 @@
 - The obsolete goal was cleared and the approved Frontier v3 durable goal is active.
 - Wave 2 now has checked recovery boundaries, restartable kernel state, exact bootstrap ownership, persisted sparse spatial/economic state, a true write-ahead canonical commit boundary, an opt-in v3-only lifecycle bridge, bounded infection propagation, exact production, contract-to-cargo flow, one exact COLD cargo route, a loaded-chunk CARGO_HANDOFF executor, and the first leased exact-Villager HOT/COLD hand-off.
 - The first executor is automation-complete only: its owned chest/item behavior has been materialized in GameTests, but it has not yet received an ordinary-server restart, player interaction or visual-comprehension audit.
-- HOT scenes currently use only owned persistent Villagers and vanilla local behavior; role goals, cargo/containers, death and player-change observation, hive bodies, combat, terrain/infection surfaces and a real-world continuity audit are not implemented.
+- Exact HOT-Villager death now enters only through the real NeoForge death event for an owned HOT body; it is a durable typed fact with observed position and cause, never an inference from an unloaded/missing entity. It marks that canonical actor dead, drains the lease, captures only survivors, fails the affected route explicitly and changes the visible living population. State schema 11 persists exact vitality; focused tests and the full critical Gradle gate pass with 172 GameTests. Broader health/inventory observation, player block/item changes, hive bodies, combat, terrain/infection surfaces, role goals and a real-world continuity audit remain unimplemented.
 - Existing deployed v2 server/runtime state is unchanged and is not evidence for v3.
 
 ### Next
-- Complete the HOT operation vertical slice: durable body-death/player-change observation, exact cargo custody surfaces, bounded local role goals and equivalent hive bioform scenes. Then add ordinary-server restart/player-conflict evidence for both CARGO_HANDOFF and scenes.
+- Complete the HOT operation vertical slice: durable non-lethal body/inventory and player block/item observation, exact cargo custody surfaces, bounded local role goals and equivalent hive bioform scenes. Then add ordinary-server restart/player-conflict evidence for both CARGO_HANDOFF and scenes.
 
 ## Open questions
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.

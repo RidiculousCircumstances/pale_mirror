@@ -73,9 +73,24 @@ public final class FrontierWorldRuntimeDefinition {
             if (lease == null) return rejected("scene lease is unknown");
             RouteOperation operation = state.operations().get(lease.operationId());
             if (operation == null) return rejected("scene lease has no owning operation");
+            if (operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
+                        new ProposedEvent(operation.settlementId(), new OperationFailed(operation.id(), "actor-death"))));
+            }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
                     new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
                             operationProgress(operation, command.submittedAt().ticks() + 100L)))));
+        }
+        if (command.payload() instanceof ActorDied death) {
+            SceneLease lease = state.sceneLeases().get(death.leaseId());
+            if (lease == null || lease.status() != SceneLeaseStatus.HOT
+                    || lease.members().stream().noneMatch(member -> member.actorId().equals(death.actorId()))) {
+                return rejected("actor death is not evidence for an active HOT scene member");
+            }
+            RouteOperation operation = state.operations().get(lease.operationId());
+            if (operation == null) return rejected("actor death has no owning operation");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), death),
+                    new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING))));
         }
         return rejected("command is not a trusted physical transition or scene lease");
     }
@@ -175,7 +190,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     private static List<ProposedEvent> planOperationProgress(FrontierWorldState state, ScheduledAction action) {
         RouteOperation operation = state.operations().get(action.subject());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) throw new IllegalStateException("route operation is not available for progression");
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) return List.of();
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
                 && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
@@ -207,6 +222,8 @@ public final class FrontierWorldRuntimeDefinition {
             case SceneLeasePrepared prepared -> reduceSceneLeasePrepared(state, event.subject(), event.instant(), prepared);
             case SceneLeaseTransition transition -> reduceSceneLeaseTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
+            case ActorDied death -> reduceActorDied(state, event.subject(), death);
+            case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             default -> fail(event.payload().type());
         };
     }
@@ -292,6 +309,20 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene release lacks its owning operation");
         return state.releaseSceneLease(released.leaseId(), released.members());
+    }
+    private static FrontierWorldState reduceActorDied(FrontierWorldState state, SubjectId subject, ActorDied death) {
+        SceneLease lease = state.sceneLeases().get(death.leaseId());
+        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("actor death lacks its owning operation");
+        return state.recordActorDeath(death);
+    }
+    private static FrontierWorldState reduceOperationFailed(FrontierWorldState state, SubjectId subject, OperationFailed failed) {
+        RouteOperation operation = state.operations().get(failed.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation failure lacks its owning settlement");
+        if (operation.participantIds().stream().noneMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
+            throw new IllegalArgumentException("operation failure must retain an exact dead participant");
+        }
+        return state.failOperation(failed.operationId());
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();
@@ -425,9 +456,12 @@ public final class FrontierWorldRuntimeDefinition {
             SimInstant instant, ProjectionQuery query
     ) {
         FrontierBootstrap bootstrap = state.bootstrap();
-        int residents = bootstrap.settlements().stream().mapToInt(settlement -> settlement.residents().size()).sum();
+        int residents = (int) bootstrap.settlements().stream().flatMap(settlement -> settlement.residents().stream())
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
+        int bioforms = (int) bootstrap.hive().bioforms().stream()
+                .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE).count();
         return new FrontierWorldProjection(worldId, revision, instant, bootstrap.canonicalSha256(), bootstrap.settlements().size(),
-                residents, bootstrap.hive().bioforms().size(), state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
+                residents, bioforms, state.infection().size(), state.inventory().items().size(), state.productionJobs().size(),
                 state.operations().size(),
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED).count(),
                 (int) state.physicalIntents().values().stream().filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).count(),

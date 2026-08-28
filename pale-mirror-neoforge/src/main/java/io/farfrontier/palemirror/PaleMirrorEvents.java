@@ -166,6 +166,9 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
         if (event.getEntity().level().getServer() != null) {
+            if (event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel level
+                    && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeLivingDeath(
+                    level, event.getEntity(), event.getSource().getEntity())) return;
             SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(event.getEntity().level().getServer());
             if (source.activated()) {
                 String actor = event.getSource().getEntity() == null ? "environment" : event.getSource().getEntity().getUUID().toString();

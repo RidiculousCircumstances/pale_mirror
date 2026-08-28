@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.ActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -121,6 +122,23 @@ final class FrontierV3SceneExecutor {
             if (!level.addFreshEntity(villager)) return BodyMaterialization.CONFLICT;
         }
         return BodyMaterialization.COMPLETE;
+    }
+
+    /** Accepts only an actual loaded-world death of a body owned by the active HOT lease. */
+    static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {
+        FrontierWorldState state = state(runtime);
+        if (state == null) return false;
+        Optional<SceneLease> matchingLease = state.sceneLeases().values().stream()
+                .filter(lease -> lease.status() == SceneLeaseStatus.HOT)
+                .filter(lease -> lease.members().stream().anyMatch(member -> member.entityId().equals(entity.getUUID()) && owned(entity, lease, member)))
+                .findFirst();
+        if (matchingLease.isEmpty()) return false;
+        SceneLease lease = matchingLease.orElseThrow();
+        SceneMember member = lease.members().stream().filter(candidate -> candidate.entityId().equals(entity.getUUID())).findFirst().orElseThrow();
+        String cause = source == null ? "environment" : "entity:" + source.getUUID();
+        submit(runtime, "scene-death", lease.id().value() + "-" + member.actorId().value(),
+                new ActorDied(lease.id(), member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
+        return true;
     }
 
     private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {

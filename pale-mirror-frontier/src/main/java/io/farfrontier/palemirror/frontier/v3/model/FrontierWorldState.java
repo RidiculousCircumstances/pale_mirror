@@ -103,7 +103,8 @@ public record FrontierWorldState(
             for (SubjectId participant : operation.participantIds()) {
                 if (!settlementResidents.contains(participant)) throw new IllegalArgumentException("route operation participant must belong to its settlement");
                 if (!assignedParticipants.add(participant)) throw new IllegalArgumentException("resident cannot be assigned to multiple route operations");
-                if (operation.stage() != OperationStage.FAILED && !leaseHistoryOperations.contains(operation.id())
+                if (operation.stage() != OperationStage.FAILED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
+                        && !leaseHistoryOperations.contains(operation.id())
                         && !actorLocations.get(participant).position().equals(operation.route().get(operation.routeIndex()))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical route point");
                 }
@@ -134,7 +135,7 @@ public record FrontierWorldState(
                     || !intent.postconditionObservationId().equals(java.util.Optional.of(observation.id()))) {
                 throw new IllegalArgumentException("physical observation must be the confirmed intent receipt");
             }
-            validateCargoHandoffObservation(bootstrap, operations, contracts, inventory, intent, observation);
+            FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, observation);
         }
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
@@ -212,7 +213,7 @@ public record FrontierWorldState(
         requirePosition(bootstrap.bounds(), position);
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations);
-        next.put(actor, new ActorLocation(position));
+        next.put(actor, actorLocations.get(actor).withPosition(position));
         return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
     }
 
@@ -293,7 +294,7 @@ public record FrontierWorldState(
         next.put(operation.id(), operation);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         BlockPosition position = operation.route().get(operation.routeIndex());
-        operation.participantIds().forEach(participant -> nextActors.put(participant, new ActorLocation(position)));
+        operation.participantIds().forEach(participant -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
         return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, next, physicalIntents, physicalObservations, sceneLeases);
     }
 
@@ -309,7 +310,7 @@ public record FrontierWorldState(
         nextOperations.put(operation.id(), advanced);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         BlockPosition position = advanced.route().get(nextRouteIndex);
-        advanced.participantIds().forEach(participant -> nextActors.put(participant, new ActorLocation(position)));
+        advanced.participantIds().forEach(participant -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
         return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases);
     }
 
@@ -342,7 +343,7 @@ public record FrontierWorldState(
         }
         RouteOperation operation = operations.get(current.causeSubjectId());
         if (operation == null || !operation.cargoId().equals(evidence.cargoId())) throw new IllegalArgumentException("cargo hand-off observation does not match its route operation");
-        SubjectId receiver = receiverStore(operation);
+        SubjectId receiver = FrontierCargoValidation.receiverStore(bootstrap, operation);
         if (evidence.placements().stream().anyMatch(placement -> !receiver.equals(placement.receiverSlot().containerId()))) {
             throw new IllegalArgumentException("cargo hand-off observation targets a foreign hive receiver");
         }
@@ -363,6 +364,9 @@ public record FrontierWorldState(
         Objects.requireNonNull(lease, "scene lease");
         if (sceneLeases.containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());
         if (lease.status() != SceneLeaseStatus.PREPARED) throw new IllegalArgumentException("new scene lease must be prepared");
+        if (lease.members().stream().anyMatch(member -> actorLocations.get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
+            throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
+        }
         Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
         // Closed leases have no further authority: the retained event log remains the causal
         // record, while checkpoints retain only a bounded recent terminal scene index.
@@ -398,64 +402,51 @@ public record FrontierWorldState(
     public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) {
         SceneLease current = sceneLeases.get(Objects.requireNonNull(leaseId, "scene lease id"));
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
-        Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
+        Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId)
+                .filter(actor -> actorLocations.get(actor).condition().status() == ActorLifeStatus.ALIVE).collect(java.util.stream.Collectors.toSet());
         Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
         if (!expected.equals(observed) || observed.size() != positions.size()) throw new IllegalArgumentException("scene release must capture exactly its leased actors");
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         for (SceneMemberPosition position : positions) {
             requirePosition(bootstrap.bounds(), position.position());
-            nextActors.put(position.actorId(), new ActorLocation(position.position()));
+            nextActors.put(position.actorId(), actorLocations.get(position.actorId()).withPosition(position.position()));
         }
         Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
         next.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
         return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, next);
     }
 
+    public FrontierWorldState recordActorDeath(ActorDied death) {
+        Objects.requireNonNull(death, "actor death");
+        SceneLease lease = sceneLeases.get(death.leaseId());
+        if (lease == null || lease.status() != SceneLeaseStatus.HOT
+                || lease.members().stream().noneMatch(member -> member.actorId().equals(death.actorId()))) {
+            throw new IllegalArgumentException("actor death is not evidence for an active HOT scene member");
+        }
+        ActorLocation current = actorLocations.get(death.actorId());
+        if (current.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("actor death is already recorded");
+        requirePosition(bootstrap.bounds(), death.position());
+        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
+        nextActors.put(death.actorId(), current.deadAt(death.position()));
+        return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, sceneLeases);
+    }
+
+    public FrontierWorldState failOperation(SubjectId operationId) {
+        RouteOperation current = operations.get(Objects.requireNonNull(operationId, "operation id"));
+        if (current == null || current.stage() != OperationStage.EN_ROUTE) throw new IllegalArgumentException("only an en-route operation can fail");
+        if (sceneLeases.values().stream().anyMatch(lease -> lease.operationId().equals(operationId) && lease.status() != SceneLeaseStatus.CLOSED)) {
+            throw new IllegalArgumentException("operation cannot fail before its active scene lease closes");
+        }
+        Map<SubjectId, RouteOperation> next = new LinkedHashMap<>(operations);
+        next.put(operationId, new RouteOperation(current.id(), current.settlementId(), current.cargoId(), current.destinationId(),
+                current.participantIds(), current.route(), current.routeIndex(), OperationStage.FAILED));
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, next, physicalIntents, physicalObservations, sceneLeases);
+    }
+
     public static SubjectId depotId(SubjectId settlementId) {
         Objects.requireNonNull(settlementId, "settlement id");
         if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("settlement id must use settlement: namespace");
         return new SubjectId("container:" + settlementId.value().substring("settlement:".length()) + "-depot");
-    }
-
-    private SubjectId receiverStore(RouteOperation operation) {
-        return receiverStore(bootstrap, operation);
-    }
-
-    private static SubjectId receiverStore(FrontierBootstrap bootstrap, RouteOperation operation) {
-        BlockPosition destination = operation.route().getLast();
-        HiveNest nest = bootstrap.hive().seedNests().stream().filter(value -> value.anchor().equals(destination)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("route destination is not a hive nest"));
-        return bootstrap.hive().organs().stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.STORE)
-                .findFirst().flatMap(HiveOrgan::containerId).orElseThrow(() -> new IllegalArgumentException("hive nest has no exact store receiver"));
-    }
-
-    private static void validateCargoHandoffObservation(FrontierBootstrap bootstrap, Map<SubjectId, RouteOperation> operations,
-                                                        Map<SubjectId, SupplyContract> contracts, ExactInventory inventory,
-                                                        PhysicalIntent intent, CargoHandoffObservation observation) {
-        if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
-                || !intent.id().equals(observation.intentId())) {
-            throw new IllegalArgumentException("unsupported or mismatched physical observation kind");
-        }
-        RouteOperation operation = operations.get(intent.causeSubjectId());
-        if (operation == null || !operation.cargoId().equals(observation.cargoId())) {
-            throw new IllegalArgumentException("physical observation does not match its route operation");
-        }
-        SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(observation.cargoId())).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("physical observation cargo has no contract"));
-        if (contract.status() != ContractStatus.DELIVERED || inventory.cargo().containsKey(observation.cargoId())) {
-            throw new IllegalArgumentException("physical observation requires delivered cargo without a retained batch");
-        }
-        SubjectId receiver = receiverStore(bootstrap, operation);
-        int observedCount = 0;
-        for (CargoHandoffPlacement placement : observation.placements()) {
-            ExactItemStack item = inventory.items().get(placement.itemId());
-            if (item == null || !item.itemKind().equals(contract.itemKind()) || !item.custody().equals(placement.receiverSlot())
-                    || !receiver.equals(placement.receiverSlot().containerId())) {
-                throw new IllegalArgumentException("physical observation placement does not match exact delivered inventory");
-            }
-            observedCount = Math.addExact(observedCount, item.count());
-        }
-        if (observedCount != contract.itemCount()) throw new IllegalArgumentException("physical observation delivered count does not match contract");
     }
 
     private static Set<SubjectId> actorIds(FrontierBootstrap bootstrap) {

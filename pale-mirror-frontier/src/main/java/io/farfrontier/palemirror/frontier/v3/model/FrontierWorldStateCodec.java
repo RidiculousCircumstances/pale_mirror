@@ -29,7 +29,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 10;
+    private static final int VERSION = 11;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -69,13 +69,18 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, values.size());
         for (Map.Entry<SubjectId, ActorLocation> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             writeString(output, entry.getKey().value()); writePosition(output, entry.getValue().position());
+            output.writeByte(entry.getValue().condition().status().ordinal()); output.writeLong(entry.getValue().condition().health().raw());
         }
     }
     private static Map<SubjectId, ActorLocation> readActors(DataInputStream input) throws IOException {
         Map<SubjectId, ActorLocation> values = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
-            if (values.put(id, new ActorLocation(readPosition(input))) != null) throw new IllegalArgumentException("duplicate actor state id: " + id.value());
+            BlockPosition position = readPosition(input); int status = input.readUnsignedByte();
+            if (status >= ActorLifeStatus.values().length
+                    || values.put(id, new ActorLocation(position, new ActorCondition(ActorLifeStatus.values()[status], new FixedScalar(input.readLong())))) != null) {
+                throw new IllegalArgumentException("invalid or duplicate actor state id: " + id.value());
+            }
         }
         return values;
     }
