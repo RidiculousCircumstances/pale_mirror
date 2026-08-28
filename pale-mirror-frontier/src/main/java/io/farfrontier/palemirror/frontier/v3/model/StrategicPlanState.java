@@ -61,6 +61,15 @@ final class StrategicPlanState {
                 throw new IllegalArgumentException("completed strategic objective has blocked task");
             }
         });
+        tasks.values().forEach(task -> task.dependencies().forEach(dependency -> {
+            StrategicTask predecessor = tasks.get(dependency);
+            if (task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE
+                    && (predecessor.kind() != StrategicTaskKind.PRODUCE_BREAD || !predecessor.ownerId().equals(task.ownerId())
+                    || predecessor.status() != StrategicTaskStatus.COMPLETED)) {
+                throw new IllegalArgumentException("settlement delivery dependency must be one completed local production task");
+            }
+        }));
+        tasks.keySet().forEach(id -> requireAcyclic(id, new java.util.HashSet<>(), new java.util.HashSet<>()));
     }
 
     static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of()); }
@@ -90,7 +99,7 @@ final class StrategicPlanState {
 
     StrategicPlanState addTask(StrategicTask task) {
         Objects.requireNonNull(task, "strategic task");
-        StrategicPlanState retained = compactFor(0, 1);
+        StrategicPlanState retained = compactFor(0, 1, task.dependencies());
         StrategicObjective objective = retained.objectives.get(task.objectiveId());
         if (retained.tasks.containsKey(task.id()) || objective == null || objective.status() != StrategicObjectiveStatus.ACTIVE) {
             throw new IllegalArgumentException("strategic task identity or objective is invalid");
@@ -122,11 +131,14 @@ final class StrategicPlanState {
     }
     @Override public int hashCode() { return Objects.hash(objectives, tasks); }
 
-    private StrategicPlanState compactFor(int newObjectives, int newTasks) {
+    private StrategicPlanState compactFor(int newObjectives, int newTasks) { return compactFor(newObjectives, newTasks, List.of()); }
+
+    private StrategicPlanState compactFor(int newObjectives, int newTasks, List<SubjectId> protectedTaskIds) {
         Map<SubjectId, StrategicObjective> retainedObjectives = new LinkedHashMap<>(objectives);
         Map<SubjectId, StrategicTask> retainedTasks = new LinkedHashMap<>(tasks);
         while (retainedObjectives.size() + newObjectives > MAX_OBJECTIVES || retainedTasks.size() + newTasks > MAX_TASKS) {
             StrategicObjective discard = retainedObjectives.values().stream().filter(value -> value.status() != StrategicObjectiveStatus.ACTIVE)
+                    .filter(value -> removable(value, retainedTasks, protectedTaskIds))
                     .sorted(java.util.Comparator.comparingInt(StrategicObjective::decisionOrdinal).thenComparing(StrategicObjective::id)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("strategic plan retention capacity exhausted by active work"));
             retainedObjectives.remove(discard.id());
@@ -138,6 +150,20 @@ final class StrategicPlanState {
     private static boolean allowed(StrategicTaskStatus current, StrategicTaskStatus next) {
         return current == StrategicTaskStatus.PENDING && (next == StrategicTaskStatus.ACTIVE || next == StrategicTaskStatus.BLOCKED)
                 || current == StrategicTaskStatus.ACTIVE && (next == StrategicTaskStatus.COMPLETED || next == StrategicTaskStatus.BLOCKED);
+    }
+
+    private static boolean removable(StrategicObjective objective, Map<SubjectId, StrategicTask> tasks, List<SubjectId> protectedTaskIds) {
+        java.util.Set<SubjectId> owned = tasks.values().stream().filter(task -> task.objectiveId().equals(objective.id())).map(StrategicTask::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return java.util.Collections.disjoint(owned, protectedTaskIds)
+                && tasks.values().stream().filter(task -> !task.objectiveId().equals(objective.id())).noneMatch(task -> task.dependencies().stream().anyMatch(owned::contains));
+    }
+
+    private void requireAcyclic(SubjectId id, java.util.Set<SubjectId> visiting, java.util.Set<SubjectId> visited) {
+        if (visited.contains(id)) return;
+        if (!visiting.add(id)) throw new IllegalArgumentException("strategic task dependency graph has a cycle");
+        tasks.get(id).dependencies().forEach(dependency -> requireAcyclic(dependency, visiting, visited));
+        visiting.remove(id); visited.add(id);
     }
 
     private static <T> Map<SubjectId, T> immutable(Map<SubjectId, T> source, String name) {

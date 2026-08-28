@@ -32,7 +32,7 @@ final class SupplyOperationProcess {
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        if (bread(state, settlement).isEmpty() || !participantsAvailable(state, settlement)) {
+        if (!dependenciesCompleted(state, task) || bread(state, settlement).isEmpty() || !participantsAvailable(state, settlement)) {
             return blocked(task);
         }
         SupplyContract contract = contract(state, task, settlement, bread(state, settlement).orElseThrow());
@@ -120,6 +120,9 @@ final class SupplyOperationProcess {
     }
     private static boolean participantsAvailable(FrontierWorldState state, Settlement settlement) {
         return available(state, settlement, ResidentRole.HAULER) && available(state, settlement, ResidentRole.GUARD);
+    }
+    private static boolean dependenciesCompleted(FrontierWorldState state, StrategicTask task) {
+        return task.dependencies().stream().map(state.strategicPlans().tasks()::get).allMatch(value -> value.status() == StrategicTaskStatus.COMPLETED);
     }
     private static boolean available(FrontierWorldState state, Settlement settlement, ResidentRole role) {
         return settlement.residents().stream().filter(resident -> resident.role() == role).map(Resident::id)

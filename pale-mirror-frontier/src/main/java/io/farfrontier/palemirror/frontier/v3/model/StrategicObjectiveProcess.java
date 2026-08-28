@@ -30,7 +30,7 @@ final class StrategicObjectiveProcess {
         if (state.strategicPlans().hasActiveObjective(owner)) return List.of(next);
         Optional<Candidate> candidate = candidate(state, owner);
         if (candidate.isEmpty()) return List.of(next);
-        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal); StrategicTask task = task(objective);
+        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal); StrategicTask task = task(state, objective);
         if (task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL) {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, action.dueAt().ticks() + 100L))), next);
@@ -106,7 +106,7 @@ final class StrategicObjectiveProcess {
         String stem = owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal;
         return new StrategicObjective(new SubjectId("objective:" + stem), owner, candidate.kind(), candidate.target(), ordinal, StrategicObjectiveStatus.ACTIVE);
     }
-    private static StrategicTask task(StrategicObjective objective) {
+    private static StrategicTask task(FrontierWorldState state, StrategicObjective objective) {
         List<StrategicTaskRequirement> requirements = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY, StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT);
             case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
@@ -123,7 +123,14 @@ final class StrategicObjectiveProcess {
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> StrategicTaskKind.DELIVER_BREAD_TO_HIVE;
         };
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
-                objective.infectionTarget(), requirements, List.of(), StrategicTaskStatus.PENDING);
+                objective.infectionTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING);
+    }
+    private static List<SubjectId> dependencies(FrontierWorldState state, StrategicObjective objective) {
+        if (objective.kind() != StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) return List.of();
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(objective.ownerId())
+                && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.COMPLETED)
+                .sorted(Comparator.comparing((StrategicTask task) -> state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal()).reversed()
+                        .thenComparing(StrategicTask::id)).map(StrategicTask::id).limit(1).toList();
     }
     private static boolean local(SettlementStructure facility, InfectionCell cell) {
         BlockPosition position = cell.originAtY(facility.anchor().y()); long dx = position.x() - facility.anchor().x(), dz = position.z() - facility.anchor().z();
