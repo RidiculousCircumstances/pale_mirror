@@ -205,9 +205,41 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.assertTrue(observed != null && observed.structureId().equals(cell.ownerId()) && observed.position().equals(cell.position())
                         && observed.semanticPart() == GrayboxSemanticPart.FOUNDATION,
                 "a real break event receives exact owner, coordinate and semantic evidence before block removal");
-        helper.assertTrue(ledger.claim(position).conflicted(), "the impending physical change revokes desired-state repair authority immediately");
+        helper.assertFalse(ledger.claim(position).conflicted(), "precondition inspection alone cannot retire a claim before durable acceptance");
         helper.assertTrue(level.getBlockState(position).is(Blocks.WHITE_CONCRETE),
                 "observation does not itself alter the live block; Minecraft remains the physical executor");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-physical-observation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void explosionObservationPersistsExactBaselineUntilPostImpactReconciliation(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos known = helper.absolutePos(new BlockPos(40, 8, 0));
+        BlockPos unknown = helper.absolutePos(new BlockPos(41, 8, 0));
+        level.setBlock(known.below(), Blocks.STONE.defaultBlockState(), 3);
+        FrontierV3GrayboxLedger provenance = FrontierV3GrayboxLedger.get(level);
+        GrayboxCell organ = grayboxCell(known, "organ:explosion-test", GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.HIVE_TISSUE);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, provenance, organ), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the observation begins with an exact owned organ cell");
+        level.setBlock(unknown, Blocks.STONE.defaultBlockState(), 3);
+        FrontierV3PhysicalObservationLedger observations = FrontierV3PhysicalObservationLedger.get(level);
+        helper.assertTrue(observations.captureExternalExplosion(level, level.getGameTime(), java.util.List.of(known, unknown), provenance, position -> true),
+                "real blast candidates are retained before their postcondition is known");
+        net.minecraft.nbt.CompoundTag serialized = observations.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess());
+        observations = FrontierV3PhysicalObservationLedger.load(serialized, level.registryAccess());
+        level.setBlock(known, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(unknown, Blocks.AIR.defaultBlockState(), 3);
+
+        var first = observations.nextReady(level.getGameTime() + 1L).orElseThrow();
+        helper.assertTrue(first.candidate().semantic().isPresent()
+                        && first.candidate().semantic().orElseThrow().owner().equals("organ:explosion-test"),
+                "the owned part keeps exact semantic provenance across a SavedData reload");
+        observations.resolve(first);
+        var second = observations.nextReady(level.getGameTime() + 1L).orElseThrow();
+        helper.assertTrue(second.candidate().semantic().isEmpty(), "an ordinary changed block remains an unknown scar candidate");
+        observations.resolve(second);
+        helper.assertTrue(observations.nextReady(level.getGameTime() + 1L).isEmpty(), "each post-impact candidate is consumed exactly once");
         helper.succeed();
     }
 

@@ -94,10 +94,13 @@ public final class FrontierWorldRuntimeDefinition {
             }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.structureSettlement(state.bootstrap(), damage.structureId()), damage)));
         }
+        if (command.payload() instanceof PhysicalDeltaObserved observed) {
+            return FrontierWorldPhysicalObservationProcess.plan(state, observed);
+        }
         if (command.payload() instanceof ExactItemCustodyChanged changed) {
             ExactItemStack item = state.inventory().items().get(changed.itemId());
             if (item == null || !item.custody().equals(changed.from())) return rejected("observed item source differs from canonical custody");
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(itemOwner(state, changed), changed)));
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, changed), changed)));
         }
         if (command.payload() instanceof InventoryConflictObserved observed) {
             InventoryConflict conflict = observed.conflict();
@@ -214,6 +217,9 @@ public final class FrontierWorldRuntimeDefinition {
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
                 && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
+        if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) {
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationFailed(operation.id(), "route-obstructed")));
+        }
         int nextRouteIndex = operation.routeIndex() + 1;
         OperationStage nextStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
         List<ProposedEvent> events = new java.util.ArrayList<>();
@@ -244,6 +250,7 @@ public final class FrontierWorldRuntimeDefinition {
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
+            case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
@@ -352,13 +359,16 @@ public final class FrontierWorldRuntimeDefinition {
     private static FrontierWorldState reduceOperationFailed(FrontierWorldState state, SubjectId subject, OperationFailed failed) {
         RouteOperation operation = state.operations().get(failed.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation failure lacks its owning settlement");
-        if (operation.participantIds().stream().noneMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
-            throw new IllegalArgumentException("operation failure must retain an exact dead participant");
+        boolean death = operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD);
+        boolean obstruction = "route-obstructed".equals(failed.reason())
+                && !FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas());
+        if (!death && !obstruction) {
+            throw new IllegalArgumentException("operation failure lacks a dead participant or observed route obstruction");
         }
         return state.failOperation(failed.operationId());
     }
     private static FrontierWorldState reduceExactItemCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
-        if (!subject.equals(itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
+        if (!subject.equals(FrontierWorldStateSupport.itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
         return state.withInventory(state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));
     }
     private static FrontierWorldState reduceInventoryConflict(FrontierWorldState state, SubjectId subject, InventoryConflictObserved observed) {
@@ -485,13 +495,6 @@ public final class FrontierWorldRuntimeDefinition {
         } catch (NumberFormatException error) {
             throw new IllegalArgumentException("scheduled work identity has malformed ordinal: " + id, error);
         }
-    }
-    private static SubjectId itemOwner(FrontierWorldState state, ExactItemCustodyChanged changed) {
-        InventoryCustody.ContainerSlot slot = changed.from() instanceof InventoryCustody.ContainerSlot source ? source
-                : (InventoryCustody.ContainerSlot) changed.to();
-        ContainerRecord container = state.inventory().containers().get(slot.containerId());
-        if (container == null) throw new IllegalArgumentException("item custody observation references an unknown container");
-        return container.ownerId();
     }
     private static FrontierWorldState fail(String type) { throw new IllegalStateException("unregistered v3 world event: " + type); }
 }

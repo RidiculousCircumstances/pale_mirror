@@ -1,0 +1,72 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+
+import java.util.List;
+import java.util.Optional;
+
+/** Reconciles ordinary Minecraft explosion aftermath without ownership filtering or forced loads. */
+final class FrontierV3PhysicalObservationExecutor {
+    private static final int MAX_CELLS_PER_TICK = 64;
+
+    private FrontierV3PhysicalObservationExecutor() { }
+
+    static boolean captureExternalExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                            List<BlockPos> affected) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
+        if (checkpoint == null) return false;
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        return FrontierV3PhysicalObservationLedger.get(level).captureExternalExplosion(level, level.getGameTime(), affected,
+                FrontierV3GrayboxLedger.get(level), position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ())));
+    }
+
+    static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierV3PhysicalObservationLedger ledger = FrontierV3PhysicalObservationLedger.get(level);
+        for (int index = 0; index < MAX_CELLS_PER_TICK; index++) {
+            Optional<FrontierV3PhysicalObservationLedger.Ready> ready = ledger.nextReady(level.getGameTime());
+            if (ready.isEmpty()) return;
+            FrontierV3PhysicalObservationLedger.Ready value = ready.orElseThrow(); BlockPos position = value.candidate().blockPos();
+            if (!level.hasChunkAt(position)) return; // retained for an ordinary later loaded-chunk inspection
+            if (level.getBlockState(position).equals(value.candidate().baseline(level.registryAccess()))) {
+                ledger.resolve(value); continue;
+            }
+            CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+            FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            BlockPosition canonicalPosition = new BlockPosition(position.getX(), position.getY(), position.getZ());
+            if (state.physicalDeltas().containsKey(canonicalPosition)) {
+                ledger.resolve(value); continue; // crash/retry after a durable command append
+            }
+            PhysicalDelta delta = delta(value, canonicalPosition);
+            CommandId id = new CommandId("executor:" + value.effectId() + ":" + Long.toUnsignedString(position.asLong()));
+            CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta)))
+                    .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+            if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("v3 physical observation command was rejected: " + result);
+            ledger.resolve(value);
+        }
+    }
+
+    private static PhysicalDelta delta(FrontierV3PhysicalObservationLedger.Ready ready, BlockPosition position) {
+        String cause = "explosion:" + ready.effectId();
+        Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic = ready.candidate().semantic();
+        if (semantic.isEmpty()) return new PhysicalDelta(position, PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), cause);
+        FrontierV3PhysicalObservationLedger.Semantic known = semantic.orElseThrow();
+        return new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new SubjectId(known.owner())),
+                Optional.of(GrayboxSemanticPart.valueOf(known.semanticPart())), cause);
+    }
+}

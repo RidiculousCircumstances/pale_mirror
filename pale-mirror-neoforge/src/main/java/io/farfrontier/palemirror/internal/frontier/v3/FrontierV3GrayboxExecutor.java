@@ -12,6 +12,9 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved;
 import io.farfrontier.palemirror.frontier.v3.model.StructureDamaged;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
@@ -38,6 +41,7 @@ final class FrontierV3GrayboxExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
 
     enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED }
+    enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
 
     private FrontierV3GrayboxExecutor() { }
 
@@ -60,26 +64,33 @@ final class FrontierV3GrayboxExecutor {
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
 
     /**
-     * Observes a real player break of a still-owned structural cell before Minecraft removes it.
-     * The command is durable first; regardless of command acceptance the claim becomes a conflict
-     * so desired-state projection can never restore the just-observed physical change.
+     * Observes a real player break of a still-owned semantic cell before Minecraft removes it.
+     * The command is durable first. Only after acceptance does the claim become a conflict, just
+     * before Minecraft mutates the block; a rejected observation is reported to the caller so it
+     * can cancel the break rather than creating unaccounted physical reality.
      */
-    static boolean observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
-                                     BlockPos position, String cause) {
+    static BlockBreakObservation observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
+                                                   BlockPos position, String cause) {
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        Optional<StructureDamaged> damage = prepareStructureDamage(level, ledger, position, cause);
-        if (damage.isEmpty()) return false;
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId id = new CommandId("executor:structure-damage-r" + checkpoint.revision().value() + "-p" + position.asLong());
-        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), damage.orElseThrow()))
-                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        return result instanceof CommandResult.Accepted;
+        Optional<PhysicalDeltaObserved> observed = preparePhysicalDelta(level, ledger, position, cause);
+        if (observed.isEmpty()) return BlockBreakObservation.UNMANAGED;
+        try {
+            CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+            CommandId id = new CommandId("executor:physical-delta-r" + checkpoint.revision().value() + "-p" + position.asLong());
+            CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), observed.orElseThrow()))
+                    .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+            if (!(result instanceof CommandResult.Accepted)) return BlockBreakObservation.REJECTED;
+            ledger.conflict(position); // revoke desired-state authority immediately before Minecraft mutates the block
+            return BlockBreakObservation.ACCEPTED;
+        } catch (RuntimeException failed) {
+            return BlockBreakObservation.REJECTED;
+        }
     }
 
-    /** Converts only a still-owned exact cell into canonical evidence and terminally retires its claim. */
-    static Optional<StructureDamaged> prepareStructureDamage(ServerLevel level, FrontierV3GrayboxLedger ledger,
-                                                              BlockPos position, String cause) {
+    /** Converts every still-owned graybox part (settlement, hive or route) into typed loss evidence. */
+    static Optional<PhysicalDeltaObserved> preparePhysicalDelta(ServerLevel level, FrontierV3GrayboxLedger ledger,
+                                                                 BlockPos position, String cause) {
         FrontierV3GrayboxLedger.Claim claim = ledger.claim(position);
         if (claim == null || claim.conflicted()) return Optional.empty();
         GrayboxMaterial material;
@@ -95,11 +106,20 @@ final class FrontierV3GrayboxExecutor {
             ledger.conflict(position);
             return Optional.empty();
         }
-        ledger.conflict(position);
-        if (!claim.owner().startsWith("structure:")) return Optional.empty();
+        return Optional.of(new PhysicalDeltaObserved(new PhysicalDelta(
+                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(position.getX(), position.getY(), position.getZ()),
+                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(claim.owner())),
+                Optional.of(part), cause)));
+    }
+
+    /** Converts only a still-owned exact cell into canonical evidence and terminally retires its claim. */
+    static Optional<StructureDamaged> prepareStructureDamage(ServerLevel level, FrontierV3GrayboxLedger ledger,
+                                                              BlockPos position, String cause) {
+        Optional<PhysicalDeltaObserved> observed = preparePhysicalDelta(level, ledger, position, cause);
+        if (observed.isEmpty() || !observed.orElseThrow().delta().ownerId().orElseThrow().value().startsWith("structure:")) return Optional.empty();
+        PhysicalDelta delta = observed.orElseThrow().delta();
         return Optional.of(new StructureDamaged(
-                new io.farfrontier.palemirror.frontier.v3.api.SubjectId(claim.owner()),
-                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(position.getX(), position.getY(), position.getZ()), part, cause));
+                delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), cause));
     }
 
     /** Applies exactly one loaded desired cell; exposed package-private for negative GameTests. */

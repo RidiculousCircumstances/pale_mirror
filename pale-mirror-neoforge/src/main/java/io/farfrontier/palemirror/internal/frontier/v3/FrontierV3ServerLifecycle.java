@@ -54,6 +54,7 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null) return;
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+                FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
                 // Observe player custody before passive surface drift inspection can classify it.
                 FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
@@ -87,12 +88,21 @@ public final class FrontierV3ServerLifecycle {
                 && FrontierV3SceneExecutor.observeDeath(runtime, entity, source);
     }
 
-    /** Returns true only when a still-owned v3 structure cell entered the canonical damage ledger. */
-    public static boolean observeBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
+    /** True means the v3-owned break was not durably accepted and Minecraft must not apply it. */
+    public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, "player:" + player.getUUID());
+                && FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, "player:" + player.getUUID())
+                == FrontierV3GrayboxExecutor.BlockBreakObservation.REJECTED;
+    }
+
+    /** Captures real explosion candidates for next-tick postcondition inspection without altering the blast. */
+    public static boolean observeExternalExplosion(ServerLevel level, java.util.List<BlockPos> affected) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);
     }
 
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }

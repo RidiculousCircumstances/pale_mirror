@@ -85,6 +85,28 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void typedPhysicalDeltasDriveHiveAvailabilityAndRouteObstructionWithoutASecondWorldModel() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:physical-deltas"), 91L));
+        HiveOrgan organ = initial.bootstrap().hive().organs().getFirst();
+        GrayboxCell organCell = FrontierGrayboxPlan.compile(initial).cells().values().stream()
+                .filter(value -> value.ownerId().equals(organ.id())).findFirst().orElseThrow();
+        FrontierWorldState organDamaged = initial.recordPhysicalDelta(new PhysicalDelta(organCell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(organ.id()), java.util.Optional.of(organCell.semanticPart()), "explosion:test"));
+        assertTrue(!FrontierGrayboxPlan.compile(organDamaged).cells().containsKey(organCell.position()));
+
+        List<BlockPosition> supplyRoute = FrontierRouteNetwork.supplyWaypoints(initial.bootstrap(), initial.bootstrap().settlements().getFirst().id());
+        BlockPosition routePosition = supplyRoute.get(2);
+        PhysicalDelta routeLoss = new PhysicalDelta(routePosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test");
+        FrontierWorldState routeDamaged = initial.recordPhysicalDelta(routeLoss);
+        PhysicalDeltaObserved observed = (PhysicalDeltaObserved) FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.physical_delta_observed",
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalDeltaObserved(routeLoss)));
+        assertEquals(routeLoss, observed.delta());
+        assertTrue(!FrontierGrayboxPlan.compile(routeDamaged).cells().containsKey(routePosition));
+        assertTrue(!FrontierRouteNetwork.isPassable(initial.bootstrap(), supplyRoute, routeDamaged.physicalDeltas()));
+    }
+
+    @Test
     void sharedHiveGrowthConsumesEastStoreBiomassThenPublishesWestOrganAndBioform() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hive-growth"), 91L));
         for (long tick = 600L; tick <= 640L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
@@ -460,7 +482,8 @@ class FrontierWorldRuntimeDefinitionTest {
                     SceneLeaseStatus.CLOSED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(oldId, actor))).toList()));
         }
         FrontierWorldState retentionState = new FrontierWorldState(before.bootstrap(), before.actorLocations(), released.structureConditions(), released.infection(),
-                released.inventory(), released.productionJobs(), released.contracts(), released.operations(), released.physicalIntents(), released.physicalObservations(), retained);
+                released.inventory(), released.productionJobs(), released.contracts(), released.operations(), released.physicalIntents(), released.physicalObservations(), retained,
+                released.hiveColony(), released.structureDamage(), released.physicalDeltas());
         var nextLeaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:after-compaction");
         SceneLease nextLease = new SceneLease(nextLeaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(551L), 2_000L,
                 SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(nextLeaseId, actor))).toList());

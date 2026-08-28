@@ -105,6 +105,7 @@ public final class PaleMirrorEvents {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeExternalExplosion(level, event.getAffectedBlocks());
             SourceGrayboxRuntime.forServer(level.getServer()).captureExternalExplosion(level, event.getAffectedBlocks());
         }
     }
@@ -396,7 +397,11 @@ public final class PaleMirrorEvents {
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
         if (!event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             if (event.getPlayer() instanceof ServerPlayer player) {
-                io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeBlockBreak(level, event.getPos(), player);
+                if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.rejectBlockBreak(level, event.getPos(), player)) {
+                    event.setCanceled(true);
+                    player.displayClientMessage(net.minecraft.network.chat.Component.literal("Pale Mirror: physical change was not durably recorded."), true);
+                    return;
+                }
             }
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(level.getServer());
             runtime.railTopologyChanged(level, event.getPos());

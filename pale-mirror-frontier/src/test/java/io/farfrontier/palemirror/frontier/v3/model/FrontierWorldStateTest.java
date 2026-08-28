@@ -76,13 +76,35 @@ class FrontierWorldStateTest {
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
         assertEquals(1, codec.decode(encoded).inventory().conflicts().size());
-        encoded[4] = 17;
+        encoded[4] = 18;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
         missingActor.remove(new SubjectId("resident:1-1"));
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
                 source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations(), source.physicalIntents()));
+    }
+
+    @Test
+    void physicalDeltasRetainExactKnownLossesAndUnknownScarsWithoutTemplateRepair() {
+        FrontierWorldState baseline = initial();
+        HiveOrgan organ = baseline.bootstrap().hive().organs().getFirst();
+        GrayboxCell cell = FrontierGrayboxPlan.compile(baseline).cells().values().stream()
+                .filter(value -> value.ownerId().equals(organ.id())).findFirst().orElseThrow();
+        PhysicalDelta known = new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(organ.id()), java.util.Optional.of(cell.semanticPart()), "player:test");
+        PhysicalDelta scar = new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
+                java.util.Optional.empty(), java.util.Optional.empty(), "explosion:test");
+
+        FrontierWorldState changed = baseline.recordPhysicalDelta(known).recordPhysicalDelta(scar);
+        assertEquals(2, changed.physicalDeltas().size());
+        assertTrue(!FrontierGrayboxPlan.compile(changed).cells().containsKey(cell.position()));
+        assertTrue(changed.isHiveOrganOperational(organ.id()));
+        assertTrue(new PhysicalDeltaObserved(known).requiresDurableBeforeEffect());
+        assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
+        assertThrows(IllegalArgumentException.class, () -> changed.recordPhysicalDelta(known));
+        assertThrows(IllegalArgumentException.class, () -> baseline.recordPhysicalDelta(new PhysicalDelta(new BlockPosition(1, 64, 1),
+                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, java.util.Optional.of(organ.id()), java.util.Optional.of(GrayboxSemanticPart.WALL), "bad")));
     }
 
     @Test

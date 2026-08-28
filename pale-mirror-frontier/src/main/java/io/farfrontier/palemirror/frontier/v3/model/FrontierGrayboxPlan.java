@@ -33,6 +33,10 @@ public final class FrontierGrayboxPlan {
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
         addRoutes(cells, state.bootstrap());
+        // Physical deltas are canonical aftermath, not executor-local provenance.  Once an
+        // observed cell is gone, desired-state projection must not ask a later loaded chunk to
+        // recreate it, including after the SavedData ledger has been compacted or lost.
+        state.physicalDeltas().keySet().forEach(cells::remove);
         Map<InfectionCell, FixedRatio> infection = state.infection().entrySet().stream()
                 .filter(entry -> entry.getValue().value().raw() > 0L)
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -56,6 +60,39 @@ public final class FrontierGrayboxPlan {
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         addStructure(cells, structure, StructureCondition.INTACT);
         return cells.size();
+    }
+
+    /**
+     * Resolves one full-intact semantic cell without consulting desired state.  Observations use
+     * this baseline because a previous loss may already have removed the cell from the current
+     * projection.  It deliberately covers every currently materializable owner kind.
+     */
+    public static GrayboxCell intactSemanticCell(FrontierBootstrap bootstrap, HiveColony colony, SubjectId owner, BlockPosition position) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(colony, "hive colony");
+        Objects.requireNonNull(owner, "owner"); Objects.requireNonNull(position, "position");
+        for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
+            if (structure.id().equals(owner)) return intactStructureCell(structure, position);
+        }
+        for (HiveOrgan organ : bootstrap.hive().organs()) if (organ.id().equals(owner)) return intactOrganCell(organ, position);
+        HiveOrgan added = colony.addedOrgans().get(owner);
+        if (added != null) return intactOrganCell(added, position);
+        if (FrontierRouteNetwork.OWNER.equals(owner) && FrontierRouteNetwork.surfaceCells(bootstrap).contains(position)) {
+            return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        }
+        return null;
+    }
+
+    public static int intactOrganCellCount(HiveOrgan organ) {
+        Objects.requireNonNull(organ, "organ");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        addOrgan(cells, organ);
+        return cells.size();
+    }
+
+    private static GrayboxCell intactOrganCell(HiveOrgan organ, BlockPosition position) {
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        addOrgan(cells, organ);
+        return cells.get(position);
     }
 
     private static void addStructure(Map<BlockPosition, GrayboxCell> cells, SettlementStructure structure, StructureCondition condition) {

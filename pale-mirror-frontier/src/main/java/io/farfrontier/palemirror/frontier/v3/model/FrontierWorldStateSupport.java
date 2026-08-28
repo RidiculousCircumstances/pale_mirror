@@ -56,6 +56,14 @@ final class FrontierWorldStateSupport {
         if (!bounds.contains(position)) throw new IllegalArgumentException("canonical state position is outside frontier bounds");
     }
 
+    static SubjectId itemOwner(FrontierWorldState state, ExactItemCustodyChanged changed) {
+        InventoryCustody.ContainerSlot slot = changed.from() instanceof InventoryCustody.ContainerSlot source ? source
+                : (InventoryCustody.ContainerSlot) changed.to();
+        ContainerRecord container = state.inventory().containers().get(slot.containerId());
+        if (container == null) throw new IllegalArgumentException("item custody observation references an unknown container");
+        return container.ownerId();
+    }
+
     static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label) {
         Objects.requireNonNull(input, label);
         LinkedHashMap<K, V> copy = new LinkedHashMap<>();

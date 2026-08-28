@@ -29,7 +29,7 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 16;
+    private static final int VERSION = 17;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -41,6 +41,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
                 writeStructureDamage(output, state.structureDamage());
+                writePhysicalDeltas(output, state.physicalDeltas());
                 writeInfection(output, state.infection());
                 writeHiveColony(output, state.hiveColony());
                 writeInventory(output, state.inventory());
@@ -62,9 +63,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
+            Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
-                    readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony, structureDamage);
+                    readContracts(input), readOperations(input), readPhysicalIntents(input), readPhysicalObservations(input), readSceneLeases(input), colony, structureDamage, physicalDeltas);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -130,6 +132,37 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (values.put(structure, damage) != null) throw new IllegalArgumentException("duplicate structure damage identity");
         }
         return values;
+    }
+    private static void writePhysicalDeltas(DataOutputStream output, Map<BlockPosition, PhysicalDelta> values) throws IOException {
+        writeCount(output, values.size());
+        for (PhysicalDelta delta : values.values().stream().sorted(Comparator.comparingInt((PhysicalDelta value) -> value.position().x())
+                .thenComparingInt(value -> value.position().y()).thenComparingInt(value -> value.position().z())).toList()) {
+            writePosition(output, delta.position()); output.writeByte(delta.kind().ordinal()); writeString(output, delta.cause());
+            output.writeBoolean(delta.ownerId().isPresent());
+            if (delta.ownerId().isPresent()) writeString(output, delta.ownerId().orElseThrow().value());
+            output.writeBoolean(delta.semanticPart().isPresent());
+            if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().ordinal());
+        }
+    }
+    private static Map<BlockPosition, PhysicalDelta> readPhysicalDeltas(DataInputStream input) throws IOException {
+        Map<BlockPosition, PhysicalDelta> values = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            BlockPosition position = readPosition(input); int kind = input.readUnsignedByte(); String cause = readString(input);
+            boolean ownerPresent = input.readBoolean(); java.util.Optional<SubjectId> owner = ownerPresent
+                    ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
+            boolean partPresent = input.readBoolean(); java.util.Optional<GrayboxSemanticPart> part = partPresent
+                    ? java.util.Optional.of(readSemanticPart(input)) : java.util.Optional.empty();
+            if (kind >= PhysicalDeltaKind.values().length || values.put(position,
+                    new PhysicalDelta(position, PhysicalDeltaKind.values()[kind], owner, part, cause)) != null) {
+                throw new IllegalArgumentException("invalid or duplicate physical delta");
+            }
+        }
+        return values;
+    }
+    private static GrayboxSemanticPart readSemanticPart(DataInputStream input) throws IOException {
+        int ordinal = input.readUnsignedByte();
+        if (ordinal >= GrayboxSemanticPart.values().length) throw new IllegalArgumentException("unknown graybox semantic part");
+        return GrayboxSemanticPart.values()[ordinal];
     }
     private static void writeInfection(DataOutputStream output, Map<InfectionCell, FixedRatio> values) throws IOException {
         writeCount(output, values.size());

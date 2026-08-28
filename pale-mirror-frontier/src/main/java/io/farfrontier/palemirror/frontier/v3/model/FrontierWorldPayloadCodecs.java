@@ -24,7 +24,7 @@ public final class FrontierWorldPayloadCodecs {
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(),
-                new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
+                new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
@@ -210,6 +210,34 @@ public final class FrontierWorldPayloadCodecs {
                 SubjectIdHolder structure = readSubject(input); BlockPosition position = readPosition(input); int part = input.readUnsignedByte();
                 if (part >= GrayboxSemanticPart.values().length) throw new IllegalArgumentException("unknown structure damage semantic part");
                 return new StructureDamaged(structure.value(), position, GrayboxSemanticPart.values()[part], readString(input));
+            });
+        }
+    }
+    private static final class PhysicalDeltaObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.physical_delta_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            PhysicalDelta delta = ((PhysicalDeltaObserved) payload).delta();
+            return encodeProduction(output -> {
+                writePosition(output, delta.position()); output.writeByte(delta.kind().ordinal()); writeString(output, delta.cause());
+                output.writeBoolean(delta.ownerId().isPresent());
+                if (delta.ownerId().isPresent()) writeSubject(output, delta.ownerId().orElseThrow());
+                output.writeBoolean(delta.semanticPart().isPresent());
+                if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().ordinal());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return decodeProduction(bytes, input -> {
+                BlockPosition position = readPosition(input); int kind = input.readUnsignedByte(); String cause = readString(input);
+                java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> owner = input.readBoolean()
+                        ? java.util.Optional.of(readSubject(input).value()) : java.util.Optional.empty();
+                int part = -1;
+                if (input.readBoolean()) part = input.readUnsignedByte();
+                if (kind >= PhysicalDeltaKind.values().length || part >= GrayboxSemanticPart.values().length) {
+                    throw new IllegalArgumentException("unknown physical delta value");
+                }
+                java.util.Optional<GrayboxSemanticPart> semantic = part < 0 ? java.util.Optional.empty()
+                        : java.util.Optional.of(GrayboxSemanticPart.values()[part]);
+                return new PhysicalDeltaObserved(new PhysicalDelta(position, PhysicalDeltaKind.values()[kind], owner, semantic, cause));
             });
         }
     }

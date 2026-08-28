@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -54,6 +55,26 @@ final class FrontierRouteNetwork {
         List<BlockPosition> supply = supplyWaypoints(bootstrap, settlements.getFirst().id());
         for (int index = 2; index < supply.size(); index++) addSegment(cells, supply.get(index - 1), supply.get(index));
         return Set.copyOf(cells);
+    }
+
+    /**
+     * A COLD operation can use only its own visible corridor.  A known route-surface loss makes
+     * this single-lane graybox corridor unavailable; future routing/repair can choose another
+     * graph path, but must not move cargo through an observed physical hole.
+     */
+    static boolean isPassable(FrontierBootstrap bootstrap, List<BlockPosition> waypoints,
+                              Map<BlockPosition, PhysicalDelta> deltas) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(waypoints, "waypoints"); Objects.requireNonNull(deltas, "physical deltas");
+        Set<BlockPosition> corridor = operationSurfaceCells(waypoints);
+        return deltas.keySet().stream().noneMatch(corridor::contains);
+    }
+
+    private static Set<BlockPosition> operationSurfaceCells(List<BlockPosition> waypoints) {
+        Set<BlockPosition> cells = new LinkedHashSet<>();
+        // The origin-to-egress segment stays inside the settlement silhouette and is intentionally
+        // not a route surface. All later segments are the materialized corridor.
+        for (int index = 2; index < waypoints.size(); index++) addSegment(cells, waypoints.get(index - 1), waypoints.get(index));
+        return cells;
     }
 
     private static void addSegment(Set<BlockPosition> cells, BlockPosition from, BlockPosition to) {
