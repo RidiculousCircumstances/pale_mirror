@@ -34,8 +34,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
+import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -141,6 +144,26 @@ class FrontierV3ServerRuntimeTest {
         for (int tick = 0; tick < 100; tick++) recovered.tick(new WorkBudget(8, 64));
         FrontierWorldState afterColdDue = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(0, afterColdDue.operations().get(operation.id()).routeIndex());
+
+        transitionScene(recovered, world, leaseId, SceneLeaseStatus.HOT, "command:scene-recovery-hot");
+        transitionScene(recovered, world, leaseId, SceneLeaseStatus.DRAINING, "command:scene-recovery-draining");
+        CheckpointImage draining = recovered.checkpointImage().orElseThrow();
+        SceneLeaseReleased released = new SceneLeaseReleased(leaseId, lease.members().stream().map(member ->
+                new SceneMemberPosition(member.actorId(), operation.route().getFirst())).toList());
+        CommandId releaseCommand = new CommandId("command:scene-recovery-release");
+        assertInstanceOf(CommandResult.Accepted.class, recovered.submit(new FrontierCommand(1, releaseCommand, world, draining.revision(), draining.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(releaseCommand), released)).orElseThrow());
+        for (int tick = 0; tick < 100; tick++) recovered.tick(new WorkBudget(8, 64));
+        FrontierWorldState resumed = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
+        assertEquals(1, resumed.operations().get(operation.id()).routeIndex());
+    }
+
+    private static void transitionScene(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
+                                        WorldId world, SceneLeaseId leaseId, SceneLeaseStatus status, String command) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        CommandId commandId = new CommandId(command);
+        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new SceneLeaseTransition(leaseId, status))).orElseThrow());
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {

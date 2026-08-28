@@ -8,8 +8,10 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -79,6 +81,7 @@ public record FrontierWorldState(
             if (contract.status() != ContractStatus.LOADED && inventory.cargo().containsKey(contract.cargoId())) throw new IllegalArgumentException("only a loaded contract can own cargo");
         }
         if (operations.size() > MAX_OPERATIONS) throw new IllegalArgumentException("route operation retention limit exceeded");
+        Set<SubjectId> leaseHistoryOperations = sceneLeases.values().stream().map(SceneLease::operationId).collect(java.util.stream.Collectors.toSet());
         Set<SubjectId> assignedCargo = new HashSet<>();
         Set<SubjectId> assignedParticipants = new HashSet<>();
         for (Map.Entry<SubjectId, RouteOperation> entry : operations.entrySet()) {
@@ -100,7 +103,8 @@ public record FrontierWorldState(
             for (SubjectId participant : operation.participantIds()) {
                 if (!settlementResidents.contains(participant)) throw new IllegalArgumentException("route operation participant must belong to its settlement");
                 if (!assignedParticipants.add(participant)) throw new IllegalArgumentException("resident cannot be assigned to multiple route operations");
-                if (operation.stage() != OperationStage.FAILED && !actorLocations.get(participant).position().equals(operation.route().get(operation.routeIndex()))) {
+                if (operation.stage() != OperationStage.FAILED && !leaseHistoryOperations.contains(operation.id())
+                        && !actorLocations.get(participant).position().equals(operation.route().get(operation.routeIndex()))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical route point");
                 }
             }
@@ -145,16 +149,23 @@ public record FrontierWorldState(
             SceneLease lease = entry.getValue();
             if (!entry.getKey().equals(lease.id())) throw new IllegalArgumentException("scene lease map key must match lease identity");
             RouteOperation operation = operations.get(lease.operationId());
-            if (operation == null || operation.stage() != OperationStage.EN_ROUTE || !operation.cargoId().equals(lease.cargoId())
-                    || !operation.route().get(operation.routeIndex()).equals(lease.handoffPosition())) {
+            if (operation == null || !operation.cargoId().equals(lease.cargoId())) {
                 throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
             }
-            if (!leasedOperations.add(lease.operationId())) throw new IllegalArgumentException("operation cannot have multiple scene leases");
+            if (lease.status() != SceneLeaseStatus.CLOSED && (operation.stage() != OperationStage.EN_ROUTE
+                    || !operation.route().get(operation.routeIndex()).equals(lease.handoffPosition()))) {
+                throw new IllegalArgumentException("active scene lease must bind its current en-route operation state");
+            }
+            if (lease.status() != SceneLeaseStatus.CLOSED && !leasedOperations.add(lease.operationId())) {
+                throw new IllegalArgumentException("operation cannot have multiple active scene leases");
+            }
             Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
             if (!members.equals(Set.copyOf(operation.participantIds()))) throw new IllegalArgumentException("scene lease members must exactly match route participants");
             for (SubjectId actor : members) {
-                if (!leasedActors.add(actor)) throw new IllegalArgumentException("actor cannot belong to multiple scene leases");
-                if (!actorLocations.get(actor).position().equals(lease.handoffPosition())) throw new IllegalArgumentException("scene lease actor must be at its handoff position");
+                if (lease.status() != SceneLeaseStatus.CLOSED && !leasedActors.add(actor)) throw new IllegalArgumentException("actor cannot belong to multiple active scene leases");
+                if (lease.status() == SceneLeaseStatus.PREPARED && !actorLocations.get(actor).position().equals(lease.handoffPosition())) {
+                    throw new IllegalArgumentException("prepared scene lease actor must be at its handoff position");
+                }
             }
         }
     }
@@ -353,8 +364,51 @@ public record FrontierWorldState(
         if (sceneLeases.containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());
         if (lease.status() != SceneLeaseStatus.PREPARED) throw new IllegalArgumentException("new scene lease must be prepared");
         Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
+        // Closed leases have no further authority: the retained event log remains the causal
+        // record, while checkpoints retain only a bounded recent terminal scene index.
+        int requiredCompaction = next.size() - MAX_SCENE_LEASES + 1;
+        if (requiredCompaction > 0) {
+            List<SceneLease> terminal = next.values().stream()
+                    .filter(existing -> existing.status() == SceneLeaseStatus.CLOSED)
+                    .sorted(Comparator.comparing(SceneLease::handoffInstant).thenComparing(existing -> existing.id().value()))
+                    .toList();
+            if (terminal.size() < requiredCompaction) {
+                throw new IllegalArgumentException("scene lease retention limit has no terminal leases to compact");
+            }
+            terminal.stream().limit(requiredCompaction).forEach(existing -> next.remove(existing.id()));
+        }
         next.put(lease.id(), lease);
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, next);
+    }
+
+    public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {
+        SceneLease current = sceneLeases.get(Objects.requireNonNull(leaseId, "scene lease id"));
+        if (current == null) throw new IllegalArgumentException("unknown scene lease: " + leaseId.value());
+        boolean allowed = current.status() == SceneLeaseStatus.PREPARED
+                && (nextStatus == SceneLeaseStatus.HOT || nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
+                || current.status() == SceneLeaseStatus.HOT
+                && (nextStatus == SceneLeaseStatus.DRAINING || nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
+                || current.status() == SceneLeaseStatus.DRAINING && nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART;
+        if (!allowed) throw new IllegalArgumentException("scene lease transition is not allowed");
+        Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
+        next.put(leaseId, current.withStatus(nextStatus));
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, next);
+    }
+
+    public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) {
+        SceneLease current = sceneLeases.get(Objects.requireNonNull(leaseId, "scene lease id"));
+        if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
+        Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
+        Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
+        if (!expected.equals(observed) || observed.size() != positions.size()) throw new IllegalArgumentException("scene release must capture exactly its leased actors");
+        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
+        for (SceneMemberPosition position : positions) {
+            requirePosition(bootstrap.bounds(), position.position());
+            nextActors.put(position.actorId(), new ActorLocation(position.position()));
+        }
+        Map<SceneLeaseId, SceneLease> next = new LinkedHashMap<>(sceneLeases);
+        next.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
+        return new FrontierWorldState(bootstrap, nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations, physicalIntents, physicalObservations, next);
     }
 
     public static SubjectId depotId(SubjectId settlementId) {

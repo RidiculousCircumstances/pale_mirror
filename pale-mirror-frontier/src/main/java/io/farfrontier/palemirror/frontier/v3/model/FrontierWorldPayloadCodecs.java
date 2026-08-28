@@ -22,7 +22,8 @@ public final class FrontierWorldPayloadCodecs {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
-                new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new SceneLeasePreparedCodec())));
+                new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
+                new SceneLeasePreparedCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec())));
     }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; }
@@ -152,6 +153,28 @@ public final class FrontierWorldPayloadCodecs {
         @Override public String type() { return "frontier.scene_lease_prepared"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSceneLease(output, ((SceneLeasePrepared) payload).lease())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new SceneLeasePrepared(readSceneLease(input))); }
+    }
+    private static final class SceneLeaseTransitionCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.scene_lease_transition"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { SceneLeaseTransition transition = (SceneLeaseTransition) payload;
+            writeString(output, transition.leaseId().value()); output.writeByte(transition.status().ordinal()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); int status = input.readUnsignedByte();
+            if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
+            return new SceneLeaseTransition(id, SceneLeaseStatus.values()[status]);
+        }); }
+    }
+    private static final class SceneLeaseReleasedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.scene_lease_released"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            SceneLeaseReleased released = (SceneLeaseReleased) payload; writeString(output, released.leaseId().value()); output.writeByte(released.members().size());
+            for (SceneMemberPosition member : released.members()) { writeSubject(output, member.actorId()); output.writeInt(member.position().x()); output.writeInt(member.position().y()); output.writeInt(member.position().z()); }
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); java.util.ArrayList<SceneMemberPosition> members = new java.util.ArrayList<>();
+            for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMemberPosition(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt())));
+            return new SceneLeaseReleased(id, members);
+        }); }
     }
 
     @FunctionalInterface private interface ProductionEncoder { void write(DataOutputStream output) throws IOException; }

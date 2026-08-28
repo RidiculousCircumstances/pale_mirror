@@ -35,4 +35,8 @@ public record SceneLease(SceneLeaseId id, SubjectId operationId, SubjectId cargo
     public static UUID deterministicEntityId(SceneLeaseId leaseId, SubjectId actorId) {
         return UUID.nameUUIDFromBytes(("frontier-v3:" + leaseId.value() + ":" + actorId.value()).getBytes(StandardCharsets.UTF_8));
     }
+
+    public SceneLease withStatus(SceneLeaseStatus nextStatus) {
+        return new SceneLease(id, operationId, cargoId, handoffPosition, handoffInstant, revision, nextStatus, members);
+    }
 }

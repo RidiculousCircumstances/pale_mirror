@@ -61,6 +61,22 @@ public final class FrontierWorldRuntimeDefinition {
             if (operation == null) return rejected("scene lease has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
         }
+        if (command.payload() instanceof SceneLeaseTransition transition) {
+            SceneLease lease = state.sceneLeases().get(transition.leaseId());
+            if (lease == null) return rejected("scene lease is unknown");
+            RouteOperation operation = state.operations().get(lease.operationId());
+            if (operation == null) return rejected("scene lease has no owning operation");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
+        }
+        if (command.payload() instanceof SceneLeaseReleased released) {
+            SceneLease lease = state.sceneLeases().get(released.leaseId());
+            if (lease == null) return rejected("scene lease is unknown");
+            RouteOperation operation = state.operations().get(lease.operationId());
+            if (operation == null) return rejected("scene lease has no owning operation");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
+                    new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                            operationProgress(operation, command.submittedAt().ticks() + 100L)))));
+        }
         return rejected("command is not a trusted physical transition or scene lease");
     }
     private static CommandPlan.Rejected rejected(String message) {
@@ -161,7 +177,7 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = state.operations().get(action.subject());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE) throw new IllegalStateException("route operation is not available for progression");
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
-                && value.status() != SceneLeaseStatus.CLOSED && value.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART).findFirst();
+                && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
         int nextRouteIndex = operation.routeIndex() + 1;
         OperationStage nextStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
@@ -189,6 +205,8 @@ public final class FrontierWorldRuntimeDefinition {
             case PhysicalIntentPrepared prepared -> reducePhysicalIntentPrepared(state, event.subject(), prepared);
             case PhysicalIntentTransition transition -> reducePhysicalIntentTransition(state, event.subject(), transition);
             case SceneLeasePrepared prepared -> reduceSceneLeasePrepared(state, event.subject(), event.instant(), prepared);
+            case SceneLeaseTransition transition -> reduceSceneLeaseTransition(state, event.subject(), transition);
+            case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             default -> fail(event.payload().type());
         };
     }
@@ -262,6 +280,18 @@ public final class FrontierWorldRuntimeDefinition {
             throw new IllegalArgumentException("scene lease does not match its current operation hand-off");
         }
         return state.prepareSceneLease(lease);
+    }
+    private static FrontierWorldState reduceSceneLeaseTransition(FrontierWorldState state, SubjectId subject, SceneLeaseTransition transition) {
+        SceneLease lease = state.sceneLeases().get(transition.leaseId());
+        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene lease transition lacks its owning operation");
+        return state.transitionSceneLease(transition.leaseId(), transition.status());
+    }
+    private static FrontierWorldState reduceSceneLeaseReleased(FrontierWorldState state, SubjectId subject, SceneLeaseReleased released) {
+        SceneLease lease = state.sceneLeases().get(released.leaseId());
+        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene release lacks its owning operation");
+        return state.releaseSceneLease(released.leaseId(), released.members());
     }
     private static FrontierWorldState reduceProductionStarted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job();

@@ -281,5 +281,32 @@ class FrontierWorldRuntimeDefinitionTest {
         FrontierWorldState afterDueColdWork = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(0, afterDueColdWork.operations().get(operation.id()).routeIndex(), "a leased operation must not execute the same COLD movement");
         assertThrows(IllegalArgumentException.class, () -> leased.prepareSceneLease(lease));
+
+        FrontierWorldState hot = leased.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        List<SceneMemberPosition> captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                new BlockPosition(lease.handoffPosition().x() + 1, lease.handoffPosition().y(), lease.handoffPosition().z()))).toList();
+        FrontierWorldState released = draining.releaseSceneLease(leaseId, captured);
+        assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(leaseId).status());
+        assertEquals(captured.getFirst().position(), released.actorLocations().get(captured.getFirst().actorId()).position());
+        SceneLeaseReleased releasePayload = new SceneLeaseReleased(leaseId, captured);
+        assertEquals(releasePayload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(releasePayload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(releasePayload)));
+        assertThrows(IllegalArgumentException.class, () -> hot.releaseSceneLease(leaseId, captured));
+
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> retained = new LinkedHashMap<>(released.sceneLeases());
+        for (int index = 0; index < 1_023; index++) {
+            var oldId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-" + index);
+            retained.put(oldId, new SceneLease(oldId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(index), index,
+                    SceneLeaseStatus.CLOSED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(oldId, actor))).toList()));
+        }
+        FrontierWorldState retentionState = new FrontierWorldState(before.bootstrap(), before.actorLocations(), released.structureConditions(), released.infection(),
+                released.inventory(), released.productionJobs(), released.contracts(), released.operations(), released.physicalIntents(), released.physicalObservations(), retained);
+        var nextLeaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:after-compaction");
+        SceneLease nextLease = new SceneLease(nextLeaseId, operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(551L), 2_000L,
+                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(nextLeaseId, actor))).toList());
+        FrontierWorldState compacted = retentionState.prepareSceneLease(nextLease);
+        assertEquals(1_024, compacted.sceneLeases().size());
+        assertTrue(compacted.sceneLeases().containsKey(nextLeaseId));
+        assertTrue(!compacted.sceneLeases().containsKey(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-0")));
     }
 }
