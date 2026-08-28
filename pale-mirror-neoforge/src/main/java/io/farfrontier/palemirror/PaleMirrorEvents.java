@@ -75,6 +75,7 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
         PaleMirrorRuntime.forServer(event.getServer());
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.start(event.getServer());
     }
 
     @SubscribeEvent
@@ -89,12 +90,14 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         AmbientSpawnThrottle.clear();
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.stop(event.getServer());
         PaleMirrorRuntime.stop(event.getServer());
     }
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         AmbientSpawnThrottle.tick(event.getServer());
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.tick(event.getServer());
         PaleMirrorRuntime.forServer(event.getServer()).tick();
     }
 

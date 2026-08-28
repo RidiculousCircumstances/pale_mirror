@@ -172,6 +172,7 @@ neoForge {
             sourceSet sourceSets.main
             sourceSet project(':pale-mirror-api').sourceSets.main
             sourceSet project(':pale-mirror-domain').sourceSets.main
+            sourceSet project(':pale-mirror-frontier').sourceSets.main
         }
     }
 }
@@ -198,8 +199,10 @@ neoForge.ideSyncTask(generateModMetadata)
 tasks.named('jar', Jar).configure {
     dependsOn project(':pale-mirror-api').tasks.named('classes')
     dependsOn project(':pale-mirror-domain').tasks.named('classes')
+    dependsOn project(':pale-mirror-frontier').tasks.named('classes')
     from project(':pale-mirror-api').sourceSets.main.output
     from project(':pale-mirror-domain').sourceSets.main.output
+    from project(':pale-mirror-frontier').sourceSets.main.output
 }
 
 def distributableJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
@@ -216,6 +219,7 @@ tasks.register('verifyPackagedJar') {
             [
                     'io/farfrontier/palemirror/api/IntegrationAdapter.class',
                     'io/farfrontier/palemirror/domain/WorldState.class',
+                    'io/farfrontier/palemirror/frontier/v3/persistence/FrontierStore.class',
                     'io/farfrontier/palemirror/internal/effect/EffectLeaseLedger.class',
                     'io/farfrontier/palemirror/internal/combat/ThreatCombatLedger.class',
                     'io/farfrontier/palemirror/internal/combat/PmProjectileRuntime.class',
