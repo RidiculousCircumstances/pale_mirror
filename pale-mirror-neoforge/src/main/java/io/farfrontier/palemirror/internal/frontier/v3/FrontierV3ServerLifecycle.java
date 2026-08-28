@@ -56,6 +56,7 @@ public final class FrontierV3ServerLifecycle {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
+                FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
                 // Observe player custody before passive surface drift inspection can classify it.
                 FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
                 FrontierV3ContainerSurfaceExecutor.tick(server.overworld(), runtime);
@@ -76,6 +77,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.remove(server);
         if (runtime != null) {
             FrontierV3GrayboxExecutor.forget(runtime);
+            FrontierV3InfectionOverlayExecutor.forget(runtime);
             runtime.shutdown();
         }
     }
@@ -92,8 +94,11 @@ public final class FrontierV3ServerLifecycle {
     public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, "player:" + player.getUUID())
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        String cause = "player:" + player.getUUID();
+        if (FrontierV3InfectionOverlayExecutor.observeBlockBreak(runtime, level, position, cause)
+                == FrontierV3InfectionOverlayExecutor.BlockBreakObservation.REJECTED) return true;
+        return FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, cause)
                 == FrontierV3GrayboxExecutor.BlockBreakObservation.REJECTED;
     }
 

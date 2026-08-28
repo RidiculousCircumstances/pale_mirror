@@ -44,7 +44,7 @@ public final class FrontierGrayboxPlan {
     }
 
     public Map<BlockPosition, GrayboxCell> cells() { return cells; }
-    /** Sparse source cells; loaded-chunk materialization expands only the cells intersecting that chunk. */
+    /** Sparse source cells; the dedicated overlay projects one owned marker for each loaded 4×4 cell. */
     public Map<InfectionCell, FixedRatio> infection() { return infection; }
 
     /** Full intact geometry, used to validate observed damage after the desired silhouette changes. */

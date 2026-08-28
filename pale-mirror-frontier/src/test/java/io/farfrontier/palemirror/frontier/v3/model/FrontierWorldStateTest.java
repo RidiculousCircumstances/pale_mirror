@@ -108,6 +108,25 @@ class FrontierWorldStateTest {
     }
 
     @Test
+    void infectionOverlayPlanKeepsOneBoundedReadableMarkerPerSparseSourceCell() {
+        FrontierWorldState baseline = initial();
+        InfectionCell trace = new InfectionCell(-100, 100);
+        InfectionCell bloom = new InfectionCell(100, 100);
+        FrontierWorldState state = baseline.withInfection(trace, new FixedRatio(new FixedScalar(249_999L)))
+                .withInfection(bloom, new FixedRatio(new FixedScalar(500_000L)));
+
+        FrontierInfectionOverlayPlan plan = FrontierInfectionOverlayPlan.compile(state);
+        InfectionOverlayCell traceMarker = plan.cells().get(trace);
+        InfectionOverlayCell bloomMarker = plan.cells().get(bloom);
+        assertEquals(state.infection().size(), plan.cells().size());
+        assertEquals(-399, traceMarker.x());
+        assertEquals(401, traceMarker.z());
+        assertEquals(InfectionOverlayStage.TRACE, traceMarker.stage());
+        assertEquals(InfectionOverlayStage.BLOOM, bloomMarker.stage());
+        assertThrows(IllegalArgumentException.class, () -> new InfectionOverlayCell(trace, traceMarker.x() + 1, traceMarker.z(), traceMarker.stage()));
+    }
+
+    @Test
     void physicalIntentCannotReferenceAForeignCauseSubject() {
         FrontierWorldState state = initial();
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-foreign"), PhysicalIntentKind.CARGO_HANDOFF,
