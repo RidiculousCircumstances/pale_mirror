@@ -14,12 +14,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> {
     private static final int MAGIC = 0x4656334D;
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
     private static final int MAX_ENTRIES = 65_535;
 
     @Override public byte[] encode(FrontierWorldState state) {
@@ -31,6 +33,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
                 writeInfection(output, state.infection());
+                writeInventory(output, state.inventory());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -41,7 +44,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
-            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input));
+            FrontierWorldState state = new FrontierWorldState(bootstrap, readActors(input), readStructures(input), readInfection(input), readInventory(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -89,6 +92,65 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (values.put(cell, new FixedRatio(new FixedScalar(input.readLong()))) != null) throw new IllegalArgumentException("duplicate infection cell");
         }
         return values;
+    }
+    private static void writeInventory(DataOutputStream output, ExactInventory inventory) throws IOException {
+        writeCount(output, inventory.containers().size());
+        for (ContainerRecord value : inventory.containers().values().stream().sorted(java.util.Comparator.comparing(ContainerRecord::id)).toList()) {
+            writeString(output, value.id().value()); writeString(output, value.ownerId().value()); output.writeByte(value.slotCount());
+        }
+        writeCount(output, inventory.items().size());
+        for (ExactItemStack value : inventory.items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id)).toList()) {
+            writeString(output, value.id().value()); writeString(output, value.itemKind()); output.writeByte(value.count()); writeCustody(output, value.custody());
+        }
+        writeCount(output, inventory.cargo().size());
+        for (CargoBatch value : inventory.cargo().values().stream().sorted(java.util.Comparator.comparing(CargoBatch::id)).toList()) {
+            writeString(output, value.id().value()); writeString(output, value.ownerId().value()); writeCount(output, value.itemIds().size());
+            for (SubjectId item : value.itemIds()) writeString(output, item.value());
+        }
+        writeCount(output, inventory.playerItems().size());
+        for (Map.Entry<UUID, List<SubjectId>> entry : inventory.playerItems().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeString(output, entry.getKey().toString()); writeCount(output, entry.getValue().size());
+            for (SubjectId item : entry.getValue()) writeString(output, item.value());
+        }
+    }
+    private static ExactInventory readInventory(DataInputStream input) throws IOException {
+        Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input));
+            if (containers.put(id, new ContainerRecord(id, new SubjectId(readString(input)), input.readUnsignedByte())) != null) throw new IllegalArgumentException("duplicate container id");
+        }
+        Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input));
+            if (items.put(id, new ExactItemStack(id, readString(input), input.readUnsignedByte(), readCustody(input))) != null) throw new IllegalArgumentException("duplicate item stack id");
+        }
+        Map<SubjectId, CargoBatch> cargo = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId owner = new SubjectId(readString(input));
+            java.util.ArrayList<SubjectId> itemIds = new java.util.ArrayList<>();
+            for (int item = 0, itemCount = readCount(input); item < itemCount; item++) itemIds.add(new SubjectId(readString(input)));
+            if (cargo.put(id, new CargoBatch(id, owner, itemIds)) != null) throw new IllegalArgumentException("duplicate cargo id");
+        }
+        Map<UUID, List<SubjectId>> players = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            UUID player = UUID.fromString(readString(input)); java.util.ArrayList<SubjectId> itemIds = new java.util.ArrayList<>();
+            for (int item = 0, itemCount = readCount(input); item < itemCount; item++) itemIds.add(new SubjectId(readString(input)));
+            if (players.put(player, itemIds) != null) throw new IllegalArgumentException("duplicate player custody id");
+        }
+        return new ExactInventory(containers, items, cargo, players);
+    }
+    private static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
+        if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }
+        else if (custody instanceof InventoryCustody.Cargo cargo) { output.writeByte(1); writeString(output, cargo.cargoId().value()); }
+        else { output.writeByte(2); writeString(output, ((InventoryCustody.Player) custody).playerId().toString()); }
+    }
+    private static InventoryCustody readCustody(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new InventoryCustody.ContainerSlot(new SubjectId(readString(input)), input.readUnsignedByte());
+            case 1 -> new InventoryCustody.Cargo(new SubjectId(readString(input)));
+            case 2 -> new InventoryCustody.Player(UUID.fromString(readString(input)));
+            default -> throw new IllegalArgumentException("unknown inventory custody");
+        };
     }
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());

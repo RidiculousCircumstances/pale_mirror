@@ -22,6 +22,7 @@ class FrontierWorldStateTest {
 
         assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount(), state.actorLocations().size());
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
+        assertEquals(12, state.inventory().containers().size());
         assertTrue(state.structureConditions().values().stream().allMatch(condition -> condition == StructureCondition.INTACT));
         assertTrue(state.infection().isEmpty());
     }
@@ -47,19 +48,24 @@ class FrontierWorldStateTest {
 
     @Test
     void codecRoundTripsCanonicalMutableStateAndRejectsInvalidState() {
-        FrontierWorldState source = initial().withActorLocation(new SubjectId("bioform:west-0"), new BlockPosition(-400, 64, 400))
+        FrontierWorldState baseline = initial();
+        SubjectId container = new SubjectId("container:1-depot");
+        SubjectId item = new SubjectId("item:codec");
+        ExactInventory inventory = new ExactInventory(baseline.inventory().containers(), Map.of(item,
+                new ExactItemStack(item, "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of());
+        FrontierWorldState source = baseline.withInventory(inventory).withActorLocation(new SubjectId("bioform:west-0"), new BlockPosition(-400, 64, 400))
                 .withStructureCondition(new SubjectId("structure:2-depot"), StructureCondition.DESTROYED)
                 .withInfection(new InfectionCell(-100, 100), HALF);
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
-        encoded[4] = 2;
+        encoded[4] = 3;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 
         Map<SubjectId, ActorLocation> missingActor = new LinkedHashMap<>(source.actorLocations());
         missingActor.remove(new SubjectId("resident:1-1"));
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
-                source.structureConditions(), source.infection()));
+                source.structureConditions(), source.infection(), source.inventory()));
     }
 
     private static FrontierWorldState initial() {

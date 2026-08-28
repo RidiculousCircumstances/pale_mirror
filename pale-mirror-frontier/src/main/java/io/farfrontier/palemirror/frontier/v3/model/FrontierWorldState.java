@@ -17,7 +17,8 @@ public record FrontierWorldState(
         FrontierBootstrap bootstrap,
         Map<SubjectId, ActorLocation> actorLocations,
         Map<SubjectId, StructureCondition> structureConditions,
-        Map<InfectionCell, FixedRatio> infection
+        Map<InfectionCell, FixedRatio> infection,
+        ExactInventory inventory
 ) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO);
 
@@ -26,6 +27,7 @@ public record FrontierWorldState(
         actorLocations = immutableMap(actorLocations, "actor locations");
         structureConditions = immutableMap(structureConditions, "structure conditions");
         infection = immutableMap(infection, "infection");
+        Objects.requireNonNull(inventory, "inventory");
         Set<SubjectId> expectedActors = actorIds(bootstrap);
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only bootstrap actor");
         for (ActorLocation location : actorLocations.values()) requirePosition(bootstrap.bounds(), location.position());
@@ -43,7 +45,10 @@ public record FrontierWorldState(
         bootstrap.hive().bioforms().forEach(bioform -> actors.put(bioform.id(), new ActorLocation(bioform.position())));
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
-        return new FrontierWorldState(bootstrap, actors, structures, Map.of());
+        Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
+        bootstrap.settlements().forEach(settlement -> containers.put(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"),
+                new ContainerRecord(new SubjectId("container:" + settlement.id().value().substring("settlement:".length()) + "-depot"), settlement.id(), 27)));
+        return new FrontierWorldState(bootstrap, actors, structures, Map.of(), new ExactInventory(containers, Map.of(), Map.of(), Map.of()));
     }
 
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) {
@@ -52,7 +57,7 @@ public record FrontierWorldState(
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations);
         next.put(actor, new ActorLocation(position));
-        return new FrontierWorldState(bootstrap, next, structureConditions, infection);
+        return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory);
     }
 
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {
@@ -61,7 +66,7 @@ public record FrontierWorldState(
         if (!structureConditions.containsKey(structure)) throw new IllegalArgumentException("unknown structure: " + structure.value());
         Map<SubjectId, StructureCondition> next = new LinkedHashMap<>(structureConditions);
         next.put(structure, condition);
-        return new FrontierWorldState(bootstrap, actorLocations, next, infection);
+        return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory);
     }
 
     public FrontierWorldState withInfection(InfectionCell cell, FixedRatio intensity) {
@@ -70,7 +75,11 @@ public record FrontierWorldState(
         requirePosition(bootstrap.bounds(), cell.originAtY(0));
         Map<InfectionCell, FixedRatio> next = new LinkedHashMap<>(infection);
         if (intensity.equals(ZERO_INFECTION)) next.remove(cell); else next.put(cell, intensity);
-        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next);
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, next, inventory);
+    }
+
+    public FrontierWorldState withInventory(ExactInventory nextInventory) {
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, nextInventory);
     }
 
     private static Set<SubjectId> actorIds(FrontierBootstrap bootstrap) {
