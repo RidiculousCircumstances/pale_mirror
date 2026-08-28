@@ -128,7 +128,8 @@ class StrategicObjectiveProcessTest {
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
-        assertEquals(state.strategicPlans().objectives().size(), state.strategicPlans().tasks().size());
+        assertTrue(state.strategicPlans().tasks().size() >= state.strategicPlans().objectives().size()
+                && state.strategicPlans().tasks().size() <= StrategicPlanState.MAX_TASKS);
         org.junit.jupiter.api.Assertions.assertTrue(state.strategicPlans().objectives().size() >= 1 && state.strategicPlans().objectives().size() <= StrategicPlanState.MAX_OBJECTIVES,
                 () -> "strategic objectives=" + state.strategicPlans().objectives());
         assertTrue(state.strategicPlans().objectives().values().stream().filter(value -> value.status() == StrategicObjectiveStatus.ACTIVE)

@@ -45,9 +45,13 @@ final class StrategicPlanState {
                     StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT)))) {
                 throw new IllegalArgumentException("settlement production task has an invalid decomposition");
             }
-            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE
-                    && (task.kind() != StrategicTaskKind.DELIVER_BREAD_TO_HIVE || !task.requirements().equals(List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO,
-                    StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE, StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD)))) {
+            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE && task.kind() == StrategicTaskKind.PREPARE_BREAD_CARGO
+                    && !task.requirements().equals(List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO))) {
+                throw new IllegalArgumentException("settlement cargo preparation has an invalid decomposition");
+            }
+            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE && task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE
+                    && !task.requirements().equals(List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE, StrategicTaskRequirement.AVAILABLE_HAULER,
+                    StrategicTaskRequirement.AVAILABLE_GUARD))) {
                 throw new IllegalArgumentException("settlement delivery task has an invalid decomposition");
             }
             if (task.dependencies().stream().anyMatch(dependency -> !this.tasks.containsKey(dependency) || dependency.equals(task.id()))) {
@@ -63,12 +67,18 @@ final class StrategicPlanState {
         });
         tasks.values().forEach(task -> task.dependencies().forEach(dependency -> {
             StrategicTask predecessor = tasks.get(dependency);
-            if (task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE
+            if (task.kind() == StrategicTaskKind.PREPARE_BREAD_CARGO
                     && (predecessor.kind() != StrategicTaskKind.PRODUCE_BREAD || !predecessor.ownerId().equals(task.ownerId())
                     || predecessor.status() != StrategicTaskStatus.COMPLETED)) {
-                throw new IllegalArgumentException("settlement delivery dependency must be one completed local production task");
+                throw new IllegalArgumentException("settlement cargo preparation dependency must be one completed local production task");
+            }
+            if (task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE
+                    && (predecessor.kind() != StrategicTaskKind.PREPARE_BREAD_CARGO || !predecessor.objectiveId().equals(task.objectiveId()))) {
+                throw new IllegalArgumentException("settlement delivery dependency must be its cargo preparation task");
             }
         }));
+        objectives.values().stream().filter(objective -> objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE).forEach(objective ->
+                validateDeliveryDecomposition(objective, tasks));
         tasks.keySet().forEach(id -> requireAcyclic(id, new java.util.HashSet<>(), new java.util.HashSet<>()));
     }
 
@@ -157,6 +167,15 @@ final class StrategicPlanState {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         return java.util.Collections.disjoint(owned, protectedTaskIds)
                 && tasks.values().stream().filter(task -> !task.objectiveId().equals(objective.id())).noneMatch(task -> task.dependencies().stream().anyMatch(owned::contains));
+    }
+
+    private static void validateDeliveryDecomposition(StrategicObjective objective, Map<SubjectId, StrategicTask> tasks) {
+        List<StrategicTask> own = tasks.values().stream().filter(task -> task.objectiveId().equals(objective.id())).toList();
+        if (own.stream().anyMatch(task -> task.kind() != StrategicTaskKind.PREPARE_BREAD_CARGO && task.kind() != StrategicTaskKind.DELIVER_BREAD_TO_HIVE)
+                || own.stream().filter(task -> task.kind() == StrategicTaskKind.PREPARE_BREAD_CARGO).count() > 1
+                || own.stream().filter(task -> task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE).count() > 1) {
+            throw new IllegalArgumentException("settlement delivery objective has an invalid task graph");
+        }
     }
 
     private void requireAcyclic(SubjectId id, java.util.Set<SubjectId> visiting, java.util.Set<SubjectId> visited) {

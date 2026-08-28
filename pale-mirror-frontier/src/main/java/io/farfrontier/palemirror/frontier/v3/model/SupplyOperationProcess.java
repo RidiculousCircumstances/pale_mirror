@@ -24,16 +24,16 @@ final class SupplyOperationProcess {
     private SupplyOperationProcess() { }
 
     static ScheduledAction start(StrategicTask task, long due) {
-        if (task.kind() != StrategicTaskKind.DELIVER_BREAD_TO_HIVE) throw new IllegalArgumentException("invalid supply task schedule");
+        if (task.kind() != StrategicTaskKind.PREPARE_BREAD_CARGO) throw new IllegalArgumentException("invalid supply preparation task schedule");
         return new ScheduledAction(new ScheduleId("schedule:supply-task-start-" + task.id().value().replace(':', '-')), new SimInstant(due), 0,
                 task.id(), "frontier.supply.task.start", 1);
     }
 
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
-        StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
+        StrategicTask task = preparationTask(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        if (!dependenciesCompleted(state, task) || bread(state, settlement).isEmpty() || !participantsAvailable(state, settlement)) {
-            return blocked(task);
+        if (!dependenciesCompleted(state, task) || bread(state, settlement).isEmpty()) {
+            return blockPreparation(state, task);
         }
         SupplyContract contract = contract(state, task, settlement, bread(state, settlement).orElseThrow());
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new SupplyContractCreated(contract)),
@@ -44,13 +44,15 @@ final class SupplyOperationProcess {
         SupplyContract contract = state.contracts().get(action.subject());
         if (contract == null || contract.status() != ContractStatus.ORDERED) throw new IllegalStateException("cargo load has no ordered contract");
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), contract.settlementId());
-        StrategicTask task = taskForContract(state, contract, StrategicTaskStatus.ACTIVE);
+        StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
+        StrategicTask delivery = deliveryTask(state, preparation, StrategicTaskStatus.PENDING);
         ExactItemStack item = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(value -> value.itemKind().equals(contract.itemKind())
                 && value.count() == contract.itemCount() && value.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))).findFirst().orElse(null);
-        if (item == null || !participantsAvailable(state, settlement)) return blocked(task);
+        if (item == null || !participantsAvailable(state, settlement)) return blockPreparation(state, preparation);
         RouteOperation operation = routeOperation(state, contract, settlement);
         return List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
+                transition(preparation, StrategicTaskStatus.COMPLETED), transition(delivery, StrategicTaskStatus.ACTIVE),
                 new ProposedEvent(contract.settlementId(), new OperationCreated(operation)), schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
     }
 
@@ -73,7 +75,7 @@ final class SupplyOperationProcess {
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !intent.subjectIds().equals(List.of(operation.id(), operation.cargoId()))) {
             throw new IllegalArgumentException("supply transition lacks its arrived route operation");
         }
-        StrategicTask task = taskForOperation(state, operation, StrategicTaskStatus.ACTIVE);
+        StrategicTask task = deliveryTaskForOperation(state, operation, StrategicTaskStatus.ACTIVE);
         ProposedEvent physical = new ProposedEvent(operation.settlementId(), transition);
         if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical, transition(task, StrategicTaskStatus.COMPLETED));
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return List.of(physical, transition(task, StrategicTaskStatus.BLOCKED));
@@ -82,7 +84,7 @@ final class SupplyOperationProcess {
 
     static List<ProposedEvent> failed(FrontierWorldState state, RouteOperation operation, String reason) {
         return List.of(new ProposedEvent(operation.settlementId(), new OperationFailed(operation.id(), reason)),
-                transition(taskForOperation(state, operation, StrategicTaskStatus.ACTIVE), StrategicTaskStatus.BLOCKED));
+                transition(deliveryTaskForOperation(state, operation, StrategicTaskStatus.ACTIVE), StrategicTaskStatus.BLOCKED));
     }
 
     static ScheduledAction operationProgress(RouteOperation operation, long due) { return new ScheduledAction(new ScheduleId("schedule:operation-progress-" + operation.id().value().substring("operation:".length())),
@@ -93,26 +95,34 @@ final class SupplyOperationProcess {
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) {
         return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status));
     }
-    private static List<ProposedEvent> blocked(StrategicTask task) { return List.of(transition(task, StrategicTaskStatus.BLOCKED)); }
-    private static StrategicTask task(FrontierWorldState state, SubjectId taskId, StrategicTaskStatus status) {
+    private static List<ProposedEvent> blockPreparation(FrontierWorldState state, StrategicTask preparation) {
+        return List.of(transition(preparation, StrategicTaskStatus.BLOCKED), transition(deliveryTask(state, preparation, StrategicTaskStatus.PENDING), StrategicTaskStatus.BLOCKED));
+    }
+    private static StrategicTask preparationTask(FrontierWorldState state, SubjectId taskId, StrategicTaskStatus status) {
         StrategicTask task = state.strategicPlans().tasks().get(taskId);
-        if (task == null || task.kind() != StrategicTaskKind.DELIVER_BREAD_TO_HIVE || task.status() != status) {
-            throw new IllegalStateException("supply task has no matching " + status.name().toLowerCase(java.util.Locale.ROOT) + " strategic task");
+        if (task == null || task.kind() != StrategicTaskKind.PREPARE_BREAD_CARGO || task.status() != status) {
+            throw new IllegalStateException("supply preparation has no matching " + status.name().toLowerCase(java.util.Locale.ROOT) + " strategic task");
         }
         return task;
     }
-    private static StrategicTask taskForContract(FrontierWorldState state, SupplyContract contract, StrategicTaskStatus status) {
+    private static StrategicTask preparationTaskForContract(FrontierWorldState state, SupplyContract contract, StrategicTaskStatus status) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(contract.settlementId())
-                && task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE && task.status() == status && contract(state, task).id().equals(contract.id()))
+                && task.kind() == StrategicTaskKind.PREPARE_BREAD_CARGO && task.status() == status && contract(state, task).id().equals(contract.id()))
                 .reduce((left, right) -> { throw new IllegalArgumentException("supply contract task binding is ambiguous"); })
                 .orElseThrow(() -> new IllegalArgumentException("supply contract has no active strategic task"));
     }
-    private static StrategicTask taskForOperation(FrontierWorldState state, RouteOperation operation, StrategicTaskStatus status) {
+    private static StrategicTask deliveryTaskForOperation(FrontierWorldState state, RouteOperation operation, StrategicTaskStatus status) {
         SupplyContract contract = state.contracts().values().stream().filter(value -> value.cargoId().equals(operation.cargoId())).reduce((left, right) -> {
             throw new IllegalArgumentException("supply operation cargo binding is ambiguous");
         }).orElseThrow(() -> new IllegalArgumentException("supply operation has no contract"));
         if (!contract.settlementId().equals(operation.settlementId())) throw new IllegalArgumentException("supply operation contract has a foreign owner");
-        return taskForContract(state, contract, status);
+        return deliveryTask(state, preparationTaskForContract(state, contract, StrategicTaskStatus.COMPLETED), status);
+    }
+    private static StrategicTask deliveryTask(FrontierWorldState state, StrategicTask preparation, StrategicTaskStatus status) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE
+                && task.objectiveId().equals(preparation.objectiveId()) && task.status() == status && task.dependencies().equals(List.of(preparation.id())))
+                .reduce((left, right) -> { throw new IllegalArgumentException("supply delivery task binding is ambiguous"); })
+                .orElseThrow(() -> new IllegalArgumentException("supply preparation has no matching delivery task"));
     }
     private static Optional<ExactItemStack> bread(FrontierWorldState state, Settlement settlement) {
         SubjectId depot = FrontierWorldState.depotId(settlement.id()); return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))

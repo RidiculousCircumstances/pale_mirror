@@ -30,7 +30,13 @@ final class StrategicObjectiveProcess {
         if (state.strategicPlans().hasActiveObjective(owner)) return List.of(next);
         Optional<Candidate> candidate = candidate(state, owner);
         if (candidate.isEmpty()) return List.of(next);
-        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal); StrategicTask task = task(state, objective);
+        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal);
+        if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) {
+            StrategicTask preparation = cargoPreparationTask(state, objective); StrategicTask delivery = deliveryTask(objective, preparation);
+            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(preparation)),
+                    new ProposedEvent(owner, new StrategicTaskPlanned(delivery)), new ProposedEvent(owner, new ScheduleEffect.Created(SupplyOperationProcess.start(preparation, action.dueAt().ticks() + 100L))), next);
+        }
+        StrategicTask task = task(state, objective);
         if (task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL) {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, action.dueAt().ticks() + 100L))), next);
@@ -42,10 +48,6 @@ final class StrategicObjectiveProcess {
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 100L))), next);
-        }
-        if (task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE) {
-            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                    new ProposedEvent(owner, new ScheduleEffect.Created(SupplyOperationProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
@@ -112,15 +114,14 @@ final class StrategicObjectiveProcess {
             case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
             case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
             case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
-            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO, StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE,
-                    StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD);
+            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
         };
         StrategicTaskKind kind = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
             case HIVE_EXPAND_INFECTION -> StrategicTaskKind.SPREAD_INFECTION_CELL;
             case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
             case SETTLEMENT_PRODUCE_BREAD -> StrategicTaskKind.PRODUCE_BREAD;
-            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> StrategicTaskKind.DELIVER_BREAD_TO_HIVE;
+            case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
         };
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING);
@@ -131,6 +132,18 @@ final class StrategicObjectiveProcess {
                 && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.COMPLETED)
                 .sorted(Comparator.comparing((StrategicTask task) -> state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal()).reversed()
                         .thenComparing(StrategicTask::id)).map(StrategicTask::id).limit(1).toList();
+    }
+    private static StrategicTask cargoPreparationTask(FrontierWorldState state, StrategicObjective objective) {
+        return new StrategicTask(taskId(objective, "prepare"), objective.id(), objective.ownerId(), StrategicTaskKind.PREPARE_BREAD_CARGO, Optional.empty(),
+                List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO), dependencies(state, objective), StrategicTaskStatus.PENDING);
+    }
+    private static StrategicTask deliveryTask(StrategicObjective objective, StrategicTask preparation) {
+        return new StrategicTask(taskId(objective, "deliver"), objective.id(), objective.ownerId(), StrategicTaskKind.DELIVER_BREAD_TO_HIVE, Optional.empty(),
+                List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE, StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD),
+                List.of(preparation.id()), StrategicTaskStatus.PENDING);
+    }
+    private static SubjectId taskId(StrategicObjective objective, String phase) {
+        return new SubjectId("task:" + objective.id().value().substring("objective:".length()) + "-" + phase);
     }
     private static boolean local(SettlementStructure facility, InfectionCell cell) {
         BlockPosition position = cell.originAtY(facility.anchor().y()); long dx = position.x() - facility.anchor().x(), dz = position.z() - facility.anchor().z();

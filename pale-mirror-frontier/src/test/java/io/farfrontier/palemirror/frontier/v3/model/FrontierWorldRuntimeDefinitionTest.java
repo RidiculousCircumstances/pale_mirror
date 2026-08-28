@@ -292,7 +292,8 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(PhysicalIntentStatus.PREPARED, handoff.status());
         assertEquals(List.of(operation.id(), operation.cargoId()), handoff.subjectIds());
         assertEquals(StrategicTaskStatus.ACTIVE, supplyTask(state).status());
-        assertEquals(List.of(productionTask(state).id()), supplyTask(state).dependencies());
+        assertEquals(List.of(preparationTask(state).id()), supplyTask(state).dependencies());
+        assertEquals(List.of(productionTask(state).id()), preparationTask(state).dependencies());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
@@ -477,6 +478,11 @@ class FrontierWorldRuntimeDefinitionTest {
     private static StrategicTask productionTask(FrontierWorldState state) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD)
                 .reduce((left, right) -> { throw new AssertionError("production task must be unique in this fixture"); }).orElseThrow();
+    }
+
+    private static StrategicTask preparationTask(FrontierWorldState state) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.PREPARE_BREAD_CARGO)
+                .reduce((left, right) -> { throw new AssertionError("cargo preparation task must be unique in this fixture"); }).orElseThrow();
     }
 
     private static void submitPhysicalTransition(FrontierEngine<FrontierWorldProjection> engine, String world, String command, PhysicalIntentId intentId,
