@@ -68,6 +68,8 @@ final class RouteConstructionProcess {
     private static Optional<RouteConstruction> candidate(FrontierWorldState state) {
         return state.bootstrap().settlements().stream().sorted(Comparator.comparing(Settlement::id)).filter(settlement ->
                 !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas()))
+                .filter(settlement -> state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
+                        && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey)))
                 .filter(settlement -> state.routeConstructions().values().stream().noneMatch(project -> project.settlementId().equals(settlement.id())))
                 .flatMap(settlement -> candidate(state, settlement).stream()).findFirst();
     }

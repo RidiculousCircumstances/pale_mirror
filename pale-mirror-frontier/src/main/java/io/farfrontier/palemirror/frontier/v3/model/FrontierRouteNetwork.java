@@ -116,6 +116,16 @@ final class FrontierRouteNetwork {
         return operationSurfaceCells(waypoints).contains(position);
     }
 
+    /** First physical delta on the segment a COLD patrol has just traversed, in stable block order. */
+    static java.util.Optional<BlockPosition> firstObstructionOnSegment(List<BlockPosition> waypoints, int fromWaypointIndex,
+                                                                        Map<BlockPosition, PhysicalDelta> deltas) {
+        if (fromWaypointIndex < 0 || fromWaypointIndex >= waypoints.size() - 1) throw new IllegalArgumentException("route segment cursor is invalid");
+        if (fromWaypointIndex == 0) return java.util.Optional.empty();
+        java.util.ArrayList<BlockPosition> cells = new java.util.ArrayList<>();
+        addSegment(cells, waypoints.get(fromWaypointIndex), waypoints.get(fromWaypointIndex + 1));
+        return cells.stream().filter(deltas::containsKey).findFirst();
+    }
+
     private static Set<BlockPosition> operationSurfaceCells(List<BlockPosition> waypoints) {
         Set<BlockPosition> cells = new LinkedHashSet<>();
         // The origin-to-egress segment stays inside the settlement silhouette and is intentionally
@@ -132,6 +142,13 @@ final class FrontierRouteNetwork {
         for (int x = from.x(), z = from.z();; x += stepX, z += stepZ) {
             cells.add(new BlockPosition(x, from.y(), z));
             if (x == to.x() && z == to.z()) return;
+        }
+    }
+    private static void addSegment(java.util.List<BlockPosition> cells, BlockPosition from, BlockPosition to) {
+        if (from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) throw new IllegalArgumentException("route segment must be horizontal and axis aligned");
+        int stepX = Integer.compare(to.x(), from.x()), stepZ = Integer.compare(to.z(), from.z());
+        for (int x = from.x(), z = from.z();; x += stepX, z += stepZ) {
+            cells.add(new BlockPosition(x, from.y(), z)); if (x == to.x() && z == to.z()) return;
         }
     }
 }

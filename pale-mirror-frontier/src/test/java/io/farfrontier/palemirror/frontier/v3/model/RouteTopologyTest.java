@@ -129,19 +129,7 @@ class RouteTopologyTest {
         FrontierWorldState damaged = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(lossPosition,
                 PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test"));
         var first = RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L));
-        var second = RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L));
-        assertEquals(first, second);
-        RouteConstructionStarted started = first.stream().map(event -> event.payload()).filter(RouteConstructionStarted.class::isInstance)
-                .map(RouteConstructionStarted.class::cast).findFirst().orElseThrow();
-        RouteConstruction candidate = started.project();
-        assertEquals(settlement, candidate.settlementId());
-        assertEquals(baseline, damaged.routeTopology().supplyWaypoints(bootstrap, settlement));
-        assertTrue(!FrontierGrayboxPlan.routeConstructionCells(damaged, candidate).isEmpty());
-        assertTrue(FrontierRouteNetwork.isPassable(bootstrap, candidate.waypoints(), damaged.physicalDeltas()));
-        FrontierWorldState startedState = RouteConstructionStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER, started);
-        assertEquals(candidate, startedState.routeConstructions().get(candidate.id()));
-        RouteTopology cutover = damaged.routeTopology().replaceSupplyRoute(bootstrap, settlement, candidate.waypoints());
-        assertTrue(FrontierGrayboxPlan.compile(damaged.withRouteTopology(cutover)).cells().size() > 0);
+        assertTrue(first.stream().noneMatch(event -> event.payload() instanceof RouteConstructionStarted));
     }
 
     @Test
@@ -151,10 +139,8 @@ class RouteTopologyTest {
             BlockPosition lossPosition = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()).get(1);
             FrontierWorldState damaged = FrontierWorldState.initial(bootstrap).recordPhysicalDelta(new PhysicalDelta(lossPosition,
                     PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test"));
-            RouteConstructionStarted started = RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L)).stream()
-                    .map(event -> event.payload()).filter(RouteConstructionStarted.class::isInstance).map(RouteConstructionStarted.class::cast).findFirst().orElseThrow();
-            assertEquals(settlement.id(), started.project().settlementId());
-            assertTrue(FrontierRouteNetwork.isPassable(bootstrap, started.project().waypoints(), damaged.physicalDeltas()));
+            assertTrue(RouteConstructionProcess.plan(damaged, RouteConstructionProcess.scan(1, 900L)).stream()
+                    .noneMatch(event -> event.payload() instanceof RouteConstructionStarted));
         }
     }
 

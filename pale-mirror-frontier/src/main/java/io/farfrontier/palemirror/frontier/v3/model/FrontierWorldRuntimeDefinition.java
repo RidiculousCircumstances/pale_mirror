@@ -132,6 +132,8 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
+            case "frontier.route_patrol.start" -> RoutePatrolProcess.planStart(state, action);
+            case "frontier.route_patrol.progress" -> RoutePatrolProcess.planProgress(state, action);
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
             case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
@@ -171,6 +173,10 @@ public final class FrontierWorldRuntimeDefinition {
             case HiveGrowthBlocked blocked -> HiveGrowthProcess.reduceBlocked(state, event.subject(), blocked);
             case RouteConstructionStarted started -> RouteConstructionStateSupport.reduceStarted(state, event.subject(), started);
             case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);
+            case RoutePatrolStarted started -> RoutePatrolProcess.reduceStarted(state, event.subject(), started);
+            case RoutePatrolAdvanced advanced -> RoutePatrolProcess.reduceAdvanced(state, event.subject(), advanced);
+            case RoutePatrolObstructionConfirmed confirmed -> RoutePatrolProcess.reduceObstruction(state, event.subject(), confirmed);
+            case RoutePatrolFailed failed -> RoutePatrolProcess.reduceFailed(state, event.subject(), failed);
             case StrategicObjectiveSelected selected -> StrategicObjectiveProcess.reduceObjective(state, event.subject(), selected);
             case StrategicTaskPlanned planned -> StrategicObjectiveProcess.reduceTask(state, event.subject(), planned);
             case StrategicTaskTransition transition -> StrategicObjectiveProcess.reduceTaskTransition(state, event.subject(), transition);

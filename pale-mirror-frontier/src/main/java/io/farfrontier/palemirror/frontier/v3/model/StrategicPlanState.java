@@ -11,12 +11,15 @@ import java.util.Objects;
 final class StrategicPlanState {
     static final int MAX_OBJECTIVES = 128;
     static final int MAX_TASKS = 512;
+    static final int MAX_ROUTE_PATROLS = 128;
     private final Map<SubjectId, StrategicObjective> objectives;
     private final Map<SubjectId, StrategicTask> tasks;
+    private final Map<SubjectId, RoutePatrol> routePatrols;
 
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks) {
+    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols) {
         this.objectives = immutable(objectives, "strategic objectives"); this.tasks = immutable(tasks, "strategic tasks");
-        if (this.objectives.size() > MAX_OBJECTIVES || this.tasks.size() > MAX_TASKS) throw new IllegalArgumentException("strategic plan retention limit exceeded");
+        this.routePatrols = immutable(routePatrols, "route patrols");
+        if (this.objectives.size() > MAX_OBJECTIVES || this.tasks.size() > MAX_TASKS || this.routePatrols.size() > MAX_ROUTE_PATROLS) throw new IllegalArgumentException("strategic plan retention limit exceeded");
         this.objectives.forEach((id, objective) -> {
             if (!id.equals(objective.id())) throw new IllegalArgumentException("strategic objective key must match identity");
         });
@@ -54,6 +57,10 @@ final class StrategicPlanState {
                     StrategicTaskRequirement.AVAILABLE_GUARD))) {
                 throw new IllegalArgumentException("settlement delivery task has an invalid decomposition");
             }
+            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE
+                    && (task.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE || !task.requirements().equals(List.of(StrategicTaskRequirement.AVAILABLE_GUARD)))) {
+                throw new IllegalArgumentException("settlement patrol task has an invalid decomposition");
+            }
             if (task.dependencies().stream().anyMatch(dependency -> !this.tasks.containsKey(dependency) || dependency.equals(task.id()))) {
                 throw new IllegalArgumentException("strategic task dependency must name another retained task");
             }
@@ -79,19 +86,29 @@ final class StrategicPlanState {
         }));
         objectives.values().stream().filter(objective -> objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE).forEach(objective ->
                 validateDeliveryDecomposition(objective, tasks));
+        this.routePatrols.forEach((taskId, patrol) -> validatePatrol(taskId, patrol));
         tasks.keySet().forEach(id -> requireAcyclic(id, new java.util.HashSet<>(), new java.util.HashSet<>()));
     }
 
-    static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of()); }
+    static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of(), Map.of()); }
 
     Map<SubjectId, StrategicObjective> objectives() { return objectives; }
     Map<SubjectId, StrategicTask> tasks() { return tasks; }
+    Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
 
     void validate(FrontierBootstrap bootstrap) {
         objectives.values().forEach(objective -> {
             boolean knownOwner = bootstrap.hive().id().equals(objective.ownerId())
                     || bootstrap.settlements().stream().anyMatch(settlement -> settlement.id().equals(objective.ownerId()));
             if (!knownOwner) throw new IllegalArgumentException("strategic objective has a foreign owner");
+        });
+        routePatrols.values().forEach(patrol -> {
+            Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());
+            Resident guard = settlement.residents().stream().filter(resident -> resident.id().equals(patrol.guardId())).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("route patrol guard is foreign"));
+            if (guard.role() != ResidentRole.GUARD || !patrol.route().equals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()))) {
+                throw new IllegalArgumentException("route patrol does not retain its guard or canonical route");
+            }
         });
     }
 
@@ -104,7 +121,7 @@ final class StrategicPlanState {
         StrategicPlanState retained = compactFor(1, 0);
         if (retained.objectives.containsKey(objective.id()) || retained.hasActiveObjective(objective.ownerId())) throw new IllegalArgumentException("strategic objective is duplicate or owner is already active");
         Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);
-        return new StrategicPlanState(next, retained.tasks);
+        return new StrategicPlanState(next, retained.tasks, retained.routePatrols);
     }
 
     StrategicPlanState addTask(StrategicTask task) {
@@ -115,7 +132,7 @@ final class StrategicPlanState {
             throw new IllegalArgumentException("strategic task identity or objective is invalid");
         }
         Map<SubjectId, StrategicTask> next = new LinkedHashMap<>(retained.tasks); next.put(task.id(), task);
-        return new StrategicPlanState(retained.objectives, next);
+        return new StrategicPlanState(retained.objectives, next, retained.routePatrols);
     }
 
     StrategicPlanState transitionTask(SubjectId taskId, StrategicTaskStatus nextStatus) {
@@ -133,13 +150,41 @@ final class StrategicPlanState {
                 nextObjectives.put(objective.id(), objective.withStatus(blocked ? StrategicObjectiveStatus.BLOCKED : StrategicObjectiveStatus.COMPLETED));
             }
         }
-        return new StrategicPlanState(nextObjectives, nextTasks);
+        return new StrategicPlanState(nextObjectives, nextTasks, routePatrols);
+    }
+
+    StrategicPlanState startPatrol(RoutePatrol patrol) {
+        Objects.requireNonNull(patrol, "route patrol");
+        if (routePatrols.containsKey(patrol.taskId())) throw new IllegalArgumentException("route patrol is already retained for its task");
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(patrol.taskId(), patrol);
+        return new StrategicPlanState(objectives, tasks, next);
+    }
+
+    StrategicPlanState advancePatrol(SubjectId taskId, int routeIndex) {
+        RoutePatrol current = routePatrols.get(taskId);
+        if (current == null) throw new IllegalArgumentException("unknown route patrol");
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.advance(routeIndex));
+        return new StrategicPlanState(objectives, tasks, next);
+    }
+
+    StrategicPlanState confirmPatrolObstruction(SubjectId taskId, BlockPosition position) {
+        RoutePatrol current = routePatrols.get(taskId);
+        if (current == null) throw new IllegalArgumentException("unknown route patrol");
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.confirm(position));
+        return new StrategicPlanState(objectives, tasks, next);
+    }
+
+    StrategicPlanState failPatrol(SubjectId taskId) {
+        RoutePatrol current = routePatrols.get(taskId);
+        if (current == null) throw new IllegalArgumentException("unknown route patrol");
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.fail());
+        return new StrategicPlanState(objectives, tasks, next);
     }
 
     @Override public boolean equals(Object other) {
-        return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks);
+        return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks) && routePatrols.equals(value.routePatrols);
     }
-    @Override public int hashCode() { return Objects.hash(objectives, tasks); }
+    @Override public int hashCode() { return Objects.hash(objectives, tasks, routePatrols); }
 
     private StrategicPlanState compactFor(int newObjectives, int newTasks) { return compactFor(newObjectives, newTasks, List.of()); }
 
@@ -154,7 +199,10 @@ final class StrategicPlanState {
             retainedObjectives.remove(discard.id());
             retainedTasks.values().removeIf(task -> task.objectiveId().equals(discard.id()));
         }
-        return retainedObjectives.equals(objectives) && retainedTasks.equals(tasks) ? this : new StrategicPlanState(retainedObjectives, retainedTasks);
+        Map<SubjectId, RoutePatrol> retainedPatrols = new LinkedHashMap<>(routePatrols);
+        retainedPatrols.keySet().removeIf(taskId -> !retainedTasks.containsKey(taskId));
+        return retainedObjectives.equals(objectives) && retainedTasks.equals(tasks) && retainedPatrols.equals(routePatrols) ? this
+                : new StrategicPlanState(retainedObjectives, retainedTasks, retainedPatrols);
     }
 
     private static boolean allowed(StrategicTaskStatus current, StrategicTaskStatus next) {
@@ -175,6 +223,20 @@ final class StrategicPlanState {
                 || own.stream().filter(task -> task.kind() == StrategicTaskKind.PREPARE_BREAD_CARGO).count() > 1
                 || own.stream().filter(task -> task.kind() == StrategicTaskKind.DELIVER_BREAD_TO_HIVE).count() > 1) {
             throw new IllegalArgumentException("settlement delivery objective has an invalid task graph");
+        }
+    }
+
+    private void validatePatrol(SubjectId taskId, RoutePatrol patrol) {
+        StrategicTask task = tasks.get(taskId);
+        if (!taskId.equals(patrol.taskId()) || task == null || task.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE
+                || !task.ownerId().equals(patrol.settlementId())) {
+            throw new IllegalArgumentException("route patrol must bind one settlement patrol task");
+        }
+        if (patrol.status() == RoutePatrolStatus.EN_ROUTE && task.status() != StrategicTaskStatus.ACTIVE
+                || patrol.status() == RoutePatrolStatus.ROUTE_CLEAR && task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.COMPLETED
+                || patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.COMPLETED
+                || patrol.status() == RoutePatrolStatus.FAILED && task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.BLOCKED) {
+            throw new IllegalArgumentException("route patrol status must match its task terminal state");
         }
     }
 

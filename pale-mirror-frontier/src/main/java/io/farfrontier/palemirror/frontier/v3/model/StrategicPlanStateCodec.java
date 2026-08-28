@@ -30,6 +30,13 @@ final class StrategicPlanStateCodec {
             writeCount(output, task.dependencies().size()); for (SubjectId dependency : task.dependencies()) writeSubject(output, dependency);
             output.writeByte(task.status().ordinal());
         }
+        writeCount(output, plans.routePatrols().size());
+        for (RoutePatrol patrol : plans.routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId)).toList()) {
+            writeSubject(output, patrol.taskId()); writeSubject(output, patrol.settlementId()); writeSubject(output, patrol.guardId());
+            writeCount(output, patrol.route().size()); for (BlockPosition position : patrol.route()) writePosition(output, position);
+            output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().ordinal()); output.writeBoolean(patrol.obstruction().isPresent());
+            if (patrol.obstruction().isPresent()) writePosition(output, patrol.obstruction().orElseThrow());
+        }
     }
 
     static StrategicPlanState read(DataInputStream input) throws IOException {
@@ -51,7 +58,16 @@ final class StrategicPlanStateCodec {
                 throw new IllegalArgumentException("invalid or duplicate strategic task");
             }
         }
-        return new StrategicPlanState(objectives, tasks);
+        Map<SubjectId, RoutePatrol> patrols = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId task = readSubject(input), settlement = readSubject(input), guard = readSubject(input);
+            List<BlockPosition> route = new ArrayList<>(); for (int point = 0, routeCount = readCount(input); point < routeCount; point++) route.add(readPosition(input));
+            int cursor = input.readUnsignedByte(), status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(readPosition(input)) : Optional.empty();
+            if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, guard, route, cursor, RoutePatrolStatus.values()[status], obstruction)) != null) {
+                throw new IllegalArgumentException("invalid or duplicate route patrol");
+            }
+        }
+        return new StrategicPlanState(objectives, tasks, patrols);
     }
 
     private static List<StrategicTaskRequirement> readRequirements(DataInputStream input) throws IOException {
@@ -71,6 +87,8 @@ final class StrategicPlanStateCodec {
     private static Optional<InfectionCell> readTarget(DataInputStream input) throws IOException {
         return input.readBoolean() ? Optional.of(new InfectionCell(input.readInt(), input.readInt())) : Optional.empty();
     }
+    private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
+    private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeSubject(DataOutputStream output, SubjectId id) throws IOException { FrontierWorldStateCodec.writeString(output, id.value()); }
     private static SubjectId readSubject(DataInputStream input) throws IOException { return new SubjectId(FrontierWorldStateCodec.readString(input)); }
     private static void writeCount(DataOutputStream output, int count) throws IOException { if (count > 512) throw new IllegalArgumentException("too many strategic plan entries"); output.writeShort(count); }

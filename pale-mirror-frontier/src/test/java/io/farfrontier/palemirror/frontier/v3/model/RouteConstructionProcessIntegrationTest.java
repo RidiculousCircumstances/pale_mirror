@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteConstructionProcessIntegrationTest {
     @Test
-    void scheduledWorldWorkTurnsObservedRouteLossIntoOneDurableConstructionCandidate() {
+    void scheduledPatrolConfirmsObservedRouteLossBeforeConstructionStarts() {
         WorldId worldId = new WorldId("frontier:route-reroute-scheduled");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 100L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -30,11 +30,13 @@ class RouteConstructionProcessIntegrationTest {
         CommandId commandId = new CommandId("command:route-reroute-loss");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, commandId, worldId, engine.checkpoint().revision(),
                 engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new PhysicalDeltaObserved(delta))));
-        for (long tick = 1L; tick <= 900L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        for (long tick = 1L; tick <= 2_600L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(1, after.routeConstructions().size());
         RouteConstruction candidate = after.routeConstructions().values().iterator().next();
         assertEquals(settlement, candidate.settlementId());
         assertTrue(FrontierRouteNetwork.isPassable(after.bootstrap(), candidate.waypoints(), after.physicalDeltas()));
+        assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement)
+                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().equals(Optional.of(loss))));
     }
 }

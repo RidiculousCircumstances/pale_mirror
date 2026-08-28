@@ -18,7 +18,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
-                RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }
+                RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
+                RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(), StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; } @Override public byte[] encode(FrontierPayload payload) {
             InfectionChanged changed = (InfectionChanged) payload;

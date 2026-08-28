@@ -49,6 +49,10 @@ final class StrategicObjectiveProcess {
             return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 100L))), next);
         }
+        if (task.kind() == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE) {
+            return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+                    new ProposedEvent(owner, new ScheduleEffect.Created(RoutePatrolProcess.start(task, action.dueAt().ticks() + 100L))), next);
+        }
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)), next);
     }
 
@@ -81,6 +85,12 @@ final class StrategicObjectiveProcess {
                     .map(entry -> new Candidate(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(entry.getKey()), entry.getValue().value().raw()))
                     .sorted(Candidate.HIGHEST_UTILITY).findFirst();
             if (containment.isPresent()) return containment;
+        }
+        boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
+        boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
+                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
+        if (!constructionActive && !alreadyConfirmed && !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas())) {
+            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), Long.MAX_VALUE));
         }
         boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
                 && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
@@ -115,6 +125,7 @@ final class StrategicObjectiveProcess {
             case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
             case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
+            case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> List.of(StrategicTaskRequirement.AVAILABLE_GUARD);
         };
         StrategicTaskKind kind = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
@@ -122,6 +133,7 @@ final class StrategicObjectiveProcess {
             case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
             case SETTLEMENT_PRODUCE_BREAD -> StrategicTaskKind.PRODUCE_BREAD;
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
+            case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;
         };
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING);
