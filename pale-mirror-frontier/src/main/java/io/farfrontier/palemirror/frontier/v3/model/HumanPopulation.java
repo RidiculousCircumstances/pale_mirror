@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
@@ -11,13 +12,15 @@ import java.util.Set;
  * Canonical bounded population register. Every person remains an individual;
  * households are relationships, never a cohort multiplier.
  */
-public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectId, ResidentProfile> residents) {
+public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectId, ResidentProfile> residents,
+                              Map<SubjectId, ResidentBirthJob> birthJobs) {
     public static final int MAX_HOUSEHOLDS = 1_024;
     public static final int MAX_RESIDENTS = 4_096;
+    public static final int MAX_BIRTH_JOBS = 1_024;
 
     public HumanPopulation {
-        households = immutable(households, "households"); residents = immutable(residents, "residents");
-        if (households.size() > MAX_HOUSEHOLDS || residents.size() > MAX_RESIDENTS) throw new IllegalArgumentException("human population retention limit exceeded");
+        households = immutable(households, "households"); residents = immutable(residents, "residents"); birthJobs = immutable(birthJobs, "resident birth jobs");
+        if (households.size() > MAX_HOUSEHOLDS || residents.size() > MAX_RESIDENTS || birthJobs.size() > MAX_BIRTH_JOBS) throw new IllegalArgumentException("human population retention limit exceeded");
         for (Map.Entry<SubjectId, Household> entry : households.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("household map key must match identity");
         }
@@ -27,6 +30,14 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
             Household household = households.get(resident.householdId());
             if (household == null || !household.settlementId().equals(resident.settlementId())) {
                 throw new IllegalArgumentException("resident must belong to a household in the same settlement");
+            }
+        }
+        java.util.Set<PhysicalIntentId> intents = new java.util.HashSet<>();
+        for (Map.Entry<SubjectId, ResidentBirthJob> entry : birthJobs.entrySet()) {
+            ResidentBirthJob job = entry.getValue(); Household household = households.get(job.householdId());
+            if (!entry.getKey().equals(job.id()) || household == null || !household.settlementId().equals(job.settlementId())
+                    || residents.containsKey(job.resident().id()) || !intents.add(job.consumptionIntentId())) {
+                throw new IllegalArgumentException("resident birth job has invalid exact identity or household");
             }
         }
     }
@@ -45,7 +56,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                         -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal)));
             }
         }
-        return new HumanPopulation(households, residents);
+        return new HumanPopulation(households, residents, Map.of());
     }
 
     private static Map<ResidentSkill, Integer> skills(ResidentRole role, int ordinal) {
@@ -58,6 +69,10 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         return values;
     }
 
+    static Map<ResidentSkill, Integer> birthSkills(int ordinal) {
+        return skills(ResidentRole.FARMER, ordinal);
+    }
+
     public Set<SubjectId> residentIds() { return residents.keySet(); }
     public ResidentProfile resident(SubjectId id) { return residents.get(id); }
 
@@ -66,7 +81,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         if (residents.containsKey(resident.id())) throw new IllegalArgumentException("resident identity already exists");
         if (!households.containsKey(resident.householdId())) throw new IllegalArgumentException("resident birth needs an existing household");
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(resident.id(), resident);
-        return new HumanPopulation(households, next);
+        return new HumanPopulation(households, next, birthJobs);
     }
 
     public HumanPopulation migrate(SubjectId residentId, SubjectId householdId, SubjectId settlementId) {
@@ -75,7 +90,28 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Household household = households.get(Objects.requireNonNull(householdId, "household id"));
         if (household == null || !household.settlementId().equals(settlementId)) throw new IllegalArgumentException("migration needs a household in its destination settlement");
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(residentId, resident.relocated(settlementId, householdId));
-        return new HumanPopulation(households, next);
+        return new HumanPopulation(households, next, birthJobs);
+    }
+
+    public HumanPopulation startBirth(ResidentBirthJob job) {
+        Objects.requireNonNull(job, "resident birth job");
+        if (birthJobs.containsKey(job.id()) || residents.containsKey(job.resident().id())) throw new IllegalArgumentException("resident birth identity already exists");
+        Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.put(job.id(), job);
+        return new HumanPopulation(households, residents, next);
+    }
+
+    public HumanPopulation completeBirth(SubjectId jobId) {
+        ResidentBirthJob job = birthJobs.get(Objects.requireNonNull(jobId, "resident birth job id"));
+        if (job == null || residents.containsKey(job.resident().id())) throw new IllegalArgumentException("resident birth completion lacks a unique output");
+        Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.remove(jobId);
+        Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents); nextResidents.put(job.resident().id(), job.resident());
+        return new HumanPopulation(households, nextResidents, next);
+    }
+
+    public HumanPopulation cancelBirth(SubjectId jobId) {
+        if (!birthJobs.containsKey(Objects.requireNonNull(jobId, "resident birth job id"))) throw new IllegalArgumentException("unknown resident birth job");
+        Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.remove(jobId);
+        return new HumanPopulation(households, residents, next);
     }
 
     private static <K, V> Map<K, V> immutable(Map<K, V> source, String name) {

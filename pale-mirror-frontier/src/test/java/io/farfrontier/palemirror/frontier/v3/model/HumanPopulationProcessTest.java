@@ -4,14 +4,19 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,40 +31,103 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void exactBirthAndMigrationChangeOnlyTheNamedPersonAndRejectDuplicateOrForeignHousehold() {
+    void exactBirthNeedsAConfirmedOwnedFoodReceiptAndCannotBeSubmittedDirectly() {
         WorldId world = new WorldId("frontier:human-events");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));
-        FrontierWorldState before = state(engine);
-        ResidentProfile parent = before.humanPopulation().resident(new SubjectId("resident:1-1"));
-        ResidentProfile newborn = new ResidentProfile(new SubjectId("resident:1-born-1"), parent.householdId(), parent.settlementId(), ResidentRole.FARMER,
-                0L, parent.skills());
-        ResidentBorn birth = new ResidentBorn(newborn, new BlockPosition(-358, 64, -338));
+        FrontierWorldState initial = state(engine);
+        ResidentProfile existing = initial.humanPopulation().resident(new SubjectId("resident:1-1"));
+        ResidentBorn forged = new ResidentBorn(new ResidentProfile(new SubjectId("resident:forged"), existing.householdId(), existing.settlementId(), ResidentRole.FARMER,
+                0L, existing.skills()), initial.bootstrap().settlements().getFirst().anchor());
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:forged-birth", forged)));
 
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-1", birth)));
+        FrontierWorldState active = stateWithActiveBread(initial, initial.bootstrap().settlements().getFirst().id());
+        ScheduledAction review = PopulationBirthProcess.review(active.bootstrap().settlements().getFirst().id(), 1, 100L);
+        var proposed = PopulationBirthProcess.planReview(active, review);
+        ResidentBirthStarted started = proposed.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
+                .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
+        PhysicalIntentPrepared prepared = proposed.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+        active = PopulationBirthProcess.reduceStarted(active, started.job().settlementId(), started);
+        active = PopulationBirthProcess.reducePrepared(active, started.job().settlementId(), prepared.intent());
+        assertEquals(started.job(), active.humanPopulation().birthJobs().get(started.job().id()));
+        assertEquals(active, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(active)));
+
+        ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:birth-food"), prepared.intent().id(),
+                started.job().foodItemId(), 64, 0);
+        active = active.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
+        active = active.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
+        var completion = PopulationBirthProcess.planCompletion(active, new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-birth-complete-test"),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(300L), 0, started.job().id(), "frontier.population.birth.complete", 1));
+        ResidentBorn born = (ResidentBorn) completion.getFirst().payload();
+        FrontierWorldState completed = PopulationBirthProcess.reduceBorn(active, started.job().settlementId(), born);
+        assertEquals(born.resident(), completed.humanPopulation().resident(born.resident().id()));
+        assertEquals(born.position(), completed.actorLocations().get(born.resident().id()).position());
+        assertTrue(!completed.inventory().items().containsKey(started.job().foodItemId()));
+        assertTrue(completed.humanPopulation().birthJobs().isEmpty());
+        assertEquals(born, FrontierWorldRuntimeDefinition.payloadCodecs().decode(born.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(born)));
+    }
+
+    @Test
+    void birthReviewWaitsWithoutCreatingAHiddenPopulationWhenNoOwnedActiveFoodExists() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-no-food"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        var proposed = PopulationBirthProcess.planReview(state, PopulationBirthProcess.review(settlement.id(), 1, 100L));
+        assertEquals(1, proposed.size());
+        assertTrue(proposed.getFirst().payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created);
+        assertTrue(state.humanPopulation().birthJobs().isEmpty());
+    }
+
+    @Test
+    void schedulerAndPhysicalTransitionAdmitExactlyOneResidentOnlyAfterTheConfirmedStackReceipt() {
+        WorldId world = new WorldId("frontier:birth-scheduled");
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierWorldState active = stateWithActiveBread(base.initialState(), base.initialState().bootstrap().settlements().getFirst().id());
+        SubjectId settlement = active.bootstrap().settlements().getFirst().id();
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(world, active, base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                java.util.List.of(PopulationBirthProcess.review(settlement, 1, 100L)), base.transactionCommitter());
+        var engine = FrontierEngines.create(configuration);
+        engine.advanceTo(new SimInstant(100L), new WorkBudget(16, 64));
+        FrontierWorldState permitted = state(engine);
+        ResidentBirthJob job = permitted.humanPopulation().birthJobs().values().stream().findFirst().orElseThrow();
+        assertTrue(permitted.humanPopulation().resident(job.resident().id()) == null);
+
+        PhysicalIntentTransition running = new PhysicalIntentTransition(job.consumptionIntentId(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-running", running)));
+        ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:birth-scheduled"), job.consumptionIntentId(), job.foodItemId(), 64, 0);
+        PhysicalIntentTransition confirmed = new PhysicalIntentTransition(job.consumptionIntentId(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-confirmed", confirmed)));
+        assertTrue(state(engine).humanPopulation().resident(job.resident().id()) == null);
+
+        engine.advanceTo(new SimInstant(300L), new WorkBudget(16, 64));
         FrontierWorldState born = state(engine);
-        assertEquals(newborn, born.humanPopulation().resident(newborn.id()));
-        assertEquals(birth.position(), born.actorLocations().get(newborn.id()).position());
-        assertEquals(birth, FrontierWorldRuntimeDefinition.payloadCodecs().decode(birth.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(birth)));
-        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:birth-duplicate", birth)));
+        assertEquals(job.resident(), born.humanPopulation().resident(job.resident().id()));
+        assertTrue(!born.inventory().items().containsKey(job.foodItemId()));
+    }
 
-        ResidentProfile destinationResident = born.humanPopulation().resident(new SubjectId("resident:2-1"));
-        ResidentMigrated migration = new ResidentMigrated(newborn.id(), destinationResident.householdId(), destinationResident.settlementId(), new BlockPosition(-118, 64, -338));
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:migration-1", migration)));
-        FrontierWorldState migrated = state(engine);
-        assertEquals(destinationResident.settlementId(), migrated.humanPopulation().resident(newborn.id()).settlementId());
-        assertEquals(migration.destination(), migrated.actorLocations().get(newborn.id()).position());
-        assertEquals(migration, FrontierWorldRuntimeDefinition.payloadCodecs().decode(migration.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(migration)));
-
-        ResidentMigrated foreignHousehold = new ResidentMigrated(newborn.id(), parent.householdId(), destinationResident.settlementId(), migration.destination());
-        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:migration-foreign-household", foreignHousehold)));
-        assertNotNull(state(engine).humanPopulation().resident(newborn.id()));
-
-        AmbientActorDied death = new AmbientActorDied(newborn.id(), migration.destination(), "test:physical-casualty");
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-casualty", death)));
-        FrontierWorldState dead = state(engine);
-        assertEquals(ActorLifeStatus.DEAD, dead.actorLocations().get(newborn.id()).condition().status());
-        assertEquals(newborn.id(), dead.humanPopulation().resident(newborn.id()).id());
-        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:migration-dead", migration)));
+    @Test
+    void unknownFoodEffectReleasesThePermitWithoutInventingAResidentOrDiscardingFood() {
+        FrontierWorldState state = stateWithActiveBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-unknown"), 91L)),
+                new SubjectId("settlement:1"));
+        ScheduledAction review = PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L);
+        var planned = PopulationBirthProcess.planReview(state, review);
+        ResidentBirthStarted started = planned.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
+                .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
+        PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        state = PopulationBirthProcess.reduceStarted(state, started.job().settlementId(), started);
+        state = PopulationBirthProcess.reducePrepared(state, started.job().settlementId(), prepared.intent());
+        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
+        PhysicalIntentTransition unknown = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        var outcome = PopulationBirthProcess.planTransition(state, prepared.intent(), unknown, 110L);
+        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        ResidentBirthCancelled cancelled = outcome.stream().map(event -> event.payload()).filter(ResidentBirthCancelled.class::isInstance)
+                .map(ResidentBirthCancelled.class::cast).findFirst().orElseThrow();
+        state = PopulationBirthProcess.reduceCancelled(state, started.job().settlementId(), cancelled);
+        assertTrue(state.humanPopulation().birthJobs().isEmpty());
+        assertTrue(state.humanPopulation().resident(started.job().resident().id()) == null);
+        assertTrue(state.inventory().items().containsKey(started.job().foodItemId()));
     }
 
     @Test
@@ -77,9 +145,11 @@ class HumanPopulationProcessTest {
         FrontierWorldState destroyed = state.withStructureCondition(housing.id(), StructureCondition.DESTROYED);
         assertEquals(0, SettlementFacilityCapability.housingCapacity(destroyed, settlement.id()));
         ResidentProfile parent = destroyed.humanPopulation().resident(settlement.residents().getFirst().id());
-        ResidentBorn birth = new ResidentBorn(new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
-                ResidentRole.FARMER, 0L, parent.skills()), settlement.anchor());
-        assertThrows(IllegalArgumentException.class, () -> destroyed.recordResidentBirth(birth));
+        ResidentProfile newborn = new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
+                ResidentRole.FARMER, 0L, parent.skills());
+        ResidentBirthJob permit = new ResidentBirthJob(new SubjectId("job:resident-birth-housing-blocked"), settlement.id(), parent.householdId(),
+                new SubjectId("item:bootstrap-1-wheat"), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:resident-birth-housing-blocked"), newborn, settlement.anchor());
+        assertThrows(IllegalArgumentException.class, () -> destroyed.startResidentBirth(permit));
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(housing.id());
         assertTrue(board.text().contains(settlement.residents().size() + " / " + SettlementFacilityCapability.INTACT_HOUSING_BEDS + " RESIDENTS"));
@@ -87,6 +157,13 @@ class HumanPopulationProcessTest {
 
     private static FrontierWorldState state(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {
         return new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+    }
+
+    private static FrontierWorldState stateWithActiveBread(FrontierWorldState state, SubjectId settlementId) {
+        SubjectId depot = FrontierWorldState.depotId(settlementId); SubjectId bread = new SubjectId("item:birth-test-bread");
+        ExactInventory inventory = state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(bread, settlementId, PopulationBirthProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1)));
+        return state.withInventory(inventory);
     }
     private static FrontierCommand command(WorldId world, io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine,
                                            String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {

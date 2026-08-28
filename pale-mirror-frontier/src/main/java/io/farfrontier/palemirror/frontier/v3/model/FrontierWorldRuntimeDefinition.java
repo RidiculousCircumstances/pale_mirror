@@ -41,6 +41,7 @@ public final class FrontierWorldRuntimeDefinition {
                 RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
+            actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
         }
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
     }
@@ -50,9 +51,7 @@ public final class FrontierWorldRuntimeDefinition {
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
         }
         if (command.payload() instanceof ResidentBorn birth) {
-            if (birth.resident().birthTick() > command.submittedAt().ticks()) return rejected("resident birth tick cannot be in the future");
-            try { state.recordResidentBirth(birth); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(birth.resident().settlementId(), birth)));
+            return rejected("resident birth is emitted only by a confirmed population permit");
         }
         if (command.payload() instanceof ResidentMigrated migration) {
             try { state.recordResidentMigration(migration); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
@@ -79,7 +78,15 @@ public final class FrontierWorldRuntimeDefinition {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
             }
             if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
-                try { return new CommandPlan.Accepted(HiveGrowthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())); }
+                try {
+                    if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) {
+                        return new CommandPlan.Accepted(HiveGrowthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                    }
+                    if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) {
+                        return new CommandPlan.Accepted(PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                    }
+                    return rejected("exact consumption has no supported owning process");
+                }
                 catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             }
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
@@ -213,6 +220,8 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.operation.progress" -> SupplyOperationProcess.planProgress(state, action);
             case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
+            case "frontier.population.birth.review" -> PopulationBirthProcess.planReview(state, action);
+            case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
             case "frontier.route_construction.start" -> RouteConstructionProcess.planStart(state, action);
@@ -253,6 +262,8 @@ public final class FrontierWorldRuntimeDefinition {
             case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
             case ResidentBorn birth -> reduceResidentBorn(state, event.subject(), birth);
             case ResidentMigrated migration -> reduceResidentMigrated(state, event.subject(), migration);
+            case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
+            case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
@@ -283,8 +294,7 @@ public final class FrontierWorldRuntimeDefinition {
         };
     }
     private static FrontierWorldState reduceResidentBorn(FrontierWorldState state, SubjectId subject, ResidentBorn birth) {
-        if (!subject.equals(birth.resident().settlementId())) throw new IllegalArgumentException("resident birth lacks its settlement owner");
-        return state.recordResidentBirth(birth);
+        return PopulationBirthProcess.reduceBorn(state, subject, birth);
     }
     private static FrontierWorldState reduceResidentMigrated(FrontierWorldState state, SubjectId subject, ResidentMigrated migration) {
         if (!subject.equals(migration.destinationSettlementId())) throw new IllegalArgumentException("resident migration lacks destination settlement owner");
@@ -341,7 +351,11 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
-        if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) return HiveGrowthProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
+            if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
+            if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
+            throw new IllegalArgumentException("exact consumption has no supported owning process");
+        }
         if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
             SceneStrikeStateSupport.validateIntent(state, intent);
             RouteOperation operation = state.operations().get(intent.causeSubjectId());
@@ -379,7 +393,12 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
-            if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption transition lacks hive ownership");
+            if (job != null) {
+                if (!subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption transition lacks hive ownership");
+                return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            }
+            ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
+            if (birth == null || !subject.equals(birth.settlementId())) throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());

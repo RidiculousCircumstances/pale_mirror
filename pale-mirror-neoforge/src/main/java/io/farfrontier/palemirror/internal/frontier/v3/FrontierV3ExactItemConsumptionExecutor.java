@@ -11,7 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
+import io.farfrontier.palemirror.frontier.v3.model.ExactItemConsumptionStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemConsumedObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
@@ -71,15 +71,13 @@ final class FrontierV3ExactItemConsumptionExecutor {
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) throw new IllegalStateException("exact consumption confirmation was rejected");
     }
 
-    private static Target target(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.subjectIds().size() != 2 || !state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return null;
-        var job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
-        if (!job.consumptionIntentId().equals(intent.id())) return null;
-        ExactItemStack item = state.inventory().items().get(job.consumedItemId());
-        if (item == null || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) return null;
-        ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
-        if (surface == null || !state.isHiveStore(slot.containerId())) return null;
-        return new Target(item, slot.containerId(), slot.slot(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
+    static Target target(FrontierWorldState state, PhysicalIntent intent) {
+        try {
+            ExactItemConsumptionStateSupport.Claim claim = ExactItemConsumptionStateSupport.claim(state, intent);
+            return new Target(claim.item(), claim.containerId(), claim.slot(), new BlockPos(claim.position().x(), claim.position().y(), claim.position().z()));
+        } catch (IllegalArgumentException conflict) {
+            return null;
+        }
     }
 
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) { transition(runtime, id, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), phase); }

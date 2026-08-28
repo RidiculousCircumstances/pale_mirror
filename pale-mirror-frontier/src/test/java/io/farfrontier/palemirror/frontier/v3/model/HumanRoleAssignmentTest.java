@@ -25,9 +25,9 @@ class HumanRoleAssignmentTest {
         FrontierWorldState state = initial("frontier:human-skills");
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResidentProfile lower = born(state, "resident:1-guard-skilled-low", ResidentRole.GUARD, ResidentSkill.SECURITY, 90);
-        state = state.recordResidentBirth(new ResidentBorn(lower, settlement.anchor()));
+        state = HumanPopulationTestFixtures.withResident(state, lower, settlement.anchor());
         ResidentProfile higher = born(state, "resident:1-guard-skilled-high", ResidentRole.GUARD, ResidentSkill.SECURITY, 100);
-        state = state.recordResidentBirth(new ResidentBorn(higher, settlement.anchor()));
+        state = HumanPopulationTestFixtures.withResident(state, higher, settlement.anchor());
 
         assertEquals(higher, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow());
     }
@@ -38,7 +38,7 @@ class HumanRoleAssignmentTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         state = killRole(state, ResidentRole.CRAFTER);
         ResidentProfile born = born(state, "resident:1-crafter-born", ResidentRole.CRAFTER);
-        state = state.recordResidentBirth(new ResidentBorn(born, settlement.anchor()));
+        state = HumanPopulationTestFixtures.withResident(state, born, settlement.anchor());
         StrategicTask task = productionTask(settlement.id());
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective(task, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD))
                 .addTask(task));
@@ -56,9 +56,9 @@ class HumanRoleAssignmentTest {
         state = killRole(state, ResidentRole.GUARD);
         state = killRole(state, ResidentRole.HAULER);
         ResidentProfile guard = born(state, "resident:1-guard-born", ResidentRole.GUARD);
-        state = state.recordResidentBirth(new ResidentBorn(guard, settlement.anchor()));
+        state = HumanPopulationTestFixtures.withResident(state, guard, settlement.anchor());
         ResidentProfile hauler = born(state, "resident:1-hauler-born", ResidentRole.HAULER);
-        state = state.recordResidentBirth(new ResidentBorn(hauler, settlement.anchor()));
+        state = HumanPopulationTestFixtures.withResident(state, hauler, settlement.anchor());
         assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, guard.id()));
         state = state.withInventory(withBread(state.inventory(), settlement.id()));
 

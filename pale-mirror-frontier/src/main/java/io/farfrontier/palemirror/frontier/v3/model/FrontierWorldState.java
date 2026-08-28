@@ -138,6 +138,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
             if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                     && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
+                    && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
                     && !expectedStructures.contains(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId()) && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
@@ -145,7 +146,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
-                        && !hiveColony.growthJobs().containsKey(subject)
+                        && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject)
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
                         && !strategicPlans.routeEngagements().containsKey(subject)
@@ -174,7 +175,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             } else if (observation instanceof StructuralRepairObservation repair) {
                 StructuralRepairStateSupport.validateReceipt(intent, repair);
             } else if (observation instanceof ExactItemConsumedObservation consumed) {
-                ExactItemConsumptionStateSupport.validateReceipt(hiveColony, intent, consumed);
+                ExactItemConsumptionStateSupport.validateReceipt(intent, consumed);
             } else if (observation instanceof RouteConstructionObservation construction) {
                 RouteConstructionStateSupport.validateReceipt(bootstrap, routeTopology, routeConstructions, intent, construction);
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
@@ -243,8 +244,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans, humanPopulation);
     }
-    public FrontierWorldState recordResidentBirth(ResidentBorn birth) { return HumanPopulationStateSupport.recordBirth(this, birth); }
     public FrontierWorldState recordResidentMigration(ResidentMigrated migration) { return HumanPopulationStateSupport.recordMigration(this, migration); }
+    public FrontierWorldState startResidentBirth(ResidentBirthJob job) { return HumanPopulationStateSupport.startBirth(this, job); }
+    public FrontierWorldState completeResidentBirth(ResidentBirthJob job) { return HumanPopulationStateSupport.completeBirth(this, job); }
+    public FrontierWorldState cancelResidentBirth(SubjectId jobId) { return HumanPopulationStateSupport.cancelBirth(this, jobId); }
     public List<SceneEngagementCandidate> coldEngagementSceneCandidates() { return FrontierSceneEngagementSupport.candidates(this); }
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) { return withActorLocation(actor, position, strategicPlans); }
     FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position, StrategicPlanState nextPlans) {
@@ -406,9 +409,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             ExactItemStack item = inventory.items().get(itemId);
             if (!itemId.equals(consumed.itemId()) || item == null || item.count() != consumed.countBefore()
                     || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("exact consumption receipt does not match current stack");
-            ContainerRecord container = inventory.containers().get(slot.containerId()); ContainerSurface surface = inventory.surfaces().get(slot.containerId());
-            SubjectId owner = ExactItemConsumptionStateSupport.owner(this, current);
-            if (container == null || !container.ownerId().equals(owner) || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) {
+            ExactItemConsumptionStateSupport.Claim claim = ExactItemConsumptionStateSupport.claim(this, current);
+            if (!claim.item().equals(item) || !claim.containerId().equals(slot.containerId()) || claim.slot() != slot.slot()) {
                 throw new IllegalArgumentException("exact consumption stack is not in an active owner container");
             }
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(consumed.id())));

@@ -36,6 +36,24 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec birthStarted() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_birth_started"; }
+            @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> writeBirthJob(output, ((ResidentBirthStarted) payload).job())); }
+            @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentBirthStarted(readBirthJob(input))); }
+        };
+    }
+
+    static PayloadCodec birthCancelled() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_birth_cancelled"; }
+            @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output ->
+                    FrontierWorldPayloadCodecs.writeSubject(output, ((ResidentBirthCancelled) payload).jobId())); }
+            @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
+                    input -> new ResidentBirthCancelled(FrontierWorldPayloadCodecs.readSubject(input).value())); }
+        };
+    }
+
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, resident.id()); FrontierWorldPayloadCodecs.writeSubject(output, resident.householdId());
         FrontierWorldPayloadCodecs.writeSubject(output, resident.settlementId()); output.writeByte(resident.role().ordinal()); output.writeLong(resident.birthTick());
@@ -47,5 +65,20 @@ final class HumanPopulationPayloadCodecs {
         long birthTick = input.readLong(); var skills = new java.util.EnumMap<ResidentSkill, Integer>(ResidentSkill.class);
         for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
         return new ResidentProfile(id.value(), household.value(), settlement.value(), ResidentRole.values()[role], birthTick, skills);
+    }
+
+    private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {
+        FrontierWorldPayloadCodecs.writeSubject(output, job.id()); FrontierWorldPayloadCodecs.writeSubject(output, job.settlementId());
+        FrontierWorldPayloadCodecs.writeSubject(output, job.householdId()); FrontierWorldPayloadCodecs.writeSubject(output, job.foodItemId());
+        FrontierWorldPayloadCodecs.writeString(output, job.consumptionIntentId().value()); writeProfile(output, job.resident());
+        FrontierWorldPayloadCodecs.writePosition(output, job.position());
+    }
+
+    private static ResidentBirthJob readBirthJob(DataInputStream input) throws IOException {
+        var id = FrontierWorldPayloadCodecs.readSubject(input); var settlement = FrontierWorldPayloadCodecs.readSubject(input);
+        var household = FrontierWorldPayloadCodecs.readSubject(input); var food = FrontierWorldPayloadCodecs.readSubject(input);
+        return new ResidentBirthJob(id.value(), settlement.value(), household.value(), food.value(),
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(FrontierWorldPayloadCodecs.readString(input)),
+                readProfile(input), FrontierWorldPayloadCodecs.readPosition(input));
     }
 }

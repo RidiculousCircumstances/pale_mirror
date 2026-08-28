@@ -9,19 +9,6 @@ import java.util.Objects;
 final class HumanPopulationStateSupport {
     private HumanPopulationStateSupport() { }
 
-    static FrontierWorldState recordBirth(FrontierWorldState state, ResidentBorn birth) {
-        Objects.requireNonNull(birth, "resident birth"); FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), birth.position());
-        if (state.actorLocations().containsKey(birth.resident().id())) throw new IllegalArgumentException("resident birth collides with existing actor identity");
-        if (state.bootstrap().settlements().stream().noneMatch(settlement -> settlement.id().equals(birth.resident().settlementId()))) {
-            throw new IllegalArgumentException("resident birth settlement is unknown");
-        }
-        int occupants = SettlementFacilityCapability.livingResidents(state, birth.resident().settlementId());
-        int beds = SettlementFacilityCapability.housingCapacity(state, birth.resident().settlementId());
-        if (occupants >= beds) throw new IllegalArgumentException("resident birth requires available operational housing");
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(birth.resident().id(), new ActorLocation(birth.position()));
-        return copy(state, actors, state.humanPopulation().add(birth.resident()));
-    }
-
     static FrontierWorldState recordMigration(FrontierWorldState state, ResidentMigrated migration) {
         Objects.requireNonNull(migration, "resident migration"); FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), migration.destination());
         ActorLocation actor = state.actorLocations().get(migration.residentId());
@@ -37,6 +24,33 @@ final class HumanPopulationStateSupport {
         }
         var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(migration.residentId(), actor.withPosition(migration.destination()));
         return copy(state, actors, state.humanPopulation().migrate(migration.residentId(), migration.destinationHouseholdId(), migration.destinationSettlementId()));
+    }
+
+    static FrontierWorldState startBirth(FrontierWorldState state, ResidentBirthJob job) {
+        Objects.requireNonNull(job, "resident birth job"); FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), job.position());
+        if (state.actorLocations().containsKey(job.resident().id()) || state.humanPopulation().resident(job.resident().id()) != null) {
+            throw new IllegalArgumentException("resident birth collides with existing actor identity");
+        }
+        Household household = state.humanPopulation().households().get(job.householdId());
+        if (household == null || !household.settlementId().equals(job.settlementId())) throw new IllegalArgumentException("resident birth needs a settlement household");
+        if (SettlementFacilityCapability.livingResidents(state, job.settlementId()) >= SettlementFacilityCapability.housingCapacity(state, job.settlementId())) {
+            throw new IllegalArgumentException("resident birth requires available operational housing");
+        }
+        return copy(state, state.actorLocations(), state.humanPopulation().startBirth(job));
+    }
+
+    static FrontierWorldState completeBirth(FrontierWorldState state, ResidentBirthJob job) {
+        ResidentBirthJob current = state.humanPopulation().birthJobs().get(Objects.requireNonNull(job, "resident birth job").id());
+        if (!job.equals(current)) throw new IllegalArgumentException("resident birth completion differs from its active permit");
+        if (SettlementFacilityCapability.livingResidents(state, job.settlementId()) >= SettlementFacilityCapability.housingCapacity(state, job.settlementId())) {
+            throw new IllegalArgumentException("resident birth lost required housing before completion");
+        }
+        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), new ActorLocation(job.position()));
+        return copy(state, actors, state.humanPopulation().completeBirth(job.id()));
+    }
+
+    static FrontierWorldState cancelBirth(FrontierWorldState state, SubjectId jobId) {
+        return copy(state, state.actorLocations(), state.humanPopulation().cancelBirth(jobId));
     }
 
     private static FrontierWorldState copy(FrontierWorldState state, java.util.Map<SubjectId, ActorLocation> actors, HumanPopulation population) {
