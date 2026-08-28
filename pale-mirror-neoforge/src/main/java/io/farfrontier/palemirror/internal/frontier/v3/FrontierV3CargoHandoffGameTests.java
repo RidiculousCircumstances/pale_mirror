@@ -123,6 +123,16 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-graybox-provenance", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void grayboxProvenanceDoesNotForgetAConflict(GameTestHelper helper) {
+        BlockPos position = helper.absolutePos(new BlockPos(20, 8, 0));
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(helper.getLevel());
+        ledger.applied(position, "structure:test", "DEPOT"); ledger.conflict(position);
+        helper.assertTrue(ledger.claim(position).conflicted(), "a changed applied cell remains conflict evidence, not an invitation to rewrite it");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-player-custody", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void playerInventoryObservationRequiresTheExactTaggedStack(GameTestHelper helper) {
