@@ -28,14 +28,14 @@ import java.util.OptionalInt;
 
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
+    public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
     private FrontierWorldRuntimeDefinition() { }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO,
-                (state, command) -> new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
-                        io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "no v3 world command handler is installed")),
+                FrontierWorldRuntimeDefinition::planCommand,
                 FrontierWorldRuntimeDefinition::planScheduled,
                 FrontierWorldRuntimeDefinition::reduce,
                 new FrontierWorldStateCodec(), FrontierWorldRuntimeDefinition::projection,
@@ -43,6 +43,20 @@ public final class FrontierWorldRuntimeDefinition {
     }
 
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); }
+
+    private static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
+        if (!(command.payload() instanceof PhysicalIntentTransition transition) || !PHYSICAL_EXECUTOR.equals(command.actor())) {
+            return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+                    io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not a trusted physical intent transition"));
+        }
+        PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
+        if (intent == null) return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+                io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "physical intent is unknown"));
+        RouteOperation operation = state.operations().get(intent.causeSubjectId());
+        if (operation == null) return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+                io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "physical intent has no owning operation"));
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
+    }
 
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
         return switch (action.kind()) {
