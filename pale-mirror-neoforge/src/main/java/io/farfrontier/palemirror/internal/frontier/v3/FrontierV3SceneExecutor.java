@@ -7,6 +7,13 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDied;
@@ -23,6 +30,9 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -105,6 +115,7 @@ final class FrontierV3SceneExecutor {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> {
                 executeLocalGoals(level, state, lease);
+                executeStrike(level, runtime, state, lease);
                 if (!demandExists(level, lease.handoffPosition())) submit(runtime, "scene-draining", lease.id().value(),
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             }
@@ -175,6 +186,36 @@ final class FrontierV3SceneExecutor {
                 .sorted(Comparator.comparing(value -> value.member().actorId())).toList();
         for (Body actor : bodies) moveToward(level, actor.entity(), localTarget(actor, bodies, lease));
     }
+
+    private static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        if (lease.engagementId().isEmpty() || level.getGameTime() % 20L != 0L) return;
+        List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
+        Body attacker = bodies.stream().filter(Body::bioform).findFirst().orElse(null);
+        Body target = attacker == null ? null : bodies.stream().filter(value -> !value.bioform()).min(Comparator.comparingDouble(value -> attacker.entity().distanceToSqr(value.entity()))).orElse(null);
+        if (attacker == null || target == null || attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
+        Optional<PhysicalIntent> existing = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                && intent.causeSubjectId().equals(lease.operationId()) && intent.subjectIds().equals(List.of(attacker.member().actorId(), target.member().actorId()))
+                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).findFirst();
+        if (existing.isEmpty()) {
+            String key = lease.id().value() + "-t" + level.getGameTime();
+            PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-" + key), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
+                    lease.operationId(), List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+            submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
+        }
+        PhysicalIntent intent = existing.orElseThrow();
+        if (intent.status() == PhysicalIntentStatus.PREPARED) { submit(runtime, "scene-strike-running", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())); return; }
+        float before = target.entity().getHealth(); attacker.entity().swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        target.entity().hurt(level.damageSources().mobAttack(attacker.entity()), 2.0F);
+        SceneStrikeObservation receipt = new SceneStrikeObservation(new PhysicalObservationId("observation:" + intent.id().value()), intent.id(),
+                attacker.member().actorId(), target.member().actorId(), fixed(before), fixed(target.entity().getHealth()));
+        submit(runtime, "scene-strike-confirm", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+    }
+
+    private static FixedPosition position(Entity entity) {
+        return new FixedPosition(new FixedScalar(Math.round(entity.getX() * FixedScalar.SCALE)),
+                new FixedScalar(Math.round(entity.getY() * FixedScalar.SCALE)), new FixedScalar(Math.round(entity.getZ() * FixedScalar.SCALE)));
+    }
+    private static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
 
     private static Optional<Body> body(ServerLevel level, FrontierWorldState state, SceneLease lease, SceneMember member) {
         Entity entity = level.getEntity(member.entityId());

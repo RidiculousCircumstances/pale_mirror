@@ -117,5 +117,4 @@
 - Exact balance constants, infection/territory tuning and final HOT actor budgets remain profile calibration work; they do not block the architecture or Wave 1.
 - Product validation remains unproven until real-display continuity audits, clean-room comprehension and cooperative-player gates are recorded for v3.
 ## Working set
-- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, `build.gradle`, `docs/frontier-v3-contract.md`, `docs/frontier-v3-implementation-plan.md`, `docs/frontier-ai-contract.md`, and the archived pre-v3 ledger.
-- Current wave: `pale-mirror-frontier/` kernel, persistence and bootstrap-model sources/tests including exact repair/decontamination intents; NeoForge v3 file storage host, semantic graybox plan and loaded-chunk recovery-aware projection.
+- `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, the v3 docs/plan, archived ledger; current wave: pure `pale-mirror-frontier` kernel/state plus NeoForge storage and loaded-chunk projection.

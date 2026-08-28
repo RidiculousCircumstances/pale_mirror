@@ -56,6 +56,16 @@ public final class FrontierWorldRuntimeDefinition {
             if (operation == null) return rejected("physical intent has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
         }
+        if (command.payload() instanceof PhysicalIntentPrepared prepared) {
+            PhysicalIntent intent = prepared.intent();
+            if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");
+            RouteOperation operation = state.operations().get(intent.causeSubjectId());
+            if (operation == null) return rejected("scene strike has no owning operation");
+            try {
+                SceneStrikeStateSupport.validateIntent(state, intent);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
+            } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof SceneLeasePrepared prepared) {
             RouteOperation operation = state.operations().get(prepared.lease().operationId()); if (operation == null) return rejected("scene lease has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
