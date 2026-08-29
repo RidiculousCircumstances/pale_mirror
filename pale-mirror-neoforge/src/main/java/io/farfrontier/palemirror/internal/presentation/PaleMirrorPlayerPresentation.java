@@ -19,7 +19,9 @@ import net.minecraft.server.level.ServerPlayer;
  *
  * <p>World boards own persistent object state; the future journal/atlas owns
  * history and work queues.  This class owns only a bounded, per-connected-player
- * suppression window for immediate interaction feedback.</p>
+ * suppression window for direct rejections, explicit inspection cards and
+ * durable critical alerts. Successful actions remain legible through their real
+ * inventory/world consequence and the object board, never as a HUD ticker.</p>
  */
 public final class PaleMirrorPlayerPresentation {
     private static final int MAX_CONNECTED_PLAYERS = 128;
@@ -28,10 +30,14 @@ public final class PaleMirrorPlayerPresentation {
 
     private PaleMirrorPlayerPresentation() { }
 
-    /** One compact result of the recipient's just-completed physical action; never background simulation. */
-    public static void actionResult(ServerPlayer player, String key, Component message) {
+    /**
+     * One compact refusal of the recipient's just-completed physical action.
+     * Successful outcomes must be shown by their physical result or an explicit
+     * object inspection, not by replacing the Minecraft action bar.
+     */
+    public static void actionRejected(ServerPlayer player, String key, Component message) {
         deliver(player, new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.ACTION_BAR,
-                PlayerNoticeGate.Priority.ACTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 20), oneLine(message).withStyle(ChatFormatting.YELLOW));
+                PlayerNoticeGate.Priority.REJECTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 100), oneLine(message).withStyle(ChatFormatting.RED));
     }
 
     /** Replaces the one short card after an explicit object inspection; it is never a background alert. */

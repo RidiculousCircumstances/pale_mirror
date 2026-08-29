@@ -316,8 +316,8 @@ public final class PaleMirrorEvents {
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
             var transfer = runtime.interactWithSupplyDepot(player, event.getPos());
             if (transfer.handled()) {
-                PaleMirrorPlayerPresentation.actionResult(player, transfer.success()
-                        ? "pale-mirror:depot-transfer-complete" : "pale-mirror:depot-transfer-rejected", Component.literal(transfer.message()));
+                if (!transfer.success()) PaleMirrorPlayerPresentation.actionRejected(player,
+                        "pale-mirror:depot-transfer-rejected", Component.literal(transfer.message()));
                 event.setCanceled(true);
                 event.setCancellationResult(transfer.success() ? InteractionResult.SUCCESS : InteractionResult.FAIL);
             } else if (runtime.presentSettlementJournal(player, event.getPos())) {
@@ -337,13 +337,9 @@ public final class PaleMirrorEvents {
             }
             var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                PaleMirrorPlayerPresentation.actionResult(player, "frontier-v3:cargo-carrier-rejected",
+                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected",
                         Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
-            }
-            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED) {
-                PaleMirrorPlayerPresentation.actionResult(player, "frontier-v3:cargo-carrier-released",
-                        Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
             }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
@@ -376,13 +372,9 @@ public final class PaleMirrorEvents {
             }
             var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                PaleMirrorPlayerPresentation.actionResult(player, "frontier-v3:cargo-carrier-rejected",
+                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected",
                         Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
-            }
-            if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED) {
-                PaleMirrorPlayerPresentation.actionResult(player, "frontier-v3:cargo-carrier-released",
-                        Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
             }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
@@ -506,7 +498,7 @@ public final class PaleMirrorEvents {
     private static boolean denyReservedTransfer(Player player, ItemStack stack) {
         if (!(player instanceof ServerPlayer serverPlayer) || stack.isEmpty()
                 || !PaleMirrorRuntime.forServer(serverPlayer.getServer()).isReservedTransferItem(stack)) return false;
-        PaleMirrorPlayerPresentation.actionResult(serverPlayer, "pale-mirror:reserved-resource-transfer",
+        PaleMirrorPlayerPresentation.actionRejected(serverPlayer, "pale-mirror:reserved-resource-transfer",
                 Component.literal("This item is reserved by a Pale Mirror resource transfer."));
         return true;
     }

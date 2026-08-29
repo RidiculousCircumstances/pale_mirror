@@ -15,12 +15,16 @@ import java.util.Objects;
  */
 final class PlayerNoticeGate {
     static final int MAX_RECENT_KEYS = 32;
-    /** One second is enough to acknowledge deliberate interaction without becoming a ticker. */
-    static final int ACTION_BAR_INTERVAL_TICKS = 20;
+    /**
+     * The action bar is an interruption, not a status feed.  It is reserved for
+     * a direct rejected action and must leave room for Minecraft's own combat,
+     * item and navigation feedback.
+     */
+    static final int ACTION_BAR_INTERVAL_TICKS = 60;
 
     enum Channel { ACTION_BAR, CONTEXT_CARD, CHAT }
 
-    enum Priority { ACTION, CONTEXT, CRITICAL }
+    enum Priority { REJECTION, CONTEXT, CRITICAL }
 
     /** HUD is reserved for the result of an action the recipient just chose. */
     enum Origin { PLAYER_ACTION, BACKGROUND }
@@ -31,8 +35,8 @@ final class PlayerNoticeGate {
             Objects.requireNonNull(channel, "channel"); Objects.requireNonNull(priority, "priority");
             Objects.requireNonNull(origin, "origin");
             if (duplicateCooldownTicks < 0) throw new IllegalArgumentException("duplicate cooldown must not be negative");
-            if (channel == Channel.ACTION_BAR && (priority != Priority.ACTION || origin != Origin.PLAYER_ACTION)) {
-                throw new IllegalArgumentException("action-bar notices must be direct player action results");
+            if (channel == Channel.ACTION_BAR && (priority != Priority.REJECTION || origin != Origin.PLAYER_ACTION)) {
+                throw new IllegalArgumentException("action-bar notices must be direct player-action rejections");
             }
             if (channel == Channel.CONTEXT_CARD && (priority != Priority.CONTEXT || origin != Origin.PLAYER_ACTION)) {
                 throw new IllegalArgumentException("context cards must be explicit player inspections");

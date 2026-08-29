@@ -7,10 +7,10 @@ import org.junit.jupiter.api.Test;
 
 class PlayerNoticeGateTest {
     @Test
-    void duplicateActionIsSuppressedButCanBeShownAgainAfterItsCooldown() {
+    void duplicateRejectionIsSuppressedButCanBeShownAgainAfterItsCooldown() {
         PlayerNoticeGate gate = new PlayerNoticeGate();
-        var notice = new PlayerNoticeGate.Notice("frontier-v3:cargo-released", PlayerNoticeGate.Channel.ACTION_BAR,
-                PlayerNoticeGate.Priority.ACTION, PlayerNoticeGate.Origin.PLAYER_ACTION, PlayerNoticeGate.ACTION_BAR_INTERVAL_TICKS);
+        var notice = new PlayerNoticeGate.Notice("frontier-v3:cargo-rejected", PlayerNoticeGate.Channel.ACTION_BAR,
+                PlayerNoticeGate.Priority.REJECTION, PlayerNoticeGate.Origin.PLAYER_ACTION, PlayerNoticeGate.ACTION_BAR_INTERVAL_TICKS);
 
         assertEquals(PlayerNoticeGate.Decision.DELIVER, gate.admit(notice, 100));
         assertEquals(PlayerNoticeGate.Decision.DUPLICATE, gate.admit(notice, 100 + PlayerNoticeGate.ACTION_BAR_INTERVAL_TICKS - 1));
@@ -18,12 +18,12 @@ class PlayerNoticeGateTest {
     }
 
     @Test
-    void distinctPlayerActionResultsCannotReplaceTheActionBarEveryTick() {
+    void distinctPlayerActionRejectionsCannotReplaceTheActionBarDuringTheQuietWindow() {
         PlayerNoticeGate gate = new PlayerNoticeGate();
         var first = new PlayerNoticeGate.Notice("action:field-1", PlayerNoticeGate.Channel.ACTION_BAR,
-                PlayerNoticeGate.Priority.ACTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 20);
+                PlayerNoticeGate.Priority.REJECTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 100);
         var different = new PlayerNoticeGate.Notice("action:field-2", PlayerNoticeGate.Channel.ACTION_BAR,
-                PlayerNoticeGate.Priority.ACTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 20);
+                PlayerNoticeGate.Priority.REJECTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 100);
 
         assertEquals(PlayerNoticeGate.Decision.DELIVER, gate.admit(first, 100));
         assertEquals(PlayerNoticeGate.Decision.RATE_LIMITED, gate.admit(different, 105));
@@ -47,7 +47,9 @@ class PlayerNoticeGateTest {
     void backgroundSimulationCannotClaimHudAndCriticalChatRemainsAvailable() {
         PlayerNoticeGate gate = new PlayerNoticeGate();
         assertThrows(IllegalArgumentException.class, () -> new PlayerNoticeGate.Notice("background:combat", PlayerNoticeGate.Channel.ACTION_BAR,
-                PlayerNoticeGate.Priority.ACTION, PlayerNoticeGate.Origin.BACKGROUND, 20));
+                PlayerNoticeGate.Priority.REJECTION, PlayerNoticeGate.Origin.BACKGROUND, 20));
+        assertThrows(IllegalArgumentException.class, () -> new PlayerNoticeGate.Notice("player:success", PlayerNoticeGate.Channel.ACTION_BAR,
+                PlayerNoticeGate.Priority.CONTEXT, PlayerNoticeGate.Origin.PLAYER_ACTION, 20));
         assertThrows(IllegalArgumentException.class, () -> new PlayerNoticeGate.Notice("background:route", PlayerNoticeGate.Channel.CONTEXT_CARD,
                 PlayerNoticeGate.Priority.CONTEXT, PlayerNoticeGate.Origin.BACKGROUND, 20));
         var critical = new PlayerNoticeGate.Notice("frontier-v3:unrecorded-physical-change", PlayerNoticeGate.Channel.CHAT,
@@ -63,7 +65,7 @@ class PlayerNoticeGateTest {
         PlayerNoticeGate gate = new PlayerNoticeGate();
         for (int index = 0; index <= PlayerNoticeGate.MAX_RECENT_KEYS; index++) {
             var notice = new PlayerNoticeGate.Notice("transient:" + index, PlayerNoticeGate.Channel.ACTION_BAR,
-                    PlayerNoticeGate.Priority.ACTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 1000);
+                    PlayerNoticeGate.Priority.REJECTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 1000);
             assertEquals(PlayerNoticeGate.Decision.DELIVER, gate.admit(notice, index * PlayerNoticeGate.ACTION_BAR_INTERVAL_TICKS));
         }
 
