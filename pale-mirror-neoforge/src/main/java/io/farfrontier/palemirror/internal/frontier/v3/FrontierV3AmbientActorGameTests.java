@@ -9,7 +9,9 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
@@ -25,6 +27,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -94,10 +97,53 @@ public final class FrontierV3AmbientActorGameTests {
         body.discard(); carpetBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotAmbientBodiesUseRoleAwareControlledMotionWithoutVanillaAi(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, origin, 16);
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ambient-local-brain"), 91L));
+        SubjectId farmer = new SubjectId("resident:1-1"), scout = new SubjectId("bioform:west-1");
+        BlockPosition anchor = new BlockPosition(origin.getX(), origin.getY(), origin.getZ());
+        AmbientActorLease farmerLease = new AmbientActorLease(farmer, anchor, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, new BlockPosition(anchor.x() + 12, anchor.y(), anchor.z()));
+        AmbientActorLease scoutLease = new AmbientActorLease(scout, new BlockPosition(anchor.x() + 2, anchor.y(), anchor.z()),
+                io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL, anchor);
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, farmer, anchor), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "the farmer fixture must materialize as one exact body");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, scout,
+                        new BlockPosition(anchor.x() + 2, anchor.y(), anchor.z())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "the scout fixture must materialize as one exact body");
+        Villager farmerBody = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, farmer));
+        Zombie scoutBody = (Zombie) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, scout));
+        double farmerBefore = farmerBody.distanceToSqr(origin.getX() + 0.5D, farmerBody.getY(), origin.getZ() + 0.5D);
+        for (int tick = 0; tick < 80; tick++) {
+            FrontierV3AmbientActorExecutor.pursueLocalGoal(level, state, farmer, farmerBody, farmerLease);
+            FrontierV3AmbientActorExecutor.pursueLocalGoal(level, state, scout, scoutBody, scoutLease);
+        }
+        helper.assertTrue(farmerBody.isNoAi() && scoutBody.isNoAi(),
+                "HOT ambient bodies must stay outside uncontrolled vanilla target/combat AI");
+        helper.assertTrue(farmerBody.distanceToSqr(origin.getX() + 0.5D, farmerBody.getY(), origin.getZ() + 0.5D) > farmerBefore + 0.1D,
+                "the farmer must visibly work around its assigned facility rather than freeze at its hand-off point");
+        helper.assertTrue(FrontierV3AmbientActorExecutor.localTarget(state, scout, scoutLease, 0L)
+                        .distanceToSqr(scoutLease.handoffPosition().x() + 0.5D, scoutLease.handoffPosition().y(), scoutLease.handoffPosition().z() + 0.5D)
+                        > FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 0L)
+                        .distanceToSqr(farmerLease.handoffPosition().x() + 0.5D, farmerLease.handoffPosition().y(), farmerLease.handoffPosition().z() + 0.5D),
+                "a scout patrol must use a wider role-specific perimeter than a farmer work cycle");
+        helper.assertTrue(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 0L)
+                        .distanceToSqr(farmerLease.goalPosition().x() + 0.5D, farmerLease.goalPosition().y(), farmerLease.goalPosition().z() + 0.5D) > 25.0D,
+                "ambient local motion must remain anchored at the exact exterior hand-off slot, not cross a semantic-object centre");
+        helper.assertTrue(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 0L)
+                        .distanceToSqr(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 180L)) > 0.01D,
+                "a durable ambient work lease must produce a continuing cycle rather than one static target");
+        farmerBody.discard(); scoutBody.discard(); helper.succeed();
+    }
+
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(position.above(), Blocks.AIR.defaultBlockState(), 3);
+    }
+    private static void prepareSquareFloor(ServerLevel level, BlockPos center, int radius) {
+        for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) prepareFloor(level, center.offset(x, 0, z));
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());

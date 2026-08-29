@@ -11,12 +11,14 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -31,6 +33,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -115,7 +118,7 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, entry.getKey(), bioform(state, entry.getKey()))) {
-                pursueLocalGoal(mob, lease.goalPosition());
+                pursueLocalGoal(level, state, entry.getKey(), mob, lease);
             }
         }
     }
@@ -314,10 +317,47 @@ final class FrontierV3AmbientActorExecutor {
             body.setDropChance(EquipmentSlot.HEAD, 0.0F);
         }
     }
-    private static void pursueLocalGoal(Mob body, BlockPosition goal) {
-        body.setNoAi(false);
-        if (body.tickCount % 20 != 0) return;
-        body.getNavigation().moveTo(goal.x() + 0.5D, goal.y(), goal.z() + 0.5D, body instanceof Zombie ? 0.85D : 0.70D);
+    /**
+     * Executes one bounded ambient local brain.  The durable lease owns the purpose and the
+     * individual hand-off slot is the spatial anchor; using a settlement/nest centroid would
+     * route a valid exterior body through owned structure geometry.
+     * exact actor identity supplies a stable phase.  Minecraft's vanilla goal AI intentionally
+     * remains disabled because ambient combat, target acquisition and inventory use would evade
+     * the v3 physical-intent ledger.
+     */
+    static void pursueLocalGoal(ServerLevel level, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+        FrontierV3ControlledMobMotion.moveToward(level, body, localTarget(state, actorId, lease, level.getGameTime()));
+    }
+
+    static Vec3 localTarget(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease, long gameTime) {
+        LocalBrain brain = localBrain(state, actorId);
+        long cycle = Math.floorMod(gameTime, brain.periodTicks());
+        double phase = (cycle / (double) brain.periodTicks()) + (brain.identityPhase() / 16.0D);
+        double angle = phase * Math.PI * 2.0D;
+        BlockPosition anchor = lease.handoffPosition();
+        return new Vec3(anchor.x() + 0.5D + Math.cos(angle) * brain.radius(), anchor.y(), anchor.z() + 0.5D + Math.sin(angle) * brain.radius());
+    }
+
+    private static LocalBrain localBrain(FrontierWorldState state, SubjectId actorId) {
+        int identityPhase = Math.floorMod(actorId.value().hashCode(), 16);
+        ResidentProfile resident = state.humanPopulation().resident(actorId);
+        if (resident != null) {
+            return switch (resident.role()) {
+                case FARMER -> new LocalBrain(1.00D, 360L, identityPhase);
+                case BUILDER -> new LocalBrain(1.25D, 300L, identityPhase);
+                case CRAFTER -> new LocalBrain(0.75D, 280L, identityPhase);
+                case GUARD -> new LocalBrain(1.50D, 480L, identityPhase);
+                case MEDIC -> new LocalBrain(0.50D, 240L, identityPhase);
+                case HAULER -> new LocalBrain(1.50D, 320L, identityPhase);
+            };
+        }
+        BioformRole role = bioformRole(state, actorId);
+        return switch (role) {
+            case WORKER -> new LocalBrain(1.00D, 320L, identityPhase);
+            case SCOUT -> new LocalBrain(1.50D, 240L, identityPhase);
+            case GUARD -> new LocalBrain(1.25D, 480L, identityPhase);
+            case BOMBER -> new LocalBrain(1.50D, 300L, identityPhase);
+        };
     }
     /** Durably captures then removes a loaded HOT body; the return value proves no serialized duplicate remains. */
     static boolean drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
@@ -377,6 +417,7 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
     private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
+    private record LocalBrain(double radius, long periodTicks, int identityPhase) { }
     record AdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement) {
         private static AdmissionDiagnostic notCanonical() { return new AdmissionDiagnostic("NOT_CANONICAL", null, false, null); }
         private static AdmissionDiagnostic indexed(UUID entityId, boolean pending) { return new AdmissionDiagnostic("INDEXED", entityId, pending, null); }

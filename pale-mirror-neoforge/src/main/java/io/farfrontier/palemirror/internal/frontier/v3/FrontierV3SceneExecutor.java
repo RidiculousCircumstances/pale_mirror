@@ -48,7 +48,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.phys.Vec3;
@@ -70,7 +69,6 @@ final class FrontierV3SceneExecutor {
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_scene_actor";
     static final String REVISION_KEY = "pale_mirror_frontier_v3_scene_revision";
     private static final int DEMAND_RADIUS_BLOCKS = 96;
-    private static final double RESIDENT_SPEED = 0.055D, BIOFORM_SPEED = 0.075D, ARRIVAL_DISTANCE = 0.35D;
 
     enum BodyMaterialization { COMPLETE, DEFERRED, CONFLICT }
 
@@ -253,7 +251,7 @@ final class FrontierV3SceneExecutor {
     private static void executeLocalGoals(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream)
                 .sorted(Comparator.comparing(value -> value.member().actorId())).toList();
-        for (Body actor : bodies) moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
+        for (Body actor : bodies) FrontierV3ControlledMobMotion.moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
     }
 
     /** Executes one durable effect phase; HOT scheduling supplies the twenty-tick cadence. */
@@ -345,17 +343,6 @@ final class FrontierV3SceneExecutor {
     private static boolean residentGuard(FrontierWorldState state, SubjectId actorId) {
         return state.bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
                 .anyMatch(resident -> resident.id().equals(actorId) && resident.role() == ResidentRole.GUARD);
-    }
-
-    private static void moveToward(ServerLevel level, Mob actor, Vec3 target) {
-        Vec3 delta = target.subtract(actor.position()); double distance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
-        if (distance <= ARRIVAL_DISTANCE) return;
-        double speed = actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED;
-        Vec3 direct = new Vec3(delta.x / distance * speed, 0.0D, delta.z / distance * speed);
-        Vec3 step = List.of(direct, new Vec3(-direct.z, 0.0D, direct.x), new Vec3(direct.z, 0.0D, -direct.x)).stream()
-                .filter(candidate -> level.noCollision(actor, actor.getBoundingBox().move(candidate))).findFirst().orElse(null);
-        if (step == null) return;
-        actor.setYRot((float) Math.toDegrees(Math.atan2(-step.x, step.z))); actor.yBodyRot = actor.getYRot(); actor.move(MoverType.SELF, step);
     }
 
     /**
