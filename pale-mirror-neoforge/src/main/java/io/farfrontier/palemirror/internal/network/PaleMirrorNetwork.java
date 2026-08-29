@@ -18,6 +18,8 @@ public final class PaleMirrorNetwork {
         var registrar = event.registrar("1");
         registrar.playToClient(AtlasSnapshotPayload.TYPE, AtlasSnapshotPayload.STREAM_CODEC,
                 PaleMirrorNetwork::receiveSnapshot);
+        registrar.playToClient(PlayerContextCardPayload.TYPE, PlayerContextCardPayload.STREAM_CODEC,
+                PaleMirrorNetwork::receiveContextCard);
         registrar.playToServer(AtlasRequestPayload.TYPE, AtlasRequestPayload.STREAM_CODEC,
                 PaleMirrorNetwork::requestSnapshot);
         registrar.playToServer(AtlasActionPayload.TYPE, AtlasActionPayload.STREAM_CODEC,
@@ -35,6 +37,13 @@ public final class PaleMirrorNetwork {
 
     public static void sendAction(AtlasActionPayload.Action action, String targetId) {
         PacketDistributor.sendToServer(new AtlasActionPayload(action, targetId));
+    }
+
+    /** Context cards are optional client presentation; unsupported clients retain the world-board explanation. */
+    public static void sendContextCard(ServerPlayer player, PlayerContextCardPayload payload) {
+        if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(player.connection, PlayerContextCardPayload.TYPE.id())) {
+            PacketDistributor.sendToPlayer(player, payload);
+        }
     }
 
     /** Pushes newly canonical knowledge only when the negotiated client actually supports Atlas. */
@@ -63,6 +72,12 @@ public final class PaleMirrorNetwork {
     private static void receiveSnapshot(AtlasSnapshotPayload payload, IPayloadContext context) {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             io.farfrontier.palemirror.internal.client.PaleMirrorAtlasClient.receive(payload);
+        }
+    }
+
+    private static void receiveContextCard(PlayerContextCardPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            io.farfrontier.palemirror.internal.client.PaleMirrorContextCardClient.receive(payload);
         }
     }
 

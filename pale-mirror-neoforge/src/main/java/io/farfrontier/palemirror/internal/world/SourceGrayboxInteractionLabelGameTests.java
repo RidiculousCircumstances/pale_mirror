@@ -43,17 +43,19 @@ public final class SourceGrayboxInteractionLabelGameTests {
     }
 
     @GameTest(batch = "pm-source-graybox-materializer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void transientBriefingReplacesChatBacklogButRetainsTitleStateAndRisk(GameTestHelper helper) {
+    public static void contextualCardReplacesHudBacklogButRetainsTitleStateAndRisk(GameTestHelper helper) {
         String detailed = "digestive pool hive organ #6\nState: vitality 100.00; biomass 334.10.\n"
                 + "Risk: living hive tissue supports infection, growth and hostile bioforms.\n"
                 + "Next: marked blocks are exact damage points; destroying one immediately reduces this organ's vitality.";
-        String overlay = SourceGrayboxTransientOverlay.from(detailed);
-        helper.assertValueEqual(overlay, "digestive pool hive organ #6\nState: vitality 100.00; biomass 334.10.\n"
-                        + "Risk: living hive tissue supports infection, growth and hostile bioforms.",
-                "a repeated click must replace the prior aid with its identity, current state and immediate consequence, not append a full chat transcript");
+        var card = SourceGrayboxPlayerCard.fromBriefing(detailed);
+        helper.assertValueEqual(card.title(), "digestive pool hive organ #6",
+                "one contextual card retains the selected object identity");
+        helper.assertValueEqual(card.lines(), List.of("State: vitality 100.00; biomass 334.10.",
+                        "Risk: living hive tissue supports infection, growth and hostile bioforms."),
+                "one contextual card retains state and immediate risk without a retained chat or action-bar transcript");
         try {
-            SourceGrayboxTransientOverlay.from("\n \n");
-            helper.fail("an empty player briefing must fail visibly instead of erasing the current overlay");
+            SourceGrayboxPlayerCard.fromBriefing("\n \n");
+            helper.fail("an empty player briefing must fail visibly instead of replacing the current contextual card");
         } catch (IllegalArgumentException expected) {
             helper.succeed();
         }

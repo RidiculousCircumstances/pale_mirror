@@ -30,6 +30,20 @@ class PlayerNoticeGateTest {
     }
 
     @Test
+    void contextCardsReplaceRatherThanQueueAndCannotFlickerAcrossRapidTargets() {
+        PlayerNoticeGate gate = new PlayerNoticeGate();
+        var field = new PlayerNoticeGate.Notice("source:briefing:field-1", PlayerNoticeGate.Channel.CONTEXT_CARD,
+                PlayerNoticeGate.Priority.CONTEXT, 20);
+        var hive = new PlayerNoticeGate.Notice("source:briefing:hive-1", PlayerNoticeGate.Channel.CONTEXT_CARD,
+                PlayerNoticeGate.Priority.CONTEXT, 20);
+
+        assertEquals(PlayerNoticeGate.Decision.DELIVER, gate.admit(field, 100));
+        assertEquals(PlayerNoticeGate.Decision.RATE_LIMITED, gate.admit(hive, 103));
+        assertEquals(PlayerNoticeGate.Decision.DELIVER, gate.admit(hive, 104));
+        assertEquals(PlayerNoticeGate.Decision.DUPLICATE, gate.admit(hive, 105));
+    }
+
+    @Test
     void criticalChatIsNotDelayedByATransientOverlayAndClockRewindClearsOnlyEphemeralState() {
         PlayerNoticeGate gate = new PlayerNoticeGate();
         var transientNotice = new PlayerNoticeGate.Notice("source:briefing:hive", PlayerNoticeGate.Channel.ACTION_BAR,

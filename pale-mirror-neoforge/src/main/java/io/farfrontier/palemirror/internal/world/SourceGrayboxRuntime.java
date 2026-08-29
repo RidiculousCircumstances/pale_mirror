@@ -291,7 +291,7 @@ public final class SourceGrayboxRuntime {
     public void presentTransientReceipt(ServerPlayer player, String receipt) {
         Objects.requireNonNull(player, "player");
         PaleMirrorPlayerPresentation.transientAction(player, "source-graybox:receipt:" + noticeFingerprint(receipt),
-                net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(receipt)));
+                net.minecraft.network.chat.Component.literal(receipt));
     }
 
     /** Turns a declared physical interaction slot into the exact source fact it carries. */
@@ -349,8 +349,8 @@ public final class SourceGrayboxRuntime {
                 ? SourceGrayboxPlayerBriefing.forIdentity(snapshot, interactionLabelId(claim), SourceGrayboxMaterializer.LABEL_KIND)
                 : SourceGrayboxPlayerBriefing.at(snapshot, position.getX(), position.getZ());
         return briefing.map(text -> {
-            PaleMirrorPlayerPresentation.transientAction(player, "source-graybox:block-briefing:" + position.asLong(),
-                    net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)));
+            PaleMirrorPlayerPresentation.context(player, "source-graybox:block-briefing:" + position.asLong(),
+                    SourceGrayboxPlayerCard.fromBriefing(text));
             return true;
         }).orElse(false);
     }
@@ -362,8 +362,8 @@ public final class SourceGrayboxRuntime {
         String kind = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_KIND);
         if (id.isBlank() || kind.isBlank()) return false;
         return SourceGrayboxPlayerBriefing.forIdentity(data.snapshot(), id, kind).map(text -> {
-            PaleMirrorPlayerPresentation.transientAction(player, "source-graybox:entity-briefing:" + id,
-                    net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)));
+            PaleMirrorPlayerPresentation.context(player, "source-graybox:entity-briefing:" + id,
+                    SourceGrayboxPlayerCard.fromBriefing(text));
             return true;
         }).orElse(false);
     }

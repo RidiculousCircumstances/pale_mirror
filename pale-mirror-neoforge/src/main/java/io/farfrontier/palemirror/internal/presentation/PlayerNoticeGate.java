@@ -16,10 +16,11 @@ import java.util.Objects;
 final class PlayerNoticeGate {
     static final int MAX_RECENT_KEYS = 32;
     static final int TRANSIENT_ACTION_BAR_INTERVAL_TICKS = 10;
+    static final int CONTEXT_CARD_INTERVAL_TICKS = 4;
 
-    enum Channel { ACTION_BAR, CHAT }
+    enum Channel { ACTION_BAR, CONTEXT_CARD, CHAT }
 
-    enum Priority { TRANSIENT, ACTION, CRITICAL }
+    enum Priority { TRANSIENT, ACTION, CONTEXT, CRITICAL }
 
     record Notice(String key, Channel channel, Priority priority, int duplicateCooldownTicks) {
         Notice {
@@ -37,6 +38,7 @@ final class PlayerNoticeGate {
     };
     private long lastObservedTick = Long.MIN_VALUE;
     private long lastTransientActionBarTick = Long.MIN_VALUE;
+    private long lastContextCardTick = Long.MIN_VALUE;
 
     Decision admit(Notice notice, long gameTick) {
         Objects.requireNonNull(notice, "notice");
@@ -50,10 +52,15 @@ final class PlayerNoticeGate {
                 && gameTick - lastTransientActionBarTick < TRANSIENT_ACTION_BAR_INTERVAL_TICKS) {
             return Decision.RATE_LIMITED;
         }
+        if (notice.channel() == Channel.CONTEXT_CARD && lastContextCardTick != Long.MIN_VALUE
+                && gameTick - lastContextCardTick < CONTEXT_CARD_INTERVAL_TICKS) {
+            return Decision.RATE_LIMITED;
+        }
         lastDelivered.put(notice.key(), gameTick);
         if (notice.channel() == Channel.ACTION_BAR && notice.priority() == Priority.TRANSIENT) {
             lastTransientActionBarTick = gameTick;
         }
+        if (notice.channel() == Channel.CONTEXT_CARD) lastContextCardTick = gameTick;
         return Decision.DELIVER;
     }
 
@@ -62,5 +69,6 @@ final class PlayerNoticeGate {
     private void resetForClockRewind() {
         lastDelivered.clear();
         lastTransientActionBarTick = Long.MIN_VALUE;
+        lastContextCardTick = Long.MIN_VALUE;
     }
 }
