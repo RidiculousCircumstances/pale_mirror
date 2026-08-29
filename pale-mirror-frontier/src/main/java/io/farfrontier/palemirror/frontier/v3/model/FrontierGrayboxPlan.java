@@ -136,6 +136,9 @@ public final class FrontierGrayboxPlan {
         for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) for (int y = 0; y <= 3; y++) {
             if (y == 3 || Math.abs(x) == 2 || Math.abs(z) == 2) add(cells, organ.anchor().offset(x, y, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
         }
+        // A STORE is hollow like the other organs, but its exact chest must stand on a planned
+        // tissue socket rather than on an arbitrary world block.
+        if (organ.containerId().isPresent()) add(cells, organ.anchor(), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
     }
 
     private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {

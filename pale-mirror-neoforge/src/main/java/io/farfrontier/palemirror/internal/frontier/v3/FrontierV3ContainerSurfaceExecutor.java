@@ -10,6 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierContainerSocketPlan;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
@@ -29,6 +31,7 @@ import java.util.Comparator;
  * reconstructs a missing or altered surface.</p>
  */
 final class FrontierV3ContainerSurfaceExecutor {
+    enum SocketReadiness { DEFERRED, READY, CONFLICT }
     private FrontierV3ContainerSurfaceExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -47,6 +50,13 @@ final class FrontierV3ContainerSurfaceExecutor {
                                          FrontierWorldState state, ContainerSurface surface) {
         BlockPos target = position(surface);
         if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
+            SocketReadiness readiness = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target,
+                    FrontierContainerSocketPlan.support(state, surface).orElse(null));
+            if (readiness == SocketReadiness.DEFERRED) return;
+            if (readiness == SocketReadiness.CONFLICT) {
+                transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
+                return;
+            }
             if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.PREPARED)) return;
             ChestBlockEntity chest = claimFreshChest(level, target, surface.containerId());
             if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) {
@@ -54,6 +64,11 @@ final class FrontierV3ContainerSurfaceExecutor {
                 return;
             }
             transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
+            return;
+        }
+        if (!hasReadySocket(level, FrontierV3GrayboxLedger.get(level), target,
+                FrontierContainerSocketPlan.support(state, surface).orElse(null))) {
+            reportConflict(runtime, surface.containerId());
             return;
         }
         ChestBlockEntity chest = activeChest(level, target, surface.containerId());
@@ -70,6 +85,11 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (active.isEmpty()) return;
         ContainerSurface surface = active.get((int) Math.floorMod(level.getGameTime(), active.size()));
         if (!level.hasChunkAt(position(surface))) return;
+        if (!hasReadySocket(level, FrontierV3GrayboxLedger.get(level), position(surface),
+                FrontierContainerSocketPlan.support(state, surface).orElse(null))) {
+            reportConflict(runtime, surface.containerId());
+            return;
+        }
         ChestBlockEntity chest = activeChest(level, position(surface), surface.containerId());
         if (chest == null || !matchesCanonicalSlots(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
     }
@@ -112,6 +132,32 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     static boolean reportConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId) {
         return transition(runtime, containerId, ContainerSurfaceStatus.CONFLICT);
+    }
+
+    /**
+     * Separates a not-yet-projected owned socket from a player/world obstruction.  Only the
+     * latter is terminal conflict evidence; the former must wait without changing canonical
+     * container state.
+     */
+    static SocketReadiness socketReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target, GrayboxCell support) {
+        // A destroyed/temporarily unavailable canonical facility has no socket to materialize;
+        // it is capacity loss, not evidence that the player obstructed a future chest.
+        if (support == null) return SocketReadiness.DEFERRED;
+        if (!level.getBlockState(target).isAir()) return SocketReadiness.CONFLICT;
+        BlockPos supportPosition = target.below();
+        FrontierV3GrayboxLedger.Claim claim = ledger.claim(supportPosition);
+        if (claim == null && level.getBlockState(supportPosition).isAir()) return SocketReadiness.DEFERRED;
+        return matchesReadySocket(level, claim, support, supportPosition) ? SocketReadiness.READY : SocketReadiness.CONFLICT;
+    }
+
+    private static boolean hasReadySocket(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target, GrayboxCell support) {
+        return support != null && matchesReadySocket(level, ledger.claim(target.below()), support, target.below());
+    }
+
+    private static boolean matchesReadySocket(ServerLevel level, FrontierV3GrayboxLedger.Claim claim, GrayboxCell support, BlockPos position) {
+        return claim != null && !claim.conflicted() && claim.owner().equals(support.ownerId().value())
+                && claim.material().equals(support.material().name()) && claim.semanticPart().equals(support.semanticPart().name())
+                && level.getBlockState(position).equals(FrontierV3GrayboxExecutor.material(support.material()));
     }
 
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId,

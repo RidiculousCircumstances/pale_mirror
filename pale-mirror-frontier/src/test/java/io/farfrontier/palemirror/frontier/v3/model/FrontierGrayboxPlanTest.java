@@ -43,6 +43,17 @@ class FrontierGrayboxPlanTest {
         assertTrue(waypoints.stream().skip(1).allMatch(position -> plan.cells().get(position).ownerId().equals(FrontierRouteNetwork.OWNER)));
     }
 
+    @Test
+    void everyBootstrapContainerHasOnePlannedProvenanceSupportSocket() {
+        FrontierWorldState state = initial();
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        state.inventory().surfaces().values().forEach(surface -> {
+            GrayboxCell support = FrontierContainerSocketPlan.support(state, surface).orElseThrow();
+            assertEquals(support, plan.cells().get(support.position()), "socket must be part of the immutable graybox plan: " + surface.containerId());
+        });
+    }
+
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:graybox-plan"), 1234L));
     }
