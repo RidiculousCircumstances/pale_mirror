@@ -58,6 +58,9 @@ final class PhysicalEffectObservationStateCodec {
                 string(output, harvest.workerId().value()); string(output, harvest.output().id().value()); string(output, harvest.output().economicOwnerId().value());
                 string(output, harvest.output().itemKind()); output.writeByte(harvest.output().count()); FrontierWorldStateCodec.writeCustody(output, harvest.output().custody());
                 output.writeByte(harvest.harvestedCropSlots());
+            } else if (observation instanceof ProductionTransformationObservation production) {
+                output.writeByte(9); string(output, production.id().value()); string(output, production.intentId().value()); string(output, production.inputItemId().value());
+                string(output, production.outputItemId().value()); output.writeByte(production.inputCount()); output.writeByte(production.outputCount());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -76,6 +79,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 6 -> new ExactItemConsumedObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 case 7 -> new ResourceSitePreparationObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 case 8 -> harvest(input, id, intentId);
+                case 9 -> new ProductionTransformationObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

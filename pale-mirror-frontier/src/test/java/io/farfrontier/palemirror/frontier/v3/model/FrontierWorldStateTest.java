@@ -78,6 +78,9 @@ class FrontierWorldStateTest {
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
         assertEquals(1, codec.decode(encoded).inventory().conflicts().size());
+        byte[] legacy = encoded.clone();
+        legacy[4] = 41;
+        assertEquals(source, codec.decode(legacy));
         encoded[4] = 17;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 

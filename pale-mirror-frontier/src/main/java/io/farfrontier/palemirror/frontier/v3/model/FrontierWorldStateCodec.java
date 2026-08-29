@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 41, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 41, VERSION = 42, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -64,7 +64,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     @Override public FrontierWorldState decode(byte[] encoded) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
-            if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
+            int version = input.readUnsignedByte();
+            if (version != LEGACY_VERSION && version != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);

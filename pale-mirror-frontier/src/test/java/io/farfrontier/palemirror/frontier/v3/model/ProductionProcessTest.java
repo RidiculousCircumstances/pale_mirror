@@ -13,7 +13,12 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
@@ -52,6 +57,27 @@ class ProductionProcessTest {
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(transition))).observation().orElseThrow());
         FrontierWorldState completed = running.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertTrue(completed.productionJobs().isEmpty());
+        assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
+    }
+
+    @Test
+    void trustedPhysicalExecutorRoutesProductionTransitionsToTheirSettlementJob() {
+        PreparedProduction prepared = activePhysicalProduction();
+        WorldId world = new WorldId("frontier:production-command");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+
+        assertInstanceOf(CommandResult.Accepted.class, submitTransition(engine, world, "running", prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty()));
+        FrontierWorldState running = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(PhysicalIntentStatus.RUNNING, running.physicalIntents().get(prepared.intent().id()).status());
+
+        ExactItemStack input = running.inventory().items().get(prepared.job().consumedItemId());
+        ProductionTransformationObservation receipt = new ProductionTransformationObservation(new PhysicalObservationId("observation:production-command"), prepared.intent().id(),
+                input.id(), prepared.job().outputItemId(), input.count(), prepared.job().outputCount());
+        CommandResult confirmed = submitTransition(engine, world, "confirmed", prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertInstanceOf(CommandResult.Accepted.class, confirmed, confirmed.toString());
+        FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
     }
 
@@ -105,6 +131,14 @@ class ProductionProcessTest {
                 PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId(), job.outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
         return new PreparedProduction(state.preparePhysicalIntent(intent), job, intent);
+    }
+
+    private static CommandResult submitTransition(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,
+                                                  String suffix, PhysicalIntentId intent, PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation) {
+        CommandId command = new CommandId("command:production-" + suffix);
+        var checkpoint = engine.checkpoint();
+        return engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                CauseChain.root(command), new PhysicalIntentTransition(intent, status, observation)));
     }
 
     private record PreparedProduction(FrontierWorldState state, ProductionJob job, PhysicalIntent intent) { }

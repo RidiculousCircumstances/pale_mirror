@@ -33,6 +33,7 @@ final class FrontierPhysicalIntentCommandProcess {
                         ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks()));
                 case RESOURCE_SITE_HARVEST -> new CommandPlan.Accepted(
                         ResourceSiteHarvestProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                case PRODUCTION_TRANSFORMATION -> productionTransition(state, intent, transition);
                 case CARGO_HANDOFF -> routeTransition(state, intent, transition);
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
                 case EXACT_ITEM_CONSUMPTION -> consumptionTransition(state, intent, transition, command);
@@ -46,6 +47,18 @@ final class FrontierPhysicalIntentCommandProcess {
         if (operation == null) return rejected("physical intent has no owning operation");
         if (intent.kind() == PhysicalIntentKind.CARGO_HANDOFF) return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition));
         return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
+    }
+
+    /** A production transformation belongs to its settlement job, never to a route operation. */
+    private static CommandPlan productionTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+        if (job == null) return rejected("production transformation has no active job");
+        try {
+            ProductionTransformationStateSupport.validateIntent(state, intent);
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), transition)));
+        } catch (IllegalArgumentException invalid) {
+            return rejected(invalid.getMessage());
+        }
     }
 
     private static CommandPlan consumptionTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition,
