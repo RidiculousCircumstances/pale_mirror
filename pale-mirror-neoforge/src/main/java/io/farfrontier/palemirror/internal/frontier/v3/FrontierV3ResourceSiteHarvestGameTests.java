@@ -26,11 +26,13 @@ import java.util.List;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3ResourceSiteHarvestGameTests {
+    private static final BlockPos FIXTURE_ORIGIN = new BlockPos(2, 8, 2);
+
     private FrontierV3ResourceSiteHarvestGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void exactMatureFieldBecomesOneTaggedDepotStackAndRecovers(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(new BlockPos(8, 8, 8))); prepare(level, site);
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN)); prepare(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level); PhysicalIntentId intent = new PhysicalIntentId("intent:site-harvest-game-test");
             ledger.reserve(site.id(), intent); helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
@@ -39,11 +41,13 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the fixture must use the production stage projector to mature all crops");
             helper.assertTrue(site.soilSlots().stream().allMatch(soil -> level.getBlockState(new BlockPos(soil.x(), soil.y(), soil.z())).is(Blocks.FARMLAND)),
                     "the fixture must retain all 64 owned farmland cells");
+            helper.assertTrue(site.irrigationSlots().stream().allMatch(irrigation -> level.getBlockState(new BlockPos(irrigation.x(), irrigation.y(), irrigation.z()))
+                            .equals(Blocks.WATER.defaultBlockState())), "the fixture must retain its four source-water irrigation cells");
             String cropMismatch = site.cropSlots().stream().filter(crop -> !level.getBlockState(new BlockPos(crop.x(), crop.y(), crop.z()))
                     .equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7))).findFirst().map(crop -> crop + "="
                     + level.getBlockState(new BlockPos(crop.x(), crop.y(), crop.z()))).orElse("none");
             helper.assertTrue(cropMismatch.equals("none"), "the fixture must contain all 64 owned mature crops: " + cropMismatch);
-            BlockPos chestPosition = helper.absolutePos(new BlockPos(18, 8, 8)); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+            BlockPos chestPosition = helper.absolutePos(new BlockPos(12, 8, 2)); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
             SubjectId depot = new SubjectId("container:resource-harvest-game-test"); ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, depot);
             ExactItemStack output = new ExactItemStack(new SubjectId("item:site-harvest-game-test-wheat"), new SubjectId("settlement:1"), "minecraft:wheat", 64,
                     new InventoryCustody.ContainerSlot(depot, 4));
@@ -68,6 +72,8 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
     }
     private static void prepare(ServerLevel level, ResourceSite site) {
         site.soilSlots().forEach(soil -> { BlockPos position = new BlockPos(soil.x(), soil.y(), soil.z()); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(position, Blocks.GRASS_BLOCK.defaultBlockState(), 3); });
+        site.irrigationSlots().forEach(irrigation -> { BlockPos position = new BlockPos(irrigation.x(), irrigation.y(), irrigation.z()); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(position, Blocks.GRASS_BLOCK.defaultBlockState(), 3); });
         site.cropSlots().forEach(crop -> level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3));
         int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow(), maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();

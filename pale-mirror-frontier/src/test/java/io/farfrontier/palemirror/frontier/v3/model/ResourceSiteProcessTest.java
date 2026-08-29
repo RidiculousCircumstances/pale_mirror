@@ -4,10 +4,17 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.EngineStatus;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -44,6 +51,28 @@ class ResourceSiteProcessTest {
                 new ResourceSiteGrowthAdvanced(site, lifecycle.growthEpoch(), lifecycle.growthStage()));
 
         assertTrue(ResourceSiteProcess.planGrowth(advanced, due).isEmpty());
+    }
+
+    @Test
+    void conflictedFieldCancelsItsPersistedGrowthActionAfterRecoveryWithoutQuarantining() {
+        FrontierWorldState state = prepared(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
+        ScheduledAction stale = ResourceSiteProcess.nextGrowth(state.resourceSites().site(site), 1_000L);
+        BlockPosition affected = FrontierResourceSitePlan.compile(state.bootstrap()).get(site).soilSlots().getFirst();
+        FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(state, site, new ResourceSiteConflictObserved(site, affected, "observed:farmland-decay"));
+        WorldId world = conflicted.bootstrap().worldId();
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, conflicted.bootstrap().seed());
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(world, conflicted,
+                SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                List.of(stale), base.transactionCommitter());
+        var original = FrontierEngines.create(configuration);
+        var recovered = FrontierEngines.recover(configuration, new RecoveryImage(world, Optional.of(new SnapshotRecord(original.checkpoint(), 0L)), List.of()));
+
+        var result = recovered.advanceTo(new SimInstant(1_000L), new WorkBudget(8, 64));
+
+        assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind());
+        assertEquals(1, result.transactions().size(), "the stale head must become one durable cancellation transaction");
+        assertEquals(ResourceSitePhase.CONFLICT, new FrontierWorldStateCodec().decode(recovered.checkpoint().canonicalState()).resourceSites().site(site).phase());
+        assertTrue(recovered.checkpoint().schedules().isEmpty(), "the recovered stale growth action must not remain queued");
     }
 
     @Test

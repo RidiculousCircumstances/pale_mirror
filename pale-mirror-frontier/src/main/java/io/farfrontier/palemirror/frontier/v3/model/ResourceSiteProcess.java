@@ -100,7 +100,7 @@ final class ResourceSiteProcess {
     static FrontierWorldState reduceConflict(FrontierWorldState state, SubjectId subject, ResourceSiteConflictObserved conflict) {
         if (!subject.equals(conflict.siteId())) throw new IllegalArgumentException("resource-site conflict has a foreign event owner");
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(conflict.siteId());
-        if (site == null || !site.cropSlots().contains(conflict.position()) && !site.soilSlots().contains(conflict.position())) {
+        if (site == null || !site.managedSlots().contains(conflict.position())) {
             throw new IllegalArgumentException("resource-site conflict must name one exact field cell");
         }
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());

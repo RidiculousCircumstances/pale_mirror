@@ -23,11 +23,13 @@ import java.util.List;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3ResourceSiteGameTests {
+    private static final BlockPos FIXTURE_ORIGIN = new BlockPos(2, 8, 2);
+
     private FrontierV3ResourceSiteGameTests() { }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-owned", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void ownedFieldWritesAllSlotsAndRecoversItsPendingProvenance(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(new BlockPos(8, 8, 8)));
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN));
         prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
@@ -39,7 +41,7 @@ public final class FrontierV3ResourceSiteGameTests {
                     "one executor pass writes every prevalidated soil and crop slot: " + firstFieldMismatch(level, site));
             ledger.activate(site.id()); CompoundTag active = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(active, level.registryAccess());
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 0) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
-                    "the exact 64 farmland and 64 wheat cells plus active provenance survive a SavedData reload");
+                    "the exact 64 farmland, 64 wheat and four source-water cells plus active provenance survive a SavedData reload");
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 3), FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
                     "a canonical COLD growth stage updates only the owned field cells");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3) && ledger.claim(site.id()).stage() == 3,
@@ -57,9 +59,9 @@ public final class FrontierV3ResourceSiteGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-foreign", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void foreignFieldCellIsNeverAdoptedOrOverwritten(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(new BlockPos(32, 8, 8)));
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN));
         prepareBaseline(level, site); BlockPosition foreign = site.cropSlots().getFirst(); BlockPos position = minecraft(foreign);
         level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3ResourceSiteExecutor.baseline(level, site) || FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
@@ -70,12 +72,30 @@ public final class FrontierV3ResourceSiteGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-irrigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void irrigationIsOwnedFieldInfrastructureAndItsLossIsNeverRepairedBlindly(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN), "site:resource-site-irrigation-game-test");
+        prepareBaseline(level, site);
+        helper.runAfterDelay(10, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            ledger.reserve(site.id(), new PhysicalIntentId("intent:site-irrigation-game-test"));
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "the fixture must create the complete irrigated field");
+            ledger.activate(site.id()); BlockPos water = minecraft(site.irrigationSlots().getFirst());
+            level.setBlock(water, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 1), FrontierV3ResourceSiteExecutor.StageProjectionResult.CONFLICT,
+                    "a missing source-water cell is field conflict evidence, not a request to recreate irrigation");
+            helper.assertTrue(level.getBlockState(water).is(Blocks.DIAMOND_BLOCK), "the foreign replacement must remain physically untouched");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-site-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void externalBlastRetainsOneFieldWitnessAcrossSavedDataReload(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(new BlockPos(48, 8, 8)), "site:resource-site-explosion-game-test"); prepareBaseline(level, site);
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN), "site:resource-site-explosion-game-test"); prepareBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger claims = FrontierV3ResourceSiteLedger.get(level);
             claims.reserve(site.id(), new PhysicalIntentId("intent:site-explosion-game-test"));
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site), "the blast fixture must retain its neutral baseline: " + firstBaselineMismatch(level, site));
             helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
                     "the blast fixture must own one complete field before capture: " + firstFieldMismatch(level, site));
             claims.activate(site.id()); helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, claims, site, 4),
@@ -109,6 +129,8 @@ public final class FrontierV3ResourceSiteGameTests {
             // Production accepts grass or dirt; use dirt in the delayed fixture because
             // grass can receive a random tick before the ownership assertion runs.
             level.setBlock(position, Blocks.DIRT.defaultBlockState(), 3); });
+        site.irrigationSlots().forEach(irrigation -> { BlockPos position = minecraft(irrigation); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(position, Blocks.DIRT.defaultBlockState(), 3); });
         site.cropSlots().forEach(crop -> level.setBlock(minecraft(crop), Blocks.AIR.defaultBlockState(), 3));
         int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow(), maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
         site.cropSlots().stream().filter(crop -> crop.x() == minX).forEach(crop -> level.setBlock(minecraft(crop).west(), Blocks.GLOWSTONE.defaultBlockState(), 3));
@@ -117,18 +139,33 @@ public final class FrontierV3ResourceSiteGameTests {
     private static void prepareGrayboxBaseline(ServerLevel level, ResourceSite site) {
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(position, Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), 3); });
+        site.irrigationSlots().forEach(irrigation -> { BlockPos position = minecraft(irrigation); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(position, Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), 3); });
         site.cropSlots().forEach(crop -> level.setBlock(minecraft(crop), Blocks.AIR.defaultBlockState(), 3));
         int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow(), maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
         site.cropSlots().stream().filter(crop -> crop.x() == minX).forEach(crop -> level.setBlock(minecraft(crop).west(), Blocks.GLOWSTONE.defaultBlockState(), 3));
         site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
+    private static String firstBaselineMismatch(ServerLevel level, ResourceSite site) {
+        return site.cropSlots().stream().filter(position -> !level.getBlockState(minecraft(position)).isAir())
+                .findFirst().map(position -> "crop " + position + "=" + level.getBlockState(minecraft(position)))
+                .or(() -> site.soilSlots().stream().filter(position -> {
+                    BlockPos minecraft = minecraft(position); return !level.getBlockState(minecraft).is(Blocks.DIRT) || level.getBlockState(minecraft.below()).isAir();
+                }).findFirst().map(position -> "soil " + position + "=" + level.getBlockState(minecraft(position)) + ", below=" + level.getBlockState(minecraft(position).below())))
+                .or(() -> site.irrigationSlots().stream().filter(position -> {
+                    BlockPos minecraft = minecraft(position); return !level.getBlockState(minecraft).is(Blocks.DIRT) || level.getBlockState(minecraft.below()).isAir();
+                }).findFirst().map(position -> "irrigation " + position + "=" + level.getBlockState(minecraft(position)) + ", below=" + level.getBlockState(minecraft(position).below())))
+                .orElse("baseline appears valid");
+    }
     private static String firstFieldMismatch(ServerLevel level, ResourceSite site) {
         return site.soilSlots().stream().filter(position -> !level.getBlockState(minecraft(position)).is(Blocks.FARMLAND))
                 .findFirst().map(position -> "soil " + position + "=" + level.getBlockState(minecraft(position)))
                 .or(() -> site.cropSlots().stream().filter(position -> !level.getBlockState(minecraft(position))
                                 .equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0)))
                         .findFirst().map(position -> "crop " + position + "=" + level.getBlockState(minecraft(position))))
+                .or(() -> site.irrigationSlots().stream().filter(position -> !level.getBlockState(minecraft(position)).equals(Blocks.WATER.defaultBlockState()))
+                        .findFirst().map(position -> "irrigation " + position + "=" + level.getBlockState(minecraft(position))))
                 .orElse("unreported-state-mismatch");
     }
 }

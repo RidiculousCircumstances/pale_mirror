@@ -179,7 +179,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     private static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
                                                                                                boolean autonomousInterception) {
-        return switch (action.kind()) {
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = switch (action.kind()) {
             case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
             case "frontier.settlement.production.task.start" -> ProductionProcess.planStart(state, action);
             case "frontier.settlement.production.task.complete" -> ProductionProcess.planCompletion(state, action);
@@ -208,6 +208,10 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.objective.interrupt" -> StrategicObjectiveProcess.planOpportunity(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
+        // A known planner can deliberately find that a durable physical observation has already
+        // invalidated its work. That no-op must still become a persisted schedule transition:
+        // otherwise a later tick/restart would rediscover the same head and quarantine the world.
+        return planned.isEmpty() ? List.of(new ProposedEvent(action.subject(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(action.id()))) : planned;
     }
     private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         if (event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition || event.payload() instanceof AmbientLeaseReleased) {

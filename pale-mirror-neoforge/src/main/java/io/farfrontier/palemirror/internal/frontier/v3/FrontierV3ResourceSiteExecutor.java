@@ -146,8 +146,11 @@ final class FrontierV3ResourceSiteExecutor {
 
     static boolean placeWholeField(ServerLevel level, ResourceSite site) {
         if (!baseline(level, site)) return false;
-        for (BlockPosition soil : site.soilSlots()) level.setBlock(minecraft(soil), Blocks.FARMLAND.defaultBlockState(), 3);
-        for (BlockPosition crop : site.cropSlots()) level.setBlock(minecraft(crop), crop(0), 3);
+        for (BlockPosition irrigation : site.irrigationSlots()) level.setBlock(minecraft(irrigation), Blocks.WATER.defaultBlockState(), 3);
+        for (BlockPosition crop : site.cropSlots()) {
+            level.setBlock(minecraft(crop.offset(0, -1, 0)), Blocks.FARMLAND.defaultBlockState(), 3);
+            level.setBlock(minecraft(crop), crop(0), 3);
+        }
         return matches(level, site, 0);
     }
 
@@ -169,10 +172,10 @@ final class FrontierV3ResourceSiteExecutor {
                 .map(site -> new Target(site, null)).orElse(null);
     }
     static boolean contains(ResourceSite site, BlockPos position) {
-        return java.util.stream.Stream.concat(site.cropSlots().stream(), site.soilSlots().stream()).anyMatch(slot -> minecraft(slot).equals(position));
+        return site.managedSlots().stream().anyMatch(slot -> minecraft(slot).equals(position));
     }
     static boolean loaded(ServerLevel level, ResourceSite site) {
-        return java.util.stream.Stream.concat(site.cropSlots().stream(), site.soilSlots().stream()).map(FrontierV3ResourceSiteExecutor::minecraft).allMatch(level::hasChunkAt);
+        return site.managedSlots().stream().map(FrontierV3ResourceSiteExecutor::minecraft).allMatch(level::hasChunkAt);
     }
     static boolean baseline(ServerLevel level, ResourceSite site) {
         return site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).isAir())
@@ -180,15 +183,21 @@ final class FrontierV3ResourceSiteExecutor {
                     BlockState state = level.getBlockState(minecraft(soil));
                     return (state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT) || state.is(Blocks.LIGHT_GRAY_CONCRETE))
                             && !level.getBlockState(minecraft(soil).below()).isAir();
+                }) && site.irrigationSlots().stream().allMatch(irrigation -> {
+                    BlockState state = level.getBlockState(minecraft(irrigation));
+                    return (state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT) || state.is(Blocks.LIGHT_GRAY_CONCRETE))
+                            && !level.getBlockState(minecraft(irrigation).below()).isAir();
                 });
     }
     static boolean matches(ServerLevel level, ResourceSite site, int stage) {
         return site.soilSlots().stream().allMatch(soil -> level.getBlockState(minecraft(soil)).is(Blocks.FARMLAND))
-                && site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).equals(crop(stage)));
+                && site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).equals(crop(stage)))
+                && site.irrigationSlots().stream().allMatch(irrigation -> level.getBlockState(minecraft(irrigation)).equals(Blocks.WATER.defaultBlockState()));
     }
     private static Optional<BlockPosition> firstMismatch(ServerLevel level, ResourceSite site, int stage) {
         return java.util.stream.Stream.concat(site.soilSlots().stream().filter(soil -> !level.getBlockState(minecraft(soil)).is(Blocks.FARMLAND)),
-                site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(crop(stage)))).findFirst();
+                java.util.stream.Stream.concat(site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(crop(stage))),
+                        site.irrigationSlots().stream().filter(irrigation -> !level.getBlockState(minecraft(irrigation)).equals(Blocks.WATER.defaultBlockState())))).findFirst();
     }
     private static boolean projectsGrowthStage(ResourceSiteLifecycle lifecycle) {
         return lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY;

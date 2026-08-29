@@ -147,6 +147,10 @@ There is no indivisible daily phase and no loop over every object each tick.
   is not a second fast simulation or a daily shortcut.
 - Work budgets may defer execution to a later server tick but may not reorder,
   merge or discard due actions. Simulation lag is measured and visible.
+- If a known due action has become obsolete because a prior durable fact changed
+  its domain precondition, its planner emits one persisted `Cancelled` effect.
+  An unknown action kind or invalid planner state remains fail-closed; neither
+  case may be silently discarded.
 
 All canonical arithmetic uses integers or named fixed-point value types with
 checked overflow and explicit rounding. Random decisions use a counter/keyed

@@ -100,8 +100,7 @@ final class FrontierV3ResourceSiteExplosionLedger extends SavedData {
     }
 
     private static boolean contains(ResourceSite site, BlockPos position) {
-        return java.util.stream.Stream.concat(site.soilSlots().stream(), site.cropSlots().stream())
-                .map(slot -> new BlockPos(slot.x(), slot.y(), slot.z())).anyMatch(position::equals);
+        return site.managedSlots().stream().map(slot -> new BlockPos(slot.x(), slot.y(), slot.z())).anyMatch(position::equals);
     }
 
     static FrontierV3ResourceSiteExplosionLedger load(CompoundTag tag, HolderLookup.Provider registries) {
