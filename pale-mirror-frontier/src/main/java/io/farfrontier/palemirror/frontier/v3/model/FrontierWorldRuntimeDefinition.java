@@ -178,6 +178,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
             case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
             case "frontier.resource_site.harvest" -> ResourceSiteHarvestProcess.plan(state, action);
+            case "frontier.objective.resource_harvest" -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
             case "frontier.route_construction.start" -> RouteConstructionProcess.planStart(state, action);

@@ -36,6 +36,31 @@ final class StrategicObjectiveProcess {
         return plan(state, action, false);
     }
 
+    /** A ready exact field asks its settlement planner for work without bypassing durable task ownership. */
+    static ScheduledAction resourceHarvestOpportunity(FrontierWorldState state, ResourceSiteLifecycle lifecycle, long dueAt) {
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
+        if (site == null || lifecycle.phase() != ResourceSitePhase.READY) throw new IllegalArgumentException("resource harvest opportunity requires a ready known field");
+        String suffix = lifecycle.siteId().value().substring("site:".length());
+        return new ScheduledAction(new ScheduleId("schedule:objective-resource-harvest-" + suffix + "-" + lifecycle.growthEpoch() + "-" + dueAt),
+                new SimInstant(dueAt), 0, lifecycle.siteId(), "frontier.objective.resource_harvest", 1);
+    }
+
+    static List<ProposedEvent> planResourceHarvestOpportunity(FrontierWorldState state, ScheduledAction action) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(action.subject());
+        if (lifecycle.phase() != ResourceSitePhase.READY || !action.id().equals(resourceHarvestOpportunity(state, lifecycle, action.dueAt().ticks()).id())) return List.of();
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
+        SubjectId owner = site.settlementId();
+        if (state.strategicPlans().hasActiveObjective(owner)) {
+            return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
+                    Math.addExact(action.dueAt().ticks(), ResourceSiteHarvestProcess.RETRY_INTERVAL)))));
+        }
+        int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
+        Candidate candidate = new Candidate(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
+        StrategicObjective objective = objective(owner, candidate, ordinal); StrategicTask task = task(state, objective);
+        return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+                new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(action.dueAt().ticks(), 100L)))));
+    }
+
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring) {
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
@@ -159,7 +184,8 @@ final class StrategicObjectiveProcess {
     }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal) {
         String stem = owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal;
-        return new StrategicObjective(new SubjectId("objective:" + stem), owner, candidate.kind(), candidate.target(), ordinal, StrategicObjectiveStatus.ACTIVE);
+        return new StrategicObjective(new SubjectId("objective:" + stem), owner, candidate.kind(), candidate.target(), candidate.resourceSiteTarget(), ordinal,
+                StrategicObjectiveStatus.ACTIVE);
     }
     private static StrategicTask task(FrontierWorldState state, StrategicObjective objective) {
         List<StrategicTaskRequirement> requirements = switch (objective.kind()) {
@@ -171,6 +197,8 @@ final class StrategicObjectiveProcess {
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> List.of(StrategicTaskRequirement.AVAILABLE_GUARD);
             case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION, StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL);
+            case SETTLEMENT_HARVEST_RESOURCE_SITE -> List.of(StrategicTaskRequirement.ACTIVE_FARM, StrategicTaskRequirement.AVAILABLE_FARMER,
+                    StrategicTaskRequirement.FREE_DEPOT_SLOT);
         };
         StrategicTaskKind kind = switch (objective.kind()) {
             case SETTLEMENT_CONTAIN_LOCAL_INFECTION -> StrategicTaskKind.DECONTAMINATE_INFECTION_CELL;
@@ -181,11 +209,12 @@ final class StrategicObjectiveProcess {
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;
             case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS;
+            case SETTLEMENT_HARVEST_RESOURCE_SITE -> StrategicTaskKind.HARVEST_RESOURCE_SITE;
         };
         Optional<SubjectId> operation = kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION ? HiveRouteEngagementProcess.targetOperation(state) : Optional.empty();
         if (kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION && operation.isEmpty()) throw new IllegalStateException("route interception lost its target during task creation");
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
-                objective.infectionTarget(), operation, requirements, dependencies(state, objective), StrategicTaskStatus.PENDING);
+                objective.infectionTarget(), operation, objective.resourceSiteTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING);
     }
     private static List<SubjectId> dependencies(FrontierWorldState state, StrategicObjective objective) {
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS) {
@@ -220,9 +249,13 @@ final class StrategicObjectiveProcess {
             throw new IllegalArgumentException("strategic review has a foreign owner");
         }
     }
-    private record Candidate(StrategicObjectiveKind kind, Optional<InfectionCell> target, long utility) {
+    private record Candidate(StrategicObjectiveKind kind, Optional<InfectionCell> target, Optional<SubjectId> resourceSiteTarget, long utility) {
+        Candidate(StrategicObjectiveKind kind, Optional<InfectionCell> target, long utility) {
+            this(kind, target, Optional.empty(), utility);
+        }
         private static final Comparator<Candidate> HIGHEST_UTILITY = Comparator.comparingLong(Candidate::utility).reversed()
                 .thenComparing(Candidate::kind).thenComparing(value -> value.target().map(InfectionCell::x).orElse(Integer.MIN_VALUE))
-                .thenComparing(value -> value.target().map(InfectionCell::z).orElse(Integer.MIN_VALUE));
+                .thenComparing(value -> value.target().map(InfectionCell::z).orElse(Integer.MIN_VALUE))
+                .thenComparing(value -> value.resourceSiteTarget().map(SubjectId::value).orElse(""));
     }
 }

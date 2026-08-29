@@ -37,22 +37,24 @@ final class StrategicPlanPayloadCodecs {
     }; }
     private static void writeObjective(DataOutputStream output, StrategicObjective value) throws IOException {
         subject(output, value.id()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
+        optionalSubject(output, value.resourceSiteTarget());
         output.writeInt(value.decisionOrdinal()); output.writeByte(value.status().ordinal());
     }
     private static StrategicObjective readObjective(DataInputStream input) throws IOException {
-        SubjectId id = subject(input), owner = subject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = target(input); int ordinal = input.readInt(), status = input.readUnsignedByte();
+        SubjectId id = subject(input), owner = subject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = target(input);
+        Optional<SubjectId> resourceSiteTarget = optionalSubject(input); int ordinal = input.readInt(), status = input.readUnsignedByte();
         if (kind >= StrategicObjectiveKind.values().length || status >= StrategicObjectiveStatus.values().length) throw new IllegalArgumentException("unknown strategic objective value");
-        return new StrategicObjective(id, owner, StrategicObjectiveKind.values()[kind], target, ordinal, StrategicObjectiveStatus.values()[status]);
+        return new StrategicObjective(id, owner, StrategicObjectiveKind.values()[kind], target, resourceSiteTarget, ordinal, StrategicObjectiveStatus.values()[status]);
     }
     private static void writeTask(DataOutputStream output, StrategicTask value) throws IOException {
         subject(output, value.id()); subject(output, value.objectiveId()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
-        optionalSubject(output, value.operationTarget());
+        optionalSubject(output, value.operationTarget()); optionalSubject(output, value.resourceSiteTarget());
         count(output, value.requirements().size()); for (StrategicTaskRequirement requirement : value.requirements()) output.writeByte(requirement.ordinal());
         count(output, value.dependencies().size()); for (SubjectId dependency : value.dependencies()) subject(output, dependency); output.writeByte(value.status().ordinal());
     }
     private static StrategicTask readTask(DataInputStream input) throws IOException {
         SubjectId id = subject(input), objective = subject(input), owner = subject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = target(input);
-        Optional<SubjectId> operationTarget = optionalSubject(input);
+        Optional<SubjectId> operationTarget = optionalSubject(input); Optional<SubjectId> resourceSiteTarget = optionalSubject(input);
         List<StrategicTaskRequirement> requirements = new ArrayList<>();
         for (int index = 0, count = count(input); index < count; index++) {
             int value = input.readUnsignedByte();
@@ -61,7 +63,7 @@ final class StrategicPlanPayloadCodecs {
         }
         List<SubjectId> dependencies = new ArrayList<>(); for (int index = 0, count = count(input); index < count; index++) dependencies.add(subject(input)); int status = input.readUnsignedByte();
         if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length) throw new IllegalArgumentException("unknown strategic task value");
-        return new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, requirements, dependencies, StrategicTaskStatus.values()[status]);
+        return new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, resourceSiteTarget, requirements, dependencies, StrategicTaskStatus.values()[status]);
     }
     private static void target(DataOutputStream output, Optional<InfectionCell> target) throws IOException {
         output.writeBoolean(target.isPresent()); if (target.isPresent()) { output.writeInt(target.orElseThrow().x()); output.writeInt(target.orElseThrow().z()); }

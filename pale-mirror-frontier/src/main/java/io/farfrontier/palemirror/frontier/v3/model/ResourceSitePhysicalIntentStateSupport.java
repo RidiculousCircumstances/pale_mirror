@@ -68,7 +68,9 @@ final class ResourceSitePhysicalIntentStateSupport {
     static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         if (lifecycle.phase() == ResourceSitePhase.DESTROYED) return replace(state, state.resourceSites(), nextIntents, state.physicalObservations());
-        preparation(lifecycle, intent.id());
+        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) preparation(lifecycle, intent.id());
+        else if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) harvest(lifecycle, intent.id());
+        else throw new IllegalArgumentException("resource-site conflict has a foreign physical intent");
         return replace(state, state.resourceSites().replace(lifecycle.conflicted()), nextIntents, state.physicalObservations());
     }
 
@@ -141,6 +143,11 @@ final class ResourceSitePhysicalIntentStateSupport {
     private static ResourceSitePreparationJob preparation(ResourceSiteLifecycle lifecycle, PhysicalIntentId intentId) {
         return lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
                 .filter(job -> job.intentId().equals(intentId)).orElseThrow(() -> new IllegalArgumentException("resource-site preparation has no matching active work"));
+    }
+
+    private static ResourceSiteHarvestJob harvest(ResourceSiteLifecycle lifecycle, PhysicalIntentId intentId) {
+        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(job -> job.intentId().equals(intentId)).orElseThrow(() -> new IllegalArgumentException("resource-site harvest has no matching active work"));
     }
 
     private static SubjectId jobId(SubjectId siteId) { return new SubjectId("job:site-prepare-" + siteId.value().substring("site:".length())); }

@@ -35,7 +35,8 @@ final class StrategicPlanState {
                 throw new IllegalArgumentException("strategic task must belong to one retained objective");
             }
             StrategicObjective objective = this.objectives.get(task.objectiveId());
-            if (!objective.ownerId().equals(task.ownerId()) || !objective.infectionTarget().equals(task.infectionTarget())) {
+            if (!objective.ownerId().equals(task.ownerId()) || !objective.infectionTarget().equals(task.infectionTarget())
+                    || !objective.resourceSiteTarget().equals(task.resourceSiteTarget())) {
                 throw new IllegalArgumentException("strategic task must retain its objective owner and target");
             }
             if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION
@@ -72,6 +73,11 @@ final class StrategicPlanState {
                     && (task.kind() != StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS || !task.requirements().equals(List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION,
                     StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL)) || task.dependencies().size() != 1)) {
                 throw new IllegalArgumentException("settlement route construction task has an invalid decomposition");
+            }
+            if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE
+                    && (task.kind() != StrategicTaskKind.HARVEST_RESOURCE_SITE || !task.requirements().equals(List.of(StrategicTaskRequirement.ACTIVE_FARM,
+                    StrategicTaskRequirement.AVAILABLE_FARMER, StrategicTaskRequirement.FREE_DEPOT_SLOT)))) {
+                throw new IllegalArgumentException("settlement harvest task has an invalid decomposition");
             }
             if (task.dependencies().stream().anyMatch(dependency -> !this.tasks.containsKey(dependency) || dependency.equals(task.id()))) {
                 throw new IllegalArgumentException("strategic task dependency must name another retained task");
@@ -122,6 +128,12 @@ final class StrategicPlanState {
             boolean knownOwner = bootstrap.hive().id().equals(objective.ownerId())
                     || bootstrap.settlements().stream().anyMatch(settlement -> settlement.id().equals(objective.ownerId()));
             if (!knownOwner) throw new IllegalArgumentException("strategic objective has a foreign owner");
+            objective.resourceSiteTarget().ifPresent(siteId -> {
+                ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(siteId);
+                if (site == null || !site.settlementId().equals(objective.ownerId())) {
+                    throw new IllegalArgumentException("strategic harvest objective has a foreign resource site");
+                }
+            });
         });
         routePatrols.values().forEach(patrol -> {
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());

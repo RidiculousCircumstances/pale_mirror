@@ -20,12 +20,14 @@ final class StrategicPlanStateCodec {
         writeCount(output, plans.objectives().size());
         for (StrategicObjective objective : plans.objectives().values().stream().sorted(Comparator.comparing(StrategicObjective::id)).toList()) {
             writeSubject(output, objective.id()); writeSubject(output, objective.ownerId()); output.writeByte(objective.kind().ordinal());
-            writeTarget(output, objective.infectionTarget()); output.writeInt(objective.decisionOrdinal()); output.writeByte(objective.status().ordinal());
+            writeTarget(output, objective.infectionTarget()); writeOptionalSubject(output, objective.resourceSiteTarget());
+            output.writeInt(objective.decisionOrdinal()); output.writeByte(objective.status().ordinal());
         }
         writeCount(output, plans.tasks().size());
         for (StrategicTask task : plans.tasks().values().stream().sorted(Comparator.comparing(StrategicTask::id)).toList()) {
             writeSubject(output, task.id()); writeSubject(output, task.objectiveId()); writeSubject(output, task.ownerId()); output.writeByte(task.kind().ordinal());
-            writeTarget(output, task.infectionTarget()); writeOptionalSubject(output, task.operationTarget()); writeCount(output, task.requirements().size());
+            writeTarget(output, task.infectionTarget()); writeOptionalSubject(output, task.operationTarget()); writeOptionalSubject(output, task.resourceSiteTarget());
+            writeCount(output, task.requirements().size());
             for (StrategicTaskRequirement requirement : task.requirements()) output.writeByte(requirement.ordinal());
             writeCount(output, task.dependencies().size()); for (SubjectId dependency : task.dependencies()) writeSubject(output, dependency);
             output.writeByte(task.status().ordinal());
@@ -55,19 +57,21 @@ final class StrategicPlanStateCodec {
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
+            Optional<SubjectId> resourceSiteTarget = readOptionalSubject(input);
             int ordinal = input.readInt(), status = input.readUnsignedByte();
             if (kind >= StrategicObjectiveKind.values().length || status >= StrategicObjectiveStatus.values().length
-                    || objectives.put(id, new StrategicObjective(id, owner, StrategicObjectiveKind.values()[kind], target, ordinal, StrategicObjectiveStatus.values()[status])) != null) {
+                    || objectives.put(id, new StrategicObjective(id, owner, StrategicObjectiveKind.values()[kind], target, resourceSiteTarget, ordinal, StrategicObjectiveStatus.values()[status])) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic objective");
             }
         }
         Map<SubjectId, StrategicTask> tasks = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), objective = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
-            Optional<SubjectId> operationTarget = readOptionalSubject(input);
+            Optional<SubjectId> operationTarget = readOptionalSubject(input); Optional<SubjectId> resourceSiteTarget = readOptionalSubject(input);
             List<StrategicTaskRequirement> requirements = readRequirements(input); List<SubjectId> dependencies = readDependencies(input); int status = input.readUnsignedByte();
             if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length
-                    || tasks.put(id, new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, requirements, dependencies, StrategicTaskStatus.values()[status])) != null) {
+                    || tasks.put(id, new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, resourceSiteTarget,
+                    requirements, dependencies, StrategicTaskStatus.values()[status])) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic task");
             }
         }

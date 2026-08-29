@@ -47,7 +47,7 @@ class ResourceSiteProcessTest {
     }
 
     @Test
-    void matureStageBecomesReadyAndSchedulesOneHarvestReviewInsteadOfAnEighthGrowth() {
+    void matureStageBecomesReadyAndSchedulesOneStrategicHarvestOpportunityInsteadOfAnEighthGrowth() {
         FrontierWorldState state = prepared(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE - 1; stage++) {
             ResourceSiteLifecycle current = state.resourceSites().site(site);
@@ -61,7 +61,8 @@ class ResourceSiteProcessTest {
         FrontierWorldState ready = ResourceSiteProcess.reduceGrowth(state, site, (ResourceSiteGrowthAdvanced) planned.getFirst().payload());
         assertEquals(ResourceSitePhase.READY, ready.resourceSites().site(site).phase());
         ScheduledAction harvest = ((ScheduleEffect.Created) planned.get(1).payload()).action();
-        assertEquals("frontier.resource_site.harvest", harvest.kind());
+        assertEquals("frontier.objective.resource_harvest", harvest.kind());
+        assertEquals(site, harvest.subject());
         assertEquals(10_001L, harvest.dueAt().ticks());
     }
 

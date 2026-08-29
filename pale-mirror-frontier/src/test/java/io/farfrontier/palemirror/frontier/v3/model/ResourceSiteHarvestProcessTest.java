@@ -19,13 +19,17 @@ class ResourceSiteHarvestProcessTest {
     @Test
     void exactMatureFieldCreatesOneNamedWheatStackOnlyAfterObservedReceipt() {
         FrontierWorldState ready = activeDepot(ready(initial())); SubjectId site = new SubjectId("site:1-wheat-field");
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(ready,
-                ResourceSiteHarvestProcess.review(ready.resourceSites().site(site), 22_000L));
+        FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
 
-        assertEquals(2, planned.size()); ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.getFirst().payload();
-        assertFalse(ready.inventory().items().containsKey(started.job().outputItemId()));
-        FrontierWorldState harvesting = ResourceSiteHarvestProcess.reduceStarted(ready, site, started);
-        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(1).payload()).intent();
+        assertEquals(3, planned.size()); assertEquals(new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE), planned.getFirst().payload());
+        ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
+        assertEquals(task.id(), started.job().taskId()); assertFalse(tasked.inventory().items().containsKey(started.job().outputItemId()));
+        assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+        FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"), (StrategicTaskTransition) planned.getFirst().payload());
+        FrontierWorldState harvesting = ResourceSiteHarvestProcess.reduceStarted(active, site, started);
+        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(2).payload()).intent();
         harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, intent);
         harvesting = harvesting.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         ExactItemStack output = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, started.job().outputSlot());
@@ -34,31 +38,36 @@ class ResourceSiteHarvestProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> completion = ResourceSiteHarvestProcess.planTransition(harvesting, intent,
                 new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)), 22_010L);
 
-        assertEquals(2, completion.size());
+        assertEquals(3, completion.size()); assertEquals(new StrategicTaskTransition(task.id(), StrategicTaskStatus.COMPLETED), completion.get(1).payload());
         FrontierWorldState complete = harvesting.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        complete = StrategicObjectiveProcess.reduceTaskTransition(complete, new SubjectId("settlement:1"), (StrategicTaskTransition) completion.get(1).payload());
         assertEquals(ResourceSitePhase.GROWING, complete.resourceSites().site(site).phase());
         assertEquals(output, complete.inventory().items().get(output.id()));
+        assertEquals(StrategicTaskStatus.COMPLETED, complete.strategicPlans().tasks().get(task.id()).status());
         assertTrue(new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(complete)).inventory().items().containsKey(output.id()));
     }
 
     @Test
     void inactiveOrFullDepotLeavesReadyFieldWithoutInventingAHarvest() {
         FrontierWorldState state = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state,
-                ResourceSiteHarvestProcess.review(state.resourceSites().site(site), 22_000L));
+        FrontierWorldState tasked = harvestTask(state, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
 
-        assertEquals(1, planned.size()); assertTrue(planned.getFirst().payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created);
+        assertEquals(1, planned.size()); assertEquals(new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED), planned.getFirst().payload());
         assertEquals(ResourceSitePhase.READY, state.resourceSites().site(site).phase());
     }
 
     @Test
     void receiptCannotRedirectTheNamedHarvestToAnotherDepotSlot() {
         FrontierWorldState ready = activeDepot(ready(initial())); SubjectId site = new SubjectId("site:1-wheat-field");
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(ready,
-                ResourceSiteHarvestProcess.review(ready.resourceSites().site(site), 22_000L));
-        ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.getFirst().payload();
-        FrontierWorldState harvesting = ResourceSiteHarvestProcess.reduceStarted(ready, site, started);
-        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(1).payload()).intent();
+        FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+        ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
+        FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"), (StrategicTaskTransition) planned.getFirst().payload());
+        FrontierWorldState harvesting = ResourceSiteHarvestProcess.reduceStarted(active, site, started);
+        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(2).payload()).intent();
         harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, intent);
         harvesting = harvesting.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         InventoryCustody.ContainerSlot otherSlot = new InventoryCustody.ContainerSlot(started.job().outputSlot().containerId(),
@@ -69,6 +78,31 @@ class ResourceSiteHarvestProcessTest {
 
         FrontierWorldState state = harvesting;
         assertThrows(IllegalArgumentException.class, () -> state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+    }
+
+    @Test
+    void restartUnknownHarvestConflictsTheExactFieldAndBlocksItsOwningTask() {
+        FrontierWorldState ready = activeDepot(ready(initial())); SubjectId site = new SubjectId("site:1-wheat-field");
+        FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+        ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
+        FrontierWorldState harvesting = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"),
+                (StrategicTaskTransition) planned.getFirst().payload());
+        harvesting = ResourceSiteHarvestProcess.reduceStarted(harvesting, site, started);
+        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(2).payload()).intent();
+        harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, intent);
+        harvesting = harvesting.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> transition = ResourceSiteHarvestProcess.planTransition(harvesting, intent,
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()), 22_101L);
+
+        assertEquals(2, transition.size());
+        FrontierWorldState conflicted = harvesting.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(site).phase());
+        FrontierWorldState blocked = StrategicObjectiveProcess.reduceTaskTransition(conflicted, new SubjectId("settlement:1"),
+                (StrategicTaskTransition) transition.get(1).payload());
+        assertEquals(StrategicTaskStatus.BLOCKED, blocked.strategicPlans().tasks().get(task.id()).status());
+        assertEquals(StrategicObjectiveStatus.BLOCKED, blocked.strategicPlans().objectives().get(task.objectiveId()).status());
     }
 
     private static FrontierWorldState activeDepot(FrontierWorldState state) {
@@ -90,6 +124,23 @@ class ResourceSiteHarvestProcessTest {
             state = ResourceSiteProcess.reduceGrowth(state, site, new ResourceSiteGrowthAdvanced(site, current.growthEpoch(), current.growthStage()));
         }
         return state;
+    }
+
+    private static FrontierWorldState harvestTask(FrontierWorldState state, SubjectId site, long dueAt) {
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), dueAt));
+        assertEquals(3, planned.size());
+        assertEquals(planned.getFirst().payload(), FrontierWorldRuntimeDefinition.payloadCodecs().decode(planned.getFirst().payload().type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(planned.getFirst().payload())));
+        assertEquals(planned.get(1).payload(), FrontierWorldRuntimeDefinition.payloadCodecs().decode(planned.get(1).payload().type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(planned.get(1).payload())));
+        FrontierWorldState selected = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"),
+                (StrategicObjectiveSelected) planned.getFirst().payload());
+        return StrategicObjectiveProcess.reduceTask(selected, new SubjectId("settlement:1"), (StrategicTaskPlanned) planned.get(1).payload());
+    }
+
+    private static StrategicTask onlyHarvestTask(FrontierWorldState state) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
     }
 
     private static FrontierWorldState initial() {

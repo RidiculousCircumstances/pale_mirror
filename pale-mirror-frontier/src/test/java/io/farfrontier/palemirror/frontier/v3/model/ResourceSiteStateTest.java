@@ -26,7 +26,7 @@ class ResourceSiteStateTest {
         ResourceSiteLifecycle growing = preparing.prepared();
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) growing = growing.advanceGrowth();
         assertEquals(ResourceSitePhase.READY, growing.phase());
-        ResourceSiteHarvestJob harvest = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-1-wheat-field-1"), siteId,
+        ResourceSiteHarvestJob harvest = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("task:field-harvest-1"), siteId,
                 new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1"),
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
                 new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"));
