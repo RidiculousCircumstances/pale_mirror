@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { correlation, loadScenario, newManifest, saveManifest } from './scenario.mjs';
+import { correlation, hasDiagnosticResponses, loadScenario, newManifest, saveManifest } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario -- <scenario.json> [manifest.json]');
@@ -48,7 +48,7 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
 });
 
 try {
-  await waitForPilot(child, () => complete || failure, 180_000);
+  await waitForPilot(child, () => failure || (complete && hasDiagnosticResponses(diagnostics, scenario.assertions ?? [])), 180_000);
   if (failure) throw new Error(failure);
   await Promise.all(frameTasks);
   for (const [index, action] of (scenario.actions ?? []).entries()) manifest.actions.push({ correlation: correlation(runId, index + 1), action });

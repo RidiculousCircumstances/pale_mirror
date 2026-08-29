@@ -71,6 +71,11 @@ export function correlation(runId, step) {
   return `scenario:${runId}:${step}`;
 }
 
+/** A native client receives command replies on later render/network ticks. */
+export function hasDiagnosticResponses(diagnostics, assertions) {
+  return assertions.every((assertion) => diagnostics.some((entry) => entry.value?.kind === assertion.view && entry.value?.id === assertion.id));
+}
+
 export function newManifest({ scenario, sha256, runId }) {
   return {
     schema: 1,

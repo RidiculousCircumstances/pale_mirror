@@ -8,7 +8,7 @@
     { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run tp PMTestPilot -336 65 -360" }
   ],
   "actions": [
-    { "type": "wait_until_block", "position": { "x": -332, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "x": -332, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 75000 },
     { "type": "wait", "ms": 5000 },
     { "type": "look", "at": { "x": -332, "y": 64, "z": -355 } },
     { "type": "break", "position": { "x": -332, "y": 64, "z": -355 } },
@@ -18,7 +18,7 @@
   ],
   "assertions": [
     { "after": 4, "view": "site", "id": "site:1-wheat-field", "expect": { "phase": "CONFLICT" } },
-    { "after": 4, "view": "trace", "id": "player:bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "kind": "resource_site_conflict" } }
+    { "after": 4, "view": "trace", "id": "player:bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "eventKind": "resource_site_conflict" } }
   ],
   "frames": [
     { "after": 1, "name": "field-ready" },

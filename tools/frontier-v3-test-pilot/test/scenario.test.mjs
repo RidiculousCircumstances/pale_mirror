@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, newManifest, validateScenario } from '../src/scenario.mjs';
+import { correlation, hasDiagnosticResponses, newManifest, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -29,6 +29,17 @@ test('manifest records stable action correlations', () => {
   const manifest = newManifest({ scenario, sha256: 'abc', runId: 'run-1' });
   assert.equal(correlation(manifest.runId, 2), 'scenario:run-1:2');
   assert.equal(manifest.scenarioId, 'field_player_break');
+});
+
+test('runner waits for every requested asynchronous diagnostic response', () => {
+  const assertions = [
+    { view: 'site', id: 'site:1-wheat-field' },
+    { view: 'trace', id: 'player:pilot' }
+  ];
+  const site = { value: { kind: 'site', id: 'site:1-wheat-field' } };
+  const trace = { value: { kind: 'trace', id: 'player:pilot' } };
+  assert.equal(hasDiagnosticResponses([site], assertions), false);
+  assert.equal(hasDiagnosticResponses([site, trace], assertions), true);
 });
 
 test('pilot module loads its pinned CommonJS pathfinder dependency', async () => {
