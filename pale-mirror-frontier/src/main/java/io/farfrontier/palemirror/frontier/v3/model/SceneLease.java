@@ -15,7 +15,8 @@ import java.util.UUID;
 /** Immutable durable claim preventing concurrent COLD and HOT execution of one route scene. */
 public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                          SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId,
-                         List<SceneMember> members, Set<SubjectId> ambientHandoffActorIds) {
+                         List<SceneMember> members, Set<SubjectId> ambientHandoffActorIds,
+                         Optional<SceneRecoveryEvidence> recoveryEvidence) {
     public SceneLease {
         Objects.requireNonNull(id, "scene lease id");
         Objects.requireNonNull(worldId, "scene lease world");
@@ -27,6 +28,7 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
         Objects.requireNonNull(status, "scene lease status"); engagementId = Objects.requireNonNull(engagementId, "scene lease engagement");
         members = List.copyOf(members);
         ambientHandoffActorIds = Set.copyOf(ambientHandoffActorIds);
+        recoveryEvidence = Objects.requireNonNull(recoveryEvidence, "scene lease recovery evidence");
         if (members.isEmpty() || members.size() > 32 || members.stream().map(SceneMember::actorId).distinct().count() != members.size()
                 || members.stream().map(SceneMember::entityId).distinct().count() != members.size()
                 || !members.stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(ambientHandoffActorIds)) {
@@ -37,15 +39,24 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
                 throw new IllegalArgumentException("scene member UUID must be deterministic from actor identity");
             }
         }
+        if (recoveryEvidence.isPresent() && status != SceneLeaseStatus.UNKNOWN_AFTER_RESTART) {
+            throw new IllegalArgumentException("only an unknown scene lease may retain recovery evidence");
+        }
     }
 
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, Optional.empty(), members, Set.of());
+        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, Optional.empty(), members, Set.of(), Optional.empty());
     }
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, Set.of());
+        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, Set.of(), Optional.empty());
+    }
+
+    public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
+                      SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
+                      Set<SubjectId> ambientHandoffActorIds) {
+        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, ambientHandoffActorIds, Optional.empty());
     }
 
     /** One canonical actor retains the same physical identity across ambient and scene leases. */
@@ -60,7 +71,12 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
     }
 
     public SceneLease withStatus(SceneLeaseStatus nextStatus) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, nextStatus, engagementId, members, ambientHandoffActorIds);
+        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, nextStatus, engagementId, members, ambientHandoffActorIds,
+                nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART ? recoveryEvidence : Optional.empty());
     }
-    public SceneLease withAmbientHandoff(Set<SubjectId> actorIds) { return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, actorIds); }
+    public SceneLease withAmbientHandoff(Set<SubjectId> actorIds) { return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, actorIds, recoveryEvidence); }
+    public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {
+        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, ambientHandoffActorIds,
+                Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));
+    }
 }

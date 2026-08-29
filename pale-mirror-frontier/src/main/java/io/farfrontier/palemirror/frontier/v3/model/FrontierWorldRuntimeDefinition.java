@@ -92,6 +92,21 @@ public final class FrontierWorldRuntimeDefinition {
                     new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
                             SupplyOperationProcess.operationProgress(operation, command.submittedAt().ticks() + 100L)))));
         }
+        if (command.payload() instanceof SceneLeaseRecoveryUnresolved unresolved) {
+            SceneLease lease = state.sceneLeases().get(unresolved.leaseId());
+            if (lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || lease.recoveryEvidence().isPresent()) {
+                return rejected("scene recovery evidence does not bind one unresolved restart lease");
+            }
+            if (lease.engagementId().isPresent()) return rejected("engagement scene recovery needs its own outcome policy");
+            RouteOperation operation = state.operations().get(lease.operationId());
+            if (operation == null || operation.stage() != OperationStage.EN_ROUTE) return rejected("scene recovery evidence has no active route operation");
+            try {
+                List<ProposedEvent> events = new java.util.ArrayList<>();
+                events.add(new ProposedEvent(operation.settlementId(), unresolved));
+                events.addAll(SupplyOperationProcess.failed(state, operation, "scene-recovery-unresolved"));
+                return new CommandPlan.Accepted(List.copyOf(events));
+            } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ActorDied death) {
             SceneLease lease = state.sceneLeases().get(death.leaseId());
             if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
@@ -214,6 +229,7 @@ public final class FrontierWorldRuntimeDefinition {
             case SceneLeaseHandoff handoff -> reduceSceneLeaseHandoff(state, event.subject(), event.instant(), handoff);
             case SceneLeaseTransition transition -> reduceSceneLeaseTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
+            case SceneLeaseRecoveryUnresolved unresolved -> reduceSceneLeaseRecoveryUnresolved(state, event.subject(), unresolved);
             case ActorDied death -> reduceActorDied(state, event.subject(), death);
             case AmbientActorDied death -> AmbientActorProcess.reduce(state, event.subject(), death);
             case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
@@ -435,10 +451,19 @@ public final class FrontierWorldRuntimeDefinition {
         boolean death = operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD);
         boolean obstruction = "route-obstructed".equals(failed.reason())
                 && !FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas());
-        if (!death && !obstruction) {
+        boolean recoveryUnresolved = "scene-recovery-unresolved".equals(failed.reason()) && state.sceneLeases().values().stream()
+                .anyMatch(lease -> lease.operationId().equals(operation.id()) && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART
+                        && lease.recoveryEvidence().isPresent());
+        if (!death && !obstruction && !recoveryUnresolved) {
             throw new IllegalArgumentException("operation failure lacks a dead participant or observed route obstruction");
         }
         return state.failOperation(failed.operationId());
+    }
+    private static FrontierWorldState reduceSceneLeaseRecoveryUnresolved(FrontierWorldState state, SubjectId subject, SceneLeaseRecoveryUnresolved unresolved) {
+        SceneLease lease = state.sceneLeases().get(unresolved.leaseId());
+        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene recovery evidence lacks its owning operation");
+        return FrontierSceneLeaseStateSupport.recoveryUnresolved(state, unresolved);
     }
     private static FrontierWorldState reduceExactItemCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
         if (!subject.equals(FrontierWorldStateSupport.itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");

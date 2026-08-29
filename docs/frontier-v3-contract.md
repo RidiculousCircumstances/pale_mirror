@@ -215,6 +215,11 @@ states.
   authority, so an ambient-to-scene hand-off adopts the same body rather than
   cloning or recreating it. Missing, duplicated or obstructed bodies fail
   visibly and do not imply death.
+- If a naturally loaded player-demand point disproves recovery of a logistics
+  scene's complete exact body set or cargo carrier, the runtime persists the
+  exact missing identities as recovery evidence and blocks that delivery. It
+  does not recreate actors, infer deaths, duplicate the cargo, or reschedule
+  the same unknown scene forever; unrelated settlement work continues.
 - Battles and operations use one scene-level lease so participants, terrain,
   cargo and effects cross the boundary atomically.
 

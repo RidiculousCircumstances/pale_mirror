@@ -53,6 +53,8 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
+import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -61,6 +63,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -142,13 +145,40 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void loadedMissingRestartSceneBlocksItsDeliveryWithoutReplacingActorsOrCargo(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:scene-recovery-unresolved");
+        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        for (int tick = 0; tick < 2_550; tick++) runtime.tick(new WorkBudget(64, 512));
+        FrontierWorldState state = worldState(runtime);
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-recovery-unresolved");
+        SceneLease lease = new SceneLease(leaseId, checkpoint.worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), checkpoint.instant(),
+                checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
+                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
+        submitWorld(runtime, "recovery-unresolved-prepare", new SceneLeasePrepared(lease));
+        transitionScene(runtime, world, leaseId, SceneLeaseStatus.HOT, "command:recovery-unresolved-hot");
+        assertEquals(1, FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime));
+
+        submitWorld(runtime, "recovery-unresolved-observation", new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false));
+
+        FrontierWorldState after = worldState(runtime);
+        assertEquals(OperationStage.FAILED, after.operations().get(operation.id()).stage());
+        assertEquals(Set.of(operation.participantIds().getFirst()), after.sceneLeases().get(leaseId).recoveryEvidence().orElseThrow().missingActorIds());
+        assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, after.sceneLeases().get(leaseId).status());
+        runtime.shutdown();
+    }
+
+    @Test
     void freshLifecycleWritesAheadTicksPersistsAndRecoversWithoutWorldTimeInput(@TempDir Path directory) {
         FrontierStore store = new FrontierFileStore(directory, codecs());
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), store, 2);
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
 
         FrontierCommand command = command("command:increment", Revision.ZERO, SimInstant.ZERO, 5);
-        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(command).orElseThrow());
+        CommandResult result = runtime.submit(command).orElseThrow();
+        assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
         runtime.tick(new WorkBudget(4, 8));
         runtime.tick(new WorkBudget(4, 8));
         runtime.tick(new WorkBudget(4, 8));
@@ -386,7 +416,8 @@ class FrontierV3ServerRuntimeTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(); CommandId commandId = new CommandId("test:" + phase);
         FrontierCommand command = new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload);
-        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(command).orElseThrow());
+        CommandResult result = runtime.submit(command).orElseThrow();
+        assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
     }
 
     private record Counter(int value) { }

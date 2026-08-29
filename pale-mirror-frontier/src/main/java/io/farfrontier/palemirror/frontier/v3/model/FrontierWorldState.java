@@ -187,7 +187,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             boolean enRouteScene = operation.stage() == OperationStage.EN_ROUTE && operation.route().get(operation.routeIndex()).equals(lease.handoffPosition());
             boolean interruptedScene = operation.stage() == OperationStage.INTERRUPTED
                     && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
-            if (lease.status() != SceneLeaseStatus.CLOSED && !enRouteScene && !interruptedScene) {
+            boolean unresolvedRestartScene = operation.stage() == OperationStage.FAILED && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART
+                    && lease.recoveryEvidence().isPresent();
+            if (lease.status() != SceneLeaseStatus.CLOSED && !enRouteScene && !interruptedScene && !unresolvedRestartScene) {
                 throw new IllegalArgumentException("active scene lease must bind its current en-route operation state");
             }
             if (lease.status() != SceneLeaseStatus.CLOSED && !leasedOperations.add(lease.operationId())) {
@@ -452,8 +454,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 productionJobs, nextContracts, operations, next, nextObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState prepareSceneLease(SceneLease lease) { return FrontierSceneLeaseStateSupport.prepare(this, lease); }
-    /** Atomically records loaded-body evidence, closes ambient authority and prepares one scene. */
-    public FrontierWorldState handoffAmbientScene(SceneLeaseHandoff handoff) { return FrontierSceneLeaseStateSupport.handoff(this, handoff); }
+    /** Atomically records loaded-body evidence, closes ambient authority and prepares one scene. */ public FrontierWorldState handoffAmbientScene(SceneLeaseHandoff handoff) { return FrontierSceneLeaseStateSupport.handoff(this, handoff); }
     public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) { return FrontierSceneLeaseStateSupport.transition(this, Objects.requireNonNull(leaseId, "scene lease id"), nextStatus); }
     public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) { return FrontierSceneLeaseStateSupport.release(this, Objects.requireNonNull(leaseId, "scene lease id"), positions); }
     public FrontierWorldState recordActorDeath(ActorDied death) {

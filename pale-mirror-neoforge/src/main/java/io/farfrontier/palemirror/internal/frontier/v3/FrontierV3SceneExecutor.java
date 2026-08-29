@@ -29,6 +29,7 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
@@ -172,6 +173,17 @@ final class FrontierV3SceneExecutor {
     /** Reclaims only a complete observed body set; missing bodies remain explicit UNKNOWN. */
     private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         if (!demandExists(level, lease.handoffPosition())) return;
+        if (lease.recoveryEvidence().isPresent()) return;
+        java.util.Set<SubjectId> missing = lease.members().stream()
+                .filter(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE)
+                .filter(member -> !owned(level.getEntity(member.entityId()), state, lease, member))
+                .map(SceneMember::actorId).collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        if (!missing.isEmpty()) { recoveryUnresolved(runtime, lease, missing, false); return; }
+        RouteOperation operation = state.operations().get(lease.operationId());
+        boolean interrupted = operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
+        if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
+            recoveryUnresolved(runtime, lease, java.util.Set.of(), true); return;
+        }
         reclaimObservedBodies(level, runtime, state, lease);
     }
 
@@ -449,6 +461,11 @@ final class FrontierV3SceneExecutor {
     }
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
         submit(runtime, "scene-unknown", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+    }
+    /** A loaded demand point has disproved exact reclaimability; record conflict rather than loop forever or replace a body. */
+    private static void recoveryUnresolved(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, java.util.Set<SubjectId> missingActors,
+                                           boolean missingCarrier) {
+        submit(runtime, "scene-recovery-unresolved", lease.id().value(), new SceneLeaseRecoveryUnresolved(lease.id(), missingActors, missingCarrier));
     }
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
         CheckpointImage checkpoint = checkpoint(runtime);

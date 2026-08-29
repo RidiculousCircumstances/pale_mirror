@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 41, VERSION = 42, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 43, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -65,14 +65,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
-            if (version != LEGACY_VERSION && version != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
+            if (version != 41 && version != LEGACY_VERSION && version != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
-                    readContracts(input), readOperations(input), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input), colony, structureDamage, physicalDeltas,
+                    readContracts(input), readOperations(input), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input), RouteTopologyStateCodec.read(input, bootstrap), StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input),
                     ResourceSiteStateCodec.read(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
@@ -399,9 +399,16 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); }
             writeCount(output, lease.ambientHandoffActorIds().size());
             for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeString(output, actor.value());
+            output.writeBoolean(lease.recoveryEvidence().isPresent());
+            if (lease.recoveryEvidence().isPresent()) {
+                SceneRecoveryEvidence evidence = lease.recoveryEvidence().orElseThrow();
+                writeCount(output, evidence.missingActorIds().size());
+                for (SubjectId actor : evidence.missingActorIds().stream().sorted().toList()) writeString(output, actor.value());
+                output.writeBoolean(evidence.missingCargoCarrier());
+            }
         }
     }
-    private static Map<SceneLeaseId, SceneLease> readSceneLeases(DataInputStream input) throws IOException {
+    private static Map<SceneLeaseId, SceneLease> readSceneLeases(DataInputStream input, int version) throws IOException {
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SceneLeaseId id = new SceneLeaseId(readString(input)); WorldId world = new WorldId(readString(input)); SubjectId operation = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
@@ -414,8 +421,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
             java.util.Set<SubjectId> handoffActors = new java.util.LinkedHashSet<>();
             for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) handoffActors.add(new SubjectId(readString(input)));
+            java.util.Optional<SceneRecoveryEvidence> recovery = java.util.Optional.empty();
+            if (version >= VERSION && input.readBoolean()) {
+                java.util.Set<SubjectId> missing = new java.util.LinkedHashSet<>();
+                for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) missing.add(new SubjectId(readString(input)));
+                recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));
+            }
             SceneLease lease = new SceneLease(id, world, operation, cargo, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
-                    SceneLeaseStatus.values()[status], engagement, members, handoffActors);
+                    SceneLeaseStatus.values()[status], engagement, members, handoffActors, recovery);
             if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
         }
         return leases;

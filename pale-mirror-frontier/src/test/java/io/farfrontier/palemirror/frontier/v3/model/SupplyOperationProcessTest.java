@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -57,5 +58,30 @@ class SupplyOperationProcessTest {
         ScheduleEffect.Created deferred = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload());
         assertEquals(1, planned.size());
         assertEquals(SupplyOperationProcess.operationProgress(operation, 2_750L), deferred.action());
+    }
+
+    @Test
+    void observedMissingRestartSceneBlocksOnlyItsExactDeliveryRatherThanReschedulingForever() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(
+                new WorldId("frontier:supply-unresolved-scene"), 91L));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        SceneLeaseId leaseId = new SceneLeaseId("lease:supply-unresolved-scene");
+        SceneLease lease = new SceneLease(leaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(),
+                engine.checkpoint().instant(), engine.checkpoint().revision().value(), SceneLeaseStatus.PREPARED,
+                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
+        FrontierWorldState unresolved = FrontierSceneLeaseStateSupport.recoveryUnresolved(
+                before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART),
+                new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false));
+
+        List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unresolved, SupplyOperationProcess.operationProgress(operation, 2_650L));
+
+        assertEquals(List.of(new OperationFailed(operation.id(), "scene-recovery-unresolved"),
+                new StrategicTaskTransition(new SubjectId("task:settlement-1-settlement_deliver_bread_to_hive-2-deliver"), StrategicTaskStatus.BLOCKED)),
+                planned.stream().map(ProposedEvent::payload).toList());
+        assertEquals(unresolved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unresolved)));
+        SceneLeaseRecoveryUnresolved payload = new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false);
+        assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
     }
 }

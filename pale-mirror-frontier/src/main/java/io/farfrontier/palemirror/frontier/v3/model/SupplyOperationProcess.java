@@ -72,7 +72,11 @@ final class SupplyOperationProcess {
         if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
         Optional<SceneLease> unknownLease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
                 && value.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).findFirst();
-        if (unknownLease.isPresent()) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+        if (unknownLease.isPresent()) {
+            return unknownLease.orElseThrow().recoveryEvidence().isPresent()
+                    ? failed(state, operation, "scene-recovery-unresolved")
+                    : List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+        }
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
                 && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));

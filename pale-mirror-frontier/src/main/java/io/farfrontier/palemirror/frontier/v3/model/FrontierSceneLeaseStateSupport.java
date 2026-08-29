@@ -85,6 +85,27 @@ final class FrontierSceneLeaseStateSupport {
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), plans);
     }
 
+    /**
+     * Records a naturally loaded recovery observation without inventing a death, body, cargo
+     * hand-off or COLD continuation.  The owning operation is subsequently blocked by the same
+     * transaction, so an uninspectable old scene cannot monopolize its settlement forever.
+     */
+    static FrontierWorldState recoveryUnresolved(FrontierWorldState state, SceneLeaseRecoveryUnresolved unresolved) {
+        SceneLease current = state.sceneLeases().get(unresolved.leaseId());
+        if (current == null || current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent()) {
+            throw new IllegalArgumentException("scene recovery evidence requires one uninspected unknown lease");
+        }
+        Set<SubjectId> liveMembers = current.members().stream().map(SceneMember::actorId)
+                .filter(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
+                .collect(java.util.stream.Collectors.toSet());
+        if (!liveMembers.containsAll(unresolved.missingActorIds())) {
+            throw new IllegalArgumentException("scene recovery evidence names a foreign or already-dead actor");
+        }
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.put(current.id(), current.withRecoveryEvidence(new SceneRecoveryEvidence(unresolved.missingActorIds(), unresolved.missingCargoCarrier())));
+        return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans());
+    }
+
     static FrontierWorldState release(FrontierWorldState state, SceneLeaseId leaseId, List<SceneMemberPosition> positions) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
