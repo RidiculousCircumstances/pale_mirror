@@ -44,6 +44,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -61,16 +62,20 @@ import java.util.Optional;
  * Loaded-chunk HOT executor for exact route participants.
  *
  * <p>A persisted lease is the authority boundary. PREPARED may safely finish materialization of
- * its deterministic bodies after a restart; HOT never respawns a missing body and instead enters
- * the observable unknown state. This executor neither loads chunks nor writes world blocks.</p>
+ * its deterministic bodies after a restart; restart recovery and a live loaded-world conflict
+ * remain separate durable states. This executor neither loads chunks nor writes world blocks.</p>
  */
 final class FrontierV3SceneExecutor {
     static final String LEASE_KEY = "pale_mirror_frontier_v3_scene_lease";
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_scene_actor";
     static final String REVISION_KEY = "pale_mirror_frontier_v3_scene_revision";
     private static final int DEMAND_RADIUS_BLOCKS = 96;
+    private static final int MAX_VERTICAL_PLACEMENT_SEARCH = 8;
 
     enum BodyMaterialization { COMPLETE, DEFERRED, CONFLICT }
+
+    /** Read-only materialization preflight; never creates, moves, claims or loads a body. */
+    record Readiness(String bodies, String carrier) { }
 
     private FrontierV3SceneExecutor() { }
 
@@ -146,13 +151,14 @@ final class FrontierV3SceneExecutor {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> {
                 executeLocalGoals(level, state, lease);
-                if (!FrontierV3CargoCarrierExecutor.move(level, state, lease)) { unknown(runtime, lease); return; }
+                if (!FrontierV3CargoCarrierExecutor.move(level, state, lease)) { conflict(runtime, lease); return; }
                 if (level.getGameTime() % 20L == 0L && !executeExplosion(level, runtime, state, lease)) executeStrike(level, runtime, state, lease);
                 if (!demandExists(level, lease.handoffPosition())) submit(runtime, "scene-draining", lease.id().value(),
                         new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             }
             case DRAINING -> release(level, runtime, lease);
             case UNKNOWN_AFTER_RESTART -> reclaim(level, runtime, state, lease);
+            case CONFLICT -> { }
             case CLOSED -> { }
         }
     }
@@ -164,7 +170,7 @@ final class FrontierV3SceneExecutor {
         if (result == BodyMaterialization.COMPLETE && carrier == BodyMaterialization.COMPLETE) {
             submit(runtime, "scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         } else if (result == BodyMaterialization.CONFLICT || carrier == BodyMaterialization.CONFLICT) {
-            unknown(runtime, lease);
+            conflict(runtime, lease);
         }
     }
 
@@ -240,6 +246,31 @@ final class FrontierV3SceneExecutor {
             if (!level.addFreshEntity(body)) return BodyMaterialization.CONFLICT;
         }
         return BodyMaterialization.COMPLETE;
+    }
+
+    static Optional<Readiness> readiness(ServerLevel level, FrontierWorldState state, SubjectId engagementId) {
+        SceneLease lease = state.sceneLeases().values().stream()
+                .filter(value -> value.engagementId().filter(engagementId::equals).isPresent())
+                .sorted(Comparator.comparing(SceneLease::id)).findFirst().orElse(null);
+        if (lease == null) return Optional.empty();
+        return Optional.of(new Readiness(bodyReadiness(level, state, lease), FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name()));
+    }
+
+    private static String bodyReadiness(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        boolean allCurrent = true;
+        for (int index = 0; index < lease.members().size(); index++) {
+            SceneMember member = lease.members().get(index); Entity existing = level.getEntity(member.entityId());
+            if (existing != null) {
+                if (owned(existing, state, lease, member)) continue;
+                return "UUID_CONFLICT";
+            }
+            allCurrent = false;
+            if (lease.ambientHandoffActorIds().contains(member.actorId())) return "AWAITING_AMBIENT_HANDOFF";
+            BlockPos candidate = spawnCandidate(lease.handoffPosition(), index);
+            if (!level.hasChunkAt(candidate)) return "UNLOADED";
+            if (spawnPosition(level, candidate) == null) return "BLOCKED";
+        }
+        return allCurrent ? "CURRENT" : "READY";
     }
 
     /**
@@ -381,14 +412,14 @@ final class FrontierV3SceneExecutor {
         RouteOperation operation = state.operations().get(lease.operationId());
         boolean interrupted = operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
         if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
-            unknown(runtime, lease); return;
+            conflict(runtime, lease); return;
         }
         List<SceneMemberPosition> positions = new ArrayList<>();
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
-            if (!owned(entity, state, lease, member)) { unknown(runtime, lease); return; }
-            if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) { unknown(runtime, lease); return; }
+            if (!owned(entity, state, lease, member)) { conflict(runtime, lease); return; }
+            if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) { conflict(runtime, lease); return; }
             long health = Math.round((double) body.getHealth() * FixedScalar.SCALE);
             positions.add(new SceneMemberPosition(member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
         }
@@ -414,9 +445,18 @@ final class FrontierV3SceneExecutor {
         return new BlockPos(anchor.x() + (ordinal % 2) * 2, anchor.y(), anchor.z() + (ordinal / 2) * 2);
     }
     private static BlockPos spawnPosition(ServerLevel level, BlockPos position) {
-        if (!level.getBlockState(position).isAir() || !level.getBlockState(position.above()).isAir()
-                || !level.getBlockState(position.below()).isFaceSturdy(level, position.below(), Direction.UP)) return null;
-        return position;
+        if (!level.hasChunkAt(position)) return null;
+        // A canonical hand-off is horizontal.  It can land on a route, field edge or player-built
+        // slope whose exact top surface differs from its strategic Y.  Search only the naturally
+        // loaded column, exactly as ambient admission does; never overwrite or clear an obstacle.
+        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, position.getX(), position.getZ());
+        for (int y = surface; y <= surface + MAX_VERTICAL_PLACEMENT_SEARCH; y++) {
+            BlockPos candidate = new BlockPos(position.getX(), y, position.getZ());
+            if (!level.hasChunkAt(candidate)) return null;
+            if (level.getBlockState(candidate).isAir() && level.getBlockState(candidate.above()).isAir()
+                    && level.getBlockState(candidate.below()).isFaceSturdy(level, candidate.below(), Direction.UP)) return candidate;
+        }
+        return null;
     }
 
     static Optional<Entity> explosionCause(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
@@ -426,6 +466,19 @@ final class FrontierV3SceneExecutor {
                 .flatMap(lease -> lease.members().stream().filter(member -> member.actorId().equals(intent.causeSubjectId()))
                         .map(member -> new LeaseMember(lease, member))).filter(value -> owned(level.getEntity(value.member().entityId()), state, value.lease(), value.member()))
                 .map(value -> level.getEntity(value.member().entityId())).filter(entity -> entity instanceof Mob).filter(Entity::isAlive).findFirst();
+    }
+
+    /**
+     * Read-only proof for the shared Graybox admission boundary. A scene body is
+     * allowed only when every persisted identity component still agrees with an
+     * active (including conflict-preserved) canonical scene lease.
+     */
+    static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        FrontierWorldState state = state(runtime);
+        if (state == null || entity.isRemoved()) return false;
+        return state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
+                .flatMap(lease -> lease.members().stream().map(member -> new LeaseMember(lease, member)))
+                .anyMatch(value -> owned(entity, state, value.lease(), value.member()));
     }
 
     private static boolean bomber(FrontierWorldState state, SubjectId actorId) {
@@ -449,8 +502,9 @@ final class FrontierV3SceneExecutor {
         entity.getPersistentData().putString(ACTOR_KEY, member.actorId().value());
         entity.getPersistentData().putLong(REVISION_KEY, lease.revision());
     }
-    private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
-        submit(runtime, "scene-unknown", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+    /** A loaded-world obstruction or altered owned body is a physical conflict, not restart evidence. */
+    private static void conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+        submit(runtime, "scene-conflict", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT));
     }
     /** A loaded demand point has disproved exact reclaimability; record conflict rather than loop forever or replace a body. */
     private static void recoveryUnresolved(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, java.util.Set<SubjectId> missingActors,

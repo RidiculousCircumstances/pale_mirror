@@ -32,6 +32,8 @@ import java.util.Objects;
 /** Explicit development bridge; V3 has no production activation before the cutover gate. */
 public final class FrontierV3ServerLifecycle {
     private static final String ENABLED_PROPERTY = "pale_mirror.frontier_v3.enabled";
+    private static final String PILOT_RUN_ID_PROPERTY = "pale_mirror.frontier_v3.pilot.run_id";
+    private static final String PILOT_PROFILE_PROPERTY = "pale_mirror.frontier_v3.pilot.profile";
     private static final Map<MinecraftServer, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection>> RUNTIMES = new IdentityHashMap<>();
     /** Servers whose world teardown has begun; their entity leaves are not gameplay observations. */
     private static final Map<MinecraftServer, Boolean> STOPPING = new IdentityHashMap<>();
@@ -114,8 +116,17 @@ public final class FrontierV3ServerLifecycle {
                 // The immutable canonical formatter remains the source of the not-found response.
             }
         }
+        java.util.Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness = java.util.Optional.empty();
+        if ("scene".equals(view)) {
+            try {
+                sceneReadiness = FrontierV3SceneExecutor.readiness(FrontierV3PhysicalWorld.require(server), state,
+                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
+            } catch (IllegalArgumentException ignored) {
+                // The immutable canonical formatter remains the source of the not-found response.
+            }
+        }
         return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
-                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness);
+                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness);
     }
 
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */
@@ -139,7 +150,7 @@ public final class FrontierV3ServerLifecycle {
         if (!enabled() || RUNTIMES.containsKey(server)) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.configuration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed()),
+                initialConfiguration(physicalWorld),
                 new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
@@ -163,13 +174,28 @@ public final class FrontierV3ServerLifecycle {
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             PaleMirrorMod.LOGGER.info("Frontier v3 development runtime started for {}", server.getWorldPath(LevelResource.ROOT));
-            String pilotRunId = System.getProperty("pale_mirror.frontier_v3.pilot.run_id", "");
+            String pilotRunId = System.getProperty(PILOT_RUN_ID_PROPERTY, "");
             if (!pilotRunId.isBlank()) {
                 PaleMirrorMod.LOGGER.info("PMV3_PILOT_SERVER runId={} pid={}", pilotRunId, ProcessHandle.current().pid());
             }
         } else {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined at startup: {}", runtime.status().detail().orElse("unknown"));
         }
+    }
+
+    /**
+     * The only non-world bootstrap is a named disposable-pilot fixture.  It is intentionally
+     * unavailable to normal starts: the pilot has a per-JVM nonce and its scenario runner owns
+     * a fresh world directory, so this never becomes a production simulation switch.
+     */
+    private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
+    initialConfiguration(ServerLevel physicalWorld) {
+        String profile = System.getProperty(PILOT_PROFILE_PROPERTY, "world");
+        if (profile.equals("world")) return FrontierWorldRuntimeDefinition.configuration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        if (profile.equals("hot-scene-strike") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
+        throw new IllegalStateException("Frontier v3 pilot profile is unavailable outside an identified disposable runner: " + profile);
     }
 
     /**
@@ -277,14 +303,15 @@ public final class FrontierV3ServerLifecycle {
     }
 
     /**
-     * Lets the shared graybox admission boundary admit only an exact V3 ambient carrier.
-     * This is a predicate only; EntityJoin observation remains the sole lifecycle mutation path.
+     * Lets the shared Graybox admission boundary admit only an exact active V3
+     * ambient or scene carrier. This is a predicate only; EntityJoin observation
+     * remains the sole lifecycle mutation path.
      */
-    public static boolean recognizesAmbientCarrier(ServerLevel level, Entity entity) {
+    public static boolean recognizesManagedCarrier(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3AmbientActorExecutor.recognizes(runtime, entity);
+                && (FrontierV3AmbientActorExecutor.recognizes(runtime, entity) || FrontierV3SceneExecutor.recognizes(runtime, entity));
     }
 
     /** Returns true only when this v3 runtime durably accepted the managed HOT death. */
@@ -342,7 +369,7 @@ public final class FrontierV3ServerLifecycle {
         if (owner.isBlank()) return false;
         var board = FrontierReadabilityPlan.compile(state).boards().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(owner));
         if (board == null || !FrontierV3ObjectBoardExecutor.isCurrentOwnedBoard(level, entity, board)) return false;
-        PaleMirrorPlayerPresentation.context(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
+        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
         return true;
     }
 
@@ -470,18 +497,21 @@ public final class FrontierV3ServerLifecycle {
     }
 
     /** Routes a real blast either to its active v3 intent or to the ordinary external-effect observer. */
-    public static boolean observeExplosion(ServerLevel level, java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
+    public static boolean observeExplosion(ServerLevel level, net.minecraft.world.level.Explosion explosion,
+                                           java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
-        return observeExplosion(level, runtime, affected, entities);
+        return observeExplosion(level, runtime, explosion, affected, entities);
     }
 
     /** One shared server-thread bridge for the production host and real-world integration proofs. */
     static boolean observeExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                    java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
+                                    net.minecraft.world.level.Explosion explosion, java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(affected, "affected blocks");
-        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent();
+        Entity directSource = explosion == null ? null : explosion.getDirectSourceEntity();
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent()
+                .or(() -> FrontierV3BomberBomb.intentFor(explosion));
         for (Entity entity : entities) {
             CargoCarrierInteraction released = releaseCargoCarrier(level, runtime, entity, java.util.Optional.empty());
             if (released == CargoCarrierInteraction.REJECTED) {
@@ -493,7 +523,7 @@ public final class FrontierV3ServerLifecycle {
         }
         boolean resourceSite = managed.map(intent -> FrontierV3ResourceSiteExplosionExecutor.captureManaged(level, runtime, intent, affected))
                 .orElseGet(() -> FrontierV3ResourceSiteExplosionExecutor.captureExternal(level, runtime, affected));
-        boolean ordinary = managed.map(intent -> FrontierV3ExplosionExecutor.observeDetonation(level, runtime, intent, affected, entities))
+        boolean ordinary = managed.map(intent -> FrontierV3ExplosionExecutor.observeDetonation(level, runtime, intent, directSource, affected, entities))
                 .orElseGet(() -> FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected));
         return resourceSite || ordinary;
     }

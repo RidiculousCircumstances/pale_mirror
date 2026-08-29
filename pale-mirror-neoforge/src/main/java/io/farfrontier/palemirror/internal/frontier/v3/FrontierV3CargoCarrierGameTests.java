@@ -73,6 +73,27 @@ public final class FrontierV3CargoCarrierGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void preparedCarrierStandsAboveLoadedRouteDeck(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 0));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-deck-test");
+        FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-deck-test");
+        BlockPos deck = cargoPosition(origin, lease); prepareFloor(level, deck); level.setBlock(deck, Blocks.STONE.defaultBlockState(), 3);
+
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "a loaded route deck may occupy strategic hand-off height without blocking the exact cargo carrier");
+        helper.runAfterDelay(1L, () -> {
+            try {
+                Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
+                helper.assertTrue(carrier != null && carrier.blockPosition().getY() > deck.getY(),
+                        "the carrier must stand on the existing route deck rather than inside or replacing it");
+                helper.assertValueEqual(level.getBlockState(deck), Blocks.STONE.defaultBlockState(),
+                        "carrier placement must preserve the loaded route deck exactly");
+                carrier.discard(); runtime.shutdown(); helper.succeed();
+            } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedSceneRefusesForeignCargoCarrierWithExpectedUuid(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(48, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-conflict-test");

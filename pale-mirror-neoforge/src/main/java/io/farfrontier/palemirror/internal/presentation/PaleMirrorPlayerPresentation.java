@@ -28,29 +28,25 @@ public final class PaleMirrorPlayerPresentation {
 
     private PaleMirrorPlayerPresentation() { }
 
-    public static void transientAction(ServerPlayer player, String key, Component message) {
+    /** One compact result of the recipient's just-completed physical action; never background simulation. */
+    public static void actionResult(ServerPlayer player, String key, Component message) {
         deliver(player, new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.ACTION_BAR,
-                PlayerNoticeGate.Priority.TRANSIENT, 20), oneLine(message).withStyle(ChatFormatting.GRAY));
+                PlayerNoticeGate.Priority.ACTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 20), oneLine(message).withStyle(ChatFormatting.YELLOW));
     }
 
-    public static void action(ServerPlayer player, String key, Component message) {
-        deliver(player, new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.ACTION_BAR,
-                PlayerNoticeGate.Priority.ACTION, 8), oneLine(message).withStyle(ChatFormatting.YELLOW));
-    }
-
-    /** Replaces the player's one short object card; durable facts remain on boards and in the Atlas. */
-    public static void context(ServerPlayer player, String key, PlayerContextCard card) {
+    /** Replaces the one short card after an explicit object inspection; it is never a background alert. */
+    public static void inspect(ServerPlayer player, String key, PlayerContextCard card) {
         Objects.requireNonNull(player, "player"); Objects.requireNonNull(card, "card");
         PlayerNoticeGate gate = gates(Objects.requireNonNull(player.getServer(), "player server"))
                 .computeIfAbsent(player.getUUID(), ignored -> new PlayerNoticeGate());
         if (gate.admit(new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.CONTEXT_CARD,
-                PlayerNoticeGate.Priority.CONTEXT, 20), player.serverLevel().getGameTime()) != PlayerNoticeGate.Decision.DELIVER) return;
+                PlayerNoticeGate.Priority.CONTEXT, PlayerNoticeGate.Origin.PLAYER_ACTION, 20), player.serverLevel().getGameTime()) != PlayerNoticeGate.Decision.DELIVER) return;
         PaleMirrorNetwork.sendContextCard(player, new PlayerContextCardPayload(card.title(), card.lines(), CONTEXT_DURATION_TICKS, card.accentRgb()));
     }
 
     public static void critical(ServerPlayer player, String key, Component message) {
         deliver(player, new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.CHAT,
-                PlayerNoticeGate.Priority.CRITICAL, 100), message.copy().withStyle(ChatFormatting.RED));
+                PlayerNoticeGate.Priority.CRITICAL, PlayerNoticeGate.Origin.BACKGROUND, 100), message.copy().withStyle(ChatFormatting.RED));
     }
 
     /** Clears the only ephemeral state at server shutdown; no player/world state is retained. */

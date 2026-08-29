@@ -7,5 +7,6 @@ enum RouteEngagementStatus {
     COLD_COMBAT,
     HOT,
     RESOLVED,
-    UNKNOWN_AFTER_RESTART
+    UNKNOWN_AFTER_RESTART,
+    CONFLICT
 }

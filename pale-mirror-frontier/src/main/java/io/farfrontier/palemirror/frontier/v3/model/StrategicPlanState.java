@@ -279,11 +279,17 @@ final class StrategicPlanState {
     }
 
     private static boolean allowed(RouteEngagementStatus current, RouteEngagementStatus next) {
-        return current == RouteEngagementStatus.APPROACHING && (next == RouteEngagementStatus.WAITING_FOR_INTERCEPT || next == RouteEngagementStatus.COLD_COMBAT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
-                || current == RouteEngagementStatus.WAITING_FOR_INTERCEPT && (next == RouteEngagementStatus.COLD_COMBAT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
-                || current == RouteEngagementStatus.COLD_COMBAT && (next == RouteEngagementStatus.HOT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
-                || current == RouteEngagementStatus.HOT && (next == RouteEngagementStatus.COLD_COMBAT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART)
-                || current == RouteEngagementStatus.UNKNOWN_AFTER_RESTART && (next == RouteEngagementStatus.HOT || next == RouteEngagementStatus.COLD_COMBAT);
+        return current == RouteEngagementStatus.APPROACHING && (next == RouteEngagementStatus.WAITING_FOR_INTERCEPT
+                || next == RouteEngagementStatus.COLD_COMBAT || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART
+                || next == RouteEngagementStatus.CONFLICT)
+                || current == RouteEngagementStatus.WAITING_FOR_INTERCEPT && (next == RouteEngagementStatus.COLD_COMBAT
+                || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART || next == RouteEngagementStatus.CONFLICT)
+                || current == RouteEngagementStatus.COLD_COMBAT && (next == RouteEngagementStatus.HOT
+                || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART || next == RouteEngagementStatus.CONFLICT)
+                || current == RouteEngagementStatus.HOT && (next == RouteEngagementStatus.COLD_COMBAT
+                || next == RouteEngagementStatus.UNKNOWN_AFTER_RESTART || next == RouteEngagementStatus.CONFLICT)
+                || current == RouteEngagementStatus.UNKNOWN_AFTER_RESTART && (next == RouteEngagementStatus.HOT || next == RouteEngagementStatus.COLD_COMBAT)
+                || current == RouteEngagementStatus.CONFLICT && next == RouteEngagementStatus.HOT;
     }
 
     StrategicPlanState resolveEngagement(SubjectId engagementId, RouteEngagementOutcome outcome) {

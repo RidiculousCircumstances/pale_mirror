@@ -88,6 +88,21 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesOneReadOnlyEngagementSceneWithoutCreatingOrAdvancingIt(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:diagnostic-scene-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        String id = state.coldEngagementSceneCandidates().getFirst().engagementId().value();
+
+        String scene = FrontierV3DiagnosticJson.render("scene", id, checkpoint, state, Optional.empty());
+
+        assertTrue(scene.contains("\"status\":\"not_found\""), "without a materialized scene lease the read-only view must not create one");
+        assertTrue(runtime.decodedState().orElseThrow().sceneLeases().isEmpty(), "diagnostics never mutate the canonical scene state");
+    }
+
+    @Test
     void keepsPhysicalReadinessScopedToHarvestIntents(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-readiness-test"), 94L),

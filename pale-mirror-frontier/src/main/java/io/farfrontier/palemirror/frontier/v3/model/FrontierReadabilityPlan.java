@@ -51,9 +51,11 @@ public final class FrontierReadabilityPlan {
     private static void addRouteNetwork(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state) {
         boolean damaged = state.physicalDeltas().values().stream().anyMatch(delta ->
                 delta.ownerId().equals(java.util.Optional.of(FrontierRouteNetwork.OWNER)));
+        boolean sceneConflict = state.sceneLeases().values().stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.CONFLICT);
         boolean caravan = state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE);
-        FrontierObjectBoard.Tone tone = damaged ? FrontierObjectBoard.Tone.WARNING : FrontierObjectBoard.Tone.SETTLEMENT;
-        String stateText = damaged ? "ROUTE DAMAGE · PATROL NEEDED" : caravan ? "CARAVAN EN ROUTE" : "ACTIVE · 12 SETTLEMENTS";
+        FrontierObjectBoard.Tone tone = damaged || sceneConflict ? FrontierObjectBoard.Tone.WARNING : FrontierObjectBoard.Tone.SETTLEMENT;
+        String stateText = damaged ? "ROUTE DAMAGE · PATROL NEEDED" : sceneConflict ? "SCENE BLOCKED · KEEP CLEAR"
+                : caravan ? "CARAVAN EN ROUTE" : "ACTIVE · 12 SETTLEMENTS";
         add(values, new FrontierObjectBoard(FrontierRouteNetwork.OWNER,
                 FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3), tone,
                 "FRONTIER ROUTES\nNETWORK\n" + stateText));

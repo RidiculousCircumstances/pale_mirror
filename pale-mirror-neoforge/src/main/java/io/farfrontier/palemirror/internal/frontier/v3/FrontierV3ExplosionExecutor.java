@@ -28,7 +28,6 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.phys.AABB;
 
@@ -52,11 +51,12 @@ final class FrontierV3ExplosionExecutor {
                 .sorted(Comparator.comparing(PhysicalIntent::id)).findFirst().ifPresent(intent -> execute(level, runtime, intent));
     }
 
-    static boolean observeDetonation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId,
+    static boolean observeDetonation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId, Entity source,
                                      java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         FrontierWorldState state = state(runtime); if (state == null) return false;
         PhysicalIntent intent = state.physicalIntents().get(intentId);
-        if (intent == null || intent.kind() != PhysicalIntentKind.EXPLOSION || intent.status() != PhysicalIntentStatus.RUNNING) return false;
+        if (intent == null || intent.kind() != PhysicalIntentKind.EXPLOSION || intent.status() != PhysicalIntentStatus.RUNNING
+                || !FrontierV3BomberBomb.isCurrent(source, intent)) return false;
         Set<Long> resourceSiteCells = FrontierV3ResourceSiteExplosionExecutor.activeOwnedCells(level, state);
         return FrontierV3ManagedExplosionLedger.get(level).capture(level, level.getGameTime(), intentId, affected, entities, state,
                 FrontierV3GrayboxLedger.get(level), FrontierV3InfectionOverlayLedger.get(level),
@@ -68,14 +68,19 @@ final class FrontierV3ExplosionExecutor {
         BlockPos origin = origin(intent); if (origin == null) { unknown(runtime, intent.id(), "non-block-origin"); return; }
         if (!level.hasChunkAt(origin)) return;
         FrontierV3ManagedExplosionLedger ledger = FrontierV3ManagedExplosionLedger.get(level);
-        if (intent.status() == PhysicalIntentStatus.RUNNING) { reconcile(level, runtime, intent, ledger); return; }
         FrontierWorldState state = state(runtime); if (state == null) return;
+        if (intent.status() == PhysicalIntentStatus.RUNNING) {
+            if (ledger.has(intent.id())) { reconcile(level, runtime, intent, ledger); return; }
+            if (FrontierV3BomberBomb.inspect(level, intent) == FrontierV3BomberBomb.Inspection.MISSING_OR_ALTERED) {
+                unknown(runtime, intent.id(), "missing-or-altered-bomber-bomb");
+            }
+            return;
+        }
         Entity source = FrontierV3SceneExecutor.explosionCause(level, state, intent).orElse(null);
         if (source == null) { unknown(runtime, intent.id(), "missing-hot-bomber"); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
-        FrontierV3ExplosionExecutionScope.run(intent.id(), () -> level.explode(source, origin.getX() + 0.5D, origin.getY() + 0.5D, origin.getZ() + 0.5D,
-                (float) intent.radiusBlocks(), false, Level.ExplosionInteraction.TNT));
-        if (!ledger.has(intent.id())) unknown(runtime, intent.id(), "missing-detonation-observation");
+        FrontierWorldState running = state(runtime); PhysicalIntent current = running == null ? null : running.physicalIntents().get(intent.id());
+        if (current == null || !FrontierV3BomberBomb.materialize(level, current, source)) unknown(runtime, intent.id(), "bomber-bomb-admission-failed");
     }
 
     private static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,

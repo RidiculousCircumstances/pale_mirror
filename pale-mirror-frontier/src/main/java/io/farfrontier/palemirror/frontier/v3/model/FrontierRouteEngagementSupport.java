@@ -49,7 +49,8 @@ final class FrontierRouteEngagementSupport {
                 // the last deterministic approach position until observed loaded-world evidence.
                 boolean approachOwnsPosition = engagement.status() == RouteEngagementStatus.APPROACHING
                         || engagement.status() == RouteEngagementStatus.WAITING_FOR_INTERCEPT
-                        || engagement.status() == RouteEngagementStatus.UNKNOWN_AFTER_RESTART;
+                        || engagement.status() == RouteEngagementStatus.UNKNOWN_AFTER_RESTART
+                        || engagement.status() == RouteEngagementStatus.CONFLICT;
                 if (approachOwnsPosition && location.condition().status() == ActorLifeStatus.ALIVE
                         && !location.position().equals(attacker.position())) {
                     throw new IllegalArgumentException("COLD engagement attacker must retain its exact route position");

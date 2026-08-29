@@ -207,6 +207,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         || !lease.handoffPosition().equals(engagement.intercept())
                         || (lease.status() != SceneLeaseStatus.CLOSED && engagement.status() != RouteEngagementStatus.COLD_COMBAT
                         && engagement.status() != RouteEngagementStatus.HOT && engagement.status() != RouteEngagementStatus.UNKNOWN_AFTER_RESTART
+                        && engagement.status() != RouteEngagementStatus.CONFLICT
                         && !interruptedAbort)) {
                     throw new IllegalArgumentException("scene lease must bind one active canonical engagement");
                 }

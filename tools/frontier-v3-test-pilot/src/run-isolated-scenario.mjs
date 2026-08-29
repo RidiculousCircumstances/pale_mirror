@@ -76,7 +76,8 @@ async function startServer(reset) {
   const serverArgs = [':pale-mirror-neoforge:runFrontierV3PilotServer', '--no-daemon',
     `-PfrontierV3PilotWorld=${world}`, `-PfrontierV3PilotSeed=${scenario.isolation.seed}`,
     `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotUsername=${scenario.pilot.username}`,
-    `-PfrontierV3PilotReset=${reset}`, `-PfrontierV3PilotRunId=${serverRunId}`];
+    `-PfrontierV3PilotReset=${reset}`, `-PfrontierV3PilotRunId=${serverRunId}`,
+    `-PfrontierV3PilotProfile=${scenario.server.profile ?? 'world'}`];
   const child = spawn(gradle, serverArgs, {
     cwd: project, env: process.env, stdio: ['pipe', 'pipe', 'pipe']
   });
@@ -121,7 +122,7 @@ async function runPilot(scenarioFile, manifest, server) {
 }
 
 async function writeScenario(path, value) {
-  await writeFile(path, `${JSON.stringify({ ...value, server: { host: '127.0.0.1', port } }, null, 2)}\n`, 'utf8');
+  await writeFile(path, `${JSON.stringify({ ...value, server: { ...value.server, host: '127.0.0.1', port } }, null, 2)}\n`, 'utf8');
 }
 
 async function stopServerSafely(server, logPath, offset, serverPort) {

@@ -86,6 +86,15 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsSemanticCameraTargetsInEitherSupportedForm() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"look","position":{"x":1,"y":64,"z":2}},
+                {"type":"look","at":{"x":3,"y":65,"z":4}}]}""");
+        assertEquals(2, parsed.actionCount());
+    }
+
+    @Test
     void permitsOnlyBoundedOrdinaryV3BoardInteractionWithAVisibleCardReceipt() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"interact_board","text":"WHEAT FIELD","title":"Northwatch",

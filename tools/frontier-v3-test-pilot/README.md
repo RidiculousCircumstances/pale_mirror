@@ -13,6 +13,13 @@ server receives an explicit seed, a per-run level name and a generated
 offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
+An isolated scenario may additionally declare `"server": { "profile":
+"hot-scene-strike" }`. This fail-closed development fixture is available only
+to the named disposable pilot runner; it selects a deterministic canonical HOT
+engagement so an ordinary player visit can prove one physical combat/effect
+flow. The normal `world` profile remains the default. Neither profile gives the
+pilot a canonical mutation API or force-loads chunks.
+
 Run the checked-in isolated terminal-harvest regression on the visible `:0`
 display:
 

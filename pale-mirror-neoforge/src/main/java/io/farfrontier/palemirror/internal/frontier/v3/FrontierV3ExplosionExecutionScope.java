@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 
 import java.util.Optional;
 
-/** Identifies only the synchronous Minecraft event emitted by one v3-owned blast invocation. */
+/** Identifies only the synchronous vanilla detonation of one exact owned bomber body. */
 final class FrontierV3ExplosionExecutionScope {
     private static final ThreadLocal<PhysicalIntentId> CURRENT = new ThreadLocal<>();
 

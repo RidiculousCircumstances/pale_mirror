@@ -23,7 +23,7 @@ public final class SourceGrayboxEntityAdmission {
     /** True when a non-source mob must be denied before it can affect the source projection. */
     public static boolean rejects(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level");
-        return rejects(level.dimension(), entity, FrontierV3ServerLifecycle.recognizesAmbientCarrier(level, entity));
+        return rejects(level.dimension(), entity, FrontierV3ServerLifecycle.recognizesManagedCarrier(level, entity));
     }
 
     static boolean rejects(ResourceKey<Level> dimension, Entity entity) {

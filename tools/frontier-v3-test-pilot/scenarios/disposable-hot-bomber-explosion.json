@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "disposable_hot_bomber_explosion",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "hot-scene-strike" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "engagement:development-hot-strike", "expect": { "status": "ok", "explosionStatus": "CONFIRMED" }, "timeoutMs": 60000 },
+    { "type": "look", "position": { "x": -358, "y": 64, "z": -338 } },
+    { "type": "inspect", "view": "scene", "id": "engagement:development-hot-strike" }
+  ],
+  "assertions": [
+    { "after": 3, "view": "scene", "id": "engagement:development-hot-strike", "expect": { "status": "ok", "explosionStatus": "CONFIRMED" } }
+  ],
+  "frames": [
+    { "after": 2, "name": "hot-bomber-aftermath" }
+  ]
+}

@@ -80,6 +80,9 @@ final class FrontierSceneLeaseStateSupport {
             if (nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && currentEngagement.status() != RouteEngagementStatus.RESOLVED) {
                 plans = plans.transitionEngagement(engagement, RouteEngagementStatus.UNKNOWN_AFTER_RESTART);
             }
+            if (nextStatus == SceneLeaseStatus.CONFLICT && currentEngagement.status() != RouteEngagementStatus.RESOLVED) {
+                plans = plans.transitionEngagement(engagement, RouteEngagementStatus.CONFLICT);
+            }
         }
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(nextStatus));
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), plans);

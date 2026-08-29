@@ -71,6 +71,8 @@ public final class FrontierV3SceneGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
         prepareFloor(level, origin); prepareFloor(level, origin.east(2));
+        // A route deck may physically occupy the strategic hand-off height.
+        level.setBlock(origin, Blocks.STONE.defaultBlockState(), 3);
         SceneLease lease = lease(origin);
 
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-body-test"), 91L));
@@ -84,9 +86,47 @@ public final class FrontierV3SceneGameTests {
             helper.assertValueEqual(body.getPersistentData().getString(FrontierV3SceneExecutor.ACTOR_KEY), member.actorId().value(),
                     "materialized body must carry its canonical actor identity");
             helper.assertTrue(body.isNoAi(), "a HOT body must not retain uncontrolled vanilla AI or combat authority");
+            if (member.equals(lease.members().getFirst())) {
+                helper.assertTrue(!body.blockPosition().equals(origin), "a scene body must stand above a loaded route deck, never inside it");
+            }
             body.discard();
         }
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void activeSceneBodiesCarryStrictGrayboxAdmissionProof(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 0));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-admission-proof"), 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-admission-proof");
+        var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the admission fixture runtime must remain active"));
+        SceneLease lease = new SceneLease(leaseId, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
+        FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        for (int index = 0; index < lease.members().size(); index++) {
+            BlockPos position = origin.offset((index % 2) * 2, 0, (index / 2) * 2); prepareFloor(level, position);
+            addOwnedBody(helper, level, lease, lease.members().get(index), position);
+        }
+        for (SceneMember member : lease.members()) {
+            Entity body = level.getEntity(member.entityId());
+            helper.assertTrue(body != null && FrontierV3SceneExecutor.recognizes(runtime, body),
+                    "only a body whose UUID, kind, actor, lease and revision match an active canonical scene may pass Graybox admission");
+        }
+        Zombie foreign = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(foreign != null && !FrontierV3SceneExecutor.recognizes(runtime, foreign),
+                "an untagged native mob must not acquire a scene admission proof");
+        FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-drain", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING));
+        FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-close", leaseId.value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased(leaseId,
+                lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), candidate.handoffPosition())).toList()));
+        Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
+        helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
+                "a stale body from a closed scene must be denied rather than retained as a permanent exception");
+        lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+        runtime.shutdown(); helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-conflict", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
@@ -348,7 +388,7 @@ public final class FrontierV3SceneGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void hotBomberPreparesOneExactExplosionFromItsOwnedZombieBody(GameTestHelper helper) {
+    public static void hotBomberMaterializesOneOwnedTntAndDoesNotReplayItsDisappearance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(48, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-explosion-game-test"), 91L), new EphemeralStore(), 20_000);
@@ -376,12 +416,26 @@ public final class FrontierV3SceneGameTests {
             helper.assertValueEqual(intent.causeSubjectId(), bomber, "the receipt must retain the exact canonical bomber identity");
             helper.assertValueEqual(FrontierV3SceneExecutor.explosionCause(level, state(runtime), intent).orElseThrow(), bomberBody,
                     "only the matching tagged HOT zombie may become the Minecraft explosion source");
+            FrontierV3ExplosionExecutor.tick(level, runtime);
+            PhysicalIntent running = state(runtime).physicalIntents().get(intent.id());
+            helper.assertValueEqual(running.status(), PhysicalIntentStatus.RUNNING, "the durable intent must run before its physical TNT body enters the world");
+            Entity physicalBomb = level.getEntity(FrontierV3BomberBomb.entityId(intent.id()));
+            helper.assertTrue(physicalBomb instanceof net.minecraft.world.entity.item.PrimedTnt
+                            && FrontierV3BomberBomb.isCurrent(physicalBomb, running),
+                    "the exact intent must materialize one tagged ordinary PrimedTnt body, never an immediate synthetic blast");
+            helper.assertValueEqual(FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, level), 0,
+                    "restart recovery must retain the exact loaded owned TNT for postcondition inspection instead of replaying or quarantining it");
+            physicalBomb.discard();
+            helper.assertValueEqual(FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, level), 1,
+                    "a missing bomb in an already loaded chunk must become visible unknown at restart, never be recreated");
+            helper.assertValueEqual(state(runtime).physicalIntents().get(intent.id()).status(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
+                    "a missing loaded-world bomb becomes visible unknown evidence and is never spawned or exploded again");
             lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
             runtime.shutdown(); helper.succeed();
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-explosion-live", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-scene-explosion-live", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void hotBomberBlastUsesRealTntEventAndRetainsPostImpactInspection(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(56, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
@@ -392,14 +446,20 @@ public final class FrontierV3SceneGameTests {
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
         FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        // The regular graybox is flat; the bare GameTest template is not.  Give the ballistic
+        // vanilla TNT the same supported ground instead of allowing it to fall out of the fixture.
+        for (int x = -2; x <= 8; x++) for (int z = -2; z <= 4; z++) prepareFloor(level, origin.offset(x, 0, z));
         for (int index = 0; index < lease.members().size(); index++) {
             BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
         }
         BlockPos blastTarget = origin.east(3); prepareFloor(level, blastTarget); level.setBlock(blastTarget, Blocks.STONE.defaultBlockState(), 3);
         AtomicBoolean active = new AtomicBoolean(true), captured = new AtomicBoolean();
+        java.util.concurrent.atomic.AtomicReference<String> detonationSource = new java.util.concurrent.atomic.AtomicReference<>("no detonation event");
         Consumer<ExplosionEvent.Detonate> listener = event -> {
             if (active.get() && event.getLevel() == level && FrontierV3ExplosionExecutionScope.currentIntent().isPresent()) {
-                captured.set(FrontierV3ServerLifecycle.observeExplosion(level, runtime, event.getAffectedBlocks(), event.getAffectedEntities()));
+                Entity direct = event.getExplosion().getDirectSourceEntity();
+                detonationSource.set(direct == null ? "null" : direct.getType().toString() + ":" + direct.getUUID() + ":" + direct.getPersistentData().getString(FrontierV3BomberBomb.INTENT_KEY));
+                captured.set(FrontierV3ServerLifecycle.observeExplosion(level, runtime, event.getExplosion(), event.getAffectedBlocks(), event.getAffectedEntities()));
             }
         };
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, ExplosionEvent.Detonate.class, listener);
@@ -414,12 +474,18 @@ public final class FrontierV3SceneGameTests {
                 helper.assertTrue(FrontierV3SceneExecutor.executeExplosion(level, runtime, state(runtime), lease), "the hot scene must durably prepare its real blast");
                 PhysicalIntent intent = state(runtime).physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION).findFirst().orElseThrow();
                 FrontierV3ExplosionExecutor.tick(level, runtime);
-                helper.assertTrue(captured.get(), "the actual Minecraft detonation event must enter the v3 observation bridge");
-                helper.assertTrue(FrontierV3ManagedExplosionLedger.get(level).has(intent.id()), "post-impact inspection must be persisted before receipt confirmation");
+                Entity bomb = level.getEntity(FrontierV3BomberBomb.entityId(intent.id()));
+                helper.assertTrue(bomb instanceof net.minecraft.world.entity.item.PrimedTnt && FrontierV3BomberBomb.isCurrent(bomb, state(runtime).physicalIntents().get(intent.id())),
+                        "the hot bomber must release a visible normal TNT entity before it detonates");
+                helper.assertFalse(captured.get(), "TNT admission itself is not an invented detonation observation");
                 helper.assertValueEqual(state(runtime).physicalIntents().get(intent.id()).status(), PhysicalIntentStatus.RUNNING, "the blast stays running until real-world reconciliation completes");
+                ((net.minecraft.world.entity.item.PrimedTnt) bomb).setFuse(1);
+                ((net.minecraft.world.entity.item.PrimedTnt) bomb).tick();
+                FrontierV3ManagedExplosionLedger retained = FrontierV3ManagedExplosionLedger.get(level);
+                helper.assertTrue(captured.get(), "the normal TNT tick must enter the v3 observation bridge; source=" + detonationSource.get());
+                helper.assertTrue(retained.has(intent.id()), "post-impact inspection must be persisted before receipt confirmation");
                 helper.runAfterDelay(2L, () -> {
                     try {
-                        FrontierV3ManagedExplosionLedger retained = FrontierV3ManagedExplosionLedger.get(level);
                         var pendingEntity = retained.nextEntity(intent.id(), level.getGameTime());
                         helper.assertTrue(pendingEntity.isPresent(), "a real unloaded post-impact entity remains explicit inspection work, never a guessed death");
                         helper.assertValueEqual(state(runtime).physicalIntents().get(intent.id()).status(), PhysicalIntentStatus.RUNNING,

@@ -287,11 +287,14 @@ public final class SourceGrayboxRuntime {
         return Optional.of(SourceGrayboxPlayerBriefing.acceptedEntityReceipt(before, data.snapshot(), result.entity()));
     }
 
-    /** Displays an accepted source effect without retaining an obscuring chat backlog. */
+    /**
+     * An accepted source effect is already legible as a physical consequence
+     * and durable board/Atlas state. Do not turn combat or harvesting into a
+     * scrolling HUD receipt stream.
+     */
     public void presentTransientReceipt(ServerPlayer player, String receipt) {
         Objects.requireNonNull(player, "player");
-        PaleMirrorPlayerPresentation.transientAction(player, "source-graybox:receipt:" + noticeFingerprint(receipt),
-                net.minecraft.network.chat.Component.literal(receipt));
+        Objects.requireNonNull(receipt, "receipt");
     }
 
     /** Turns a declared physical interaction slot into the exact source fact it carries. */
@@ -349,7 +352,7 @@ public final class SourceGrayboxRuntime {
                 ? SourceGrayboxPlayerBriefing.forIdentity(snapshot, interactionLabelId(claim), SourceGrayboxMaterializer.LABEL_KIND)
                 : SourceGrayboxPlayerBriefing.at(snapshot, position.getX(), position.getZ());
         return briefing.map(text -> {
-            PaleMirrorPlayerPresentation.context(player, "source-graybox:block-briefing:" + position.asLong(),
+            PaleMirrorPlayerPresentation.inspect(player, "source-graybox:block-briefing:" + position.asLong(),
                     SourceGrayboxPlayerCard.fromBriefing(text));
             return true;
         }).orElse(false);
@@ -362,14 +365,10 @@ public final class SourceGrayboxRuntime {
         String kind = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_KIND);
         if (id.isBlank() || kind.isBlank()) return false;
         return SourceGrayboxPlayerBriefing.forIdentity(data.snapshot(), id, kind).map(text -> {
-            PaleMirrorPlayerPresentation.context(player, "source-graybox:entity-briefing:" + id,
+            PaleMirrorPlayerPresentation.inspect(player, "source-graybox:entity-briefing:" + id,
                     SourceGrayboxPlayerCard.fromBriefing(text));
             return true;
         }).orElse(false);
-    }
-
-    private static String noticeFingerprint(String text) {
-        return Integer.toUnsignedString(Objects.requireNonNull(text, "text").hashCode(), 36);
     }
 
     /** Explicit operator transport makes the disposable arena discoverable without touching the overworld. */

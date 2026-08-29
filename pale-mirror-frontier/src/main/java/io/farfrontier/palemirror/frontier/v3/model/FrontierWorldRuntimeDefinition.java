@@ -79,10 +79,20 @@ public final class FrontierWorldRuntimeDefinition {
             if (operation == null) return rejected("scene lease has no owning operation");
             if (lease.engagementId().isPresent()) {
                 RouteEngagement engagement = state.strategicPlans().routeEngagements().get(lease.engagementId().orElseThrow());
-                if (engagement == null || engagement.status() != RouteEngagementStatus.HOT) return rejected("scene lease has no HOT engagement to resume");
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
-                        new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
-                                HiveRouteEngagementProcess.combat(engagement, command.submittedAt().ticks() + 20L)))));
+                if (engagement == null) return rejected("scene lease has no canonical engagement");
+                if (engagement.status() == RouteEngagementStatus.HOT) {
+                    return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
+                            new ProposedEvent(operation.settlementId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                                    HiveRouteEngagementProcess.combat(engagement, command.submittedAt().ticks() + 20L)))));
+                }
+                // A real blast/player interaction may legitimately destroy the cargo while the
+                // scene is HOT. Cargo release atomically interrupts the operation and aborts its
+                // engagement; remaining bodies must drain and close, never restart COLD combat.
+                if (operation.stage() == OperationStage.INTERRUPTED && engagement.status() == RouteEngagementStatus.RESOLVED
+                        && engagement.outcome().filter(outcome -> outcome == RouteEngagementOutcome.ABORTED).isPresent()) {
+                    return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released)));
+                }
+                return rejected("scene lease cannot resume its interrupted engagement");
             }
             if (operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
                 List<ProposedEvent> events = new java.util.ArrayList<>(); events.add(new ProposedEvent(operation.settlementId(), released));

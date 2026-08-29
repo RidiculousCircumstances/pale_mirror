@@ -130,7 +130,10 @@ public final class FrontierV3TestPilotClient {
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + action.get("view").getAsString()
                         + (action.get("id").getAsString().isBlank() ? "" : " " + action.get("id").getAsString())); advance(type); }
-                case "look" -> { look(minecraft, position(action, "at")); advance(type); }
+                case "look" -> {
+                    look(minecraft, position(action, action.has("at") ? "at" : "position"));
+                    advance(type);
+                }
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
                 case "open_container" -> openContainer(minecraft, position(action, "position"), action.get("timeoutMs").getAsLong());

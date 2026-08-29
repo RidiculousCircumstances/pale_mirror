@@ -36,7 +36,15 @@ final class FrontierV3PhysicalIntentRestartSafety {
     static int quarantineUninspectableRunningIntents(
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level
     ) {
-        return quarantineWithManagedPostcondition(runtime, intent -> FrontierV3ManagedExplosionLedger.get(level).has(intent));
+        java.util.function.Predicate<PhysicalIntentId> hasManagedPostcondition = intent -> FrontierV3ManagedExplosionLedger.get(level).has(intent);
+        List<PhysicalIntentId> running = state(runtime).physicalIntents().values().stream()
+                .filter(intent -> intent.status() == PhysicalIntentStatus.RUNNING)
+                .filter(intent -> !hasRestartInspector(level, intent, hasManagedPostcondition))
+                .map(PhysicalIntent::id)
+                .sorted(Comparator.naturalOrder())
+                .toList();
+        for (PhysicalIntentId intentId : running) quarantine(runtime, intentId);
+        return running.size();
     }
 
     static int quarantineWithManagedPostcondition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -65,6 +73,18 @@ final class FrontierV3PhysicalIntentRestartSafety {
             case EXPLOSION -> hasManagedPostcondition.test(intent.id());
             default -> false;
         };
+    }
+
+    private static boolean hasRestartInspector(ServerLevel level, PhysicalIntent intent,
+                                               java.util.function.Predicate<PhysicalIntentId> hasManagedPostcondition) {
+        if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION) {
+            return hasLoadedPostconditionInspector(intent, hasManagedPostcondition);
+        }
+        if (hasManagedPostcondition.test(intent.id())) return true;
+        // Never load a chunk merely to recover a physical effect.  An exact bomb in a naturally
+        // loaded chunk is recoverable; an absent chunk must wait; a missing/altered loaded bomb
+        // is unsafe and is therefore made visibly UNKNOWN.
+        return FrontierV3BomberBomb.inspect(level, intent) != FrontierV3BomberBomb.Inspection.MISSING_OR_ALTERED;
     }
 
     private static void quarantine(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId) {

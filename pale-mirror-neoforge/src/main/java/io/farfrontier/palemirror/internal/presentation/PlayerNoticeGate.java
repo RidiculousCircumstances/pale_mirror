@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Ephemeral per-player admission control for presentation-only notices.
+ * Ephemeral per-player presentation policy for immediate, noncanonical notices.
  *
  * <p>This is deliberately not canonical state, a journal or a retry queue.
  * It merely prevents one physical interaction (or two overlapping NeoForge
@@ -15,18 +15,31 @@ import java.util.Objects;
  */
 final class PlayerNoticeGate {
     static final int MAX_RECENT_KEYS = 32;
-    static final int TRANSIENT_ACTION_BAR_INTERVAL_TICKS = 10;
-    static final int CONTEXT_CARD_INTERVAL_TICKS = 4;
+    /** One second is enough to acknowledge deliberate interaction without becoming a ticker. */
+    static final int ACTION_BAR_INTERVAL_TICKS = 20;
 
     enum Channel { ACTION_BAR, CONTEXT_CARD, CHAT }
 
-    enum Priority { TRANSIENT, ACTION, CONTEXT, CRITICAL }
+    enum Priority { ACTION, CONTEXT, CRITICAL }
 
-    record Notice(String key, Channel channel, Priority priority, int duplicateCooldownTicks) {
+    /** HUD is reserved for the result of an action the recipient just chose. */
+    enum Origin { PLAYER_ACTION, BACKGROUND }
+
+    record Notice(String key, Channel channel, Priority priority, Origin origin, int duplicateCooldownTicks) {
         Notice {
             if (key == null || key.isBlank() || key.length() > 160) throw new IllegalArgumentException("notice key must be 1..160 characters");
             Objects.requireNonNull(channel, "channel"); Objects.requireNonNull(priority, "priority");
+            Objects.requireNonNull(origin, "origin");
             if (duplicateCooldownTicks < 0) throw new IllegalArgumentException("duplicate cooldown must not be negative");
+            if (channel == Channel.ACTION_BAR && (priority != Priority.ACTION || origin != Origin.PLAYER_ACTION)) {
+                throw new IllegalArgumentException("action-bar notices must be direct player action results");
+            }
+            if (channel == Channel.CONTEXT_CARD && (priority != Priority.CONTEXT || origin != Origin.PLAYER_ACTION)) {
+                throw new IllegalArgumentException("context cards must be explicit player inspections");
+            }
+            if (channel == Channel.CHAT && priority != Priority.CRITICAL) {
+                throw new IllegalArgumentException("chat notices are reserved for durable critical failures");
+            }
         }
     }
 
@@ -37,8 +50,7 @@ final class PlayerNoticeGate {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) { return size() > MAX_RECENT_KEYS; }
     };
     private long lastObservedTick = Long.MIN_VALUE;
-    private long lastTransientActionBarTick = Long.MIN_VALUE;
-    private long lastContextCardTick = Long.MIN_VALUE;
+    private long lastActionBarTick = Long.MIN_VALUE;
 
     Decision admit(Notice notice, long gameTick) {
         Objects.requireNonNull(notice, "notice");
@@ -47,20 +59,12 @@ final class PlayerNoticeGate {
         lastObservedTick = gameTick;
         Long previous = lastDelivered.get(notice.key());
         if (previous != null && gameTick - previous < notice.duplicateCooldownTicks()) return Decision.DUPLICATE;
-        if (notice.channel() == Channel.ACTION_BAR && notice.priority() == Priority.TRANSIENT
-                && lastTransientActionBarTick != Long.MIN_VALUE
-                && gameTick - lastTransientActionBarTick < TRANSIENT_ACTION_BAR_INTERVAL_TICKS) {
-            return Decision.RATE_LIMITED;
-        }
-        if (notice.channel() == Channel.CONTEXT_CARD && lastContextCardTick != Long.MIN_VALUE
-                && gameTick - lastContextCardTick < CONTEXT_CARD_INTERVAL_TICKS) {
+        if (notice.channel() == Channel.ACTION_BAR && lastActionBarTick != Long.MIN_VALUE
+                && gameTick - lastActionBarTick < ACTION_BAR_INTERVAL_TICKS) {
             return Decision.RATE_LIMITED;
         }
         lastDelivered.put(notice.key(), gameTick);
-        if (notice.channel() == Channel.ACTION_BAR && notice.priority() == Priority.TRANSIENT) {
-            lastTransientActionBarTick = gameTick;
-        }
-        if (notice.channel() == Channel.CONTEXT_CARD) lastContextCardTick = gameTick;
+        if (notice.channel() == Channel.ACTION_BAR) lastActionBarTick = gameTick;
         return Decision.DELIVER;
     }
 
@@ -68,7 +72,6 @@ final class PlayerNoticeGate {
 
     private void resetForClockRewind() {
         lastDelivered.clear();
-        lastTransientActionBarTick = Long.MIN_VALUE;
-        lastContextCardTick = Long.MIN_VALUE;
+        lastActionBarTick = Long.MIN_VALUE;
     }
 }

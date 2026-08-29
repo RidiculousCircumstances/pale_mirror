@@ -44,8 +44,21 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness) {
+        return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, Optional.empty());
+    }
+
+    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+                         Optional<FrontierV3DiagnosticTrace.Entry> trace,
+                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
+                         Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness) {
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(id, "id");
-        Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(trace, "trace"); Objects.requireNonNull(admission, "admission"); Objects.requireNonNull(harvestReadiness, "harvestReadiness");
+        Objects.requireNonNull(checkpoint, "checkpoint");
+        Objects.requireNonNull(state, "state");
+        Objects.requireNonNull(trace, "trace");
+        Objects.requireNonNull(admission, "admission");
+        Objects.requireNonNull(harvestReadiness, "harvestReadiness");
+        Objects.requireNonNull(sceneReadiness, "sceneReadiness");
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
             case "site" -> site(id, checkpoint, state);
@@ -54,6 +67,7 @@ final class FrontierV3DiagnosticJson {
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state);
+            case "scene" -> scene(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness);
             case "trace" -> trace(id, checkpoint, trace);
             default -> unavailable(kind, id, checkpoint, "unknown_view");
@@ -166,6 +180,26 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
                 + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]}";
+    }
+
+    /** One stable engagement-level view for player-piloted physical-scene evidence. */
+    private static String scene(String id, CheckpointImage checkpoint, FrontierWorldState state,
+                                Optional<FrontierV3SceneExecutor.Readiness> readiness) {
+        SubjectId engagement = subject(id).orElse(null);
+        if (engagement == null) return unavailable("scene", id, checkpoint, "not_found");
+        var lease = state.sceneLeases().values().stream().filter(value -> value.engagementId().filter(engagement::equals).isPresent())
+                .sorted(java.util.Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::id)).findFirst().orElse(null);
+        if (lease == null) return unavailable("scene", id, checkpoint, "not_found");
+        PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
+                .filter(value -> value.subjectIds().size() == 2 && value.subjectIds().getLast().equals(engagement))
+                .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
+        return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseStatus\":\"" + lease.status()
+                + "\",\"members\":" + lease.members().size() + ",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
+                + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
+    }
+
+    private static String sceneReadiness(FrontierV3SceneExecutor.Readiness value) {
+        return ",\"physicalReadiness\":{\"bodies\":\"" + quote(value.bodies()) + "\",\"carrier\":\"" + quote(value.carrier()) + "\"}";
     }
 
     private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state,

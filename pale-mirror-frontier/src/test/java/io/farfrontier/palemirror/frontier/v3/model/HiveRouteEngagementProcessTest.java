@@ -104,6 +104,51 @@ class HiveRouteEngagementProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
+    @Test void loadedSceneConflictIsNotRestartUnknownAndCanResumeOnlyThroughFreshPreparation() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
+                .filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+            state = state.withActorLocation(bioform.id(), intercept);
+        }
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-scene-conflict"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:hive-scene-conflict"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
+            if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
+            if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
+            if (event.payload() instanceof RouteEngagementTransition transition) state = HiveRouteEngagementProcess.reduceTransition(state, hive, transition);
+        }
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().values().stream().findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:hot-scene-conflict");
+        List<SubjectId> actorIds = java.util.stream.Stream.concat(operation.participantIds().stream(), engagement.attackerIds().stream()).sorted().toList();
+        WorldId worldId = state.bootstrap().worldId();
+        SceneLease lease = new SceneLease(leaseId, worldId, operation.id(), operation.cargoId(), intercept,
+                new SimInstant(3_000L), 0L, SceneLeaseStatus.PREPARED, Optional.of(engagement.id()),
+                actorIds.stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(worldId, actor))).toList());
+
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
+                .transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        assertEquals(SceneLeaseStatus.CONFLICT, state.sceneLeases().get(leaseId).status());
+        assertTrue(state.sceneLeases().get(leaseId).recoveryEvidence().isEmpty(), "a live obstruction must not manufacture restart evidence");
+        assertEquals(RouteEngagementStatus.CONFLICT, state.strategicPlans().routeEngagements().get(engagement.id()).status());
+        FrontierObjectBoard routeBoard = FrontierReadabilityPlan.compile(state).boards().get(FrontierRouteNetwork.OWNER);
+        assertEquals(FrontierObjectBoard.Tone.WARNING, routeBoard.tone());
+        assertTrue(routeBoard.text().endsWith("SCENE BLOCKED · KEEP CLEAR"), "the player-facing route board must name a live obstruction");
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        assertEquals(new SceneLeaseTransition(leaseId, SceneLeaseStatus.CONFLICT), FrontierWorldRuntimeDefinition.payloadCodecs().decode(
+                "frontier.scene_lease_transition", FrontierWorldRuntimeDefinition.payloadCodecs().encode(new SceneLeaseTransition(leaseId, SceneLeaseStatus.CONFLICT))));
+
+        state = state.transitionSceneLease(leaseId, SceneLeaseStatus.PREPARED).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        assertEquals(SceneLeaseStatus.HOT, state.sceneLeases().get(leaseId).status());
+        assertEquals(RouteEngagementStatus.HOT, state.strategicPlans().routeEngagements().get(engagement.id()).status());
+    }
+
     @Test void interceptTaskRejectsAnOperationThatDoesNotExistInCanonicalWorld() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:intercept-negative"), 91L));
         SubjectId hive = state.bootstrap().hive().id();
