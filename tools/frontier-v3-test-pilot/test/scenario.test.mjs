@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readdir, readFile } from 'node:fs/promises';
 import { correlation, newManifest, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
@@ -28,4 +29,18 @@ test('manifest records stable action correlations', () => {
   const manifest = newManifest({ scenario, sha256: 'abc', runId: 'run-1' });
   assert.equal(correlation(manifest.runId, 2), 'scenario:run-1:2');
   assert.equal(manifest.scenarioId, 'field_player_break');
+});
+
+test('pilot module loads its pinned CommonJS pathfinder dependency', async () => {
+  const pilot = await import('../src/pilot.mjs');
+  assert.equal(typeof pilot.connectPilot, 'function');
+  assert.equal(typeof pilot.perform, 'function');
+});
+
+test('checked-in scenarios parse through the declared runner boundary', async () => {
+  const scenarios = await readdir(new URL('../scenarios/', import.meta.url));
+  for (const name of scenarios.filter((value) => value.endsWith('.json'))) {
+    const source = await readFile(new URL(`../scenarios/${name}`, import.meta.url), 'utf8');
+    assert.doesNotThrow(() => validateScenario(JSON.parse(source)), name);
+  }
 });

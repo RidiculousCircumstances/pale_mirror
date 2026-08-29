@@ -21,14 +21,16 @@ restart tests or unbriefed player product tests.
 
 | Component | Runs where | Authority |
 | --- | --- | --- |
-| `frontier-v3-test-pilot` | External Node process | A normal Mineflayer network client. It has no canonical-state access. Its temporary operator status is limited to declared world setup and read-only diagnostics. |
-| Scenario runner | External Node process | Starts/stops the pilot, waits for declared observations and writes test evidence. It does not alter canonical state. |
+| `frontier-v3-test-pilot` | One normal visible NeoForge client | The actual pilot runs the standard client interaction layer on `DISPLAY=:0`; it has no canonical-state access. Its temporary operator status is limited to declared world setup and read-only diagnostics. |
+| Scenario runner | External Node process | Validates the scenario, launches one visible NeoForge client, reads its ordinary client log/diagnostic replies and writes an evidence manifest. It does not alter canonical state. |
 | V3 diagnostic command | Server thread | Reads one immutable v3 checkpoint/projection and emits bounded JSON. It submits no command, writes no WAL entry and never loads a chunk. |
-| Visible audit client | One real NeoForge client on `DISPLAY=:0` | Observes the pilot/world and captures frames only. It is not the pilot and has no authority over the scenario. |
+| Visible audit client | Optional real NeoForge client on `DISPLAY=:0` | Observes/captures frames only. It is never launched alongside the pilot: the one visible pilot is normally its own player-height observer. |
 
-Mineflayer has no renderer. Therefore the visible mode intentionally consists
-of one graphical observer and one invisible protocol client; it still satisfies
-the one-visible-client rule and avoids duplicate music/audio.
+Mineflayer remains an offline protocol preflight only. The full Far Frontier
+server requires NeoForge's mod-channel handshake, so a Mineflayer connection is
+correctly rejected before it can be evidence. The actual pilot is therefore the
+one graphical NeoForge client, not a protocol imitation; its movement and
+interactions still travel through ordinary Minecraft packets.
 
 ## Read-only diagnostics
 
@@ -49,22 +51,28 @@ large collections are represented by counts and deterministic first-N entries.
 
 The command is intentionally not an HTTP service and cannot fast-forward,
 materialize, teleport, mutate a player or reveal mutable internals to adapters.
-The scenario runner parses the same chat/console text that an operator sees.
+The scenario runner parses the same client log/chat text that an operator sees.
 
 ## Pilot actions
 
-Each action is performed using standard client packets and is acknowledged only
-after an independently observed server result. Initial scenario positioning may
-use an explicit operator setup command, but all evidence-bearing actions use
-the pilot's real movement, look, attack, use-container, inventory and death
-paths.
+Each action is performed using standard client packets. Initial positioning and
+game-mode changes are explicit `setup` commands; they are never evidence.
+Evidence actions use the pilot's real movement, look and block-attack paths.
+`inspect` is a separately declared read-only observation, delivered through the
+same ordinary client command channel and retained in the runner manifest.
 
 The first supported action set is deliberately small:
 
 - connect/disconnect and wait for a loaded position;
 - walk/look at a declared block position;
-- break a block, open a container, withdraw/deposit an exact stack;
-- wait for a diagnostic predicate or an ordinary server tick interval.
+- wait until the client actually has the named block, or fail with the observed
+  block state rather than relying on a guessed delay;
+- break a block and issue a read-only v3 inspection;
+- wait for an ordinary server tick interval.
+
+Native container/inventory/death paths are the next pilot slice. They remain
+deliberately unclaimed until each has a real-server proof; the old Mineflayer
+implementation cannot supply that proof against the required NeoForge handshake.
 
 No evidence-bearing pilot action may call a Pale Mirror mutation command,
 submit a domain payload or write world files. The runner may issue only
@@ -81,10 +89,11 @@ writes one manifest containing the source scenario hash, pilot protocol
 version, server/world identity, diagnostic samples, correlation IDs and PNG
 paths. No screenshot pixel equality is used as a correctness oracle.
 
-The initial regression is `field_player_break`:
+The initial regression is `visible_field_player_break`:
 
 1. join a clean v3 world and naturally load Northwatch's field;
-2. wait for the site diagnostic to reach `READY`;
+2. wait for the client to confirm the named wheat block rather than assuming a
+   teleport loaded its chunk;
 3. pilot breaks one named crop through its normal packet path;
 4. assert the site becomes `CONFLICT`, the returned revision advances and the
    diagnostic cause identifies the pilot;

@@ -1,6 +1,7 @@
 import mineflayer from 'mineflayer';
-import { pathfinder, Movements, goals } from 'mineflayer-pathfinder';
+import pathfinderModule from 'mineflayer-pathfinder';
 
+const { pathfinder, Movements, goals } = pathfinderModule;
 const { GoalNear } = goals;
 
 export async function connectPilot(config, onDiagnostic = () => {}) {

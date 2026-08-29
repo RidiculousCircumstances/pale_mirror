@@ -62,6 +62,8 @@ dependencies {
     compileOnly 'maven.modrinth:uCdwusMi:3.2.0-b-1.21.1'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    // Minecraft supplies Gson at runtime; unit tests execute outside its launch classpath.
+    testImplementation 'com.google.code.gson:gson:2.10.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -164,6 +166,16 @@ neoForge {
             programArgument providers.gradleProperty('visualAuditUsername').orElse('PMAudit').get()
             programArgument '--quickPlayMultiplayer'
             programArgument providers.gradleProperty('visualAuditServer').orElse('127.0.0.1:25565').get()
+        }
+        frontierV3PilotClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/railway-client')
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
+                    providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
+            programArgument '--username'
+            programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
+            programArgument '--quickPlayMultiplayer'
+            programArgument providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25565').get()
         }
         ftbClient {
             client()
