@@ -137,7 +137,7 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
     }
     private static Optional<BlockCandidate> block(ServerLevel level, FrontierV3GrayboxLedger provenance, FrontierV3InfectionOverlayLedger infection, BlockPos position) {
         BlockState baseline = level.getBlockState(position); if (baseline.isAir()) return Optional.empty();
-        Optional<InfectionCell> cell = infection == null ? Optional.empty() : infection.cellAt(position);
+        Optional<InfectionCell> cell = infection == null ? Optional.empty() : infection.activeCellAt(position);
         return Optional.of(new BlockCandidate(position.asLong(), NbtUtils.writeBlockState(baseline), semantic(provenance.claim(position), baseline), cell));
     }
     private static EntityCandidate entity(Entity value) {

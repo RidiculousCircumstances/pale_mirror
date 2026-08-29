@@ -129,7 +129,7 @@ class FrontierWorldStateTest {
     }
 
     @Test
-    void infectionOverlayPlanKeepsOneBoundedReadableMarkerPerSparseSourceCell() {
+    void infectionOverlayPlanKeepsOneCompleteBoundedSurfacePatchPerSparseSourceCell() {
         FrontierWorldState baseline = initial();
         InfectionCell trace = new InfectionCell(-100, 100);
         InfectionCell bloom = new InfectionCell(100, 100);
@@ -137,14 +137,14 @@ class FrontierWorldStateTest {
                 .withInfection(bloom, new FixedRatio(new FixedScalar(500_000L)));
 
         FrontierInfectionOverlayPlan plan = FrontierInfectionOverlayPlan.compile(state);
-        InfectionOverlayCell traceMarker = plan.cells().get(trace);
-        InfectionOverlayCell bloomMarker = plan.cells().get(bloom);
+        InfectionOverlayCell tracePatch = plan.cells().get(trace);
+        InfectionOverlayCell bloomPatch = plan.cells().get(bloom);
         assertEquals(state.infection().size(), plan.cells().size());
-        assertEquals(-399, traceMarker.x());
-        assertEquals(401, traceMarker.z());
-        assertEquals(InfectionOverlayStage.TRACE, traceMarker.stage());
-        assertEquals(InfectionOverlayStage.BLOOM, bloomMarker.stage());
-        assertThrows(IllegalArgumentException.class, () -> new InfectionOverlayCell(trace, traceMarker.x() + 1, traceMarker.z(), traceMarker.stage()));
+        assertEquals(InfectionCell.BLOCKS * InfectionCell.BLOCKS, tracePatch.surfaceColumns().size());
+        assertEquals(new InfectionOverlayCell.SurfaceColumn(-400, 400), tracePatch.surfaceColumns().getFirst());
+        assertEquals(new InfectionOverlayCell.SurfaceColumn(-397, 403), tracePatch.surfaceColumns().getLast());
+        assertEquals(InfectionOverlayStage.TRACE, tracePatch.stage());
+        assertEquals(InfectionOverlayStage.BLOOM, bloomPatch.stage());
     }
 
     @Test

@@ -23,12 +23,15 @@ public final class FrontierInfectionOverlayPlan {
                 .sorted(Map.Entry.comparingByKey(Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)))
                 .forEach(entry -> {
                     InfectionCell cell = entry.getKey();
-                    int x = Math.addExact(Math.multiplyExact(cell.x(), InfectionCell.BLOCKS), 1);
-                    int z = Math.addExact(Math.multiplyExact(cell.z(), InfectionCell.BLOCKS), 1);
-                    if (!state.bootstrap().bounds().contains(new BlockPosition(x, 0, z))) {
+                    int x = Math.multiplyExact(cell.x(), InfectionCell.BLOCKS);
+                    int z = Math.multiplyExact(cell.z(), InfectionCell.BLOCKS);
+                    int maxX = Math.addExact(x, InfectionCell.BLOCKS - 1);
+                    int maxZ = Math.addExact(z, InfectionCell.BLOCKS - 1);
+                    if (!state.bootstrap().bounds().contains(new BlockPosition(x, 0, z))
+                            || !state.bootstrap().bounds().contains(new BlockPosition(maxX, 0, maxZ))) {
                         throw new IllegalArgumentException("infection cell is outside frontier bounds");
                     }
-                    cells.put(cell, new InfectionOverlayCell(cell, x, z, InfectionOverlayStage.fromRaw(entry.getValue().value().raw())));
+                    cells.put(cell, new InfectionOverlayCell(cell, InfectionOverlayStage.fromRaw(entry.getValue().value().raw())));
                 });
         return new FrontierInfectionOverlayPlan(cells);
     }

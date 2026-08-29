@@ -65,7 +65,7 @@ final class FrontierV3InfectionOverlayExecutor {
         InfectionCell cell = ledger.cellAt(position).orElse(null);
         if (cell == null) return BlockBreakObservation.UNMANAGED;
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(cell);
-        if (claim == null || claim.conflicted() || !level.getBlockState(position).equals(material(claim.stage()))) {
+        if (claim == null || !claim.active() || !level.getBlockState(position).equals(material(claim.stage()))) {
             if (claim != null) ledger.conflict(cell);
             return BlockBreakObservation.UNMANAGED;
         }
@@ -87,40 +87,67 @@ final class FrontierV3InfectionOverlayExecutor {
 
     static ProjectionResult project(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
                                     FrontierWorldState state) {
-        if (!level.hasChunkAt(new BlockPos(desired.x(), 0, desired.z()))) return ProjectionResult.DEFERRED;
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(desired.cell());
         if (claim != null) return projectClaim(level, ledger, desired, state, claim);
-        BlockPos position = new BlockPos(desired.x(), level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, desired.x(), desired.z()), desired.z());
-        if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
-        if (state.physicalDeltas().containsKey(canonical(position)) || !level.getBlockState(position).isAir()) {
-            ledger.blocked(desired.cell(), position, desired.stage());
+        List<BlockPos> positions = discoveredPatch(level, desired);
+        if (positions == null) return ProjectionResult.DEFERRED;
+        if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position)) || !level.getBlockState(position).isAir())) {
+            ledger.blocked(desired.cell(), positions, desired.stage());
             return ProjectionResult.CONFLICT;
         }
         ledger.ensureCapacityFor(desired.cell());
+        ledger.prepare(desired.cell(), positions, desired.stage());
         BlockState expected = material(desired.stage());
-        if (!level.setBlock(position, expected, 3) || !level.getBlockState(position).equals(expected)) return ProjectionResult.DEFERRED;
-        ledger.applied(desired.cell(), position, desired.stage());
+        if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
+        ledger.activate(desired.cell());
         return ProjectionResult.APPLIED;
     }
 
     private static ProjectionResult projectClaim(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
                                                  FrontierWorldState state, FrontierV3InfectionOverlayLedger.Claim claim) {
         if (claim.conflicted()) return ProjectionResult.CONFLICT;
-        BlockPos position = BlockPos.of(claim.position());
-        if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
+        List<BlockPos> positions = claim.blockPositions();
+        if (positions.stream().anyMatch(position -> !level.hasChunkAt(position))) return ProjectionResult.DEFERRED;
+        if (claim.prepared()) return reconcilePrepared(level, ledger, desired, state, claim, positions);
         if (claim.cleared()) {
-            if (!level.getBlockState(position).isAir()) { ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT; }
+            if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir())) { ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT; }
             BlockState expected = material(desired.stage());
-            if (!level.setBlock(position, expected, 3) || !level.getBlockState(position).equals(expected)) return ProjectionResult.DEFERRED;
+            if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
             ledger.updateStage(desired.cell(), desired.stage()); return ProjectionResult.UPDATED;
         }
-        if (state.physicalDeltas().containsKey(canonical(position)) || !level.getBlockState(position).equals(material(claim.stage()))) {
+        if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position))
+                || !level.getBlockState(position).equals(material(claim.stage())))) {
             ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT;
         }
         if (claim.stage() == desired.stage()) return ProjectionResult.CURRENT;
         BlockState expected = material(desired.stage());
-        if (!level.setBlock(position, expected, 3) || !level.getBlockState(position).equals(expected)) return ProjectionResult.DEFERRED;
+        if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
         ledger.updateStage(desired.cell(), desired.stage()); return ProjectionResult.UPDATED;
+    }
+
+    /**
+     * A prepared patch is the only recovery authority for a first physical write.  It may finish
+     * only when the world still proves that no column was written; a full exact postcondition is
+     * accepted, but every mixed or foreign result becomes a conflict rather than a repair job.
+     */
+    private static ProjectionResult reconcilePrepared(ServerLevel level, FrontierV3InfectionOverlayLedger ledger,
+                                                      InfectionOverlayCell desired, FrontierWorldState state,
+                                                      FrontierV3InfectionOverlayLedger.Claim claim,
+                                                      List<BlockPos> positions) {
+        if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position)))) {
+            ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT;
+        }
+        BlockState preparedMaterial = material(claim.stage());
+        if (positions.stream().allMatch(position -> level.getBlockState(position).equals(preparedMaterial))) {
+            ledger.activate(desired.cell()); return ProjectionResult.APPLIED;
+        }
+        if (positions.stream().allMatch(position -> level.getBlockState(position).isAir())) {
+            ledger.retargetPrepared(desired.cell(), desired.stage());
+            BlockState expected = material(desired.stage());
+            if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
+            ledger.activate(desired.cell()); return ProjectionResult.APPLIED;
+        }
+        ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT;
     }
 
     static ProjectionResult reconcileRetraction(ServerLevel level, FrontierV3InfectionOverlayLedger ledger,
@@ -128,16 +155,17 @@ final class FrontierV3InfectionOverlayExecutor {
                                                 FrontierWorldState state) {
         InfectionCell cell = entry.getKey(); FrontierV3InfectionOverlayLedger.Claim claim = entry.getValue();
         if (claim.conflicted()) return ProjectionResult.CONFLICT;
-        BlockPos position = BlockPos.of(claim.position());
-        if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
+        List<BlockPos> positions = claim.blockPositions();
+        if (positions.stream().anyMatch(position -> !level.hasChunkAt(position))) return ProjectionResult.DEFERRED;
         if (claim.cleared()) {
-            if (!level.getBlockState(position).isAir()) { ledger.conflict(cell); return ProjectionResult.CONFLICT; }
+            if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir())) { ledger.conflict(cell); return ProjectionResult.CONFLICT; }
             ledger.forgetRetracted(cell); return ProjectionResult.RETRACTED;
         }
-        if (state.physicalDeltas().containsKey(canonical(position)) || !level.getBlockState(position).equals(material(claim.stage()))) {
+        if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position))
+                || !level.getBlockState(position).equals(material(claim.stage())))) {
             ledger.conflict(cell); return ProjectionResult.CONFLICT;
         }
-        if (!level.setBlock(position, Blocks.AIR.defaultBlockState(), 3) || !level.getBlockState(position).isAir()) return ProjectionResult.DEFERRED;
+        if (!replace(level, positions, Blocks.AIR.defaultBlockState())) return ProjectionResult.DEFERRED;
         ledger.forgetRetracted(cell); return ProjectionResult.RETRACTED;
     }
 
@@ -148,6 +176,32 @@ final class FrontierV3InfectionOverlayExecutor {
             case BLOOM -> Blocks.MAGENTA_CARPET.defaultBlockState();
             case SATURATED -> Blocks.RED_CARPET.defaultBlockState();
         };
+    }
+
+    private static List<BlockPos> discoveredPatch(ServerLevel level, InfectionOverlayCell desired) {
+        List<BlockPos> positions = new java.util.ArrayList<>(FrontierV3InfectionOverlayLedger.PATCH_COLUMNS);
+        for (InfectionOverlayCell.SurfaceColumn column : desired.surfaceColumns()) {
+            BlockPos columnProbe = new BlockPos(column.x(), 0, column.z());
+            if (!level.hasChunkAt(columnProbe)) return null;
+            BlockPos position = new BlockPos(column.x(), level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.x(), column.z()), column.z());
+            if (!level.hasChunkAt(position)) return null;
+            // A prior interrupted v3 write can itself become the motion-blocking surface.  Keep
+            // that exact carpet in the failed baseline so a later retry conflicts rather than
+            // silently placing another carpet one block above it.
+            if (isOverlayMaterial(level.getBlockState(position.below()))) position = position.below();
+            positions.add(position);
+        }
+        return List.copyOf(positions);
+    }
+
+    private static boolean replace(ServerLevel level, List<BlockPos> positions, BlockState expected) {
+        for (BlockPos position : positions) if (!level.setBlock(position, expected, 3)) return false;
+        return positions.stream().allMatch(position -> level.getBlockState(position).equals(expected));
+    }
+
+    private static boolean isOverlayMaterial(BlockState state) {
+        return state.equals(material(InfectionOverlayStage.TRACE)) || state.equals(material(InfectionOverlayStage.INFESTED))
+                || state.equals(material(InfectionOverlayStage.BLOOM)) || state.equals(material(InfectionOverlayStage.SATURATED));
     }
 
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }

@@ -120,11 +120,17 @@ physical effect can damage the correct subject without reducing a building to
 one arbitrary health number.
 
 Territory, navigation and infection use separate spatial resolutions. The
-initial infection surface is a sparse 4×4-block cell field; strategic territory
-uses larger cells; actors and physical effects retain fixed-point block-space
-positions. Baseline terrain plus a sparse physical-delta index records scars,
-obstructions, craters, player construction and infection overlays without
-copying the entire Minecraft world into canonical state.
+initial infection surface is a sparse 4×4-block cell field; each materialized
+cell is one complete sixteen-column surface patch whose measured physical
+positions are retained as bounded provenance, while its intensity remains one
+canonical value. Before its first block write the surface patch records those
+exact columns as `PREPARED`; recovery may activate only a complete matching
+patch, retry an entirely absent patch, or visibly conflict a mixed/foreign
+patch—never complete or stack an interrupted write. Strategic territory uses larger cells; actors and physical
+effects retain fixed-point block-space positions. Baseline terrain plus a sparse
+physical-delta index records scars, obstructions, craters, player construction
+and infection overlays without copying the entire Minecraft world into
+canonical state.
 
 ## Time and event execution
 

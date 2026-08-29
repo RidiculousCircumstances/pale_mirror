@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "visible_hive_west_nest",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run tp PMTestPilot -420 70 409" }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 5000 },
+    { "type": "look", "at": { "x": -420, "y": 67, "z": 420 } },
+    { "type": "hud", "visible": false },
+    { "type": "wait", "ms": 1000 }
+  ],
+  "assertions": [],
+  "frames": [
+    { "after": 4, "name": "hive-west-nest" }
+  ]
+}

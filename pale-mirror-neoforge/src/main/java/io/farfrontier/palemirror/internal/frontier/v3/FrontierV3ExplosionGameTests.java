@@ -75,7 +75,13 @@ public final class FrontierV3ExplosionGameTests {
     public static void managedBlastRetainsChangedInfectionEvidenceAcrossSavedDataReload(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(48, 8, 0));
         InfectionCell cell = new InfectionCell(12, 13); FrontierV3InfectionOverlayLedger infection = FrontierV3InfectionOverlayLedger.get(level);
-        level.setBlock(position, FrontierV3InfectionOverlayExecutor.material(InfectionOverlayStage.BLOOM), 3); infection.applied(cell, position, InfectionOverlayStage.BLOOM);
+        java.util.List<BlockPos> patch = java.util.stream.IntStream.range(0, FrontierV3InfectionOverlayLedger.PATCH_COLUMNS)
+                .mapToObj(index -> position.offset(index % InfectionCell.BLOCKS, 0, index / InfectionCell.BLOCKS)).toList();
+        patch.forEach(value -> {
+            level.setBlock(value.below(), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(value, FrontierV3InfectionOverlayExecutor.material(InfectionOverlayStage.BLOOM), 3);
+        });
+        infection.prepare(cell, patch, InfectionOverlayStage.BLOOM); infection.activate(cell);
         PhysicalIntentId intent = new PhysicalIntentId("intent:managed-explosion-infection-test"); FrontierV3ManagedExplosionLedger ledger = FrontierV3ManagedExplosionLedger.get(level);
         helper.assertTrue(ledger.capture(level, level.getGameTime(), intent, java.util.List.of(position), java.util.List.of(), null,
                 FrontierV3GrayboxLedger.get(level), infection, ignored -> true), "an owned infection marker is retained before blast reconciliation");

@@ -51,7 +51,7 @@ final class FrontierV3DecontaminationExecutor {
             if (intent.status() == PhysicalIntentStatus.RUNNING) unknown(runtime, intent.id(), "restart-target-conflict");
             return;
         }
-        if (!level.hasChunkAt(target.marker()) || !level.hasChunkAt(target.chestPosition())) return;
+        if (target.markers().stream().anyMatch(position -> !level.hasChunkAt(position)) || !level.hasChunkAt(target.chestPosition())) return;
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level, new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target, chest); return; }
@@ -74,14 +74,14 @@ final class FrontierV3DecontaminationExecutor {
     /** Rebuilds only our own SavedData claim from an already-measured completed effect after a crash. */
     static boolean recoverLedgerPostcondition(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, Target target) {
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(target.cell());
-        if (claim == null || claim.conflicted()) return false;
+        if (claim == null || !claim.active()) return false;
         if (target.remainingRaw() == 0L) {
-            if (!level.getBlockState(target.marker()).isAir()) return false;
+            if (target.markers().stream().anyMatch(position -> !level.getBlockState(position).isAir())) return false;
             if (!claim.cleared()) ledger.clearedByEffect(target.cell());
             return true;
         }
         InfectionOverlayStage result = target.resultStage().orElseThrow();
-        if (!level.getBlockState(target.marker()).equals(FrontierV3InfectionOverlayExecutor.material(result))) return false;
+        if (target.markers().stream().anyMatch(position -> !level.getBlockState(position).equals(FrontierV3InfectionOverlayExecutor.material(result)))) return false;
         ledger.updateStage(target.cell(), result); return true;
     }
 
@@ -95,16 +95,15 @@ final class FrontierV3DecontaminationExecutor {
 
     static boolean applyOne(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, Target target, ChestBlockEntity chest) {
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(target.cell()); ItemStack stack = chest.getItem(target.slot());
-        if (claim == null || claim.conflicted() || claim.cleared() || claim.stage() != target.priorStage()
-                || !level.getBlockState(target.marker()).equals(FrontierV3InfectionOverlayExecutor.material(target.priorStage()))
+        if (claim == null || !claim.active() || claim.stage() != target.priorStage()
+                || target.markers().stream().anyMatch(position -> !level.getBlockState(position).equals(FrontierV3InfectionOverlayExecutor.material(target.priorStage())))
                 || !FrontierV3CargoHandoffExecutor.exactMatch(stack, target.material())) return false;
         if (target.remainingRaw() == 0L) {
-            if (!level.setBlock(target.marker(), Blocks.AIR.defaultBlockState(), 3) || !level.getBlockState(target.marker()).isAir()) return false;
+            if (!replace(level, target.markers(), Blocks.AIR.defaultBlockState())) return false;
             ledger.clearedByEffect(target.cell());
         } else {
             InfectionOverlayStage result = target.resultStage().orElseThrow();
-            if (!level.setBlock(target.marker(), FrontierV3InfectionOverlayExecutor.material(result), 3)
-                    || !level.getBlockState(target.marker()).equals(FrontierV3InfectionOverlayExecutor.material(result))) return false;
+            if (!replace(level, target.markers(), FrontierV3InfectionOverlayExecutor.material(result))) return false;
             ledger.updateStage(target.cell(), result);
         }
         stack.shrink(1); chest.setItem(target.slot(), stack); chest.setChanged(); return true;
@@ -118,9 +117,9 @@ final class FrontierV3DecontaminationExecutor {
         if (material == null || !material.itemKind().equals(DecontaminationPolicy.REAGENT) || prior == null || !(material.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return null;
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId()); FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(cell);
         if (surface == null || surface.status() != io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ACTIVE
-                || claim == null || claim.conflicted()) return null;
+                || claim == null || !claim.active()) return null;
         long remaining = Math.max(0L, prior - DecontaminationPolicy.REDUCTION_RAW); InfectionOverlayStage before = InfectionOverlayStage.fromRaw(prior);
-        return new Target(cell, BlockPos.of(claim.position()), material, slot.containerId(), slot.slot(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()),
+        return new Target(cell, claim.blockPositions(), material, slot.containerId(), slot.slot(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()),
                 prior, remaining, before, remaining == 0L ? Optional.empty() : Optional.of(InfectionOverlayStage.fromRaw(remaining)));
     }
 
@@ -149,6 +148,11 @@ final class FrontierV3DecontaminationExecutor {
         return runtime.decodedState().orElse(null);
     }
 
-    record Target(InfectionCell cell, BlockPos marker, ExactItemStack material, SubjectId containerId, int slot, BlockPos chestPosition,
+    private static boolean replace(ServerLevel level, java.util.List<BlockPos> positions, net.minecraft.world.level.block.state.BlockState state) {
+        for (BlockPos position : positions) if (!level.setBlock(position, state, 3)) return false;
+        return positions.stream().allMatch(position -> level.getBlockState(position).equals(state));
+    }
+
+    record Target(InfectionCell cell, java.util.List<BlockPos> markers, ExactItemStack material, SubjectId containerId, int slot, BlockPos chestPosition,
                   long priorRaw, long remainingRaw, InfectionOverlayStage priorStage, Optional<InfectionOverlayStage> resultStage) { }
 }

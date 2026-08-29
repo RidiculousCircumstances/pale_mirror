@@ -303,44 +303,6 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-infection-overlay", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void infectionOverlayUsesFreshAirThenRetreatsOrPreservesForeignConflict(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos provisional = helper.absolutePos(new BlockPos(48, 8, 0));
-        int x = Math.addExact(Math.multiplyExact(Math.floorDiv(provisional.getX() - 1, InfectionCell.BLOCKS), InfectionCell.BLOCKS), 1);
-        int z = Math.addExact(Math.multiplyExact(Math.floorDiv(provisional.getZ() - 1, InfectionCell.BLOCKS), InfectionCell.BLOCKS), 1);
-        InfectionCell cell = new InfectionCell(Math.floorDiv(x, InfectionCell.BLOCKS), Math.floorDiv(z, InfectionCell.BLOCKS));
-        InfectionOverlayCell desired = new InfectionOverlayCell(cell, x, z, InfectionOverlayStage.BLOOM);
-        BlockPos marker = new BlockPos(x, provisional.getY(), z);
-        level.setBlock(marker, Blocks.AIR.defaultBlockState(), 3);
-        level.setBlock(marker.below(), Blocks.STONE.defaultBlockState(), 3);
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:game-test-infection"), 91L));
-        FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
-
-        helper.assertValueEqual(FrontierV3InfectionOverlayExecutor.project(level, ledger, desired, state),
-                FrontierV3InfectionOverlayExecutor.ProjectionResult.APPLIED,
-                "a sparse infection cell claims only fresh air above the naturally loaded surface");
-        marker = BlockPos.of(ledger.claim(cell).position());
-        helper.assertTrue(level.getBlockState(marker).is(Blocks.MAGENTA_CARPET),
-                "the bloom stage is an obvious foreign graybox surface marker");
-        net.minecraft.nbt.CompoundTag serialized = ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess());
-        ledger = FrontierV3InfectionOverlayLedger.load(serialized, level.registryAccess());
-        helper.assertValueEqual(FrontierV3InfectionOverlayExecutor.reconcileRetraction(level, ledger,
-                        java.util.Map.entry(cell, ledger.claim(cell)), state), FrontierV3InfectionOverlayExecutor.ProjectionResult.RETRACTED,
-                "canonical retreat restores only the exact owned air-baseline marker after SavedData reload");
-        helper.assertTrue(level.getBlockState(marker).isAir(), "retraction leaves the captured air baseline, not a terrain rewrite");
-
-        helper.assertValueEqual(FrontierV3InfectionOverlayExecutor.project(level, ledger, desired, state),
-                FrontierV3InfectionOverlayExecutor.ProjectionResult.APPLIED, "the same cell may return after a clean retreat");
-        level.setBlock(marker, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
-        helper.assertValueEqual(FrontierV3InfectionOverlayExecutor.project(level, ledger, desired, state),
-                FrontierV3InfectionOverlayExecutor.ProjectionResult.CONFLICT,
-                "a later player/world change is terminal provenance rather than repaint permission");
-        helper.assertTrue(level.getBlockState(marker).is(Blocks.DIAMOND_BLOCK), "the materializer never overwrites the foreign replacement");
-        helper.succeed();
-    }
-
     private static GrayboxCell grayboxCell(BlockPos position, String owner, GrayboxMaterial material, GrayboxSemanticPart part) {
         return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()), new SubjectId(owner), material, part);
     }
