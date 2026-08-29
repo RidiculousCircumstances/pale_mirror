@@ -288,6 +288,25 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void restartSafetyLeavesRunningHarvestForItsLoadedFieldAndDepotInspector() {
+        PhysicalIntent harvest = new PhysicalIntent(new PhysicalIntentId("intent:restart-harvest"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
+                PhysicalIntentStatus.RUNNING, new SubjectId("site:1-wheat-field"),
+                List.of(new SubjectId("site:1-wheat-field"), new SubjectId("job:site-harvest-1-wheat-field-1"),
+                        new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1-wheat")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED);
+        PhysicalIntent unsupported = new PhysicalIntent(new PhysicalIntentId("intent:restart-unsupported"), PhysicalIntentKind.SCENE_STRIKE,
+                PhysicalIntentStatus.RUNNING, new SubjectId("operation:supply-1-2"),
+                List.of(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+
+        assertTrue(FrontierV3PhysicalIntentRestartSafety.hasLoadedPostconditionInspector(harvest, ignored -> false),
+                "the harvest executor verifies all owned crop cells and the exact depot stack without replay");
+        assertFalse(FrontierV3PhysicalIntentRestartSafety.hasLoadedPostconditionInspector(unsupported, ignored -> false),
+                "an effect without an exact loaded-world inspector must still fail closed as UNKNOWN");
+    }
+
+    @Test
     void restartRetainsPreparedSceneLeaseAndKeepsItsColdRouteSuspended(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-lease-recovery");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());

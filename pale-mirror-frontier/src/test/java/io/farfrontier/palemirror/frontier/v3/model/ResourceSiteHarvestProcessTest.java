@@ -5,6 +5,14 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -105,6 +113,40 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(StrategicObjectiveStatus.BLOCKED, blocked.strategicPlans().objectives().get(task.objectiveId()).status());
     }
 
+    @Test
+    void publicPhysicalBoundaryConfirmsOneObservedHarvestWithoutQuarantiningTheEngine() {
+        WorldId world = new WorldId("frontier:resource-site-public-harvest");
+        FrontierWorldState ready = activeDepot(ready(FrontierWorldState.initial(FrontierBootstrapper.create(world, 125L))));
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        FrontierWorldState tasked = harvestTask(ready, site, 22_000L);
+        StrategicTask task = onlyHarvestTask(tasked);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+        ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
+        FrontierWorldState harvesting = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"),
+                (StrategicTaskTransition) planned.getFirst().payload());
+        harvesting = ResourceSiteHarvestProcess.reduceStarted(harvesting, site, started);
+        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(2).payload()).intent();
+        harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, intent);
+
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 125L);
+        var configuration = new FrontierEngineConfiguration<>(world, harvesting, new SimInstant(22_100L), base.commandPlanner(), base.scheduledPlanner(),
+                base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(), TransactionCommitter.noOp());
+        var engine = FrontierEngines.create(configuration);
+        assertTrue(submit(engine, world, "running", intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty()) instanceof CommandResult.Accepted);
+
+        ExactItemStack output = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, started.job().outputSlot());
+        ResourceSiteHarvestObservation receipt = new ResourceSiteHarvestObservation(new PhysicalObservationId("observation:site-harvest-public"),
+                intent.id(), site, started.job().workerId(), output, 64);
+        CommandResult result = submit(engine, world, "confirmed", intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+
+        assertTrue(result instanceof CommandResult.Accepted, () -> "harvest confirmation must be accepted: " + result);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
+        FrontierWorldState complete = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(ResourceSitePhase.GROWING, complete.resourceSites().site(site).phase());
+        assertEquals(output, complete.inventory().items().get(output.id()));
+    }
+
     private static FrontierWorldState activeDepot(FrontierWorldState state) {
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         ExactInventory inventory = state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE);
@@ -141,6 +183,15 @@ class ResourceSiteHarvestProcessTest {
 
     private static StrategicTask onlyHarvestTask(FrontierWorldState state) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+    }
+
+    private static CommandResult submit(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,
+                                        String phase, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId,
+                                        PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation) {
+        CommandId command = new CommandId("command:resource-site-harvest-" + phase);
+        var checkpoint = engine.checkpoint();
+        return engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), new PhysicalIntentTransition(intentId, status, observation)));
     }
 
     private static FrontierWorldState initial() {

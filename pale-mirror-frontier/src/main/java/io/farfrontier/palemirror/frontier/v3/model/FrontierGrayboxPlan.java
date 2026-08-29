@@ -79,6 +79,14 @@ public final class FrontierGrayboxPlan {
         return java.util.Set.copyOf(cells.keySet());
     }
 
+    /** Full-intact organ occupancy used by the canonical hive actor slot compiler. */
+    static java.util.Set<BlockPosition> intactOrganOccupancy(java.util.List<HiveOrgan> organs) {
+        Objects.requireNonNull(organs, "organs");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        organs.forEach(organ -> addOrgan(cells, organ));
+        return java.util.Set.copyOf(cells.keySet());
+    }
+
     /**
      * Resolves one full-intact semantic cell without consulting desired state.  Observations use
      * this baseline because a previous loss may already have removed the cell from the current

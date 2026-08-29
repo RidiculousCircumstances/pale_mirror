@@ -43,21 +43,28 @@ final class FrontierV3PhysicalIntentRestartSafety {
                                                    java.util.function.Predicate<PhysicalIntentId> hasManagedPostcondition) {
         List<PhysicalIntentId> running = state(runtime).physicalIntents().values().stream()
                 .filter(intent -> intent.status() == PhysicalIntentStatus.RUNNING)
-                .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION
-                        && intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING)
-                .filter(intent -> intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION
-                        || !hasManagedPostcondition.test(intent.id()))
+                .filter(intent -> !hasLoadedPostconditionInspector(intent, hasManagedPostcondition))
                 .map(PhysicalIntent::id)
                 .sorted(Comparator.naturalOrder())
                 .toList();
         for (PhysicalIntentId intentId : running) quarantine(runtime, intentId);
         return running.size();
+    }
+
+    /**
+     * A retained RUNNING intent is safe only when a loaded-world executor has an exact,
+     * non-replaying postcondition inspector for it.  In particular, a harvest checks all owned
+     * crop cells and its one named depot stack before acknowledging the existing physical result.
+     */
+    static boolean hasLoadedPostconditionInspector(PhysicalIntent intent,
+                                                    java.util.function.Predicate<PhysicalIntentId> hasManagedPostcondition) {
+        return switch (intent.kind()) {
+            case CARGO_HANDOFF, STRUCTURAL_REPAIR, ROUTE_CONSTRUCTION, DECONTAMINATION,
+                    EXACT_ITEM_CONSUMPTION, RESOURCE_SITE_PREPARATION, RESOURCE_SITE_HARVEST,
+                    PRODUCTION_TRANSFORMATION, CARGO_LOADING -> true;
+            case EXPLOSION -> hasManagedPostcondition.test(intent.id());
+            default -> false;
+        };
     }
 
     private static void quarantine(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId) {

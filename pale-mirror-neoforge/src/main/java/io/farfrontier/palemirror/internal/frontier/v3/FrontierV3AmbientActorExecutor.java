@@ -53,6 +53,7 @@ final class FrontierV3AmbientActorExecutor {
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int MAX_PENDING_ADMISSIONS = 4_096;
+    private static final int MAX_VERTICAL_PLACEMENT_SEARCH = 4;
     private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
     private static final long PENDING_ADMISSION_TICKS = 20L;
     /** Noncanonical, short-lived bridge across EntityJoinLevelEvent and the UUID index. */
@@ -133,10 +134,8 @@ final class FrontierV3AmbientActorExecutor {
             }
             return Result.CURRENT;
         }
-        BlockPos anchor = new BlockPos(canonicalPosition.x(), canonicalPosition.y(), canonicalPosition.z());
-        if (!level.hasChunkAt(anchor)) return Result.DEFERRED;
-        BlockPos position = new BlockPos(anchor.getX(), level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ()), anchor.getZ());
-        if (!level.hasChunkAt(position) || !level.getBlockState(position).isAir() || !level.getBlockState(position.above()).isAir()) return Result.DEFERRED;
+        BlockPos position = standingPosition(level, canonicalPosition);
+        if (position == null) return Result.DEFERRED;
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
         body.setUUID(entityId); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
@@ -157,6 +156,45 @@ final class FrontierV3AmbientActorExecutor {
     }
 
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
+
+    /**
+     * Read-only loaded-world admission evidence for one canonical ambient actor.  This must not
+     * load a chunk or alter a lease: it exists so an operator can distinguish a legitimate
+     * unloaded/blocked deferral from a UUID ownership conflict while investigating a visible
+     * PREPARED lease.
+     */
+    static AdmissionDiagnostic admissionDiagnostic(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                    FrontierWorldState state, SubjectId actorId) {
+        var location = state.actorLocations().get(actorId);
+        if (location == null) return AdmissionDiagnostic.notCanonical();
+        UUID expectedId = entityId(state, actorId);
+        Entity existing = level.getEntity(expectedId);
+        if (existing != null) {
+            return owned(existing, actorId, bioform(state, actorId))
+                    ? AdmissionDiagnostic.indexed(expectedId, pending(runtime, expectedId) != null)
+                    : AdmissionDiagnostic.conflict(expectedId);
+        }
+        BlockPos anchor = new BlockPos(location.position().x(), location.position().y(), location.position().z());
+        if (!level.hasChunkAt(anchor)) return AdmissionDiagnostic.unloaded(expectedId);
+        BlockPos position = standingPosition(level, location.position());
+        if (position == null) return AdmissionDiagnostic.blocked(expectedId, new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
+        return AdmissionDiagnostic.ready(expectedId, new BlockPosition(position.getX(), position.getY(), position.getZ()));
+    }
+
+    /** Finds the first two-block-clear standing space directly above the naturally loaded surface. */
+    private static BlockPos standingPosition(ServerLevel level, BlockPosition canonicalPosition) {
+        BlockPos anchor = new BlockPos(canonicalPosition.x(), canonicalPosition.y(), canonicalPosition.z());
+        if (!level.hasChunkAt(anchor)) return null;
+        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ());
+        for (int y = surface; y <= surface + MAX_VERTICAL_PLACEMENT_SEARCH; y++) {
+            BlockPos candidate = new BlockPos(anchor.getX(), y, anchor.getZ());
+            if (!level.hasChunkAt(candidate)) return null;
+            if (!level.getBlockState(candidate).isAir() || !level.getBlockState(candidate.above()).isAir()
+                    || level.getBlockState(candidate.below()).isAir()) continue;
+            return candidate;
+        }
+        return null;
+    }
 
     /** Retains only an exact expected body during the short join-to-index hand-off. */
     static boolean observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
@@ -339,5 +377,13 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
     private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
+    record AdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement) {
+        private static AdmissionDiagnostic notCanonical() { return new AdmissionDiagnostic("NOT_CANONICAL", null, false, null); }
+        private static AdmissionDiagnostic indexed(UUID entityId, boolean pending) { return new AdmissionDiagnostic("INDEXED", entityId, pending, null); }
+        private static AdmissionDiagnostic conflict(UUID entityId) { return new AdmissionDiagnostic("UUID_CONFLICT", entityId, false, null); }
+        private static AdmissionDiagnostic unloaded(UUID entityId) { return new AdmissionDiagnostic("UNLOADED", entityId, false, null); }
+        private static AdmissionDiagnostic blocked(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("BLOCKED", entityId, false, placement); }
+        private static AdmissionDiagnostic ready(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("READY", entityId, false, placement); }
+    }
     enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT }
 }

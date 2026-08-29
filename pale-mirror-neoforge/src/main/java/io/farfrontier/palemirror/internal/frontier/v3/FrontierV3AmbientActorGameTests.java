@@ -71,6 +71,18 @@ public final class FrontierV3AmbientActorGameTests {
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
                         new BlockPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "the durable HOT acknowledgement retains the one existing UUID rather than duplicating it");
+        SubjectId carpetResident = new SubjectId("resident:1-2"); BlockPos carpet = origin.offset(4, 0, 0);
+        level.setBlock(carpet.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(carpet, Blocks.RED_CARPET.defaultBlockState(), 3);
+        level.setBlock(carpet.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(carpet.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), carpetResident,
+                        new BlockPosition(carpet.getX(), carpet.getY(), carpet.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "an owned infection carpet is a physical surface, not a reason to strand the canonical actor");
+        Villager carpetBody = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), carpetResident));
+        helper.assertTrue(carpetBody != null && carpetBody.getY() >= carpet.getY() + 1.0D
+                        && level.getBlockState(carpet).is(Blocks.RED_CARPET),
+                "the exact body must stand above the carpet without replacing it: body="
+                        + (carpetBody == null ? "missing" : carpetBody.position()) + " carpet=" + carpet);
         helper.assertFalse(FrontierV3AmbientActorExecutor.observeLeave(runtime, body, false),
                 "an ordinary EntityLeave callback is too late to close a serialized HOT body into COLD");
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
@@ -79,7 +91,7 @@ public final class FrontierV3AmbientActorGameTests {
                 "server teardown must not release a saved HOT body into COLD");
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
                 "a graceful shutdown retains the HOT lease for exact UUID recovery after restart");
-        body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
+        body.discard(); carpetBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
     }
 
     private static void prepareFloor(ServerLevel level, BlockPos position) {

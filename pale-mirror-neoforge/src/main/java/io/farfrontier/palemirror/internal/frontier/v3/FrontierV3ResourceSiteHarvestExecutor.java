@@ -133,8 +133,9 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalIntentTransition(intentId, status, observation)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted) && status == PhysicalIntentStatus.CONFIRMED) {
-            throw new IllegalStateException("resource-site harvest confirmation was rejected: " + result);
+        if (result instanceof CommandResult.Rejected rejected && status == PhysicalIntentStatus.CONFIRMED) {
+            throw new IllegalStateException("resource-site harvest confirmation was rejected [" + rejected.rejection().code()
+                    + "]: " + rejected.rejection().detail());
         }
         return result instanceof CommandResult.Accepted;
     }

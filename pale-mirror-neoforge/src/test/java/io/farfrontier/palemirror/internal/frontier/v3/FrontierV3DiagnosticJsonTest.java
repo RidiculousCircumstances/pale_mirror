@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,6 +41,23 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(itemJson.contains("\"custody\":{"));
         assertTrue(missing.contains("\"status\":\"not_found\""));
         assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192);
+    }
+
+    @Test
+    void exposesBoundedReadOnlyAmbientAdmissionEvidence(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-admission-test"), 93L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
+        var evidence = new FrontierV3AmbientActorExecutor.AdmissionDiagnostic("BLOCKED", UUID.fromString("6e6a062d-a182-469c-9de8-2de3f3703ee1"), false,
+                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4, 65, 8));
+
+        String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty(), Optional.of(evidence));
+
+        assertTrue(actorJson.contains("\"physicalAdmission\":{\"status\":\"BLOCKED\""));
+        assertTrue(actorJson.contains("\"placement\":{\"x\":4,\"y\":65,\"z\":8}"));
     }
 
     @Test

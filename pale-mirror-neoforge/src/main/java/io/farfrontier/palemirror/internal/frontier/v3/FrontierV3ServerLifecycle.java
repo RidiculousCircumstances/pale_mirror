@@ -88,8 +88,18 @@ public final class FrontierV3ServerLifecycle {
         }
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
+        java.util.Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission = java.util.Optional.empty();
+        if ("actor".equals(view)) {
+            try {
+                admission = java.util.Optional.of(FrontierV3AmbientActorExecutor.admissionDiagnostic(
+                        FrontierV3PhysicalWorld.require(server), runtime, state,
+                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id)));
+            } catch (IllegalArgumentException ignored) {
+                // The immutable canonical formatter remains the source of the not-found response.
+            }
+        }
         return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
-                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty());
+                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission);
     }
 
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */

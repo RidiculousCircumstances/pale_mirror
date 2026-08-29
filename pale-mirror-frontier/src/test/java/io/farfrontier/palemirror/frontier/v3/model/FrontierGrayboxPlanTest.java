@@ -73,6 +73,23 @@ class FrontierGrayboxPlanTest {
         });
     }
 
+    @Test
+    void everyBootstrapBioformUsesOneClearDeterministicHivePerimeterSlot() {
+        FrontierWorldState state = initial();
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        state.bootstrap().hive().bioforms().forEach(bioform -> {
+            BlockPosition position = state.actorLocations().get(bioform.id()).position();
+            GrayboxCell foot = plan.cells().get(position);
+            assertTrue(foot == null || foot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
+                    "bioform foot cell must stay outside hive organ geometry: " + bioform.id());
+            assertEquals(null, plan.cells().get(position.offset(0, 1, 0)),
+                    "bioform body clearance must stay outside hive organ geometry: " + bioform.id());
+            assertEquals(null, plan.cells().get(position.offset(0, 2, 0)),
+                    "bioform head clearance must stay outside hive organ geometry: " + bioform.id());
+        });
+    }
+
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:graybox-plan"), 1234L));
     }

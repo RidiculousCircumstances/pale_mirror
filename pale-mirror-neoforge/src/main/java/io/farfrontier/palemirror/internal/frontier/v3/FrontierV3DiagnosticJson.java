@@ -28,12 +28,18 @@ final class FrontierV3DiagnosticJson {
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace) {
+        return render(kind, id, checkpoint, state, trace, Optional.empty());
+    }
+
+    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+                         Optional<FrontierV3DiagnosticTrace.Entry> trace,
+                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission) {
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(id, "id");
-        Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(trace, "trace");
+        Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(trace, "trace"); Objects.requireNonNull(admission, "admission");
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
             case "site" -> site(id, checkpoint, state);
-            case "actor" -> actor(id, checkpoint, state);
+            case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state);
             case "intent" -> intent(id, checkpoint, state);
@@ -77,7 +83,8 @@ final class FrontierV3DiagnosticJson {
                 + ",\"activeWork\":\"" + quote(work) + "\",\"firstCrop\":" + position(site.cropSlots().getFirst()) + "}";
     }
 
-    private static String actor(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String actor(String id, CheckpointImage checkpoint, FrontierWorldState state,
+                                Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission) {
         SubjectId subject = subject(id).orElse(null); ActorLocation location = subject == null ? null : state.actorLocations().get(subject);
         if (location == null) return unavailable("actor", id, checkpoint, "not_found");
         ResidentProfile resident = state.humanPopulation().resident(subject);
@@ -87,7 +94,15 @@ final class FrontierV3DiagnosticJson {
         return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + (resident != null ? "RESIDENT" : "BIOFORM")
                 + "\",\"owner\":\"" + quote(owner) + "\",\"role\":\"" + role + "\",\"life\":\"" + location.condition().status()
                 + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(location.position())
-                + ",\"ambientLease\":\"" + quote(state.ambientLeases().containsKey(subject) ? state.ambientLeases().get(subject).status().name() : "NONE") + "\"}";
+                + ",\"ambientLease\":\"" + quote(state.ambientLeases().containsKey(subject) ? state.ambientLeases().get(subject).status().name() : "NONE") + "\""
+                + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
+    }
+
+    private static String admission(FrontierV3AmbientActorExecutor.AdmissionDiagnostic value) {
+        String placement = value.placement() == null ? "null" : position(value.placement());
+        String entityId = value.entityId() == null ? "" : value.entityId().toString();
+        return ",\"physicalAdmission\":{\"status\":\"" + quote(value.status()) + "\",\"entityUuid\":\""
+                + quote(entityId) + "\",\"pending\":" + value.pending() + ",\"placement\":" + placement + "}";
     }
 
     private static String item(String id, CheckpointImage checkpoint, FrontierWorldState state) {
