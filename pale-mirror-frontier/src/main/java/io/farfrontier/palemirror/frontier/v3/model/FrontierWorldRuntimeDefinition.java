@@ -314,6 +314,12 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) return ResourceSiteProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) return ResourceSiteHarvestProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {
+            ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+            if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("production transformation must be prepared by its settlement");
+            ProductionTransformationStateSupport.validateIntent(state, intent);
+            return state.preparePhysicalIntent(intent);
+        }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
@@ -362,6 +368,11 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site harvest transition lacks site ownership");
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
+        if (intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {
+            ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+            if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("production transformation transition lacks settlement ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {

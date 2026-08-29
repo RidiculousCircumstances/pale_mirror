@@ -63,6 +63,16 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("resource-site preparation must bind one site and one job without an area radius");
                 }
             }
+            case RESOURCE_SITE_HARVEST -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED || subjectIds.size() != 4) {
+                    throw new IllegalArgumentException("resource-site harvest must bind one site, job, worker and output without an area radius");
+                }
+            }
+            case PRODUCTION_TRANSFORMATION -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED || subjectIds.size() != 3) {
+                    throw new IllegalArgumentException("production transformation must bind one job, input and output without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");

@@ -107,6 +107,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3InventoryObservationExecutor.tick(physicalWorld, runtime);
                 FrontierV3CargoCarrierObservationExecutor.tick(physicalWorld, runtime);
                 FrontierV3ContainerSurfaceExecutor.tick(physicalWorld, runtime);
+                FrontierV3ProductionTransformationExecutor.tick(physicalWorld, runtime);
                 FrontierV3ExactItemConsumptionExecutor.tick(physicalWorld, runtime);
                 FrontierV3CargoHandoffExecutor.tick(physicalWorld, runtime);
                 FrontierV3StructuralRepairExecutor.tick(physicalWorld, runtime);

@@ -76,8 +76,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             ResidentProfile worker = humanPopulation.resident(job.workerId());
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
             if (!worker.settlementId().equals(settlement.id()) || worker.role() != ResidentRole.CRAFTER) throw new IllegalArgumentException("production job worker must be a settlement crafter");
-            if (inventory.items().containsKey(job.consumedItemId()) || inventory.items().containsKey(job.outputItemId())) {
-                throw new IllegalArgumentException("active production job must own neither consumed nor output item stack");
+            ExactItemStack input = inventory.items().get(job.consumedItemId());
+            if (inventory.items().containsKey(job.outputItemId())) {
+                throw new IllegalArgumentException("active production job must not retain its output stack");
+            }
+            if (input != null && (!(input.custody() instanceof InventoryCustody.ContainerSlot slot)
+                    || !slot.containerId().equals(depotId(settlement.id())) || input.count() != job.outputCount())) {
+                throw new IllegalArgumentException("active production job input must remain in its exact settlement depot slot");
             }
         }
         for (Map.Entry<SubjectId, SupplyContract> entry : contracts.entrySet()) {
@@ -139,7 +144,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                     && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
                     && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
-                    && !expectedStructures.contains(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
+                    && !expectedStructures.contains(intent.causeSubjectId()) && !productionJobs.containsKey(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
                     && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
@@ -147,7 +152,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
-                        && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject)
+                        && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject)
+                        && productionJobs.values().stream().noneMatch(job -> job.outputItemId().equals(subject))
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
                         && !strategicPlans.routeEngagements().containsKey(subject)
@@ -277,6 +283,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(job, "production job");
         Objects.requireNonNull(inputItemId, "production input item id");
         if (!job.consumedItemId().equals(inputItemId)) throw new IllegalArgumentException("production job input identity differs");
+        ExactItemStack input = inventory.items().get(inputItemId);
+        if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("production input is unavailable");
         if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
         if (productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
             throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
@@ -291,6 +299,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (!job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind()) || job.outputCount() != output.count()) {
             throw new IllegalArgumentException("production output does not match durable job result");
         }
+        ExactItemStack input = inventory.items().get(job.consumedItemId());
+        if (input != null) throw new IllegalArgumentException("materialized production must confirm its physical transformation rather than emit a direct completion");
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(jobId);
         return next(actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
@@ -338,6 +348,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(intent, "physical intent");
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
         SceneStrikeStateSupport.validateIntent(this, intent); ResourceSitePhysicalIntentStateSupport.validateIntent(this, intent);
+        ProductionTransformationStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
@@ -352,6 +363,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         if (nextStatus != PhysicalIntentStatus.CONFIRMED) {
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.empty()));
+            if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION
+                    && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+                return ProductionTransformationStateSupport.unknown(this, current, next);
+            }
             if ((current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION
                     || current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST)
                     && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return ResourceSitePhysicalIntentStateSupport.conflict(this, current, next);
@@ -410,6 +425,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(consumed.id(), consumed);
             return next(actorLocations, structureConditions, infection, inventory.withoutItem(itemId), productionJobs, contracts, operations,
                     next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {
+            if (!(evidence instanceof ProductionTransformationObservation production)) {
+                throw new IllegalArgumentException("production transformation requires exact physical receipt");
+            }
+            return ProductionTransformationStateSupport.complete(this, current, production, next);
         }
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");

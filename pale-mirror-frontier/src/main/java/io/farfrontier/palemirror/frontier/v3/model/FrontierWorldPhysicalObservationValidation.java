@@ -43,6 +43,8 @@ final class FrontierWorldPhysicalObservationValidation {
                 ResourceSitePhysicalIntentStateSupport.validateHarvestReceipt(bootstrap, intent, harvest);
             } else if (observation instanceof ResourceSitePreparationObservation preparation) {
                 ResourceSitePhysicalIntentStateSupport.validateReceipt(intent, preparation);
+            } else if (observation instanceof ProductionTransformationObservation production) {
+                ProductionTransformationStateSupport.validateReceipt(intent, production);
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
         }
     }

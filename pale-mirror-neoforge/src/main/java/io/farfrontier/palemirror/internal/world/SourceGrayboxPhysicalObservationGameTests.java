@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
@@ -148,14 +149,10 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         SourceGrayboxMaterializerGameTests.prepareFlatFloor(helper, anchor, 24);
         SourceGrayboxSavedData data = SourceGrayboxSavedData.fresh(42L);
         data.activate(0L);
-        SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
         ReferenceGrayboxSnapshot baseline = data.snapshot();
-        String residentId = baseline.residents().getFirst().id();
-        ReferenceGrayboxSnapshot presentation = SourceGrayboxMaterializerGameTests.fixture(anchor, baseline, residentId, 1.0d, "entity-observation");
-        materializer.apply(helper.getLevel(), presentation);
-        Villager carrier = helper.getLevel().getEntitiesOfClass(Villager.class, new AABB(anchor).inflate(24), entity ->
-                entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID).equals(residentId)).stream().findFirst().orElseThrow();
+        String residentId = baseline.residents().getLast().id();
         String before = data.snapshot().stateRevision();
+        Villager carrier = projectedResident(helper, anchor, residentId, before);
 
         Villager forged = new Villager(net.minecraft.world.entity.EntityType.VILLAGER, helper.getLevel());
         forged.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, residentId);
@@ -173,6 +170,17 @@ public final class SourceGrayboxPhysicalObservationGameTests {
         String after = data.snapshot().stateRevision();
         helper.assertTrue(!before.equals(after), "an accepted entity observation must advance the canonical revision");
         helper.succeed();
+    }
+
+    private static Villager projectedResident(GameTestHelper helper, BlockPos anchor, String residentId, String revision) {
+        Villager carrier = new Villager(EntityType.VILLAGER, helper.getLevel());
+        carrier.setUUID(SourceGrayboxMaterializer.uuid("resident", residentId));
+        carrier.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_ID, residentId);
+        carrier.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_KIND, "RESIDENT");
+        carrier.getPersistentData().putString(SourceGrayboxMaterializer.ENTITY_REVISION, revision);
+        carrier.moveTo(anchor.getX() + 0.5d, anchor.getY(), anchor.getZ() + 0.5d);
+        helper.getLevel().addFreshEntity(carrier);
+        return carrier;
     }
 
     private static ReferenceGrayboxSnapshot routePresentation(BlockPos anchor, ReferenceGrayboxSnapshot source, String fixtureId) {

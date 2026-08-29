@@ -28,6 +28,10 @@ final class PhysicalEffectObservationPayloadCodec {
             output.writeByte(7); ids(output, preparation); FrontierWorldPayloadCodecs.writeSubject(output, preparation.siteId());
             output.writeByte(preparation.preparedSoilSlots()); output.writeByte(preparation.preparedCropSlots());
         }
+        else if (observation instanceof ProductionTransformationObservation production) {
+            output.writeByte(8); ids(output, production); FrontierWorldPayloadCodecs.writeSubject(output, production.inputItemId());
+            FrontierWorldPayloadCodecs.writeSubject(output, production.outputItemId()); output.writeByte(production.inputCount()); output.writeByte(production.outputCount());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -41,6 +45,8 @@ final class PhysicalEffectObservationPayloadCodec {
             case 5 -> explosion(input);
             case 6 -> new ExactItemConsumedObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
             case 7 -> new ResourceSitePreparationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
+            case 8 -> new ProductionTransformationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

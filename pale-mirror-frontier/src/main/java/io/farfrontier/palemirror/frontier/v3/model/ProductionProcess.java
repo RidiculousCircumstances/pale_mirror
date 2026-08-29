@@ -1,6 +1,13 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -30,7 +37,9 @@ final class ProductionProcess {
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.FACILITY_UNAVAILABLE);
         Optional<ExactItemStack> input = wheat(state, settlement);
         if (input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.INPUT_UNAVAILABLE);
-        if (state.inventory().firstFreeSlot(FrontierWorldState.depotId(settlement.id())).isEmpty()) {
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        boolean physicallyActive = state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE;
+        if (!physicallyActive && state.inventory().firstFreeSlot(depot).isEmpty()) {
             return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.OUTPUT_STORAGE_UNAVAILABLE);
         }
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
@@ -43,10 +52,20 @@ final class ProductionProcess {
         if (job == null) throw new IllegalStateException("production completion has no active job: " + action.subject().value());
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id()); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.FACILITY_UNAVAILABLE);
-        SubjectId depot = FrontierWorldState.depotId(settlement.id()); OptionalInt slot = state.inventory().firstFreeSlot(depot);
-        if (slot.isEmpty()) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.OUTPUT_STORAGE_UNAVAILABLE);
-        ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), job.outputItemKind(), job.outputCount(), new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
-        return List.of(new ProposedEvent(settlement.id(), new ProductionCompleted(job.id(), output)), transition(task, StrategicTaskStatus.COMPLETED));
+        ExactItemStack input = state.inventory().items().get(job.consumedItemId());
+        if (input == null) {
+            SubjectId depot = FrontierWorldState.depotId(settlement.id()); OptionalInt slot = state.inventory().firstFreeSlot(depot);
+            if (slot.isEmpty()) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.OUTPUT_STORAGE_UNAVAILABLE);
+            ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), job.outputItemKind(), job.outputCount(), new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
+            return List.of(new ProposedEvent(settlement.id(), new ProductionCompleted(job.id(), output)), transition(task, StrategicTaskStatus.COMPLETED));
+        }
+        if (!(input.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) {
+            return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.INPUT_UNAVAILABLE);
+        }
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-" + job.id().value().substring("job:".length())),
+                PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId(), job.outputItemId()),
+                fixed(state.actorLocations().get(job.workerId()).position()), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+        return List.of(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
     }
 
     static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
@@ -58,7 +77,8 @@ final class ProductionProcess {
         if (input == null || !WHEAT.equals(input.itemKind()) || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) throw new IllegalArgumentException("production start input is unavailable or not in its depot");
         if (input.count() != job.outputCount() || !BREAD.equals(job.outputItemKind())) throw new IllegalArgumentException("production output is not a verified wheat conversion");
-        activeTask(state, settlement.id()); return state.startProductionJob(job, started.inputItemId());
+        boolean physicallyActive = state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).status() == ContainerSurfaceStatus.ACTIVE;
+        activeTask(state, settlement.id()); return physicallyActive ? state.withProductionJob(job) : state.startProductionJob(job, started.inputItemId());
     }
 
     static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, ProductionCompleted completed) {
@@ -70,7 +90,9 @@ final class ProductionProcess {
             throw new IllegalArgumentException("production output is not stored in its settlement depot");
         }
         if (!completed.output().economicOwnerId().equals(settlement.id())) throw new IllegalArgumentException("production output claim does not belong to its settlement");
-        if (state.inventory().firstFreeSlot(slot.containerId()).orElse(-1) != slot.slot()) throw new IllegalArgumentException("production output does not target the deterministic free depot slot");
+        if (state.inventory().items().containsKey(job.consumedItemId())) {
+            throw new IllegalArgumentException("materialized production output requires a physical transformation receipt");
+        }
         activeTask(state, settlement.id()); return state.completeProductionJob(completed.jobId(), completed.output());
     }
 
@@ -126,5 +148,6 @@ final class ProductionProcess {
             new SimInstant(due), 0, job.id(), "frontier.settlement.production.task.complete", 1); }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+    private static FixedPosition fixed(BlockPosition position) { return new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())); }
     private static void requireOwner(SubjectId actual, SubjectId expected) { if (!expected.equals(actual)) throw new IllegalArgumentException("production event subject does not own the work"); }
 }
