@@ -68,10 +68,37 @@ public final class FrontierV3ResourceSiteGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-resource-site", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void externalBlastRetainsOneFieldWitnessAcrossSavedDataReload(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(new BlockPos(48, 8, 8)), "site:resource-site-explosion-game-test"); prepareBaseline(level, site);
+        helper.runAfterDelay(10, () -> {
+            FrontierV3ResourceSiteLedger claims = FrontierV3ResourceSiteLedger.get(level);
+            claims.reserve(site.id(), new PhysicalIntentId("intent:site-explosion-game-test"));
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "the blast fixture must own one complete field before capture");
+            claims.activate(site.id()); helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, claims, site, 4),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the exact field witness must retain its current crop stage");
+            BlockPos changed = minecraft(site.cropSlots().getFirst()); FrontierV3ResourceSiteExplosionLedger evidence = FrontierV3ResourceSiteExplosionLedger.get(level);
+            helper.assertTrue(evidence.captureExternal(level, level.getGameTime(), List.of(changed), List.of(site), claims),
+                    "a real pre-impact field cell becomes one durable site witness rather than a generic scar");
+            evidence = FrontierV3ResourceSiteExplosionLedger.load(evidence.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+            level.setBlock(changed, Blocks.AIR.defaultBlockState(), 3);
+            FrontierV3ResourceSiteExplosionLedger.Ready ready = evidence.nextReady(level.getGameTime() + 1L).orElseThrow();
+            helper.assertValueEqual(ready.candidate().siteId(), site.id(), "reload retains the exact affected field identity");
+            helper.assertValueEqual(ready.candidate().expectedStage(), 4, "reload retains the exact canonical crop stage used for post-impact inspection");
+            helper.assertValueEqual(ready.candidate().witness(), site.cropSlots().getFirst(), "reload retains the one exact blast witness cell");
+            helper.assertFalse(FrontierV3ResourceSiteExecutor.matches(level, site, ready.candidate().expectedStage()),
+                    "the real changed cell is visible to reconciliation and is never rewritten by the observation queue");
+            evidence.resolve(ready); helper.succeed();
+        });
+    }
+
     private static ResourceSite field(BlockPos origin) {
+        return field(origin, "site:resource-site-game-test");
+    }
+    private static ResourceSite field(BlockPos origin, String id) {
         List<BlockPosition> crops = new ArrayList<>(64);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) crops.add(new BlockPosition(origin.getX() + x, origin.getY(), origin.getZ() + z));
-        return new ResourceSite(new SubjectId("site:resource-site-game-test"), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"),
+        return new ResourceSite(new SubjectId(id), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"),
                 ResourceSiteKind.WHEAT_FIELD, crops);
     }
     private static void prepareBaseline(ServerLevel level, ResourceSite site) {

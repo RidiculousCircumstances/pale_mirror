@@ -19,6 +19,7 @@ import net.minecraft.server.level.ServerLevel;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Reconciles ordinary Minecraft explosion aftermath without ownership filtering or forced loads. */
 final class FrontierV3PhysicalObservationExecutor {
@@ -30,8 +31,10 @@ final class FrontierV3PhysicalObservationExecutor {
                                             List<BlockPos> affected) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
+        Set<Long> resourceSiteCells = FrontierV3ResourceSiteExplosionExecutor.activeOwnedCells(level, state);
         return FrontierV3PhysicalObservationLedger.get(level).captureExternalExplosion(level, level.getGameTime(), affected,
-                FrontierV3GrayboxLedger.get(level), position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ())));
+                FrontierV3GrayboxLedger.get(level), position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ()))
+                        && !resourceSiteCells.contains(position.asLong()));
     }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

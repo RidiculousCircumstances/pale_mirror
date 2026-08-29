@@ -35,6 +35,7 @@ import net.minecraft.world.phys.AABB;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Executes one already-durable v3 blast; normal Minecraft geometry remains completely unrestricted. */
 final class FrontierV3ExplosionExecutor {
@@ -56,9 +57,11 @@ final class FrontierV3ExplosionExecutor {
         FrontierWorldState state = state(runtime); if (state == null) return false;
         PhysicalIntent intent = state.physicalIntents().get(intentId);
         if (intent == null || intent.kind() != PhysicalIntentKind.EXPLOSION || intent.status() != PhysicalIntentStatus.RUNNING) return false;
+        Set<Long> resourceSiteCells = FrontierV3ResourceSiteExplosionExecutor.activeOwnedCells(level, state);
         return FrontierV3ManagedExplosionLedger.get(level).capture(level, level.getGameTime(), intentId, affected, entities, state,
                 FrontierV3GrayboxLedger.get(level), FrontierV3InfectionOverlayLedger.get(level),
-                position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ())));
+                position -> state.bootstrap().bounds().contains(new BlockPosition(position.getX(), position.getY(), position.getZ()))
+                        && !resourceSiteCells.contains(position.asLong()));
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent) {

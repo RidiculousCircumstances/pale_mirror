@@ -168,10 +168,10 @@ final class FrontierV3ResourceSiteExecutor {
         return FrontierResourceSitePlan.compile(state.bootstrap()).values().stream().filter(site -> contains(site, position)).findFirst()
                 .map(site -> new Target(site, null)).orElse(null);
     }
-    private static boolean contains(ResourceSite site, BlockPos position) {
+    static boolean contains(ResourceSite site, BlockPos position) {
         return java.util.stream.Stream.concat(site.cropSlots().stream(), site.soilSlots().stream()).anyMatch(slot -> minecraft(slot).equals(position));
     }
-    private static boolean loaded(ServerLevel level, ResourceSite site) {
+    static boolean loaded(ServerLevel level, ResourceSite site) {
         return java.util.stream.Stream.concat(site.cropSlots().stream(), site.soilSlots().stream()).map(FrontierV3ResourceSiteExecutor::minecraft).allMatch(level::hasChunkAt);
     }
     static boolean baseline(ServerLevel level, ResourceSite site) {
@@ -212,11 +212,16 @@ final class FrontierV3ResourceSiteExecutor {
                                        ResourceSite site, BlockPosition position, String cause) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());
+        recordConflict(runtime, ledger, site, position, cause, id);
+    }
+    static boolean recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger,
+                                  ResourceSite site, BlockPosition position, String cause, CommandId id) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new ResourceSiteConflictObserved(site.id(), position, cause)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("resource-site conflict observation was rejected");
-        ledger.conflict(site.id());
+        if (!(result instanceof CommandResult.Accepted)) return false;
+        ledger.conflict(site.id()); return true;
     }
 
     record Target(ResourceSite site, PhysicalIntent intent) { }

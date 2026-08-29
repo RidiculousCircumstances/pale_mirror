@@ -73,6 +73,7 @@ public final class FrontierV3ServerLifecycle {
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
+                FrontierV3ResourceSiteExplosionExecutor.tick(server.overworld(), runtime);
                 FrontierV3ExplosionExecutor.tick(server.overworld(), runtime);
                 FrontierV3CargoCarrierImpactExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
@@ -304,8 +305,11 @@ public final class FrontierV3ServerLifecycle {
             if (managed.isEmpty()) captureCargoCarrierImpact(level, runtime, entity, "external explosion");
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) return false;
         }
-        return managed.isPresent() ? FrontierV3ExplosionExecutor.observeDetonation(level, runtime, managed.orElseThrow(), affected, entities)
-                : FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected);
+        boolean resourceSite = managed.map(intent -> FrontierV3ResourceSiteExplosionExecutor.captureManaged(level, runtime, intent, affected))
+                .orElseGet(() -> FrontierV3ResourceSiteExplosionExecutor.captureExternal(level, runtime, affected));
+        boolean ordinary = managed.map(intent -> FrontierV3ExplosionExecutor.observeDetonation(level, runtime, intent, affected, entities))
+                .orElseGet(() -> FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected));
+        return resourceSite || ordinary;
     }
 
     /** Retains a released chest cart even if its HOT lease was released by an earlier player interaction. */
