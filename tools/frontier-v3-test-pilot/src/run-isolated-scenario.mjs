@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createConnection } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadScenario } from './scenario.mjs';
+import { loadScenario, restartSegments } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -20,41 +21,65 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('FRO
 const world = `v3-${scenario.id.replace(/[^a-z0-9_-]/g, '-').slice(0, 36)}-${runId.slice(0, 8)}`;
 const output = resolve(project, outputPath);
 const ephemeralScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-scenario.json`);
+const beforeRestartScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-before-restart.json`);
+const afterRestartScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-after-restart.json`);
+const beforeRestartManifest = output.replace(/\.json$/i, '') + '.before-restart.json';
 const disposableWorld = resolve(project, `pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/${world}`);
 const serverLog = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/logs/latest.log');
-const serverLogOffset = await fileSize(serverLog);
 await mkdir(dirname(ephemeralScenario), { recursive: true });
-await writeFile(ephemeralScenario, `${JSON.stringify({ ...scenario, server: { host: '127.0.0.1', port } }, null, 2)}\n`, 'utf8');
-
-const serverArgs = [':pale-mirror-neoforge:runFrontierV3PilotServer', '--no-daemon',
-  `-PfrontierV3PilotWorld=${world}`, `-PfrontierV3PilotSeed=${scenario.isolation.seed}`,
-  `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotUsername=${scenario.pilot.username}`, '-PfrontierV3PilotReset=true'];
-const server = spawn(gradle, serverArgs, { cwd: project, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
-let serverOutput = '';
-for (const stream of [server.stdout, server.stderr]) stream.setEncoding('utf8').on('data', (chunk) => { process.stdout.write(chunk); serverOutput += chunk; });
-
+let server = null;
 try {
-  await waitForServer(server, () => serverOutput.includes('Done') && serverOutput.includes('Frontier v3'), 180_000);
-  const pilot = spawn(process.execPath, [resolve(dirname(fileURLToPath(import.meta.url)), 'run-scenario.mjs'), ephemeralScenario, output], {
-    cwd: project, env: { ...process.env, FRONTIER_V3_PILOT_PROFILE: 'lite', FRONTIER_V3_GRADLE: gradle }, stdio: 'inherit'
-  });
-  const code = await exited(pilot);
-  if (code !== 0) throw new Error(`isolated native pilot exited with ${code}`);
+  const recovery = restartSegments(scenario);
+  server = await startServer(true);
+  if (recovery == null) {
+    await writeScenario(ephemeralScenario, scenario);
+    await runPilot(ephemeralScenario, output, server);
+  } else {
+    await writeScenario(beforeRestartScenario, recovery.before);
+    await runPilot(beforeRestartScenario, beforeRestartManifest, server);
+    if (recovery.mode === 'graceful') await stopServerSafely(server, serverLog, server.logOffset, port);
+    else await stopServerAbruptly(server);
+    server = null;
+    server = await startServer(false);
+    await writeScenario(afterRestartScenario, recovery.after);
+    await runPilot(afterRestartScenario, output, server);
+    const manifest = JSON.parse(await readFile(output, 'utf8'));
+    manifest.recovery = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction, beforeRestartManifest };
+    await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  }
 } finally {
-  await stopServerSafely(server, serverLog, serverLogOffset);
-  await rm(ephemeralScenario, { force: true });
+  if (server != null) await stopServerSafely(server, serverLog, server.logOffset, port);
+  await Promise.all([ephemeralScenario, beforeRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
   if (process.env.FRONTIER_V3_KEEP_DISPOSABLE !== 'true') await rm(disposableWorld, { recursive: true, force: true });
 }
 
 console.log(JSON.stringify({ status: 'ok', profile: 'disposable_lite', world, port, manifest: output }));
 
-function waitForServer(child, ready, timeoutMs) {
+async function startServer(reset) {
+  const logOffset = await fileSize(serverLog);
+  const serverArgs = [':pale-mirror-neoforge:runFrontierV3PilotServer', '--no-daemon',
+    `-PfrontierV3PilotWorld=${world}`, `-PfrontierV3PilotSeed=${scenario.isolation.seed}`,
+    `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotUsername=${scenario.pilot.username}`, `-PfrontierV3PilotReset=${reset}`];
+  // Only abrupt recovery needs a separate process group. Keeping ordinary
+  // graceful runs attached preserves Gradle's normal shutdown forwarding and
+  // its durable world-save acknowledgement.
+  const child = spawn(gradle, serverArgs, {
+    cwd: project, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: scenario.restart?.mode === 'abrupt'
+  });
+  let output = '';
+  for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on('data', (chunk) => { process.stdout.write(chunk); output += chunk; });
+  const session = { child, output: () => output, logOffset };
+  await waitForServer(session, 180_000);
+  return session;
+}
+
+function waitForServer(session, timeoutMs) {
   return new Promise((resolveReady, reject) => {
     let settled = false;
     const settle = (callback, value) => { if (!settled) { settled = true; clearInterval(timer); clearTimeout(alarm); callback(value); } };
-    const timer = setInterval(() => { if (ready()) settle(resolveReady); }, 100);
+    const timer = setInterval(() => { if (session.output().includes('Done') && session.output().includes('Frontier v3')) settle(resolveReady); }, 100);
     const alarm = setTimeout(() => settle(reject, new Error(`disposable v3 server did not become ready within ${timeoutMs}ms`)), timeoutMs);
-    child.once('exit', (code) => settle(reject, new Error(`disposable v3 server exited before ready (${code})`)));
+    session.child.once('exit', (code) => settle(reject, new Error(`disposable v3 server exited before ready (${code})`)));
   });
 }
 function exited(child) {
@@ -64,15 +89,60 @@ function exited(child) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(child.exitCode ?? 1);
   return new Promise((resolveExit) => child.once('exit', (code) => resolveExit(code ?? 1)));
 }
-async function stopServerSafely(server, logPath, offset) {
+async function runPilot(scenarioFile, manifest, server) {
+  const pilot = spawn(process.execPath, [resolve(dirname(fileURLToPath(import.meta.url)), 'run-scenario.mjs'), scenarioFile, manifest], {
+    cwd: project, env: { ...process.env, FRONTIER_V3_PILOT_PROFILE: 'lite', FRONTIER_V3_GRADLE: gradle }, stdio: 'inherit'
+  });
+  const code = await exited(pilot);
+  if (code !== 0) throw new Error(`isolated native pilot exited with ${code}`);
+  // The outer scenario runner closes its normal client only after it receives
+  // the final read-only assertion. Some NeoForge versions do not emit the
+  // vanilla leave line until their next network flush, so this is an
+  // optimization/evidence point rather than a false failure condition; the
+  // subsequent stop still requires Minecraft's own all-dimensions-saved
+  // acknowledgement.
+  await waitForLog(serverLog, server.logOffset, `${scenario.pilot.username} left the game`, 2_000);
+}
+
+async function writeScenario(path, value) {
+  await writeFile(path, `${JSON.stringify({ ...value, server: { host: '127.0.0.1', port } }, null, 2)}\n`, 'utf8');
+}
+
+async function stopServerSafely(server, logPath, offset, serverPort) {
   // Gradle's JavaExec console does not reliably forward `stop` from a pipe.
   // Its SIGINT does begin the Minecraft shutdown, but Gradle can return before
   // its forked server has flushed every level.  Therefore SIGINT is only a
   // stop request; deletion waits for Minecraft's own durable acknowledgement.
-  if (server.exitCode === null && server.signalCode === null) server.kill('SIGINT');
+  if (server.child.exitCode === null && server.child.signalCode === null) server.child.kill('SIGINT');
   const stopped = await waitForLog(logPath, offset, 'ThreadedAnvilChunkStorage: All dimensions are saved', 45_000);
   if (!stopped) throw new Error('disposable v3 server did not confirm a flushed world; preserving it for diagnosis');
-  await Promise.race([exited(server), timeout(5_000)]);
+  // The Gradle wrapper may linger after its dedicated Minecraft child has
+  // flushed and closed.  A second JVM must not open the same world until the
+  // actual game listener is gone; conversely, waiting on an unrelated wrapper
+  // forever gives no stronger persistence guarantee.
+  if (!await waitForPortClosed(serverPort, 45_000)) {
+    throw new Error('disposable v3 server flushed but still owns its game port; preserving it for diagnosis');
+  }
+  if (!await exitedWithin(server.child, 10_000)) {
+    // At this point Minecraft has durably saved and its listener is closed.
+    // This targets only the exact disposable Gradle wrapper, never a world
+    // process or a broad process group.
+    server.child.kill('SIGTERM');
+    if (!await exitedWithin(server.child, 10_000)) server.child.kill('SIGKILL');
+    if (!await exitedWithin(server.child, 5_000)) {
+      throw new Error('disposable Gradle wrapper survived after a closed saved server; preserving world for diagnosis');
+    }
+  }
+}
+async function stopServerAbruptly(server) {
+  if (server.child.exitCode === null && server.child.signalCode === null) {
+    try { process.kill(-server.child.pid, 'SIGKILL'); }
+    catch (failure) { throw new Error(`could not abruptly stop exact disposable server group: ${failure}`); }
+  }
+  await Promise.race([exited(server.child), timeout(5_000)]);
+  // Allow the operating system to release only the known disposable port before
+  // the recovery server opens the same exact world.
+  await timeout(500);
 }
 async function fileSize(path) {
   try { return (await stat(path)).size; }
@@ -91,5 +161,25 @@ async function waitForLog(path, offset, marker, timeoutMs) {
     await timeout(100);
   }
   return false;
+}
+async function waitForPortClosed(serverPort, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!await portOpen(serverPort)) return true;
+    await timeout(100);
+  }
+  return false;
+}
+function portOpen(serverPort) {
+  return new Promise((resolveOpen) => {
+    const socket = createConnection({ host: '127.0.0.1', port: serverPort });
+    const finish = (open) => { socket.removeAllListeners(); socket.destroy(); resolveOpen(open); };
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.setTimeout(500, () => finish(false));
+  });
+}
+async function exitedWithin(child, durationMs) {
+  return Promise.race([exited(child).then(() => true), timeout(durationMs).then(() => false)]);
 }
 function timeout(ms) { return new Promise((resolveTimeout) => setTimeout(() => resolveTimeout(null), ms)); }

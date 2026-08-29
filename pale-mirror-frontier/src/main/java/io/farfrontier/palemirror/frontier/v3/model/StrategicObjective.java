@@ -35,6 +35,7 @@ record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKin
                        int decisionOrdinal, StrategicObjectiveStatus status) {
         this(id, ownerId, kind, infectionTarget, Optional.empty(), decisionOrdinal, status);
     }
+    StrategicObjectiveLane lane() { return StrategicObjectiveLane.forKind(kind); }
     StrategicObjective withStatus(StrategicObjectiveStatus nextStatus) {
         return new StrategicObjective(id, ownerId, kind, infectionTarget, resourceSiteTarget, decisionOrdinal, nextStatus);
     }

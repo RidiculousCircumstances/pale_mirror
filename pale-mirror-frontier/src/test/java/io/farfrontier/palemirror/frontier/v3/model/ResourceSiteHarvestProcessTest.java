@@ -25,6 +25,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteHarvestProcessTest {
     @Test
+    void readyFieldUsesItsBoundedFacilityLaneWithoutCancellingStrategicWork() {
+        FrontierWorldState state = activeDepot(ready(initial())); SubjectId settlement = new SubjectId("settlement:1");
+        StrategicObjective strategic = new StrategicObjective(new SubjectId("objective:1-export"), settlement,
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask strategicTask = new StrategicTask(new SubjectId("task:1-export"), strategic.id(), settlement,
+                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
+                StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(strategic).addTask(strategicTask));
+        SubjectId site = new SubjectId("site:1-wheat-field");
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+
+        assertEquals(3, planned.size(), "an active strategic objective must not starve an independent farm");
+        StrategicObjectiveSelected selected = (StrategicObjectiveSelected) planned.getFirst().payload();
+        assertEquals(StrategicObjectiveLane.FACILITY, selected.objective().lane());
+        FrontierWorldState withFacility = StrategicObjectiveProcess.reduceObjective(state, settlement, selected);
+        withFacility = StrategicObjectiveProcess.reduceTask(withFacility, settlement, (StrategicTaskPlanned) planned.get(1).payload());
+        assertEquals(2, withFacility.strategicPlans().objectives().values().stream()
+                .filter(objective -> objective.status() == StrategicObjectiveStatus.ACTIVE).count());
+        assertEquals(StrategicTaskStatus.PENDING, withFacility.strategicPlans().tasks().get(strategicTask.id()).status(),
+                "facility work must neither cancel nor preempt the strategic task");
+    }
+
+    @Test
     void exactMatureFieldCreatesOneNamedWheatStackOnlyAfterObservedReceipt() {
         FrontierWorldState ready = activeDepot(ready(initial())); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);

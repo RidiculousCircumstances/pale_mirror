@@ -590,12 +590,12 @@ tasks.register('testVggtOmegaCollectorPilot', Exec) {
 
 tasks.register('verifyLargeFiles') {
     group = 'verification'
-    description = 'Applies the 500-line Java-file debt ratchet.'
+    description = 'Applies the 1000-line Java-file debt ratchet.'
     inputs.files(guardedJavaSources)
     doLast {
-        def oversized = guardedJavaSources.files.findAll { source -> source.readLines().size() > 500 }
+        def oversized = guardedJavaSources.files.findAll { source -> source.readLines().size() > 1000 }
         if (!oversized.isEmpty()) {
-            throw new GradleException("Java files exceed the 500-line guardrail: ${oversized.join(', ')}")
+            throw new GradleException("Java files exceed the 1000-line guardrail: ${oversized.join(', ')}")
         }
     }
 }

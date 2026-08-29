@@ -53,6 +53,24 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
+    void ownerHasAtMostOneActiveObjectivePerDerivedLane() {
+        SubjectId owner = new SubjectId("settlement:1");
+        StrategicObjective strategic = new StrategicObjective(new SubjectId("objective:lane-strategic"), owner,
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicObjective facility = new StrategicObjective(new SubjectId("objective:lane-facility"), owner,
+                StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, java.util.Optional.empty(),
+                java.util.Optional.of(new SubjectId("site:1-wheat-field")), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicPlanState plans = StrategicPlanState.empty().addObjective(strategic).addObjective(facility);
+
+        assertTrue(plans.hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC));
+        assertTrue(plans.hasActiveObjective(owner, StrategicObjectiveLane.FACILITY));
+        StrategicObjective duplicateFacility = new StrategicObjective(new SubjectId("objective:lane-facility-duplicate"), owner,
+                StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, java.util.Optional.empty(),
+                java.util.Optional.of(new SubjectId("site:1-wheat-field")), 2, StrategicObjectiveStatus.ACTIVE);
+        assertThrows(IllegalArgumentException.class, () -> plans.addObjective(duplicateFacility));
+    }
+
+    @Test
     void hiveBiomassSelectsOneExactGrowthTaskBeforeFurtherExpansion() {
         FrontierWorldState state = initial("frontier:strategic-growth", 406L); SubjectId hive = state.bootstrap().hive().id();
 
@@ -133,7 +151,8 @@ class StrategicObjectiveProcessTest {
         org.junit.jupiter.api.Assertions.assertTrue(state.strategicPlans().objectives().size() >= 1 && state.strategicPlans().objectives().size() <= StrategicPlanState.MAX_OBJECTIVES,
                 () -> "strategic objectives=" + state.strategicPlans().objectives());
         assertTrue(state.strategicPlans().objectives().values().stream().filter(value -> value.status() == StrategicObjectiveStatus.ACTIVE)
-                .collect(java.util.stream.Collectors.groupingBy(StrategicObjective::ownerId)).values().stream().allMatch(values -> values.size() == 1));
+                .collect(java.util.stream.Collectors.groupingBy(value -> java.util.Map.entry(value.ownerId(), value.lane())))
+                .values().stream().allMatch(values -> values.size() == 1));
     }
 
     @Test

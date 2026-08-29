@@ -27,11 +27,13 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId site = state.resourceSites().sites().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId item = state.inventory().items().keySet().stream().sorted().findFirst().orElseThrow();
+        SubjectId settlement = state.bootstrap().settlements().getFirst().id();
 
         String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, state, Optional.empty());
         String siteJson = FrontierV3DiagnosticJson.render("site", site.value(), checkpoint, state, Optional.empty());
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty());
         String itemJson = FrontierV3DiagnosticJson.render("item", item.value(), checkpoint, state, Optional.empty());
+        String settlementJson = FrontierV3DiagnosticJson.render("settlement", settlement.value(), checkpoint, state, Optional.empty());
         String missing = FrontierV3DiagnosticJson.render("site", "site:missing", checkpoint, state, Optional.empty());
 
         assertTrue(summary.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"summary\""));
@@ -40,8 +42,10 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(siteJson.contains("\"firstCrop\":{"));
         assertTrue(actorJson.contains("\"position\":{"));
         assertTrue(itemJson.contains("\"custody\":{"));
+        assertTrue(settlementJson.contains("\"harvestAdmission\":\"NO_READY_SITE\""));
+        assertTrue(settlementJson.contains("\"strategic\":{"));
         assertTrue(missing.contains("\"status\":\"not_found\""));
-        assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192);
+        assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192 && settlementJson.length() < 8_192);
     }
 
     @Test

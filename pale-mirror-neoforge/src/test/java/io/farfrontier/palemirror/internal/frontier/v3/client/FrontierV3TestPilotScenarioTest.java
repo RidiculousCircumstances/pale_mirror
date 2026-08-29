@@ -62,4 +62,22 @@ class FrontierV3TestPilotScenarioTest {
                 {"schema":1,"actions":[{"type":"wait_until_harvest_result","siteId":"site:1-wheat-field",
                 "intentId":"intent:site-harvest-1-wheat-field-1","timeoutMs":180000}]}"""));
     }
+
+    @Test
+    void acceptsBoundedOrdinaryPlayerChunkVisitsAndSemanticCameraEvidence() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"setup":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"x":1,"y":65,"z":2},"settleMs":1000}],"actions":[
+                {"type":"assert_visible_block","position":{"x":1,"y":64,"z":2},"timeoutMs":10000},
+                {"type":"assert_visible_board","text":"WHEAT FIELD","position":{"x":4,"y":67,"z":5},
+                "radius":3,"maxDistance":64,"maxAngleDeg":50,"timeoutMs":30000}]}""");
+        assertEquals(1, parsed.setupCount());
+        assertEquals(2, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"setup":[{"type":"visit","dimension":"bad_dimension",
+                "position":{"x":1,"y":65,"z":2},"settleMs":1000}],"actions":[]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"assert_visible_board","text":"WHEAT FIELD",
+                "position":{"x":4,"y":67,"z":5},"maxDistance":129,"timeoutMs":30000}]}"""));
+    }
 }

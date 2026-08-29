@@ -9,8 +9,10 @@ import java.util.Set;
 
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
-    private static final Set<String> ACTION_TYPES = Set.of("wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look", "walk", "break", "hud");
-    private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "actor", "item", "operation", "intent", "trace");
+    private static final Set<String> ACTION_TYPES = Set.of(
+            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
+            "walk", "break", "hud", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board");
+    private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "actor", "item", "operation", "intent", "trace");
 
     record Parsed(JsonArray setup, JsonArray actions) {
         int setupCount() { return setup.size(); }
@@ -51,10 +53,14 @@ final class FrontierV3TestPilotScenario {
             if (!ACTION_TYPES.contains(type)) throw new IllegalArgumentException("unsupported test-pilot action: " + type);
             JsonObject action = element.getAsJsonObject();
             if ((type.equals("command") && !action.has("command")) ||
+                    (type.equals("visit") && !validVisit(action)) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
                             || !action.get("expect").isJsonObject() || !timeout(action, 300_000L))) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
+                    (type.equals("assert_fixture") && !validFixture(action)) ||
+                    (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
+                    (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
                     (type.equals("hud") && (!action.has("visible") || !action.get("visible").isJsonPrimitive()
                             || !action.get("visible").getAsJsonPrimitive().isBoolean())) ||
@@ -76,10 +82,59 @@ final class FrontierV3TestPilotScenario {
         return value >= 0L && value <= maximum;
     }
 
+    private static boolean timeout(JsonObject action, long maximum, String field) {
+        if (!action.has(field) || !action.get(field).isJsonPrimitive() || !action.get(field).getAsJsonPrimitive().isNumber()) return false;
+        long value = action.get(field).getAsLong();
+        return value >= 0L && value <= maximum;
+    }
+
     /** A harvest result is deliberately stronger than a transient READY phase. */
     private static boolean validHarvestResult(JsonObject action) {
         return requiredId(action, "siteId", "site:") && requiredId(action, "intentId", "intent:")
-                && requiredId(action, "itemId", "item:") && timeout(action, 300_000L);
+                && requiredId(action, "itemId", "item:") && (!action.has("settlementId") || requiredId(action, "settlementId", "settlement:"))
+                && timeout(action, 300_000L);
+    }
+
+    private static boolean validFixture(JsonObject action) {
+        if (!timeout(action, 120_000L) || !action.has("checks") || !action.get("checks").isJsonArray()) return false;
+        JsonArray checks = action.getAsJsonArray("checks");
+        if (checks.isEmpty() || checks.size() > 16) return false;
+        for (JsonElement check : checks) {
+            if (!check.isJsonObject()) return false;
+            JsonObject value = check.getAsJsonObject();
+            if (!validDiagnosticIdentity(value) || !value.has("expect") || !value.get("expect").isJsonObject()) return false;
+        }
+        return true;
+    }
+
+    private static boolean validVisit(JsonObject action) {
+        return action.has("dimension") && action.get("dimension").isJsonPrimitive()
+                && action.get("dimension").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                && position(action) && timeout(action, 120_000L, "settleMs");
+    }
+
+    private static boolean validVisibleBoard(JsonObject action) {
+        if (!position(action) || !timeout(action, 120_000L) || !action.has("text") || !action.get("text").isJsonPrimitive()
+                || action.get("text").getAsString().isBlank()) return false;
+        return boundedOptionalNumber(action, "radius", 0.0D, 16.0D)
+                && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
+                && boundedOptionalNumber(action, "maxAngleDeg", 1.0D, 90.0D);
+    }
+
+    private static boolean boundedOptionalNumber(JsonObject action, String field, double minimum, double maximum) {
+        if (!action.has(field)) return true;
+        if (!action.get(field).isJsonPrimitive() || !action.get(field).getAsJsonPrimitive().isNumber()) return false;
+        double value = action.get(field).getAsDouble(); return Double.isFinite(value) && value >= minimum && value <= maximum;
+    }
+
+    private static boolean position(JsonObject action) {
+        JsonObject position = action.has("position") ? action.getAsJsonObject("position") : action.getAsJsonObject("at");
+        return position != null && whole(position, "x") && whole(position, "y") && whole(position, "z");
+    }
+
+    private static boolean whole(JsonObject value, String field) {
+        if (!value.has(field) || !value.get(field).isJsonPrimitive() || !value.get(field).getAsJsonPrimitive().isNumber()) return false;
+        Number number = value.get(field).getAsNumber(); return number.doubleValue() == (double) number.longValue();
     }
 
     private static boolean requiredId(JsonObject action, String field, String prefix) {

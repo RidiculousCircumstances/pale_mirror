@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
@@ -46,6 +47,7 @@ final class FrontierV3DiagnosticJson {
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
             case "site" -> site(id, checkpoint, state);
+            case "settlement" -> settlement(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state);
@@ -88,6 +90,24 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
                 + ",\"activeWork\":\"" + quote(work) + "\",\"firstCrop\":" + position(site.cropSlots().getFirst()) + "}";
+    }
+
+    private static String settlement(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        FrontierSettlementWorkDiagnostic value = subject == null ? null
+                : FrontierSettlementWorkDiagnostic.inspect(checkpoint, state, subject).orElse(null);
+        if (value == null) return unavailable("settlement", id, checkpoint, "not_found");
+        return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"strategic\":" + lane(value.strategic())
+                + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())
+                + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())
+                + ",\"harvestAdmission\":\"" + quote(value.harvestAdmission()) + "\",\"livingFarmers\":" + value.livingFarmers()
+                + ",\"availableFarmer\":\"" + quote(value.availableFarmerId()) + "\",\"farmStatus\":\"" + quote(value.farmStatus())
+                + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot() + "}";
+    }
+
+    private static String lane(FrontierSettlementWorkDiagnostic.Lane lane) {
+        return "{\"objective\":\"" + quote(lane.objectiveId()) + "\",\"kind\":\"" + quote(lane.kind())
+                + "\",\"status\":\"" + quote(lane.status()) + "\"}";
     }
 
     private static String actor(String id, CheckpointImage checkpoint, FrontierWorldState state,
@@ -175,6 +195,7 @@ final class FrontierV3DiagnosticJson {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream()).filter(value -> value.id().equals(id)).findFirst();
     }
     private static String position(BlockPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
+    private static String strings(java.util.List<String> values) { return values.stream().map(value -> "\"" + quote(value) + "\"").reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]"); }
     private static String custody(InventoryCustody custody) {
         return switch (custody) {
             case InventoryCustody.ContainerSlot slot -> "{\"kind\":\"CONTAINER_SLOT\",\"container\":\"" + quote(slot.containerId().value()) + "\",\"slot\":" + slot.slot() + "}";

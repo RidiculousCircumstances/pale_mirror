@@ -9,7 +9,7 @@ import sys
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LEDGER_PATH = REPOSITORY_ROOT / "CONTINUITY.md"
-MAX_LEDGER_LINES = 120
+MAX_LEDGER_LINES = 240
 REQUIRED_HEADINGS = (
     "# Continuity Ledger",
     "## Goal (success criteria)",

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, hasDiagnosticResponses, newManifest, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, hasDiagnosticResponses, newManifest, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -47,6 +47,42 @@ test('an isolated scenario has an explicit deterministic disposable-world seed',
   const isolated = { ...scenario, isolation: { mode: 'disposable_lite', seed: 41 } };
   assert.doesNotThrow(() => validateScenario(isolated));
   assert.throws(() => validateScenario({ ...isolated, isolation: { mode: 'shared', seed: 41 } }), /isolation/);
+});
+
+test('chunk visits are setup-only ordinary-player travel with bounded settle time', () => {
+  const visit = { ...scenario, setup: [{ type: 'visit', dimension: 'pale_mirror:frontier_graybox', position: { x: 1, y: 65, z: 2 }, settleMs: 1000 }] };
+  assert.doesNotThrow(() => validateScenario(visit));
+  assert.throws(() => validateScenario({ ...visit, setup: [{ ...visit.setup[0], dimension: 'frontier_graybox' }] }), /visit needs/);
+  assert.throws(() => validateScenario({ ...visit, actions: [{ ...visit.setup[0] }] }), /unsupported actions action/);
+});
+
+test('semantic visible checks are bounded evidence actions, not world mutations', () => {
+  const visible = { ...scenario, setup: [], actions: [
+    { type: 'assert_visible_block', position: { x: 1, y: 64, z: 2 }, timeoutMs: 10_000 },
+    { type: 'assert_visible_board', text: 'WHEAT FIELD', position: { x: 4, y: 67, z: 5 }, radius: 3, maxDistance: 64, maxAngleDeg: 50, timeoutMs: 30_000 }
+  ], assertions: [], frames: [{ after: 2, name: 'semantic-frame' }] };
+  assert.doesNotThrow(() => validateScenario(visible));
+  assert.throws(() => validateScenario({ ...visible, actions: [{ ...visible.actions[1], maxDistance: 129 }] }), /assert_visible_board/);
+  assert.throws(() => validateScenario({ ...visible, setup: [visible.actions[0]] }), /unsupported setup action/);
+});
+
+test('restart runner slices action-relative assertions without a second scenario language', () => {
+  const recoverable = { ...scenario, setup: [{ type: 'command', command: '/time set day' }], actions: [
+    { type: 'wait', ms: 10 }, { type: 'inspect', view: 'summary', id: '' }, { type: 'hud', visible: false }
+  ], assertions: [
+    { after: 1, view: 'summary', id: '', expect: { status: 'ok' } },
+    { after: 2, view: 'summary', id: '', expect: { status: 'ok' } }
+  ], frames: [{ after: 1, name: 'before-restart' }, { after: 3, name: 'after-restart' }],
+  restart: { mode: 'abrupt', afterAction: 1, resumeSetup: [{ type: 'visit', dimension: 'pale_mirror:frontier_graybox', position: { x: 1, y: 65, z: 2 }, settleMs: 0 }] } };
+  assert.doesNotThrow(() => validateScenario(recoverable));
+  const segments = restartSegments(recoverable);
+  assert.equal(segments.mode, 'abrupt');
+  assert.equal(segments.before.actions.length, 1);
+  assert.equal(segments.after.actions.length, 2);
+  assert.equal(segments.after.setup[0].type, 'visit');
+  assert.deepEqual(segments.after.assertions.map((value) => value.after), [1]);
+  assert.deepEqual(segments.after.frames.map((value) => value.after), [2]);
+  assert.throws(() => validateScenario({ ...recoverable, restart: { mode: 'graceful', afterAction: 3 } }), /restart needs/);
 });
 
 test('native pilot may advance only the bounded canonical v3 clock', () => {

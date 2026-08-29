@@ -11,6 +11,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.entity.Display;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -38,6 +39,8 @@ public final class FrontierV3TestPilotClient {
     private static int index;
     private static long actionStartedTick = -1L;
     private static boolean breaking;
+    private static boolean visitSent;
+    private static long visitChunkReadyTick = -1L;
     private static Boolean originalHideGui;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
 
@@ -49,7 +52,7 @@ public final class FrontierV3TestPilotClient {
         if (configured.isBlank()) return;
         try {
             FrontierV3TestPilotScenario.Parsed scenario = FrontierV3TestPilotScenario.parse(Files.readString(Path.of(configured)));
-            setup = scenario.setup(); actions = scenario.actions(); runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L; breaking = false; diagnostics.clear();
+            setup = scenario.setup(); actions = scenario.actions(); runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L; breaking = false; visitSent = false; visitChunkReadyTick = -1L; diagnostics.clear();
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={}", configured, setup.size(), actions.size());
         } catch (IOException | IllegalArgumentException failure) {
             actions = null;
@@ -93,6 +96,10 @@ public final class FrontierV3TestPilotClient {
                 case "wait_until_block" -> waitUntilBlock(minecraft, action);
                 case "wait_until_diagnostic" -> waitUntilDiagnostic(minecraft, action);
                 case "wait_until_harvest_result" -> waitUntilHarvestResult(minecraft, action);
+                case "assert_fixture" -> assertFixture(minecraft, action);
+                case "visit" -> visit(minecraft, action);
+                case "assert_visible_block" -> assertVisibleBlock(minecraft, action);
+                case "assert_visible_board" -> assertVisibleBoard(minecraft, action);
                 case "fast_forward" -> { minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); advance(type); }
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + action.get("view").getAsString()
@@ -134,6 +141,68 @@ public final class FrontierV3TestPilotClient {
         }
     }
 
+    /**
+     * A visit is ordinary operator travel by the one network client, followed by
+     * client-observed natural chunk readiness. It never asks the server to load
+     * a chunk; after travel, ordinary player demand performs that work.
+     */
+    private static void visit(Minecraft minecraft, JsonObject action) {
+        BlockPos target = position(action, "position"); String dimension = action.get("dimension").getAsString(); long tick = minecraft.level.getGameTime();
+        if (!visitSent) {
+            String username = minecraft.player.getGameProfile().getName();
+            minecraft.player.connection.sendCommand("execute in " + dimension + " run tp " + username + " " + target.getX() + " " + target.getY() + " " + target.getZ());
+            visitSent = true;
+            return;
+        }
+        boolean ready = minecraft.level.dimension().location().toString().equals(dimension) && minecraft.level.hasChunkAt(target);
+        if (ready) {
+            if (visitChunkReadyTick < 0L) visitChunkReadyTick = tick;
+            if ((tick - visitChunkReadyTick) * 50L >= action.get("settleMs").getAsLong()) { advance("visit"); return; }
+        } else visitChunkReadyTick = -1L;
+        if ((tick - actionStartedTick) * 50L >= 120_000L + action.get("settleMs").getAsLong()) {
+            throw new IllegalStateException("timed out visiting naturally loaded " + dimension + " at " + target);
+        }
+    }
+
+    /** Proves the player camera itself is aimed at one loaded, non-air exact block. */
+    private static void assertVisibleBlock(Minecraft minecraft, JsonObject action) {
+        BlockPos expected = position(action, "position");
+        Vec3 delta = Vec3.atCenterOf(expected).subtract(minecraft.player.getEyePosition());
+        double distance = delta.length();
+        boolean aimed = distance > 0.0D && distance <= 128.0D
+                && minecraft.player.getViewVector(1.0F).normalize().dot(delta.scale(1.0D / distance)) >= Math.cos(Math.toRadians(5.0D));
+        if (!minecraft.level.getBlockState(expected).isAir() && aimed) {
+            advance("assert_visible_block"); return;
+        }
+        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
+            throw new IllegalStateException("camera never targeted visible block " + expected);
+        }
+    }
+
+    /**
+     * Proves a named owned board is in the local rendered entity set, near its
+     * expected semantic anchor and inside the player-facing camera cone. It is
+     * deliberately a presentation assertion only: no board/level mutation is
+     * possible through this pilot.
+     */
+    private static void assertVisibleBoard(Minecraft minecraft, JsonObject action) {
+        BlockPos anchor = position(action, "position"); String expectedText = action.get("text").getAsString();
+        double radius = action.has("radius") ? action.get("radius").getAsDouble() : 3.0D;
+        double maxDistance = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
+        double maxAngle = Math.cos(Math.toRadians(action.has("maxAngleDeg") ? action.get("maxAngleDeg").getAsDouble() : 50.0D));
+        Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize(); Vec3 expected = Vec3.atCenterOf(anchor);
+        boolean visible = minecraft.level.getEntitiesOfClass(Display.TextDisplay.class, minecraft.player.getBoundingBox().inflate(maxDistance), display -> {
+            if (display.getCustomName() == null || !display.getCustomName().getString().contains(expectedText)
+                    || display.position().distanceToSqr(expected) > radius * radius) return false;
+            Vec3 delta = display.position().subtract(eye); double distance = delta.length();
+            return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
+        }).stream().findFirst().isPresent();
+        if (visible) { advance("assert_visible_board"); return; }
+        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
+            throw new IllegalStateException("camera never saw board text=" + expectedText + " near " + anchor);
+        }
+    }
+
     /** Polls the existing read-only diagnostic command at most once per second until a fresh exact predicate arrives. */
     private static void waitUntilDiagnostic(Minecraft minecraft, JsonObject action) {
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString(); long tick = minecraft.level.getGameTime();
@@ -166,6 +235,7 @@ public final class FrontierV3TestPilotClient {
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect site " + siteId);
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect intent " + intentId);
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect item " + itemId);
+            if (action.has("settlementId")) minecraft.player.connection.sendCommand("pale_mirror v3 inspect settlement " + action.get("settlementId").getAsString());
         }
         long timeoutMs = action.get("timeoutMs").getAsLong();
         if ((tick - actionStartedTick) * 50L >= timeoutMs) {
@@ -174,6 +244,24 @@ public final class FrontierV3TestPilotClient {
     }
 
     private static boolean fresh(ObservedDiagnostic observed) { return observed != null && observed.tick() >= actionStartedTick; }
+
+    /** A fixture is only a bounded read-only precondition; it cannot arrange or mutate the world. */
+    private static void assertFixture(Minecraft minecraft, JsonObject action) {
+        long tick = minecraft.level.getGameTime(); JsonArray checks = action.getAsJsonArray("checks"); boolean allMatch = true;
+        for (JsonElement element : checks) {
+            JsonObject check = element.getAsJsonObject(); String view = check.get("view").getAsString(); String id = check.get("id").getAsString();
+            ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
+            if (observed == null || observed.tick() < actionStartedTick || !matches(observed.value(), check.getAsJsonObject("expect"))) allMatch = false;
+        }
+        if (allMatch) { advance("assert_fixture"); return; }
+        if ((tick - actionStartedTick) % 20L == 0L) {
+            for (JsonElement element : checks) {
+                JsonObject check = element.getAsJsonObject(); String view = check.get("view").getAsString(); String id = check.get("id").getAsString();
+                minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id));
+            }
+        }
+        if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException("fixture preconditions did not converge: " + checks);
+    }
 
     private static boolean harvestComplete(JsonObject site, JsonObject intent, JsonObject item) {
         if (!"ok".equals(string(site, "status")) || !"GROWING".equals(string(site, "phase")) || site.get("growthEpoch").getAsLong() < 2L
@@ -221,13 +309,22 @@ public final class FrontierV3TestPilotClient {
         String phase = runningSetup ? "setup" : "action";
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
         index++; actionStartedTick = -1L; breaking = false;
+        visitSent = false; visitChunkReadyTick = -1L;
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
-        else if (!runningSetup && index >= actions.size()) PaleMirrorMod.LOGGER.info("PMV3_PILOT completed scenario actions={}", actions.size());
+        else if (!runningSetup && index >= actions.size()) {
+            int completedActions = actions.size();
+            // The outer runner must still receive the server response to the
+            // final read-only assertion. It closes this ordinary client only
+            // after all such responses are present; disconnecting here would
+            // race that final packet and turn a completed action into a false
+            // scenario timeout.
+            PaleMirrorMod.LOGGER.info("PMV3_PILOT completed scenario actions={}", completedActions);
+        }
     }
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
         if (originalHideGui != null) { minecraft.options.hideGui = originalHideGui; originalHideGui = null; }
-        actions = null; setup = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false; diagnostics.clear();
+        actions = null; setup = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false; visitSent = false; visitChunkReadyTick = -1L; diagnostics.clear();
     }
     private record DiagnosticIdentity(String view, String id) { }
     private record ObservedDiagnostic(long tick, JsonObject value) { }

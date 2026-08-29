@@ -50,7 +50,7 @@ final class StrategicObjectiveProcess {
         if (lifecycle.phase() != ResourceSitePhase.READY || !action.id().equals(resourceHarvestOpportunity(state, lifecycle, action.dueAt().ticks()).id())) return List.of();
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
         SubjectId owner = site.settlementId();
-        if (state.strategicPlans().hasActiveObjective(owner)) {
+        if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.FACILITY)) {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
                     Math.addExact(action.dueAt().ticks(), ResourceSiteHarvestProcess.RETRY_INTERVAL)))));
         }
@@ -68,7 +68,7 @@ final class StrategicObjectiveProcess {
                 new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks() + REVIEW_INTERVAL)))) : List.of();
         Optional<Candidate> candidate = candidate(state, owner);
         List<ProposedEvent> preempted = preemptForInterception(state, owner, candidate);
-        if (state.strategicPlans().hasActiveObjective(owner) && preempted.isEmpty()) return next;
+        if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC) && preempted.isEmpty()) return next;
         if (candidate.isEmpty()) return next;
         Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal);
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) {

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "id": "disposable_redwillow_field_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 380, "y": 65, "z": -340 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "settlement", "id": "settlement:4", "expect": { "status": "ok", "harvestAdmission": "NO_READY_SITE" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_block", "position": { "x": 388, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 90000 },
+    { "type": "look", "at": { "x": 388, "y": 64, "z": -355 } },
+    { "type": "assert_visible_block", "position": { "x": 388, "y": 64, "z": -355 }, "timeoutMs": 10000 },
+    { "type": "inspect", "view": "site", "id": "site:4-wheat-field" },
+    { "type": "wait_until_block", "position": { "x": 388, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 90000 },
+    { "type": "inspect", "view": "site", "id": "site:4-wheat-field" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 4,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 380, "y": 65, "z": -340 }, "settleMs": 1000 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+      ] }
+    ]
+  },
+  "assertions": [
+    { "after": 4, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING" } },
+    { "after": 6, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING" } }
+  ],
+  "frames": [
+    { "after": 3, "name": "before-restart-field" },
+    { "after": 5, "name": "after-restart-field" }
+  ]
+}

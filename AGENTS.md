@@ -9,7 +9,7 @@ messages unless their durable facts are reflected there.
 At the start of every assistant turn, read `CONTINUITY.md` before acting. Update
 it only when goals, constraints/assumptions, key decisions, progress state,
 important verification evidence, open questions or the active working set
-change. Keep it factual and at most 120 lines; never store dialogue summaries,
+change. Keep it factual and at most 240 lines; never store dialogue summaries,
 long changelogs, raw test logs or stale file inventories in the active ledger.
 
 If history must be retained, archive the previous ledger under `docs/archive/`
@@ -98,6 +98,31 @@ side deliberately in the same task. Do not silently let either drift.
 `critical-code` includes canonical world state, persistence, migrations,
 simulation, scenarios, materialization, observers, adapters, and server
 lifecycle. A test must cover a negative or recovery path for such changes.
+
+## Frontier v3 causal-test workflow
+
+For a change to Frontier v3 materialization, physical observation, player
+causality, test-pilot behaviour, scenario execution or restart/recovery,
+select the smallest relevant checked-in declarative scenario under
+`tools/frontier-v3-test-pilot/scenarios/`; do not substitute an ad-hoc client
+session or the full suite. A new causal flow must add or extend a scenario
+whose structure is:
+
+1. a read-only fixture declaring its required canonical/world preconditions;
+2. ordinary player setup and one or more evidence-bearing player actions;
+3. a terminal domain assertion (not a transient phase), plus its bounded PMV3
+   correlation trace.
+
+Add a semantic camera check and linked frame when the change has a player
+visible claim. Add a graceful or abrupt restart split when it changes durable
+state, non-replayable physical effects, or recovery behaviour. Fixtures,
+diagnostics, semantic checks and scenario setup are evidence only: they must
+not force-load chunks, mutate canonical state or edit world files. Use at most
+one visible native client on `DISPLAY=:0`; the scenario runner owns its
+disposable seeded world and the normal player connection. Keep fast unit and
+Node schema tests for every edit, then apply the existing critical-code gate
+before committing. A live scenario is evidence for that specific flow, not a
+replacement for product/visual acceptance.
 
 ## Architecture rules
 

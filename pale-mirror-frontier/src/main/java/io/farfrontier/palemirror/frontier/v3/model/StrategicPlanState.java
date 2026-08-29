@@ -30,6 +30,11 @@ final class StrategicPlanState {
         this.objectives.forEach((id, objective) -> {
             if (!id.equals(objective.id())) throw new IllegalArgumentException("strategic objective key must match identity");
         });
+        objectives.values().stream().filter(objective -> objective.status() == StrategicObjectiveStatus.ACTIVE)
+                .collect(java.util.stream.Collectors.groupingBy(objective -> java.util.Map.entry(objective.ownerId(), objective.lane())))
+                .values().forEach(values -> {
+                    if (values.size() > 1) throw new IllegalArgumentException("objective owner has more than one active work lane entry");
+                });
         this.tasks.forEach((id, task) -> {
             if (!id.equals(task.id()) || !this.objectives.containsKey(task.objectiveId())) {
                 throw new IllegalArgumentException("strategic task must belong to one retained objective");
@@ -145,14 +150,17 @@ final class StrategicPlanState {
         });
     }
 
-    boolean hasActiveObjective(SubjectId ownerId) {
-        return objectives.values().stream().anyMatch(objective -> objective.ownerId().equals(ownerId) && objective.status() == StrategicObjectiveStatus.ACTIVE);
+    boolean hasActiveObjective(SubjectId ownerId, StrategicObjectiveLane lane) {
+        return objectives.values().stream().anyMatch(objective -> objective.ownerId().equals(ownerId) && objective.lane() == lane
+                && objective.status() == StrategicObjectiveStatus.ACTIVE);
     }
 
     StrategicPlanState addObjective(StrategicObjective objective) {
         Objects.requireNonNull(objective, "strategic objective");
         StrategicPlanState retained = compactFor(1, 0);
-        if (retained.objectives.containsKey(objective.id()) || retained.hasActiveObjective(objective.ownerId())) throw new IllegalArgumentException("strategic objective is duplicate or owner is already active");
+        if (retained.objectives.containsKey(objective.id()) || retained.hasActiveObjective(objective.ownerId(), objective.lane())) {
+            throw new IllegalArgumentException("strategic objective is duplicate or owner work lane is already active");
+        }
         Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);
         return new StrategicPlanState(next, retained.tasks, retained.routePatrols, retained.routeEngagements);
     }
