@@ -21,9 +21,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSitePreparationProcessTest {
     @Test
-    void initialWorldSchedulesEveryFieldAsOneDurablePreparationIntent() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:resource-site-schedule"), 77L));
-        for (long tick = 100L; tick <= 4_100L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+    void freshWorldDurablyPreparesEveryFieldBeforeTheFirstNaturalChunkVisit() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:resource-site-schedule"), 77L);
+        assertEquals(12, configuration.initialSchedules().stream()
+                .filter(action -> action.kind().equals(ResourceSiteProcess.PREPARATION_ACTION))
+                .count());
+        assertTrue(configuration.initialSchedules().stream()
+                .filter(action -> action.kind().equals(ResourceSiteProcess.PREPARATION_ACTION))
+                .allMatch(action -> action.dueAt().ticks() == ResourceSiteProcess.INITIAL_PREPARATION_TICK));
+
+        var engine = FrontierEngines.create(configuration);
+        engine.advanceTo(new SimInstant(100L), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());

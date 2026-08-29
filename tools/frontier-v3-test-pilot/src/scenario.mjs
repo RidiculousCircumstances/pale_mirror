@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'inspect']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'inspect', 'hud']);
 const SETUP_ACTIONS = new Set(['command', 'observe']);
 
 export async function loadScenario(path) {
@@ -37,6 +37,7 @@ export function validateScenario(scenario) {
           || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('wait_until_block needs block and timeoutMs 0..120000');
       }
+      if (action.type === 'hud' && typeof action.visible !== 'boolean') throw new Error('hud needs boolean visible');
       if (action.type === 'inspect' && (!['summary', 'site', 'actor', 'item', 'operation', 'intent', 'trace'].includes(action.view)
           || typeof action.id !== 'string')) throw new Error('inspect needs a read-only v3 view and id');
     }

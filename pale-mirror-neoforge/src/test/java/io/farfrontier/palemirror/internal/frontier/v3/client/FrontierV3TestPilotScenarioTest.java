@@ -20,4 +20,13 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"rewrite_canon"}]}"""));
     }
+
+    @Test
+    void acceptsOnlyBooleanLocalHudPresentationAction() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"hud","visible":false}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"hud","visible":"false"}]}"""));
+    }
 }

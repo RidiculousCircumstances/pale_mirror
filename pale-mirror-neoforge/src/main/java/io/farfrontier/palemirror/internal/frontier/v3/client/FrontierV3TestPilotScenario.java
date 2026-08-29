@@ -9,7 +9,7 @@ import java.util.Set;
 
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
-    private static final Set<String> ACTION_TYPES = Set.of("wait", "wait_until_block", "command", "inspect", "look", "walk", "break");
+    private static final Set<String> ACTION_TYPES = Set.of("wait", "wait_until_block", "command", "inspect", "look", "walk", "break", "hud");
 
     record Parsed(JsonArray setup, JsonArray actions) {
         int setupCount() { return setup.size(); }
@@ -51,6 +51,8 @@ final class FrontierV3TestPilotScenario {
             JsonObject action = element.getAsJsonObject();
             if ((type.equals("command") && !action.has("command")) ||
                     (type.equals("inspect") && (!action.has("view") || !action.has("id"))) ||
+                    (type.equals("hud") && (!action.has("visible") || !action.get("visible").isJsonPrimitive()
+                            || !action.get("visible").getAsJsonPrimitive().isBoolean())) ||
                     ((type.equals("look") || type.equals("walk") || type.equals("break") || type.equals("wait_until_block")) && !action.has("position") && !action.has("at"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }

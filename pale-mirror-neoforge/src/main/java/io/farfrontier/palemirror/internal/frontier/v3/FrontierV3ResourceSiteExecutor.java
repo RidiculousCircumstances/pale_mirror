@@ -47,10 +47,7 @@ final class FrontierV3ResourceSiteExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
-                .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION)
-                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
-                .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
+        FrontierV3ResourceSitePreparationSelection.nextLoaded(state, site -> loaded(level, site)).ifPresent(intent -> execute(level, runtime, state, intent));
         projectOneGrowthStage(level, runtime, state);
     }
 

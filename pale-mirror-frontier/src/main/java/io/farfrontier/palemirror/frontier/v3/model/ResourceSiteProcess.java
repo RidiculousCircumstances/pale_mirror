@@ -18,7 +18,10 @@ import java.util.List;
 
 /** Advances a confirmed prepared field by COLD server time; it neither inspects nor changes Minecraft. */
 final class ResourceSiteProcess {
+    /** A durable early intent waits for a naturally loaded site before any physical execution. */
+    static final long INITIAL_PREPARATION_TICK = 1L;
     static final long WHEAT_STAGE_INTERVAL = 3_000L;
+    static final String PREPARATION_ACTION = "frontier.resource_site.prepare";
     private ResourceSiteProcess() { }
 
     static ScheduledAction nextGrowth(ResourceSiteLifecycle lifecycle, long dueAt) {
@@ -30,7 +33,7 @@ final class ResourceSiteProcess {
 
     static ScheduledAction preparation(SubjectId siteId, long dueAt) {
         return new ScheduledAction(new ScheduleId("schedule:resource-site-prepare-" + siteId.value().substring("site:".length())), new SimInstant(dueAt), 0,
-                siteId, "frontier.resource_site.prepare", 1);
+                siteId, PREPARATION_ACTION, 1);
     }
 
     static List<ProposedEvent> planPreparation(FrontierWorldState state, ScheduledAction action) {

@@ -26,6 +26,14 @@ The one visible client performs the actual movement and break. It writes a JSON
 evidence manifest plus the before/after X11 frames under
 `build/frontier-v3-scenarios/`.
 
+The run uses a disposable copy of that installed pack and excludes only
+`pale_mirror-hosted.jar`; NeoForge ModDev then supplies the current source set.
+This prevents a stale installed JAR from silently testing different code.
+
+For an acceptance frame, place a local `hud` action and a short `wait` before
+the frame declaration. It changes only the pilot's presentation, is restored
+on disconnect, and cannot issue a server or canonical-state mutation.
+
 Mineflayer remains an offline compatibility/preflight helper only: a protocol
 bot cannot complete this pack's full NeoForge handshake. It is excluded from
 production artifacts and must never receive production credentials.

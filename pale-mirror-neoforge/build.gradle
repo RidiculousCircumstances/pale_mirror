@@ -48,6 +48,7 @@ def createGameTestWorldDirectory = new File(createGameTestDirectory, 'world')
 def railwayGameTestWorldDirectory = new File(railwayGameTestDirectory, 'world')
 def railwayManagedConfig = layout.buildDirectory.file('runs/railway-game-test/config/railways-untold/config.toml')
 def railwayClientManagedConfig = layout.buildDirectory.file('runs/railway-client/config/railways-untold/config.toml')
+def frontierV3PilotClientDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-client')
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
@@ -169,7 +170,9 @@ neoForge {
         }
         frontierV3PilotClient {
             client()
-            gameDirectory = layout.buildDirectory.dir('runs/railway-client')
+            // A normal development client must execute the current source set,
+            // never a stale hosted copy of this same mod from the pack profile.
+            gameDirectory = frontierV3PilotClientDirectory
             systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
                     providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
             programArgument '--username'
@@ -614,6 +617,28 @@ tasks.named('runCreateClient') { dependsOn prepareCreateClientMods }
 tasks.named('runRailwayClient') { dependsOn prepareRailwayClientMods }
 tasks.named('runFtbClient') { dependsOn prepareFtbClientMods }
 tasks.named('runMillenaireClient') { dependsOn prepareMillenaireClientMods }
+
+def syncFrontierV3PilotClientPack = tasks.register('syncFrontierV3PilotClientPack', Sync) {
+    dependsOn tasks.named('classes')
+    def installedClient = layout.buildDirectory.dir('runs/railway-client')
+    from(installedClient) {
+        // NeoForge ModDev contributes the current Pale Mirror source set to the
+        // run. Leaving this pack artifact beside it silently wins class lookup.
+        exclude 'mods/pale_mirror-hosted.jar'
+    }
+    into(frontierV3PilotClientDirectory)
+    doFirst {
+        if (!new File(installedClient.get().asFile, 'mods').isDirectory()) {
+            throw new GradleException('Frontier v3 pilot requires the installed railway-client pack; run scripts/install-client.sh first')
+        }
+    }
+    doLast {
+        if (new File(frontierV3PilotClientDirectory.get().asFile, 'mods/pale_mirror-hosted.jar').isFile()) {
+            throw new GradleException('Frontier v3 pilot profile must not contain the hosted Pale Mirror jar')
+        }
+    }
+}
+tasks.named('prepareFrontierV3PilotClientRun') { dependsOn syncFrontierV3PilotClientPack }
 
 tasks.register('clientSmoke', Exec) {
     group = 'verification'

@@ -34,6 +34,7 @@ public final class FrontierV3TestPilotClient {
     private static int index;
     private static long actionStartedTick = -1L;
     private static boolean breaking;
+    private static Boolean originalHideGui;
 
     private FrontierV3TestPilotClient() { }
 
@@ -76,6 +77,7 @@ public final class FrontierV3TestPilotClient {
                 case "look" -> { look(minecraft, position(action, "at")); advance(type); }
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
+                case "hud" -> { setHud(minecraft, action.get("visible").getAsBoolean()); advance(type); }
                 default -> throw new IllegalArgumentException("unsupported visible pilot action: " + type);
             }
         } catch (RuntimeException failure) {
@@ -116,6 +118,12 @@ public final class FrontierV3TestPilotClient {
         minecraft.player.setXRot((float) -(Mth.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z)) * Mth.RAD_TO_DEG));
     }
 
+    /** Local presentation only; restored when the disposable pilot disconnects. */
+    private static void setHud(Minecraft minecraft, boolean visible) {
+        if (originalHideGui == null) originalHideGui = minecraft.options.hideGui;
+        minecraft.options.hideGui = !visible;
+    }
+
     private static BlockPos position(JsonObject action, String field) {
         JsonObject value = Objects.requireNonNull(action.getAsJsonObject(field), field + " position");
         return new BlockPos(value.get("x").getAsInt(), value.get("y").getAsInt(), value.get("z").getAsInt());
@@ -128,5 +136,9 @@ public final class FrontierV3TestPilotClient {
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
         else if (!runningSetup && index >= actions.size()) PaleMirrorMod.LOGGER.info("PMV3_PILOT completed scenario actions={}", actions.size());
     }
-    private static void reset() { Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); actions = null; setup = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false; }
+    private static void reset() {
+        Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
+        if (originalHideGui != null) { minecraft.options.hideGui = originalHideGui; originalHideGui = null; }
+        actions = null; setup = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
+    }
 }

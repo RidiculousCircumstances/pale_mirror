@@ -11,17 +11,20 @@
     { "type": "wait_until_block", "position": { "x": -332, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 75000 },
     { "type": "wait", "ms": 5000 },
     { "type": "look", "at": { "x": -332, "y": 64, "z": -355 } },
+    { "type": "wait", "ms": 1000 },
+    { "type": "hud", "visible": false },
+    { "type": "wait", "ms": 1000 },
     { "type": "break", "position": { "x": -332, "y": 64, "z": -355 } },
     { "type": "wait", "ms": 1000 },
     { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
     { "type": "inspect", "view": "trace", "id": "player:bf39347d-cb86-3221-b6b7-7b89a1dcb4cf" }
   ],
   "assertions": [
-    { "after": 4, "view": "site", "id": "site:1-wheat-field", "expect": { "phase": "CONFLICT" } },
-    { "after": 4, "view": "trace", "id": "player:bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "eventKind": "resource_site_conflict" } }
+    { "after": 7, "view": "site", "id": "site:1-wheat-field", "expect": { "phase": "CONFLICT" } },
+    { "after": 7, "view": "trace", "id": "player:bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "eventKind": "resource_site_conflict" } }
   ],
   "frames": [
-    { "after": 1, "name": "field-ready" },
-    { "after": 4, "name": "field-after-break" }
+    { "after": 6, "name": "field-ready" },
+    { "after": 8, "name": "field-after-break" }
   ]
 }

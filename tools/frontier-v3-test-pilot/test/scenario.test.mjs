@@ -42,6 +42,16 @@ test('runner waits for every requested asynchronous diagnostic response', () => 
   assert.equal(hasDiagnosticResponses([site, trace], assertions), true);
 });
 
+test('local HUD presentation action cannot carry a world mutation', () => {
+  const localPresentation = structuredClone(scenario);
+  localPresentation.actions = [{ type: 'hud', visible: false }];
+  localPresentation.assertions = [];
+  localPresentation.frames = [];
+  assert.doesNotThrow(() => validateScenario(localPresentation));
+  localPresentation.actions = [{ type: 'hud', visible: 'false' }];
+  assert.throws(() => validateScenario(localPresentation), /hud needs boolean visible/);
+});
+
 test('pilot module loads its pinned CommonJS pathfinder dependency', async () => {
   const pilot = await import('../src/pilot.mjs');
   assert.equal(typeof pilot.connectPilot, 'function');
