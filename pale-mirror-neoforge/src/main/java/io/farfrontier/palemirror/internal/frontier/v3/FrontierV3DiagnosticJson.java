@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
@@ -50,6 +52,7 @@ final class FrontierV3DiagnosticJson {
             case "settlement" -> settlement(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
+            case "container" -> container(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness);
             case "trace" -> trace(id, checkpoint, trace);
@@ -137,6 +140,22 @@ final class FrontierV3DiagnosticJson {
         if (item == null) return unavailable("item", id, checkpoint, "not_found");
         return base("item", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(item.economicOwnerId().value())
                 + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count() + ",\"custody\":" + custody(item.custody()) + "}";
+    }
+
+    /** One bounded exact-container projection for test-pilot and operator inspection. */
+    private static String container(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null); ContainerRecord container = subject == null ? null : state.inventory().containers().get(subject);
+        ContainerSurface surface = subject == null ? null : state.inventory().surfaces().get(subject);
+        if (container == null || surface == null) return unavailable("container", id, checkpoint, "not_found");
+        java.util.List<ExactItemStack> occupiedItems = state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
+                        && slot.containerId().equals(subject)).sorted(java.util.Comparator.comparingInt(item -> ((InventoryCustody.ContainerSlot) item.custody()).slot()))
+                .toList();
+        String occupied = occupiedItems.stream().map(item -> "{\"slot\":" + ((InventoryCustody.ContainerSlot) item.custody()).slot() + ",\"item\":\"" + quote(item.id().value())
+                        + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count() + "}")
+                .reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]");
+        return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
+                + "\",\"surface\":\"" + surface.status() + "\",\"slotCount\":" + container.slotCount()
+                + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + "}";
     }
 
     private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state) {

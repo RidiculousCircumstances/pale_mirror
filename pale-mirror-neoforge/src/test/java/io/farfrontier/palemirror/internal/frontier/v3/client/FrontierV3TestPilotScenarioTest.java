@@ -84,4 +84,18 @@ class FrontierV3TestPilotScenarioTest {
                 {"schema":1,"actions":[{"type":"assert_visible_board","text":"WHEAT FIELD",
                 "position":{"x":4,"y":67,"z":5},"maxDistance":129,"timeoutMs":30000}]}"""));
     }
+
+    @Test
+    void acceptsOnlyBoundedOrdinaryContainerActionsAndReadOnlyIngressWaits() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"open_container","position":{"x":1,"y":64,"z":2},"timeoutMs":10000},
+                {"type":"quick_move_from_inventory","item":"minecraft:glowstone_dust","count":1,"timeoutMs":10000},
+                {"type":"wait_until_container_item","containerId":"container:4-depot","item":"minecraft:glowstone_dust","count":1,"slot":0,"timeoutMs":30000}]}""");
+        assertEquals(3, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"quick_move_from_inventory","item":"minecraft:glowstone_dust","count":65,"timeoutMs":10000}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_container_item","containerId":"depot:4","item":"minecraft:glowstone_dust","count":1,"timeoutMs":30000}]}"""));
+    }
 }

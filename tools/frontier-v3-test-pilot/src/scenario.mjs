@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -61,6 +61,18 @@ export function validateScenario(scenario) {
         throw new Error('assert_fixture needs 1..16 read-only diagnostic checks and timeoutMs 0..120000');
       }
       if (['walk', 'look', 'break', 'open_container', 'wait_until_block'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (action.type === 'open_container' && (!Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
+        throw new Error('open_container needs timeoutMs 0..120000');
+      }
+      if (action.type === 'quick_move_from_inventory' && (!validItemKind(action.item) || !validStackCount(action.count)
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
+        throw new Error('quick_move_from_inventory needs exact item/count and timeoutMs 0..120000');
+      }
+      if (action.type === 'wait_until_container_item' && (!requiredId(action.containerId, 'container:') || !validItemKind(action.item)
+          || !validStackCount(action.count) || (action.slot !== undefined && (!Number.isInteger(action.slot) || action.slot < 0 || action.slot > 26))
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
+        throw new Error('wait_until_container_item needs a container, exact item/count and timeoutMs 0..300000');
+      }
       if (action.type === 'assert_visible_block' && (!validPosition(action.position) || !Number.isInteger(action.timeoutMs)
           || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('assert_visible_block needs position and timeoutMs 0..120000');
@@ -98,7 +110,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'site', 'settlement', 'actor', 'item', 'operation', 'intent', 'trace'].includes(assertion.view)
+        || !['summary', 'site', 'settlement', 'actor', 'item', 'container', 'operation', 'intent', 'trace'].includes(assertion.view)
         || typeof assertion.id !== 'string' || (assertion.view !== 'summary' && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
@@ -150,11 +162,15 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'site', 'settlement', 'actor', 'item', 'operation', 'intent', 'trace'].includes(value.view)
+  return ['summary', 'site', 'settlement', 'actor', 'item', 'container', 'operation', 'intent', 'trace'].includes(value.view)
     && typeof value.id === 'string' && (value.view === 'summary' || Boolean(value.id));
 }
 
 function requiredId(value, prefix) { return typeof value === 'string' && value.startsWith(prefix) && value.length > prefix.length; }
+
+function validItemKind(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }
+
+function validStackCount(value) { return Number.isInteger(value) && value >= 1 && value <= 64; }
 
 function validatePosition(value) {
   if (!value || !Number.isInteger(value.x) || !Number.isInteger(value.y) || !Number.isInteger(value.z)) {

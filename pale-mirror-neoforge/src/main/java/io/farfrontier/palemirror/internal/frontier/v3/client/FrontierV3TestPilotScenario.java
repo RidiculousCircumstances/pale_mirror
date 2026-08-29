@@ -11,8 +11,9 @@ import java.util.Set;
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
-            "walk", "break", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board");
-    private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "actor", "item", "operation", "intent", "trace");
+            "walk", "break", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory",
+            "wait_until_container_item");
+    private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "actor", "item", "container", "operation", "intent", "trace");
 
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
@@ -59,11 +60,14 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
                             || !action.get("expect").isJsonObject() || !timeout(action, 300_000L))) ||
+                    (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
                     (type.equals("assert_fixture") && !validFixture(action)) ||
                     (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
+                    (type.equals("open_container") && (!position(action) || !timeout(action, 120_000L))) ||
+                    (type.equals("quick_move_from_inventory") && !validQuickMove(action)) ||
                     ((type.equals("look") || type.equals("walk") || type.equals("break") || type.equals("wait_until_block")) && !action.has("position") && !action.has("at"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }
@@ -117,6 +121,28 @@ final class FrontierV3TestPilotScenario {
         return requiredId(action, "siteId", "site:") && requiredId(action, "intentId", "intent:")
                 && requiredId(action, "itemId", "item:") && (!action.has("settlementId") || requiredId(action, "settlementId", "settlement:"))
                 && timeout(action, 300_000L);
+    }
+
+    private static boolean validContainerItem(JsonObject action) {
+        return requiredId(action, "containerId", "container:") && itemKind(action) && positiveStackCount(action, "count") && timeout(action, 300_000L)
+                && (!action.has("slot") || wholeWithin(action, "slot", 0, 26));
+    }
+
+    private static boolean validQuickMove(JsonObject action) {
+        return itemKind(action) && positiveStackCount(action, "count") && timeout(action, 120_000L);
+    }
+
+    private static boolean itemKind(JsonObject action) {
+        return action.has("item") && action.get("item").isJsonPrimitive()
+                && action.get("item").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+");
+    }
+
+    private static boolean positiveStackCount(JsonObject action, String field) { return wholeWithin(action, field, 1, 64); }
+
+    private static boolean wholeWithin(JsonObject action, String field, long minimum, long maximum) {
+        if (!action.has(field) || !action.get(field).isJsonPrimitive() || !action.get(field).getAsJsonPrimitive().isNumber()) return false;
+        Number value = action.get(field).getAsNumber(); long whole = value.longValue();
+        return whole >= minimum && whole <= maximum && value.doubleValue() == (double) whole;
     }
 
     private static boolean validFixture(JsonObject action) {

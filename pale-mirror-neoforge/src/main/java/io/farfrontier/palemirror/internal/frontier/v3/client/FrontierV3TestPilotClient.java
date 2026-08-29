@@ -9,9 +9,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.entity.Display;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.Slot;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -45,6 +50,8 @@ public final class FrontierV3TestPilotClient {
     private static boolean breaking;
     private static boolean visitSent;
     private static long visitChunkReadyTick = -1L;
+    private static boolean containerOpenAttempted;
+    private static boolean quickMoveAttempted;
     private static Boolean originalHideGui;
     private static CaptureBarrier captureBarrier;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
@@ -60,6 +67,7 @@ public final class FrontierV3TestPilotClient {
             setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
             breaking = false; visitSent = false; visitChunkReadyTick = -1L;
+            containerOpenAttempted = false; quickMoveAttempted = false;
             captureBarrier = null; diagnostics.clear();
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
         } catch (IOException | IllegalArgumentException failure) {
@@ -109,6 +117,7 @@ public final class FrontierV3TestPilotClient {
                 case "wait_until_block" -> waitUntilBlock(minecraft, action);
                 case "wait_until_diagnostic" -> waitUntilDiagnostic(minecraft, action);
                 case "wait_until_harvest_result" -> waitUntilHarvestResult(minecraft, action);
+                case "wait_until_container_item" -> waitUntilContainerItem(minecraft, action);
                 case "assert_fixture" -> assertFixture(minecraft, action);
                 case "visit" -> visit(minecraft, action);
                 case "assert_visible_block" -> assertVisibleBlock(minecraft, action);
@@ -120,6 +129,8 @@ public final class FrontierV3TestPilotClient {
                 case "look" -> { look(minecraft, position(action, "at")); advance(type); }
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
+                case "open_container" -> openContainer(minecraft, position(action, "position"), action.get("timeoutMs").getAsLong());
+                case "quick_move_from_inventory" -> quickMoveFromInventory(minecraft, action);
                 default -> throw new IllegalArgumentException("unsupported visible pilot action: " + type);
             }
         } catch (RuntimeException failure) {
@@ -140,6 +151,45 @@ public final class FrontierV3TestPilotClient {
         if (minecraft.level.getBlockState(target).isAir()) { breaking = false; advance("break"); return; }
         if (!breaking) { minecraft.gameMode.startDestroyBlock(target, Direction.UP); breaking = true; }
         else minecraft.gameMode.continueDestroyBlock(target, Direction.UP);
+    }
+
+    /** Opens the real block menu through Minecraft's normal client interaction packet. */
+    private static void openContainer(Minecraft minecraft, BlockPos target, long timeoutMs) {
+        if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) { advance("open_container"); return; }
+        if (!containerOpenAttempted) {
+            minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
+                    new BlockHitResult(Vec3.atCenterOf(target), Direction.UP, target, false));
+            containerOpenAttempted = true;
+        }
+        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= timeoutMs) {
+            throw new IllegalStateException("timed out opening ordinary container at " + target);
+        }
+    }
+
+    /** Shift-clicks one exact player stack through the ordinary open-menu protocol. */
+    private static void quickMoveFromInventory(Minecraft minecraft, JsonObject action) {
+        if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) {
+            timeout(minecraft, action, "container menu was not open for quick move"); return;
+        }
+        ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString()); int count = action.get("count").getAsInt();
+        if (quickMoveAttempted) {
+            boolean moved = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
+                    .anyMatch(slot -> sameStack(slot, item, count));
+            if (moved) { advance("quick_move_from_inventory"); return; }
+            timeout(minecraft, action, "quick move did not reach the container"); return;
+        }
+        Slot source = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container == minecraft.player.getInventory())
+                .filter(slot -> sameStack(slot, item, count)).findFirst().orElse(null);
+        if (source == null) { timeout(minecraft, action, "player lacks exact stack " + item + " x" + count); return; }
+        int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
+        if (menuSlot < 0) throw new IllegalStateException("player inventory slot is absent from the open container menu");
+        minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
+        quickMoveAttempted = true;
+    }
+
+    private static boolean sameStack(Slot slot, ResourceLocation item, int count) {
+        return !slot.getItem().isEmpty() && slot.getItem().getCount() == count
+                && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item);
     }
 
     private static void waitUntilBlock(Minecraft minecraft, JsonObject action) {
@@ -255,6 +305,28 @@ public final class FrontierV3TestPilotClient {
         }
     }
 
+    /** Waits for a precise canonical slot-owned stack without needing its generated item identity. */
+    private static void waitUntilContainerItem(Minecraft minecraft, JsonObject action) {
+        String containerId = action.get("containerId").getAsString(); long tick = minecraft.level.getGameTime();
+        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("container", containerId));
+        if (fresh(observed) && containerContains(observed.value(), action)) { advance("wait_until_container_item"); return; }
+        if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect container " + containerId);
+        timeout(minecraft, action, "timed out waiting for exact container ingress " + containerId);
+    }
+
+    private static boolean containerContains(JsonObject container, JsonObject action) {
+        if (!"ok".equals(string(container, "status")) || !container.has("occupied") || !container.get("occupied").isJsonArray()) return false;
+        String item = action.get("item").getAsString(); int count = action.get("count").getAsInt();
+        Integer slot = action.has("slot") ? action.get("slot").getAsInt() : null;
+        for (JsonElement element : container.getAsJsonArray("occupied")) {
+            if (!element.isJsonObject()) continue;
+            JsonObject value = element.getAsJsonObject();
+            if (item.equals(string(value, "itemKind")) && value.has("count") && value.get("count").getAsInt() == count
+                    && (slot == null || value.has("slot") && value.get("slot").getAsInt() == slot)) return true;
+        }
+        return false;
+    }
+
     private static boolean fresh(ObservedDiagnostic observed) { return observed != null && observed.tick() >= actionStartedTick; }
 
     /** A fixture is only a bounded read-only precondition; it cannot arrange or mutate the world. */
@@ -288,6 +360,10 @@ public final class FrontierV3TestPilotClient {
         JsonElement value = object.get(member); return value != null && value.isJsonPrimitive() ? value.getAsString() : "";
     }
 
+    private static void timeout(Minecraft minecraft, JsonObject action, String detail) {
+        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException(detail);
+    }
+
     private static boolean matches(JsonObject actual, JsonObject expected) {
         for (Map.Entry<String, JsonElement> entry : expected.entrySet()) {
             JsonElement value = actual.get(entry.getKey());
@@ -315,7 +391,18 @@ public final class FrontierV3TestPilotClient {
         if (originalHideGui == null) originalHideGui = minecraft.options.hideGui;
         minecraft.options.hideGui = true;
         minecraft.setScreen(null);
+        clearCaptureNoise(minecraft);
+    }
+
+    /** Keeps an explicitly requested player screen, but not disposable-client diagnostics or tutorials. */
+    private static void preparePlayerCapture(Minecraft minecraft) {
+        clearCaptureNoise(minecraft);
+    }
+
+    private static void clearCaptureNoise(Minecraft minecraft) {
         minecraft.gui.getChat().clearMessages(false);
+        minecraft.getTutorial().stop();
+        minecraft.getToasts().clear();
     }
 
     private static BlockPos position(JsonObject action, String field) {
@@ -329,12 +416,13 @@ public final class FrontierV3TestPilotClient {
         int completedAction = runningSetup ? 0 : index + 1;
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
         index++; actionStartedTick = -1L; breaking = false;
-        visitSent = false; visitChunkReadyTick = -1L;
+        visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false;
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
         else if (reachedFrame != null) {
             JsonObject frame = reachedFrame;
             String presentation = frame.has("presentation") ? frame.get("presentation").getAsString() : "clean";
             if (presentation.equals("clean")) prepareCleanCapture(Minecraft.getInstance());
+            else preparePlayerCapture(Minecraft.getInstance());
             captureBarrier = new CaptureBarrier(completedAction, frame.get("name").getAsString(), presentation,
                     Minecraft.getInstance().level.getGameTime() + CAPTURE_SETTLE_TICKS, false);
         }
@@ -389,7 +477,11 @@ public final class FrontierV3TestPilotClient {
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
         if (originalHideGui != null) { minecraft.options.hideGui = originalHideGui; originalHideGui = null; }
-        actions = null; setup = null; frames = null; captureBarrier = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false; visitSent = false; visitChunkReadyTick = -1L; diagnostics.clear();
+        actions = null; setup = null; frames = null; captureBarrier = null;
+        runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
+        visitSent = false; visitChunkReadyTick = -1L;
+        containerOpenAttempted = false; quickMoveAttempted = false;
+        diagnostics.clear();
     }
     private record DiagnosticIdentity(String view, String id) { }
     private record ObservedDiagnostic(long tick, JsonObject value) { }
