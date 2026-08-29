@@ -19,6 +19,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -44,6 +46,7 @@ final class FrontierV3AmbientActorExecutor {
     private static final int MAX_ACTORS_PER_TICK = 16;
     private static final int DEMAND_RADIUS_BLOCKS = 96;
     private static final int MAX_PENDING_ADMISSIONS = 4_096;
+    private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
     private static final long PENDING_ADMISSION_TICKS = 20L;
     /** Noncanonical, short-lived bridge across EntityJoinLevelEvent and the UUID index. */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<UUID, PendingAdmission>> PENDING_ADMISSIONS = new IdentityHashMap<>();
@@ -98,6 +101,7 @@ final class FrontierV3AmbientActorExecutor {
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
         body.setUUID(entityId); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
+        if (body instanceof Zombie zombie) configureBioform(zombie);
         body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + actorId.value())); body.setCustomNameVisible(false);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
@@ -179,6 +183,12 @@ final class FrontierV3AmbientActorExecutor {
         return !entity.isRemoved() && actorId.value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && (bioform ? entity instanceof Zombie : entity instanceof Villager)
                 && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY));
+    }
+    /** The graybox Zombie is a hive creature, not a vanilla undead exposed to daylight. */
+    static void configureBioform(Zombie body) {
+        if (!body.hasEffect(MobEffects.FIRE_RESISTANCE)) {
+            body.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS, 0, true, false));
+        }
     }
     private static void pursueLocalGoal(Mob body, BlockPosition goal) {
         if (body.tickCount % 20 != 0) return;

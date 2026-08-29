@@ -70,7 +70,11 @@ final class SupplyOperationProcess {
                 .anyMatch(engagement -> engagement.operationId().equals(operation.id()) && engagement.status() != RouteEngagementStatus.RESOLVED
                         && operation.route().get(operation.routeIndex()).equals(engagement.intercept()));
         if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
-        Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id()) && value.status() != SceneLeaseStatus.CLOSED).findFirst();
+        Optional<SceneLease> unknownLease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
+                && value.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).findFirst();
+        if (unknownLease.isPresent()) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+        Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
+                && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) return failed(state, operation, "route-obstructed");
         int index = operation.routeIndex() + 1; OperationStage stage = index == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;

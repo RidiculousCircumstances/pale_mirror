@@ -1,14 +1,20 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class SupplyOperationProcessTest {
     @Test
@@ -31,5 +37,25 @@ class SupplyOperationProcessTest {
         FrontierWorldState reduced = StrategicObjectiveProcess.reduceTaskTransition(state, settlement.id(), (StrategicTaskTransition) planned.getFirst().payload());
         reduced = StrategicObjectiveProcess.reduceTaskTransition(reduced, settlement.id(), (StrategicTaskTransition) planned.get(1).payload());
         assertEquals(StrategicObjectiveStatus.BLOCKED, reduced.strategicPlans().objectives().get(objective.id()).status());
+    }
+
+    @Test
+    void unknownHotLeaseDefersColdRouteProgressWithoutPretendingTheSceneIsActive() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(
+                new WorldId("frontier:supply-unknown-scene"), 91L));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        SceneLeaseId leaseId = new SceneLeaseId("lease:supply-unknown-scene");
+        SceneLease lease = new SceneLease(leaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(),
+                engine.checkpoint().instant(), engine.checkpoint().revision().value(), SceneLeaseStatus.PREPARED,
+                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
+        FrontierWorldState unknown = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+
+        List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unknown, SupplyOperationProcess.operationProgress(operation, 2_650L));
+
+        ScheduleEffect.Created deferred = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload());
+        assertEquals(1, planned.size());
+        assertEquals(SupplyOperationProcess.operationProgress(operation, 2_750L), deferred.action());
     }
 }

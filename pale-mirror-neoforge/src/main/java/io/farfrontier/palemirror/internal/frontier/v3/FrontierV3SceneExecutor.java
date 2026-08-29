@@ -197,9 +197,14 @@ final class FrontierV3SceneExecutor {
             Entity existing = level.getEntity(member.entityId());
             if (existing != null) {
                 if (!(existing instanceof Mob body) || body.getHealth() <= 0.0F) return BodyMaterialization.CONFLICT;
-                if (owned(existing, state, lease, member)) continue;
+                if (owned(existing, state, lease, member)) {
+                    if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie);
+                    continue;
+                }
                 if (!FrontierV3AmbientActorExecutor.owned(existing, member.actorId(), bioform(state, member.actorId()))) return BodyMaterialization.CONFLICT;
-                body.getNavigation().stop(); body.setNoAi(true); body.setCustomNameVisible(true); mark(body, lease, member);
+                body.getNavigation().stop(); body.setNoAi(true); body.setCustomNameVisible(true);
+                if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie);
+                mark(body, lease, member);
                 continue;
             }
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return BodyMaterialization.DEFERRED;
@@ -214,6 +219,7 @@ final class FrontierV3SceneExecutor {
             body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
             body.setPersistenceRequired();
             body.setNoAi(true);
+            if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie);
             body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + member.actorId().value()));
             body.setCustomNameVisible(true);
             mark(body, lease, member);
