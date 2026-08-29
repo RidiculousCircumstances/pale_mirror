@@ -185,8 +185,13 @@ final class FrontierV3AmbientActorExecutor {
                 new AmbientActorDied(actorId, new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
         return true;
     }
-    /** Captures a living HOT body before Minecraft releases it, never treating absence as death. */
-    static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+    /**
+     * Captures a living HOT body before ordinary chunk departure, never treating absence as death.
+     * During server shutdown an entity leave only means Minecraft is serializing the same body, so
+     * the HOT lease must survive for restart recovery instead of producing a COLD continuation.
+     */
+    static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, boolean serverStopping) {
+        if (serverStopping) return false;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null || !(entity instanceof Mob body)) return false;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);

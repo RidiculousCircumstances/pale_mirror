@@ -30,12 +30,15 @@ import java.util.Objects;
 public final class FrontierV3ServerLifecycle {
     private static final String ENABLED_PROPERTY = "pale_mirror.frontier_v3.enabled";
     private static final Map<MinecraftServer, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection>> RUNTIMES = new IdentityHashMap<>();
+    /** Servers whose world teardown has begun; their entity leaves are not gameplay observations. */
+    private static final Map<MinecraftServer, Boolean> STOPPING = new IdentityHashMap<>();
     private static final WorkBudget TICK_BUDGET = new WorkBudget(128, 512);
 
     private FrontierV3ServerLifecycle() { }
 
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
+        STOPPING.remove(server);
         if (!enabled() || RUNTIMES.containsKey(server)) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
@@ -68,6 +71,7 @@ public final class FrontierV3ServerLifecycle {
     }
 
     public static void tick(MinecraftServer server) {
+        if (stopping(server)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try {
@@ -105,15 +109,25 @@ public final class FrontierV3ServerLifecycle {
     }
 
     public static void stop(MinecraftServer server) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.remove(server);
-        if (runtime != null) {
-            FrontierV3GrayboxExecutor.forget(runtime);
-            FrontierV3ResourceSiteExecutor.forget(runtime);
-            FrontierV3InfectionOverlayExecutor.forget(runtime);
-            FrontierV3ObjectBoardExecutor.forget(runtime);
-            FrontierV3AmbientActorExecutor.forget(runtime);
-            runtime.shutdown();
+        try {
+            FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.remove(server);
+            if (runtime != null) {
+                FrontierV3GrayboxExecutor.forget(runtime);
+                FrontierV3ResourceSiteExecutor.forget(runtime);
+                FrontierV3InfectionOverlayExecutor.forget(runtime);
+                FrontierV3ObjectBoardExecutor.forget(runtime);
+                FrontierV3AmbientActorExecutor.forget(runtime);
+                runtime.shutdown();
+            }
+        } finally {
+            STOPPING.remove(server);
         }
+    }
+
+    /** Marks the beginning of orderly shutdown before Minecraft emits entity-unload events. */
+    public static void beginStopping(MinecraftServer server) {
+        Objects.requireNonNull(server, "server");
+        STOPPING.put(server, Boolean.TRUE);
     }
 
     /** Retains an exact restored ambient body until ServerLevel publishes its UUID index. */
@@ -149,7 +163,11 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity);
+                && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity, stopping(level.getServer()));
+    }
+
+    private static boolean stopping(MinecraftServer server) {
+        return STOPPING.containsKey(server);
     }
 
     /** Keeps an exact owned field on the canonical growth clock rather than Vanilla random ticks. */

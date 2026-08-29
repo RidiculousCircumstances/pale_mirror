@@ -71,6 +71,10 @@ public final class FrontierV3AmbientActorGameTests {
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
                         new BlockPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "the durable HOT acknowledgement retains the one existing UUID rather than duplicating it");
+        helper.assertFalse(FrontierV3AmbientActorExecutor.observeLeave(runtime, body, true),
+                "server teardown must not release a saved HOT body into COLD");
+        helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
+                "a graceful shutdown retains the HOT lease for exact UUID recovery after restart");
         body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
     }
 
