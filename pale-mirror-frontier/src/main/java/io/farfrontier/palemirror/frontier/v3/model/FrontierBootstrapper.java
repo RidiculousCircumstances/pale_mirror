@@ -59,18 +59,18 @@ public final class FrontierBootstrapper {
     private static Settlement settlement(long seed, int index) {
         SubjectId settlementId = new SubjectId("settlement:" + (index + 1));
         BlockPosition anchor = new BlockPosition(ANCHORS[index][0], 64, ANCHORS[index][1]);
-        int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
-        List<Resident> people = new ArrayList<>(residents);
-        for (int ordinal = 0; ordinal < residents; ordinal++) {
-            people.add(new Resident(new SubjectId("resident:" + (index + 1) + "-" + (ordinal + 1)), settlementId,
-                    ResidentRole.values()[ordinal % ResidentRole.values().length], anchor.offset((ordinal % 8 - 4) * 2, 0, (ordinal / 8 - 2) * 2)));
-        }
         List<SettlementStructure> structures = new ArrayList<>();
         int[][] offsets = {{0, 0}, {-20, -12}, {20, -12}, {-20, 14}, {20, 14}, {0, 22}};
         for (StructureKind kind : StructureKind.values()) {
             int[] offset = offsets[kind.ordinal()];
             structures.add(new SettlementStructure(new SubjectId("structure:" + (index + 1) + "-" + kind.name().toLowerCase(Locale.ROOT)),
                     settlementId, kind, anchor.offset(offset[0], 0, offset[1])));
+        }
+        int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
+        List<Resident> people = new ArrayList<>(residents);
+        for (int ordinal = 0; ordinal < residents; ordinal++) {
+            people.add(new Resident(new SubjectId("resident:" + (index + 1) + "-" + (ordinal + 1)), settlementId,
+                    ResidentRole.values()[ordinal % ResidentRole.values().length], FrontierSettlementActorSlots.slot(BOUNDS, anchor, structures, ordinal)));
         }
         return new Settlement(settlementId, NAMES[index], anchor, people, structures);
     }

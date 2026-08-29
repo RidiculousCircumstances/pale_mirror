@@ -47,6 +47,14 @@ class HumanPopulationProcessTest {
                 .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
         PhysicalIntentPrepared prepared = proposed.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        BlockPosition birthPosition = started.job().position();
+        GrayboxCell birthFoot = FrontierGrayboxPlan.compile(active).cells().get(birthPosition);
+        assertTrue(birthFoot == null || birthFoot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
+                "a new resident may use a route surface but must not be born inside structure geometry");
+        assertEquals(null, FrontierGrayboxPlan.compile(active).cells().get(birthPosition.offset(0, 1, 0)));
+        assertEquals(null, FrontierGrayboxPlan.compile(active).cells().get(birthPosition.offset(0, 2, 0)));
+        assertTrue(active.actorLocations().values().stream().noneMatch(actor -> actor.position().equals(birthPosition)),
+                "the next resident slot must not overlap an existing exact actor");
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         active = PopulationBirthProcess.reduceStarted(active, started.job().settlementId(), started);
         active = PopulationBirthProcess.reducePrepared(active, started.job().settlementId(), prepared.intent());

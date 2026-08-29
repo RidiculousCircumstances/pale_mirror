@@ -54,6 +54,25 @@ class FrontierGrayboxPlanTest {
         });
     }
 
+    @Test
+    void everyBootstrapResidentUsesOneClearDeterministicStreetOrPerimeterSlot() {
+        FrontierWorldState state = initial();
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        state.bootstrap().settlements().forEach(settlement -> {
+            java.util.Set<BlockPosition> positions = new java.util.HashSet<>();
+            settlement.residents().forEach(resident -> {
+                BlockPosition position = state.actorLocations().get(resident.id()).position();
+                assertTrue(positions.add(position), "resident slots must not overlap: " + resident.id());
+                GrayboxCell foot = plan.cells().get(position);
+                assertTrue(foot == null || foot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
+                        "resident foot cell may use a route surface but must stay outside structure geometry: " + resident.id());
+                assertEquals(null, plan.cells().get(position.offset(0, 1, 0)), "resident body clearance must stay outside graybox geometry: " + resident.id());
+                assertEquals(null, plan.cells().get(position.offset(0, 2, 0)), "resident head clearance must stay outside graybox geometry: " + resident.id());
+            });
+        });
+    }
+
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:graybox-plan"), 1234L));
     }

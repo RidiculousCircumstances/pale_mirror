@@ -44,7 +44,9 @@ final class PopulationBirthProcess {
         Household household = household(state, settlement.id());
         if (household == null) return List.copyOf(events);
         int ordinal = nextOrdinal(action);
-        ResidentBirthJob job = job(settlement, household, food.orElseThrow(), ordinal, action.dueAt().ticks() + COMPLETION_DELAY);
+        int placementOrdinal = Math.toIntExact(state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement.id())).count());
+        ResidentBirthJob job = job(state.bootstrap().bounds(), settlement, household, food.orElseThrow(), ordinal, placementOrdinal, action.dueAt().ticks() + COMPLETION_DELAY);
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.foodItemId()), fixed(job.position()), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
@@ -138,14 +140,13 @@ final class PopulationBirthProcess {
                         .filter(resident -> resident.householdId().equals(value.id())).count()).thenComparing(Household::id)).orElse(null);
     }
 
-    private static ResidentBirthJob job(Settlement settlement, Household household, ExactItemStack food, int ordinal, long birthTick) {
-        SettlementStructure housing = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst()
-                .orElseThrow(() -> new IllegalStateException("settlement lacks housing"));
+    private static ResidentBirthJob job(WorldBounds bounds, Settlement settlement, Household household, ExactItemStack food, int ordinal, int placementOrdinal, long birthTick) {
         String suffix = suffix(settlement.id()) + "-" + ordinal;
         ResidentProfile resident = new ResidentProfile(new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal), household.id(), settlement.id(), ResidentRole.FARMER,
                 birthTick, HumanPopulation.birthSkills(ordinal));
         return new ResidentBirthJob(new SubjectId("job:resident-birth-" + suffix), settlement.id(), household.id(), food.id(),
-                new PhysicalIntentId("intent:resident-birth-food-" + suffix), resident, housing.anchor());
+                new PhysicalIntentId("intent:resident-birth-food-" + suffix), resident,
+                FrontierSettlementActorSlots.slot(bounds, settlement, placementOrdinal));
     }
 
     private static int nextOrdinal(ScheduledAction action) {
