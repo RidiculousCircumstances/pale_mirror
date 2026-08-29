@@ -38,7 +38,7 @@ final class HiveRouteEngagementProcess {
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || activeForOperation(state, operation.id())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
-        if (FrontierSceneAdmission.hasActiveSceneLease(state, operation.id())) {
+        if (!FrontierSceneAdmission.coldInterceptionAvailable(state, operation.id())) {
             return List.of(schedule(start(task, action.dueAt().ticks() + STEP_INTERVAL)));
         }
         // An interception claims the caravan's current COLD position. Selecting a future waypoint
@@ -59,12 +59,14 @@ final class HiveRouteEngagementProcess {
         if (engagement == null || engagement.status() != RouteEngagementStatus.APPROACHING) return List.of();
         StrategicTask task = task(state, engagement.taskId(), StrategicTaskStatus.ACTIVE);
         RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || engagement.attackerIds().stream()
-                .anyMatch(actor -> state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE)) {
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
             return abort(engagement);
         }
-        if (FrontierSceneAdmission.hasActiveSceneLease(state, operation.id())) {
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
             return List.of(schedule(progress(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        }
+        if (engagement.attackerIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE)) {
+            return abort(engagement);
         }
         List<ProposedEvent> events = new ArrayList<>();
         for (EngagementAttacker attacker : engagement.attackers()) {
@@ -81,12 +83,14 @@ final class HiveRouteEngagementProcess {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
         if (engagement == null || engagement.status() != RouteEngagementStatus.WAITING_FOR_INTERCEPT) return List.of();
         RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || !engagement.allAttackersAtIntercept()
-                || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
             return abort(engagement);
         }
-        if (FrontierSceneAdmission.hasActiveSceneLease(state, operation.id())) {
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
             return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        }
+        if (!engagement.allAttackersAtIntercept() || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
+            return abort(engagement);
         }
         if (!operation.route().get(operation.routeIndex()).equals(engagement.intercept())) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
@@ -96,7 +100,7 @@ final class HiveRouteEngagementProcess {
     static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
         if (engagement == null || engagement.status() != RouteEngagementStatus.COLD_COMBAT) return List.of();
-        if (FrontierSceneAdmission.hasActiveSceneLease(state, engagement.operationId())) {
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
             return List.of(schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
         }
         List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);
@@ -132,6 +136,7 @@ final class HiveRouteEngagementProcess {
     static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, RouteEngagementAttackerAdvanced advanced) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(advanced.engagementId());
         if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("route engagement advancement has a foreign owner");
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) throw new IllegalArgumentException("COLD engagement cannot advance an ambient-leased actor");
         RouteEngagement next = engagement.advanceAttacker(advanced.attackerId(), advanced.routeIndex());
         EngagementAttacker attacker = next.attackers().stream().filter(value -> value.actorId().equals(advanced.attackerId())).findFirst().orElseThrow();
         return state.withActorLocation(attacker.actorId(), attacker.position(), state.strategicPlans().replaceEngagement(next));
@@ -144,18 +149,25 @@ final class HiveRouteEngagementProcess {
                 && !engagement.allAttackersAtIntercept()) {
             throw new IllegalArgumentException("route engagement cannot wait or fight before all attackers arrive");
         }
+        if (transition.status() == RouteEngagementStatus.COLD_COMBAT && !FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
+            throw new IllegalArgumentException("COLD engagement cannot take authority from an ambient lease");
+        }
         return state.withStrategicPlans(state.strategicPlans().transitionEngagement(engagement.id(), transition.status()));
     }
 
     static FrontierWorldState reduceStrike(FrontierWorldState state, SubjectId subject, RouteEngagementStrike strike) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(strike.engagementId());
         if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("COLD strike has a foreign owner");
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) throw new IllegalArgumentException("COLD strike cannot target an ambient-leased actor");
         return FrontierRouteEngagementStateSupport.strike(state, strike);
     }
 
     static FrontierWorldState reduceResolved(FrontierWorldState state, SubjectId subject, RouteEngagementResolved resolved) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(resolved.engagementId());
         if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("route engagement resolution has a foreign owner");
+        if (engagement.status() != RouteEngagementStatus.HOT && !FrontierSceneAdmission.coldEngagementActorsAvailable(state, engagement)) {
+            throw new IllegalArgumentException("COLD engagement cannot resolve while an exact actor has ambient authority");
+        }
         return FrontierRouteEngagementStateSupport.resolve(state, resolved);
     }
 

@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Objects;
 
@@ -38,7 +39,32 @@ public final class FrontierSceneAdmission {
 
     /** Admission for beginning a new COLD interception, not for progressing its own engagement. */
     public static boolean coldInterceptionAvailable(FrontierWorldState state, SubjectId operationId) {
-        return !hasActiveSceneLease(state, operationId) && !hasUnresolvedRouteEngagement(state, operationId);
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(operationId, "operation id");
+        RouteOperation operation = state.operations().get(operationId);
+        return operation != null && !hasActiveSceneLease(state, operationId) && !hasUnresolvedRouteEngagement(state, operationId)
+                && available(state, operation.participantIds());
+    }
+
+    /**
+     * A COLD engagement may advance or strike only while every exact combatant is free of
+     * Minecraft-side authority.  {@code UNKNOWN_AFTER_RESTART} remains an active authority:
+     * the loaded-world inspector must settle it before a strategic action may change that actor.
+     */
+    public static boolean coldEngagementAvailable(FrontierWorldState state, RouteEngagement engagement) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(engagement, "engagement");
+        RouteOperation operation = state.operations().get(engagement.operationId());
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || hasActiveSceneLease(state, operation.id())) return false;
+        return coldEngagementActorsAvailable(state, engagement);
+    }
+
+    /** Exact actor-authority check without assuming that a route is still en route. */
+    public static boolean coldEngagementActorsAvailable(FrontierWorldState state, RouteEngagement engagement) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(engagement, "engagement");
+        RouteOperation operation = state.operations().get(engagement.operationId());
+        if (operation == null) return false;
+        Collection<SubjectId> actors = new ArrayList<>(operation.participantIds());
+        actors.addAll(engagement.attackerIds());
+        return available(state, actors);
     }
 
     /** An active operation or pending engagement reserves exact actors before a player loads them. */

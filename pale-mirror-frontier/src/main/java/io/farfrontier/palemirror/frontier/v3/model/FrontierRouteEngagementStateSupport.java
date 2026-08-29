@@ -12,6 +12,9 @@ final class FrontierRouteEngagementStateSupport {
 
     static FrontierWorldState strike(FrontierWorldState state, RouteEngagementStrike strike) {
         RouteEngagement engagement = requireColdEngagement(state, strike.engagementId());
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
+            throw new IllegalArgumentException("COLD strike cannot mutate an ambient-leased combatant");
+        }
         if (engagement.nextStrikeEpoch() != strike.epoch()) throw new IllegalArgumentException("COLD strike epoch is stale or replayed");
         boolean hiveTurn = (strike.epoch() & 1) == 0;
         if (hiveTurn != engagement.attackerIds().contains(strike.attackerId())

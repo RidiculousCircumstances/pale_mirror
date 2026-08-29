@@ -259,6 +259,52 @@ class HiveRouteEngagementProcessTest {
         assertEquals(OperationStage.EN_ROUTE, state.operations().get(operation.id()).stage());
     }
 
+    @Test void coldCombatDefersAndReducerRejectsAnActorRetainedByActiveOrRecoveryAmbientLease() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+            state = state.withActorLocation(bioform.id(), intercept);
+        }
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-ambient-recovery-exclusive"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:hive-ambient-recovery-exclusive"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
+            if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
+            if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
+            if (event.payload() instanceof RouteEngagementTransition transition) state = HiveRouteEngagementProcess.reduceTransition(state, hive, transition);
+        }
+        SubjectId engagementId = new SubjectId("engagement:hive-ambient-recovery-exclusive");
+        SubjectId defender = operation.participantIds().getFirst();
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, defender, new SimInstant(3_010L));
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = AmbientLeaseStateProcess.transition(state, defender, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> deferred = HiveRouteEngagementProcess.planCombat(state,
+                new ScheduledAction(new ScheduleId("schedule:ambient-recovery-exclusive"), new SimInstant(3_020L), 0, engagementId,
+                        "frontier.hive_route_engagement.combat", 1));
+        assertEquals(1, deferred.size());
+        ScheduleEffect.Created retry = (ScheduleEffect.Created) deferred.getFirst().payload();
+        assertEquals(3_040L, retry.action().dueAt().ticks());
+        assertEquals(OperationStage.EN_ROUTE, state.operations().get(operation.id()).stage());
+
+        RouteEngagementStrike impossible = new RouteEngagementStrike(engagementId, state.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst(), defender,
+                0, RouteEngagementCombatRules.damage(state, state.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst()));
+        FrontierWorldState retained = state;
+        assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceStrike(retained, hive, impossible));
+
+        state = AmbientLeaseStateProcess.transition(state, defender, AmbientLeaseStatus.HOT);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> hotDeferred = HiveRouteEngagementProcess.planCombat(state,
+                new ScheduledAction(new ScheduleId("schedule:ambient-hot-exclusive"), new SimInstant(3_040L), 0, engagementId,
+                        "frontier.hive_route_engagement.combat", 1));
+        assertEquals(1, hotDeferred.size());
+        assertEquals(3_060L, ((ScheduleEffect.Created) hotDeferred.getFirst().payload()).action().dueAt().ticks());
+    }
+
     @Test void productionProfileAutonomouslyHoldsARealCaravanUntilHiveGuardsReachItsCurrentPosition() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-intercept"), 91L));
         boolean heldAtCurrentIntercept = false;
