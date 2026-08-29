@@ -131,7 +131,7 @@ final class FrontierV3AmbientActorExecutor {
     /** Retains only an exact expected body during the short join-to-index hand-off. */
     static boolean observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return false;
+        if (state == null || !recognizes(runtime, entity)) return false;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
         if (rawActorId.isBlank()) return false;
         SubjectId actorId;
@@ -145,6 +145,27 @@ final class FrontierV3AmbientActorExecutor {
             submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
         }
         return true;
+    }
+
+    /**
+     * Strict non-mutating admission proof for the shared graybox entity boundary.
+     * A tag alone is never sufficient: this verifies the live canonical actor, exact UUID,
+     * actor kind and an extant ambient lease before a V3 body may enter the physical world.
+     */
+    static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
+        String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
+        if (rawActorId.isBlank()) return false;
+        SubjectId actorId;
+        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
+        var location = state.actorLocations().get(actorId);
+        var lease = state.ambientLeases().get(actorId);
+        return location != null && location.condition().status() == ActorLifeStatus.ALIVE
+                && lease != null && lease.status() != AmbientLeaseStatus.CLOSED
+                && !FrontierSceneAdmission.reserved(state, actorId)
+                && entityId(state, actorId).equals(entity.getUUID())
+                && owned(entity, actorId, bioform(state, actorId));
     }
     /** Accepts only a real loaded-world death for the exact HOT ambient body. */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {

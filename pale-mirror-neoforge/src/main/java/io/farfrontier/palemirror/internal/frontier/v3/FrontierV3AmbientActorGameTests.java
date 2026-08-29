@@ -59,6 +59,13 @@ public final class FrontierV3AmbientActorGameTests {
                 "a retained PREPARED lease may create exactly its expected loaded-world body");
         Villager body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
         helper.assertTrue(body != null && body.isNoAi(), "the before-HOT body must stay inert across the acknowledgement window");
+        helper.assertTrue(FrontierV3AmbientActorExecutor.recognizes(runtime, body),
+                "the shared graybox boundary must accept only the exact prepared V3 carrier");
+        Villager forged = new Villager(net.minecraft.world.entity.EntityType.VILLAGER, level);
+        forged.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
+        forged.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        helper.assertFalse(FrontierV3AmbientActorExecutor.recognizes(runtime, forged),
+                "a copied V3 tag without the canonical UUID is never an admissible carrier");
         FrontierV3CommandSubmission.submit(runtime, "ambient-prepared-game-test-hot", resident.value(),
                 new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,

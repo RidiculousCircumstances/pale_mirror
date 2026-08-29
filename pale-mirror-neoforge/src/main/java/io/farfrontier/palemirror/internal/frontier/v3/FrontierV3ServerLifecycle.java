@@ -124,6 +124,17 @@ public final class FrontierV3ServerLifecycle {
                 && FrontierV3AmbientActorExecutor.observeJoin(runtime, entity);
     }
 
+    /**
+     * Lets the shared graybox admission boundary admit only an exact V3 ambient carrier.
+     * This is a predicate only; EntityJoin observation remains the sole lifecycle mutation path.
+     */
+    public static boolean recognizesAmbientCarrier(ServerLevel level, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3AmbientActorExecutor.recognizes(runtime, entity);
+    }
+
     /** Returns true only when this v3 runtime durably accepted the managed HOT death. */
     public static boolean observeLivingDeath(ServerLevel level, Entity entity, Entity source) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");

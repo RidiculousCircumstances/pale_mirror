@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.world;
 
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle;
 import java.util.Objects;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -21,12 +22,19 @@ public final class SourceGrayboxEntityAdmission {
 
     /** True when a non-source mob must be denied before it can affect the source projection. */
     public static boolean rejects(ServerLevel level, Entity entity) {
-        return rejects(Objects.requireNonNull(level, "level").dimension(), entity);
+        Objects.requireNonNull(level, "level");
+        return rejects(level.dimension(), entity, FrontierV3ServerLifecycle.recognizesAmbientCarrier(level, entity));
     }
 
     static boolean rejects(ResourceKey<Level> dimension, Entity entity) {
+        return rejects(dimension, entity, false);
+    }
+
+    /** Package-visible seam: the event bridge supplies only a strict canonical V3 proof. */
+    static boolean rejects(ResourceKey<Level> dimension, Entity entity, boolean verifiedV3Carrier) {
         return Objects.requireNonNull(dimension, "dimension").equals(SourceGrayboxWorldBoundary.DIMENSION)
                 && Objects.requireNonNull(entity, "entity") instanceof Mob
-                && !SourceGrayboxMaterializer.recognizesManagedEntity(entity);
+                && !SourceGrayboxMaterializer.recognizesManagedEntity(entity)
+                && !verifiedV3Carrier;
     }
 }

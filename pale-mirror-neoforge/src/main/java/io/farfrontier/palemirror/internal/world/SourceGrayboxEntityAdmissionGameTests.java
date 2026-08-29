@@ -36,6 +36,11 @@ public final class SourceGrayboxEntityAdmissionGameTests {
                 "0000000000000000000000000000000000000000000000000000000000000000");
         helper.assertTrue(!SourceGrayboxEntityAdmission.rejects(SourceGrayboxWorldBoundary.DIMENSION, projectedCarrier),
                 "the exact deterministic carrier must be admitted so source materialization remains complete");
+        Villager verifiedV3Carrier = new Villager(EntityType.VILLAGER, helper.getLevel());
+        helper.assertTrue(SourceGrayboxEntityAdmission.rejects(SourceGrayboxWorldBoundary.DIMENSION, verifiedV3Carrier),
+                "a V3-shaped but unverified Villager remains foreign at the shared graybox boundary");
+        helper.assertTrue(!SourceGrayboxEntityAdmission.rejects(SourceGrayboxWorldBoundary.DIMENSION, verifiedV3Carrier, true),
+                "only the lifecycle's strict canonical V3 proof may cross the legacy admission boundary");
         helper.succeed();
     }
 }
