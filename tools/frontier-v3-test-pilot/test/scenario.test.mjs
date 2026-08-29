@@ -21,6 +21,9 @@ test('scenario separates setup from evidence-bearing actions', () => {
 });
 
 test('summary diagnostics need no object identity while object diagnostics do', () => {
+  const inspection = { ...scenario, actions: [{ type: 'inspect', view: 'summary', id: '' }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(inspection));
+  assert.throws(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'site', id: '' }] }), /inspect needs a read-only v3 view and id/);
   assert.doesNotThrow(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'summary', id: '', expect: { status: 'ok' } }] }));
   assert.throws(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'site', id: '', expect: { status: 'ok' } }] }), /invalid diagnostic assertion/);
 });

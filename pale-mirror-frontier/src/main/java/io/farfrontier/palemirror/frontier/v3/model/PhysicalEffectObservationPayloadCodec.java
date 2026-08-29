@@ -36,6 +36,12 @@ final class PhysicalEffectObservationPayloadCodec {
             output.writeByte(9); ids(output, loading); FrontierWorldPayloadCodecs.writeSubject(output, loading.contractId());
             FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, loading.itemId()); output.writeByte(loading.itemCount());
         }
+        else if (observation instanceof ResourceSiteHarvestObservation harvest) {
+            output.writeByte(10); ids(output, harvest); FrontierWorldPayloadCodecs.writeSubject(output, harvest.siteId());
+            FrontierWorldPayloadCodecs.writeSubject(output, harvest.workerId()); FrontierWorldPayloadCodecs.writeSubject(output, harvest.output().id());
+            FrontierWorldPayloadCodecs.writeSubject(output, harvest.output().economicOwnerId()); FrontierWorldPayloadCodecs.writeString(output, harvest.output().itemKind());
+            output.writeByte(harvest.output().count()); FrontierWorldStateCodec.writeCustody(output, harvest.output().custody()); output.writeByte(harvest.harvestedCropSlots());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -53,6 +59,7 @@ final class PhysicalEffectObservationPayloadCodec {
                     FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
             case 9 -> new CargoLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+            case 10 -> harvest(input);
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }
@@ -105,6 +112,13 @@ final class PhysicalEffectObservationPayloadCodec {
     private static SceneStrikeObservation strike(DataInputStream input) throws IOException {
         return new SceneStrikeObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                 FrontierWorldPayloadCodecs.readSubject(input).value(), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
+    }
+    private static ResourceSiteHarvestObservation harvest(DataInputStream input) throws IOException {
+        PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input); var site = FrontierWorldPayloadCodecs.readSubject(input).value();
+        var worker = FrontierWorldPayloadCodecs.readSubject(input).value(); var item = FrontierWorldPayloadCodecs.readSubject(input).value();
+        var owner = FrontierWorldPayloadCodecs.readSubject(input).value(); String kind = FrontierWorldPayloadCodecs.readString(input);
+        int count = input.readUnsignedByte(); InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
+        return new ResourceSiteHarvestObservation(id, intent, site, worker, new ExactItemStack(item, owner, kind, count, custody), input.readUnsignedByte());
     }
     private static ExplosionObservation explosion(DataInputStream input) throws IOException {
         PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input);

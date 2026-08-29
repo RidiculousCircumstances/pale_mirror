@@ -43,6 +43,10 @@ class ResourceSiteHarvestProcessTest {
         ExactItemStack output = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, started.job().outputSlot());
         ResourceSiteHarvestObservation receipt = new ResourceSiteHarvestObservation(new PhysicalObservationId("observation:site-harvest-1"), intent.id(), site,
                 started.job().workerId(), output, 64);
+        PhysicalIntentTransition confirmedReceipt = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertEquals(confirmedReceipt, FrontierWorldRuntimeDefinition.payloadCodecs().decode(confirmedReceipt.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(confirmedReceipt)),
+                "the exact harvest receipt must cross the WAL payload boundary before the physical executor can acknowledge it");
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> completion = ResourceSiteHarvestProcess.planTransition(harvesting, intent,
                 new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)), 22_010L);
 

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "live_northwatch_harvest",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run tp PMTestPilot -336 65 -360" }
+  ],
+  "actions": [
+    { "type": "wait_until_block", "position": { "x": -332, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 75000 },
+    { "type": "wait", "ms": 2000 },
+    { "type": "hud", "visible": false },
+    { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
+    { "type": "wait", "ms": 12000 },
+    { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "hud", "visible": true }
+  ],
+  "assertions": [
+    { "after": 4, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok" } },
+    { "after": 6, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok" } },
+    { "after": 7, "view": "summary", "id": "", "expect": { "status": "ok" } }
+  ],
+  "frames": [
+    { "after": 3, "name": "northwatch-before-harvest-window" },
+    { "after": 5, "name": "northwatch-after-harvest-window" }
+  ]
+}

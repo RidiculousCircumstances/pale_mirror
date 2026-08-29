@@ -45,7 +45,7 @@ export function validateScenario(scenario) {
       }
       if (action.type === 'hud' && typeof action.visible !== 'boolean') throw new Error('hud needs boolean visible');
       if (action.type === 'inspect' && (!['summary', 'site', 'actor', 'item', 'operation', 'intent', 'trace'].includes(action.view)
-          || typeof action.id !== 'string')) throw new Error('inspect needs a read-only v3 view and id');
+          || typeof action.id !== 'string' || (action.view !== 'summary' && !action.id))) throw new Error('inspect needs a read-only v3 view and id');
     }
   }
   const assertions = scenario.assertions ?? [];
