@@ -195,9 +195,13 @@ states.
 - While HOT, the domain chooses intent and constraints; Minecraft movement,
   collision, combat, inventory and explosion results supply the physical facts.
   COLD rules do not execute the same action concurrently.
-- HOT-to-COLD first captures exact surviving bodies, positions, health,
-  inventories, damage and unfinished intents. Only then may physical custody be
-  released and future domain work scheduled.
+- HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
+  surviving bodies, positions, health, inventories, damage and unfinished
+  intents. It durably closes the lease and removes the exact body before that
+  chunk can serialize it. A late Minecraft entity-leave callback never closes a
+  HOT lease: it is recovery evidence for the same UUID, not proof that a COLD
+  hand-off happened. Only then may physical custody be released and future
+  domain work scheduled.
 - COLD-to-HOT first advances the scene to the lease instant, then reconstructs
   its current state. Dead actors and completed effects are never replayed to
   make a cinematic history.

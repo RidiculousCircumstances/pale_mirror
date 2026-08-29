@@ -37,19 +37,27 @@ import java.util.UUID;
  * Materializes exact ordinary residents and hive bioforms through persisted per-actor HOT leases.
  *
  * <p>It owns no canonical mutation and never interprets an unloaded/missing body as death. A
- * deterministic UUID prevents a second body after ordinary unload/reload; an untagged body with
- * that UUID is a visible non-owning conflict and remains untouched.</p>
+ * deterministic UUID prevents a second body after ordinary unload/reload. A durable COLD hand-off
+ * discards the body before its chunk can serialize it; an untagged body with that UUID is a visible
+ * non-owning conflict and remains untouched.</p>
  */
 final class FrontierV3AmbientActorExecutor {
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_ambient_actor";
     static final String KIND_KEY = "pale_mirror_frontier_v3_ambient_kind";
     private static final int MAX_ACTORS_PER_TICK = 16;
     private static final int DEMAND_RADIUS_BLOCKS = 96;
+    private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
+    private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int MAX_PENDING_ADMISSIONS = 4_096;
     private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
     private static final long PENDING_ADMISSION_TICKS = 20L;
     /** Noncanonical, short-lived bridge across EntityJoinLevelEvent and the UUID index. */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<UUID, PendingAdmission>> PENDING_ADMISSIONS = new IdentityHashMap<>();
+    /**
+     * Loaded-world observation only: the durable lease remains the source of truth.  A body is
+     * never allowed to fall out of a chunk and serialize after its lease has become COLD.
+     */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Long>> COLD_DEMAND_SINCE = new IdentityHashMap<>();
 
     private FrontierV3AmbientActorExecutor() { }
 
@@ -60,9 +68,26 @@ final class FrontierV3AmbientActorExecutor {
         int admitted = 0;
         for (var entry : state.actorLocations().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             if (admitted >= MAX_ACTORS_PER_TICK) return;
-            if (entry.getValue().condition().status() != ActorLifeStatus.ALIVE || FrontierSceneAdmission.reserved(state, entry.getKey())
-                    || !demand(level, entry.getValue().position())) continue;
+            if (entry.getValue().condition().status() != ActorLifeStatus.ALIVE
+                    || FrontierSceneAdmission.reserved(state, entry.getKey())) {
+                forgetColdDemand(runtime, entry.getKey());
+                continue;
+            }
             var lease = state.ambientLeases().get(entry.getKey());
+            boolean demanded = demand(level, entry.getValue().position());
+            if (!demanded) {
+                if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
+                    Entity body = level.getEntity(entityId(state, entry.getKey()));
+                    if (body instanceof Mob mob && owned(mob, entry.getKey(), bioform(state, entry.getKey()))
+                            && drainAfterDemandHysteresis(level, runtime, entry.getKey(), mob)) {
+                        admitted++;
+                    }
+                } else {
+                    forgetColdDemand(runtime, entry.getKey());
+                }
+                continue;
+            }
+            forgetColdDemand(runtime, entry.getKey());
             if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
                 submit(runtime, "ambient-prepare", entry.getKey().value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, entry.getKey(), runtime.checkpointImage().orElseThrow().instant())));
                 admitted++;
@@ -186,9 +211,8 @@ final class FrontierV3AmbientActorExecutor {
         return true;
     }
     /**
-     * Captures a living HOT body before ordinary chunk departure, never treating absence as death.
-     * During server shutdown an entity leave only means Minecraft is serializing the same body, so
-     * the HOT lease must survive for restart recovery instead of producing a COLD continuation.
+     * A late entity-leave callback never changes a HOT lease. Minecraft may already have serialized
+     * the body, so closing here could admit a second deterministic UUID on the next player demand.
      */
     static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, boolean serverStopping) {
         if (serverStopping) return false;
@@ -202,11 +226,12 @@ final class FrontierV3AmbientActorExecutor {
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(entity.getUUID())
                 || !owned(entity, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
                 || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
-        BlockPosition position = new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ());
-        FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
-        submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
-        submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health));
-        return true;
+        // EntityLeaveLevelEvent can be emitted only after chunk serialization has begun.  A
+        // transition to CLOSED here would permit a fresh body on the next demand while the old
+        // UUID is still in chunk NBT.  The regular tick drains, durably closes and discards the
+        // body while it is unquestionably loaded.  An unexpected leave therefore fails closed
+        // as HOT and is reclaimed by the same UUID if Minecraft restores it later.
+        return false;
     }
     private static boolean demand(ServerLevel level, BlockPosition position) {
         BlockPos target = new BlockPos(position.x(), position.y(), position.z());
@@ -233,7 +258,29 @@ final class FrontierV3AmbientActorExecutor {
         if (body.tickCount % 20 != 0) return;
         body.getNavigation().moveTo(goal.x() + 0.5D, goal.y(), goal.z() + 0.5D, body instanceof Zombie ? 0.85D : 0.70D);
     }
-    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { PENDING_ADMISSIONS.remove(runtime); }
+    /** Durably captures then removes a loaded HOT body; the return value proves no serialized duplicate remains. */
+    static boolean drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
+        String rawActorId = body.getPersistentData().getString(ACTOR_KEY);
+        if (rawActorId.isBlank()) return false;
+        SubjectId actorId;
+        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
+        var current = state.actorLocations().get(actorId);
+        if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(body.getUUID())
+                || !owned(body, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
+                || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
+        BlockPosition position = new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+        FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
+        submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
+        submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health));
+        body.discard();
+        return true;
+    }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
+        PENDING_ADMISSIONS.remove(runtime);
+        COLD_DEMAND_SINCE.remove(runtime);
+    }
     private static PendingAdmission pending(FrontierV3ServerRuntime<?, ?> runtime, UUID entityId) {
         Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.get(runtime);
         return pending == null ? null : pending.get(entityId);
@@ -244,6 +291,26 @@ final class FrontierV3AmbientActorExecutor {
         pending.values().removeIf(candidate -> candidate.entity().isRemoved() || candidate.entity().isAddedToLevel()
                 || candidate.expiresAtGameTime() < level.getGameTime());
         if (pending.isEmpty()) PENDING_ADMISSIONS.remove(runtime);
+    }
+    private static boolean drainAfterDemandHysteresis(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                      SubjectId actorId, Mob body) {
+        Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+        if (absentSince.size() >= MAX_PENDING_ADMISSIONS && !absentSince.containsKey(actorId)) return false;
+        long started = absentSince.computeIfAbsent(actorId, ignored -> level.getGameTime());
+        if (level.getGameTime() - started < DRAIN_HYSTERESIS_TICKS || playerWithin(level, body.blockPosition(), DRAIN_SAFE_RADIUS_BLOCKS)) return false;
+        boolean drained = drain(runtime, body);
+        if (drained) absentSince.remove(actorId);
+        if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
+        return drained;
+    }
+    private static void forgetColdDemand(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId) {
+        Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.get(runtime);
+        if (absentSince == null) return;
+        absentSince.remove(actorId);
+        if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
+    }
+    private static boolean playerWithin(ServerLevel level, BlockPos position, int radius) {
+        return level.players().stream().filter(player -> !player.isSpectator()).anyMatch(player -> player.blockPosition().closerThan(position, radius));
     }
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
         FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
