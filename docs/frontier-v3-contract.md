@@ -275,6 +275,9 @@ contamination of structures and organs. Growth, retreat, removal and spread
 remain canonical processes; the adapter does not paint infection merely for
 appearance. Graybox may substitute semantic colours and cubes, but it must make
 extent, direction, severity and affected objects readable from player height.
+An affected object board derives its warning only from current infection cells
+intersecting that object's semantic geometry; this is a readable projection, not
+a second mutable infection state.
 
 ## Physical economy and custody
 

@@ -19,13 +19,15 @@ public final class FrontierReadabilityPlan {
     public static FrontierReadabilityPlan compile(FrontierWorldState state) {
         Objects.requireNonNull(state, "state");
         Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>();
+        Map<SubjectId, InfectionOverlayStage> contamination = contamination(state);
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure -> {
             StructureCondition condition = state.structureConditions().get(structure.id());
-            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition),
-                    settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + facilityText(state, settlement, structure, condition)));
+            InfectionOverlayStage stage = contamination.get(structure.id());
+            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition, stage),
+                    settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition), stage)));
         }));
-        state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ));
-        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ));
+        state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
         FrontierResourceSitePlan.compile(state.bootstrap()).values().forEach(site -> addResourceSite(values, state, site));
         addRouteNetwork(values, state);
         return new FrontierReadabilityPlan(values);
@@ -33,10 +35,10 @@ public final class FrontierReadabilityPlan {
 
     public Map<SubjectId, FrontierObjectBoard> boards() { return boards; }
 
-    private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ) {
+    private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage) {
         boolean operational = state.isHiveOrganOperational(organ.id());
-        add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), operational ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING,
-                "HIVE\n" + organName(organ.kind()) + "\n" + (operational ? "ACTIVE" : "DISABLED · REPAIR NEEDED")));
+        add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), stage == null && operational ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING,
+                "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? "ACTIVE" : "DISABLED · REPAIR NEEDED", stage)));
     }
 
     private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site) {
@@ -75,8 +77,8 @@ public final class FrontierReadabilityPlan {
         return firstCrop.offset(4, 3, -2);
     }
 
-    private static FrontierObjectBoard.Tone tone(StructureCondition condition) {
-        return condition == StructureCondition.INTACT ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
+    private static FrontierObjectBoard.Tone tone(StructureCondition condition, InfectionOverlayStage stage) {
+        return condition == StructureCondition.INTACT && stage == null ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
     }
 
     private static FrontierObjectBoard.Tone fieldTone(ResourceSitePhase phase) {
@@ -122,6 +124,23 @@ public final class FrontierReadabilityPlan {
             case CONFLICT -> "DAMAGED · REPAIR NEEDED";
             case DESTROYED -> "LOST · REBUILD NEEDED";
         };
+    }
+
+    /** Pure semantic contact: a live infection column intersects one current object cell. */
+    private static Map<SubjectId, InfectionOverlayStage> contamination(FrontierWorldState state) {
+        Map<SubjectId, InfectionOverlayStage> values = new LinkedHashMap<>();
+        FrontierGrayboxPlan.compile(state).cells().values().forEach(cell -> {
+            var intensity = state.infection().get(InfectionCell.at(cell.position()));
+            if (intensity != null && intensity.value().raw() > 0L) {
+                values.merge(cell.ownerId(), InfectionOverlayStage.fromRaw(intensity.value().raw()),
+                        (left, right) -> left.ordinal() >= right.ordinal() ? left : right);
+            }
+        });
+        return Map.copyOf(values);
+    }
+
+    private static String withContamination(String stateText, InfectionOverlayStage stage) {
+        return stage == null ? stateText : stateText + "\nINFECTION · " + stage.name();
     }
 
     private static String facilityText(FrontierWorldState state, Settlement settlement, SettlementStructure structure, StructureCondition condition) {
