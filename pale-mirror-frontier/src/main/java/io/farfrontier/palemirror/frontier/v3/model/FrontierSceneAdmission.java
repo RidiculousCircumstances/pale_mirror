@@ -67,10 +67,16 @@ public final class FrontierSceneAdmission {
         return available(state, actors);
     }
 
-    /** An active operation or pending engagement reserves exact actors before a player loads them. */
+    /**
+     * A non-closed scene keeps every exact participant exclusively reserved, even if its owning
+     * operation has already become terminal due to restart recovery evidence.  Otherwise an
+     * ambient executor could race the still-authoritative UNKNOWN scene and force a quarantine.
+     */
     public static boolean reserved(FrontierWorldState state, SubjectId actorId) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorId, "actor id");
-        return state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
+        return state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
+                || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
                 && operation.participantIds().contains(actorId))
                 || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId));
     }

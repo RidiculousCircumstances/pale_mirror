@@ -167,6 +167,14 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(OperationStage.FAILED, after.operations().get(operation.id()).stage());
         assertEquals(Set.of(operation.participantIds().getFirst()), after.sceneLeases().get(leaseId).recoveryEvidence().orElseThrow().missingActorIds());
         assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, after.sceneLeases().get(leaseId).status());
+        SubjectId reservedParticipant = operation.participantIds().getFirst();
+        assertTrue(FrontierSceneAdmission.reserved(after, reservedParticipant));
+        CheckpointImage rejectedCheckpoint = runtime.checkpointImage().orElseThrow();
+        CommandId rejectedCommandId = new CommandId("command:ambient-recovery-evidence-overlap");
+        CommandResult rejected = runtime.submit(new FrontierCommand(1, rejectedCommandId, world, rejectedCheckpoint.revision(), rejectedCheckpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(rejectedCommandId),
+                new AmbientLeasePrepared(AmbientActorProcess.nextLease(after, reservedParticipant, rejectedCheckpoint.instant())))).orElseThrow();
+        assertEquals(RejectionCode.REJECTED_BY_POLICY, assertInstanceOf(CommandResult.Rejected.class, rejected).rejection().code());
         runtime.shutdown();
     }
 
