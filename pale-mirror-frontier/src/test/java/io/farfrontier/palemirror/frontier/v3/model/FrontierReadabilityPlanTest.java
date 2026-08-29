@@ -50,7 +50,7 @@ class FrontierReadabilityPlanTest {
         HiveOrgan heart = state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.HEART).findFirst().orElseThrow();
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(heart.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
-        assertTrue(board.text().endsWith("INFECTION · SATURATED"));
+        assertTrue(board.text().endsWith("INFECTED\nSATURATED"));
         assertTrue(!board.text().contains(heart.id().value()));
     }
 

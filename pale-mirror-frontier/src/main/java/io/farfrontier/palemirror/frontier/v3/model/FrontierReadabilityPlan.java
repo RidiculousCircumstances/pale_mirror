@@ -140,7 +140,7 @@ public final class FrontierReadabilityPlan {
     }
 
     private static String withContamination(String stateText, InfectionOverlayStage stage) {
-        return stage == null ? stateText : stateText + "\nINFECTION · " + stage.name();
+        return stage == null ? stateText : stateText + "\nINFECTED\n" + stage.name();
     }
 
     private static String facilityText(FrontierWorldState state, Settlement settlement, SettlementStructure structure, StructureCondition condition) {
