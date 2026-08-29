@@ -137,6 +137,25 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void duePlannerMayDurablyCancelItsOwnObsoleteActionWithoutASecondAcknowledgement() {
+        ScheduledAction action = scheduled("schedule:obsolete", "settlement:a", 10L, 1);
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, due) -> List.of(new ProposedEvent(due.subject(), new ScheduleEffect.Cancelled(due.id()))),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(action));
+
+        AdvanceResult result = engine.advanceTo(new SimInstant(10L), new WorkBudget(1, 1));
+
+        assertEquals("ACTIVE", result.status().kind().name());
+        assertTrue(engine.scheduledActions().isEmpty());
+        assertEquals(List.of("kernel.schedule_cancelled"), engine.transactions().getFirst().events().stream()
+                .map(event -> event.payload().type()).toList());
+    }
+
+    @Test
     void scheduleCreationRescheduleAndCancellationAreCommittedEvents() {
         InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false);
         ScheduledAction original = scheduled("schedule:created", "settlement:a", 10L, 1);

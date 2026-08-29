@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
@@ -83,5 +84,29 @@ class SupplyOperationProcessTest {
         assertEquals(unresolved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unresolved)));
         SceneLeaseRecoveryUnresolved payload = new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false);
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
+    }
+
+    @Test
+    void obsoleteProgressActionIsDurablyCancelledAfterItsOperationHasAlreadyFailed() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(
+                new WorldId("frontier:supply-terminal-progress"), 91L));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        SceneLeaseId leaseId = new SceneLeaseId("lease:supply-terminal-progress");
+        SceneLease lease = new SceneLease(leaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(),
+                engine.checkpoint().instant(), engine.checkpoint().revision().value(), SceneLeaseStatus.PREPARED,
+                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
+        FrontierWorldState failed = FrontierSceneLeaseStateSupport.recoveryUnresolved(
+                before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART),
+                new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false));
+        failed = failed.failOperation(operation.id());
+        ScheduledAction action = SupplyOperationProcess.operationProgress(operation, 2_650L);
+
+        List<ProposedEvent> planned = SupplyOperationProcess.planProgress(failed, action);
+
+        ScheduleEffect.Cancelled cancelled = assertInstanceOf(ScheduleEffect.Cancelled.class, planned.getFirst().payload());
+        assertEquals(action.id(), cancelled.scheduleId());
+        assertEquals(1, planned.size());
     }
 }

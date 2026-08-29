@@ -65,7 +65,12 @@ final class SupplyOperationProcess {
 
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         RouteOperation operation = state.operations().get(action.subject());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) return List.of();
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
+            // A terminal operation can retain an older persisted progress action after recovery.
+            // It is not harmless to return no events: record the exact cancellation rather than
+            // pretending the action never existed or allowing the kernel to quarantine.
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
+        }
         boolean heldAtIntercept = state.strategicPlans().routeEngagements().values().stream()
                 .anyMatch(engagement -> engagement.operationId().equals(operation.id()) && engagement.status() != RouteEngagementStatus.RESOLVED
                         && operation.route().get(operation.routeIndex()).equals(engagement.intercept()));

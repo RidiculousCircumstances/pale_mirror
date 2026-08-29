@@ -183,7 +183,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                     throw new IllegalStateException("due action emitted no completion event: " + action.id().value());
                 }
                 List<ProposedEvent> events = new ArrayList<>(planned.size() + 1);
-                events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
+                if (!plannerCompletes(action, planned)) {
+                    events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
+                }
                 events.addAll(planned);
                 CommandId cause = new CommandId("scheduler:" + action.id().value().replace(':', '/'));
                 completed.add(commit(CauseChain.root(cause), action.dueAt(), events, Optional.empty()));
@@ -222,6 +224,26 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     List<ScheduledAction> scheduledActions() {
         requireOwnerThread();
         return schedules.snapshot();
+    }
+
+    /**
+     * Normal due work is acknowledged by the kernel. A planner may instead durably cancel,
+     * consume, or reschedule its own due action when a prior physical observation has made its
+     * original domain transition obsolete. This is deliberately narrow: a planner cannot
+     * silently discard work, and a completion for any other action does not suppress the normal
+     * head acknowledgement.
+     */
+    private static boolean plannerCompletes(ScheduledAction action, List<ProposedEvent> planned) {
+        long completions = planned.stream().filter(event -> switch (event.payload()) {
+            case ScheduleEffect.Cancelled cancelled -> cancelled.scheduleId().equals(action.id());
+            case ScheduleEffect.Consumed consumed -> consumed.scheduleId().equals(action.id());
+            case ScheduleEffect.Rescheduled rescheduled -> rescheduled.scheduleId().equals(action.id());
+            default -> false;
+        }).count();
+        if (completions > 1L) {
+            throw new IllegalStateException("due action emits multiple completion effects: " + action.id().value());
+        }
+        return completions == 1L;
     }
 
     private TransactionId commit(CauseChain causes, SimInstant eventInstant, List<ProposedEvent> proposed,

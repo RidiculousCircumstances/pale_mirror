@@ -167,6 +167,13 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(OperationStage.FAILED, after.operations().get(operation.id()).stage());
         assertEquals(Set.of(operation.participantIds().getFirst()), after.sceneLeases().get(leaseId).recoveryEvidence().orElseThrow().missingActorIds());
         assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, after.sceneLeases().get(leaseId).status());
+        String operationProgressSchedule = "schedule:operation-progress-" + operation.id().value().substring("operation:".length());
+        assertTrue(runtime.checkpointImage().orElseThrow().schedules().stream()
+                .anyMatch(action -> action.id().value().equals(operationProgressSchedule)));
+        for (int tick = 0; tick < 100; tick++) runtime.tick(new WorkBudget(64, 512));
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+        assertTrue(runtime.checkpointImage().orElseThrow().schedules().stream()
+                .noneMatch(action -> action.id().value().equals(operationProgressSchedule)));
         SubjectId reservedParticipant = operation.participantIds().getFirst();
         assertTrue(FrontierSceneAdmission.reserved(after, reservedParticipant));
         CheckpointImage rejectedCheckpoint = runtime.checkpointImage().orElseThrow();
