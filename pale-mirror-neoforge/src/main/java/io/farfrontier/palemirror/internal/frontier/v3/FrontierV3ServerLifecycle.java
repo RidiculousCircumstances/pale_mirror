@@ -36,6 +36,21 @@ public final class FrontierV3ServerLifecycle {
 
     private FrontierV3ServerLifecycle() { }
 
+    /**
+     * Reports the physical-world owner selected at server launch.
+     *
+     * <p>This is deliberately a launch-mode decision rather than a runtime-health decision.
+     * A quarantined v3 world must stay visibly quarantined; it must never permit the frozen v2
+     * source graybox to resume writing the same dimension as an implicit fallback.</p>
+     */
+    public static boolean ownsPhysicalWorld(MinecraftServer server) {
+        Objects.requireNonNull(server, "server");
+        return v3LaunchOwnsPhysicalWorld();
+    }
+
+    /** Package-visible so the launch-mode exclusion remains directly testable without a server fixture. */
+    static boolean v3LaunchOwnsPhysicalWorld() { return enabled(); }
+
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         STOPPING.remove(server);

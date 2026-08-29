@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.debug.DebugCommandRegistrar;
 import io.farfrontier.palemirror.internal.presentation.ScenarioCommandPresentation;
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle;
 import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import net.minecraft.commands.CommandSourceStack;
@@ -47,7 +48,10 @@ final class PaleMirrorCommandRegistrar {
                             context.getSource().sendSuccess(() -> Component.literal("Advanced " + count + " simulation step(s); produced " + events + " event(s)."), true);
                             return events;
                 }))));
-        LiteralArgumentBuilder<CommandSourceStack> frontier = Commands.literal("frontier").requires(source -> source.hasPermission(2));
+        // The source-parity runtime is frozen legacy. It must never receive a command which
+        // publishes into the dimension selected for a v3 launch.
+        LiteralArgumentBuilder<CommandSourceStack> frontier = Commands.literal("frontier").requires(source -> source.hasPermission(2)
+                && !FrontierV3ServerLifecycle.ownsPhysicalWorld(source.getServer()));
         frontier.then(Commands.literal("status").executes(context -> {
             context.getSource().sendSuccess(() -> Component.literal(SourceGrayboxRuntime.forServer(context.getSource().getServer()).status()), false);
             return 1;

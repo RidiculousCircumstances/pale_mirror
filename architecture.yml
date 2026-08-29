@@ -81,7 +81,7 @@ invariants:
   - statement: "Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions."
   - statement: "Unknown or player-owned block changes are conflicts and must not be overwritten by default."
   - id: "frontier-v3-greenfield-isolation"
-    statement: "Frontier v3 is a fresh-world pure-Java runtime in pale-mirror-frontier and must not import, invoke, fixture-gate or share canonical state with pale-mirror-domain, frontier.reference, SourceGraybox, Python, Minecraft or NeoForge."
+    statement: "Frontier v3 is a fresh-world pure-Java runtime in pale-mirror-frontier and must not import, invoke, fixture-gate or share canonical state with pale-mirror-domain, frontier.reference, SourceGraybox, Python, Minecraft or NeoForge. A launch with pale_mirror.frontier_v3.enabled=true exclusively owns pale_mirror:frontier_graybox: frozen v2 is paused, its graybox commands reject, and a v3 quarantine never falls back to v2; v2 remains independently runnable only in a non-v3 launch."
   - id: "frontier-v3-single-writer"
     statement: "One FrontierEngine mutation lane on the Minecraft server thread owns each v3 world's canonical revision; commands and due actions validate and emit immutable events before an atomic state transition, while workers, adapters, entities, renderers and persistence callbacks never mutate canonical state."
   - id: "frontier-v3-event-time"

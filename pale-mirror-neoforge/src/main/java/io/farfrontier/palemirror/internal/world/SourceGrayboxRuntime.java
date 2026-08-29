@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.world;
 
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
@@ -79,6 +80,7 @@ public final class SourceGrayboxRuntime {
 
     /** Returns true only after the source graybox has become the active campaign clock. */
     public boolean tick() {
+        if (FrontierV3ServerLifecycle.ownsPhysicalWorld(server)) return false;
         if (!data.activated()) return false;
         ServerLevel graybox = grayboxLevel();
         // An external explosion was captured from the non-cancellable
@@ -146,6 +148,7 @@ public final class SourceGrayboxRuntime {
 
     /** Explicit activation prevents a legacy campaign clock and source clock from running together. */
     public ReferenceGrayboxSnapshot activate() {
+        requireExclusivePhysicalWorld();
         ServerLevel graybox = grayboxLevel();
         SourceGrayboxWorldBoundary.enforce(graybox);
         data.activate(graybox.getGameTime());
@@ -154,6 +157,7 @@ public final class SourceGrayboxRuntime {
     }
 
     public void advance(int days) {
+        requireExclusivePhysicalWorld();
         data.advance(days);
         if (data.activated()) {
             ServerLevel graybox = grayboxLevel();
@@ -177,8 +181,15 @@ public final class SourceGrayboxRuntime {
         return data.activated();
     }
 
+    private void requireExclusivePhysicalWorld() {
+        if (FrontierV3ServerLifecycle.ownsPhysicalWorld(server)) {
+            throw new IllegalStateException("Frontier v3 owns pale_mirror:frontier_graybox for this server launch");
+        }
+    }
+
     /** Explicit operator-controlled pacing transition; it never changes source state itself. */
     public boolean changeClockProfile(String profileId) {
+        requireExclusivePhysicalWorld();
         SourceGrayboxClockProfile profile = SourceGrayboxClockProfile.fromId(profileId);
         return data.changeClockProfile(profile, grayboxLevel().getGameTime());
     }

@@ -34,6 +34,11 @@ the Python parity port or an adapter over `ReferenceGrayboxSimulation`.
   v2 save.
 - Existing v2 runtime remains frozen and isolated until the v3 cutover gate.
   There is no v3-to-v2 fallback and no shared canonical state.
+- A launch with `pale_mirror.frontier_v3.enabled=true` exclusively owns
+  `pale_mirror:frontier_graybox`: v2 ticking and source-graybox commands are
+  disabled for that launch, including after a v3 quarantine. v2 remains
+  independently runnable only on a non-v3 launch; it may never republish into
+  a v3 physical world.
 - General techniques learned from v2 may become new requirements or tests, but
   production v3 code may not import or delegate to v2 implementations.
 

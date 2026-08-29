@@ -109,7 +109,7 @@ public final class PaleMirrorRuntime {
         PaleMirrorRuntime runtime = INSTANCES.remove(server);
         if (runtime != null) { runtime.distantHorizons.close(); runtime.debug.close(); }
     }
-    public void tick() { distantHorizons.tick(server); debug.tick(); if (SourceGrayboxRuntime.forServer(server).tick()) return;
+    public void tick() { distantHorizons.tick(server); debug.tick(); if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.ownsPhysicalWorld(server)) return; if (SourceGrayboxRuntime.forServer(server).tick()) return;
         work.beginTick();
         long gameTick = server.overworld().getGameTime();
         domainServices.setThreatTierPolicy(ThreatTierDefinitions.current());
