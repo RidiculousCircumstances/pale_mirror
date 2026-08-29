@@ -44,7 +44,7 @@ class FrontierWorldRuntimeDefinitionTest {
         org.junit.jupiter.api.Assertions.assertTrue(projection.residentCount() >= 240 && projection.residentCount() <= 480);
         assertEquals(2, projection.itemStackCount());
         assertEquals(0, projection.activeProductionJobCount());
-        assertEquals(2, projection.infectedCellCount());
+        assertEquals(18, projection.infectedCellCount());
     }
 
     @Test
@@ -207,7 +207,7 @@ class FrontierWorldRuntimeDefinitionTest {
         for (long tick = 100L; tick <= 3_600L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
 
         FrontierWorldProjection projection = engine.projection(ProjectionQuery.summary());
-        assertEquals(2, projection.infectedCellCount());
+        assertEquals(18, projection.infectedCellCount());
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().values().stream()
                 .filter(task -> task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM).findFirst().orElseThrow().status());

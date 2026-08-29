@@ -38,7 +38,13 @@ class FrontierWorldStateTest {
         assertTrue(state.operations().isEmpty());
         assertTrue(state.physicalIntents().isEmpty());
         assertTrue(state.structureConditions().values().stream().allMatch(condition -> condition == StructureCondition.INTACT));
-        assertEquals(2, state.infection().size());
+        assertEquals(18, state.infection().size());
+        for (HiveNest nest : state.bootstrap().hive().seedNests()) {
+            InfectionCell centre = InfectionCell.at(nest.anchor());
+            assertEquals(new FixedRatio(new FixedScalar(750_000L)), state.infection().get(centre));
+            assertEquals(new FixedRatio(new FixedScalar(500_000L)), state.infection().get(new InfectionCell(centre.x() + 1, centre.z())));
+            assertEquals(new FixedRatio(new FixedScalar(250_000L)), state.infection().get(new InfectionCell(centre.x() + 1, centre.z() + 1)));
+        }
     }
 
     @Test
@@ -55,7 +61,7 @@ class FrontierWorldStateTest {
         assertEquals(StructureCondition.DAMAGED, changed.structureConditions().get(structure));
         assertEquals(HALF, changed.infection().get(cell));
         assertEquals(new InfectionCell(-1, -1), cell);
-        assertEquals(2, changed.withInfection(cell, new FixedRatio(FixedScalar.ZERO)).infection().size());
+        assertEquals(18, changed.withInfection(cell, new FixedRatio(FixedScalar.ZERO)).infection().size());
         assertThrows(IllegalArgumentException.class, () -> state.withActorLocation(resident, new BlockPosition(512, 64, 0)));
         assertThrows(IllegalArgumentException.class, () -> state.withStructureCondition(new SubjectId("structure:missing"), StructureCondition.DESTROYED));
     }

@@ -120,8 +120,11 @@ physical effect can damage the correct subject without reducing a building to
 one arbitrary health number.
 
 Territory, navigation and infection use separate spatial resolutions. The
-initial infection surface is a sparse 4×4-block cell field; each materialized
-cell is one complete sixteen-column surface patch whose measured physical
+initial infection surface is a sparse 4×4-block cell field. Each seed nest
+begins with a real 3×3 cluster of those exact cells (saturated core, active
+cardinal cells and infected corners), giving its initial territory a readable
+12×12 physical footprint without a presentation-only population or area
+multiplier. Each materialized cell is one complete sixteen-column surface patch whose measured physical
 positions are retained as bounded provenance, while its intensity remains one
 canonical value. Before its first block write the surface patch records those
 exact columns as `PREPARED`; recovery may activate only a complete matching
@@ -348,7 +351,9 @@ command.
 
 Graybox uses normal Villagers and Zombies, coloured cubes/rectangles, visible
 route corridors, storage containers, object-local boards and strongly distinct
-hive silhouettes. One board belongs to one object. Geometry and motion must
+hive silhouettes. Bioform role markers use distinct colours and prevent only
+vanilla daylight ignition; actual fire and explosion effects remain physical
+events to observe and reconcile. One board belongs to one object. Geometry and motion must
 communicate function before text; labels explain state, cause, risk and possible
 action without exposing opaque IDs to ordinary players.
 

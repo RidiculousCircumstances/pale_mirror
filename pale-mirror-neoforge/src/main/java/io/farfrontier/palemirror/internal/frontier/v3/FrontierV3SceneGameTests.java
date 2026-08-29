@@ -43,9 +43,11 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
@@ -123,6 +125,9 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(entity instanceof Zombie, "the scene body must retain the canonical bioform kind");
         helper.assertTrue(((Zombie) entity).hasEffect(MobEffects.FIRE_RESISTANCE),
                 "a graybox hive bioform must survive daylight without becoming an unaccounted vanilla death");
+        helper.assertTrue(((Zombie) entity).getItemBySlot(EquipmentSlot.HEAD).is(Items.LIME_WOOL)
+                        && !((Zombie) entity).getItemBySlot(EquipmentSlot.HEAD).isDamageableItem(),
+                "a WORKER bioform must carry its unbreakable lime role marker to prevent vanilla daylight ignition");
         entity.discard();
         helper.succeed();
     }
@@ -160,6 +165,8 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform)) instanceof net.minecraft.world.entity.monster.Zombie, "bioform identity maps to Zombie");
         helper.assertTrue(((Zombie) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform))).hasEffect(MobEffects.FIRE_RESISTANCE),
                 "an ambient graybox bioform must survive daylight without becoming an unaccounted vanilla death");
+        helper.assertTrue(!((Zombie) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform))).getItemBySlot(EquipmentSlot.HEAD).isEmpty(),
+                "an ambient bioform has a physical role marker that suppresses vanilla daylight flames");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
                         new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "a repeated loaded-chunk pass never duplicates the exact resident");

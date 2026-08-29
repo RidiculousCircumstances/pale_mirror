@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
+import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
@@ -22,10 +23,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.IdentityHashMap;
@@ -120,6 +124,7 @@ final class FrontierV3AmbientActorExecutor {
         UUID entityId = entityId(state, actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
         if (existing != null) {
             if (!owned(existing, actorId, bioform)) return Result.CONFLICT;
+            if (existing instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
             // A recovered PREPARED body has not yet crossed the canonical HOT boundary.
             // Keep it inert until that durable transition is accepted.
             if (existing instanceof Mob body) {
@@ -138,7 +143,7 @@ final class FrontierV3AmbientActorExecutor {
         // The body exists before the durable PREPARED -> HOT acknowledgement. Do not let
         // vanilla AI move it across that crash window.
         body.setNoAi(true);
-        if (body instanceof Zombie zombie) configureBioform(zombie);
+        if (body instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
         body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + actorId.value())); body.setCustomNameVisible(false);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
@@ -242,15 +247,33 @@ final class FrontierV3AmbientActorExecutor {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .map(Bioform::id).anyMatch(actorId::equals);
     }
+    static BioformRole bioformRole(FrontierWorldState state, SubjectId actorId) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .filter(bioform -> bioform.id().equals(actorId)).map(Bioform::role).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("not a canonical Frontier v3 bioform: " + actorId));
+    }
     static boolean owned(Entity entity, SubjectId actorId, boolean bioform) {
         return !entity.isRemoved() && actorId.value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && (bioform ? entity instanceof Zombie : entity instanceof Villager)
                 && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY));
     }
     /** The graybox Zombie is a hive creature, not a vanilla undead exposed to daylight. */
-    static void configureBioform(Zombie body) {
+    static void configureBioform(Zombie body, BioformRole role) {
         if (!body.hasEffect(MobEffects.FIRE_RESISTANCE)) {
             body.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS, 0, true, false));
+        }
+        // Fire resistance prevents daylight damage but vanilla Zombies still render as burning.
+        // The non-damageable role marker suppresses only vanilla sunlight ignition; real fire and
+        // explosion effects remain visible and flow through their normal physical observation path.
+        body.setCanPickUpLoot(false);
+        if (body.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) {
+            body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(switch (role) {
+                case WORKER -> Items.LIME_WOOL;
+                case SCOUT -> Items.CYAN_WOOL;
+                case GUARD -> Items.PURPLE_WOOL;
+                case BOMBER -> Items.RED_WOOL;
+            }));
+            body.setDropChance(EquipmentSlot.HEAD, 0.0F);
         }
     }
     private static void pursueLocalGoal(Mob body, BlockPosition goal) {
