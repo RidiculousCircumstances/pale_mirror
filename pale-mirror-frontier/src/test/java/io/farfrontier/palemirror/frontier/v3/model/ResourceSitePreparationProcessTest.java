@@ -32,6 +32,27 @@ class ResourceSitePreparationProcessTest {
     }
 
     @Test
+    void trustedExecutorCanStartPreparedFieldThroughThePublicCommandBoundary() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:resource-site-command"), 77L));
+        for (long tick = 100L; tick <= 4_100L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+
+        FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        PhysicalIntent intent = prepared.physicalIntents().values().stream()
+                .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION)
+                .findFirst().orElseThrow();
+        var checkpoint = engine.checkpoint();
+        var command = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:resource-site-preparation-running");
+
+        assertTrue(engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, command, checkpoint.worldId(), checkpoint.revision(),
+                checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(command),
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted);
+        FrontierWorldState running = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(PhysicalIntentStatus.RUNNING, running.physicalIntents().get(intent.id()).status());
+    }
+
+    @Test
     void confirmedPreparationMakesOneGrowingFieldAndPersistsItsFirstColdStage() {
         Prepared prepared = prepared();
         FrontierWorldState running = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());

@@ -354,6 +354,12 @@ public final class FrontierWorldRuntimeDefinition {
             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
+        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
+            if (!subject.equals(intent.causeSubjectId())) {
+                throw new IllegalArgumentException("resource-site preparation transition lacks site ownership");
+            }
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site harvest transition lacks site ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
