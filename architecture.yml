@@ -240,7 +240,7 @@ critical_flows:
     verification: "critical-code"
   - id: "frontier-v3-hot-cold-scene"
     lifecycle: "active-development"
-    path: "naturally loaded player demand -> durable PREPARED scene or ambient lease -> exact owned loaded-chunk bodies -> HOT local execution -> DRAINING capture -> durable CLOSED lease and scheduled COLD continuation; absent/conflicting restart bodies remain explicit UNKNOWN"
+    path: "naturally loaded player demand -> durable PREPARED scene or ambient lease -> exact owned loaded-chunk bodies -> HOT local execution -> DRAINING capture -> durable CLOSED lease and scheduled COLD continuation; a before-effect ambient PREPARED lease remains inspectable and may finish materialization after restart, while absent/conflicting previously HOT/DRAINING bodies remain explicit UNKNOWN"
     owner: "FrontierWorldState scene and ambient leases plus NeoForge scene/ambient executors; canonical local goals constrain ambient HOT movement"
     verification: "critical-code"
   - id: "frontier-v3-physical-feedback"

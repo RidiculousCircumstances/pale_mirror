@@ -93,7 +93,16 @@ final class FrontierV3AmbientActorExecutor {
     static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BlockPosition canonicalPosition) {
         if (!state.actorLocations().containsKey(actorId)) return Result.CONFLICT;
         UUID entityId = entityId(state, actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
-        if (existing != null) return owned(existing, actorId, bioform) ? Result.CURRENT : Result.CONFLICT;
+        if (existing != null) {
+            if (!owned(existing, actorId, bioform)) return Result.CONFLICT;
+            // A recovered PREPARED body has not yet crossed the canonical HOT boundary.
+            // Keep it inert until that durable transition is accepted.
+            if (existing instanceof Mob body) {
+                body.getNavigation().stop();
+                body.setNoAi(true);
+            }
+            return Result.CURRENT;
+        }
         BlockPos anchor = new BlockPos(canonicalPosition.x(), canonicalPosition.y(), canonicalPosition.z());
         if (!level.hasChunkAt(anchor)) return Result.DEFERRED;
         BlockPos position = new BlockPos(anchor.getX(), level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ()), anchor.getZ());
@@ -101,6 +110,9 @@ final class FrontierV3AmbientActorExecutor {
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
         body.setUUID(entityId); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
+        // The body exists before the durable PREPARED -> HOT acknowledgement. Do not let
+        // vanilla AI move it across that crash window.
+        body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie);
         body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + actorId.value())); body.setCustomNameVisible(false);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
@@ -191,6 +203,7 @@ final class FrontierV3AmbientActorExecutor {
         }
     }
     private static void pursueLocalGoal(Mob body, BlockPosition goal) {
+        body.setNoAi(false);
         if (body.tickCount % 20 != 0) return;
         body.getNavigation().moveTo(goal.x() + 0.5D, goal.y(), goal.z() + 0.5D, body instanceof Zombie ? 0.85D : 0.70D);
     }

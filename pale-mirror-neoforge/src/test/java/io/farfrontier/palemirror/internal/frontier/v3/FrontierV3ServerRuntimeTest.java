@@ -306,6 +306,29 @@ class FrontierV3ServerRuntimeTest {
         recovered.shutdown();
     }
 
+    @Test
+    void restartRetainsPreparedAmbientLeaseForLoadedChunkMaterialization(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:ambient-prepared-recovery");
+        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        SubjectId resident = new SubjectId("resident:1-1");
+        CheckpointImage before = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(before.canonicalState());
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, resident, before.instant());
+        submitAmbient(runtime, world, new AmbientLeasePrepared(lease), "command:ambient-prepared-recovery");
+        runtime.shutdown();
+
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        assertEquals(0, FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(recovered));
+        FrontierWorldState prepared = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
+        assertEquals(AmbientLeaseStatus.PREPARED, prepared.ambientLeases().get(resident).status());
+        assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownAmbientLeaseCount());
+        recovered.shutdown();
+    }
+
     private static void transitionScene(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
                                         WorldId world, SceneLeaseId leaseId, SceneLeaseStatus status, String command) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();

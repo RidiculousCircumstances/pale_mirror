@@ -13,7 +13,11 @@ final class FrontierV3AmbientLeaseRestartSafety {
         if (state == null) return 0;
         int count = 0;
         for (var lease : state.ambientLeases().values().stream().sorted(java.util.Comparator.comparing(value -> value.actorId().value())).toList()) {
-            if (lease.status() == AmbientLeaseStatus.PREPARED || lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING) {
+            // PREPARED is a durable before-effect record: no physical body has yet been
+            // acknowledged as HOT, so a naturally loaded chunk can still inspect or create its
+            // one expected UUID after restart. Only a previously HOT/DRAINING body has an
+            // uninspected external state that must fail closed as UNKNOWN.
+            if (lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING) {
                 FrontierV3CommandSubmission.submit(runtime, "ambient-restart-unknown", lease.actorId().value(),
                         new AmbientLeaseTransition(lease.actorId(), AmbientLeaseStatus.UNKNOWN_AFTER_RESTART));
                 count++;
