@@ -32,6 +32,10 @@ final class PhysicalEffectObservationPayloadCodec {
             output.writeByte(8); ids(output, production); FrontierWorldPayloadCodecs.writeSubject(output, production.inputItemId());
             FrontierWorldPayloadCodecs.writeSubject(output, production.outputItemId()); output.writeByte(production.inputCount()); output.writeByte(production.outputCount());
         }
+        else if (observation instanceof CargoLoadObservation loading) {
+            output.writeByte(9); ids(output, loading); FrontierWorldPayloadCodecs.writeSubject(output, loading.contractId());
+            FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, loading.itemId()); output.writeByte(loading.itemCount());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -47,6 +51,8 @@ final class PhysicalEffectObservationPayloadCodec {
             case 7 -> new ResourceSitePreparationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
             case 8 -> new ProductionTransformationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
+            case 9 -> new CargoLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

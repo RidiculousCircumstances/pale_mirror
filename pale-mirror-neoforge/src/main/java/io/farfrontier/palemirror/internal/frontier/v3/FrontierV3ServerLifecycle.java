@@ -146,6 +146,7 @@ public final class FrontierV3ServerLifecycle {
                 // Observe player custody before passive surface drift inspection can classify it.
                 FrontierV3InventoryObservationExecutor.tick(physicalWorld, runtime);
                 FrontierV3CargoCarrierObservationExecutor.tick(physicalWorld, runtime);
+                FrontierV3CargoLoadingExecutor.tick(physicalWorld, runtime);
                 FrontierV3ContainerSurfaceExecutor.tick(physicalWorld, runtime);
                 FrontierV3ProductionTransformationExecutor.tick(physicalWorld, runtime);
                 FrontierV3ExactItemConsumptionExecutor.tick(physicalWorld, runtime);

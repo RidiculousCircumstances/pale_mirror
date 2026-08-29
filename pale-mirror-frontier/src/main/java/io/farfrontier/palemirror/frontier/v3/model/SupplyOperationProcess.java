@@ -54,12 +54,50 @@ final class SupplyOperationProcess {
                 && value.count() == contract.itemCount() && value.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))).findFirst().orElse(null);
         if (item == null || !participantsAvailable(state, settlement)) return blockPreparation(state, preparation);
+        ContainerSurface surface = state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id()));
+        if (surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE) {
+            return List.of(new ProposedEvent(contract.settlementId(), new PhysicalIntentPrepared(cargoLoadingIntent(contract, item, surface))));
+        }
+        return cargoLoadedEvents(state, contract, item, action.dueAt().ticks(), autonomousInterception);
+    }
+
+    /** Continues a physical active-depot cargo loading only after its exact removal receipt. */
+    static List<ProposedEvent> planCargoLoadingTransition(FrontierWorldState state, PhysicalIntent intent,
+                                                          PhysicalIntentTransition transition, long now) {
+        CargoLoadingStateSupport.validateIntent(state, intent);
+        SupplyContract contract = state.contracts().get(intent.causeSubjectId());
+        ExactItemStack item = state.inventory().items().get(intent.subjectIds().get(2));
+        StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
+        if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            return List.of(new ProposedEvent(contract.settlementId(), transition), transition(preparation, StrategicTaskStatus.BLOCKED),
+                    transition(deliveryTask(state, preparation, StrategicTaskStatus.PENDING), StrategicTaskStatus.BLOCKED));
+        }
+        if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(contract.settlementId(), transition));
+        if (!(transition.observation().orElseThrow() instanceof CargoLoadObservation receipt)) {
+            throw new IllegalArgumentException("cargo loading confirmation requires its exact removal receipt");
+        }
+        CargoLoadingStateSupport.validateReceipt(intent, receipt);
+        return cargoLoadedEvents(state, contract, item, now, true, transition);
+    }
+
+    private static List<ProposedEvent> cargoLoadedEvents(FrontierWorldState state, SupplyContract contract, ExactItemStack item,
+                                                          long now, boolean autonomousInterception) {
+        return cargoLoadedEvents(state, contract, item, now, autonomousInterception, null);
+    }
+
+    private static List<ProposedEvent> cargoLoadedEvents(FrontierWorldState state, SupplyContract contract, ExactItemStack item,
+                                                          long now, boolean autonomousInterception, PhysicalIntentTransition physicalTransition) {
+        StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
+        StrategicTask delivery = deliveryTask(state, preparation, StrategicTaskStatus.PENDING);
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), contract.settlementId());
         RouteOperation operation = routeOperation(state, contract, settlement);
-        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
+        List<ProposedEvent> events = new ArrayList<>();
+        if (physicalTransition != null) events.add(new ProposedEvent(contract.settlementId(), physicalTransition));
+        events.addAll(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
                 transition(preparation, StrategicTaskStatus.COMPLETED), transition(delivery, StrategicTaskStatus.ACTIVE),
                 new ProposedEvent(contract.settlementId(), new OperationCreated(operation))));
-        if (autonomousInterception) events.add(schedule(StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), operation, action.dueAt().ticks() + 20L)));
-        events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+        if (autonomousInterception) events.add(schedule(StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), operation, now + 20L)));
+        events.add(schedule(operationProgress(operation, now + 100L)));
         return List.copyOf(events);
     }
 
@@ -116,6 +154,14 @@ final class SupplyOperationProcess {
     private static ScheduledAction cargoLoad(SupplyContract contract, long due) { return new ScheduledAction(new ScheduleId("schedule:cargo-load-" + contract.id().value().substring("contract:".length())),
             new SimInstant(due), 0, contract.id(), "frontier.supply.cargo.load", 1); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+
+    private static PhysicalIntent cargoLoadingIntent(SupplyContract contract, ExactItemStack item, ContainerSurface surface) {
+        BlockPosition position = surface.position();
+        return new PhysicalIntent(new PhysicalIntentId("intent:cargo-load-" + contract.id().value().substring("contract:".length())),
+                PhysicalIntentKind.CARGO_LOADING, PhysicalIntentStatus.PREPARED, contract.id(), List.of(contract.id(), contract.cargoId(), item.id()),
+                new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
+                PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED);
+    }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) {
         return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status));
     }

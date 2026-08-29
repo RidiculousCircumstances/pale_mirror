@@ -15,5 +15,7 @@ public enum PhysicalIntentKind {
     /** Loaded-chunk exact harvest of one mature renewable site into one named output stack. */
     RESOURCE_SITE_HARVEST,
     /** One exact owned input stack becomes one named exact output stack in its physical slot. */
-    PRODUCTION_TRANSFORMATION
+    PRODUCTION_TRANSFORMATION,
+    /** One exact active-depot stack leaves its physical slot before becoming a named cargo batch. */
+    CARGO_LOADING
 }

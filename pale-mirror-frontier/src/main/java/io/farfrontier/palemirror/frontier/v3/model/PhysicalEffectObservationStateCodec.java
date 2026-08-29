@@ -61,6 +61,9 @@ final class PhysicalEffectObservationStateCodec {
             } else if (observation instanceof ProductionTransformationObservation production) {
                 output.writeByte(9); string(output, production.id().value()); string(output, production.intentId().value()); string(output, production.inputItemId().value());
                 string(output, production.outputItemId().value()); output.writeByte(production.inputCount()); output.writeByte(production.outputCount());
+            } else if (observation instanceof CargoLoadObservation loading) {
+                output.writeByte(10); string(output, loading.id().value()); string(output, loading.intentId().value()); string(output, loading.contractId().value());
+                string(output, loading.cargoId().value()); string(output, loading.itemId().value()); output.writeByte(loading.itemCount());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -80,6 +83,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 7 -> new ResourceSitePreparationObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 case 8 -> harvest(input, id, intentId);
                 case 9 -> new ProductionTransformationObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
+                case 10 -> new CargoLoadObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

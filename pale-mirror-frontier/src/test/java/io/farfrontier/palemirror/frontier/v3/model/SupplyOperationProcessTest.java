@@ -1,6 +1,9 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -12,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -108,5 +112,76 @@ class SupplyOperationProcessTest {
         ScheduleEffect.Cancelled cancelled = assertInstanceOf(ScheduleEffect.Cancelled.class, planned.getFirst().payload());
         assertEquals(action.id(), cancelled.scheduleId());
         assertEquals(1, planned.size());
+    }
+
+    @Test
+    void activeDepotLoadsCargoOnlyAfterExactPhysicalRemovalReceiptAndBlocksOnUnknownOutcome() {
+        FrontierWorldState state = loadingState("frontier:cargo-loading");
+        SupplyContract contract = state.contracts().values().iterator().next();
+        ScheduledAction action = new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:cargo-loading-test"),
+                new SimInstant(500L), 0, contract.id(), "frontier.supply.cargo.load", 1);
+
+        List<ProposedEvent> prepared = SupplyOperationProcess.planCargoLoad(state, action, false);
+        assertEquals(1, prepared.size(), "an active owned depot must not transfer custody before Minecraft removes the stack");
+        PhysicalIntent intent = assertInstanceOf(PhysicalIntentPrepared.class, prepared.getFirst().payload()).intent();
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING, intent.kind());
+        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        ExactItemStack item = state.inventory().items().get(intent.subjectIds().get(2));
+        CargoLoadObservation receipt = new CargoLoadObservation(new PhysicalObservationId("observation:cargo-loading-test"), intent.id(), contract.id(),
+                contract.cargoId(), item.id(), item.count());
+        PhysicalIntentTransition receiptTransition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(receiptTransition, codecs.decode(receiptTransition.type(), codecs.encode(receiptTransition)),
+                "the exact physical removal receipt survives the ordered WAL payload boundary");
+
+        List<ProposedEvent> confirmed = SupplyOperationProcess.planCargoLoadingTransition(state, intent,
+                receiptTransition, 501L);
+        assertInstanceOf(PhysicalIntentTransition.class, confirmed.getFirst().payload());
+        assertEquals(PhysicalIntentStatus.CONFIRMED, ((PhysicalIntentTransition) confirmed.getFirst().payload()).status());
+        assertInstanceOf(CargoLoaded.class, confirmed.get(1).payload());
+        assertEquals(new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(contract.settlementId()), 1), item.custody(),
+                "before confirmed receipt the canonical stack remains in its exact depot slot");
+
+        state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        state = state.loadContractCargo(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())));
+        assertEquals(new InventoryCustody.Cargo(contract.cargoId()), state.inventory().items().get(item.id()).custody());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
+                "the exact removal receipt and cargo transfer survive snapshot recovery");
+
+        FrontierWorldState blocked = loadingState("frontier:cargo-loading-unknown");
+        SupplyContract blockedContract = blocked.contracts().values().iterator().next();
+        PhysicalIntent blockedIntent = assertInstanceOf(PhysicalIntentPrepared.class,
+                SupplyOperationProcess.planCargoLoad(blocked, actionFor(blockedContract), false).getFirst().payload()).intent();
+        blocked = blocked.preparePhysicalIntent(blockedIntent);
+        List<ProposedEvent> unknown = SupplyOperationProcess.planCargoLoadingTransition(blocked, blockedIntent,
+                new PhysicalIntentTransition(blockedIntent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()), 501L);
+        assertEquals(List.of(PhysicalIntentTransition.class, StrategicTaskTransition.class, StrategicTaskTransition.class),
+                unknown.stream().map(event -> event.payload().getClass()).toList());
+        assertEquals(StrategicTaskStatus.BLOCKED, ((StrategicTaskTransition) unknown.get(1).payload()).status());
+        assertEquals(StrategicTaskStatus.BLOCKED, ((StrategicTaskTransition) unknown.get(2).payload()).status());
+    }
+
+    private static FrontierWorldState loadingState(String world) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId(world), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        ExactItemStack bread = new ExactItemStack(new SubjectId("item:cargo-loading-bread"), settlement.id(), "minecraft:bread", 64,
+                new InventoryCustody.ContainerSlot(depot, 1));
+        state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE).store(bread));
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:cargo-loading"), settlement.id(),
+                StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask preparation = new StrategicTask(new SubjectId("task:cargo-loading-prepare"), objective.id(), settlement.id(),
+                StrategicTaskKind.PREPARE_BREAD_CARGO, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO), List.of(), StrategicTaskStatus.ACTIVE);
+        StrategicTask delivery = new StrategicTask(new SubjectId("task:cargo-loading-deliver"), objective.id(), settlement.id(),
+                StrategicTaskKind.DELIVER_BREAD_TO_HIVE, Optional.empty(), List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE,
+                StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD), List.of(preparation.id()), StrategicTaskStatus.PENDING);
+        return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(preparation).addTask(delivery))
+                .createSupplyContract(new SupplyContract(new SubjectId("contract:supply-1-1"), settlement.id(), state.bootstrap().hive().id(),
+                        new SubjectId("cargo:supply-1-1"), "minecraft:bread", 64, ContractStatus.ORDERED));
+    }
+
+    private static ScheduledAction actionFor(SupplyContract contract) {
+        return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:cargo-loading-unknown"),
+                new SimInstant(500L), 0, contract.id(), "frontier.supply.cargo.load", 1);
     }
 }

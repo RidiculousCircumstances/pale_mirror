@@ -34,6 +34,8 @@ final class FrontierPhysicalIntentCommandProcess {
                 case RESOURCE_SITE_HARVEST -> new CommandPlan.Accepted(
                         ResourceSiteHarvestProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
                 case PRODUCTION_TRANSFORMATION -> productionTransition(state, intent, transition);
+                case CARGO_LOADING -> new CommandPlan.Accepted(SupplyOperationProcess.planCargoLoadingTransition(
+                        state, intent, transition, command.submittedAt().ticks()));
                 case CARGO_HANDOFF -> routeTransition(state, intent, transition);
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
                 case EXACT_ITEM_CONSUMPTION -> consumptionTransition(state, intent, transition, command);

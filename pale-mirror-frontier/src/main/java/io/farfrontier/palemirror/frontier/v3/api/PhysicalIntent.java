@@ -73,6 +73,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("production transformation must bind one job, input and output without an area radius");
                 }
             }
+            case CARGO_LOADING -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED || subjectIds.size() != 3) {
+                    throw new IllegalArgumentException("cargo loading must bind contract, cargo and exact depot stack without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");

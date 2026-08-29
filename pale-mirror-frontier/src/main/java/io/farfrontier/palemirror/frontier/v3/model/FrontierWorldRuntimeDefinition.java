@@ -336,6 +336,7 @@ public final class FrontierWorldRuntimeDefinition {
             ProductionTransformationStateSupport.validateIntent(state, intent);
             return state.preparePhysicalIntent(intent);
         }
+        if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
@@ -391,6 +392,7 @@ public final class FrontierWorldRuntimeDefinition {
             if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("production transformation transition lacks settlement ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
+        if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.reduceTransition(state, subject, intent, transition);
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
             if (job != null) {
