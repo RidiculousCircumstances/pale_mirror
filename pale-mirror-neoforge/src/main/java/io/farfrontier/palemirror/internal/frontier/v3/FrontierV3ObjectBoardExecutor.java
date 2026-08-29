@@ -82,10 +82,10 @@ final class FrontierV3ObjectBoardExecutor {
         CompoundTag data = display.saveWithoutId(new CompoundTag());
         Component text = Component.literal(board.text()).withStyle(colour(board.tone()), ChatFormatting.BOLD);
         data.putString(Display.TextDisplay.TAG_TEXT, Component.Serializer.toJson(text, display.registryAccess()));
-        data.putInt("line_width", 256); data.putByte("text_opacity", (byte) 0xFF); data.putInt("background", 0xE0000000);
-        data.putBoolean("shadow", true); data.putBoolean("see_through", true); data.putString("alignment", "center"); data.putFloat("view_range", 1.5F);
-        data.putFloat("width", 16.0F); data.putFloat("height", 4.0F); data.putInt("glow_color_override", glow(board.tone())); data.putBoolean("Glowing", true);
-        Transformation.EXTENDED_CODEC.encodeStart(NbtOps.INSTANCE, new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(1.25F), new Quaternionf()))
+        data.putInt("line_width", 320); data.putByte("text_opacity", (byte) 0xFF); data.putInt("background", 0xE0000000);
+        data.putBoolean("shadow", true); data.putBoolean("see_through", true); data.putString("alignment", "center"); data.putFloat("view_range", 3.0F);
+        data.putFloat("width", 20.0F); data.putFloat("height", 5.0F); data.putInt("glow_color_override", glow(board.tone())); data.putBoolean("Glowing", true);
+        Transformation.EXTENDED_CODEC.encodeStart(NbtOps.INSTANCE, new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(1.75F), new Quaternionf()))
                 .ifSuccess(value -> data.put("transformation", value));
         Display.BillboardConstraints.CODEC.encodeStart(NbtOps.INSTANCE, Display.BillboardConstraints.CENTER).ifSuccess(value -> data.put("billboard", value));
         Brightness.CODEC.encodeStart(NbtOps.INSTANCE, Brightness.FULL_BRIGHT).ifSuccess(value -> data.put("brightness", value));

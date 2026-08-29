@@ -26,6 +26,7 @@ public final class FrontierReadabilityPlan {
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ));
+        FrontierResourceSitePlan.compile(state.bootstrap()).values().forEach(site -> addResourceSite(values, state, site));
         return new FrontierReadabilityPlan(values);
     }
 
@@ -35,6 +36,13 @@ public final class FrontierReadabilityPlan {
         boolean operational = state.isHiveOrganOperational(organ.id());
         add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), operational ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING,
                 "HIVE\n" + organName(organ.kind()) + "\n" + (operational ? "ACTIVE" : "DISABLED · REPAIR NEEDED")));
+    }
+
+    private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site) {
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(site), fieldTone(lifecycle.phase()),
+                settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(lifecycle)));
     }
 
     private static BlockPosition structureBoardPosition(SettlementStructure structure, StructureCondition condition) {
@@ -50,8 +58,20 @@ public final class FrontierReadabilityPlan {
         return structure.anchor().offset(0, Math.max(2, height - 1), -depth / 2 - 1);
     }
 
+    private static BlockPosition fieldBoardPosition(ResourceSite site) {
+        BlockPosition firstCrop = site.cropSlots().getFirst();
+        return firstCrop.offset(4, 3, -2);
+    }
+
     private static FrontierObjectBoard.Tone tone(StructureCondition condition) {
         return condition == StructureCondition.INTACT ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
+    }
+
+    private static FrontierObjectBoard.Tone fieldTone(ResourceSitePhase phase) {
+        return switch (phase) {
+            case CONFLICT, DESTROYED -> FrontierObjectBoard.Tone.WARNING;
+            case UNPREPARED, GROWING, READY, HARVESTING -> FrontierObjectBoard.Tone.SETTLEMENT;
+        };
     }
 
     private static String structureName(StructureKind kind) {
@@ -78,6 +98,17 @@ public final class FrontierReadabilityPlan {
             case INTACT -> "OPERATIONAL";
             case DAMAGED -> "DAMAGED · REPAIR NEEDED";
             case DESTROYED -> "DESTROYED · SITE LOST";
+        };
+    }
+
+    private static String fieldStateText(ResourceSiteLifecycle lifecycle) {
+        return switch (lifecycle.phase()) {
+            case UNPREPARED -> "PREPARING SOIL · KEEP CLEAR";
+            case GROWING -> "GROWING · STAGE " + lifecycle.growthStage() + "/" + ResourceSiteLifecycle.MATURE_STAGE;
+            case READY -> "READY TO HARVEST · FARMERS NEEDED";
+            case HARVESTING -> "HARVEST IN PROGRESS";
+            case CONFLICT -> "DAMAGED · REPAIR NEEDED";
+            case DESTROYED -> "LOST · REBUILD NEEDED";
         };
     }
 
