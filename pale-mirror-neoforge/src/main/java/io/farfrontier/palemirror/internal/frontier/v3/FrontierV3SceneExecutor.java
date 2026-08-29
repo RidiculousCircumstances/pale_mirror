@@ -93,6 +93,7 @@ final class FrontierV3SceneExecutor {
                 .filter(operation -> operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.EN_ROUTE)
                 .filter(operation -> state.sceneLeases().values().stream().noneMatch(lease -> lease.operationId().equals(operation.id())
                         && lease.status() != SceneLeaseStatus.CLOSED))
+                .filter(operation -> !FrontierSceneAdmission.hasUnresolvedRouteEngagement(state, operation.id()))
                 .filter(operation -> demandExists(level, operation.route().get(operation.routeIndex()))).findFirst();
         if (demand.isPresent()) {
             RouteOperation operation = demand.orElseThrow();

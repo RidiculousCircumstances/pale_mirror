@@ -27,6 +27,29 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveRouteEngagementProcessTest {
+    @Test void hotOrRecoveryLeaseDefersTheSameColdInterceptionWithoutClaimingItsOperation() {
+        FrontierWorldState state = enRouteState().withStrategicPlans(StrategicPlanState.empty());
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        SceneLease lease = routeLease(state, operation, "lease:intercept-exclusive", SceneLeaseStatus.PREPARED);
+        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+
+        assertTrue(HiveRouteEngagementProcess.targetOperation(state).isEmpty(), "a COLD review must not claim an operation retained by HOT/recovery evidence");
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-intercept-exclusive"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:hive-intercept-exclusive"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> deferred = HiveRouteEngagementProcess.planStart(state,
+                HiveRouteEngagementProcess.start(task, 3_000L));
+        assertEquals(1, deferred.size());
+        ScheduleEffect.Created retry = (ScheduleEffect.Created) deferred.getFirst().payload();
+        assertEquals(3_100L, retry.action().dueAt().ticks());
+        assertEquals(task.id(), retry.action().subject());
+    }
+
     @Test void hiveReviewPersistsTheExactOperationTargetBeforeSchedulingAnInterception() {
         FrontierWorldState state = enRouteState().withStrategicPlans(StrategicPlanState.empty());
         SubjectId hive = state.bootstrap().hive().id();
@@ -204,6 +227,38 @@ class HiveRouteEngagementProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
+    @Test void coldCombatWaitsRatherThanResolvingOverAnActiveRouteScene() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+            state = state.withActorLocation(bioform.id(), intercept);
+        }
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-cold-exclusive"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:hive-cold-exclusive"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
+            if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
+            if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
+            if (event.payload() instanceof RouteEngagementTransition transition) state = HiveRouteEngagementProcess.reduceTransition(state, hive, transition);
+        }
+        SubjectId engagementId = new SubjectId("engagement:hive-cold-exclusive");
+        SceneLease lease = routeLease(state, operation, "lease:cold-exclusive", SceneLeaseStatus.PREPARED);
+        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> deferred = HiveRouteEngagementProcess.planCombat(state,
+                new ScheduledAction(new ScheduleId("schedule:cold-exclusive"), new SimInstant(3_020L), 0, engagementId,
+                        "frontier.hive_route_engagement.combat", 1));
+        assertEquals(1, deferred.size());
+        ScheduleEffect.Created retry = (ScheduleEffect.Created) deferred.getFirst().payload();
+        assertEquals(3_040L, retry.action().dueAt().ticks());
+        assertEquals(OperationStage.EN_ROUTE, state.operations().get(operation.id()).stage());
+    }
+
     @Test void productionProfileAutonomouslyHoldsARealCaravanUntilHiveGuardsReachItsCurrentPosition() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-intercept"), 91L));
         boolean heldAtCurrentIntercept = false;
@@ -233,5 +288,11 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE));
         return state;
+    }
+
+    private static SceneLease routeLease(FrontierWorldState state, RouteOperation operation, String id, SceneLeaseStatus status) {
+        return new SceneLease(new SceneLeaseId(id), state.bootstrap().worldId(), operation.id(), operation.cargoId(),
+                operation.route().get(operation.routeIndex()), SimInstant.ZERO, 0L, status,
+                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList());
     }
 }

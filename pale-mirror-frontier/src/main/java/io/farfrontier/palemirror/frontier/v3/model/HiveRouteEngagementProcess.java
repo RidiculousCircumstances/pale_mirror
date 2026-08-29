@@ -22,8 +22,8 @@ final class HiveRouteEngagementProcess {
 
     static Optional<SubjectId> targetOperation(FrontierWorldState state) {
         return state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.EN_ROUTE)
-                .filter(operation -> state.strategicPlans().routeEngagements().values().stream().noneMatch(engagement -> engagement.operationId().equals(operation.id())
-                        && engagement.status() != RouteEngagementStatus.RESOLVED)).sorted(Comparator.comparing(RouteOperation::id)).map(RouteOperation::id).findFirst();
+                .filter(operation -> FrontierSceneAdmission.coldInterceptionAvailable(state, operation.id()))
+                .sorted(Comparator.comparing(RouteOperation::id)).map(RouteOperation::id).findFirst();
     }
 
     static ScheduledAction start(StrategicTask task, long due) {
@@ -37,6 +37,9 @@ final class HiveRouteEngagementProcess {
         RouteOperation operation = task.operationTarget().map(state.operations()::get).orElse(null);
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || activeForOperation(state, operation.id())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        }
+        if (FrontierSceneAdmission.hasActiveSceneLease(state, operation.id())) {
+            return List.of(schedule(start(task, action.dueAt().ticks() + STEP_INTERVAL)));
         }
         // An interception claims the caravan's current COLD position. Selecting a future waypoint
         // would let the independently scheduled caravan arrive before distant guards can reach it.
@@ -60,6 +63,9 @@ final class HiveRouteEngagementProcess {
                 .anyMatch(actor -> state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE)) {
             return abort(engagement);
         }
+        if (FrontierSceneAdmission.hasActiveSceneLease(state, operation.id())) {
+            return List.of(schedule(progress(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        }
         List<ProposedEvent> events = new ArrayList<>();
         for (EngagementAttacker attacker : engagement.attackers()) {
             if (!attacker.atDestination()) events.add(new ProposedEvent(engagement.hiveId(),
@@ -79,6 +85,9 @@ final class HiveRouteEngagementProcess {
                 || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
             return abort(engagement);
         }
+        if (FrontierSceneAdmission.hasActiveSceneLease(state, operation.id())) {
+            return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        }
         if (!operation.route().get(operation.routeIndex()).equals(engagement.intercept())) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
                 schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
@@ -87,6 +96,9 @@ final class HiveRouteEngagementProcess {
     static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
         if (engagement == null || engagement.status() != RouteEngagementStatus.COLD_COMBAT) return List.of();
+        if (FrontierSceneAdmission.hasActiveSceneLease(state, engagement.operationId())) {
+            return List.of(schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
+        }
         List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);
         List<SubjectId> defenders = RouteEngagementCombatRules.livingDefenders(state, engagement);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, engagement);
