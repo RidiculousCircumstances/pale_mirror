@@ -43,7 +43,7 @@ final class FrontierV3ObjectBoardExecutor {
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || !cursor.revision().equals(checkpoint.revision())) {
             FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive")));
-            cursor = new Cursor(checkpoint.revision(), plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList());
+            cursor = Cursor.from(checkpoint.revision(), plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList(), cursor);
             CURSORS.put(runtime, cursor);
         }
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
@@ -98,13 +98,31 @@ final class FrontierV3ObjectBoardExecutor {
     private static int glow(FrontierObjectBoard.Tone tone) {
         return switch (tone) { case SETTLEMENT -> 0xFFAA00; case HIVE -> 0xD77CFF; case WARNING -> 0xFF5555; };
     }
-    private static final class Cursor {
+    /**
+     * A canonical revision is not a materialization epoch.  The simulation can advance its
+     * revision more quickly than the loaded-world budget can inspect every board.  Keep the
+     * round-robin position whenever the stable board slots are unchanged, otherwise remote
+     * settlement work could permanently starve an already-loaded later hive board.
+     */
+    static final class Cursor {
         private final Revision revision;
         private final List<FrontierObjectBoard> boards;
         private int index;
-        Cursor(Revision revision, List<FrontierObjectBoard> boards) { this.revision = revision; this.boards = boards; }
+        Cursor(Revision revision, List<FrontierObjectBoard> boards, int index) { this.revision = revision; this.boards = boards; this.index = index; }
+        static Cursor from(Revision revision, List<FrontierObjectBoard> boards, Cursor prior) {
+            int next = prior != null && sameSlots(prior.boards, boards) ? prior.index % Math.max(1, boards.size()) : 0;
+            return new Cursor(revision, boards, next);
+        }
         Revision revision() { return revision; }
         boolean hasNext() { return !boards.isEmpty(); }
         FrontierObjectBoard next() { FrontierObjectBoard value = boards.get(index); index = (index + 1) % boards.size(); return value; }
+        private static boolean sameSlots(List<FrontierObjectBoard> prior, List<FrontierObjectBoard> next) {
+            if (prior.size() != next.size()) return false;
+            for (int index = 0; index < prior.size(); index++) {
+                FrontierObjectBoard left = prior.get(index); FrontierObjectBoard right = next.get(index);
+                if (!left.ownerId().equals(right.ownerId()) || !left.position().equals(right.position())) return false;
+            }
+            return true;
+        }
     }
 }

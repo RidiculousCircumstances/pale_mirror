@@ -14,6 +14,8 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.List;
+
 /** Materialized player briefing boards must remain attributable and fail closed on world drift. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -50,6 +52,45 @@ public final class FrontierV3ObjectBoardGameTests {
         helper.assertTrue(ledger.claim(board.ownerId().value()).conflicted(), "the conflict remains durable for later inspection");
         helper.assertTrue(level.getEntitiesOfClass(Display.TextDisplay.class, new AABB(position).inflate(1.0D)).isEmpty(),
                 "the materializer does not spawn a replacement at the original position");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void ownedBoardUpdatesItsReadableTextWithoutReplacingItsBody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(24, 8, 0));
+        FrontierObjectBoard prior = board(position, "organ:board-updated-heart", FrontierObjectBoard.Tone.WARNING,
+                "HIVE\nHEART\nACTIVE\nINFECTION · SATURATED");
+        FrontierObjectBoard current = board(position, "organ:board-updated-heart", FrontierObjectBoard.Tone.WARNING,
+                "HIVE\nHEART\nACTIVE\nINFECTED\nSATURATED");
+        FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, prior), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
+                "the initial canonical board is materialized once");
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, current), FrontierV3ObjectBoardExecutor.ProjectionResult.UPDATED,
+                "a changed canonical explanation updates the owned board in place");
+        helper.assertValueEqual(display(level, position).getCustomName().getString(), current.text(), "the display exposes only current canonical text");
+        helper.assertValueEqual(level.getEntitiesOfClass(Display.TextDisplay.class, new AABB(position).inflate(1.0D)).size(), 1,
+                "an explanation update never duplicates a player-facing board");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void cursorKeepsRoundRobinProgressAcrossUnrelatedCanonicalRevisions(GameTestHelper helper) {
+        List<FrontierObjectBoard> before = List.of(
+                board(new BlockPos(0, 0, 0), "board:a", FrontierObjectBoard.Tone.HIVE, "old-a"),
+                board(new BlockPos(1, 0, 0), "board:b", FrontierObjectBoard.Tone.HIVE, "old-b"),
+                board(new BlockPos(2, 0, 0), "board:c", FrontierObjectBoard.Tone.HIVE, "old-c"));
+        FrontierV3ObjectBoardExecutor.Cursor first = FrontierV3ObjectBoardExecutor.Cursor.from(new io.farfrontier.palemirror.frontier.v3.api.Revision(7), before, null);
+        helper.assertValueEqual(first.next().ownerId().value(), "board:a", "the fresh cursor starts from its deterministic first board");
+        List<FrontierObjectBoard> changedText = List.of(
+                board(new BlockPos(0, 0, 0), "board:a", FrontierObjectBoard.Tone.HIVE, "new-a"),
+                board(new BlockPos(1, 0, 0), "board:b", FrontierObjectBoard.Tone.HIVE, "new-b"),
+                board(new BlockPos(2, 0, 0), "board:c", FrontierObjectBoard.Tone.HIVE, "new-c"));
+        FrontierV3ObjectBoardExecutor.Cursor refreshed = FrontierV3ObjectBoardExecutor.Cursor.from(new io.farfrontier.palemirror.frontier.v3.api.Revision(8), changedText, first);
+        helper.assertValueEqual(refreshed.next().ownerId().value(), "board:b",
+                "a new canonical revision must not repeatedly restart the scan at the first board");
+        FrontierV3ObjectBoardExecutor.Cursor refreshedAgain = FrontierV3ObjectBoardExecutor.Cursor.from(new io.farfrontier.palemirror.frontier.v3.api.Revision(9), changedText, refreshed);
+        helper.assertValueEqual(refreshedAgain.next().ownerId().value(), "board:c",
+                "continued revisions still reach later loaded boards under the bounded budget");
         helper.succeed();
     }
 
