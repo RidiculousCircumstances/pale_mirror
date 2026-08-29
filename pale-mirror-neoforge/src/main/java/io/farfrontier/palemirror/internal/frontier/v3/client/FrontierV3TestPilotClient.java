@@ -131,6 +131,7 @@ public final class FrontierV3TestPilotClient {
                 case "break" -> breakBlock(minecraft, position(action, "position"));
                 case "open_container" -> openContainer(minecraft, position(action, "position"), action.get("timeoutMs").getAsLong());
                 case "quick_move_from_inventory" -> quickMoveFromInventory(minecraft, action);
+                case "quick_move_from_container" -> quickMoveFromContainer(minecraft, action);
                 default -> throw new IllegalArgumentException("unsupported visible pilot action: " + type);
             }
         } catch (RuntimeException failure) {
@@ -183,6 +184,27 @@ public final class FrontierV3TestPilotClient {
         if (source == null) { timeout(minecraft, action, "player lacks exact stack " + item + " x" + count); return; }
         int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
         if (menuSlot < 0) throw new IllegalStateException("player inventory slot is absent from the open container menu");
+        minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
+        quickMoveAttempted = true;
+    }
+
+    /** Shift-clicks one exact existing container stack through the ordinary open-menu protocol. */
+    private static void quickMoveFromContainer(Minecraft minecraft, JsonObject action) {
+        if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) {
+            timeout(minecraft, action, "container menu was not open for quick move"); return;
+        }
+        ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString()); int count = action.get("count").getAsInt();
+        if (quickMoveAttempted) {
+            boolean moved = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container == minecraft.player.getInventory())
+                    .anyMatch(slot -> sameStack(slot, item, count));
+            if (moved) { advance("quick_move_from_container"); return; }
+            timeout(minecraft, action, "quick move did not reach the player inventory"); return;
+        }
+        Slot source = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
+                .filter(slot -> sameStack(slot, item, count)).findFirst().orElse(null);
+        if (source == null) { timeout(minecraft, action, "container lacks exact stack " + item + " x" + count); return; }
+        int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
+        if (menuSlot < 0) throw new IllegalStateException("container slot is absent from the open container menu");
         minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
         quickMoveAttempted = true;
     }

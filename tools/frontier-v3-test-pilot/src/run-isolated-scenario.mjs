@@ -26,6 +26,10 @@ const afterRestartScenario = resolve(project, `build/frontier-v3-scenarios/${run
 const beforeRestartManifest = output.replace(/\.json$/i, '') + '.before-restart.json';
 const disposableWorld = resolve(project, `pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/${world}`);
 const serverLog = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/logs/latest.log');
+// A loaded 1024×1024 graybox may legitimately take longer than the former
+// 45-second budget to flush every vanilla dimension.  This is an observation
+// timeout only: deletion still waits for Minecraft's own durable marker.
+const DURABLE_STOP_TIMEOUT_MS = 90_000;
 await mkdir(dirname(ephemeralScenario), { recursive: true });
 let server = null;
 let completed = false;
@@ -126,13 +130,13 @@ async function stopServerSafely(server, logPath, offset, serverPort) {
   // its forked server has flushed every level.  Therefore SIGINT is only a
   // stop request; deletion waits for Minecraft's own durable acknowledgement.
   if (server.child.exitCode === null && server.child.signalCode === null) server.child.kill('SIGINT');
-  const stopped = await waitForLog(logPath, offset, 'ThreadedAnvilChunkStorage: All dimensions are saved', 45_000);
+  const stopped = await waitForLog(logPath, offset, 'ThreadedAnvilChunkStorage: All dimensions are saved', DURABLE_STOP_TIMEOUT_MS);
   if (!stopped) throw new Error('disposable v3 server did not confirm a flushed world; preserving it for diagnosis');
   // The Gradle wrapper may linger after its dedicated Minecraft child has
   // flushed and closed.  A second JVM must not open the same world until the
   // actual game listener is gone; conversely, waiting on an unrelated wrapper
   // forever gives no stronger persistence guarantee.
-  if (!await waitForPortClosed(serverPort, 45_000)) {
+  if (!await waitForPortClosed(serverPort, DURABLE_STOP_TIMEOUT_MS)) {
     throw new Error('disposable v3 server flushed but still owns its game port; preserving it for diagnosis');
   }
   if (!await exitedWithin(server.child, 10_000)) {

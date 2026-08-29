@@ -47,11 +47,13 @@ test('native pilot moves an exact real player stack into a container before acce
   const ingress = { ...scenario, actions: [
     { type: 'open_container', position: { x: 1, y: 64, z: 2 }, timeoutMs: 10_000 },
     { type: 'quick_move_from_inventory', item: 'minecraft:glowstone_dust', count: 1, timeoutMs: 10_000 },
+    { type: 'quick_move_from_container', item: 'minecraft:wheat', count: 64, timeoutMs: 10_000 },
     { type: 'wait_until_container_item', containerId: 'container:4-depot', item: 'minecraft:glowstone_dust', count: 1, slot: 0, timeoutMs: 30_000 }
   ], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(ingress));
   assert.throws(() => validateScenario({ ...ingress, actions: [{ ...ingress.actions[1], count: 65 }] }), /quick_move_from_inventory/);
-  assert.throws(() => validateScenario({ ...ingress, actions: [{ ...ingress.actions[2], containerId: 'depot:4' }] }), /wait_until_container_item/);
+  assert.throws(() => validateScenario({ ...ingress, actions: [{ ...ingress.actions[3], containerId: 'depot:4' }] }), /wait_until_container_item/);
+  assert.throws(() => validateScenario({ ...ingress, actions: [{ ...ingress.actions[2], count: 0 }] }), /quick_move_from_container/);
 });
 
 test('an isolated scenario has an explicit deterministic disposable-world seed', () => {

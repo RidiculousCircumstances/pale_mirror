@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -64,9 +64,9 @@ export function validateScenario(scenario) {
       if (action.type === 'open_container' && (!Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('open_container needs timeoutMs 0..120000');
       }
-      if (action.type === 'quick_move_from_inventory' && (!validItemKind(action.item) || !validStackCount(action.count)
+      if (['quick_move_from_inventory', 'quick_move_from_container'].includes(action.type) && (!validItemKind(action.item) || !validStackCount(action.count)
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
-        throw new Error('quick_move_from_inventory needs exact item/count and timeoutMs 0..120000');
+        throw new Error(`${action.type} needs exact item/count and timeoutMs 0..120000`);
       }
       if (action.type === 'wait_until_container_item' && (!requiredId(action.containerId, 'container:') || !validItemKind(action.item)
           || !validStackCount(action.count) || (action.slot !== undefined && (!Number.isInteger(action.slot) || action.slot < 0 || action.slot > 26))
