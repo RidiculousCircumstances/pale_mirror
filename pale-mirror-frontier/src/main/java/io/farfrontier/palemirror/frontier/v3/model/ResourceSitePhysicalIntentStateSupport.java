@@ -19,6 +19,9 @@ final class ResourceSitePhysicalIntentStateSupport {
     private ResourceSitePhysicalIntentStateSupport() { }
 
     static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
+            ResourceSiteHarvestProcess.validateIntent(state, state.resourceSites().site(intent.causeSubjectId()), intent); return;
+        }
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION) return;
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         ResourceSitePreparationJob job = preparation(lifecycle, intent.id());
@@ -32,7 +35,9 @@ final class ResourceSitePhysicalIntentStateSupport {
 
     static boolean ownsNonterminalSubject(ResourceSiteState sites, SubjectId subject) {
         return sites.sites().values().stream().anyMatch(lifecycle -> lifecycle.siteId().equals(subject)
-                || jobId(lifecycle.siteId()).equals(subject) || lifecycle.activeWork().map(ResourceSiteWork::id).filter(subject::equals).isPresent());
+                || jobId(lifecycle.siteId()).equals(subject) || lifecycle.activeWork().map(ResourceSiteWork::id).filter(subject::equals).isPresent()
+                || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent());
     }
 
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ResourceSitePreparationObservation receipt,
@@ -44,6 +49,20 @@ final class ResourceSitePhysicalIntentStateSupport {
         nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(receipt.id(), receipt);
         return replace(state, state.resourceSites().replace(lifecycle.prepared()), nextIntents, observations);
+    }
+
+    static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
+                                              Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); ResourceSiteHarvestJob job = ResourceSiteHarvestProcess.harvest(lifecycle, intent.id());
+        validateHarvestReceipt(state.bootstrap(), intent, receipt); if (!receipt.siteId().equals(job.siteId()) || !receipt.workerId().equals(job.workerId())) {
+            throw new IllegalArgumentException("resource-site harvest receipt has a foreign site or worker");
+        }
+        if (!receipt.output().id().equals(job.outputItemId()) || !receipt.output().custody().equals(job.outputSlot())) {
+            throw new IllegalArgumentException("resource-site harvest receipt has a foreign output slot");
+        }
+        nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id())));
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(receipt.id(), receipt);
+        return replace(state, state.resourceSites().replace(lifecycle.harvested()), state.inventory().store(receipt.output()), nextIntents, observations);
     }
 
     static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
@@ -75,6 +94,7 @@ final class ResourceSitePhysicalIntentStateSupport {
                 if (!(observation instanceof ResourceSitePreparationObservation receipt)) throw new IllegalArgumentException("prepared field lacks preparation receipt");
                 validateReceipt(intent, receipt);
             }
+            if (lifecycle.phase() == ResourceSitePhase.HARVESTING) validateHarvestState(sites, intents, observations, lifecycle);
         }
     }
 
@@ -83,6 +103,38 @@ final class ResourceSitePhysicalIntentStateSupport {
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
                 || !intent.subjectIds().equals(List.of(receipt.siteId(), jobId(receipt.siteId())))) {
             throw new IllegalArgumentException("resource-site preparation receipt does not match its exact field intent");
+        }
+    }
+
+    static void validateHarvestReceipt(FrontierBootstrap bootstrap, PhysicalIntent intent, ResourceSiteHarvestObservation receipt) {
+        ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(intent.causeSubjectId()); ExactItemStack output = receipt.output();
+        if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
+                || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId()) || intent.subjectIds().size() != 4
+                || !intent.subjectIds().get(2).equals(receipt.workerId()) || !intent.subjectIds().get(3).equals(output.id())
+                || !output.economicOwnerId().equals(site.settlementId()) || !output.itemKind().equals("minecraft:wheat") || output.count() != 64
+                || !(output.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(site.settlementId()))) {
+            throw new IllegalArgumentException("resource-site harvest receipt does not match its exact output claim");
+        }
+    }
+
+    private static void validateHarvestState(ResourceSiteState sites, Map<PhysicalIntentId, PhysicalIntent> intents,
+                                             Map<PhysicalObservationId, PhysicalEffectObservation> observations, ResourceSiteLifecycle lifecycle) {
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalArgumentException("harvesting resource site has no harvest job"));
+        PhysicalIntent intent = intents.get(job.intentId()); if (intent == null) return;
+        validateHarvestBinding(lifecycle, intent);
+        if (intent.status() == PhysicalIntentStatus.CONFIRMED) {
+            PhysicalEffectObservation observation = observations.get(intent.postconditionObservationId().orElseThrow());
+            if (!(observation instanceof ResourceSiteHarvestObservation)) throw new IllegalArgumentException("harvest intent has a foreign receipt");
+        }
+    }
+
+    private static void validateHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {
+        ResourceSiteHarvestJob job = ResourceSiteHarvestProcess.harvest(lifecycle, intent.id());
+        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || !intent.causeSubjectId().equals(lifecycle.siteId())
+                || !intent.subjectIds().equals(List.of(job.siteId(), job.id(), job.workerId(), job.outputItemId()))
+                || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED) {
+            throw new IllegalArgumentException("resource-site harvest intent does not bind its active job");
         }
     }
 
@@ -95,7 +147,11 @@ final class ResourceSitePhysicalIntentStateSupport {
     private static PhysicalIntentId intentId(SubjectId siteId) { return new PhysicalIntentId("intent:site-prepare-" + siteId.value().substring("site:".length())); }
     private static FrontierWorldState replace(FrontierWorldState state, ResourceSiteState sites, Map<PhysicalIntentId, PhysicalIntent> intents,
                                               Map<PhysicalObservationId, PhysicalEffectObservation> observations) {
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
+        return replace(state, sites, state.inventory(), intents, observations);
+    }
+    private static FrontierWorldState replace(FrontierWorldState state, ResourceSiteState sites, ExactInventory inventory, Map<PhysicalIntentId, PhysicalIntent> intents,
+                                              Map<PhysicalObservationId, PhysicalEffectObservation> observations) {
+        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(),
                 state.contracts(), state.operations(), intents, observations, state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(),
                 state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), sites);
     }

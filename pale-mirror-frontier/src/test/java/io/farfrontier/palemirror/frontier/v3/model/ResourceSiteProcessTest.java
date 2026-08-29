@@ -47,7 +47,7 @@ class ResourceSiteProcessTest {
     }
 
     @Test
-    void matureStageBecomesReadyAndDoesNotScheduleAnEighthGrowth() {
+    void matureStageBecomesReadyAndSchedulesOneHarvestReviewInsteadOfAnEighthGrowth() {
         FrontierWorldState state = prepared(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE - 1; stage++) {
             ResourceSiteLifecycle current = state.resourceSites().site(site);
@@ -57,9 +57,12 @@ class ResourceSiteProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planGrowth(state,
                 ResourceSiteProcess.nextGrowth(finalGrowing, 10_000L));
 
-        assertEquals(1, planned.size());
+        assertEquals(2, planned.size());
         FrontierWorldState ready = ResourceSiteProcess.reduceGrowth(state, site, (ResourceSiteGrowthAdvanced) planned.getFirst().payload());
         assertEquals(ResourceSitePhase.READY, ready.resourceSites().site(site).phase());
+        ScheduledAction harvest = ((ScheduleEffect.Created) planned.get(1).payload()).action();
+        assertEquals("frontier.resource_site.harvest", harvest.kind());
+        assertEquals(10_001L, harvest.dueAt().ticks());
     }
 
     private static FrontierWorldState prepared(FrontierWorldState state) {

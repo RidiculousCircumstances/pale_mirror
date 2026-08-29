@@ -158,32 +158,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
-        for (Map.Entry<PhysicalObservationId, PhysicalEffectObservation> entry : physicalObservations.entrySet()) {
-            PhysicalEffectObservation observation = entry.getValue();
-            if (!entry.getKey().equals(observation.id())) throw new IllegalArgumentException("physical observation map key must match observation identity");
-            PhysicalIntent intent = physicalIntents.get(observation.intentId());
-            if (intent == null || intent.status() != PhysicalIntentStatus.CONFIRMED
-                    || !intent.postconditionObservationId().equals(java.util.Optional.of(observation.id()))) {
-                throw new IllegalArgumentException("physical observation must be the confirmed intent receipt");
-            }
-            if (observation instanceof CargoHandoffObservation cargo) {
-                FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
-            } else if (observation instanceof ExplosionObservation explosion) {
-                ExplosionStateSupport.validateReceipt(intent, explosion);
-            } else if (observation instanceof SceneStrikeObservation strike) {
-                SceneStrikeStateSupport.validateObservation(operations, sceneLeases, intent, strike);
-            } else if (observation instanceof DecontaminationObservation decontamination) {
-                DecontaminationStateSupport.validateReceipt(bootstrap, infection, intent, decontamination);
-            } else if (observation instanceof StructuralRepairObservation repair) {
-                StructuralRepairStateSupport.validateReceipt(intent, repair);
-            } else if (observation instanceof ExactItemConsumedObservation consumed) {
-                ExactItemConsumptionStateSupport.validateReceipt(intent, consumed);
-            } else if (observation instanceof RouteConstructionObservation construction) {
-                RouteConstructionStateSupport.validateReceipt(bootstrap, routeTopology, routeConstructions, intent, construction);
-            } else if (observation instanceof ResourceSitePreparationObservation preparation) {
-                ResourceSitePhysicalIntentStateSupport.validateReceipt(intent, preparation);
-            } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
-        }
+        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, operations,
+                contracts, sceneLeases, routeConstructions, routeTopology);
         ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations);
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
@@ -394,6 +370,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
             if (!(evidence instanceof ResourceSitePreparationObservation preparation)) throw new IllegalArgumentException("resource-site preparation requires exact field evidence");
             return ResourceSitePhysicalIntentStateSupport.complete(this, current, preparation, next);
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
+            if (!(evidence instanceof ResourceSiteHarvestObservation harvest)) throw new IllegalArgumentException("resource-site harvest requires exact field and output evidence");
+            return ResourceSitePhysicalIntentStateSupport.completeHarvest(this, current, harvest, next);
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR) {
             if (!(evidence instanceof StructuralRepairObservation repair)) throw new IllegalArgumentException("structural repair requires repair observation evidence");

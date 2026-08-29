@@ -77,6 +77,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3CargoCarrierImpactExecutor.tick(server.overworld(), runtime);
                 FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
                 FrontierV3ResourceSiteExecutor.tick(server.overworld(), runtime);
+                FrontierV3ResourceSiteHarvestExecutor.tick(server.overworld(), runtime);
                 FrontierV3DecontaminationExecutor.tick(server.overworld(), runtime);
                 FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
                 FrontierV3ObjectBoardExecutor.tick(server.overworld(), runtime);

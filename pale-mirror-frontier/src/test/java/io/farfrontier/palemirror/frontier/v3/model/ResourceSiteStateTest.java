@@ -28,6 +28,7 @@ class ResourceSiteStateTest {
         assertEquals(ResourceSitePhase.READY, growing.phase());
         ResourceSiteHarvestJob harvest = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-1-wheat-field-1"), siteId,
                 new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1"),
+                new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
                 new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"));
         ResourceSiteLifecycle harvested = growing.harvesting(harvest).harvested();
         assertEquals(ResourceSitePhase.GROWING, harvested.phase());

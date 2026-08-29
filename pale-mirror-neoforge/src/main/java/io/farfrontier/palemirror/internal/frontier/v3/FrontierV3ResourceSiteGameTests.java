@@ -28,7 +28,7 @@ public final class FrontierV3ResourceSiteGameTests {
     public static void ownedFieldWritesAllSlotsAndRecoversItsPendingProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(new BlockPos(8, 8, 8)));
         prepareBaseline(level, site);
-        helper.runAfterDelay(2, () -> {
+        helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
             PhysicalIntentId intent = new PhysicalIntentId("intent:site-prepare-resource-site-game-test"); ledger.reserve(site.id(), intent);
             CompoundTag pending = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(pending, level.registryAccess());

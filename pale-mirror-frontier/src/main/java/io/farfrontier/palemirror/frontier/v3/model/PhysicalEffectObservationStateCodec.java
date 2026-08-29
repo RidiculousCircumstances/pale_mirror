@@ -53,6 +53,11 @@ final class PhysicalEffectObservationStateCodec {
             } else if (observation instanceof ResourceSitePreparationObservation preparation) {
                 output.writeByte(7); string(output, preparation.id().value()); string(output, preparation.intentId().value()); string(output, preparation.siteId().value());
                 output.writeByte(preparation.preparedSoilSlots()); output.writeByte(preparation.preparedCropSlots());
+            } else if (observation instanceof ResourceSiteHarvestObservation harvest) {
+                output.writeByte(8); string(output, harvest.id().value()); string(output, harvest.intentId().value()); string(output, harvest.siteId().value());
+                string(output, harvest.workerId().value()); string(output, harvest.output().id().value()); string(output, harvest.output().economicOwnerId().value());
+                string(output, harvest.output().itemKind()); output.writeByte(harvest.output().count()); FrontierWorldStateCodec.writeCustody(output, harvest.output().custody());
+                output.writeByte(harvest.harvestedCropSlots());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -70,6 +75,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 5 -> explosion(input, id, intentId);
                 case 6 -> new ExactItemConsumedObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 case 7 -> new ResourceSitePreparationObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
+                case 8 -> harvest(input, id, intentId);
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
@@ -102,6 +108,11 @@ final class PhysicalEffectObservationStateCodec {
             items.add(new ExplosionItemImpact(item, ExplosionItemImpact.Outcome.values()[outcome]));
         }
         return new ExplosionObservation(id, intentId, origin, radius, affected, changed, entities, items, input.readInt(), input.readInt());
+    }
+    private static ResourceSiteHarvestObservation harvest(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
+        SubjectId site = new SubjectId(text(input)), worker = new SubjectId(text(input)), item = new SubjectId(text(input)), owner = new SubjectId(text(input));
+        String kind = text(input); int count = input.readUnsignedByte(); InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
+        return new ResourceSiteHarvestObservation(id, intentId, site, worker, new ExactItemStack(item, owner, kind, count, custody), input.readUnsignedByte());
     }
 
     private static void string(DataOutputStream output, String value) throws IOException { FrontierWorldStateCodec.writeString(output, value); }

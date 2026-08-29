@@ -208,7 +208,7 @@ final class FrontierV3ResourceSiteExecutor {
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         return result instanceof CommandResult.Accepted;
     }
-    private static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger,
+    static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger,
                                        ResourceSite site, BlockPosition position, String cause) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());

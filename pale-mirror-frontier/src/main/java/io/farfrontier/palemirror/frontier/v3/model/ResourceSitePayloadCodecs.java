@@ -45,6 +45,27 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
+    static PayloadCodec harvestStarted() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_site_harvest_started"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                ResourceSiteHarvestJob job = ((ResourceSiteHarvestStarted) payload).job();
+                byte[][] values = { bytes(job.id().value()), bytes(job.siteId().value()), bytes(job.workerId().value()), bytes(job.outputItemId().value()),
+                        bytes(job.outputSlot().containerId().value()), bytes(job.intentId().value()) };
+                int size = Integer.BYTES + 6; for (byte[] value : values) size = Math.addExact(size, value.length);
+                return ByteBuffer.allocate(size).put((byte) values[0].length).put(values[0]).put((byte) values[1].length).put(values[1])
+                        .put((byte) values[2].length).put(values[2]).put((byte) values[3].length).put(values[3]).put((byte) values[4].length).put(values[4])
+                        .putInt(job.outputSlot().slot()).put((byte) values[5].length).put(values[5]).array();
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                ByteBuffer input = ByteBuffer.wrap(bytes); String id = read(input), site = read(input), worker = read(input), output = read(input), depot = read(input);
+                if (input.remaining() < Integer.BYTES + 1) throw new IllegalArgumentException("truncated resource-site harvest payload");
+                int slot = input.getInt(); String intent = read(input); if (input.hasRemaining()) throw new IllegalArgumentException("trailing resource-site harvest payload");
+                return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(new SubjectId(id), new SubjectId(site), new SubjectId(worker), new SubjectId(output),
+                        new InventoryCustody.ContainerSlot(new SubjectId(depot), slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent)));
+            }
+        };
+    }
     static PayloadCodec conflictObserved() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resource_site_conflict_observed"; }
@@ -67,5 +88,10 @@ final class ResourceSitePayloadCodecs {
     private static String read(ByteBuffer input) {
         if (!input.hasRemaining()) throw new IllegalArgumentException("truncated resource-site preparation payload"); int length = Byte.toUnsignedInt(input.get());
         if (length == 0 || input.remaining() < length) throw new IllegalArgumentException("malformed resource-site preparation payload"); byte[] value = new byte[length]; input.get(value); return new String(value, StandardCharsets.UTF_8);
+    }
+    private static byte[] bytes(String value) {
+        byte[] encoded = value.getBytes(StandardCharsets.UTF_8);
+        if (encoded.length == 0 || encoded.length > 255) throw new IllegalArgumentException("resource-site payload identity is invalid");
+        return encoded;
     }
 }

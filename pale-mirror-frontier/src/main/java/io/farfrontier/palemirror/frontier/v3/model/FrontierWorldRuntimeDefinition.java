@@ -56,64 +56,8 @@ public final class FrontierWorldRuntimeDefinition {
             try { state.recordResidentMigration(migration); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(migration.destinationSettlementId(), migration)));
         }
-        if (command.payload() instanceof PhysicalIntentTransition transition) {
-            PhysicalIntent intent = state.physicalIntents().get(transition.intentId()); if (intent == null) return rejected("physical intent is unknown");
-            if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) {
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
-            }
-            if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
-                try { return new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition)); }
-                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            }
-            if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
-                try { return new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition)); }
-                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            }
-            if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
-                try { return new CommandPlan.Accepted(ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks())); }
-                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            }
-            if (intent.kind() == PhysicalIntentKind.CARGO_HANDOFF) {
-                try { return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition)); }
-                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            }
-            if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
-            }
-            if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
-                try {
-                    if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) {
-                        return new CommandPlan.Accepted(HiveGrowthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
-                    }
-                    if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) {
-                        return new CommandPlan.Accepted(PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
-                    }
-                    return rejected("exact consumption has no supported owning process");
-                }
-                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            }
-            RouteOperation operation = state.operations().get(intent.causeSubjectId());
-            if (operation == null) return rejected("physical intent has no owning operation");
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
-        }
-        if (command.payload() instanceof PhysicalIntentPrepared prepared) {
-            PhysicalIntent intent = prepared.intent();
-            if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
-                try { return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared))); }
-                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            }
-            if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
-                try { ExplosionStateSupport.validateIntent(state, intent); }
-                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)));
-            }
-            if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");
-            RouteOperation operation = state.operations().get(intent.causeSubjectId());
-            if (operation == null) return rejected("scene strike has no owning operation");
-            try {
-                SceneStrikeStateSupport.validateIntent(state, intent);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
-            } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+        if (command.payload() instanceof PhysicalIntentTransition || command.payload() instanceof PhysicalIntentPrepared) {
+            return FrontierPhysicalIntentCommandProcess.plan(state, command);
         }
         if (command.payload() instanceof SceneLeasePrepared prepared) {
             RouteOperation operation = state.operations().get(prepared.lease().operationId()); if (operation == null) return rejected("scene lease has no owning operation");
@@ -233,6 +177,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
             case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
             case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
+            case "frontier.resource_site.harvest" -> ResourceSiteHarvestProcess.plan(state, action);
             case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
             case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
             case "frontier.route_construction.start" -> RouteConstructionProcess.planStart(state, action);
@@ -277,6 +222,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
             case ResourceSiteGrowthAdvanced advanced -> ResourceSiteProcess.reduceGrowth(state, event.subject(), advanced);
             case ResourceSitePreparationStarted started -> ResourceSiteProcess.reducePreparationStarted(state, event.subject(), started);
+            case ResourceSiteHarvestStarted started -> ResourceSiteHarvestProcess.reduceStarted(state, event.subject(), started);
             case ResourceSiteConflictObserved conflict -> ResourceSiteProcess.reduceConflict(state, event.subject(), conflict);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
@@ -366,6 +312,7 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) return ResourceSiteProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) return ResourceSiteHarvestProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
@@ -404,6 +351,10 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
+        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
+            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site harvest transition lacks site ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {

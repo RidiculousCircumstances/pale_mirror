@@ -47,7 +47,7 @@ final class ResourceSiteStateCodec {
         }
         if (work instanceof ResourceSiteHarvestJob harvest) {
             output.writeByte(1); writeIdentity(output, harvest); FrontierWorldStateCodec.writeString(output, harvest.workerId().value());
-            FrontierWorldStateCodec.writeString(output, harvest.outputItemId().value()); return;
+            FrontierWorldStateCodec.writeString(output, harvest.outputItemId().value()); FrontierWorldStateCodec.writeCustody(output, harvest.outputSlot()); return;
         }
         throw new IllegalArgumentException("unknown resource-site work type");
     }
@@ -58,9 +58,15 @@ final class ResourceSiteStateCodec {
         return switch (kind) {
             case 0 -> new ResourceSitePreparationJob(id, site, intent);
             case 1 -> new ResourceSiteHarvestJob(id, site, new SubjectId(FrontierWorldStateCodec.readString(input)),
-                    new SubjectId(FrontierWorldStateCodec.readString(input)), intent);
+                    new SubjectId(FrontierWorldStateCodec.readString(input)), readOutputSlot(input), intent);
             default -> throw new IllegalArgumentException("unknown resource-site work type");
         };
+    }
+
+    private static InventoryCustody.ContainerSlot readOutputSlot(DataInputStream input) throws IOException {
+        InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
+        if (custody instanceof InventoryCustody.ContainerSlot slot) return slot;
+        throw new IllegalArgumentException("resource-site harvest output must target a container slot");
     }
 
     private static void writeIdentity(DataOutputStream output, ResourceSiteWork work) throws IOException {

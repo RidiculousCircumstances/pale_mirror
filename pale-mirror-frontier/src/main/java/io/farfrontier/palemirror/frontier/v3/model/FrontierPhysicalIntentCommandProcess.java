@@ -1,0 +1,83 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.CommandRejection;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
+
+import java.util.List;
+
+/** Routes trusted physical executor commands to the owner-specific durable process. */
+final class FrontierPhysicalIntentCommandProcess {
+    private FrontierPhysicalIntentCommandProcess() { }
+
+    static CommandPlan plan(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof PhysicalIntentTransition transition) return transition(state, command, transition);
+        if (command.payload() instanceof PhysicalIntentPrepared prepared) return prepared(state, prepared);
+        return rejected("physical executor command is not a physical intent");
+    }
+
+    private static CommandPlan transition(FrontierWorldState state, FrontierCommand command, PhysicalIntentTransition transition) {
+        PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
+        if (intent == null) return rejected("physical intent is unknown");
+        try {
+            return switch (intent.kind()) {
+                case STRUCTURAL_REPAIR -> new CommandPlan.Accepted(List.of(new ProposedEvent(
+                        FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
+                case ROUTE_CONSTRUCTION -> new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition));
+                case DECONTAMINATION -> new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition));
+                case RESOURCE_SITE_PREPARATION -> new CommandPlan.Accepted(
+                        ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks()));
+                case RESOURCE_SITE_HARVEST -> new CommandPlan.Accepted(
+                        ResourceSiteHarvestProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                case CARGO_HANDOFF -> routeTransition(state, intent, transition);
+                case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
+                case EXACT_ITEM_CONSUMPTION -> consumptionTransition(state, intent, transition, command);
+                default -> routeTransition(state, intent, transition);
+            };
+        } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+    }
+
+    private static CommandPlan routeTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        RouteOperation operation = state.operations().get(intent.causeSubjectId());
+        if (operation == null) return rejected("physical intent has no owning operation");
+        if (intent.kind() == PhysicalIntentKind.CARGO_HANDOFF) return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition));
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
+    }
+
+    private static CommandPlan consumptionTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition,
+                                                     FrontierCommand command) {
+        if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) {
+            return new CommandPlan.Accepted(HiveGrowthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+        }
+        if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) {
+            return new CommandPlan.Accepted(PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+        }
+        return rejected("exact consumption has no supported owning process");
+    }
+
+    private static CommandPlan prepared(FrontierWorldState state, PhysicalIntentPrepared prepared) {
+        PhysicalIntent intent = prepared.intent();
+        try {
+            if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared)));
+            }
+            if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
+                ExplosionStateSupport.validateIntent(state, intent);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)));
+            }
+            if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");
+            RouteOperation operation = state.operations().get(intent.causeSubjectId());
+            if (operation == null) return rejected("scene strike has no owning operation");
+            SceneStrikeStateSupport.validateIntent(state, intent);
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
+        } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+    }
+
+    private static CommandPlan.Rejected rejected(String message) {
+        return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, message));
+    }
+}

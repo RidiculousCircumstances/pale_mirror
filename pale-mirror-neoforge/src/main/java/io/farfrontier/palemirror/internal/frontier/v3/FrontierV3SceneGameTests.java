@@ -271,7 +271,8 @@ public final class FrontierV3SceneGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void durableHotStrikeHurtsExactBodyAndNeverReplaysUnknownEffect(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos origin = helper.absolutePos(new BlockPos(32, 8, 0)); prepareFloor(level, origin); prepareFloor(level, origin.east());
+        BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 4)); prepareFloor(level, origin); prepareFloor(level, origin.east());
+        prepareFloor(level, origin.east(8));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-strike-game-test"), 91L), new EphemeralStore(), 20_000);
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();

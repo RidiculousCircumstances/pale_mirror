@@ -82,7 +82,8 @@ final class ResourceSiteProcess {
         if (lifecycle.phase() != ResourceSitePhase.GROWING || !action.id().equals(nextGrowth(lifecycle, action.dueAt().ticks()).id())) return List.of();
         ResourceSiteGrowthAdvanced advanced = new ResourceSiteGrowthAdvanced(lifecycle.siteId(), lifecycle.growthEpoch(), lifecycle.growthStage());
         ResourceSiteLifecycle next = lifecycle.advanceGrowth();
-        if (next.phase() == ResourceSitePhase.READY) return List.of(new ProposedEvent(lifecycle.siteId(), advanced));
+        if (next.phase() == ResourceSitePhase.READY) return List.of(new ProposedEvent(lifecycle.siteId(), advanced), new ProposedEvent(lifecycle.siteId(),
+                new ScheduleEffect.Created(ResourceSiteHarvestProcess.review(next, Math.addExact(action.dueAt().ticks(), 1L)))));
         return List.of(new ProposedEvent(lifecycle.siteId(), advanced), new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(next,
                 Math.addExact(action.dueAt().ticks(), WHEAT_STAGE_INTERVAL)))));
     }

@@ -88,6 +88,17 @@ final class FrontierWorldStateSupport {
                 .sorted(byRoleSkill(role)).findFirst();
     }
 
+    static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(resident -> state.operations().values().stream().noneMatch(operation -> retainsParticipantClaim(state, operation)
+                        && operation.participantIds().contains(resident.id())))
+                .filter(resident -> state.sceneLeases().values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                        && lease.members().stream().anyMatch(member -> member.actorId().equals(resident.id()))))
+                .sorted(byRoleSkill(role)).findFirst();
+    }
+
     static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {
         return retainsParticipantClaim(state.contracts(), operation);
     }
