@@ -64,7 +64,7 @@ final class FrontierV3ResourceSiteExecutor {
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(target.site().id());
         if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return BlockBreakObservation.UNMANAGED;
         if (!matches(level, target.site(), claim.stage())) {
-            recordConflict(runtime, ledger, target.site(), firstMismatch(level, target.site(), claim.stage()).orElse(canonical(position)), cause);
+            recordPlayerConflict(level, runtime, ledger, target.site(), firstMismatch(level, target.site(), claim.stage()).orElse(canonical(position)), cause);
             return BlockBreakObservation.UNMANAGED;
         }
         try {
@@ -233,6 +233,20 @@ final class FrontierV3ResourceSiteExecutor {
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (!(result instanceof CommandResult.Accepted)) return false;
         ledger.conflict(site.id()); return true;
+    }
+
+    /** A player-caused mismatch needs the same trace evidence as the already-missing direct-break branch. */
+    private static void recordPlayerConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                             FrontierV3ResourceSiteLedger ledger, ResourceSite site, BlockPosition position, String cause) {
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());
+        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new ResourceSiteConflictObserved(site.id(), position, cause)))
+                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        if (result instanceof CommandResult.Accepted) {
+            ledger.conflict(site.id());
+            FrontierV3DiagnosticTrace.record(level.getServer(), cause, "resource_site_conflict", site.id(), result);
+        }
     }
 
     record Target(ResourceSite site, PhysicalIntent intent) { }
