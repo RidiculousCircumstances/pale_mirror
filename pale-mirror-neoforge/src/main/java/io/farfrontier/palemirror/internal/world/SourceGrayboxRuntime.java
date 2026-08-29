@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.world;
 
 import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle;
+import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
@@ -289,7 +290,8 @@ public final class SourceGrayboxRuntime {
     /** Displays an accepted source effect without retaining an obscuring chat backlog. */
     public void presentTransientReceipt(ServerPlayer player, String receipt) {
         Objects.requireNonNull(player, "player");
-        player.displayClientMessage(net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(receipt)), true);
+        PaleMirrorPlayerPresentation.transientAction(player, "source-graybox:receipt:" + noticeFingerprint(receipt),
+                net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(receipt)));
     }
 
     /** Turns a declared physical interaction slot into the exact source fact it carries. */
@@ -347,7 +349,8 @@ public final class SourceGrayboxRuntime {
                 ? SourceGrayboxPlayerBriefing.forIdentity(snapshot, interactionLabelId(claim), SourceGrayboxMaterializer.LABEL_KIND)
                 : SourceGrayboxPlayerBriefing.at(snapshot, position.getX(), position.getZ());
         return briefing.map(text -> {
-            player.displayClientMessage(net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)), true);
+            PaleMirrorPlayerPresentation.transientAction(player, "source-graybox:block-briefing:" + position.asLong(),
+                    net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)));
             return true;
         }).orElse(false);
     }
@@ -359,9 +362,14 @@ public final class SourceGrayboxRuntime {
         String kind = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_KIND);
         if (id.isBlank() || kind.isBlank()) return false;
         return SourceGrayboxPlayerBriefing.forIdentity(data.snapshot(), id, kind).map(text -> {
-            player.displayClientMessage(net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)), true);
+            PaleMirrorPlayerPresentation.transientAction(player, "source-graybox:entity-briefing:" + id,
+                    net.minecraft.network.chat.Component.literal(SourceGrayboxTransientOverlay.from(text)));
             return true;
         }).orElse(false);
+    }
+
+    private static String noticeFingerprint(String text) {
+        return Integer.toUnsignedString(Objects.requireNonNull(text, "text").hashCode(), 36);
     }
 
     /** Explicit operator transport makes the disposable arena discoverable without touching the overworld. */

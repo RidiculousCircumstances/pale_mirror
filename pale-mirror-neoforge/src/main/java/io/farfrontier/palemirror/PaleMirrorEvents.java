@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.internal.debug.DebugCommandRegistrar;
 import io.farfrontier.palemirror.internal.observation.ThreatControllerDestroyed;
 import io.farfrontier.palemirror.internal.observation.EncounterActorDestroyed;
 import io.farfrontier.palemirror.internal.presentation.ScenarioCommandPresentation;
+import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -91,6 +92,7 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         AmbientSpawnThrottle.clear();
+        PaleMirrorPlayerPresentation.clear(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.stop(event.getServer());
         PaleMirrorRuntime.stop(event.getServer());
     }
@@ -314,7 +316,8 @@ public final class PaleMirrorEvents {
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
             var transfer = runtime.interactWithSupplyDepot(player, event.getPos());
             if (transfer.handled()) {
-                player.sendSystemMessage(Component.literal(transfer.message()));
+                PaleMirrorPlayerPresentation.action(player, transfer.success()
+                        ? "pale-mirror:depot-transfer-complete" : "pale-mirror:depot-transfer-rejected", Component.literal(transfer.message()));
                 event.setCanceled(true);
                 event.setCancellationResult(transfer.success() ? InteractionResult.SUCCESS : InteractionResult.FAIL);
             } else if (runtime.presentSettlementJournal(player, event.getPos())) {
@@ -331,11 +334,13 @@ public final class PaleMirrorEvents {
                 && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
             var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                player.sendSystemMessage(Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
+                PaleMirrorPlayerPresentation.action(player, "frontier-v3:cargo-carrier-rejected",
+                        Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
             }
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED) {
-                player.sendSystemMessage(Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
+                PaleMirrorPlayerPresentation.action(player, "frontier-v3:cargo-carrier-released",
+                        Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
             }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
@@ -365,11 +370,13 @@ public final class PaleMirrorEvents {
                 && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
             var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                player.sendSystemMessage(Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
+                PaleMirrorPlayerPresentation.action(player, "frontier-v3:cargo-carrier-rejected",
+                        Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
             }
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.RELEASED) {
-                player.sendSystemMessage(Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
+                PaleMirrorPlayerPresentation.action(player, "frontier-v3:cargo-carrier-released",
+                        Component.literal("Frontier cargo is now a real physical shipment; taking it interrupts the route."));
             }
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
@@ -451,7 +458,8 @@ public final class PaleMirrorEvents {
             if (event.getPlayer() instanceof ServerPlayer player) {
                 if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.rejectBlockBreak(level, event.getPos(), player)) {
                     event.setCanceled(true);
-                    player.displayClientMessage(net.minecraft.network.chat.Component.literal("Pale Mirror: physical change was not durably recorded."), true);
+                    PaleMirrorPlayerPresentation.critical(player, "frontier-v3:unrecorded-physical-change",
+                            Component.literal("Pale Mirror: physical change was not durably recorded."));
                     return;
                 }
             }
@@ -492,7 +500,8 @@ public final class PaleMirrorEvents {
     private static boolean denyReservedTransfer(Player player, ItemStack stack) {
         if (!(player instanceof ServerPlayer serverPlayer) || stack.isEmpty()
                 || !PaleMirrorRuntime.forServer(serverPlayer.getServer()).isReservedTransferItem(stack)) return false;
-        serverPlayer.sendSystemMessage(Component.literal("This item is reserved by a Pale Mirror resource transfer."));
+        PaleMirrorPlayerPresentation.action(serverPlayer, "pale-mirror:reserved-resource-transfer",
+                Component.literal("This item is reserved by a Pale Mirror resource transfer."));
         return true;
     }
 

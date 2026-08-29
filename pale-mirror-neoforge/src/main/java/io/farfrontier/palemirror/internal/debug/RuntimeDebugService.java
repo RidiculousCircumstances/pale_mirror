@@ -19,7 +19,6 @@ import io.farfrontier.palemirror.internal.world.SettlementObservationRecord;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.network.chat.Component;
 
 /**
  * Runtime-only operator controls. It can inspect projections, select input for the normal registration pipeline,
@@ -85,8 +84,6 @@ public final class RuntimeDebugService {
                     renderPlannedColumn(player, region.pendingMineColumn());
                 }
             }
-            if (gameTime % 100 == 0) player.displayClientMessage(Component.literal(
-                    "PM debug: green=observed village, white=managed bounds, flame=planned mine"), true);
         }
     }
 
