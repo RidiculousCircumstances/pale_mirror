@@ -26,7 +26,10 @@ final class PaleMirrorCommandRegistrar {
     static void register(RegisterCommandsEvent event) {
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("pale_mirror")
                 .then(Commands.literal("status").requires(source -> source.hasPermission(2)).executes(context -> {
-                    context.getSource().sendSuccess(() -> Component.literal(PaleMirrorRuntime.forServer(context.getSource().getServer()).status()), false);
+                    String status = FrontierV3ServerLifecycle.ownsPhysicalWorld(context.getSource().getServer())
+                            ? FrontierV3ServerLifecycle.status(context.getSource().getServer())
+                            : PaleMirrorRuntime.forServer(context.getSource().getServer()).status();
+                    context.getSource().sendSuccess(() -> Component.literal(status), false);
                     return 1;
                 }));
         root.then(Commands.literal("performance").requires(source -> source.hasPermission(2)).executes(context -> {

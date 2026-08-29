@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
@@ -50,6 +51,45 @@ public final class FrontierV3ServerLifecycle {
 
     /** Package-visible so the launch-mode exclusion remains directly testable without a server fixture. */
     static boolean v3LaunchOwnsPhysicalWorld() { return enabled(); }
+
+    /**
+     * Returns an operator-facing summary of the v3 world selected for this server.
+     *
+     * <p>In particular, this never delegates to the frozen v2 runtime.  A missing or
+     * quarantined v3 runtime remains an explicit v3 failure, rather than becoming a plausible
+     * but false zero-valued v2 status report.</p>
+     */
+    public static String status(MinecraftServer server) {
+        Objects.requireNonNull(server, "server");
+        if (!ownsPhysicalWorld(server)) return "Frontier v3 is not selected for this server.";
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
+        if (runtime == null) {
+            return "Frontier v3 owns Graybox, but no active runtime is available; inspect the server log.";
+        }
+        FrontierV3RuntimeStatus runtimeStatus = runtime.status();
+        if (runtimeStatus.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            return "Frontier v3 " + runtimeStatus.kind() + ": "
+                    + runtimeStatus.detail().orElse("runtime is not active") + ".";
+        }
+        return runtime.projection(ProjectionQuery.summary())
+                .map(FrontierV3ServerLifecycle::formatStatus)
+                .orElse("Frontier v3 is ACTIVE, but its immutable status projection is unavailable.");
+    }
+
+    /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */
+    static String formatStatus(FrontierWorldProjection projection) {
+        Objects.requireNonNull(projection, "projection");
+        return "Frontier v3 ACTIVE | world=" + projection.worldId().value()
+                + " rev=" + projection.revision().value() + " tick=" + projection.instant().ticks()
+                + " | settlements=" + projection.settlementCount() + " residents=" + projection.residentCount()
+                + " bioforms=" + projection.bioformCount() + " infectedCells=" + projection.infectedCellCount()
+                + " | exactStacks=" + projection.itemStackCount() + " production=" + projection.activeProductionJobCount()
+                + " routes=" + projection.activeRouteOperationCount()
+                + " | effects prepared=" + projection.preparedPhysicalIntentCount() + " unknown=" + projection.unknownPhysicalIntentCount()
+                + " | HOT scenes=" + projection.activeSceneLeaseCount() + "/unknown=" + projection.unknownSceneLeaseCount()
+                + " ambient=" + projection.activeAmbientLeaseCount() + "/unknown=" + projection.unknownAmbientLeaseCount()
+                + " | inventoryConflicts=" + projection.inventoryConflictCount();
+    }
 
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
