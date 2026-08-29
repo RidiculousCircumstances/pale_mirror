@@ -1,0 +1,153 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.model.Bioform;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
+import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+
+import java.util.Objects;
+import java.util.Optional;
+
+/** Stable bounded JSON emitted by the v3 operator diagnostic command; it only reads one immutable checkpoint. */
+final class FrontierV3DiagnosticJson {
+    static final String PREFIX = "PMV3_DIAG ";
+    private static final int MAX_BYTES = 8_192;
+
+    private FrontierV3DiagnosticJson() { }
+
+    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+                         Optional<FrontierV3DiagnosticTrace.Entry> trace) {
+        Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(trace, "trace");
+        String value = switch (kind) {
+            case "summary" -> summary(checkpoint, state);
+            case "site" -> site(id, checkpoint, state);
+            case "actor" -> actor(id, checkpoint, state);
+            case "item" -> item(id, checkpoint, state);
+            case "operation" -> operation(id, checkpoint, state);
+            case "intent" -> intent(id, checkpoint, state);
+            case "trace" -> trace(id, checkpoint, trace);
+            default -> unavailable(kind, id, checkpoint, "unknown_view");
+        };
+        if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {
+            value = unavailable(kind, id, checkpoint, "response_limit");
+        }
+        return PREFIX + value;
+    }
+
+    static String unavailableRuntime(String kind, String id) {
+        return PREFIX + "{\"schema\":1,\"kind\":\"" + quote(kind) + "\",\"id\":\"" + quote(id)
+                + "\",\"status\":\"runtime_unavailable\"}";
+    }
+
+    private static String summary(CheckpointImage checkpoint, FrontierWorldState state) {
+        return base("summary", "", checkpoint)
+                + ",\"status\":\"ok\",\"settlements\":" + state.bootstrap().settlements().size()
+                + ",\"residents\":" + state.humanPopulation().residents().size()
+                + ",\"bioforms\":" + state.actorLocations().keySet().stream().filter(value -> value.value().startsWith("bioform:")).count()
+                + ",\"sites\":" + state.resourceSites().sites().size()
+                + ",\"operations\":" + state.operations().size()
+                + ",\"intents\":" + state.physicalIntents().size()
+                + ",\"ambientLeases\":" + state.ambientLeases().size()
+                + ",\"sceneLeases\":" + state.sceneLeases().size()
+                + ",\"items\":" + state.inventory().items().size()
+                + ",\"inventoryConflicts\":" + state.inventory().conflicts().size() + "}";
+    }
+
+    private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
+        ResourceSite site = subject == null ? null : FrontierResourceSitePlan.compile(state.bootstrap()).get(subject);
+        if (lifecycle == null || site == null) return unavailable("site", id, checkpoint, "not_found");
+        String work = lifecycle.activeWork().map(value -> value.id().value()).orElse("");
+        return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
+                + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
+                + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
+                + ",\"activeWork\":\"" + quote(work) + "\",\"firstCrop\":" + position(site.cropSlots().getFirst()) + "}";
+    }
+
+    private static String actor(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null); ActorLocation location = subject == null ? null : state.actorLocations().get(subject);
+        if (location == null) return unavailable("actor", id, checkpoint, "not_found");
+        ResidentProfile resident = state.humanPopulation().resident(subject);
+        Bioform bioform = bioform(state, subject).orElse(null);
+        String role = resident != null ? resident.role().name() : bioform != null ? bioform.role().name() : "UNKNOWN";
+        String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
+        return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + (resident != null ? "RESIDENT" : "BIOFORM")
+                + "\",\"owner\":\"" + quote(owner) + "\",\"role\":\"" + role + "\",\"life\":\"" + location.condition().status()
+                + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(location.position())
+                + ",\"ambientLease\":\"" + quote(state.ambientLeases().containsKey(subject) ? state.ambientLeases().get(subject).status().name() : "NONE") + "\"}";
+    }
+
+    private static String item(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null); ExactItemStack item = subject == null ? null : state.inventory().items().get(subject);
+        if (item == null) return unavailable("item", id, checkpoint, "not_found");
+        return base("item", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(item.economicOwnerId().value())
+                + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count() + ",\"custody\":" + custody(item.custody()) + "}";
+    }
+
+    private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null); RouteOperation operation = subject == null ? null : state.operations().get(subject);
+        if (operation == null) return unavailable("operation", id, checkpoint, "not_found");
+        String members = operation.participantIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
+        return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
+                + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
+                + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
+                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]}";
+    }
+
+    private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        PhysicalIntent intent;
+        try { intent = state.physicalIntents().get(new PhysicalIntentId(id)); }
+        catch (IllegalArgumentException invalid) { intent = null; }
+        if (intent == null) return unavailable("intent", id, checkpoint, "not_found");
+        String subjects = intent.subjectIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
+        return base("intent", id, checkpoint) + ",\"status\":\"ok\",\"intentKind\":\"" + intent.kind()
+                + "\",\"intentStatus\":\"" + intent.status() + "\",\"causeSubject\":\"" + quote(intent.causeSubjectId().value())
+                + "\",\"radius\":" + intent.radiusBlocks() + ",\"subjects\":[" + subjects + "]}";
+    }
+
+    private static String trace(String id, CheckpointImage checkpoint, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
+        if (trace.isEmpty()) return unavailable("trace", id, checkpoint, "not_found");
+        FrontierV3DiagnosticTrace.Entry entry = trace.orElseThrow();
+        return base("trace", id, checkpoint) + ",\"status\":\"ok\",\"correlation\":\"" + quote(entry.correlation())
+                + "\",\"eventKind\":\"" + quote(entry.kind()) + "\",\"subject\":\"" + quote(entry.subject())
+                + "\",\"command\":\"" + quote(entry.commandId()) + "\",\"transaction\":\"" + quote(entry.transactionId())
+                + "\",\"acceptedRevision\":" + entry.revision() + "}";
+    }
+
+    private static String unavailable(String kind, String id, CheckpointImage checkpoint, String status) {
+        return base(kind, id, checkpoint) + ",\"status\":\"" + quote(status) + "\"}";
+    }
+
+    private static String base(String kind, String id, CheckpointImage checkpoint) {
+        return "{\"schema\":1,\"kind\":\"" + quote(kind) + "\",\"id\":\"" + quote(id) + "\",\"world\":\""
+                + quote(checkpoint.worldId().value()) + "\",\"revision\":" + checkpoint.revision().value() + ",\"instant\":" + checkpoint.instant().ticks();
+    }
+
+    private static Optional<SubjectId> subject(String value) { try { return Optional.of(new SubjectId(value)); } catch (IllegalArgumentException invalid) { return Optional.empty(); } }
+    private static Optional<Bioform> bioform(FrontierWorldState state, SubjectId id) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream()).filter(value -> value.id().equals(id)).findFirst();
+    }
+    private static String position(BlockPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
+    private static String custody(InventoryCustody custody) {
+        return switch (custody) {
+            case InventoryCustody.ContainerSlot slot -> "{\"kind\":\"CONTAINER_SLOT\",\"container\":\"" + quote(slot.containerId().value()) + "\",\"slot\":" + slot.slot() + "}";
+            case InventoryCustody.Cargo cargo -> "{\"kind\":\"CARGO\",\"cargo\":\"" + quote(cargo.cargoId().value()) + "\"}";
+            case InventoryCustody.Player player -> "{\"kind\":\"PLAYER\",\"player\":\"" + player.playerId() + "\"}";
+            case InventoryCustody.WorldCarrier carrier -> "{\"kind\":\"WORLD_CARRIER\",\"carrier\":\"" + carrier.carrierId() + "\"}";
+        };
+    }
+    private static String quote(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
+}

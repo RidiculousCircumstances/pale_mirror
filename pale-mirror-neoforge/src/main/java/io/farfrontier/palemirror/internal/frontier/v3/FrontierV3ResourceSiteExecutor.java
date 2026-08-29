@@ -74,6 +74,7 @@ final class FrontierV3ResourceSiteExecutor {
                     FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),
                     new ResourceSiteConflictObserved(target.site().id(), canonical(position), cause))).orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             if (!(result instanceof CommandResult.Accepted)) return BlockBreakObservation.REJECTED;
+            FrontierV3DiagnosticTrace.record(level.getServer(), cause, "resource_site_conflict", target.site().id(), result);
             ledger.conflict(target.site().id());
             return BlockBreakObservation.ACCEPTED;
         } catch (RuntimeException rejected) {

@@ -32,6 +32,13 @@ final class PaleMirrorCommandRegistrar {
                     context.getSource().sendSuccess(() -> Component.literal(status), false);
                     return 1;
                 }));
+        LiteralArgumentBuilder<CommandSourceStack> v3 = Commands.literal("v3")
+                .requires(source -> source.hasPermission(2) && FrontierV3ServerLifecycle.ownsPhysicalWorld(source.getServer()));
+        LiteralArgumentBuilder<CommandSourceStack> inspect = Commands.literal("inspect");
+        inspect.then(Commands.literal("summary").executes(context -> v3Diagnostic(context, "summary", "")));
+        inspect.then(diagnosticObject("site")); inspect.then(diagnosticObject("actor")); inspect.then(diagnosticObject("item"));
+        inspect.then(diagnosticObject("operation")); inspect.then(diagnosticObject("intent")); inspect.then(diagnosticObject("trace"));
+        v3.then(inspect); root.then(v3);
         root.then(Commands.literal("performance").requires(source -> source.hasPermission(2)).executes(context -> {
             context.getSource().sendSuccess(() -> Component.literal(PaleMirrorRuntime
                     .forServer(context.getSource().getServer()).performanceStatus()), false);
@@ -229,6 +236,16 @@ final class PaleMirrorCommandRegistrar {
                 }))));
         DebugCommandRegistrar.attach(root);
         event.getDispatcher().register(root);
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> diagnosticObject(String view) {
+        return Commands.literal(view).then(Commands.argument("id", StringArgumentType.greedyString())
+                .executes(context -> v3Diagnostic(context, view, StringArgumentType.getString(context, "id"))));
+    }
+
+    private static int v3Diagnostic(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context, String view, String id) {
+        context.getSource().sendSuccess(() -> Component.literal(FrontierV3ServerLifecycle.diagnostic(context.getSource().getServer(), view, id)), false);
+        return 1;
     }
 
     private static int changeFrontierClock(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context, String profile) {

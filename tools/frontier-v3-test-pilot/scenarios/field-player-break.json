@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "field_player_break",
+  "server": { "host": "127.0.0.1", "port": 25565, "version": "1.21.1" },
+  "pilot": { "username": "PMTestPilot", "auth": "offline" },
+  "setup": [
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run tp PMTestPilot -336 65 -360" },
+    { "type": "observe", "viewer": "PMAudit" }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 5000 },
+    { "type": "walk", "position": { "x": -332, "y": 65, "z": -355 }, "radius": 2 },
+    { "type": "look", "at": { "x": -332, "y": 64, "z": -355 } },
+    { "type": "break", "position": { "x": -332, "y": 64, "z": -355 } },
+    { "type": "wait", "ms": 1000 }
+  ],
+  "assertions": [
+    { "after": 1, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok" } },
+    { "after": 4, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
+    { "after": 4, "view": "trace", "id": "$pilot", "expect": { "status": "ok", "eventKind": "resource_site_conflict" } }
+  ],
+  "frames": [
+    { "after": 1, "name": "before" },
+    { "after": 4, "name": "after" }
+  ]
+}

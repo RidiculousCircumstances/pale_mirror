@@ -1,0 +1,17 @@
+{
+  "name": "@far-frontier/frontier-v3-test-pilot",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "scenario": "node src/run-scenario.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "mineflayer": "4.38.0",
+    "mineflayer-pathfinder": "2.4.5"
+  }
+}

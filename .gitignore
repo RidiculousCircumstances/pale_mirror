@@ -37,6 +37,7 @@ __pycache__/
 *.py[cod]
 /tools/blender/.venv/
 /tools/blender/__pycache__/
+/tools/frontier-v3-test-pilot/node_modules/
 
 ### Minecraft Modding ###
 run/

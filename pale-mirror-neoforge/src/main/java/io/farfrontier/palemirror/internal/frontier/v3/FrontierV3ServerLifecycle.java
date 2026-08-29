@@ -76,6 +76,22 @@ public final class FrontierV3ServerLifecycle {
                 .orElse("Frontier v3 is ACTIVE, but its immutable status projection is unavailable.");
     }
 
+    /**
+     * Emits one bounded, immutable diagnostic document for an operator or external test pilot.
+     * This is deliberately a read boundary: no command, schedule, chunk load or WAL write occurs here.
+     */
+    public static String diagnostic(MinecraftServer server, String view, String id) {
+        Objects.requireNonNull(server, "server"); Objects.requireNonNull(view, "view"); Objects.requireNonNull(id, "id");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
+        if (!ownsPhysicalWorld(server) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
+        }
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
+                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty());
+    }
+
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */
     static String formatStatus(FrontierWorldProjection projection) {
         Objects.requireNonNull(projection, "projection");
@@ -177,6 +193,7 @@ public final class FrontierV3ServerLifecycle {
                 runtime.shutdown();
             }
         } finally {
+            FrontierV3DiagnosticTrace.forget(server);
             STOPPING.remove(server);
         }
     }

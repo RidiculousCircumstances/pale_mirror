@@ -1,0 +1,62 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class FrontierV3DiagnosticJsonTest {
+    @Test
+    void rendersBoundedStableReadOnlyViewsForRealCanonicalSubjects(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-json-test"), 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId site = state.resourceSites().sites().keySet().stream().sorted().findFirst().orElseThrow();
+        SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
+        SubjectId item = state.inventory().items().keySet().stream().sorted().findFirst().orElseThrow();
+
+        String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, state, Optional.empty());
+        String siteJson = FrontierV3DiagnosticJson.render("site", site.value(), checkpoint, state, Optional.empty());
+        String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty());
+        String itemJson = FrontierV3DiagnosticJson.render("item", item.value(), checkpoint, state, Optional.empty());
+        String missing = FrontierV3DiagnosticJson.render("site", "site:missing", checkpoint, state, Optional.empty());
+
+        assertTrue(summary.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"summary\""));
+        assertTrue(summary.contains("\"settlements\":12"));
+        assertTrue(siteJson.contains("\"id\":\"" + site.value() + "\""));
+        assertTrue(siteJson.contains("\"firstCrop\":{"));
+        assertTrue(actorJson.contains("\"position\":{"));
+        assertTrue(itemJson.contains("\"custody\":{"));
+        assertTrue(missing.contains("\"status\":\"not_found\""));
+        assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192);
+    }
+
+    @Test
+    void exposesOnlyOneExplicitTraceAndNeverInventsAMissingCorrelation(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-trace-test"), 92L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        FrontierV3DiagnosticTrace.Entry trace = new FrontierV3DiagnosticTrace.Entry("player:test", "resource_site_conflict",
+                "site:1-wheat-field", "executor:command", "transaction:one", 7L);
+
+        String known = FrontierV3DiagnosticJson.render("trace", "player:test", checkpoint, state, Optional.of(trace));
+        String missing = FrontierV3DiagnosticJson.render("trace", "player:other", checkpoint, state, Optional.empty());
+
+        assertTrue(known.contains("\"correlation\":\"player:test\""));
+        assertTrue(known.contains("\"acceptedRevision\":7"));
+        assertTrue(missing.contains("\"status\":\"not_found\""));
+    }
+}
