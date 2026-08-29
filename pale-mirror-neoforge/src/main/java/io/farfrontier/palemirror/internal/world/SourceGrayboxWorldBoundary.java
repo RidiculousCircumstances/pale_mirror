@@ -1,10 +1,8 @@
 package io.farfrontier.palemirror.internal.world;
 
-import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3PhysicalWorld;
 import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
@@ -17,8 +15,7 @@ import java.util.Map;
 
 /** Immutable dedicated-level identity and finite-border owner for the source graybox. */
 final class SourceGrayboxWorldBoundary {
-    static final ResourceKey<Level> DIMENSION = ResourceKey.create(Registries.DIMENSION,
-            ResourceLocation.fromNamespaceAndPath(PaleMirrorMod.MOD_ID, "frontier_graybox"));
+    static final ResourceKey<Level> DIMENSION = FrontierV3PhysicalWorld.DIMENSION;
     private static final int OBSERVATION_DECK_RADIUS = 3;
     private static final int OBSERVATION_DECK_X = 8;
     private static final int OBSERVATION_DECK_Z = ReferenceGrayboxLayout.MIN_Z - 56;
@@ -34,9 +31,11 @@ final class SourceGrayboxWorldBoundary {
      * definition fails activation rather than projecting onto a player landscape.
      */
     static ServerLevel level(MinecraftServer server) {
-        ServerLevel result = server.getLevel(DIMENSION);
-        if (result == null) throw new IllegalStateException("source graybox dimension is unavailable");
-        return result;
+        try {
+            return FrontierV3PhysicalWorld.require(server);
+        } catch (IllegalStateException missing) {
+            throw new IllegalStateException("source graybox dimension is unavailable", missing);
+        }
     }
 
     static void enforce(ServerLevel level) {

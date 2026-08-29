@@ -178,7 +178,8 @@ final class FrontierV3ResourceSiteExecutor {
         return site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).isAir())
                 && site.soilSlots().stream().allMatch(soil -> {
                     BlockState state = level.getBlockState(minecraft(soil));
-                    return (state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT)) && !level.getBlockState(minecraft(soil).below()).isAir();
+                    return (state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT) || state.is(Blocks.LIGHT_GRAY_CONCRETE))
+                            && !level.getBlockState(minecraft(soil).below()).isAir();
                 });
     }
     static boolean matches(ServerLevel level, ResourceSite site, int stage) {

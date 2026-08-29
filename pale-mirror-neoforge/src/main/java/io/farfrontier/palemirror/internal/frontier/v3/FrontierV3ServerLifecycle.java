@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
-import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -38,13 +37,14 @@ public final class FrontierV3ServerLifecycle {
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         if (!enabled() || RUNTIMES.containsKey(server)) return;
+        ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:overworld"), server.overworld().getSeed()),
+                FrontierWorldRuntimeDefinition.configuration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed()),
                 new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             try {
-                int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, server.overworld());
+                int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, physicalWorld);
                 int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
                 int sceneUnknown = FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime);
                 if (uninspectable > 0) {
@@ -72,26 +72,27 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null) return;
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
-                FrontierV3PhysicalObservationExecutor.tick(server.overworld(), runtime);
-                FrontierV3ResourceSiteExplosionExecutor.tick(server.overworld(), runtime);
-                FrontierV3ExplosionExecutor.tick(server.overworld(), runtime);
-                FrontierV3CargoCarrierImpactExecutor.tick(server.overworld(), runtime);
-                FrontierV3GrayboxExecutor.tick(server.overworld(), runtime);
-                FrontierV3ResourceSiteExecutor.tick(server.overworld(), runtime);
-                FrontierV3ResourceSiteHarvestExecutor.tick(server.overworld(), runtime);
-                FrontierV3DecontaminationExecutor.tick(server.overworld(), runtime);
-                FrontierV3InfectionOverlayExecutor.tick(server.overworld(), runtime);
-                FrontierV3ObjectBoardExecutor.tick(server.overworld(), runtime);
-                FrontierV3AmbientActorExecutor.tick(server.overworld(), runtime);
+                ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
+                FrontierV3PhysicalObservationExecutor.tick(physicalWorld, runtime);
+                FrontierV3ResourceSiteExplosionExecutor.tick(physicalWorld, runtime);
+                FrontierV3ExplosionExecutor.tick(physicalWorld, runtime);
+                FrontierV3CargoCarrierImpactExecutor.tick(physicalWorld, runtime);
+                FrontierV3GrayboxExecutor.tick(physicalWorld, runtime);
+                FrontierV3ResourceSiteExecutor.tick(physicalWorld, runtime);
+                FrontierV3ResourceSiteHarvestExecutor.tick(physicalWorld, runtime);
+                FrontierV3DecontaminationExecutor.tick(physicalWorld, runtime);
+                FrontierV3InfectionOverlayExecutor.tick(physicalWorld, runtime);
+                FrontierV3ObjectBoardExecutor.tick(physicalWorld, runtime);
+                FrontierV3AmbientActorExecutor.tick(physicalWorld, runtime);
                 // Observe player custody before passive surface drift inspection can classify it.
-                FrontierV3InventoryObservationExecutor.tick(server.overworld(), runtime);
-                FrontierV3CargoCarrierObservationExecutor.tick(server.overworld(), runtime);
-                FrontierV3ContainerSurfaceExecutor.tick(server.overworld(), runtime);
-                FrontierV3ExactItemConsumptionExecutor.tick(server.overworld(), runtime);
-                FrontierV3CargoHandoffExecutor.tick(server.overworld(), runtime);
-                FrontierV3StructuralRepairExecutor.tick(server.overworld(), runtime);
-                FrontierV3RouteConstructionExecutor.tick(server.overworld(), runtime);
-                FrontierV3SceneExecutor.tick(server.overworld(), runtime);
+                FrontierV3InventoryObservationExecutor.tick(physicalWorld, runtime);
+                FrontierV3CargoCarrierObservationExecutor.tick(physicalWorld, runtime);
+                FrontierV3ContainerSurfaceExecutor.tick(physicalWorld, runtime);
+                FrontierV3ExactItemConsumptionExecutor.tick(physicalWorld, runtime);
+                FrontierV3CargoHandoffExecutor.tick(physicalWorld, runtime);
+                FrontierV3StructuralRepairExecutor.tick(physicalWorld, runtime);
+                FrontierV3RouteConstructionExecutor.tick(physicalWorld, runtime);
+                FrontierV3SceneExecutor.tick(physicalWorld, runtime);
                 runtime.tick(TICK_BUDGET);
             }
         } catch (RuntimeException error) {
@@ -119,7 +120,7 @@ public final class FrontierV3ServerLifecycle {
     public static boolean observeEntityJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && FrontierV3AmbientActorExecutor.observeJoin(runtime, entity);
     }
 
@@ -127,7 +128,7 @@ public final class FrontierV3ServerLifecycle {
     public static boolean observeLivingDeath(ServerLevel level, Entity entity, Entity source) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && (FrontierV3SceneExecutor.observeDeath(runtime, entity, source)
                 || FrontierV3AmbientActorExecutor.observeDeath(runtime, entity, source));
     }
@@ -136,7 +137,7 @@ public final class FrontierV3ServerLifecycle {
     public static boolean observeEntityLeave(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity);
     }
 
@@ -144,7 +145,7 @@ public final class FrontierV3ServerLifecycle {
     public static boolean blocksNativeCropGrowth(ServerLevel level, BlockPos position) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(runtime, level, position);
     }
 
@@ -156,7 +157,7 @@ public final class FrontierV3ServerLifecycle {
     public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
         return releaseCargoCarrier(level, runtime, entity, java.util.Optional.of(player.getUUID()));
     }
 
@@ -194,7 +195,7 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
         if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         observeTerminalVehicleDamage(level, runtime, entity, source);
     }
 
@@ -215,7 +216,7 @@ public final class FrontierV3ServerLifecycle {
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return ExactCustodyObservation.REJECTED;
         var carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(itemEntity.getItem());
@@ -233,7 +234,7 @@ public final class FrontierV3ServerLifecycle {
     public static ExactCustodyObservation observeExactItemToss(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return ExactCustodyObservation.REJECTED;
         var item = state.inventory().items().values().stream().filter(value -> value.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Player owner
@@ -273,7 +274,7 @@ public final class FrontierV3ServerLifecycle {
     public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         String cause = "player:" + player.getUUID();
         if (FrontierV3InfectionOverlayExecutor.observeBlockBreak(runtime, level, position, cause)
                 == FrontierV3InfectionOverlayExecutor.BlockBreakObservation.REJECTED) return true;
@@ -287,7 +288,7 @@ public final class FrontierV3ServerLifecycle {
     public static boolean observeExplosion(ServerLevel level, java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         return observeExplosion(level, runtime, affected, entities);
     }
 

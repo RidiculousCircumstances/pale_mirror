@@ -28,13 +28,13 @@ public final class FrontierV3ResourceSiteGameTests {
     @GameTest(batch = "pm-frontier-v3-resource-site", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void ownedFieldWritesAllSlotsAndRecoversItsPendingProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(new BlockPos(8, 8, 8)));
-        prepareBaseline(level, site);
+        prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
             PhysicalIntentId intent = new PhysicalIntentId("intent:site-prepare-resource-site-game-test"); ledger.reserve(site.id(), intent);
             CompoundTag pending = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(pending, level.registryAccess());
             helper.assertTrue(ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.PENDING && FrontierV3ResourceSiteExecutor.baseline(level, site),
-                    "a restart retains pending ownership without treating the grass baseline as a completed field");
+                    "a restart retains pending ownership without treating the neutral graybox footing as a completed field");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
                     "one executor pass writes every prevalidated soil and crop slot: " + firstFieldMismatch(level, site));
             ledger.activate(site.id()); CompoundTag active = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(active, level.registryAccess());
@@ -109,6 +109,14 @@ public final class FrontierV3ResourceSiteGameTests {
             // Production accepts grass or dirt; use dirt in the delayed fixture because
             // grass can receive a random tick before the ownership assertion runs.
             level.setBlock(position, Blocks.DIRT.defaultBlockState(), 3); });
+        site.cropSlots().forEach(crop -> level.setBlock(minecraft(crop), Blocks.AIR.defaultBlockState(), 3));
+        int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow(), maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
+        site.cropSlots().stream().filter(crop -> crop.x() == minX).forEach(crop -> level.setBlock(minecraft(crop).west(), Blocks.GLOWSTONE.defaultBlockState(), 3));
+        site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
+    }
+    private static void prepareGrayboxBaseline(ServerLevel level, ResourceSite site) {
+        site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(position, Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), 3); });
         site.cropSlots().forEach(crop -> level.setBlock(minecraft(crop), Blocks.AIR.defaultBlockState(), 3));
         int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow(), maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
         site.cropSlots().stream().filter(crop -> crop.x() == minX).forEach(crop -> level.setBlock(minecraft(crop).west(), Blocks.GLOWSTONE.defaultBlockState(), 3));
