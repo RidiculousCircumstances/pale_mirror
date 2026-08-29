@@ -202,6 +202,7 @@ pairs to the dedicated-server installer:
 ```bash
 scripts/install-server.sh \
   --target /srv/far-frontier \
+  --level-name frontier-v3-live \
   --accept-eula \
   --pale-mirror-url https://ARTIFACT_HOST/pale-mirror/0.2.0/pale_mirror-0.2.0.jar \
   --pale-mirror-sha512 <PM-SHA-512> \

@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "8d3255e292502cef460ae47206f29d6065f576dea22c0e64234183b5b8ff8276"
+hash = "17e6e4d782bb9130e6e4266e16740a568a49b8001566cdf090848f5cb3a12e4c"
 
 [[files]]
 file = "config/README.md"
@@ -54,7 +54,7 @@ hash = "96432136ee78d5ed53ee96e6a6ae742487f434f4593b4fc1f7a357fd0404e7ba"
 
 [[files]]
 file = "datapacks/README.md"
-hash = "026394bfcebb1456dda40e96020a690ea34b6af4e560a33e8e571ab403674a65"
+hash = "4e357c67e389867053395772f12241d8777a091058ac6576d74ae7b5a177d048"
 
 [[files]]
 file = "datapacks/crimson-curse-raids-disabled/README.md"
@@ -760,7 +760,7 @@ hash = "ba731c2600b07e23bc22ecf4d54350f4f4ce407add4a0cef94209a7573b29f8c"
 
 [[files]]
 file = "scripts/install-server.sh"
-hash = "a434b0c288b822df2848334edbcb2eecd93b6af59847bacc1164cecb40a2265c"
+hash = "4e0208d66ffbac0a40564e65aeee665407893136ffea27e8aed8a3993c39daa6"
 
 [[files]]
 file = "scripts/lib/install-hosted-pale-mirror.sh"
@@ -776,7 +776,7 @@ hash = "1701805a333229d1a384bf4d6c960d6b14436bce125cbc64948d7b27cd4992e1"
 
 [[files]]
 file = "scripts/run-server-java22.sh"
-hash = "db79eecd0e6243230201566ecc677cc330b1976414a91aeb6fef5fd1cda04a0e"
+hash = "1c0eba04456d8a29fb2fcf432191005bfab018274a76d129ed5d397f79bff121"
 
 [[files]]
 file = "scripts/server-smoke-test.sh"

@@ -21,6 +21,7 @@ Usage: scripts/install-server.sh --target <server directory> [options]
 Options:
   --pack-url <URL>
   --java <path>
+  --level-name <directory name>
   --enable-c2me
   --enable-server-dh-cache
   --accept-eula
@@ -54,6 +55,7 @@ java_bin="${JAVA_BIN:-java}"
 accept_eula=false
 enable_c2me=false
 enable_server_dh_cache=false
+level_name=""
 pale_mirror_url="${PALE_MIRROR_URL:-}"
 pale_mirror_sha512="${PALE_MIRROR_SHA512:-}"
 pale_mirror_visuals_url="${PALE_MIRROR_VISUALS_URL:-}"
@@ -65,6 +67,7 @@ while (($#)); do
     --target) target=${2:?--target requires a directory}; shift 2 ;;
     --pack-url) pack_url=${2:?--pack-url requires a URL}; shift 2 ;;
     --java) java_bin=${2:?--java requires a path}; shift 2 ;;
+    --level-name) level_name=${2:?--level-name requires a directory name}; shift 2 ;;
     --accept-eula) accept_eula=true; shift ;;
     --enable-c2me) enable_c2me=true; shift ;;
     --enable-server-dh-cache) enable_server_dh_cache=true; shift ;;
@@ -80,6 +83,10 @@ while (($#)); do
 done
 
 [[ -n "$target" ]] || { usage >&2; exit 2; }
+if [[ -n "$level_name" && ! "$level_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "--level-name must be a simple relative directory name: $level_name" >&2
+  exit 2
+fi
 validate_hosted_pale_mirror_args "$pale_mirror_url" "$pale_mirror_sha512"
 validate_hosted_pale_mirror_visuals_args "$pale_mirror_visuals_url" "$pale_mirror_visuals_sha512"
 validate_hosted_railway_args "$railway_untold_url" "$railway_untold_sha512"
@@ -211,6 +218,22 @@ install_hosted_pale_mirror_visuals \
 install_hosted_railway_untold \
   "$target" "$railway_untold_url" "$railway_untold_sha512" "$cache_dir"
 
+set_server_property() {
+  local key=$1 value=$2 properties="$target/server.properties" temporary
+  temporary=$(mktemp "$target/.server-properties.XXXXXX")
+  if [[ -f "$properties" ]]; then
+    awk -F= -v key="$key" '$1 != key { print }' "$properties" >"$temporary"
+  fi
+  printf '%s=%s\n' "$key" "$value" >>"$temporary"
+  mv "$temporary" "$properties"
+}
+
+# A custom dimension is world-local data. Set the selected world before
+# resolving its datapack location, rather than relying on a later manual edit.
+if [[ -n "$level_name" ]]; then
+  set_server_property level-name "$level_name"
+fi
+
 resolve_world_datapacks_dir() {
   local properties=$1 level_name
   level_name=world
@@ -270,15 +293,6 @@ if [[ "$accept_eula" == true ]]; then
   printf 'eula=true\n' >"$target/eula.txt"
 fi
 
-set_server_property() {
-  local key=$1 value=$2 properties="$target/server.properties" temporary
-  temporary=$(mktemp "$target/.server-properties.XXXXXX")
-  if [[ -f "$properties" ]]; then
-    awk -F= -v key="$key" '$1 != key { print }' "$properties" >"$temporary"
-  fi
-  printf '%s=%s\n' "$key" "$value" >>"$temporary"
-  mv "$temporary" "$properties"
-}
 set_server_property view-distance 8
 set_server_property simulation-distance 6
 set_server_property sync-chunk-writes true

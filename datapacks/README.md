@@ -14,8 +14,9 @@ content from selecting entities or items supplied only by absent optional mods.
 They change world generation directly; they do not hide errors with log filters.
 
 `pale-mirror-graybox` owns the disposable `pale_mirror:frontier_graybox`
-dimension for source-parity simulation tests. It must be installed before a
-world is first created, because dimensions are level-stem data rather than a
-runtime terrain edit. The normal server installer copies it into
-`world/datapacks/`; the Pale Mirror mod rejects graybox activation if it is
-absent instead of changing the ordinary overworld.
+dimension for Frontier v3 tests. It must be installed before a world is first
+created, because dimensions are level-stem data rather than a runtime terrain
+edit. Select the world through `scripts/install-server.sh --level-name NAME`;
+the installer then copies the pack into `NAME/datapacks/` before first boot. A
+v3-enabled launcher rejects a selected world that lacks this definition rather
+than changing the ordinary overworld.
