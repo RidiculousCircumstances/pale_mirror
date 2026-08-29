@@ -169,7 +169,10 @@ final class FrontierV3DiagnosticJson {
                 + ",\"depotSurface\":\"" + quote(value.depotSurface())
                 + "\",\"ownedChestPresent\":" + value.ownedChestPresent()
                 + ",\"fieldMatchesMatureStage\":" + value.fieldMatchesMatureStage()
-                + ",\"outputSlotEmpty\":" + value.outputSlotEmpty() + "}";
+                + ",\"outputSlotEmpty\":" + value.outputSlotEmpty()
+                + ",\"claimedFieldStage\":" + value.claimedFieldStage()
+                + ",\"fieldMatchesClaimedStage\":" + value.fieldMatchesClaimedStage()
+                + ",\"precondition\":\"" + value.precondition() + "\"}";
     }
 
     private static String trace(String id, CheckpointImage checkpoint, Optional<FrontierV3DiagnosticTrace.Entry> trace) {

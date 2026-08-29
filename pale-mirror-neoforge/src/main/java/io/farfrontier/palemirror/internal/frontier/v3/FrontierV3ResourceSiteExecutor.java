@@ -265,7 +265,13 @@ final class FrontierV3ResourceSiteExecutor {
                         site.irrigationSlots().stream().filter(irrigation -> !level.getBlockState(minecraft(irrigation)).equals(Blocks.WATER.defaultBlockState())))).findFirst();
     }
     private static boolean projectsGrowthStage(ResourceSiteLifecycle lifecycle) {
-        return lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY;
+        // Starting an exact harvest atomically changes the canonical lifecycle
+        // from READY to HARVESTING.  Its field still belongs to this executor,
+        // however: the bounded cursor may not yet have materialized the final
+        // mature crop stage when that hand-off happens.  Keep projecting the
+        // same canonical stage until the harvest receipt owns the reset.
+        return lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
+                || lifecycle.phase() == ResourceSitePhase.HARVESTING;
     }
     private static BlockState crop(int stage) { return Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, stage); }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }

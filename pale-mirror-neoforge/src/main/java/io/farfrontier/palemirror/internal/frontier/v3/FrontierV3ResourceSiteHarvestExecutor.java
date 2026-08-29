@@ -33,9 +33,17 @@ import java.util.Optional;
 
 /** Turns one loaded mature field into its sole named 64-wheat stack without any implicit yield. */
 final class FrontierV3ResourceSiteHarvestExecutor {
+    /**
+     * A mature canonical site can legitimately be one bounded materializer
+     * turn ahead of its loaded crop blocks.  That is not player drift and
+     * must not turn a harvest into an irreversible conflict.
+     */
+    enum Precondition { READY, WAITING_FOR_FIELD_PROJECTION, CONFLICT }
+
     /** Immutable loaded-world probe for the read-only operator diagnostic boundary. */
     record Readiness(boolean fieldLoaded, boolean depotLoaded, String depotSurface, boolean ownedChestPresent,
-                     boolean fieldMatchesMatureStage, boolean outputSlotEmpty) { }
+                     boolean fieldMatchesMatureStage, boolean outputSlotEmpty, int claimedFieldStage,
+                     boolean fieldMatchesClaimedStage, Precondition precondition) { }
 
     private FrontierV3ResourceSiteHarvestExecutor() { }
 
@@ -61,9 +69,14 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         FrontierV3ResourceSiteLedger.Claim claim = fieldLoaded ? FrontierV3ResourceSiteLedger.get(level).claim(target.site().id()) : null;
         boolean mature = fieldLoaded && claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
                 && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && FrontierV3ResourceSiteExecutor.matches(level, target.site(), ResourceSiteLifecycle.MATURE_STAGE);
+        boolean matchesClaim = fieldLoaded && claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
+                && FrontierV3ResourceSiteExecutor.matches(level, target.site(), claim.stage());
         boolean outputSlotEmpty = chest != null && target.output().custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot
                 && chest.getItem(slot.slot()).isEmpty();
-        return Optional.of(new Readiness(fieldLoaded, depotLoaded, surfaceStatus, chest != null, mature, outputSlotEmpty));
+        Precondition precondition = fieldLoaded && depotLoaded && chest != null
+                ? precondition(level, target.site(), claim, chest, target.output()) : Precondition.CONFLICT;
+        return Optional.of(new Readiness(fieldLoaded, depotLoaded, surfaceStatus, chest != null, mature, outputSlotEmpty,
+                claim == null ? -1 : claim.stage(), matchesClaim, precondition));
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
@@ -77,7 +90,9 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (chest == null) { unknown(runtime, intent.id(), "missing-depot"); return; }
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, target, ledger, chest); return; }
-        if (!precondition(level, target, ledger, chest)) { fail(runtime, ledger, target, "field-or-depot-precondition"); return; }
+        Precondition precondition = precondition(level, target.site(), ledger.claim(target.site().id()), chest, target.output());
+        if (precondition == Precondition.WAITING_FOR_FIELD_PROJECTION) return;
+        if (precondition != Precondition.READY) { fail(runtime, ledger, target, "field-or-depot-precondition"); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!apply(level, ledger, target.site(), chest, target.output())) { fail(runtime, ledger, target, "partial-harvest"); return; }
         confirm(runtime, intent, target);
@@ -89,15 +104,28 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         fail(runtime, ledger, target, "restart-postcondition-conflict");
     }
 
-    private static boolean precondition(ServerLevel level, Target target, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest) {
-        return precondition(level, target.site(), ledger, chest, target.output());
+    static Precondition precondition(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest, ExactItemStack output) {
+        return precondition(level, site, ledger.claim(site.id()), chest, output);
     }
 
-    static boolean precondition(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest, ExactItemStack output) {
-        if (!(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return false;
-        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
-        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
-                && FrontierV3ResourceSiteExecutor.matches(level, site, ResourceSiteLifecycle.MATURE_STAGE) && chest.getItem(slot.slot()).isEmpty();
+    private static Precondition precondition(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim,
+                                             ChestBlockEntity chest, ExactItemStack output) {
+        if (!(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)
+                || claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !chest.getItem(slot.slot()).isEmpty()) {
+            return Precondition.CONFLICT;
+        }
+        // The field ledger is the durable proof of PM ownership.  If its
+        // complete footprint still exactly matches that known stage, the
+        // regular bounded stage projector simply has not reached this site
+        // after the canonical maturity event yet.  Never overwrite or
+        // "repair" it here; wait for that owner to project the next stage.
+        if (claim.stage() < ResourceSiteLifecycle.MATURE_STAGE
+                && FrontierV3ResourceSiteExecutor.matches(level, site, claim.stage())) {
+            return Precondition.WAITING_FOR_FIELD_PROJECTION;
+        }
+        return claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
+                && FrontierV3ResourceSiteExecutor.matches(level, site, ResourceSiteLifecycle.MATURE_STAGE)
+                ? Precondition.READY : Precondition.CONFLICT;
     }
 
     private static boolean completePostcondition(ServerLevel level, Target target, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest) {
@@ -112,7 +140,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     }
 
     static boolean apply(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, ChestBlockEntity chest, ExactItemStack output) {
-        if (!precondition(level, site, ledger, chest, output)) return false;
+        if (precondition(level, site, ledger, chest, output) != Precondition.READY) return false;
         if (FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 0) == FrontierV3ResourceSiteExecutor.StageProjectionResult.CONFLICT) return false;
         int slot = ((io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot) output.custody()).slot();
         chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(output)); chest.setChanged();

@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "id": "live_redwillow_harvest",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
   "server": { "host": "127.0.0.1", "port": 25565 },
   "pilot": { "username": "PMTestPilot" },
   "setup": [

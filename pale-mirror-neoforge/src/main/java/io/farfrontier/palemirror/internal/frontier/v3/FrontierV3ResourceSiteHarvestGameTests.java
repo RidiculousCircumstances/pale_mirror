@@ -37,7 +37,15 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level); PhysicalIntentId intent = new PhysicalIntentId("intent:site-harvest-game-test");
             ledger.reserve(site.id(), intent); helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
                     "the harvest fixture must first materialize an exact active stage-zero field");
-            ledger.activate(site.id()); helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7),
+            ledger.activate(site.id());
+            BlockPos chestPosition = helper.absolutePos(new BlockPos(12, 8, 2)); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+            SubjectId depot = new SubjectId("container:resource-harvest-game-test"); ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, depot);
+            ExactItemStack output = new ExactItemStack(new SubjectId("item:site-harvest-game-test-wheat"), new SubjectId("settlement:1"), "minecraft:wheat", 64,
+                    new InventoryCustody.ContainerSlot(depot, 4));
+            helper.assertValueEqual(FrontierV3ResourceSiteHarvestExecutor.precondition(level, site, ledger, chest, output),
+                    FrontierV3ResourceSiteHarvestExecutor.Precondition.WAITING_FOR_FIELD_PROJECTION,
+                    "a fully owned stage-zero field waits for the bounded projector instead of becoming a false harvest conflict");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7),
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the fixture must use the production stage projector to mature all crops");
             helper.assertTrue(site.soilSlots().stream().allMatch(soil -> level.getBlockState(new BlockPos(soil.x(), soil.y(), soil.z())).is(Blocks.FARMLAND)),
                     "the fixture must retain all 64 owned farmland cells");
@@ -47,10 +55,9 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     .equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7))).findFirst().map(crop -> crop + "="
                     + level.getBlockState(new BlockPos(crop.x(), crop.y(), crop.z()))).orElse("none");
             helper.assertTrue(cropMismatch.equals("none"), "the fixture must contain all 64 owned mature crops: " + cropMismatch);
-            BlockPos chestPosition = helper.absolutePos(new BlockPos(12, 8, 2)); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
-            SubjectId depot = new SubjectId("container:resource-harvest-game-test"); ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, depot);
-            ExactItemStack output = new ExactItemStack(new SubjectId("item:site-harvest-game-test-wheat"), new SubjectId("settlement:1"), "minecraft:wheat", 64,
-                    new InventoryCustody.ContainerSlot(depot, 4));
+            helper.assertValueEqual(FrontierV3ResourceSiteHarvestExecutor.precondition(level, site, ledger, chest, output),
+                    FrontierV3ResourceSiteHarvestExecutor.Precondition.READY,
+                    "the same exact field becomes harvestable only after its owner projects maturity");
             helper.assertTrue(chest != null && FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, output),
                     "one receipt atomically resets all owned crops and writes one exact tagged output stack");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 0) && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(4), output),
