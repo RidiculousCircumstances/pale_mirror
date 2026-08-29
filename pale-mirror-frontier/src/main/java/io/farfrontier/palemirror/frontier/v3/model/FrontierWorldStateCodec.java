@@ -19,8 +19,20 @@ import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, VERSION = 41, MAX_ENTRIES = 65_535;
+    private final FrontierBootstrap pinnedBootstrap;
+
+    /** Generic codec for independent snapshots and cross-world test fixtures. */
+    public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
+
+    /**
+     * Runtime-local codec that reuses the immutable genesis profile after proving the snapshot belongs to it.
+     * This never weakens the serialized world/seed boundary: a foreign header fails before its mutable state is read.
+     */
+    FrontierWorldStateCodec(FrontierBootstrap pinnedBootstrap) { this.pinnedBootstrap = java.util.Objects.requireNonNull(pinnedBootstrap, "pinnedBootstrap"); }
+
     @Override public byte[] encode(FrontierWorldState state) {
         try {
+            verifyPinnedBootstrap(state.bootstrap());
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC); output.writeByte(VERSION);
@@ -53,7 +65,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
-            FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId(readString(input)), input.readLong());
+            FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
@@ -65,6 +77,20 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
+    }
+
+    private FrontierBootstrap bootstrapFor(WorldId worldId, long seed) {
+        if (pinnedBootstrap == null) return FrontierBootstrapper.create(worldId, seed);
+        if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed) {
+            throw new IllegalArgumentException("Frontier v3 state belongs to a different pinned bootstrap");
+        }
+        return pinnedBootstrap;
+    }
+
+    private void verifyPinnedBootstrap(FrontierBootstrap bootstrap) {
+        if (pinnedBootstrap != null && (!pinnedBootstrap.worldId().equals(bootstrap.worldId()) || pinnedBootstrap.seed() != bootstrap.seed())) {
+            throw new IllegalArgumentException("cannot encode Frontier v3 state for a different pinned bootstrap");
+        }
     }
 
     private static void writeActors(DataOutputStream output, Map<SubjectId, ActorLocation> values) throws IOException {

@@ -67,10 +67,11 @@ public final class FrontierBootstrapper {
                     settlementId, kind, anchor.offset(offset[0], 0, offset[1])));
         }
         int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
+        List<BlockPosition> placements = FrontierSettlementActorSlots.slots(BOUNDS, anchor, structures, residents);
         List<Resident> people = new ArrayList<>(residents);
         for (int ordinal = 0; ordinal < residents; ordinal++) {
             people.add(new Resident(new SubjectId("resident:" + (index + 1) + "-" + (ordinal + 1)), settlementId,
-                    ResidentRole.values()[ordinal % ResidentRole.values().length], FrontierSettlementActorSlots.slot(BOUNDS, anchor, structures, ordinal)));
+                    ResidentRole.values()[ordinal % ResidentRole.values().length], placements.get(ordinal)));
         }
         return new Settlement(settlementId, NAMES[index], anchor, people, structures);
     }

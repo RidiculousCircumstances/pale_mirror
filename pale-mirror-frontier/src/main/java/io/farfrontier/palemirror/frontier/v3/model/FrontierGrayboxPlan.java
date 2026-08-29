@@ -68,6 +68,18 @@ public final class FrontierGrayboxPlan {
     }
 
     /**
+     * One immutable full-height occupancy view of a settlement's stable structures.
+     * Bootstrap placement and later births deliberately use this same authoritative geometry
+     * rather than re-deriving a partial footprint for every candidate coordinate.
+     */
+    static java.util.Set<BlockPosition> intactStructureOccupancy(java.util.List<SettlementStructure> structures) {
+        Objects.requireNonNull(structures, "structures");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        structures.forEach(structure -> addStructure(cells, structure, StructureCondition.INTACT));
+        return java.util.Set.copyOf(cells.keySet());
+    }
+
+    /**
      * Resolves one full-intact semantic cell without consulting desired state.  Observations use
      * this baseline because a previous loss may already have removed the cell from the current
      * projection.  It deliberately covers every currently materializable owner kind.

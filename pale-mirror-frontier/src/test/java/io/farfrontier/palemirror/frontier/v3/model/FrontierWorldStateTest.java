@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -86,6 +87,20 @@ class FrontierWorldStateTest {
                 source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations(), source.physicalIntents(),
                 source.physicalObservations(), source.sceneLeases(), source.hiveColony(), source.structureDamage(), source.physicalDeltas(),
                 source.ambientLeases(), source.routeConstructions(), source.routeTopology(), source.strategicPlans(), source.humanPopulation(), source.resourceSites()));
+    }
+
+    @Test
+    void pinnedCodecReusesOnlyItsVerifiedImmutableBootstrap() {
+        FrontierBootstrap pinned = FrontierBootstrapper.create(new WorldId("frontier:pinned"), 1234L);
+        FrontierWorldState ownState = FrontierWorldState.initial(pinned);
+        FrontierWorldStateCodec codec = new FrontierWorldStateCodec(pinned);
+
+        assertSame(pinned, codec.decode(codec.encode(ownState)).bootstrap());
+
+        FrontierWorldState foreignState = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:foreign"), 1234L));
+        byte[] foreignBytes = new FrontierWorldStateCodec().encode(foreignState);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(foreignBytes));
+        assertThrows(IllegalArgumentException.class, () -> codec.encode(foreignState));
     }
 
     @Test

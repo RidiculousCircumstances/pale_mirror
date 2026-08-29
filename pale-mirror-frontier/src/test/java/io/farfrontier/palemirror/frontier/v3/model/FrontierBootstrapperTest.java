@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -54,6 +55,18 @@ class FrontierBootstrapperTest {
             assertEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 7L).canonicalSha256());
         } finally {
             Locale.setDefault(prior);
+        }
+    }
+
+    @Test
+    void batchPlacementUsesTheSameImmutableGeometryAsAnIndividualFutureBirthSlot() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:slots"), 7L);
+        Settlement settlement = bootstrap.settlements().getFirst();
+        int count = settlement.residents().size() + 1;
+
+        List<BlockPosition> batch = FrontierSettlementActorSlots.slots(bootstrap.bounds(), settlement.anchor(), settlement.structures(), count);
+        for (int ordinal = 0; ordinal < count; ordinal++) {
+            assertEquals(batch.get(ordinal), FrontierSettlementActorSlots.slot(bootstrap.bounds(), settlement, ordinal));
         }
     }
 }
