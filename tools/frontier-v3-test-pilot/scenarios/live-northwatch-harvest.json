@@ -10,21 +10,19 @@
   ],
   "actions": [
     { "type": "wait_until_block", "position": { "x": -332, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 75000 },
-    { "type": "wait", "ms": 2000 },
     { "type": "hud", "visible": false },
     { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
-    { "type": "wait", "ms": 12000 },
+    { "type": "wait_until_harvest_result", "siteId": "site:1-wheat-field", "intentId": "intent:site-harvest-1-wheat-field-1", "itemId": "item:site-harvest-1-wheat-field-1-wheat", "timeoutMs": 180000 },
     { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
     { "type": "inspect", "view": "summary", "id": "" },
     { "type": "hud", "visible": true }
   ],
   "assertions": [
-    { "after": 4, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok" } },
-    { "after": 6, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok" } },
-    { "after": 7, "view": "summary", "id": "", "expect": { "status": "ok" } }
+    { "after": 3, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2, "growthStage": 0 } },
+    { "after": 5, "view": "summary", "id": "", "expect": { "status": "ok" } }
   ],
   "frames": [
-    { "after": 3, "name": "northwatch-before-harvest-window" },
-    { "after": 5, "name": "northwatch-after-harvest-window" }
+    { "after": 2, "name": "northwatch-before-harvest-window" },
+    { "after": 3, "name": "northwatch-after-harvest-window" }
   ]
 }

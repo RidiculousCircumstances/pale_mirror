@@ -28,10 +28,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.Optional;
 
 /** Turns one loaded mature field into its sole named 64-wheat stack without any implicit yield. */
 final class FrontierV3ResourceSiteHarvestExecutor {
+    /** Immutable loaded-world probe for the read-only operator diagnostic boundary. */
+    record Readiness(boolean fieldLoaded, boolean depotLoaded, String depotSurface, boolean ownedChestPresent,
+                     boolean fieldMatchesMatureStage, boolean outputSlotEmpty) { }
+
     private FrontierV3ResourceSiteHarvestExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -40,6 +45,25 @@ final class FrontierV3ResourceSiteHarvestExecutor {
                 .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
                 .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
+    }
+
+    /** Explains a pending harvest without loading chunks or mutating either world. */
+    static Optional<Readiness> readiness(ServerLevel level, FrontierWorldState state, PhysicalIntentId intentId) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(intentId, "intent id");
+        Target target = target(state, state.physicalIntents().get(intentId));
+        if (target == null) return Optional.empty();
+        boolean fieldLoaded = loaded(level, target.site());
+        boolean depotLoaded = level.hasChunkAt(target.chestPosition());
+        ContainerSurface surface = state.inventory().surfaces().get(target.job().outputSlot().containerId());
+        String surfaceStatus = surface == null ? "MISSING" : surface.status().name();
+        ChestBlockEntity chest = depotLoaded ? FrontierV3CargoHandoffExecutor.activeChest(level,
+                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.job().outputSlot().containerId())) : null;
+        FrontierV3ResourceSiteLedger.Claim claim = fieldLoaded ? FrontierV3ResourceSiteLedger.get(level).claim(target.site().id()) : null;
+        boolean mature = fieldLoaded && claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
+                && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && FrontierV3ResourceSiteExecutor.matches(level, target.site(), ResourceSiteLifecycle.MATURE_STAGE);
+        boolean outputSlotEmpty = chest != null && target.output().custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot
+                && chest.getItem(slot.slot()).isEmpty();
+        return Optional.of(new Readiness(fieldLoaded, depotLoaded, surfaceStatus, chest != null, mature, outputSlotEmpty));
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
@@ -102,6 +126,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent == null) return null;
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST) return null;
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId()); if (lifecycle == null) return null;
         ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)

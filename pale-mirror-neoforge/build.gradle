@@ -49,6 +49,17 @@ def railwayGameTestWorldDirectory = new File(railwayGameTestDirectory, 'world')
 def railwayManagedConfig = layout.buildDirectory.file('runs/railway-game-test/config/railways-untold/config.toml')
 def railwayClientManagedConfig = layout.buildDirectory.file('runs/railway-client/config/railways-untold/config.toml')
 def frontierV3PilotClientDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-client')
+def frontierV3PilotPackClientDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-pack-client')
+def frontierV3PilotServerDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-server')
+// Resolve isolated-run inputs during Gradle configuration so the RunGame task remains
+// configuration-cache safe while it prepares a disposable game directory.
+def frontierV3PilotServerRunDirectory = frontierV3PilotServerDirectory.get().asFile
+def frontierV3PilotWorldName = providers.gradleProperty('frontierV3PilotWorld').orElse('frontier-v3-pilot-world').get()
+def frontierV3PilotSeed = providers.gradleProperty('frontierV3PilotSeed').orElse('41').get()
+def frontierV3PilotPort = providers.gradleProperty('frontierV3PilotPort').orElse('25575').get()
+def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
+def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
+def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
@@ -170,8 +181,8 @@ neoForge {
         }
         frontierV3PilotClient {
             client()
-            // A normal development client must execute the current source set,
-            // never a stale hosted copy of this same mod from the pack profile.
+            // Deliberately minimal v3 profile: NeoForge plus current source only.
+            // It connects only to the matching disposable Frontier v3 server.
             gameDirectory = frontierV3PilotClientDirectory
             // The pilot's acceptance frames are captured from its exact X11
             // window.  On a Wayland desktop GLFW otherwise prefers a native
@@ -183,10 +194,32 @@ neoForge {
             environment 'WAYLAND_DISPLAY', '__pale_mirror_pilot_xwayland_only__'
             systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
                     providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
+            programArgument '--fullscreen'
+            programArgument '--username'
+            programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
+            programArgument '--quickPlayMultiplayer'
+            programArgument providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25575').get()
+        }
+        frontierV3PilotPackClient {
+            client()
+            // Full-pack pilot remains available only for final compatibility/visual acceptance.
+            gameDirectory = frontierV3PilotPackClientDirectory
+            environment 'XDG_SESSION_TYPE', 'x11'
+            environment 'WAYLAND_DISPLAY', '__pale_mirror_pilot_xwayland_only__'
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
+                    providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
+            programArgument '--fullscreen'
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
             programArgument '--quickPlayMultiplayer'
             programArgument providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25565').get()
+        }
+        frontierV3PilotServer {
+            server()
+            // This server shares neither a pack profile nor a world directory with live work.
+            gameDirectory = frontierV3PilotServerDirectory
+            programArgument '--nogui'
+            systemProperty 'pale_mirror.frontier_v3.enabled', 'true'
         }
         ftbClient {
             client()
@@ -626,7 +659,7 @@ tasks.named('runRailwayClient') { dependsOn prepareRailwayClientMods }
 tasks.named('runFtbClient') { dependsOn prepareFtbClientMods }
 tasks.named('runMillenaireClient') { dependsOn prepareMillenaireClientMods }
 
-def syncFrontierV3PilotClientPack = tasks.register('syncFrontierV3PilotClientPack', Sync) {
+def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClient', Sync) {
     dependsOn tasks.named('classes')
     def installedClient = layout.buildDirectory.dir('runs/railway-client')
     from(installedClient) {
@@ -634,19 +667,78 @@ def syncFrontierV3PilotClientPack = tasks.register('syncFrontierV3PilotClientPac
         // run. Leaving this pack artifact beside it silently wins class lookup.
         exclude 'mods/pale_mirror-hosted.jar'
     }
-    into(frontierV3PilotClientDirectory)
+    into(frontierV3PilotPackClientDirectory)
     doFirst {
         if (!new File(installedClient.get().asFile, 'mods').isDirectory()) {
             throw new GradleException('Frontier v3 pilot requires the installed railway-client pack; run scripts/install-client.sh first')
         }
     }
     doLast {
-        if (new File(frontierV3PilotClientDirectory.get().asFile, 'mods/pale_mirror-hosted.jar').isFile()) {
+        if (new File(frontierV3PilotPackClientDirectory.get().asFile, 'mods/pale_mirror-hosted.jar').isFile()) {
             throw new GradleException('Frontier v3 pilot profile must not contain the hosted Pale Mirror jar')
         }
     }
 }
-tasks.named('prepareFrontierV3PilotClientRun') { dependsOn syncFrontierV3PilotClientPack }
+tasks.named('prepareFrontierV3PilotPackClientRun') { dependsOn syncFrontierV3PilotPackClient }
+
+// The old pilot profile copied a full modpack into this exact generated directory.
+// Always clear it before a lite launch so stale optional jars can never silently
+// defeat the profile boundary or pollute its logs.
+def resetFrontierV3PilotLiteClient = tasks.register('resetFrontierV3PilotLiteClient', Delete) {
+    delete frontierV3PilotClientDirectory
+}
+tasks.named('prepareFrontierV3PilotClientRun') {
+    dependsOn resetFrontierV3PilotLiteClient
+    doLast {
+        // A brand-new Minecraft game directory normally opens the first-run
+        // accessibility screen.  The native test pilot has no business logic
+        // until Quick Play connects, so acknowledge that client-local prompt
+        // deterministically here rather than relying on a manual X11 click.
+        // This is deliberately scoped to the disposable lite profile.
+        def options = new File(frontierV3PilotClientDirectory.get().asFile, 'options.txt')
+        options.parentFile.mkdirs()
+        options.text = 'onboardAccessibility:b:true\n' +
+                'narrator:0\n'
+    }
+}
+
+def resetFrontierV3PilotServerWorld = tasks.register('resetFrontierV3PilotServerWorld') {
+    doLast {
+        def worldDirectory = new File(frontierV3PilotServerRunDirectory, frontierV3PilotWorldName)
+        if (frontierV3PilotReset == 'true' && worldDirectory.exists() && !worldDirectory.deleteDir()) {
+            throw new GradleException("Could not reset disposable Frontier v3 pilot world ${worldDirectory}")
+        }
+    }
+}
+def installFrontierV3PilotGrayboxDatapack = tasks.register('installFrontierV3PilotGrayboxDatapack', Sync) {
+    dependsOn resetFrontierV3PilotServerWorld
+    from(frontierV3PilotGrayboxDatapackDirectory)
+    into(new File(frontierV3PilotServerRunDirectory, "${frontierV3PilotWorldName}/datapacks/pale-mirror-graybox"))
+    doFirst {
+        if (!new File(frontierV3PilotGrayboxDatapackDirectory, 'data/pale_mirror/dimension/frontier_graybox.json').isFile()) {
+            throw new GradleException("Frontier v3 lite profile requires the canonical workspace datapack at ${frontierV3PilotGrayboxDatapackDirectory}")
+        }
+    }
+}
+
+tasks.named('runFrontierV3PilotServer') {
+    dependsOn installFrontierV3PilotGrayboxDatapack
+    doFirst {
+        def directory = frontierV3PilotServerRunDirectory
+        def world = frontierV3PilotWorldName
+        def seed = frontierV3PilotSeed
+        def port = frontierV3PilotPort
+        def username = frontierV3PilotOperator
+        if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)) {
+            throw new GradleException('Frontier v3 pilot world, username or port is invalid')
+        }
+        directory.mkdirs()
+        new File(directory, 'eula.txt').text = 'eula=true\n'
+        new File(directory, 'server.properties').text = "level-name=${world}\nlevel-seed=${seed}\nserver-ip=127.0.0.1\nserver-port=${port}\nonline-mode=false\nallow-flight=true\ngamemode=creative\ndifficulty=normal\nspawn-protection=0\nview-distance=10\nsimulation-distance=10\n"
+        def uuid = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        new File(directory, 'ops.json').text = '[\n  {"uuid":"' + uuid + '","name":"' + username + '","level":4,"bypassesPlayerLimit":false}\n]\n'
+    }
+}
 
 tasks.register('clientSmoke', Exec) {
     group = 'verification'

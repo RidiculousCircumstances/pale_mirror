@@ -109,6 +109,29 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
 
     Optional<AdvanceResult> tick(WorkBudget budget) {
+        return advanceOne(budget, true);
+    }
+
+    /**
+     * Advances the ordinary ordered due-action engine by a bounded operator-requested interval.
+     * Every unit retains its normal WAL-backed transition; snapshots may be coalesced because
+     * recovery can replay the complete WAL tail after an interrupted request.
+     */
+    Optional<AdvanceResult> advance(int ticks, WorkBudget budget) {
+        if (ticks < 1) throw new IllegalArgumentException("advance ticks must be positive");
+        Objects.requireNonNull(budget, "budget");
+        AdvanceResult latest = null;
+        for (int index = 0; index < ticks; index++) {
+            Optional<AdvanceResult> result = advanceOne(budget, false);
+            if (result.isEmpty()) return Optional.empty();
+            latest = result.orElseThrow();
+            if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.of(latest);
+        }
+        if (ticksSinceCheckpoint >= checkpointIntervalTicks) checkpoint();
+        return Optional.of(Objects.requireNonNull(latest, "advanced result"));
+    }
+
+    private Optional<AdvanceResult> advanceOne(WorkBudget budget, boolean checkpointWhenDue) {
         Objects.requireNonNull(budget, "budget");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         try {
@@ -119,7 +142,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, result.status().failureDetail());
                 return Optional.of(result);
             }
-            if (ticksSinceCheckpoint >= checkpointIntervalTicks) checkpoint();
+            if (checkpointWhenDue && ticksSinceCheckpoint >= checkpointIntervalTicks) checkpoint();
             return Optional.of(result);
         } catch (RuntimeException error) {
             quarantine(error);

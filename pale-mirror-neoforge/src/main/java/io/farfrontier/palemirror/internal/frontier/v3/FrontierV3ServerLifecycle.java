@@ -33,7 +33,11 @@ public final class FrontierV3ServerLifecycle {
     private static final Map<MinecraftServer, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection>> RUNTIMES = new IdentityHashMap<>();
     /** Servers whose world teardown has begun; their entity leaves are not gameplay observations. */
     private static final Map<MinecraftServer, Boolean> STOPPING = new IdentityHashMap<>();
+    /** One bounded operator request per server; canonical progress itself remains in the WAL. */
+    private static final Map<MinecraftServer, Integer> FAST_FORWARD_REMAINING = new IdentityHashMap<>();
     private static final WorkBudget TICK_BUDGET = new WorkBudget(128, 512);
+    public static final int MAX_FAST_FORWARD_TICKS = 24_000;
+    private static final int FAST_FORWARD_SLICE_TICKS = 512;
 
     private FrontierV3ServerLifecycle() { }
 
@@ -98,8 +102,18 @@ public final class FrontierV3ServerLifecycle {
                 // The immutable canonical formatter remains the source of the not-found response.
             }
         }
+        java.util.Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness = java.util.Optional.empty();
+        if ("intent".equals(view)) {
+            try {
+                harvestReadiness = FrontierV3ResourceSiteHarvestExecutor.readiness(
+                        FrontierV3PhysicalWorld.require(server), state,
+                        new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(id));
+            } catch (IllegalArgumentException ignored) {
+                // The immutable canonical formatter remains the source of the not-found response.
+            }
+        }
         return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
-                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission);
+                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness);
     }
 
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */
@@ -119,7 +133,7 @@ public final class FrontierV3ServerLifecycle {
 
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
-        STOPPING.remove(server);
+        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server);
         if (!enabled() || RUNTIMES.containsKey(server)) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
@@ -149,6 +163,21 @@ public final class FrontierV3ServerLifecycle {
         } else {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined at startup: {}", runtime.status().detail().orElse("unknown"));
         }
+    }
+
+    /**
+     * Queues one bounded operator fast-forward. It advances the same canonical tick engine in
+     * regular server-tick slices and pauses before physical work or a HOT scene could be skipped.
+     */
+    public static boolean requestFastForward(MinecraftServer server, int ticks) {
+        Objects.requireNonNull(server, "server");
+        if (ticks < 1 || ticks > MAX_FAST_FORWARD_TICKS || !ownsPhysicalWorld(server) || stopping(server)) return false;
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || FAST_FORWARD_REMAINING.containsKey(server)) return false;
+        if (FrontierV3FastForwardSafety.requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime.decodedState().orElseThrow())) return false;
+        FAST_FORWARD_REMAINING.put(server, ticks);
+        PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward ticks={}", ticks);
+        return true;
     }
 
     public static void tick(MinecraftServer server) {
@@ -181,13 +210,14 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3RouteConstructionExecutor.tick(physicalWorld, runtime);
                 FrontierV3SceneExecutor.tick(physicalWorld, runtime);
                 runtime.tick(TICK_BUDGET);
+                advanceQueuedCanonicalTime(server, runtime);
             }
         } catch (RuntimeException error) {
             runtime.quarantine(error);
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
-            RUNTIMES.remove(server);
+            RUNTIMES.remove(server); FAST_FORWARD_REMAINING.remove(server);
         }
     }
 
@@ -204,8 +234,25 @@ public final class FrontierV3ServerLifecycle {
             }
         } finally {
             FrontierV3DiagnosticTrace.forget(server);
-            STOPPING.remove(server);
+            STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server);
         }
+    }
+
+    private static void advanceQueuedCanonicalTime(MinecraftServer server, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        Integer remaining = FAST_FORWARD_REMAINING.get(server);
+        ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
+        if (remaining == null || FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow())) return;
+        int allowed = Math.min(remaining, FAST_FORWARD_SLICE_TICKS); int advanced = 0;
+        while (advanced < allowed && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && !FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow())) {
+            if (runtime.advance(1, TICK_BUDGET).isEmpty()) break;
+            advanced++;
+        }
+        int next = remaining - advanced;
+        if (next <= 0) {
+            FAST_FORWARD_REMAINING.remove(server);
+            PaleMirrorMod.LOGGER.info("Frontier v3 completed operator fast-forward");
+        } else FAST_FORWARD_REMAINING.put(server, next);
     }
 
     /** Marks the beginning of orderly shutdown before Minecraft emits entity-unload events. */

@@ -24,6 +24,11 @@ final class PaleMirrorCommandRegistrar {
     private PaleMirrorCommandRegistrar() { }
 
     static void register(RegisterCommandsEvent event) {
+        event.getDispatcher().register(commandTree());
+    }
+
+    /** Builds the complete tree before Brigadier receives it; package-visible for structural tests. */
+    static LiteralArgumentBuilder<CommandSourceStack> commandTree() {
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("pale_mirror")
                 .then(Commands.literal("status").requires(source -> source.hasPermission(2)).executes(context -> {
                     String status = FrontierV3ServerLifecycle.ownsPhysicalWorld(context.getSource().getServer())
@@ -38,7 +43,20 @@ final class PaleMirrorCommandRegistrar {
         inspect.then(Commands.literal("summary").executes(context -> v3Diagnostic(context, "summary", "")));
         inspect.then(diagnosticObject("site")); inspect.then(diagnosticObject("actor")); inspect.then(diagnosticObject("item"));
         inspect.then(diagnosticObject("operation")); inspect.then(diagnosticObject("intent")); inspect.then(diagnosticObject("trace"));
-        v3.then(inspect); root.then(v3);
+        v3.then(inspect);
+        v3.then(Commands.literal("advance").requires(source -> source.hasPermission(4))
+                .then(Commands.argument("ticks", IntegerArgumentType.integer(1, FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS)).executes(context -> {
+                    int ticks = IntegerArgumentType.getInteger(context, "ticks");
+                    if (!FrontierV3ServerLifecycle.requestFastForward(context.getSource().getServer(), ticks)) {
+                        context.getSource().sendFailure(Component.literal("Frontier v3 cannot fast-forward while physical work is pending or another request is active."));
+                        return 0;
+                    }
+                    context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward for " + ticks + " tick(s)."), true);
+                    return ticks;
+                })));
+        // Attach the finished mutable v3 branch only after every child is present. Brigadier
+        // copies a child branch when it is attached, so attaching it earlier would omit advance.
+        root.then(v3);
         root.then(Commands.literal("performance").requires(source -> source.hasPermission(2)).executes(context -> {
             context.getSource().sendSuccess(() -> Component.literal(PaleMirrorRuntime
                     .forServer(context.getSource().getServer()).performanceStatus()), false);
@@ -235,7 +253,7 @@ final class PaleMirrorCommandRegistrar {
                     return issued ? 1 : 0;
                 }))));
         DebugCommandRegistrar.attach(root);
-        event.getDispatcher().register(root);
+        return root;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> diagnosticObject(String view) {

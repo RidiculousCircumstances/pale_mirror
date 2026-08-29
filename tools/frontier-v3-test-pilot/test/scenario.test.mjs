@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, hasDiagnosticResponses, newManifest, selectMutterXauthority, validateScenario } from '../src/scenario.mjs';
+import { correlation, hasDiagnosticResponses, newManifest, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -28,10 +28,44 @@ test('summary diagnostics need no object identity while object diagnostics do', 
   assert.throws(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'site', id: '', expect: { status: 'ok' } }] }), /invalid diagnostic assertion/);
 });
 
+test('native pilot may await a bounded fresh read-only diagnostic predicate', () => {
+  const diagnosticWait = { ...scenario, actions: [{ type: 'wait_until_diagnostic', view: 'site', id: 'site:1-wheat-field',
+    expect: { status: 'ok', growthStage: 7 }, timeoutMs: 180_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(diagnosticWait));
+  assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], expect: [] }] }), /wait_until_diagnostic/);
+  assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], timeoutMs: 300_001 }] }), /wait_until_diagnostic/);
+});
+
+test('native pilot has one domain wait for a confirmed exact harvest, not READY', () => {
+  const harvest = { ...scenario, actions: [{ type: 'wait_until_harvest_result', siteId: 'site:1-wheat-field',
+    intentId: 'intent:site-harvest-1-wheat-field-1', itemId: 'item:site-harvest-1-wheat-field-1-wheat', timeoutMs: 180_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(harvest));
+  assert.throws(() => validateScenario({ ...harvest, actions: [{ ...harvest.actions[0], itemId: 'wheat' }] }), /wait_until_harvest_result/);
+});
+
+test('an isolated scenario has an explicit deterministic disposable-world seed', () => {
+  const isolated = { ...scenario, isolation: { mode: 'disposable_lite', seed: 41 } };
+  assert.doesNotThrow(() => validateScenario(isolated));
+  assert.throws(() => validateScenario({ ...isolated, isolation: { mode: 'shared', seed: 41 } }), /isolation/);
+});
+
+test('native pilot may advance only the bounded canonical v3 clock', () => {
+  const advance = { ...scenario, actions: [{ type: 'fast_forward', ticks: 24_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(advance));
+  assert.throws(() => validateScenario({ ...advance, actions: [{ type: 'fast_forward', ticks: 24_001 }] }), /fast_forward/);
+  assert.throws(() => validateScenario({ ...advance, actions: [{ type: 'fast_forward', ticks: 1.5 }] }), /fast_forward/);
+});
+
 test('manifest records stable action correlations', () => {
   const manifest = newManifest({ scenario, sha256: 'abc', runId: 'run-1' });
   assert.equal(correlation(manifest.runId, 2), 'scenario:run-1:2');
   assert.equal(manifest.scenarioId, 'field_player_break');
+});
+
+test('PMV3 JSONL records retain a run and action correlation without modpack logs', () => {
+  const record = traceRecord({ runId: 'run-1', kind: 'action_completed', correlation: correlation('run-1', 2), step: 2 });
+  assert.deepEqual({ source: record.source, runId: record.runId, kind: record.kind, correlation: record.correlation, step: record.step },
+    { source: 'PMV3', runId: 'run-1', kind: 'action_completed', correlation: 'scenario:run-1:2', step: 2 });
 });
 
 test('runner waits for every requested asynchronous diagnostic response', () => {

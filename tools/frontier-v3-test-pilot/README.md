@@ -1,44 +1,87 @@
-# Frontier v3 test-pilot
+# Frontier v3 test pilot
 
-This is development-only automation inside one normal NeoForge Minecraft
-client. It never ships in the NeoForge JAR or Packwiz pack. Its evidence path
-is deliberately narrow:
+This tool proves a normal player's causal effect on Frontier v3. It is not a
+simulation control plane: it sends ordinary client packets and read-only
+`/pale_mirror v3 inspect` commands only.
 
-```text
-native client action -> normal server event -> v3 observation -> WAL -> PMV3_DIAG
+## Profiles and isolation
+
+`runFrontierV3PilotClient` is the default **lite** profile: NeoForge and the
+current Pale Mirror source, with no installed modpack. It must connect to
+`runFrontierV3PilotServer`, which has the same minimal dependency set. The
+server receives an explicit seed, a per-run level name and a generated
+offline-mode operator identity for the declared pilot. A run never shares its
+world directory with the deployment server or another scenario.
+
+Run the checked-in isolated terminal-harvest regression on the visible `:0`
+display:
+
+```bash
+DISPLAY=:0 npm run scenario:isolated -- scenarios/disposable-redwillow-harvest.json
 ```
 
-## Local run
+The runner creates `pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/<unique-world>`,
+starts one local server on port `25575` (override with
+`FRONTIER_V3_PILOT_PORT`), then stops and removes that exact generated world.
+Set
+`FRONTIER_V3_KEEP_DISPOSABLE=true` only when preserving a failed world for
+diagnosis. It never resets a live/server-pack world.
 
-1. Start a disposable v3 server. The scenario starts exactly one normal
-   NeoForge test-pilot client on `DISPLAY=:0`.
-2. Grant temporary operator status to `PMTestPilot`; the sample uses it only
-   for disposable-world setup and read-only `/pale_mirror v3 inspect`, never
-   for a canonical v3 mutation.
-3. From this directory, install the pinned development dependencies and run:
+The harvest regression is deliberately strict: at present it exposes a real
+strategic-objective starvation defect rather than yielding a false green
+result. A passing run requires the complete domain result described below.
 
-   ```bash
-   npm ci
-   DISPLAY=:0 npm run scenario -- scenarios/field-player-break.json
-   ```
+`FRONTIER_V3_PILOT_PROFILE=pack npm run scenario -- ...` remains available for
+the final full-pack compatibility and visual gate. It is deliberately not the
+default loop.
 
-The one visible client performs the actual movement and break. Its isolated
-development run uses the user session's XWayland bridge so that a frame is
-captured from the exact fullscreen Minecraft window, rather than from the
-whole desktop. It writes a JSON evidence manifest plus the before/after X11 frames under
-`build/frontier-v3-scenarios/`.
+## Scenario contract
 
-The run uses a disposable copy of that installed pack and excludes only
-`pale_mirror-hosted.jar`; NeoForge ModDev then supplies the current source set.
-This prevents a stale installed JAR from silently testing different code.
+All scenarios declare a server and pilot. Isolated scenarios additionally use:
 
-For an acceptance frame, place a local `hud` action and a short `wait` before
-the frame declaration. It changes only the pilot's presentation, is restored
-on disconnect, and cannot issue a server or canonical-state mutation.
+```json
+"isolation": { "mode": "disposable_lite", "seed": 41 }
+```
 
-Mineflayer remains an offline compatibility/preflight helper only: a protocol
-bot cannot complete this pack's full NeoForge handshake. It is excluded from
-production artifacts and must never receive production credentials.
+Setup actions may arrange a deterministic test location. Evidence actions are
+normal player actions. `wait_until_diagnostic` is useful for a stable single
+canonical predicate. Do not use it to wait for a transient phase such as
+`READY` when testing an end-to-end operation.
 
-Scenario setup may manipulate a disposable world, but action entries are the
-only causality evidence. A scenario cannot put a setup command in `actions`.
+`wait_until_harvest_result` waits for all three terminal facts together:
+
+- the named physical intent is `CONFIRMED`;
+- the named exact 64-wheat stack has `CONTAINER_SLOT` custody in the depot;
+- the named site entered its next `GROWING` epoch.
+
+This is the pattern for future domain waits: model the player-meaningful result,
+not one internal waypoint.
+
+`/pale_mirror v3 inspect intent <id>` adds `physicalReadiness` for a pending
+resource-site harvest. It reports loaded field/depot chunks, canonical depot
+surface state, exact owned chest presence, mature-block match and output-slot
+emptiness. It reads the naturally loaded world only; it does not load chunks,
+write blocks, change WAL or repair a mismatch.
+
+## Evidence and gates
+
+Each scenario emits a manifest and a sibling `*.pmv3.jsonl`. JSONL contains
+only PMV3 records such as `run_started`, `action_started`,
+`diagnostic_received`, `action_completed`, `frame_captured` and `run_finished`.
+Every evidence action has a stable `scenario:<run-id>:<step>` correlation ID.
+Third-party Forge/modpack warnings are intentionally not copied into this
+stream.
+
+Use the cheapest sufficient gate while iterating:
+
+| Gate | When | Evidence |
+| --- | --- | --- |
+| Fast | each small edit | `npm test` and focused JUnit tests |
+| Minecraft boundary | changed executor, client packet, persistence or physical observation | relevant GameTest server |
+| Live flow | changed one causal flow | one matching isolated scenario |
+| Milestone/commit | critical Frontier code | repository full critical Gradle gate, then the relevant visible scenario; full-pack visual only when its compatibility/art is in scope |
+
+The repository guardrails still require the full critical Gradle gate before a
+commit touching canonical/materialization/test-harness code. The matrix avoids
+running unrelated visual or third-party-pack suites on every local edit; it
+does not weaken that final gate.

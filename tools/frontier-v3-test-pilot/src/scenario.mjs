@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'inspect', 'hud']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'hud']);
 const SETUP_ACTIONS = new Set(['command', 'observe']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -29,6 +29,10 @@ export function validateScenario(scenario) {
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
   }
+  if (scenario.isolation !== undefined && (!scenario.isolation || scenario.isolation.mode !== 'disposable_lite'
+      || !Number.isInteger(scenario.isolation.seed) || scenario.isolation.seed < -2_147_483_648 || scenario.isolation.seed > 2_147_483_647)) {
+    throw new Error('isolation must declare disposable_lite with a signed 32-bit seed');
+  }
   for (const [phase, allowed] of [['setup', SETUP_ACTIONS], ['actions', EVIDENCE_ACTIONS]]) {
     const actions = scenario[phase] ?? [];
     if (!Array.isArray(actions)) throw new Error(`scenario ${phase} must be an array`);
@@ -44,8 +48,18 @@ export function validateScenario(scenario) {
         throw new Error('wait_until_block needs block and timeoutMs 0..120000');
       }
       if (action.type === 'hud' && typeof action.visible !== 'boolean') throw new Error('hud needs boolean visible');
-      if (action.type === 'inspect' && (!['summary', 'site', 'actor', 'item', 'operation', 'intent', 'trace'].includes(action.view)
-          || typeof action.id !== 'string' || (action.view !== 'summary' && !action.id))) throw new Error('inspect needs a read-only v3 view and id');
+      if (action.type === 'inspect' && !validDiagnosticIdentity(action)) throw new Error('inspect needs a read-only v3 view and id');
+      if (action.type === 'fast_forward' && (!Number.isInteger(action.ticks) || action.ticks < 1 || action.ticks > 24_000)) {
+        throw new Error('fast_forward needs ticks 1..24000');
+      }
+      if (action.type === 'wait_until_diagnostic' && (!validDiagnosticIdentity(action) || !action.expect || typeof action.expect !== 'object'
+          || Array.isArray(action.expect) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
+        throw new Error('wait_until_diagnostic needs a read-only view, predicate and timeoutMs 0..300000');
+      }
+      if (action.type === 'wait_until_harvest_result' && (!requiredId(action.siteId, 'site:') || !requiredId(action.intentId, 'intent:')
+          || !requiredId(action.itemId, 'item:') || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
+        throw new Error('wait_until_harvest_result needs exact site, intent, item identities and timeoutMs 0..300000');
+      }
     }
   }
   const assertions = scenario.assertions ?? [];
@@ -67,6 +81,13 @@ export function validateScenario(scenario) {
     }
   }
 }
+
+function validDiagnosticIdentity(value) {
+  return ['summary', 'site', 'actor', 'item', 'operation', 'intent', 'trace'].includes(value.view)
+    && typeof value.id === 'string' && (value.view === 'summary' || Boolean(value.id));
+}
+
+function requiredId(value, prefix) { return typeof value === 'string' && value.startsWith(prefix) && value.length > prefix.length; }
 
 function validatePosition(value) {
   if (!value || !Number.isInteger(value.x) || !Number.isInteger(value.y) || !Number.isInteger(value.z)) {
@@ -94,8 +115,14 @@ export function newManifest({ scenario, sha256, runId }) {
     setup: [],
     actions: [],
     diagnostics: [],
-    frames: []
+    frames: [],
+    trace: null
   };
+}
+
+/** A line is self-contained so a failed/terminated scenario keeps usable causal evidence. */
+export function traceRecord({ runId, kind, correlation: traceCorrelation = null, ...data }) {
+  return { schema: 1, source: 'PMV3', runId, kind, correlation: traceCorrelation, at: new Date().toISOString(), ...data };
 }
 
 export async function saveManifest(path, manifest) {

@@ -34,15 +34,22 @@ final class FrontierV3DiagnosticJson {
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
                          Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission) {
+        return render(kind, id, checkpoint, state, trace, admission, Optional.empty());
+    }
+
+    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+                         Optional<FrontierV3DiagnosticTrace.Entry> trace,
+                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness) {
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(id, "id");
-        Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(trace, "trace"); Objects.requireNonNull(admission, "admission");
+        Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(trace, "trace"); Objects.requireNonNull(admission, "admission"); Objects.requireNonNull(harvestReadiness, "harvestReadiness");
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
             case "site" -> site(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state);
-            case "intent" -> intent(id, checkpoint, state);
+            case "intent" -> intent(id, checkpoint, state, harvestReadiness);
             case "trace" -> trace(id, checkpoint, trace);
             default -> unavailable(kind, id, checkpoint, "unknown_view");
         };
@@ -122,7 +129,8 @@ final class FrontierV3DiagnosticJson {
                 + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]}";
     }
 
-    private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state,
+                                 Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness) {
         PhysicalIntent intent;
         try { intent = state.physicalIntents().get(new PhysicalIntentId(id)); }
         catch (IllegalArgumentException invalid) { intent = null; }
@@ -130,7 +138,18 @@ final class FrontierV3DiagnosticJson {
         String subjects = intent.subjectIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
         return base("intent", id, checkpoint) + ",\"status\":\"ok\",\"intentKind\":\"" + intent.kind()
                 + "\",\"intentStatus\":\"" + intent.status() + "\",\"causeSubject\":\"" + quote(intent.causeSubjectId().value())
-                + "\",\"radius\":" + intent.radiusBlocks() + ",\"subjects\":[" + subjects + "]}";
+                + "\",\"radius\":" + intent.radiusBlocks() + ",\"subjects\":[" + subjects + "]"
+                + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                    ? harvestReadiness.map(FrontierV3DiagnosticJson::harvestReadiness).orElse("") : "") + "}";
+    }
+
+    private static String harvestReadiness(FrontierV3ResourceSiteHarvestExecutor.Readiness value) {
+        return ",\"physicalReadiness\":{\"fieldLoaded\":" + value.fieldLoaded()
+                + ",\"depotLoaded\":" + value.depotLoaded()
+                + ",\"depotSurface\":\"" + quote(value.depotSurface())
+                + "\",\"ownedChestPresent\":" + value.ownedChestPresent()
+                + ",\"fieldMatchesMatureStage\":" + value.fieldMatchesMatureStage()
+                + ",\"outputSlotEmpty\":" + value.outputSlotEmpty() + "}";
     }
 
     private static String trace(String id, CheckpointImage checkpoint, Optional<FrontierV3DiagnosticTrace.Entry> trace) {

@@ -29,4 +29,37 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"hud","visible":"false"}]}"""));
     }
+
+    @Test
+    void acceptsOnlyBoundedReadOnlyDiagnosticWaitPredicates() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
+                "expect":{"growthStage":7},"timeoutMs":180000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
+                "expect":[],"timeoutMs":180000}]}"""));
+    }
+
+    @Test
+    void acceptsOnlyBoundedWholeTickFastForwardActions() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"fast_forward","ticks":24000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"fast_forward","ticks":24001}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"fast_forward","ticks":1.5}]}"""));
+    }
+
+    @Test
+    void requiresAllCanonicalIdentitiesForADomainHarvestResult() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_harvest_result","siteId":"site:1-wheat-field",
+                "intentId":"intent:site-harvest-1-wheat-field-1","itemId":"item:site-harvest-1-wheat-field-1-wheat","timeoutMs":180000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_harvest_result","siteId":"site:1-wheat-field",
+                "intentId":"intent:site-harvest-1-wheat-field-1","timeoutMs":180000}]}"""));
+    }
 }

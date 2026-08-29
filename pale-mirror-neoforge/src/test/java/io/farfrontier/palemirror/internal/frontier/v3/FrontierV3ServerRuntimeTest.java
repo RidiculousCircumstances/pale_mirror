@@ -210,6 +210,22 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void boundedAdvanceUsesTheSameWalBackedTickEngineAndRecovers(@TempDir Path directory) {
+        FrontierStore store = new FrontierFileStore(directory, codecs());
+        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), store, 2);
+        assertInstanceOf(CommandResult.Accepted.class,
+                runtime.submit(command("command:advance", Revision.ZERO, SimInstant.ZERO, 7)).orElseThrow());
+
+        assertEquals(new SimInstant(3L), runtime.advance(3, new WorkBudget(4, 8)).orElseThrow().instant());
+        assertEquals(new Revision(1L), runtime.checkpointImage().orElseThrow().revision());
+        runtime.shutdown();
+
+        FrontierV3ServerRuntime<Counter, CounterProjection> recovered = FrontierV3ServerRuntime.start(configuration(), store, 2);
+        assertEquals(new SimInstant(3L), recovered.checkpointImage().orElseThrow().instant());
+        assertEquals(7, recovered.projection(ProjectionQuery.summary()).orElseThrow().value());
+    }
+
+    @Test
     void decodedStateIsSharedUntilACommittedRevisionChangesIt(@TempDir Path directory) {
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
         Counter first = runtime.decodedState().orElseThrow();

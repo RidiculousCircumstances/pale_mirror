@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class FrontierV3DiagnosticJsonTest {
     @Test
@@ -76,5 +77,21 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(known.contains("\"correlation\":\"player:test\""));
         assertTrue(known.contains("\"acceptedRevision\":7"));
         assertTrue(missing.contains("\"status\":\"not_found\""));
+    }
+
+    @Test
+    void keepsPhysicalReadinessScopedToHarvestIntents(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-readiness-test"), 94L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        var readiness = new FrontierV3ResourceSiteHarvestExecutor.Readiness(true, false, "ACTIVE", false, true, false);
+
+        String nonHarvest = FrontierV3DiagnosticJson.render("intent", "intent:missing", checkpoint, state, Optional.empty(),
+                Optional.empty(), Optional.of(readiness));
+
+        assertTrue(nonHarvest.contains("\"status\":\"not_found\""));
+        assertFalse(nonHarvest.contains("physicalReadiness"));
     }
 }

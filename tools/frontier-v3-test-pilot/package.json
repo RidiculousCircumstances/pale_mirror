@@ -8,6 +8,7 @@
   },
   "scripts": {
     "scenario": "node src/run-scenario.mjs",
+    "scenario:isolated": "node src/run-isolated-scenario.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
