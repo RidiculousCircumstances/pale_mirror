@@ -86,6 +86,17 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsOnlyBoundedOrdinaryV3BoardInteractionWithAVisibleCardReceipt() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"interact_board","text":"WHEAT FIELD","title":"Northwatch",
+                "position":{"x":4,"y":67,"z":5},"radius":3,"maxDistance":64,"maxAngleDeg":50,"timeoutMs":30000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"interact_board","text":"WHEAT FIELD",
+                "position":{"x":4,"y":67,"z":5},"timeoutMs":30000}]}"""));
+    }
+
+    @Test
     void acceptsOnlyBoundedOrdinaryContainerActionsAndReadOnlyIngressWaits() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[

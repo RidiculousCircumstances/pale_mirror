@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'interact_board']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -83,6 +83,14 @@ export function validateScenario(scenario) {
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {
         throw new Error('assert_visible_board needs text, position and bounded visibility limits');
+      }
+      if (action.type === 'interact_board' && (typeof action.text !== 'string' || !action.text || typeof action.title !== 'string' || !action.title
+          || action.title.length > 72 || !validPosition(action.position) || !Number.isInteger(action.timeoutMs)
+          || action.timeoutMs < 0 || action.timeoutMs > 120_000
+          || (action.radius !== undefined && (!Number.isFinite(action.radius) || action.radius < 0 || action.radius > 16))
+          || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
+          || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {
+        throw new Error('interact_board needs a bounded visible board target and expected contextual title');
       }
       if (action.type === 'wait' && (!Number.isInteger(action.ms) || action.ms < 0 || action.ms > 120_000)) {
         throw new Error('wait duration must be 0..120000 milliseconds');

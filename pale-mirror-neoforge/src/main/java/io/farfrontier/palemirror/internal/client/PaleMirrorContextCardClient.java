@@ -25,6 +25,11 @@ public final class PaleMirrorContextCardClient {
 
     public static void clear() { card = Card.empty(); clientTick = 0; }
 
+    /** Test-pilot-only read of local presentation receipt; never a server or canonical query. */
+    public static boolean hasActiveTitle(String title) {
+        return title != null && clientTick < card.expiresAt() && title.equals(card.title());
+    }
+
     public static void render(GuiGraphics graphics) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.screen != null || clientTick >= card.expiresAt()) return;

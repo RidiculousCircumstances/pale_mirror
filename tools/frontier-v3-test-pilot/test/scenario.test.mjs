@@ -79,6 +79,15 @@ test('semantic visible checks are bounded evidence actions, not world mutations'
   assert.throws(() => validateScenario({ ...visible, setup: [visible.actions[0]] }), /unsupported setup action/);
 });
 
+test('native pilot may right-click one visible v3 board and await only its local card receipt', () => {
+  const interaction = { ...scenario, setup: [], actions: [
+    { type: 'interact_board', text: 'WHEAT FIELD', title: 'Northwatch', position: { x: 4, y: 67, z: 5 }, radius: 3, maxDistance: 64, maxAngleDeg: 50, timeoutMs: 30_000 }
+  ], assertions: [], frames: [{ after: 1, name: 'object-card', presentation: 'player' }] };
+  assert.doesNotThrow(() => validateScenario(interaction));
+  assert.throws(() => validateScenario({ ...interaction, actions: [{ ...interaction.actions[0], title: '' }] }), /interact_board/);
+  assert.throws(() => validateScenario({ ...interaction, actions: [{ ...interaction.actions[0], maxDistance: 129 }] }), /interact_board/);
+});
+
 test('restart runner slices action-relative assertions without a second scenario language', () => {
   const recoverable = { ...scenario, setup: [{ type: 'command', command: '/time set day' }], actions: [
     { type: 'wait', ms: 10 }, { type: 'inspect', view: 'summary', id: '' }, { type: 'wait', ms: 10 }

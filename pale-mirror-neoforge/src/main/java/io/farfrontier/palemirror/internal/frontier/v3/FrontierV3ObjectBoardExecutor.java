@@ -15,6 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Brightness;
 import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
@@ -74,6 +75,20 @@ final class FrontierV3ObjectBoardExecutor {
         String expected = board.text();
         if (expected.equals(display.getCustomName() == null ? null : display.getCustomName().getString())) return ProjectionResult.CURRENT;
         configure(display, board); return ProjectionResult.UPDATED;
+    }
+
+    /**
+     * Confirms that a clicked display is the currently claimed materialization of this exact
+     * canonical board.  A custom-named lookalike must never become a presentation authority.
+     */
+    static boolean isCurrentOwnedBoard(ServerLevel level, Entity entity, FrontierObjectBoard board) {
+        if (!(entity instanceof Display.TextDisplay display) || !level.hasChunkAt(display.blockPosition())) return false;
+        String owner = board.ownerId().value();
+        FrontierV3ObjectBoardLedger.Claim claim = FrontierV3ObjectBoardLedger.get(level).claim(owner);
+        return claim != null && !claim.conflicted() && claim.position() == position(board).asLong()
+                && claim.uuid().equals(uuid(owner).toString()) && display.getUUID().equals(uuid(owner))
+                && display.blockPosition().equals(position(board))
+                && owner.equals(display.getPersistentData().getString(OWNER_KEY));
     }
 
     private static BlockPos position(FrontierObjectBoard board) { return new BlockPos(board.position().x(), board.position().y(), board.position().z()); }

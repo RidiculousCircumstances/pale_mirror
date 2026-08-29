@@ -10,6 +10,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -70,6 +71,26 @@ public final class FrontierV3ObjectBoardGameTests {
         helper.assertValueEqual(display(level, position).getCustomName().getString(), current.text(), "the display exposes only current canonical text");
         helper.assertValueEqual(level.getEntitiesOfClass(Display.TextDisplay.class, new AABB(position).inflate(1.0D)).size(), 1,
                 "an explanation update never duplicates a player-facing board");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void contextualCardMayOnlyUseTheExactClaimedBoardBody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(30, 8, 0));
+        FrontierObjectBoard board = board(position, "site:board-owned-field", FrontierObjectBoard.Tone.SETTLEMENT,
+                "Northwatch\nWHEAT FIELD\nGROWING · STAGE 0/7");
+        FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, board), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
+                "the exact semantic board must exist before it can become player context");
+        Display.TextDisplay claimed = display(level, position);
+        helper.assertTrue(FrontierV3ObjectBoardExecutor.isCurrentOwnedBoard(level, claimed, board),
+                "the ledger-recognized board can safely supply a noncanonical contextual card");
+        Display.TextDisplay impostor = new Display.TextDisplay(EntityType.TEXT_DISPLAY, level);
+        impostor.setPos(position.getX() + 3.5D, position.getY(), position.getZ() + 0.5D);
+        impostor.getPersistentData().putString("pale_mirror.frontier_v3.board_owner", board.ownerId().value());
+        level.addFreshEntity(impostor);
+        helper.assertFalse(FrontierV3ObjectBoardExecutor.isCurrentOwnedBoard(level, impostor, board),
+                "a lookalike owner tag without the claimed UUID and position cannot trigger a contextual card");
         helper.succeed();
     }
 

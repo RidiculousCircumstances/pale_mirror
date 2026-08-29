@@ -12,6 +12,8 @@ import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
+import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -324,6 +326,24 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
         return releaseCargoCarrier(level, runtime, entity, java.util.Optional.of(player.getUUID()));
+    }
+
+    /**
+     * Shows the current immutable v3 explanation for one exact owned board.  This is a read-only
+     * presentation boundary: it does not create a command, retain an event or alter the board.
+     */
+    public static boolean presentObjectBoard(ServerLevel level, ServerPlayer player, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
+        String owner = entity.getPersistentData().getString("pale_mirror.frontier_v3.board_owner");
+        if (owner.isBlank()) return false;
+        var board = FrontierReadabilityPlan.compile(state).boards().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(owner));
+        if (board == null || !FrontierV3ObjectBoardExecutor.isCurrentOwnedBoard(level, entity, board)) return false;
+        PaleMirrorPlayerPresentation.context(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
+        return true;
     }
 
     /** Makes a carrier physically accountable before a real world effect may destroy it. */

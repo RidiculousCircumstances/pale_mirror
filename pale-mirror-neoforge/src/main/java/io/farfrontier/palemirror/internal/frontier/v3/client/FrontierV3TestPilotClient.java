@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.internal.client.PaleMirrorContextCardClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -52,6 +53,7 @@ public final class FrontierV3TestPilotClient {
     private static long visitChunkReadyTick = -1L;
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
+    private static boolean boardInteractionAttempted;
     private static Boolean originalHideGui;
     private static CaptureBarrier captureBarrier;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
@@ -68,6 +70,7 @@ public final class FrontierV3TestPilotClient {
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
             breaking = false; visitSent = false; visitChunkReadyTick = -1L;
             containerOpenAttempted = false; quickMoveAttempted = false;
+            boardInteractionAttempted = false;
             captureBarrier = null; diagnostics.clear();
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
         } catch (IOException | IllegalArgumentException failure) {
@@ -122,6 +125,7 @@ public final class FrontierV3TestPilotClient {
                 case "visit" -> visit(minecraft, action);
                 case "assert_visible_block" -> assertVisibleBlock(minecraft, action);
                 case "assert_visible_board" -> assertVisibleBoard(minecraft, action);
+                case "interact_board" -> interactBoard(minecraft, action);
                 case "fast_forward" -> { minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); advance(type); }
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + action.get("view").getAsString()
@@ -285,6 +289,30 @@ public final class FrontierV3TestPilotClient {
         if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
             throw new IllegalStateException("camera never saw board text=" + expectedText + " near " + anchor);
         }
+    }
+
+    /**
+     * Uses Minecraft's normal entity interaction packet and waits for its local, optional
+     * presentation receipt.  The card itself remains noncanonical; the semantic board is the
+     * durable physical explanation and was already verified before this click.
+     */
+    private static void interactBoard(Minecraft minecraft, JsonObject action) {
+        BlockPos anchor = position(action, "position"); String expectedText = action.get("text").getAsString();
+        double radius = action.has("radius") ? action.get("radius").getAsDouble() : 3.0D;
+        Display.TextDisplay board = minecraft.level.getEntitiesOfClass(Display.TextDisplay.class,
+                minecraft.player.getBoundingBox().inflate(action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D), display ->
+                        display.getCustomName() != null && display.getCustomName().getString().contains(expectedText)
+                                && display.position().distanceToSqr(Vec3.atCenterOf(anchor)) <= radius * radius)
+                .stream().findFirst().orElse(null);
+        if (board == null) { timeout(minecraft, action, "no visible named board was available for ordinary interaction"); return; }
+        if (!boardInteractionAttempted) {
+            minecraft.gameMode.interact(minecraft.player, board, InteractionHand.MAIN_HAND);
+            boardInteractionAttempted = true;
+        }
+        if (PaleMirrorContextCardClient.hasActiveTitle(action.get("title").getAsString())) {
+            advance("interact_board"); return;
+        }
+        timeout(minecraft, action, "timed out waiting for the contextual board card");
     }
 
     /** Polls the existing read-only diagnostic command at most once per second until a fresh exact predicate arrives. */

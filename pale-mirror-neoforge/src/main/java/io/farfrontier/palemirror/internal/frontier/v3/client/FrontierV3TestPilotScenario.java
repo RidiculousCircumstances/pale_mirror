@@ -12,7 +12,7 @@ final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
             "walk", "break", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
-            "wait_until_container_item");
+            "wait_until_container_item", "interact_board");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "actor", "item", "container", "operation", "intent", "trace");
 
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
@@ -65,6 +65,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("assert_fixture") && !validFixture(action)) ||
                     (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
+                    (type.equals("interact_board") && !validBoardInteraction(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
                     (type.equals("open_container") && (!position(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
@@ -169,6 +170,12 @@ final class FrontierV3TestPilotScenario {
         return boundedOptionalNumber(action, "radius", 0.0D, 16.0D)
                 && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
                 && boundedOptionalNumber(action, "maxAngleDeg", 1.0D, 90.0D);
+    }
+
+    /** A bounded ordinary right-click on one already-rendered semantic board. */
+    private static boolean validBoardInteraction(JsonObject action) {
+        return validVisibleBoard(action) && action.has("title") && action.get("title").isJsonPrimitive()
+                && !action.get("title").getAsString().isBlank() && action.get("title").getAsString().length() <= 72;
     }
 
     private static boolean boundedOptionalNumber(JsonObject action, String field, double minimum, double maximum) {
