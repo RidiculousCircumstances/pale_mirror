@@ -27,6 +27,7 @@ public final class FrontierReadabilityPlan {
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ));
         FrontierResourceSitePlan.compile(state.bootstrap()).values().forEach(site -> addResourceSite(values, state, site));
+        addRouteNetwork(values, state);
         return new FrontierReadabilityPlan(values);
     }
 
@@ -43,6 +44,17 @@ public final class FrontierReadabilityPlan {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(site), fieldTone(lifecycle.phase()),
                 settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(lifecycle)));
+    }
+
+    private static void addRouteNetwork(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state) {
+        boolean damaged = state.physicalDeltas().values().stream().anyMatch(delta ->
+                delta.ownerId().equals(java.util.Optional.of(FrontierRouteNetwork.OWNER)));
+        boolean caravan = state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE);
+        FrontierObjectBoard.Tone tone = damaged ? FrontierObjectBoard.Tone.WARNING : FrontierObjectBoard.Tone.SETTLEMENT;
+        String stateText = damaged ? "ROUTE DAMAGE · PATROL NEEDED" : caravan ? "CARAVAN EN ROUTE" : "ACTIVE · 12 SETTLEMENTS";
+        add(values, new FrontierObjectBoard(FrontierRouteNetwork.OWNER,
+                FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3), tone,
+                "FRONTIER ROUTES\nNETWORK\n" + stateText));
     }
 
     private static BlockPosition structureBoardPosition(SettlementStructure structure, StructureCondition condition) {
