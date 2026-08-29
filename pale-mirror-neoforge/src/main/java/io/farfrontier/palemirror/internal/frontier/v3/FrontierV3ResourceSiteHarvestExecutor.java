@@ -98,9 +98,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         ResourceSiteHarvestObservation observation = new ResourceSiteHarvestObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), target.site().id(), target.job().workerId(), target.output(), 64);
-        if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) {
-            throw new IllegalStateException("resource-site harvest confirmation was rejected");
-        }
+        transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
@@ -127,11 +125,21 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId, PhysicalIntentStatus status,
                                       Optional<PhysicalEffectObservation> observation, String phase) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId id = new CommandId("executor:resource-site-harvest-" + phase + "-" + intentId.value().replace(':', '-'));
+        // A physical action may survive a crash between its Minecraft postcondition and canonical
+        // receipt. Bind each admission attempt to its precise canonical revision, as the other
+        // physical bridges do: a retained rejection or pre-crash command receipt cannot turn a
+        // later loaded-world inspection into an indistinguishable duplicate command.
+        CommandId id = commandId(phase, intentId, checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalIntentTransition(intentId, status, observation)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        if (!(result instanceof CommandResult.Accepted) && status == PhysicalIntentStatus.CONFIRMED) {
+            throw new IllegalStateException("resource-site harvest confirmation was rejected: " + result);
+        }
         return result instanceof CommandResult.Accepted;
+    }
+    static CommandId commandId(String phase, PhysicalIntentId intentId, long revision) {
+        return new CommandId("executor:resource-site-harvest-" + phase + "-" + intentId.value().replace(':', '-') + "-r" + revision);
     }
     private record Target(PhysicalIntent intent, ResourceSite site, ResourceSiteHarvestJob job, ExactItemStack output, BlockPos chestPosition) { }
 }

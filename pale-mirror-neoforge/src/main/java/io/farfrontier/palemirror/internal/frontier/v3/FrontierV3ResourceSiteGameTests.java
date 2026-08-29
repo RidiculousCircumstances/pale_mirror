@@ -12,6 +12,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CropBlock;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -34,7 +35,8 @@ public final class FrontierV3ResourceSiteGameTests {
             CompoundTag pending = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(pending, level.registryAccess());
             helper.assertTrue(ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.PENDING && FrontierV3ResourceSiteExecutor.baseline(level, site),
                     "a restart retains pending ownership without treating the grass baseline as a completed field");
-            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "one executor pass writes every prevalidated soil and crop slot");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
+                    "one executor pass writes every prevalidated soil and crop slot: " + firstFieldMismatch(level, site));
             ledger.activate(site.id()); CompoundTag active = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(active, level.registryAccess());
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 0) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
                     "the exact 64 farmland and 64 wheat cells plus active provenance survive a SavedData reload");
@@ -63,7 +65,7 @@ public final class FrontierV3ResourceSiteGameTests {
         helper.assertFalse(FrontierV3ResourceSiteExecutor.baseline(level, site) || FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
                 "a foreign crop cell rejects the whole field instead of mixing owned and player/world geometry");
         helper.assertTrue(level.getBlockState(position).is(Blocks.DIAMOND_BLOCK) && site.soilSlots().stream()
-                        .allMatch(soil -> level.getBlockState(minecraft(soil)).is(Blocks.GRASS_BLOCK)),
+                        .allMatch(soil -> level.getBlockState(minecraft(soil)).is(Blocks.DIRT)),
                 "rejection leaves the foreign block and every untouched soil-capital cell exactly as observed");
         helper.succeed();
     }
@@ -74,7 +76,8 @@ public final class FrontierV3ResourceSiteGameTests {
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger claims = FrontierV3ResourceSiteLedger.get(level);
             claims.reserve(site.id(), new PhysicalIntentId("intent:site-explosion-game-test"));
-            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "the blast fixture must own one complete field before capture");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
+                    "the blast fixture must own one complete field before capture: " + firstFieldMismatch(level, site));
             claims.activate(site.id()); helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, claims, site, 4),
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the exact field witness must retain its current crop stage");
             BlockPos changed = minecraft(site.cropSlots().getFirst()); FrontierV3ResourceSiteExplosionLedger evidence = FrontierV3ResourceSiteExplosionLedger.get(level);
@@ -103,10 +106,21 @@ public final class FrontierV3ResourceSiteGameTests {
     }
     private static void prepareBaseline(ServerLevel level, ResourceSite site) {
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-            level.setBlock(position, Blocks.GRASS_BLOCK.defaultBlockState(), 3); });
+            // Production accepts grass or dirt; use dirt in the delayed fixture because
+            // grass can receive a random tick before the ownership assertion runs.
+            level.setBlock(position, Blocks.DIRT.defaultBlockState(), 3); });
+        site.cropSlots().forEach(crop -> level.setBlock(minecraft(crop), Blocks.AIR.defaultBlockState(), 3));
         int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow(), maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
         site.cropSlots().stream().filter(crop -> crop.x() == minX).forEach(crop -> level.setBlock(minecraft(crop).west(), Blocks.GLOWSTONE.defaultBlockState(), 3));
         site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
+    private static String firstFieldMismatch(ServerLevel level, ResourceSite site) {
+        return site.soilSlots().stream().filter(position -> !level.getBlockState(minecraft(position)).is(Blocks.FARMLAND))
+                .findFirst().map(position -> "soil " + position + "=" + level.getBlockState(minecraft(position)))
+                .or(() -> site.cropSlots().stream().filter(position -> !level.getBlockState(minecraft(position))
+                                .equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0)))
+                        .findFirst().map(position -> "crop " + position + "=" + level.getBlockState(minecraft(position))))
+                .orElse("unreported-state-mismatch");
+    }
 }
