@@ -22,8 +22,10 @@ native client action -> normal server event -> v3 observation -> WAL -> PMV3_DIA
    DISPLAY=:0 npm run scenario -- scenarios/field-player-break.json
    ```
 
-The one visible client performs the actual movement and break. It writes a JSON
-evidence manifest plus the before/after X11 frames under
+The one visible client performs the actual movement and break. Its isolated
+development run uses the user session's XWayland bridge so that a frame is
+captured from the exact fullscreen Minecraft window, rather than from the
+whole desktop. It writes a JSON evidence manifest plus the before/after X11 frames under
 `build/frontier-v3-scenarios/`.
 
 The run uses a disposable copy of that installed pack and excludes only

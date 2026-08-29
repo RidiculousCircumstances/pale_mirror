@@ -5,6 +5,7 @@
   "pilot": { "username": "PMTestPilot" },
   "setup": [
     { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/time set day" },
     { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run tp PMTestPilot -336 65 -360" }
   ],
   "actions": [

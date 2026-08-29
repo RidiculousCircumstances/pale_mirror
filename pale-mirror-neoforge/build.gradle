@@ -173,6 +173,14 @@ neoForge {
             // A normal development client must execute the current source set,
             // never a stale hosted copy of this same mod from the pack profile.
             gameDirectory = frontierV3PilotClientDirectory
+            // The pilot's acceptance frames are captured from its exact X11
+            // window.  On a Wayland desktop GLFW otherwise prefers a native
+            // surface which neither names nor exposes a capturable client
+            // window to the audit harness.  This isolated development run
+            // deliberately uses the existing XWayland bridge; it never
+            // changes normal-player client platform selection.
+            environment 'XDG_SESSION_TYPE', 'x11'
+            environment 'WAYLAND_DISPLAY', '__pale_mirror_pilot_xwayland_only__'
             systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
                     providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
             programArgument '--username'

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, hasDiagnosticResponses, newManifest, validateScenario } from '../src/scenario.mjs';
+import { correlation, hasDiagnosticResponses, newManifest, selectMutterXauthority, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -50,6 +50,12 @@ test('local HUD presentation action cannot carry a world mutation', () => {
   assert.doesNotThrow(() => validateScenario(localPresentation));
   localPresentation.actions = [{ type: 'hud', visible: 'false' }];
   assert.throws(() => validateScenario(localPresentation), /hud needs boolean visible/);
+});
+
+test('visible audit resolves only one unambiguous Wayland Xauthority file', () => {
+  assert.equal(selectMutterXauthority(['.mutter-Xwaylandauth.AZ4VT3', 'wayland-0']), '.mutter-Xwaylandauth.AZ4VT3');
+  assert.equal(selectMutterXauthority(['.mutter-Xwaylandauth.first', '.mutter-Xwaylandauth.second']), undefined);
+  assert.equal(selectMutterXauthority(['.Xauthority']), undefined);
 });
 
 test('pilot module loads its pinned CommonJS pathfinder dependency', async () => {

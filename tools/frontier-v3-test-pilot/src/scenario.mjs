@@ -6,6 +6,12 @@ const SCHEMA = 1;
 const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'inspect', 'hud']);
 const SETUP_ACTIONS = new Set(['command', 'observe']);
 
+/** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
+export function selectMutterXauthority(entries) {
+  const candidates = entries.filter((entry) => /^\.mutter-Xwaylandauth\.[A-Za-z0-9]+$/.test(entry));
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 export async function loadScenario(path) {
   const source = await readFile(path, 'utf8');
   const scenario = JSON.parse(source);
