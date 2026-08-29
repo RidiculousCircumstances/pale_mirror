@@ -10,7 +10,7 @@
   ],
   "actions": [
     { "type": "wait", "ms": 5000 },
-    { "type": "look", "at": { "x": -405, "y": 68, "z": 247 } },
+    { "type": "look", "at": { "x": -405, "y": 65, "z": 247 } },
     { "type": "hud", "visible": false },
     { "type": "wait", "ms": 1000 }
   ],
