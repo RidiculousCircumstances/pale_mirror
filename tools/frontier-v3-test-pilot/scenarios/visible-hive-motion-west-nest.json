@@ -12,7 +12,6 @@
     { "type": "wait", "ms": 5000 },
     { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
     { "type": "look", "at": { "x": -420, "y": 64, "z": 420 } },
-    { "type": "hud", "visible": false },
     { "type": "wait", "ms": 1000 },
     { "type": "wait", "ms": 8000 }
   ],
@@ -20,7 +19,7 @@
     { "after": 2, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT" } }
   ],
   "frames": [
-    { "after": 5, "name": "hive-west-nest-before-motion" },
-    { "after": 6, "name": "hive-west-nest-after-motion" }
+    { "after": 4, "name": "hive-west-nest-before-motion" },
+    { "after": 5, "name": "hive-west-nest-after-motion" }
   ]
 }

@@ -22,6 +22,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -33,8 +34,11 @@ import java.util.Objects;
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID, value = Dist.CLIENT)
 public final class FrontierV3TestPilotClient {
     private static final String SCENARIO_PROPERTY = "pale_mirror.frontier_v3.test_pilot.scenario";
+    private static final String CAPTURE_CONTROL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.capture_control_directory";
+    private static final long CAPTURE_SETTLE_TICKS = 10L;
     private static JsonArray actions;
     private static JsonArray setup;
+    private static JsonArray frames;
     private static boolean runningSetup;
     private static int index;
     private static long actionStartedTick = -1L;
@@ -42,6 +46,7 @@ public final class FrontierV3TestPilotClient {
     private static boolean visitSent;
     private static long visitChunkReadyTick = -1L;
     private static Boolean originalHideGui;
+    private static CaptureBarrier captureBarrier;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
 
     private FrontierV3TestPilotClient() { }
@@ -52,8 +57,11 @@ public final class FrontierV3TestPilotClient {
         if (configured.isBlank()) return;
         try {
             FrontierV3TestPilotScenario.Parsed scenario = FrontierV3TestPilotScenario.parse(Files.readString(Path.of(configured)));
-            setup = scenario.setup(); actions = scenario.actions(); runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L; breaking = false; visitSent = false; visitChunkReadyTick = -1L; diagnostics.clear();
-            PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={}", configured, setup.size(), actions.size());
+            setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();
+            runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
+            breaking = false; visitSent = false; visitChunkReadyTick = -1L;
+            captureBarrier = null; diagnostics.clear();
+            PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
         } catch (IOException | IllegalArgumentException failure) {
             actions = null;
             PaleMirrorMod.LOGGER.error("PMV3_PILOT rejected scenario {}", configured, failure);
@@ -80,9 +88,14 @@ public final class FrontierV3TestPilotClient {
 
     @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) {
-        if (actions == null || (runningSetup && index >= setup.size()) || (!runningSetup && index >= actions.size())) return;
+        if (actions == null) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.level == null || minecraft.gameMode == null) return;
+        if (captureBarrier != null) {
+            advanceCaptureBarrier(minecraft);
+            return;
+        }
+        if ((runningSetup && index >= setup.size()) || (!runningSetup && index >= actions.size())) return;
         JsonObject action = (runningSetup ? setup : actions).get(index).getAsJsonObject();
         String type = action.get("type").getAsString();
         long tick = minecraft.level.getGameTime();
@@ -107,7 +120,6 @@ public final class FrontierV3TestPilotClient {
                 case "look" -> { look(minecraft, position(action, "at")); advance(type); }
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
-                case "hud" -> { setHud(minecraft, action.get("visible").getAsBoolean()); advance(type); }
                 default -> throw new IllegalArgumentException("unsupported visible pilot action: " + type);
             }
         } catch (RuntimeException failure) {
@@ -294,10 +306,16 @@ public final class FrontierV3TestPilotClient {
         minecraft.player.setXRot((float) -(Mth.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z)) * Mth.RAD_TO_DEG));
     }
 
-    /** Local presentation only; restored when the disposable pilot disconnects. */
-    private static void setHud(Minecraft minecraft, boolean visible) {
+    /**
+     * Frames are captured only after a local, disposable client has hidden all
+     * generic UI, closed any incidental screen and discarded its diagnostic
+     * chat backlog.  This changes neither server state nor the player/world.
+     */
+    private static void prepareCleanCapture(Minecraft minecraft) {
         if (originalHideGui == null) originalHideGui = minecraft.options.hideGui;
-        minecraft.options.hideGui = !visible;
+        minecraft.options.hideGui = true;
+        minecraft.setScreen(null);
+        minecraft.gui.getChat().clearMessages(false);
     }
 
     private static BlockPos position(JsonObject action, String field) {
@@ -308,24 +326,72 @@ public final class FrontierV3TestPilotClient {
     private static void advance(String type) {
         String phase = runningSetup ? "setup" : "action";
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
+        int completedAction = runningSetup ? 0 : index + 1;
+        JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
         index++; actionStartedTick = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L;
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
-        else if (!runningSetup && index >= actions.size()) {
-            int completedActions = actions.size();
-            // The outer runner must still receive the server response to the
-            // final read-only assertion. It closes this ordinary client only
-            // after all such responses are present; disconnecting here would
-            // race that final packet and turn a completed action into a false
-            // scenario timeout.
-            PaleMirrorMod.LOGGER.info("PMV3_PILOT completed scenario actions={}", completedActions);
+        else if (reachedFrame != null) {
+            JsonObject frame = reachedFrame;
+            String presentation = frame.has("presentation") ? frame.get("presentation").getAsString() : "clean";
+            if (presentation.equals("clean")) prepareCleanCapture(Minecraft.getInstance());
+            captureBarrier = new CaptureBarrier(completedAction, frame.get("name").getAsString(), presentation,
+                    Minecraft.getInstance().level.getGameTime() + CAPTURE_SETTLE_TICKS, false);
         }
+        else if (!runningSetup && index >= actions.size()) {
+            completeScenario();
+        }
+    }
+    private static JsonObject frameAfter(int completedAction) {
+        if (frames == null) return null;
+        for (JsonElement element : frames) {
+            JsonObject frame = element.getAsJsonObject();
+            if (frame.get("after").getAsInt() == completedAction) return frame;
+        }
+        return null;
+    }
+
+    /** A filesystem handshake prevents the next chat/command action racing the X11 capture. */
+    private static void advanceCaptureBarrier(Minecraft minecraft) {
+        CaptureBarrier barrier = captureBarrier;
+        if (minecraft.level.getGameTime() < barrier.readyAtTick()) return;
+        Path control = captureControlDirectory();
+        if (control == null) throw new IllegalStateException("visual frame declared without capture-control directory");
+        Path ready = control.resolve("frame-" + barrier.after() + ".ready");
+        Path captured = control.resolve("frame-" + barrier.after() + ".captured");
+        try {
+            if (!barrier.announced()) {
+                Files.createDirectories(control);
+                Files.writeString(ready, barrier.name() + "\n", StandardCharsets.UTF_8);
+                captureBarrier = new CaptureBarrier(barrier.after(), barrier.name(), barrier.presentation(), barrier.readyAtTick(), true);
+                PaleMirrorMod.LOGGER.info("PMV3_PILOT frame_ready after={} name={} presentation={}", barrier.after(), barrier.name(), barrier.presentation());
+                return;
+            }
+            if (Files.isRegularFile(captured)) {
+                Files.deleteIfExists(ready);
+                captureBarrier = null;
+                PaleMirrorMod.LOGGER.info("PMV3_PILOT frame_captured after={} name={}", barrier.after(), barrier.name());
+                if (index >= actions.size()) completeScenario();
+            }
+        } catch (IOException failure) {
+            throw new IllegalStateException("visual frame handshake failed for " + barrier.name(), failure);
+        }
+    }
+    private static Path captureControlDirectory() {
+        String configured = System.getProperty(CAPTURE_CONTROL_PROPERTY, "");
+        return configured.isBlank() ? null : Path.of(configured);
+    }
+    private static void completeScenario() {
+        // The outer runner must still receive the server response to the final
+        // read-only assertion before it closes this ordinary client.
+        PaleMirrorMod.LOGGER.info("PMV3_PILOT completed scenario actions={}", actions.size());
     }
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
         if (originalHideGui != null) { minecraft.options.hideGui = originalHideGui; originalHideGui = null; }
-        actions = null; setup = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false; visitSent = false; visitChunkReadyTick = -1L; diagnostics.clear();
+        actions = null; setup = null; frames = null; captureBarrier = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false; visitSent = false; visitChunkReadyTick = -1L; diagnostics.clear();
     }
     private record DiagnosticIdentity(String view, String id) { }
     private record ObservedDiagnostic(long tick, JsonObject value) { }
+    private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { }
 }

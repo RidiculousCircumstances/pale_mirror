@@ -29,26 +29,42 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /** Loaded-chunk, crash-safe preparation of a whole fixed field; it never adopts or rewrites a foreign cell. */
 final class FrontierV3ResourceSiteExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, Integer> STAGE_CURSORS = new IdentityHashMap<>();
+    // Only a process restart may revalidate a previously confirmed field whose
+    // Minecraft chunk did not make it to disk before the canonical receipt.
+    // Normal live drift remains a conflict, never a desired-state repair.
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Set<SubjectId>> RECOVERY_SITES = new IdentityHashMap<>();
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum StageProjectionResult { CURRENT, UPDATED, CONFLICT, DEFERRED }
+    enum RestartReconciliation { CURRENT, RECREATED, CONFLICT, DEFERRED }
 
     private FrontierV3ResourceSiteExecutor() { }
 
-    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { STAGE_CURSORS.remove(runtime); }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { STAGE_CURSORS.remove(runtime); RECOVERY_SITES.remove(runtime); }
+
+    static void beginRecovery(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
+        Set<SubjectId> pending = state.resourceSites().sites().values().stream()
+                .filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage).map(ResourceSiteLifecycle::siteId)
+                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+        if (!pending.isEmpty()) RECOVERY_SITES.put(runtime, pending);
+    }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         FrontierV3ResourceSitePreparationSelection.nextLoaded(state, site -> loaded(level, site)).ifPresent(intent -> execute(level, runtime, state, intent));
-        projectOneGrowthStage(level, runtime, state);
+        reconcileOneAfterRestart(level, runtime, state);
+        projectOneGrowthStage(level, runtime, runtime.decodedState().orElse(state));
     }
 
     static BlockBreakObservation observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
@@ -92,7 +108,9 @@ final class FrontierV3ResourceSiteExecutor {
     }
 
     private static void projectOneGrowthStage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Set<SubjectId> pendingRecovery = RECOVERY_SITES.getOrDefault(runtime, Set.of());
         List<ResourceSiteLifecycle> candidates = state.resourceSites().sites().values().stream().filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage)
+                .filter(lifecycle -> !pendingRecovery.contains(lifecycle.siteId()))
                 .sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList();
         if (candidates.isEmpty()) return;
         int index = Math.floorMod(STAGE_CURSORS.getOrDefault(runtime, 0), candidates.size());
@@ -115,6 +133,55 @@ final class FrontierV3ResourceSiteExecutor {
         for (BlockPosition crop : site.cropSlots()) level.setBlock(minecraft(crop), crop(desiredStage), 3);
         if (!matches(level, site, desiredStage)) return StageProjectionResult.CONFLICT;
         ledger.updateStage(site.id(), desiredStage); return StageProjectionResult.UPDATED;
+    }
+
+    /**
+     * Reconciles only one confirmed field after a server restart.  A complete
+     * neutral baseline proves that no physical field survived, so recreating
+     * the exact owned field is safe.  Any partial or foreign state remains
+     * untouched and becomes an explicit canonical conflict.
+     */
+    static RestartReconciliation reconcileAfterRestart(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
+                                                        PhysicalIntentId intentId, int desiredStage) {
+        if (!loaded(level, site)) return RestartReconciliation.DEFERRED;
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        // A neutral footprint alone proves only that it is currently safe to
+        // inspect.  Recreating it needs the separate durable proof that this
+        // exact intent had already confirmed ownership before the crash.
+        if (claim == null || !claim.intentId().equals(intentId) || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) {
+            return RestartReconciliation.CONFLICT;
+        }
+        if (matches(level, site, desiredStage)) {
+            if (claim.stage() != desiredStage) ledger.updateStage(site.id(), desiredStage);
+            return RestartReconciliation.CURRENT;
+        }
+        if (!baseline(level, site)) return RestartReconciliation.CONFLICT;
+        if (claim.stage() != 0) ledger.updateStage(site.id(), 0);
+        if (!placeWholeField(level, site)) return RestartReconciliation.CONFLICT;
+        StageProjectionResult projected = projectStage(level, ledger, site, desiredStage);
+        return projected == StageProjectionResult.CURRENT || projected == StageProjectionResult.UPDATED
+                ? RestartReconciliation.RECREATED : RestartReconciliation.CONFLICT;
+    }
+
+    private static void reconcileOneAfterRestart(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Set<SubjectId> pending = RECOVERY_SITES.get(runtime); if (pending == null || pending.isEmpty()) return;
+        for (SubjectId siteId : pending.stream().sorted().toList()) {
+            ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(siteId);
+            ResourceSiteLifecycle lifecycle = state.resourceSites().site(siteId);
+            if (site == null || !loaded(level, site)) continue;
+            PhysicalIntent intent = state.physicalIntents().values().stream().filter(candidate -> candidate.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION
+                    && candidate.status() == PhysicalIntentStatus.CONFIRMED && candidate.causeSubjectId().equals(siteId)).findFirst().orElse(null);
+            RestartReconciliation result = intent == null ? RestartReconciliation.CONFLICT
+                    : reconcileAfterRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent.id(), lifecycle.growthStage());
+            pending.remove(siteId);
+            if (result == RestartReconciliation.CONFLICT) {
+                FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level); ledger.conflict(siteId);
+                recordConflict(runtime, ledger, site, firstMismatch(level, site, lifecycle.growthStage()).orElse(site.cropSlots().getFirst()),
+                        "restart-resource-site-postcondition-conflict");
+            }
+            if (pending.isEmpty()) RECOVERY_SITES.remove(runtime);
+            return;
+        }
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {

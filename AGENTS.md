@@ -124,6 +124,13 @@ Node schema tests for every edit, then apply the existing critical-code gate
 before committing. A live scenario is evidence for that specific flow, not a
 replacement for product/visual acceptance.
 
+Visual `frames` are test-only capture barriers, never ordinary pilot actions.
+They default to `presentation: clean`: the isolated client closes incidental
+screens, hides generic HUD/chat, waits for render settling, and does not run
+the next action until the X11 capture helper acknowledges its exact frame.
+Use `presentation: player` only when the player UI itself is the assertion;
+never add an ad-hoc HUD toggle to a scenario.
+
 ## Architecture rules
 
 - `pale-mirror-domain` is pure Java: it must not import Minecraft, NeoForge,

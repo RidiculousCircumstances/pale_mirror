@@ -11,11 +11,10 @@
   "actions": [
     { "type": "wait", "ms": 5000 },
     { "type": "look", "at": { "x": -405, "y": 65, "z": 247 } },
-    { "type": "hud", "visible": false },
     { "type": "wait", "ms": 1000 }
   ],
   "assertions": [],
   "frames": [
-    { "after": 4, "name": "route-network" }
+    { "after": 3, "name": "route-network" }
   ]
 }

@@ -11,10 +11,10 @@ import java.util.Set;
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
-            "walk", "break", "hud", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board");
+            "walk", "break", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "actor", "item", "operation", "intent", "trace");
 
-    record Parsed(JsonArray setup, JsonArray actions) {
+    record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
         int actionCount() { return actions.size(); }
     }
@@ -30,8 +30,10 @@ final class FrontierV3TestPilotScenario {
         }
         JsonArray setup = array(root, "setup", true);
         JsonArray actions = array(root, "actions", false);
+        JsonArray frames = array(root, "frames", true);
         validate(setup, "setup"); validate(actions, "actions");
-        return new Parsed(setup, actions);
+        validateFrames(frames, actions.size());
+        return new Parsed(setup, actions, frames);
     }
 
     private static JsonArray array(JsonObject root, String name, boolean optional) {
@@ -62,10 +64,32 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
-                    (type.equals("hud") && (!action.has("visible") || !action.get("visible").isJsonPrimitive()
-                            || !action.get("visible").getAsJsonPrimitive().isBoolean())) ||
                     ((type.equals("look") || type.equals("walk") || type.equals("break") || type.equals("wait_until_block")) && !action.has("position") && !action.has("at"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
+            }
+        }
+    }
+
+    /**
+     * A visual frame is a test-only presentation barrier, not an action.  It
+     * owns no world mutation and defaults to the clean player-eye profile so
+     * an incidental command/chat/HUD overlay cannot contaminate evidence.
+     */
+    private static void validateFrames(JsonArray frames, int actionCount) {
+        java.util.Set<Integer> seenAfter = new java.util.HashSet<>();
+        java.util.Set<String> seenNames = new java.util.HashSet<>();
+        for (JsonElement element : frames) {
+            if (!element.isJsonObject()) throw new IllegalArgumentException("frame must be an object");
+            JsonObject frame = element.getAsJsonObject();
+            if (!frame.has("after") || !frame.get("after").isJsonPrimitive() || !frame.get("after").getAsJsonPrimitive().isNumber()
+                    || !frame.has("name") || !frame.get("name").isJsonPrimitive()) {
+                throw new IllegalArgumentException("frame needs action boundary and name");
+            }
+            int after = frame.get("after").getAsInt(); String name = frame.get("name").getAsString();
+            String presentation = frame.has("presentation") ? frame.get("presentation").getAsString() : "clean";
+            if (after < 1 || after > actionCount || !seenAfter.add(after) || !seenNames.add(name)
+                    || !name.matches("[a-z0-9][a-z0-9_-]*") || !(presentation.equals("clean") || presentation.equals("player"))) {
+                throw new IllegalArgumentException("invalid or duplicate visual frame");
             }
         }
     }

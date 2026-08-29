@@ -4,7 +4,7 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadScenario, restartSegments } from './scenario.mjs';
+import { loadScenario, pilotServerPid, restartSegments } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -28,6 +28,8 @@ const disposableWorld = resolve(project, `pale-mirror-neoforge/build/runs/fronti
 const serverLog = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/logs/latest.log');
 await mkdir(dirname(ephemeralScenario), { recursive: true });
 let server = null;
+let completed = false;
+let abruptStopAttempted = false;
 try {
   const recovery = restartSegments(scenario);
   server = await startServer(true);
@@ -38,38 +40,48 @@ try {
     await writeScenario(beforeRestartScenario, recovery.before);
     await runPilot(beforeRestartScenario, beforeRestartManifest, server);
     if (recovery.mode === 'graceful') await stopServerSafely(server, serverLog, server.logOffset, port);
-    else await stopServerAbruptly(server);
+    else {
+      abruptStopAttempted = true;
+      await stopServerAbruptly(server, port);
+    }
     server = null;
     server = await startServer(false);
+    // The replacement server is a normal live JVM and must receive the
+    // ordinary durable stop path if the after-restart pilot fails.
+    abruptStopAttempted = false;
     await writeScenario(afterRestartScenario, recovery.after);
     await runPilot(afterRestartScenario, output, server);
     const manifest = JSON.parse(await readFile(output, 'utf8'));
     manifest.recovery = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction, beforeRestartManifest };
     await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   }
+  completed = true;
 } finally {
-  if (server != null) await stopServerSafely(server, serverLog, server.logOffset, port);
+  if (server != null && !abruptStopAttempted) await stopServerSafely(server, serverLog, server.logOffset, port);
   await Promise.all([ephemeralScenario, beforeRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
-  if (process.env.FRONTIER_V3_KEEP_DISPOSABLE !== 'true') await rm(disposableWorld, { recursive: true, force: true });
+  // A failed recovery run is diagnostic evidence.  In particular, never erase
+  // the session.lock/world that prevented the next server from starting.
+  if (completed && process.env.FRONTIER_V3_KEEP_DISPOSABLE !== 'true') await rm(disposableWorld, { recursive: true, force: true });
 }
 
 console.log(JSON.stringify({ status: 'ok', profile: 'disposable_lite', world, port, manifest: output }));
 
 async function startServer(reset) {
   const logOffset = await fileSize(serverLog);
+  const serverRunId = randomUUID();
   const serverArgs = [':pale-mirror-neoforge:runFrontierV3PilotServer', '--no-daemon',
     `-PfrontierV3PilotWorld=${world}`, `-PfrontierV3PilotSeed=${scenario.isolation.seed}`,
-    `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotUsername=${scenario.pilot.username}`, `-PfrontierV3PilotReset=${reset}`];
-  // Only abrupt recovery needs a separate process group. Keeping ordinary
-  // graceful runs attached preserves Gradle's normal shutdown forwarding and
-  // its durable world-save acknowledgement.
+    `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotUsername=${scenario.pilot.username}`,
+    `-PfrontierV3PilotReset=${reset}`, `-PfrontierV3PilotRunId=${serverRunId}`];
   const child = spawn(gradle, serverArgs, {
-    cwd: project, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: scenario.restart?.mode === 'abrupt'
+    cwd: project, env: process.env, stdio: ['pipe', 'pipe', 'pipe']
   });
   let output = '';
   for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on('data', (chunk) => { process.stdout.write(chunk); output += chunk; });
-  const session = { child, output: () => output, logOffset };
+  const session = { child, output: () => output, logOffset, serverRunId, serverPid: undefined };
   await waitForServer(session, 180_000);
+  session.serverPid = pilotServerPid(output, serverRunId);
+  if (!Number.isInteger(session.serverPid)) throw new Error('disposable v3 server did not announce its exact JVM identity');
   return session;
 }
 
@@ -134,15 +146,28 @@ async function stopServerSafely(server, logPath, offset, serverPort) {
     }
   }
 }
-async function stopServerAbruptly(server) {
-  if (server.child.exitCode === null && server.child.signalCode === null) {
-    try { process.kill(-server.child.pid, 'SIGKILL'); }
-    catch (failure) { throw new Error(`could not abruptly stop exact disposable server group: ${failure}`); }
+async function stopServerAbruptly(server, serverPort) {
+  if (!Number.isInteger(server.serverPid) || server.serverPid <= 1) throw new Error('disposable server did not expose an exact JVM identity');
+  // The nonce is passed only to this Gradle RunGame task and is echoed by that
+  // JVM at server start. Kill that exact Minecraft process, not its launcher,
+  // a name match, a listener lookup, or a broad process group.
+  killIfPresent(server.serverPid);
+  if (!await waitForPortClosed(serverPort, 45_000)) {
+    throw new Error(`abruptly stopped exact disposable JVM but game port ${serverPort} remained open; preserving world for diagnosis`);
   }
-  await Promise.race([exited(server.child), timeout(5_000)]);
-  // Allow the operating system to release only the known disposable port before
-  // the recovery server opens the same exact world.
-  await timeout(500);
+  // TCP closure comes from that exact JVM. Give its OS file lock one scheduler
+  // turn to release before the recovery JVM opens this world.
+  await timeout(250);
+  if (!await exitedWithin(server.child, 10_000)) {
+    // After its exact game JVM is gone this is only the known disposable
+    // Gradle launcher, which cannot own a world lock or a live game port.
+    server.child.kill('SIGTERM');
+    if (!await exitedWithin(server.child, 5_000)) server.child.kill('SIGKILL');
+  }
+}
+function killIfPresent(pid) {
+  try { process.kill(pid, 'SIGKILL'); }
+  catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not abruptly stop exact disposable process ${pid}: ${failure}`); }
 }
 async function fileSize(path) {
   try { return (await stat(path)).size; }

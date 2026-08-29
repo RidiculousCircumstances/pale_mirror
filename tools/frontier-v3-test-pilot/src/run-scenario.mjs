@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { execFile } from 'node:child_process';
-import { appendFile, mkdir, readdir } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,8 +18,10 @@ const { scenario, sha256 } = await loadScenario(scenarioFile);
 const runId = randomUUID();
 const manifest = newManifest({ scenario, sha256, runId });
 const tracePath = output.replace(/\.json$/i, '') + '.pmv3.jsonl';
+const captureControlDirectory = output.replace(/\.json$/i, '') + `.${runId}.capture-control`;
 manifest.trace = tracePath;
 await mkdir(dirname(tracePath), { recursive: true });
+await mkdir(captureControlDirectory, { recursive: true });
 let traceWrites = Promise.resolve();
 let activeAction = null;
 function trace(kind, data = {}) {
@@ -32,6 +34,7 @@ const pilotTask = process.env.FRONTIER_V3_PILOT_PROFILE === 'pack'
   ? ':pale-mirror-neoforge:runFrontierV3PilotPackClient' : ':pale-mirror-neoforge:runFrontierV3PilotClient';
 const args = [pilotTask, '--no-daemon',
   `-PfrontierV3PilotScenario=${scenarioFile}`,
+  `-PfrontierV3PilotCaptureControlDirectory=${captureControlDirectory}`,
   `-PfrontierV3PilotUsername=${scenario.pilot.username}`,
   `-PfrontierV3PilotServer=${scenario.server.host}:${scenario.server.port}`];
 // The native pilot and its capture helper must authenticate to the same
@@ -72,20 +75,26 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
       pilotStartedAt ??= Date.now(); activeAction = started[2] === 'action' ? correlation(runId, Number(started[1])) : null;
       trace('action_started', { correlation: activeAction, phase: started[2], step: Number(started[1]), actionType: started[3] });
     }
-    if (completed) {
-      trace('action_completed', { correlation: correlation(runId, Number(completed[1])), step: Number(completed[1]) });
-      for (const frame of (scenario.frames ?? []).filter((value) => value.after === Number(completed[1]))) {
-        const destination = resolve(frame.destination ?? `build/frontier-v3-scenarios/${scenario.id}-${runId}-${frame.name}.png`);
-        frameTasks.push(executeFile('python3', [auditScript, 'capture', destination], { cwd: project, env: auditEnvironment })
-          .then(() => { manifest.frames.push({ after: frame.after, name: frame.name, path: destination }); trace('frame_captured', { correlation: correlation(runId, frame.after), name: frame.name, path: destination }); })
-          .catch((error) => { failure ??= `frame ${frame.name} capture failed: ${String(error?.stderr ?? error)}`; }));
-      }
+    if (completed) trace('action_completed', { correlation: correlation(runId, Number(completed[1])), step: Number(completed[1]) });
+    const frameReady = line.match(/PMV3_PILOT frame_ready after=(\d+) name=([^\s]+) presentation=(clean|player)/);
+    if (frameReady) {
+      const after = Number(frameReady[1]); const frame = (scenario.frames ?? []).find((value) => value.after === after && value.name === frameReady[2]);
+      if (!frame) { failure ??= `pilot announced undeclared frame after=${after} name=${frameReady[2]}`; return; }
+      const destination = resolve(frame.destination ?? `build/frontier-v3-scenarios/${scenario.id}-${runId}-${frame.name}.png`);
+      frameTasks.push(executeFile('python3', [auditScript, 'capture', destination], { cwd: project, env: auditEnvironment })
+        .then(async () => {
+          manifest.frames.push({ after: frame.after, name: frame.name, presentation: frameReady[3], path: destination });
+          await writeFile(join(captureControlDirectory, `frame-${after}.captured`), `${frame.name}\n`, 'utf8');
+          trace('frame_captured', { correlation: correlation(runId, frame.after), name: frame.name, presentation: frameReady[3], path: destination });
+        })
+        .catch((error) => { failure ??= `frame ${frame.name} capture failed: ${String(error?.stderr ?? error)}`; }));
     }
   }
 });
 
 try {
-  await waitForPilot(child, () => failure || (complete && hasDiagnosticResponses(diagnostics, scenario.assertions ?? [])), () => pilotStartedAt,
+  await waitForPilot(child, () => failure || (complete && hasDiagnosticResponses(diagnostics, scenario.assertions ?? [])
+    && manifest.frames.length === (scenario.frames ?? []).length), () => pilotStartedAt,
     300_000, scenarioDeadlineMs(scenario));
   if (failure) throw new Error(failure);
   await Promise.all(frameTasks);
@@ -104,13 +113,15 @@ try {
   await traceWrites;
   await saveManifest(output, manifest);
   child.kill('SIGINT');
+  await rm(captureControlDirectory, { recursive: true, force: true });
 }
 if (manifest.status !== 'ok') throw new Error(manifest.error);
 console.log(JSON.stringify({ status: 'ok', manifest: output, runId }));
 
 function scenarioDeadlineMs(scenario) {
   const requested = (scenario.actions ?? []).reduce((total, action) => total + (action.type === 'wait' ? action.ms : action.timeoutMs ?? 0), 0);
-  return Math.max(120_000, Math.min(600_000, requested + 30_000));
+  const captureBudget = (scenario.frames ?? []).length * 30_000;
+  return Math.max(120_000, Math.min(600_000, requested + captureBudget + 30_000));
 }
 
 function waitForPilot(child, predicate, startedAt, startupTimeoutMs, scenarioTimeoutMs) {

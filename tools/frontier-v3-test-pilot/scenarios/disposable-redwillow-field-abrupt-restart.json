@@ -18,6 +18,8 @@
     { "type": "assert_visible_block", "position": { "x": 388, "y": 64, "z": -355 }, "timeoutMs": 10000 },
     { "type": "inspect", "view": "site", "id": "site:4-wheat-field" },
     { "type": "wait_until_block", "position": { "x": 388, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 90000 },
+    { "type": "look", "at": { "x": 388, "y": 64, "z": -355 } },
+    { "type": "assert_visible_block", "position": { "x": 388, "y": 64, "z": -355 }, "timeoutMs": 10000 },
     { "type": "inspect", "view": "site", "id": "site:4-wheat-field" }
   ],
   "restart": {
@@ -32,10 +34,10 @@
   },
   "assertions": [
     { "after": 4, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING" } },
-    { "after": 6, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING" } }
+    { "after": 8, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING" } }
   ],
   "frames": [
     { "after": 3, "name": "before-abrupt-restart-field" },
-    { "after": 5, "name": "after-abrupt-restart-field" }
+    { "after": 8, "name": "after-abrupt-restart-field" }
   ]
 }

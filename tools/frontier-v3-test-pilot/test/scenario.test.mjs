@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, hasDiagnosticResponses, newManifest, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, hasDiagnosticResponses, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -68,7 +68,7 @@ test('semantic visible checks are bounded evidence actions, not world mutations'
 
 test('restart runner slices action-relative assertions without a second scenario language', () => {
   const recoverable = { ...scenario, setup: [{ type: 'command', command: '/time set day' }], actions: [
-    { type: 'wait', ms: 10 }, { type: 'inspect', view: 'summary', id: '' }, { type: 'hud', visible: false }
+    { type: 'wait', ms: 10 }, { type: 'inspect', view: 'summary', id: '' }, { type: 'wait', ms: 10 }
   ], assertions: [
     { after: 1, view: 'summary', id: '', expect: { status: 'ok' } },
     { after: 2, view: 'summary', id: '', expect: { status: 'ok' } }
@@ -115,20 +115,24 @@ test('runner waits for every requested asynchronous diagnostic response', () => 
   assert.equal(hasDiagnosticResponses([site, trace], assertions), true);
 });
 
-test('local HUD presentation action cannot carry a world mutation', () => {
-  const localPresentation = structuredClone(scenario);
-  localPresentation.actions = [{ type: 'hud', visible: false }];
-  localPresentation.assertions = [];
-  localPresentation.frames = [];
-  assert.doesNotThrow(() => validateScenario(localPresentation));
-  localPresentation.actions = [{ type: 'hud', visible: 'false' }];
-  assert.throws(() => validateScenario(localPresentation), /hud needs boolean visible/);
+test('visual frames use a unique clean capture barrier unless player UI is explicit', () => {
+  assert.doesNotThrow(() => validateScenario({ ...scenario, frames: [{ after: 1, name: 'clean' }, { after: 2, name: 'player', presentation: 'player' }] }));
+  assert.throws(() => validateScenario({ ...scenario, frames: [{ after: 1, name: 'one' }, { after: 1, name: 'two' }] }), /invalid frame declaration/);
+  assert.throws(() => validateScenario({ ...scenario, frames: [{ after: 0, name: 'zero' }] }), /invalid frame declaration/);
+  assert.throws(() => validateScenario({ ...scenario, frames: [{ after: 1, name: 'bad', presentation: 'cinematic' }] }), /invalid frame declaration/);
+  assert.throws(() => validateScenario({ ...scenario, actions: [{ type: 'hud', visible: false }], frames: [] }), /unsupported actions action/);
 });
 
 test('visible audit resolves only one unambiguous Wayland Xauthority file', () => {
   assert.equal(selectMutterXauthority(['.mutter-Xwaylandauth.AZ4VT3', 'wayland-0']), '.mutter-Xwaylandauth.AZ4VT3');
   assert.equal(selectMutterXauthority(['.mutter-Xwaylandauth.first', '.mutter-Xwaylandauth.second']), undefined);
   assert.equal(selectMutterXauthority(['.Xauthority']), undefined);
+});
+
+test('abrupt recovery resolves only the JVM that echoed its exact disposable nonce', () => {
+  const runId = '05e2ad0c-69d1-45af-8d3c-4d7908a4a63d';
+  assert.equal(pilotServerPid(`other output\nPMV3_PILOT_SERVER runId=${runId} pid=12345\n`, runId), 12345);
+  assert.equal(pilotServerPid('PMV3_PILOT_SERVER runId=foreign pid=98765', runId), undefined);
 });
 
 test('pilot module loads its pinned CommonJS pathfinder dependency', async () => {

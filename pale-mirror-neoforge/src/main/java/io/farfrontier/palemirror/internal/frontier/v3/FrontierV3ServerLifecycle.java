@@ -141,6 +141,7 @@ public final class FrontierV3ServerLifecycle {
                 new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            FrontierV3ResourceSiteExecutor.beginRecovery(runtime);
             try {
                 int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, physicalWorld);
                 int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
@@ -160,6 +161,10 @@ public final class FrontierV3ServerLifecycle {
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             PaleMirrorMod.LOGGER.info("Frontier v3 development runtime started for {}", server.getWorldPath(LevelResource.ROOT));
+            String pilotRunId = System.getProperty("pale_mirror.frontier_v3.pilot.run_id", "");
+            if (!pilotRunId.isBlank()) {
+                PaleMirrorMod.LOGGER.info("PMV3_PILOT_SERVER runId={} pid={}", pilotRunId, ProcessHandle.current().pid());
+            }
         } else {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined at startup: {}", runtime.status().detail().orElse("unknown"));
         }

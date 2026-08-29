@@ -59,6 +59,7 @@ def frontierV3PilotSeed = providers.gradleProperty('frontierV3PilotSeed').orElse
 def frontierV3PilotPort = providers.gradleProperty('frontierV3PilotPort').orElse('25575').get()
 def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
 def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
+def frontierV3PilotRunId = providers.gradleProperty('frontierV3PilotRunId').orElse('').get()
 def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
@@ -194,6 +195,8 @@ neoForge {
             environment 'WAYLAND_DISPLAY', '__pale_mirror_pilot_xwayland_only__'
             systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
                     providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.capture_control_directory',
+                    providers.gradleProperty('frontierV3PilotCaptureControlDirectory').orElse('').get()
             programArgument '--fullscreen'
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
@@ -208,6 +211,8 @@ neoForge {
             environment 'WAYLAND_DISPLAY', '__pale_mirror_pilot_xwayland_only__'
             systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
                     providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.capture_control_directory',
+                    providers.gradleProperty('frontierV3PilotCaptureControlDirectory').orElse('').get()
             programArgument '--fullscreen'
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
@@ -220,6 +225,9 @@ neoForge {
             gameDirectory = frontierV3PilotServerDirectory
             programArgument '--nogui'
             systemProperty 'pale_mirror.frontier_v3.enabled', 'true'
+            // A disposable runner receives the actual Minecraft JVM identity
+            // from its own nonce; Gradle's forked launcher is not that owner.
+            systemProperty 'pale_mirror.frontier_v3.pilot.run_id', frontierV3PilotRunId
         }
         ftbClient {
             client()
@@ -729,8 +737,9 @@ tasks.named('runFrontierV3PilotServer') {
         def seed = frontierV3PilotSeed
         def port = frontierV3PilotPort
         def username = frontierV3PilotOperator
-        if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)) {
-            throw new GradleException('Frontier v3 pilot world, username or port is invalid')
+        if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)
+                || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
+            throw new GradleException('Frontier v3 pilot world, username, port or run id is invalid')
         }
         directory.mkdirs()
         new File(directory, 'eula.txt').text = 'eula=true\n'

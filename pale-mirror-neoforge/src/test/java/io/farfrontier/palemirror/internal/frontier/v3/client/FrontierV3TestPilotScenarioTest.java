@@ -22,12 +22,16 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
-    void acceptsOnlyBooleanLocalHudPresentationAction() {
+    void visualFramesAreCleanByDefaultAndCannotBeDuplicated() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[{"type":"hud","visible":false}]}""");
+                {"schema":1,"actions":[{"type":"wait","ms":0}],"frames":[{"after":1,"name":"clean-frame"}]}""");
         assertEquals(1, parsed.actionCount());
+        assertEquals(1, parsed.frames().size());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[{"type":"hud","visible":"false"}]}"""));
+                {"schema":1,"actions":[{"type":"wait","ms":0}],"frames":[
+                {"after":1,"name":"one"},{"after":1,"name":"two"}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"hud","visible":false}]}"""));
     }
 
     @Test

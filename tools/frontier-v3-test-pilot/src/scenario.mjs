@@ -3,13 +3,19 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'hud', 'assert_visible_block', 'assert_visible_board']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'withdraw', 'deposit', 'die', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
 export function selectMutterXauthority(entries) {
   const candidates = entries.filter((entry) => /^\.mutter-Xwaylandauth\.[A-Za-z0-9]+$/.test(entry));
   return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+/** Resolves the JVM identity announced by the exact nonce passed to a disposable server. */
+export function pilotServerPid(output, runId) {
+  const match = new RegExp(`PMV3_PILOT_SERVER runId=${escapeRegExp(runId)} pid=([1-9][0-9]*)`).exec(output);
+  return match === null ? undefined : Number(match[1]);
 }
 
 export async function loadScenario(path) {
@@ -73,7 +79,6 @@ export function validateScenario(scenario) {
           || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('wait_until_block needs block and timeoutMs 0..120000');
       }
-      if (action.type === 'hud' && typeof action.visible !== 'boolean') throw new Error('hud needs boolean visible');
       if (action.type === 'inspect' && !validDiagnosticIdentity(action)) throw new Error('inspect needs a read-only v3 view and id');
       if (action.type === 'fast_forward' && (!Number.isInteger(action.ticks) || action.ticks < 1 || action.ticks > 24_000)) {
         throw new Error('fast_forward needs ticks 1..24000');
@@ -101,11 +106,15 @@ export function validateScenario(scenario) {
   }
   const frames = scenario.frames ?? [];
   if (!Array.isArray(frames)) throw new Error('scenario frames must be an array');
+  const frameAfter = new Set(); const frameNames = new Set();
   for (const frame of frames) {
-    if (!frame || !Number.isInteger(frame.after) || frame.after < 0 || frame.after > (scenario.actions ?? []).length
-        || typeof frame.name !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/.test(frame.name)) {
+    const presentation = frame?.presentation ?? 'clean';
+    if (!frame || !Number.isInteger(frame.after) || frame.after < 1 || frame.after > (scenario.actions ?? []).length
+        || typeof frame.name !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/.test(frame.name)
+        || !['clean', 'player'].includes(presentation) || frameAfter.has(frame.after) || frameNames.has(frame.name)) {
       throw new Error('invalid frame declaration');
     }
+    frameAfter.add(frame.after); frameNames.add(frame.name);
   }
   if (scenario.restart?.resumeSetup) {
     for (const action of scenario.restart.resumeSetup) {
@@ -158,6 +167,8 @@ function validPosition(value) {
 }
 
 function validDimension(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }
+
+function escapeRegExp(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 export function correlation(runId, step) {
   return `scenario:${runId}:${step}`;

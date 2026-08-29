@@ -33,7 +33,11 @@ public final class FrontierV3ResourceSiteGameTests {
         prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
-            PhysicalIntentId intent = new PhysicalIntentId("intent:site-prepare-resource-site-game-test"); ledger.reserve(site.id(), intent);
+            PhysicalIntentId intent = new PhysicalIntentId("intent:site-prepare-resource-site-game-test");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileAfterRestart(level, ledger, site, intent, 3),
+                    FrontierV3ResourceSiteExecutor.RestartReconciliation.CONFLICT,
+                    "a neutral footprint with no durable confirmed claim is never permission to recreate a field after restart");
+            ledger.reserve(site.id(), intent);
             CompoundTag pending = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(pending, level.registryAccess());
             helper.assertTrue(ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.PENDING && FrontierV3ResourceSiteExecutor.baseline(level, site),
                     "a restart retains pending ownership without treating the neutral graybox footing as a completed field");
@@ -46,6 +50,15 @@ public final class FrontierV3ResourceSiteGameTests {
                     "a canonical COLD growth stage updates only the owned field cells");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3) && ledger.claim(site.id()).stage() == 3,
                     "the ledger retains the observed physical stage needed for later drift detection");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileAfterRestart(level, ledger, site, intent, 3),
+                    FrontierV3ResourceSiteExecutor.RestartReconciliation.CURRENT,
+                    "a complete confirmed field remains its own exact recovery postcondition");
+            prepareGrayboxBaseline(level, site);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileAfterRestart(level, ledger, site, intent, 3),
+                    FrontierV3ResourceSiteExecutor.RestartReconciliation.RECREATED,
+                    "a confirmed field whose whole physical write was lost at crash may rebuild only from the complete neutral baseline");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
+                    "recovery restores exact confirmed ownership and growth stage, not an unowned template");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(level, ledger, site, minecraft(site.cropSlots().getFirst())),
                     "an exact owned crop suppresses Vanilla random growth until its next canonical stage");
             BlockPos changed = minecraft(site.cropSlots().getFirst()); level.setBlock(changed, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
