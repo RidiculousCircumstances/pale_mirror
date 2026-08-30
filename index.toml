@@ -734,7 +734,7 @@ hash = "429e97d5cbccbea9a2f92c7b359e7204622226eda7b7a4e2b6cd73d9532e48b0"
 
 [[files]]
 file = "scripts/lib/install-hosted-pale-mirror.sh"
-hash = "af67126ec987f30a894d695de30bf73e268d5b3e1fbcf3e66e9ae5a4d34a14de"
+hash = "31449c6813e2e12bfe7da3db720f6020dd508dd86f8acf7fd54dc2d1b698d26a"
 
 [[files]]
 file = "scripts/lib/install-hosted-railway-untold.sh"

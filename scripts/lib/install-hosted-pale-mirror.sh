@@ -86,7 +86,10 @@ install_hosted_pale_mirror() {
   local discovered=("$mods_dir"/pale_mirror*.jar "$mods_dir"/pale-mirror*.jar)
   eval "$nullglob_state"
   local candidates=() candidate
-  for candidate in "${discovered[@]}"; do
+  # macOS still ships Bash 3.2: with `set -u`, expanding an empty array as
+  # "${array[@]}" is an error there. Keep the no-existing-JAR path explicit.
+  for candidate in "${discovered[@]:-}"; do
+    [[ -f "$candidate" ]] || continue
     [[ "${candidate##*/}" == pale_mirror_visuals* ]] || candidates+=("$candidate")
   done
 
@@ -96,7 +99,8 @@ install_hosted_pale_mirror() {
   # recoverably under the installer cache, then make the checksum-pinned JAR
   # the sole active Pale Mirror artifact.
   local verified_existing=""
-  for candidate in "${candidates[@]}"; do
+  for candidate in "${candidates[@]:-}"; do
+    [[ -n "$candidate" ]] || continue
     if pale_mirror_sha512_matches "$expected" "$candidate"; then
       if [[ "$candidate" == "$managed_jar" ]]; then
         verified_existing="$candidate"
@@ -106,13 +110,15 @@ install_hosted_pale_mirror() {
     fi
   done
   if [[ -n "$verified_existing" ]]; then
-    for candidate in "${candidates[@]}"; do
+    for candidate in "${candidates[@]:-}"; do
+      [[ -n "$candidate" ]] || continue
       [[ "$candidate" == "$verified_existing" ]] || archive_retired_pale_mirror "$candidate" "$cache_dir"
     done
     echo "Pale Mirror already installed and SHA-512 verified: $verified_existing"
     return 0
   fi
-  for candidate in "${candidates[@]}"; do
+  for candidate in "${candidates[@]:-}"; do
+    [[ -n "$candidate" ]] || continue
     archive_retired_pale_mirror "$candidate" "$cache_dir"
   done
 
