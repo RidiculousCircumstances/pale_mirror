@@ -16,6 +16,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.neoforged.api.distmarker.Dist;
@@ -54,6 +55,7 @@ public final class FrontierV3TestPilotClient {
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
     private static boolean boardInteractionAttempted;
+    private static boolean entityInteractionAttempted;
     private static Boolean originalHideGui;
     private static CaptureBarrier captureBarrier;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
@@ -71,6 +73,7 @@ public final class FrontierV3TestPilotClient {
             breaking = false; visitSent = false; visitChunkReadyTick = -1L;
             containerOpenAttempted = false; quickMoveAttempted = false;
             boardInteractionAttempted = false;
+            entityInteractionAttempted = false;
             captureBarrier = null; diagnostics.clear();
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
         } catch (IOException | IllegalArgumentException failure) {
@@ -126,6 +129,7 @@ public final class FrontierV3TestPilotClient {
                 case "assert_visible_block" -> assertVisibleBlock(minecraft, action);
                 case "assert_visible_board" -> assertVisibleBoard(minecraft, action);
                 case "interact_board" -> interactBoard(minecraft, action);
+                case "interact_nearest_entity" -> interactNearestEntity(minecraft, action);
                 case "fast_forward" -> { minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); advance(type); }
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + action.get("view").getAsString()
@@ -318,6 +322,27 @@ public final class FrontierV3TestPilotClient {
         timeout(minecraft, action, "timed out waiting for the contextual board card");
     }
 
+    /**
+     * Sends one ordinary entity-interaction packet to the nearest locally
+     * rendered entity of the declared type. This has no server-side entity
+     * selection or UUID authority; the server still validates the action.
+     */
+    private static void interactNearestEntity(Minecraft minecraft, JsonObject action) {
+        ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
+        double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 16.0D;
+        Entity target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
+                        !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType))
+                .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
+                        .thenComparing(Entity::getUUID)).findFirst().orElse(null);
+        if (target == null) { timeout(minecraft, action, "no nearby ordinary entity of type " + expectedType); return; }
+        if (!entityInteractionAttempted) {
+            minecraft.gameMode.interact(minecraft.player, target, InteractionHand.MAIN_HAND);
+            entityInteractionAttempted = true;
+        }
+        if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) { advance("interact_nearest_entity"); return; }
+        timeout(minecraft, action, "timed out opening ordinary entity container " + expectedType);
+    }
+
     /** Polls the existing read-only diagnostic command at most once per second until a fresh exact predicate arrives. */
     private static void waitUntilDiagnostic(Minecraft minecraft, JsonObject action) {
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString(); long tick = minecraft.level.getGameTime();
@@ -470,6 +495,7 @@ public final class FrontierV3TestPilotClient {
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
         index++; actionStartedTick = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false;
+        boardInteractionAttempted = false; entityInteractionAttempted = false;
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
         else if (reachedFrame != null) {
             JsonObject frame = reachedFrame;
@@ -534,6 +560,7 @@ public final class FrontierV3TestPilotClient {
         runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L;
         containerOpenAttempted = false; quickMoveAttempted = false;
+        boardInteractionAttempted = false; entityInteractionAttempted = false;
         diagnostics.clear();
     }
     private record DiagnosticIdentity(String view, String id) { }

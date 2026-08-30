@@ -129,4 +129,15 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_container_item","containerId":"depot:4","item":"minecraft:glowstone_dust","count":1,"timeoutMs":30000}]}"""));
     }
+
+    @Test
+    void permitsATypeBoundedOrdinaryEntityInteractionWithoutEntityIdentityAuthority() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"interact_nearest_entity","entityType":"minecraft:chest_minecart",
+                "maxDistance":16,"timeoutMs":30000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"interact_nearest_entity","entityType":"minecraft:chest_minecart",
+                "maxDistance":65,"timeoutMs":30000}]}"""));
+    }
 }

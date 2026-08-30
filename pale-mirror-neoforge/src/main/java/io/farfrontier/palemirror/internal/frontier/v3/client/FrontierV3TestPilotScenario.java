@@ -12,7 +12,7 @@ final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
             "walk", "break", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
-            "wait_until_container_item", "interact_board");
+            "wait_until_container_item", "interact_board", "interact_nearest_entity");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "hive", "actor", "item", "container", "operation", "scene", "intent", "trace");
 
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
@@ -66,6 +66,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("interact_board") && !validBoardInteraction(action)) ||
+                    (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
                     (type.equals("open_container") && (!position(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
@@ -176,6 +177,13 @@ final class FrontierV3TestPilotScenario {
     private static boolean validBoardInteraction(JsonObject action) {
         return validVisibleBoard(action) && action.has("title") && action.get("title").isJsonPrimitive()
                 && !action.get("title").getAsString().isBlank() && action.get("title").getAsString().length() <= 72;
+    }
+
+    /** A bounded ordinary entity interaction with no scenario-provided entity identity. */
+    private static boolean validEntityInteraction(JsonObject action) {
+        return action.has("entityType") && action.get("entityType").isJsonPrimitive()
+                && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 64.0D);
     }
 
     private static boolean boundedOptionalNumber(JsonObject action, String field, double minimum, double maximum) {

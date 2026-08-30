@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "disposable_hot_cargo_theft",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "scene-return" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 0 } },
+      { "view": "item", "id": "item:production-1-1-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CARGO" } } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT" }, "timeoutMs": 60000 },
+    { "type": "interact_nearest_entity", "entityType": "minecraft:chest_minecart", "maxDistance": 16, "timeoutMs": 30000 },
+    { "type": "quick_move_from_container", "item": "minecraft:bread", "count": 64, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "item", "id": "item:production-1-1-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "PLAYER" } }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "INTERRUPTED" }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "operation", "id": "operation:supply-1-2" }
+  ],
+  "assertions": [
+    { "after": 4, "view": "item", "id": "item:production-1-1-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "PLAYER" } } },
+    { "after": 6, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "INTERRUPTED" } }
+  ],
+  "frames": [
+    { "after": 3, "name": "stolen-hot-cargo", "presentation": "player" }
+  ]
+}
