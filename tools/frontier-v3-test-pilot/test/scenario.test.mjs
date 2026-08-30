@@ -62,11 +62,11 @@ test('an isolated scenario has an explicit deterministic disposable-world seed',
   assert.throws(() => validateScenario({ ...isolated, isolation: { mode: 'shared', seed: 41 } }), /isolation/);
 });
 
-test('chunk visits are setup-only ordinary-player travel with bounded settle time', () => {
+test('chunk visits are ordinary-player travel and may be causal evidence actions', () => {
   const visit = { ...scenario, setup: [{ type: 'visit', dimension: 'pale_mirror:frontier_graybox', position: { x: 1, y: 65, z: 2 }, settleMs: 1000 }] };
   assert.doesNotThrow(() => validateScenario(visit));
   assert.throws(() => validateScenario({ ...visit, setup: [{ ...visit.setup[0], dimension: 'frontier_graybox' }] }), /visit needs/);
-  assert.throws(() => validateScenario({ ...visit, actions: [{ ...visit.setup[0] }] }), /unsupported actions action/);
+  assert.doesNotThrow(() => validateScenario({ ...visit, actions: [{ ...visit.setup[0] }], assertions: [], frames: [] }));
 });
 
 test('semantic visible checks are bounded evidence actions, not world mutations', () => {

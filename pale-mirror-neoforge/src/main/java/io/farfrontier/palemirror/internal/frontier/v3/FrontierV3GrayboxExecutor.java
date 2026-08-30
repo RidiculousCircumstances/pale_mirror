@@ -23,10 +23,13 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Bounded loaded-chunk executor for the immutable v3 structural graybox plan.
@@ -54,10 +57,11 @@ final class FrontierV3GrayboxExecutor {
             cursor = Cursor.from(checkpoint.revision(), plan, cursor);
             CURSORS.put(runtime, cursor);
         }
-        int examined = Math.min(MAX_CELLS_PER_TICK, cursor.cells().size());
-        for (int count = 0; count < examined; count++) {
-            GrayboxCell cell = cursor.next();
-            if (level.hasChunkAt(toMinecraft(cell))) project(level, FrontierV3GrayboxLedger.get(level), cell);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        for (int count = 0; count < MAX_CELLS_PER_TICK; count++) {
+            GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> level.hasChunkAt(toMinecraft(candidate))).orElse(null);
+            if (cell == null) return;
+            project(level, ledger, cell);
         }
     }
 
@@ -175,30 +179,82 @@ final class FrontierV3GrayboxExecutor {
         return new BlockPos(cell.position().x(), cell.position().y(), cell.position().z());
     }
 
-    private static final class Cursor {
+    /**
+     * Round-robins cells inside naturally loaded plan chunks rather than walking a world-wide
+     * list.  A first player visit must therefore make local supports and exact containers
+     * available promptly even if lexicographically earlier settlements remain unloaded.
+     */
+    static final class Cursor {
         private final Revision revision;
-        private final List<GrayboxCell> cells;
-        private int nextIndex;
+        private final List<ChunkCells> chunks;
+        private int nextChunkIndex;
 
-        private Cursor(Revision revision, List<GrayboxCell> cells, int nextIndex) {
+        private Cursor(Revision revision, List<ChunkCells> chunks, int nextChunkIndex) {
             this.revision = revision;
-            this.cells = cells;
-            this.nextIndex = nextIndex;
+            this.chunks = chunks;
+            this.nextChunkIndex = nextChunkIndex;
         }
         static Cursor from(Revision revision, FrontierGrayboxPlan plan, Cursor prior) {
             List<GrayboxCell> cells = plan.cells().values().stream().sorted(Comparator
                     .comparingInt((GrayboxCell cell) -> cell.position().y())
                     .thenComparingInt(cell -> cell.position().x()).thenComparingInt(cell -> cell.position().z())).toList();
-            int next = prior != null && prior.cells.equals(cells) ? prior.nextIndex % Math.max(1, cells.size()) : 0;
-            return new Cursor(revision, cells, next);
+            return fromCells(revision, cells, prior);
+        }
+        static Cursor fromCells(Revision revision, List<GrayboxCell> cells, Cursor prior) {
+            Map<ChunkKey, List<GrayboxCell>> grouped = new LinkedHashMap<>();
+            cells.forEach(cell -> grouped.computeIfAbsent(ChunkKey.of(cell), ignored -> new ArrayList<>()).add(cell));
+            List<ChunkCells> chunks = grouped.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry -> {
+                ChunkCells before = prior == null ? null : prior.chunk(entry.getKey());
+                return new ChunkCells(entry.getKey(), List.copyOf(entry.getValue()), before);
+            }).toList();
+            int next = prior == null || chunks.isEmpty() ? 0 : indexOf(chunks, prior.nextChunkKey());
+            return new Cursor(revision, chunks, next);
         }
         Revision revision() { return revision; }
-        List<GrayboxCell> cells() { return cells; }
-        GrayboxCell next() {
-            if (cells.isEmpty()) throw new IllegalStateException("empty graybox cursor has no next cell");
-            GrayboxCell cell = cells.get(nextIndex);
-            nextIndex = (nextIndex + 1) % cells.size();
-            return cell;
+        Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
+            if (chunks.isEmpty()) return Optional.empty();
+            for (int attempts = 0; attempts < chunks.size(); attempts++) {
+                ChunkCells chunk = chunks.get(nextChunkIndex);
+                nextChunkIndex = (nextChunkIndex + 1) % chunks.size();
+                if (loaded.test(chunk.sample())) return Optional.of(chunk.next());
+            }
+            return Optional.empty();
+        }
+        private ChunkCells chunk(ChunkKey key) {
+            return chunks.stream().filter(chunk -> chunk.key().equals(key)).findFirst().orElse(null);
+        }
+        private ChunkKey nextChunkKey() { return chunks.isEmpty() ? null : chunks.get(nextChunkIndex).key(); }
+        private static int indexOf(List<ChunkCells> chunks, ChunkKey key) {
+            if (key == null) return 0;
+            for (int index = 0; index < chunks.size(); index++) if (chunks.get(index).key().equals(key)) return index;
+            return 0;
+        }
+        private static final class ChunkCells {
+            private final ChunkKey key;
+            private final List<GrayboxCell> cells;
+            private int nextIndex;
+            ChunkCells(ChunkKey key, List<GrayboxCell> cells, ChunkCells prior) {
+                this.key = key;
+                this.cells = cells;
+                this.nextIndex = prior != null && prior.cells.equals(cells) ? prior.nextIndex % Math.max(1, cells.size()) : 0;
+            }
+            ChunkKey key() { return key; }
+            GrayboxCell sample() { return cells.getFirst(); }
+            GrayboxCell next() {
+                if (cells.isEmpty()) throw new IllegalStateException("empty graybox chunk has no next cell");
+                GrayboxCell cell = cells.get(nextIndex);
+                nextIndex = (nextIndex + 1) % cells.size();
+                return cell;
+            }
+        }
+        private record ChunkKey(int x, int z) implements Comparable<ChunkKey> {
+            static ChunkKey of(GrayboxCell cell) {
+                return new ChunkKey(cell.position().x() >> 4, cell.position().z() >> 4);
+            }
+            @Override public int compareTo(ChunkKey other) {
+                int xComparison = Integer.compare(x, other.x);
+                return xComparison != 0 ? xComparison : Integer.compare(z, other.z);
+            }
         }
     }
 }

@@ -13,7 +13,7 @@ final class FrontierV3TestPilotScenario {
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
             "walk", "break", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
             "wait_until_container_item", "interact_board");
-    private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "actor", "item", "container", "operation", "scene", "intent", "trace");
+    private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "hive", "actor", "item", "container", "operation", "scene", "intent", "trace");
 
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }

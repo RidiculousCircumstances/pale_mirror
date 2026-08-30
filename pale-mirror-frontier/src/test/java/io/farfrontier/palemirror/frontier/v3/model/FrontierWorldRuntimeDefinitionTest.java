@@ -130,6 +130,24 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void developmentHiveGrowthProfileStopsAtTheRealExactBiomassBoundary() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentHiveGrowthConfiguration(new WorldId("frontier:hive-growth-profile"), 91L));
+
+        var checkpoint = engine.checkpoint();
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        HiveGrowthJob job = state.hiveColony().growthJobs().get(new SubjectId("job:hive-growth-1"));
+
+        assertEquals(3_600L, checkpoint.instant().ticks());
+        assertTrue(job != null, "the profile must retain the real scheduled growth job");
+        assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(job.consumptionIntentId()).status());
+        assertEquals(0, state.hiveColony().addedOrgans().size());
+        assertEquals(0, state.hiveColony().spawnedBioforms().size());
+        assertEquals(18, state.infection().size());
+        assertTrue(checkpoint.schedules().stream().anyMatch(action -> action.dueAt().ticks() > checkpoint.instant().ticks()),
+                "the fixture must retain the ordinary future world schedule after the physical receipt");
+    }
+
+    @Test
     void durableObservedItemTransferMovesOnlyTheNamedCanonicalStack() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:item-custody"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'interact_board']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'interact_board', 'visit']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -32,8 +32,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world or hot-scene-strike');
+  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth'].includes(scenario.server.profile)) {
+    throw new Error('scenario server profile must be world, hot-scene-strike or hive-growth');
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
@@ -121,7 +121,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'site', 'settlement', 'actor', 'item', 'container', 'operation', 'scene', 'intent', 'trace'].includes(assertion.view)
+        || !['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'scene', 'intent', 'trace'].includes(assertion.view)
         || typeof assertion.id !== 'string' || (assertion.view !== 'summary' && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
@@ -173,7 +173,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'site', 'settlement', 'actor', 'item', 'container', 'operation', 'scene', 'intent', 'trace'].includes(value.view)
+  return ['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'scene', 'intent', 'trace'].includes(value.view)
     && typeof value.id === 'string' && (value.view === 'summary' || Boolean(value.id));
 }
 

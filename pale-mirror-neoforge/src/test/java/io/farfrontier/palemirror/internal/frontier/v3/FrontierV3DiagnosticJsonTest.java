@@ -28,6 +28,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId item = state.inventory().items().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
+        SubjectId hive = state.bootstrap().hive().id();
         SubjectId container = state.inventory().containers().keySet().stream().sorted().findFirst().orElseThrow();
 
         String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, state, Optional.empty());
@@ -35,6 +36,7 @@ class FrontierV3DiagnosticJsonTest {
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty());
         String itemJson = FrontierV3DiagnosticJson.render("item", item.value(), checkpoint, state, Optional.empty());
         String settlementJson = FrontierV3DiagnosticJson.render("settlement", settlement.value(), checkpoint, state, Optional.empty());
+        String hiveJson = FrontierV3DiagnosticJson.render("hive", hive.value(), checkpoint, state, Optional.empty());
         String containerJson = FrontierV3DiagnosticJson.render("container", container.value(), checkpoint, state, Optional.empty());
         String missing = FrontierV3DiagnosticJson.render("site", "site:missing", checkpoint, state, Optional.empty());
 
@@ -46,10 +48,12 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(itemJson.contains("\"custody\":{"));
         assertTrue(settlementJson.contains("\"harvestAdmission\":\"NO_READY_SITE\""));
         assertTrue(settlementJson.contains("\"strategic\":{"));
+        assertTrue(hiveJson.contains("\"infectionCells\":18") && hiveJson.contains("\"addedOrgans\":0"),
+                "one named hive diagnostic exposes bounded canonical expansion state without materializing it");
         assertTrue(containerJson.contains("\"surface\":") && containerJson.contains("\"occupiedCount\":") && containerJson.contains("\"occupied\":["),
                 "one diagnostic must expose only the exact occupied slot projection of one named container");
         assertTrue(missing.contains("\"status\":\"not_found\""));
-        assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192 && settlementJson.length() < 8_192 && containerJson.length() < 8_192);
+        assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192 && settlementJson.length() < 8_192 && hiveJson.length() < 8_192 && containerJson.length() < 8_192);
     }
 
     @Test

@@ -43,4 +43,27 @@ final class FrontierDevelopmentScenarios {
         if (state.coldEngagementSceneCandidates().isEmpty()) throw new IllegalStateException("development scene did not enter COLD engagement");
         return state;
     }
+
+    /**
+     * Retains the real 12-settlement schedule through the first hive decision, stopping only
+     * at the durable exact-biomass physical boundary.  The native pilot must still load the
+     * east store and let its ordinary executor consume the real tagged stack.
+     */
+    static HiveGrowthFixture hiveGrowthFixture(WorldId worldId, long seed) {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        for (long tick = 100L; tick <= 3_600L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
+        var checkpoint = engine.checkpoint();
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        HiveGrowthJob job = state.hiveColony().growthJobs().get(new SubjectId("job:hive-growth-1"));
+        if (job == null || state.physicalIntents().get(job.consumptionIntentId()) == null) {
+            throw new IllegalStateException("development hive-growth fixture did not reach its exact biomass boundary");
+        }
+        return new HiveGrowthFixture(state, checkpoint.instant(), checkpoint.schedules());
+    }
+
+    record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
+        HiveGrowthFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
 }

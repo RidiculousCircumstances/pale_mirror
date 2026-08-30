@@ -14,10 +14,12 @@ offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare `"server": { "profile":
-"hot-scene-strike" }`. This fail-closed development fixture is available only
-to the named disposable pilot runner; it selects a deterministic canonical HOT
-engagement so an ordinary player visit can prove one physical combat/effect
-flow. The normal `world` profile remains the default. Neither profile gives the
+"hot-scene-strike" }` or `"hive-growth" }`. These fail-closed development
+fixtures are available only to the named disposable pilot runner. The first
+selects a deterministic canonical HOT engagement; the second stops the real
+twelve-settlement schedule at a durable exact-biomass receipt, so an ordinary
+visit to the owned chest must cause the named organ, bioform and infection
+advance. The normal `world` profile remains the default. No profile gives the
 pilot a canonical mutation API or force-loads chunks.
 
 Run the checked-in isolated terminal-harvest regression on the visible `:0`

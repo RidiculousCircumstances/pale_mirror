@@ -63,6 +63,7 @@ final class FrontierV3DiagnosticJson {
             case "summary" -> summary(checkpoint, state);
             case "site" -> site(id, checkpoint, state);
             case "settlement" -> settlement(id, checkpoint, state);
+            case "hive" -> hive(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state);
@@ -120,6 +121,19 @@ final class FrontierV3DiagnosticJson {
                 + ",\"harvestAdmission\":\"" + quote(value.harvestAdmission()) + "\",\"livingFarmers\":" + value.livingFarmers()
                 + ",\"availableFarmer\":\"" + quote(value.availableFarmerId()) + "\",\"farmStatus\":\"" + quote(value.farmStatus())
                 + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot() + "}";
+    }
+
+    /** One named-polity diagnostic, bounded to aggregate counts plus the single next growth claim. */
+    private static String hive(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        if (subject == null || !subject.equals(state.bootstrap().hive().id())) return unavailable("hive", id, checkpoint, "not_found");
+        var next = state.hiveColony().growthJobs().values().stream().sorted(java.util.Comparator.comparing(value -> value.id().value())).findFirst();
+        String growth = next.map(value -> ",\"growthJob\":\"" + quote(value.id().value()) + "\",\"growthIntent\":\""
+                + quote(value.consumptionIntentId().value()) + "\",\"nextOrgan\":\"" + quote(value.organ().id().value())
+                + "\",\"nextBioform\":\"" + quote(value.bioform().id().value()) + "\"").orElse("");
+        return base("hive", id, checkpoint) + ",\"status\":\"ok\",\"addedOrgans\":" + state.hiveColony().addedOrgans().size()
+                + ",\"spawnedBioforms\":" + state.hiveColony().spawnedBioforms().size() + ",\"growthJobs\":" + state.hiveColony().growthJobs().size()
+                + ",\"infectionCells\":" + state.infection().size() + growth + "}";
     }
 
     private static String lane(FrontierSettlementWorkDiagnostic.Lane lane) {
