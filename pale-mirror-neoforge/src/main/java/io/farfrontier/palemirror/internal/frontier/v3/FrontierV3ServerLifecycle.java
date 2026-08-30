@@ -436,6 +436,17 @@ public final class FrontierV3ServerLifecycle {
         observeTerminalVehicleDamage(level, runtime, entity, source);
     }
 
+    /**
+     * Identifies the narrow physical transport representation whose movement is owned by the
+     * scene executor. This is a read-only tag check for the Minecart mixin; canonical ownership
+     * is still validated separately before any cargo observation or mutation.
+     */
+    public static boolean isLeasedRoadCargoCarrier(Entity entity) {
+        return entity instanceof MinecartChest
+                && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.LEASE_KEY)
+                && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.CARGO_KEY);
+    }
+
     /** Package-visible so the materialized consequence test uses the same pre-destruction path. */
     static void observeTerminalVehicleDamage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                              Entity entity, DamageSource source) {

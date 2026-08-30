@@ -47,8 +47,19 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
 
     public BlockPosition currentPosition() {
         if (activeTravel.isPresent()) return activeTravel.orElseThrow().currentPosition();
-        if (activeAssembly.isPresent()) return activeAssembly.orElseThrow().members().get(activeAssembly.orElseThrow().cargoCarrierId()).currentPosition();
         return route.get(routeIndex);
+    }
+
+    /**
+     * True only while this operation owns a nonterminal exact corridor segment.
+     *
+     * <p>An arrived segment is deliberately retained until the deterministic COLD process
+     * opens the next segment atomically.  A HOT executor must not take that transient state:
+     * doing so would suspend the very COLD action that advances the route and could materialize
+     * a stale formation at the previous milestone.</p>
+     */
+    public boolean hasInProgressTravel() {
+        return stage == OperationStage.EN_ROUTE && activeTravel.filter(travel -> !travel.arrived()).isPresent();
     }
 
     /** Supply operations persist the hauler first; assembly makes the same identity explicit before departure. */
@@ -63,7 +74,7 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
         if (activeAssembly.isPresent()) {
             OperationAssembly assembly = activeAssembly.orElseThrow();
             if (!assembly.complete() || !travel.formation().equals(assembly.positions())
-                    || !travel.cargoAnchor().equals(assembly.positions().get(assembly.cargoCarrierId()))) {
+                    || !travel.cargoAnchor().equals(assembly.cargoAnchor())) {
                 throw new IllegalArgumentException("operation travel must preserve its complete assembly formation and cargo anchor");
             }
             return new RouteOperation(id, settlementId, cargoId, destinationId, participantIds, route, routeIndex, OperationStage.EN_ROUTE, Optional.empty(), Optional.of(travel));

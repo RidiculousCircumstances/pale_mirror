@@ -85,7 +85,7 @@ public final class FrontierV3CargoCarrierGameTests {
             try {
                 Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
                 helper.assertTrue(carrier != null && carrier.blockPosition().getY() > deck.getY(),
-                        "the carrier must stand on the existing route deck rather than inside or replacing it");
+                        "the leased road carrier must stand on the existing route deck rather than inside or replacing it");
                 helper.assertValueEqual(level.getBlockState(deck), Blocks.GRAY_CARPET.defaultBlockState(),
                         "carrier placement must preserve the loaded route deck exactly");
                 carrier.discard(); runtime.shutdown(); helper.succeed();
@@ -312,9 +312,13 @@ public final class FrontierV3CargoCarrierGameTests {
     }
     private static SceneLease lease(FrontierWorldState state, BlockPos origin, String id) {
         SceneEngagementCandidate candidate = state.coldEngagementSceneCandidates().getFirst();
-        return new SceneLease(new SceneLeaseId(id), state.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(),
-                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
-                candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList());
+        List<SceneMember> members = candidate.actorIds().stream()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList();
+        BlockPosition handoff = new BlockPosition(origin.getX(), origin.getY(), origin.getZ());
+        BlockPos cargo = origin.offset((members.size() % 2) * 2 + 1, 0, (members.size() / 2) * 2);
+        return SceneLease.atExactPositions(new SceneLeaseId(id), state.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(), handoff,
+                new BlockPosition(cargo.getX(), cargo.getY(), cargo.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members,
+                members.stream().collect(java.util.stream.Collectors.toMap(SceneMember::actorId, ignored -> handoff, (left, right) -> left, java.util.LinkedHashMap::new)));
     }
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);

@@ -19,6 +19,9 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
         });
         if (copy.isEmpty() || copy.size() > 8 || !copy.containsKey(cargoCarrierId)) throw new IllegalArgumentException("assembly requires its cargo carrier and 1..8 members");
         if (copy.values().stream().map(Member::destination).distinct().count() != copy.size()) throw new IllegalArgumentException("assembly destinations must be distinct");
+        if (copy.values().stream().map(Member::currentPosition).distinct().count() != copy.size()) {
+            throw new IllegalArgumentException("assembly current positions must be distinct");
+        }
         if (deferral.isPresent()) {
             OperationAssemblyDeferral blocked = deferral.orElseThrow(); Member member = copy.get(blocked.actorId());
             if (member == null || member.arrived() || !member.corridor().get(member.cursor() + 1).equals(blocked.target())) {
@@ -29,6 +32,26 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
     }
     public boolean complete() { return members.values().stream().allMatch(Member::arrived); }
     public Map<SubjectId, BlockPosition> positions() { Map<SubjectId, BlockPosition> result = new LinkedHashMap<>(); members.forEach((actor, member) -> result.put(actor, member.currentPosition())); return Map.copyOf(result); }
+
+    /**
+     * The shipment is a separate physical object, never an invisible extension of its hauler.
+     * The supply compiler reserves adjacent hauler/escort slots at a public port; reflecting
+     * the hauler across that escort yields the third outward cargo slot.
+     */
+    public BlockPosition cargoAnchor() {
+        if (!complete()) throw new IllegalStateException("only a complete assembly reserves its physical cargo anchor");
+        BlockPosition hauler = members.get(cargoCarrierId).currentPosition();
+        BlockPosition cargo = members.entrySet().stream().filter(entry -> !entry.getKey().equals(cargoCarrierId))
+                .map(Map.Entry::getValue).map(Member::currentPosition)
+                .filter(escort -> Math.abs(hauler.x() - escort.x()) + Math.abs(hauler.z() - escort.z()) == 1)
+                .sorted(java.util.Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::z))
+                .findFirst().map(escort -> escort.offset(escort.x() - hauler.x(), 0, escort.z() - hauler.z()))
+                .orElseThrow(() -> new IllegalStateException("assembly needs one adjacent escort to reserve a separate cargo anchor"));
+        if (positions().containsValue(cargo)) {
+            throw new IllegalStateException("assembly cargo anchor must remain distinct from every exact actor");
+        }
+        return cargo;
+    }
 
     /** Advances only the already compiled approaches; callers cannot retarget a convoy mid-assembly. */
     public OperationAssembly advance(Map<SubjectId, Member> nextMembers) {

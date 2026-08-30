@@ -27,4 +27,15 @@ class OperationTravelTest {
         assertThrows(IllegalArgumentException.class, () -> new OperationTravel(List.of(new BlockPosition(0, 64, 0), new BlockPosition(2, 64, 0)),
                 0, Map.of(HAULER, new BlockPosition(0, 64, 1)), new BlockPosition(0, 64, 0)));
     }
+
+    @Test
+    void rejectsCollidingActorOrCargoAnchorsBeforeAnyPhysicalSceneCanBePrepared() {
+        SubjectId guard = new SubjectId("resident:1-2");
+        List<BlockPosition> corridor = List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0));
+
+        assertThrows(IllegalArgumentException.class, () -> new OperationTravel(corridor, 0,
+                Map.of(HAULER, new BlockPosition(0, 64, 1), guard, new BlockPosition(0, 64, 1)), new BlockPosition(0, 64, 2)));
+        assertThrows(IllegalArgumentException.class, () -> new OperationTravel(corridor, 0,
+                Map.of(HAULER, new BlockPosition(0, 64, 1), guard, new BlockPosition(0, 64, 2)), new BlockPosition(0, 64, 2)));
+    }
 }

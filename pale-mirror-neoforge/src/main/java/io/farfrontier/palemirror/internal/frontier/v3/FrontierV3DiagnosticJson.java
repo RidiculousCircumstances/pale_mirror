@@ -361,7 +361,13 @@ final class FrontierV3DiagnosticJson {
         return base("trace", id, checkpoint) + ",\"status\":\"ok\",\"correlation\":\"" + quote(entry.correlation())
                 + "\",\"eventKind\":\"" + quote(entry.kind()) + "\",\"subject\":\"" + quote(entry.subject())
                 + "\",\"command\":\"" + quote(entry.commandId()) + "\",\"transaction\":\"" + quote(entry.transactionId())
-                + "\",\"acceptedRevision\":" + entry.revision() + "}";
+                + "\",\"acceptedRevision\":" + entry.revision() + traceContext(entry.context()) + "}";
+    }
+
+    private static String traceContext(FrontierV3DiagnosticTrace.Context context) {
+        if (context.operationId().isEmpty()) return "";
+        return ",\"causal\":{\"operation\":\"" + quote(context.operationId()) + "\",\"lease\":\""
+                + quote(context.leaseId()) + "\",\"cargo\":\"" + quote(context.cargoId()) + "\",\"actors\":" + strings(context.actorIds()) + "}";
     }
 
     private static String unavailable(String kind, String id, CheckpointImage checkpoint, String status) {

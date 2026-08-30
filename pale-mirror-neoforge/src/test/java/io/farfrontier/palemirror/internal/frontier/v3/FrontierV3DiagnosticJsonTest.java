@@ -141,6 +141,25 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesBoundedSceneCausalityWithoutLeakingPhysicalOrPlayerState(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-scene-trace-test"), 92L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        FrontierV3DiagnosticTrace.Entry trace = new FrontierV3DiagnosticTrace.Entry("operation:operation:supply-1-2", "scene_hot", "operation:supply-1-2",
+                "executor:scene-hot", "transaction:scene-hot", 8L, new FrontierV3DiagnosticTrace.Context("operation:supply-1-2", "lease:supply-1-2-r7",
+                "cargo:supply-1-2", java.util.List.of("resident:1-16", "resident:1-30")));
+
+        String rendered = FrontierV3DiagnosticJson.render("trace", trace.correlation(), checkpoint, state, Optional.of(trace));
+
+        assertTrue(rendered.contains("\"causal\":{\"operation\":\"operation:supply-1-2\""));
+        assertTrue(rendered.contains("\"lease\":\"lease:supply-1-2-r7\"") && rendered.contains("\"cargo\":\"cargo:supply-1-2\""));
+        assertTrue(rendered.contains("\"actors\":[\"resident:1-16\",\"resident:1-30\"]"));
+        assertTrue(!rendered.contains("position") && !rendered.contains("uuid"), "trace context must not become a player/physical-state dump");
+    }
+
+    @Test
     void derivesOneStableTraceCorrelationForTheCompleteRouteRepairWorkOrder() {
         assertTrue(FrontierV3DiagnosticTrace.routeConstructionCorrelation(new SubjectId("construction:route-reroute-settlement-1--380-64--304"))
                 .equals("route-construction:construction:route-reroute-settlement-1--380-64--304"));

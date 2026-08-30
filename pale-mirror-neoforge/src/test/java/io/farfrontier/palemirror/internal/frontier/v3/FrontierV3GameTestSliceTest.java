@@ -1,0 +1,23 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class FrontierV3GameTestSliceTest {
+    @Test
+    void sceneSliceIncludesOnlyTheFastHotColdBatches() {
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-handoff"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-restart-reclaim"));
+        assertFalse(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-resource-harvest"));
+        assertFalse(FrontierV3GameTestSlice.includes("scene", "core-integration"));
+    }
+
+    @Test
+    void emptySliceCannotAccidentallyFilterTheFullGateAndUnknownSlicesFailClosed() {
+        assertTrue(FrontierV3GameTestSlice.includes("", "core-integration"));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3GameTestSlice.includes("all", "pm-frontier-v3-scene-handoff"));
+    }
+}

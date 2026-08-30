@@ -4,12 +4,14 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -34,16 +36,29 @@ final class FrontierV3DiagnosticTrace {
     }
 
     static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result) {
+        record(server, correlation, kind, subject, result, Context.empty());
+    }
+
+    /** Records the bounded operation → lease → cargo/actor chain for one scene transition. */
+    static void recordScene(MinecraftServer server, String kind, SceneLease lease, CommandResult result) {
+        Objects.requireNonNull(lease, "scene lease");
+        record(server, "operation:" + lease.operationId().value(), kind, lease.operationId(), result,
+                new Context(lease.operationId().value(), lease.id().value(), lease.cargoId().value(),
+                        lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
+    }
+
+    private static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result, Context context) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(correlation, "correlation");
-        Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(subject, "subject"); Objects.requireNonNull(result, "result");
+        Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(subject, "subject"); Objects.requireNonNull(result, "result"); Objects.requireNonNull(context, "context");
         if (!(result instanceof CommandResult.Accepted accepted)) return;
         Deque<Entry> entries = ENTRIES.computeIfAbsent(server, unused -> new ArrayDeque<>());
-        Entry entry = new Entry(correlation, kind, subject.value(), accepted.commandId().value(), accepted.transactionId().value(), accepted.revision().value());
+        Entry entry = new Entry(correlation, kind, subject.value(), accepted.commandId().value(), accepted.transactionId().value(), accepted.revision().value(), context);
         entries.removeIf(candidate -> candidate.commandId().equals(entry.commandId()));
         entries.addLast(entry);
         while (entries.size() > MAX_ENTRIES) entries.removeFirst();
-        PaleMirrorMod.LOGGER.info("PMV3_TRACE correlation={} kind={} subject={} command={} transaction={} revision={}",
-                entry.correlation(), entry.kind(), entry.subject(), entry.commandId(), entry.transactionId(), entry.revision());
+        PaleMirrorMod.LOGGER.info("PMV3_TRACE correlation={} kind={} subject={} command={} transaction={} revision={} operation={} lease={} cargo={} actors={}",
+                entry.correlation(), entry.kind(), entry.subject(), entry.commandId(), entry.transactionId(), entry.revision(),
+                entry.context().operationId(), entry.context().leaseId(), entry.context().cargoId(), entry.context().actorIds());
     }
 
     static Optional<Entry> latest(MinecraftServer server, String correlation) {
@@ -59,11 +74,28 @@ final class FrontierV3DiagnosticTrace {
 
     static void forget(MinecraftServer server) { ENTRIES.remove(Objects.requireNonNull(server, "server")); }
 
-    record Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision) {
+    record Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision, Context context) {
+        Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision) {
+            this(correlation, kind, subject, commandId, transactionId, revision, Context.empty());
+        }
         Entry {
             if (correlation.isBlank() || kind.isBlank() || subject.isBlank() || commandId.isBlank() || transactionId.isBlank()) {
                 throw new IllegalArgumentException("diagnostic trace entry is invalid");
             }
+            context = Objects.requireNonNull(context, "diagnostic trace context");
         }
+    }
+
+    /** Bounded noncanonical join keys only: never player UUIDs, coordinates or inventory. */
+    record Context(String operationId, String leaseId, String cargoId, List<String> actorIds) {
+        Context {
+            operationId = Objects.requireNonNull(operationId, "trace operation"); leaseId = Objects.requireNonNull(leaseId, "trace lease");
+            cargoId = Objects.requireNonNull(cargoId, "trace cargo"); actorIds = List.copyOf(Objects.requireNonNull(actorIds, "trace actors"));
+            if (actorIds.size() > 32 || actorIds.stream().anyMatch(String::isBlank)
+                    || (!operationId.isEmpty() && (leaseId.isEmpty() || cargoId.isEmpty()))) {
+                throw new IllegalArgumentException("diagnostic trace context is invalid");
+            }
+        }
+        static Context empty() { return new Context("", "", "", List.of()); }
     }
 }

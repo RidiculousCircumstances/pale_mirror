@@ -35,6 +35,7 @@ def millenaireIntegrationJar = layout.buildDirectory.file('integration/millenair
 def millenaireIntegrationUrl = rootProject.providers.gradleProperty('millenaire_integration_url').get()
 def millenaireIntegrationSha512 = rootProject.providers.gradleProperty('millenaire_integration_sha512').get()
 def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get().asFile
+def frontierV3SceneGameTestDirectory = layout.buildDirectory.dir('runs/frontier-v3-scene-game-test').get().asFile
 def crimsonGameTestDirectory = layout.buildDirectory.dir('runs/crimson-game-test').get().asFile
 def sporeGameTestDirectory = layout.buildDirectory.dir('runs/spore-game-test').get().asFile
 def createGameTestDirectory = layout.buildDirectory.dir('runs/create-game-test').get().asFile
@@ -104,6 +105,17 @@ neoForge {
             gameDirectory = coreGameTestDirectory
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+        }
+        frontierV3SceneGameTestServer {
+            type = 'gameTestServer'
+            // The template stays in the minecraft namespace, so namespace filtering alone
+            // cannot select PM v3 tests. The opt-in mixin filters only the final GameTest
+            // collection passed to the dedicated test server; regular servers and the full
+            // GameTest gate keep the complete collection unchanged.
+            gameDirectory = frontierV3SceneGameTestDirectory
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'scene'
         }
         crimsonGameTestServer {
             type = 'gameTestServer'
@@ -328,6 +340,12 @@ tasks.register('verifyPackagedJar') {
 tasks.named('runGameTestServer') {
     doFirst {
         coreGameTestDirectory.deleteDir()
+    }
+}
+
+tasks.named('runFrontierV3SceneGameTestServer') {
+    doFirst {
+        frontierV3SceneGameTestDirectory.deleteDir()
     }
 }
 
@@ -722,6 +740,12 @@ def resetFrontierV3PilotServerWorld = tasks.register('resetFrontierV3PilotServer
         }
     }
 }
+// The pilot uses only current source plus NeoForge. A stale full-pack JAR in this generated
+// directory would create noisy, misleading diagnostics and invalidate that profile boundary.
+// Preserve worlds and evidence; only the disposable runtime's external-mod directory is reset.
+def resetFrontierV3PilotLiteServerMods = tasks.register('resetFrontierV3PilotLiteServerMods', Delete) {
+    delete new File(frontierV3PilotServerRunDirectory, 'mods')
+}
 def installFrontierV3PilotGrayboxDatapack = tasks.register('installFrontierV3PilotGrayboxDatapack', Sync) {
     dependsOn resetFrontierV3PilotServerWorld
     from(frontierV3PilotGrayboxDatapackDirectory)
@@ -734,7 +758,7 @@ def installFrontierV3PilotGrayboxDatapack = tasks.register('installFrontierV3Pil
 }
 
 tasks.named('runFrontierV3PilotServer') {
-    dependsOn installFrontierV3PilotGrayboxDatapack
+    dependsOn installFrontierV3PilotGrayboxDatapack, resetFrontierV3PilotLiteServerMods
     doFirst {
         def directory = frontierV3PilotServerRunDirectory
         def world = frontierV3PilotWorldName

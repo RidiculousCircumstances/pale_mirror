@@ -131,6 +131,19 @@ the next action until the X11 capture helper acknowledges its exact frame.
 Use `presentation: player` only when the player UI itself is the assertion;
 never add an ad-hoc HUD toggle to a scenario.
 
+## Frontier v3 daily and scale workflow
+
+- For a v3 materialization edit, run focused pure/Node tests and the
+  `runFrontierV3SceneGameTestServer` slice first; reserve the complete critical
+  gate for a commit or milestone. The fast slice is evidence for the changed
+  scene boundary, not permission to skip the final gate.
+- Every HOT/COLD change needs both its ordinary path and a negative or recovery
+  path. A test that merely observes `PREPARED` or `READY` is insufficient when a
+  terminal domain result is available.
+- A change that raises a physical-scene or active-mob limit requires a
+  reproducible same-seed JFR capture and a causal proof of operation → lease →
+  actor/cargo ownership. TPS alone is not acceptance evidence.
+
 ## Architecture rules
 
 - `pale-mirror-domain` is pure Java: it must not import Minecraft, NeoForge,

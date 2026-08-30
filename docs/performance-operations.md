@@ -66,3 +66,28 @@ full loaded-entity census, no vertical chunk-volume rail scan, no repeated
 unchanged projection reconciliation, and no watchdog stall while Sable is
 enabled. Worldgen slice timing is also reported by the Visuals runtime and in
 the server log when its immutable catalog becomes ready.
+
+## Frontier v3 physical-scene scale protocol
+
+The v3 world keeps exact people, bioforms, cargo and objects. It must not
+answer a large event by turning forty residents into one representative body or
+by maintaining a second aggregate combat state. A large operation is instead
+split by spatially indexed, bounded HOT subscenes; each subscene retains the
+same canonical actor/cargo IDs and durable lease/recovery rules as a small
+operation.
+
+Before raising a configured physical-scene or active-mob limit, record a
+baseline and candidate using the same commit family, seed, world/profile,
+player route, view distance and warm-up. Capture a JFR from the actual server:
+
+```bash
+scripts/capture-runtime-jfr.sh <server-pid> 120s build/profiles/frontier-v3-scene-<seed>-<limit>.jfr
+```
+
+The evidence bundle must state active scene/subscene count, exact managed body
+count, operation/lease/cargo correlation, queue depth and deferral age, p50/p95/p99
+MSPT, maximum stall, CPU, allocation/GC and save/recovery result. Pair it with
+a checked-in declarative causal scenario at the same seed. The candidate is
+rejected on any duplicate/lost exact identity, unbounded queue, silent COLD
+fallback, missing post-restart evidence or regression outside normal variance.
+TPS alone is not a scale result.

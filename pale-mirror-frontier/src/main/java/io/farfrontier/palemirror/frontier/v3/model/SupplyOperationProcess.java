@@ -125,7 +125,7 @@ final class SupplyOperationProcess {
         if (next.equals(assembly)) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
-                    new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(operation, next.positions()))),
+                    new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(operation, next.positions(), next.cargoAnchor()))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
@@ -157,7 +157,7 @@ final class SupplyOperationProcess {
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) return failed(state, operation, "route-obstructed");
         if (operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()
                 && operation.activeTravel().orElseThrow().corridor().getLast().equals(operation.route().get(operation.routeIndex()))) {
-            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(operation, participantPositions(state, operation)))),
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         OperationTravel travel = operation.activeTravel().orElseThrow();
@@ -200,12 +200,14 @@ final class SupplyOperationProcess {
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
 
     private static OperationTravel travelForNextSegment(FrontierWorldState state, RouteOperation operation) {
-        return travelForNextSegment(operation, participantPositions(state, operation));
+        BlockPosition cargoAnchor = operation.activeAssembly().map(OperationAssembly::cargoAnchor)
+                .orElseGet(() -> operation.activeTravel().orElseThrow(() -> new IllegalArgumentException("operation has no prior cargo anchor")).cargoAnchor());
+        return travelForNextSegment(operation, participantPositions(state, operation), cargoAnchor);
     }
-    private static OperationTravel travelForNextSegment(RouteOperation operation, java.util.Map<SubjectId, BlockPosition> formation) {
+    private static OperationTravel travelForNextSegment(RouteOperation operation, java.util.Map<SubjectId, BlockPosition> formation, BlockPosition cargoAnchor) {
         if (operation.routeIndex() >= operation.route().size() - 1) throw new IllegalArgumentException("arrived operation has no next travel segment");
         List<BlockPosition> corridor = adjacentSegment(operation.route().get(operation.routeIndex()), operation.route().get(operation.routeIndex() + 1));
-        return new OperationTravel(corridor, 0, formation, formation.get(operation.cargoCarrierId()));
+        return new OperationTravel(corridor, 0, formation, cargoAnchor);
     }
 
     /**
@@ -214,7 +216,7 @@ final class SupplyOperationProcess {
      */
     static OperationTravel travelForCompletedAssembly(RouteOperation operation, OperationAssembly assembly) {
         if (!assembly.complete()) throw new IllegalArgumentException("only a complete assembly may start operation travel");
-        return travelForNextSegment(operation, assembly.positions());
+        return travelForNextSegment(operation, assembly.positions(), assembly.cargoAnchor());
     }
     private static java.util.Map<SubjectId, BlockPosition> participantPositions(FrontierWorldState state, RouteOperation operation) {
         java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();

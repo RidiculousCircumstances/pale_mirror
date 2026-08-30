@@ -113,7 +113,7 @@ final class FrontierV3SceneExecutor {
         if (engagement.isPresent()) {
             SceneEngagementCandidate candidate = engagement.orElseThrow();
             SceneLease lease = lease(runtime, state, candidate);
-            if (FrontierSceneAdmission.available(state, candidate.actorIds())) prepare(runtime, lease);
+            if (FrontierSceneAdmission.available(state, candidate.actorIds())) prepare(level, runtime, lease);
             else handoff(level, runtime, state, lease);
             return;
         }
@@ -122,11 +122,17 @@ final class FrontierV3SceneExecutor {
                 .filter(operation -> state.sceneLeases().values().stream().noneMatch(lease -> lease.operationId().equals(operation.id())
                         && lease.status() != SceneLeaseStatus.CLOSED))
                 .filter(operation -> !FrontierSceneAdmission.hasUnresolvedRouteEngagement(state, operation.id()))
+                // A completed strategic segment is a canonical transition point, not a
+                // materializable convoy state.  COLD must first atomically open the next
+                // segment with the same formation and cargo anchor; otherwise a new HOT
+                // lease would suspend that COLD action and own a stale, already-arrived
+                // corridor.  The bounded wait is one ordinary operation-progress interval.
+                .filter(RouteOperation::hasInProgressTravel)
                 .filter(operation -> demandExists(level, operation.currentPosition())).findFirst();
         if (demand.isPresent()) {
             RouteOperation operation = demand.orElseThrow();
             SceneLease lease = lease(runtime, state, operation);
-            if (FrontierSceneAdmission.available(state, operation.participantIds())) prepare(runtime, lease);
+            if (FrontierSceneAdmission.available(state, operation.participantIds())) prepare(level, runtime, lease);
             else handoff(level, runtime, state, lease);
             return;
         }
@@ -159,8 +165,9 @@ final class FrontierV3SceneExecutor {
         return Map.copyOf(positions);
     }
 
-    private static void prepare(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
-        submit(runtime, "scene-prepare", lease.id().value(), new SceneLeasePrepared(lease));
+    private static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_prepared", lease,
+                submit(runtime, "scene-prepare", lease.id().value(), new SceneLeasePrepared(lease)));
     }
 
     /** Transfers already-loaded exact ambient bodies without despawning, cloning or teleporting them. */
@@ -177,8 +184,9 @@ final class FrontierV3SceneExecutor {
         if (!captures.isEmpty()) {
             Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>(lease.memberPositions());
             captures.forEach(capture -> positions.put(capture.actorId(), capture.position()));
-            submit(runtime, "scene-handoff", lease.id().value(), new SceneLeaseHandoff(lease.withMemberPositions(positions).withAmbientHandoff(
-                    captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures));
+            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_handoff", lease,
+                    submit(runtime, "scene-handoff", lease.id().value(), new SceneLeaseHandoff(lease.withMemberPositions(positions).withAmbientHandoff(
+                            captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures)));
         }
     }
 
@@ -188,7 +196,8 @@ final class FrontierV3SceneExecutor {
             case HOT -> {
                 boolean demand = demandExists(level, lease.handoffPosition());
                 if (drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, playerWithinSafeRadius(level, lease))) {
-                    submit(runtime, "scene-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+                    FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_draining", lease,
+                            submit(runtime, "scene-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
                     return;
                 }
                 // An absent-demand scene owns no naturally loaded execution surface.  Do not
@@ -196,7 +205,9 @@ final class FrontierV3SceneExecutor {
                 // hand-off window is still running.
                 if (!demand) return;
                 executeLocalGoals(level, state, lease);
-                if (!FrontierV3CargoCarrierExecutor.move(level, state, lease, cargoDestination(state, lease))) { conflict(runtime, lease); return; }
+                if (!FrontierV3CargoCarrierExecutor.move(level, state, lease, cargoDestination(state, lease))) {
+                    conflict(level, runtime, state, lease, "carrier-unavailable"); return;
+                }
                 if (observeHotTravelAdvance(level, runtime, state, lease)) return;
                 if (combatEnabled(lease) && level.getGameTime() % 20L == 0L
                         && !executeExplosion(level, runtime, state, lease)) executeStrike(level, runtime, state, lease);
@@ -218,9 +229,11 @@ final class FrontierV3SceneExecutor {
                 ? FrontierV3CargoCarrierExecutor.materialize(level, state, lease) : BodyMaterialization.DEFERRED;
         if (result == BodyMaterialization.COMPLETE && carrier == BodyMaterialization.COMPLETE) {
             rememberObserved(level, runtime, state, lease);
-            submit(runtime, "scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_hot", lease,
+                    submit(runtime, "scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
         } else if (result == BodyMaterialization.CONFLICT || carrier == BodyMaterialization.CONFLICT) {
-            conflict(runtime, lease);
+            conflict(level, runtime, state, lease, "prepared-" + result.name().toLowerCase(java.util.Locale.ROOT)
+                    + "-" + carrier.name().toLowerCase(java.util.Locale.ROOT));
         }
     }
 
@@ -367,7 +380,7 @@ final class FrontierV3SceneExecutor {
         if (!FrontierV3CargoCarrierExecutor.atDestination(level, state, lease, next.cargoAnchor())) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "scene-operation-travel", lease.id().value(),
                 new OperationTravelAdvanced(operation.id(), next));
-        FrontierV3DiagnosticTrace.record(level.getServer(), "operation-travel:" + operation.id().value(), "operation_travel_advanced", operation.id(), result);
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "operation_travel_advanced", lease, result);
         return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
     }
 
@@ -536,7 +549,8 @@ final class FrontierV3SceneExecutor {
             // Persist that hand-off now; any serialized old projection is removed on ordinary
             // chunk return before a new scene is permitted to materialize.
             if (observed != null) {
-                submit(runtime, "scene-release-unloaded", lease.id().value(), new SceneLeaseReleased(lease.id(), observed));
+                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released_unloaded", lease,
+                        submit(runtime, "scene-release-unloaded", lease.id().value(), new SceneLeaseReleased(lease.id(), observed)));
                 forgetLeaseTransient(runtime, lease.id());
             }
             // A restart deliberately has no volatile observation. Keep DRAINING visible until a
@@ -544,18 +558,23 @@ final class FrontierV3SceneExecutor {
             return;
         }
         if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
-            conflict(runtime, lease); return;
+            conflict(level, runtime, state, lease, "release-carrier-unavailable"); return;
         }
         List<SceneMemberPosition> positions = new ArrayList<>();
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
-            if (!owned(entity, state, lease, member)) { conflict(runtime, lease); return; }
-            if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) { conflict(runtime, lease); return; }
+            if (!owned(entity, state, lease, member)) {
+                conflict(level, runtime, state, lease, "release-body-unavailable"); return;
+            }
+            if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) {
+                conflict(level, runtime, state, lease, "release-body-dead"); return;
+            }
             long health = Math.round((double) body.getHealth() * FixedScalar.SCALE);
             positions.add(new SceneMemberPosition(member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
         }
-        submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions));
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease,
+                submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions)));
         forgetLeaseTransient(runtime, lease.id());
     }
 
@@ -720,8 +739,11 @@ final class FrontierV3SceneExecutor {
         entity.getPersistentData().putLong(REVISION_KEY, lease.revision());
     }
     /** A loaded-world obstruction or altered owned body is a physical conflict, not restart evidence. */
-    private static void conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
-        submit(runtime, "scene-conflict", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT));
+    private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                 SceneLease lease, String cause) {
+        Readiness readiness = new Readiness(bodyReadiness(level, state, lease), FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name());
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_conflict:" + cause + ":" + readiness.bodies() + ":" + readiness.carrier(), lease,
+                submit(runtime, "scene-conflict", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
     }
     /** A loaded demand point has disproved exact reclaimability; record conflict rather than loop forever or replace a body. */
     private static void recoveryUnresolved(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, java.util.Set<SubjectId> missingActors,

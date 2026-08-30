@@ -29,10 +29,22 @@ class OperationAssemblyTest {
         RouteOperation operation = new RouteOperation(new SubjectId("operation:supply-1"), new SubjectId("settlement:1"), new SubjectId("cargo:supply-1"),
                 new SubjectId("hive:frontier"), List.of(HAULER, GUARD), List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0,
                 OperationStage.ASSEMBLING, java.util.Optional.of(complete), java.util.Optional.empty());
-        OperationTravel travel = new OperationTravel(List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0, complete.positions(), complete.positions().get(HAULER));
+        OperationTravel travel = new OperationTravel(List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0, complete.positions(), complete.cargoAnchor());
 
         assertEquals(OperationStage.EN_ROUTE, operation.startTravel(travel).stage());
         assertThrows(IllegalArgumentException.class, () -> operation.startTravel(new OperationTravel(travel.corridor(), 0, travel.formation(), new BlockPosition(0, 64, 0))));
+    }
+
+    @Test
+    void completeAssemblyReservesASeparateCargoAnchorAndRejectsCollidingTravel() {
+        OperationAssembly complete = new OperationAssembly(Map.of(HAULER, member(1, 0), GUARD, member(1, 1)), HAULER);
+
+        assertEquals(new BlockPosition(1, 64, 2), complete.cargoAnchor());
+        assertThrows(IllegalArgumentException.class, () -> new OperationTravel(
+                List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0,
+                complete.positions(), complete.positions().get(HAULER)));
+        assertThrows(IllegalStateException.class, () -> new OperationAssembly(Map.of(
+                HAULER, member(0, 0), GUARD, member(0, 1)), HAULER).cargoAnchor());
     }
 
     @Test

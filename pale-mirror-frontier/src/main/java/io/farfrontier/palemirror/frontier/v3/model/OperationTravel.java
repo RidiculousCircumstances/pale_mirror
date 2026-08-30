@@ -40,8 +40,12 @@ public record OperationTravel(List<BlockPosition> corridor, int cursor, Map<Subj
             }
         });
         if (copy.isEmpty() || copy.size() > 8) throw new IllegalArgumentException("operation travel formation must contain 1..8 actors");
+        if (copy.values().stream().distinct().count() != copy.size()) {
+            throw new IllegalArgumentException("operation travel formation positions must be distinct");
+        }
         formation = Map.copyOf(copy);
         cargoAnchor = Objects.requireNonNull(cargoAnchor, "operation travel cargo anchor");
+        if (formation.containsValue(cargoAnchor)) throw new IllegalArgumentException("operation travel cargo anchor must remain distinct from every exact actor");
     }
 
     public BlockPosition currentPosition() { return corridor.get(cursor); }
