@@ -168,6 +168,16 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
+    /** Decrements one exact owned stack after a matching durable physical receipt. */
+    public ExactInventory consume(SubjectId itemId, int count) {
+        ExactItemStack current = items.get(Objects.requireNonNull(itemId, "item id"));
+        if (current == null || count < 1 || count > current.count()) throw new IllegalArgumentException("exact consumption count does not match current stack");
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        if (count == current.count()) nextItems.remove(itemId);
+        else nextItems.put(itemId, new ExactItemStack(current.id(), current.economicOwnerId(), current.itemKind(), current.count() - count, current.custody()));
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
+    }
+
     /** Consumes one exact COLD cargo unit only through the owning work process. */
     public ExactInventory consumeCargoUnit(SubjectId cargoId, SubjectId itemId) {
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));

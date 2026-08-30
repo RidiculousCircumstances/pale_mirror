@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition; import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
@@ -22,7 +23,25 @@ public final class FrontierWorldRuntimeDefinition {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) { return configuration(worldId, seed, true); }
     /** Development-only uncontested logistics fixture; production always uses {@link #configuration(WorldId, long)}. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentUncontestedSupplyConfiguration(WorldId worldId, long seed) {
-        return configuration(worldId, seed, false);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = configuration(worldId, seed, false);
+        FrontierWorldState initial = developmentSupplyReserve(base.initialState());
+        return new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator());
+    }
+
+    /** Fixture-only exact reserve keeps logistics tests independent from the human food reserve policy. */
+    private static FrontierWorldState developmentSupplyReserve(FrontierWorldState state) {
+        Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        int remaining = SettlementProvisionProcess.reserveRequirement(state, settlement.id()); ExactInventory inventory = state.inventory(); int ordinal = 0;
+        while (remaining > 0) {
+            // Keep every fixture-reserve stack below one export shipment: the production output is
+            // then the only 64-item candidate, without granting the fixture fictitious food.
+            int count = Math.min(63, remaining);
+            inventory = inventory.store(new ExactItemStack(new SubjectId("item:development-supply-reserve-" + ordinal), settlement.id(), "minecraft:bread", count,
+                    new InventoryCustody.ContainerSlot(depot, ordinal + 1)));
+            remaining -= count; ordinal++;
+        }
+        return state.withInventory(inventory);
     }
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
@@ -41,6 +60,22 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
+    /** Development-only exact ration fixture; an ordinary loaded depot must consume the named bread before residents become secure. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentSettlementProvisionConfiguration(WorldId worldId, long seed) {
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = configuration(worldId, seed, false);
+        FrontierWorldState state = base.initialState(); Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId bread = new SubjectId("item:provision-fixture-bread"); int rations = settlement.residents().size();
+        ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1));
+        SettlementProvision provision = SettlementProvision.started(settlement.id(), 1, 0L, rations,
+                List.of(new SettlementRationAllocation(bread, rations)));
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:settlement-provision-1-1-0"), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
+                PhysicalIntentStatus.PREPARED, settlement.id(), List.of(settlement.id(), bread), new FixedPosition(FixedScalar.whole(settlement.anchor().x()),
+                FixedScalar.whole(settlement.anchor().y()), FixedScalar.whole(settlement.anchor().z())), 0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
+        state = state.withInventory(state.inventory().store(stack)).withHumanPopulation(state.humanPopulation().withProvision(provision.beginPhysical(intent.id())))
+                .preparePhysicalIntent(intent);
+        return new FrontierEngineConfiguration<>(base.worldId(), state, SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                new FrontierWorldStateCodec(state.bootstrap()), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator());
+    }
     /** Development-only HOT/COLD continuity fixture; production always begins at the normal world bootstrap. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentRouteSceneReturnConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(worldId, seed);
@@ -71,6 +106,7 @@ public final class FrontierWorldRuntimeDefinition {
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
+            actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1, 10_000L + index * 100L));
         }
         actions.add(PopulationMigrationProcess.review(1, 8_000L));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted().forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
@@ -284,6 +320,8 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
             case "frontier.population.migration.review" -> PopulationMigrationProcess.planReview(state, action);
             case "frontier.population.migration.progress" -> PopulationMigrationProcess.planProgress(state, action);
+            case "frontier.settlement.provision.review" -> SettlementProvisionProcess.planReview(state, action);
+            case "frontier.settlement.provision.progress" -> SettlementProvisionProcess.planProgress(state, action);
             case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
             case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
             case "frontier.resource_site.harvest" -> ResourceSiteHarvestProcess.plan(state, action);
@@ -396,6 +434,9 @@ public final class FrontierWorldRuntimeDefinition {
             case ResidentMigrationResumed resumed -> reduceMigrationResumed(state, event.subject(), resumed);
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
             case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
+            case SettlementProvisionStarted started -> SettlementProvisionProcess.reduceStarted(state, event.subject(), started);
+            case SettlementProvisionConsumed consumed -> SettlementProvisionProcess.reduceConsumed(state, event.subject(), consumed);
+            case SettlementProvisionResolved resolved -> SettlementProvisionProcess.reduceResolved(state, event.subject(), resolved);
             case ResidentHealthTransition transition -> HumanHealthProcess.reduceResidentTransition(state, event.subject(), event.instant().ticks(), transition);
             case SettlementQuarantineTransition transition -> HumanHealthProcess.reduceQuarantineTransition(state, event.subject(), event.instant().ticks(), transition);
             case ResourceSiteGrowthAdvanced advanced -> ResourceSiteProcess.reduceGrowth(state, event.subject(), advanced);
@@ -563,6 +604,7 @@ public final class FrontierWorldRuntimeDefinition {
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
+            if (state.humanPopulation().provisions().containsKey(intent.causeSubjectId())) return SettlementProvisionProcess.reducePrepared(state, subject, intent);
             throw new IllegalArgumentException("exact consumption has no supported owning process");
         }
         if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
@@ -627,7 +669,13 @@ public final class FrontierWorldRuntimeDefinition {
                 return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
             }
             ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
-            if (birth == null || !subject.equals(birth.settlementId())) throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
+            if (birth != null) {
+                if (!subject.equals(birth.settlementId())) throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
+                return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            }
+            if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
+                throw new IllegalArgumentException("settlement provision consumption transition lacks settlement ownership");
+            }
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());

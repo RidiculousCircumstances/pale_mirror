@@ -18,7 +18,7 @@ public final class ExactItemConsumptionStateSupport {
             if (!job.consumptionIntentId().equals(intent.id()) || !intent.subjectIds().equals(List.of(job.id(), job.consumedItemId()))) {
                 throw new IllegalArgumentException("exact consumption does not bind its hive growth job");
             }
-            return ownedActiveClaim(state, job.consumedItemId(), state::isHiveStore, "hive store");
+            return ownedActiveClaim(state, job.consumedItemId(), state::isHiveStore, "hive store", 64);
         }
         ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
         if (birth != null) {
@@ -26,9 +26,22 @@ public final class ExactItemConsumptionStateSupport {
                 throw new IllegalArgumentException("exact consumption does not bind its resident birth permit");
             }
             SubjectId depot = FrontierWorldState.depotId(birth.settlementId());
-            Claim claim = ownedActiveClaim(state, birth.foodItemId(), depot::equals, "settlement depot");
-            if (!claim.ownerId().equals(birth.settlementId()) || !claim.item().itemKind().equals(PopulationBirthProcess.BREAD) || claim.item().count() != 64) {
+            Claim claim = ownedActiveClaim(state, birth.foodItemId(), depot::equals, "settlement depot", 1);
+            if (!claim.ownerId().equals(birth.settlementId()) || !claim.item().itemKind().equals(PopulationBirthProcess.BREAD)) {
                 throw new IllegalArgumentException("resident birth has no exact owned food stack");
+            }
+            return claim;
+        }
+        for (SettlementProvision provision : state.humanPopulation().provisions().values()) {
+            if (provision.activeIntentId().filter(intent.id()::equals).isEmpty()) continue;
+            SettlementRationAllocation allocation = provision.currentOrActiveAllocation();
+            if (!intent.causeSubjectId().equals(provision.settlementId()) || !intent.subjectIds().equals(List.of(provision.settlementId(), allocation.itemId()))) {
+                throw new IllegalArgumentException("exact consumption does not bind its settlement provision allocation");
+            }
+            SubjectId depot = FrontierWorldState.depotId(provision.settlementId());
+            Claim claim = ownedActiveClaim(state, allocation.itemId(), depot::equals, "settlement depot", allocation.count());
+            if (!claim.ownerId().equals(provision.settlementId()) || !claim.item().itemKind().equals(SettlementProvisionProcess.BREAD)) {
+                throw new IllegalArgumentException("settlement provision has no exact owned food stack");
             }
             return claim;
         }
@@ -40,9 +53,9 @@ public final class ExactItemConsumptionStateSupport {
         if (!intent.subjectIds().contains(receipt.itemId())) throw new IllegalArgumentException("exact consumption receipt names a foreign stack");
     }
 
-    private static Claim ownedActiveClaim(FrontierWorldState state, SubjectId itemId, java.util.function.Predicate<SubjectId> allowedContainer, String label) {
+    private static Claim ownedActiveClaim(FrontierWorldState state, SubjectId itemId, java.util.function.Predicate<SubjectId> allowedContainer, String label, int count) {
         ExactItemStack item = state.inventory().items().get(itemId);
-        if (item == null || !(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !allowedContainer.test(slot.containerId())) {
+        if (item == null || item.count() < count || !(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !allowedContainer.test(slot.containerId())) {
             throw new IllegalArgumentException("exact consumption has no active " + label + " stack");
         }
         ContainerRecord container = state.inventory().containers().get(slot.containerId());
@@ -50,9 +63,9 @@ public final class ExactItemConsumptionStateSupport {
         if (container == null || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) {
             throw new IllegalArgumentException("exact consumption container is not active");
         }
-        return new Claim(item, container.ownerId(), slot.containerId(), slot.slot(), surface.position());
+        return new Claim(item, container.ownerId(), slot.containerId(), slot.slot(), surface.position(), count);
     }
 
     /** Immutable exact physical target; it carries no Minecraft type. */
-    public record Claim(ExactItemStack item, SubjectId ownerId, SubjectId containerId, int slot, BlockPosition position) { }
+    public record Claim(ExactItemStack item, SubjectId ownerId, SubjectId containerId, int slot, BlockPosition position, int count) { }
 }

@@ -25,7 +25,8 @@ public final class FrontierReadabilityPlan {
             StructureCondition condition = state.structureConditions().get(structure.id());
             InfectionOverlayStage stage = contamination.get(structure.id());
             boolean quarantine = structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id());
-            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition, stage, quarantine), scope(structure.kind()),
+            boolean foodRisk = structure.kind() == StructureKind.DEPOT && foodRisk(state, settlement.id());
+            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition, stage, quarantine, foodRisk), scope(structure.kind()),
                     settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition), stage)));
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
@@ -93,8 +94,8 @@ public final class FrontierReadabilityPlan {
         return firstCrop.offset(4, 3, -2);
     }
 
-    private static FrontierObjectBoard.Tone tone(StructureCondition condition, InfectionOverlayStage stage, boolean quarantine) {
-        return condition == StructureCondition.INTACT && stage == null && !quarantine ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
+    private static FrontierObjectBoard.Tone tone(StructureCondition condition, InfectionOverlayStage stage, boolean quarantine, boolean foodRisk) {
+        return condition == StructureCondition.INTACT && stage == null && !quarantine && !foodRisk ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
     }
 
     private static FrontierObjectBoard.Scope scope(StructureKind kind) {
@@ -167,10 +168,30 @@ public final class FrontierReadabilityPlan {
         if (structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id())) {
             return "QUARANTINE · " + state.humanPopulation().activeCases(settlement.id()) + " ACTIVE CASES";
         }
+        if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id());
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
         int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());
         int beds = SettlementFacilityCapability.forStructure(state, structure).residentCapacity();
         return conditionText(condition) + "\n" + residents + " / " + beds + " RESIDENTS";
+    }
+
+    private static String foodText(FrontierWorldState state, SubjectId settlementId) {
+        SettlementProvision provision = state.humanPopulation().provision(settlementId);
+        int available = SettlementProvisionProcess.availableFood(state, settlementId);
+        int reserve = SettlementProvisionProcess.reserveRequirement(state, settlementId);
+        return switch (provision.status()) {
+            case IDLE -> "FOOD REVIEW PENDING · " + available + " / " + reserve;
+            case IN_PROGRESS -> "FOOD SERVING · " + provision.fulfilledRations() + " / " + provision.requiredRations();
+            case SECURE -> "FOOD SECURE · " + available + " / " + reserve;
+            case RATIONED -> "FOOD RATIONED · " + provision.fulfilledRations() + " / " + provision.requiredRations();
+            case SHORTAGE -> "FOOD SHORTAGE · BREAD NEEDED";
+            case CONFLICT -> "FOOD CONFLICT · INSPECT DEPOT";
+        };
+    }
+
+    private static boolean foodRisk(FrontierWorldState state, SubjectId settlementId) {
+        SettlementProvisionStatus status = state.humanPopulation().provision(settlementId).status();
+        return status == SettlementProvisionStatus.RATIONED || status == SettlementProvisionStatus.SHORTAGE || status == SettlementProvisionStatus.CONFLICT;
     }
 
     private static void add(Map<SubjectId, FrontierObjectBoard> values, FrontierObjectBoard board) {

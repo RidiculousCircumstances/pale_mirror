@@ -188,6 +188,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                     && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
                     && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
+                    && !humanPopulation.provisions().containsKey(intent.causeSubjectId())
                     && !expectedStructures.contains(intent.causeSubjectId()) && !productionJobs.containsKey(intent.causeSubjectId())
                     && !contracts.containsKey(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
                     && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !routeConstructions.containsKey(intent.causeSubjectId())
@@ -204,6 +205,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
+                        && !humanPopulation.provisions().containsKey(subject)
                         && productionJobs.values().stream().noneMatch(job -> job.outputItemId().equals(subject))
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
@@ -716,13 +718,17 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (!itemId.equals(consumed.itemId()) || item == null || item.count() != consumed.countBefore()
                     || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("exact consumption receipt does not match current stack");
             ExactItemConsumptionStateSupport.Claim claim = ExactItemConsumptionStateSupport.claim(this, current);
-            if (!claim.item().equals(item) || !claim.containerId().equals(slot.containerId()) || claim.slot() != slot.slot()) {
+            if (!claim.item().equals(item) || !claim.containerId().equals(slot.containerId()) || claim.slot() != slot.slot() || claim.count() != consumed.consumedCount()) {
                 throw new IllegalArgumentException("exact consumption stack is not in an active owner container");
             }
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(consumed.id())));
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(consumed.id(), consumed);
-            return next(actorLocations, structureConditions, infection, inventory.withoutItem(itemId), productionJobs, contracts, operations,
+            FrontierWorldState consumedState = next(actorLocations, structureConditions, infection, inventory.consume(itemId, consumed.consumedCount()), productionJobs, contracts, operations,
                     next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+            if (humanPopulation.provisions().values().stream().anyMatch(provision -> provision.activeIntentId().filter(current.id()::equals).isPresent())) {
+                return SettlementProvisionProcess.reducePhysicalConsumptionAfterInventory(consumedState, current, consumed);
+            }
+            return consumedState;
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {
             if (!(evidence instanceof ProductionTransformationObservation production)) {

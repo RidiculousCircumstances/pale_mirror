@@ -85,6 +85,20 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void makesExactSettlementFoodShortageReadableAtTheOwnedDepot() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-food-shortage"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, settlement.residents().size(), java.util.List.of());
+        FrontierWorldState hungry = state.withHumanPopulation(state.humanPopulation().withProvision(shortage));
+        SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry).boards().get(depot.id());
+
+        assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
+        assertTrue(board.text().endsWith("FOOD SHORTAGE · BREAD NEEDED"));
+        assertTrue(!board.text().contains(settlement.id().value()));
+    }
+
+    @Test
     void makesAKnownRouteSurfaceLossLocallyVisibleAsAPatrolWarning() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:route-board-conflict"), 91L));
         BlockPosition lost = FrontierRouteNetwork.surfaceCells(state.bootstrap()).iterator().next();

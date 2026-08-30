@@ -16,6 +16,15 @@ class FrontierV3GameTestSliceTest {
     }
 
     @Test
+    void economySliceIncludesExactItemAndStoreProofsButNotCombatScenes() {
+        assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-exact-consumption"));
+        assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-object-boards"));
+        assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-container-recovery"));
+        assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-scene-explosion"));
+        assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-resource-harvest"));
+    }
+
+    @Test
     void emptySliceCannotAccidentallyFilterTheFullGateAndUnknownSlicesFailClosed() {
         assertTrue(FrontierV3GameTestSlice.includes("", "core-integration"));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3GameTestSlice.includes("all", "pm-frontier-v3-scene-handoff"));

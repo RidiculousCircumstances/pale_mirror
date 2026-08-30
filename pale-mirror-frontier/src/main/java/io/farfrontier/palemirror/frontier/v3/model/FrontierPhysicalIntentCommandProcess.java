@@ -72,6 +72,9 @@ final class FrontierPhysicalIntentCommandProcess {
         if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) {
             return new CommandPlan.Accepted(PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
         }
+        if (state.humanPopulation().provisions().containsKey(intent.causeSubjectId())) {
+            return new CommandPlan.Accepted(SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+        }
         return rejected("exact consumption has no supported owning process");
     }
 

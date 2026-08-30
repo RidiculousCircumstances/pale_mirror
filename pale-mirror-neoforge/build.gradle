@@ -36,6 +36,7 @@ def millenaireIntegrationUrl = rootProject.providers.gradleProperty('millenaire_
 def millenaireIntegrationSha512 = rootProject.providers.gradleProperty('millenaire_integration_sha512').get()
 def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get().asFile
 def frontierV3SceneGameTestDirectory = layout.buildDirectory.dir('runs/frontier-v3-scene-game-test').get().asFile
+def frontierV3EconomyGameTestDirectory = layout.buildDirectory.dir('runs/frontier-v3-economy-game-test').get().asFile
 def crimsonGameTestDirectory = layout.buildDirectory.dir('runs/crimson-game-test').get().asFile
 def sporeGameTestDirectory = layout.buildDirectory.dir('runs/spore-game-test').get().asFile
 def createGameTestDirectory = layout.buildDirectory.dir('runs/create-game-test').get().asFile
@@ -116,6 +117,15 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
             systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'scene'
+        }
+        frontierV3EconomyGameTestServer {
+            type = 'gameTestServer'
+            // Exact-item and board tests are a separate bounded materialization boundary;
+            // scene leasing stays out of this daily economics slice.
+            gameDirectory = frontierV3EconomyGameTestDirectory
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'economy'
         }
         crimsonGameTestServer {
             type = 'gameTestServer'
@@ -346,6 +356,12 @@ tasks.named('runGameTestServer') {
 tasks.named('runFrontierV3SceneGameTestServer') {
     doFirst {
         frontierV3SceneGameTestDirectory.deleteDir()
+    }
+}
+
+tasks.named('runFrontierV3EconomyGameTestServer') {
+    doFirst {
+        frontierV3EconomyGameTestDirectory.deleteDir()
     }
 }
 
@@ -767,7 +783,7 @@ tasks.named('runFrontierV3PilotServer') {
         def username = frontierV3PilotOperator
         if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)
                 || !(frontierV3PilotViewDistance ==~ /[2-9]|[12][0-9]|3[0-2]/)
-                || !(frontierV3PilotProfile in ['world', 'hot-scene-strike', 'hive-growth', 'scene-return', 'operation-assembly', 'health-quarantine', 'resident-transit'])
+                || !(frontierV3PilotProfile in ['world', 'hot-scene-strike', 'hive-growth', 'settlement-provision', 'scene-return', 'operation-assembly', 'health-quarantine', 'resident-transit'])
                 || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
             throw new GradleException('Frontier v3 pilot world, username, port, view distance, profile or run id is invalid')
         }

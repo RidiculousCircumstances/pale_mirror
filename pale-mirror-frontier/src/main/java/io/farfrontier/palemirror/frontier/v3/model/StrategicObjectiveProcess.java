@@ -177,12 +177,12 @@ final class StrategicObjectiveProcess {
         boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
                 && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        boolean reserveShort = SettlementProvisionProcess.availableFood(state, settlement.id()) < SettlementProvisionProcess.reserveRequirement(state, settlement.id());
         boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
-        if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), FixedScalar.SCALE));
-        boolean bread = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:bread")
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
-        return bread && !state.humanPopulation().quarantined(settlement.id())
+        if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
+                reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
+        return SettlementProvisionProcess.exportableBread(state, settlement.id()).isPresent() && !state.humanPopulation().quarantined(settlement.id())
                 ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception) {

@@ -27,7 +27,7 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
-/** Loaded-world evidence for the non-replayable full-stack biomass boundary. */
+/** Loaded-world evidence for the non-replayable exact-count consumption boundary. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3ExactItemConsumptionGameTests {
@@ -40,7 +40,7 @@ public final class FrontierV3ExactItemConsumptionGameTests {
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
         SubjectId container = new SubjectId("container:exact-consumption-game-test"), itemId = new SubjectId("item:exact-consumption-game-test");
         ExactItemStack item = new ExactItemStack(itemId, new SubjectId("organ:west-store"), "minecraft:rotten_flesh", 64, new InventoryCustody.ContainerSlot(container, 0));
-        FrontierV3ExactItemConsumptionExecutor.Target target = new FrontierV3ExactItemConsumptionExecutor.Target(item, container, 0, chestPosition);
+        FrontierV3ExactItemConsumptionExecutor.Target target = new FrontierV3ExactItemConsumptionExecutor.Target(item, container, 0, chestPosition, 64);
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(item));
         helper.assertTrue(FrontierV3ExactItemConsumptionExecutor.consume(chest, target), "the identity-tagged canonical stack is physically consumed");
         helper.assertTrue(FrontierV3ExactItemConsumptionExecutor.consumed(chest, target), "an empty exact slot is an inspectable restart postcondition");
@@ -71,9 +71,11 @@ public final class FrontierV3ExactItemConsumptionGameTests {
         BlockPos chestPosition = helper.absolutePos(new BlockPos(30, 8, 0)); ServerLevel level = helper.getLevel();
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
-        FrontierV3ExactItemConsumptionExecutor.Target testTarget = new FrontierV3ExactItemConsumptionExecutor.Target(target.item(), target.containerId(), target.slot(), chestPosition);
+        FrontierV3ExactItemConsumptionExecutor.Target testTarget = new FrontierV3ExactItemConsumptionExecutor.Target(target.item(), target.containerId(), target.slot(), chestPosition, target.count());
         chest.setItem(target.slot(), FrontierV3CargoHandoffExecutor.materializedStack(target.item()));
-        helper.assertTrue(FrontierV3ExactItemConsumptionExecutor.consume(chest, testTarget), "the exact tagged birth food is physically consumed once");
+        helper.assertTrue(target.count() == 1 && FrontierV3ExactItemConsumptionExecutor.consume(chest, testTarget), "the exact tagged birth food consumes one real bread item");
+        helper.assertTrue(FrontierV3ExactItemConsumptionExecutor.consumed(chest, testTarget) && chest.getItem(target.slot()).getCount() == 63,
+                "the retained tag and exact physical remainder make restart recovery inspectable");
         helper.succeed();
     }
 }

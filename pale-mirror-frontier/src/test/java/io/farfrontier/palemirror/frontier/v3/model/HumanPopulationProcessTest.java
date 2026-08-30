@@ -62,7 +62,7 @@ class HumanPopulationProcessTest {
         assertEquals(active, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(active)));
 
         ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:birth-food"), prepared.intent().id(),
-                started.job().foodItemId(), 64, 0);
+                started.job().foodItemId(), 64, 63);
         active = active.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         active = active.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
         var completion = PopulationBirthProcess.planCompletion(active, new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-birth-complete-test"),
@@ -71,7 +71,7 @@ class HumanPopulationProcessTest {
         FrontierWorldState completed = PopulationBirthProcess.reduceBorn(active, started.job().settlementId(), born);
         assertEquals(born.resident(), completed.humanPopulation().resident(born.resident().id()));
         assertEquals(born.position(), completed.actorLocations().get(born.resident().id()).position());
-        assertTrue(!completed.inventory().items().containsKey(started.job().foodItemId()));
+        assertEquals(63, completed.inventory().items().get(started.job().foodItemId()).count());
         assertTrue(completed.humanPopulation().birthJobs().isEmpty());
         assertEquals(born, FrontierWorldRuntimeDefinition.payloadCodecs().decode(born.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(born)));
     }
@@ -103,7 +103,7 @@ class HumanPopulationProcessTest {
 
         PhysicalIntentTransition running = new PhysicalIntentTransition(job.consumptionIntentId(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-running", running)));
-        ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:birth-scheduled"), job.consumptionIntentId(), job.foodItemId(), 64, 0);
+        ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:birth-scheduled"), job.consumptionIntentId(), job.foodItemId(), 64, 63);
         PhysicalIntentTransition confirmed = new PhysicalIntentTransition(job.consumptionIntentId(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-confirmed", confirmed)));
         assertTrue(state(engine).humanPopulation().resident(job.resident().id()) == null);
@@ -111,7 +111,7 @@ class HumanPopulationProcessTest {
         engine.advanceTo(new SimInstant(300L), new WorkBudget(16, 64));
         FrontierWorldState born = state(engine);
         assertEquals(job.resident(), born.humanPopulation().resident(job.resident().id()));
-        assertTrue(!born.inventory().items().containsKey(job.foodItemId()));
+        assertEquals(63, born.inventory().items().get(job.foodItemId()).count());
     }
 
     @Test

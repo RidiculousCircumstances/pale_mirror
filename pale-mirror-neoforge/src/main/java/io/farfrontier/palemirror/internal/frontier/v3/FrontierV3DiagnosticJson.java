@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -130,6 +131,14 @@ final class FrontierV3DiagnosticJson {
         FrontierSettlementWorkDiagnostic value = subject == null ? null
                 : FrontierSettlementWorkDiagnostic.inspect(checkpoint, state, subject).orElse(null);
         if (value == null) return unavailable("settlement", id, checkpoint, "not_found");
+        SettlementProvision provision = state.humanPopulation().provision(subject);
+        int availableFood = state.inventory().items().values().stream().filter(item -> item.itemKind().equals("minecraft:bread"))
+                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
+                        && slot.containerId().equals(FrontierWorldState.depotId(subject))).mapToInt(ExactItemStack::count).sum();
+        int living = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE).count();
+        int reserve = Math.addExact(Math.multiplyExact(living, 2), provision.status().name().equals("IN_PROGRESS")
+                ? provision.requiredRations() - provision.fulfilledRations() : 0);
         return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"strategic\":" + lane(value.strategic())
                 + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())
@@ -137,7 +146,10 @@ final class FrontierV3DiagnosticJson {
                 + ",\"availableFarmer\":\"" + quote(value.availableFarmerId()) + "\",\"farmStatus\":\"" + quote(value.farmStatus())
                 + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot()
                 + ",\"quarantine\":\"" + (state.humanPopulation().quarantined(subject) ? "QUARANTINED" : "NORMAL") + "\",\"activeCases\":"
-                + state.humanPopulation().activeCases(subject) + "}";
+                + state.humanPopulation().activeCases(subject) + ",\"food\":{\"status\":\"" + provision.status()
+                + "\",\"available\":" + availableFood + ",\"reserve\":" + reserve + ",\"required\":" + provision.requiredRations()
+                + ",\"fulfilled\":" + provision.fulfilledRations() + ",\"intent\":\""
+                + quote(provision.activeIntentId().map(PhysicalIntentId::value).orElse("")) + "\"}}";
     }
 
     /** One named-polity diagnostic, bounded to aggregate counts plus the single next growth claim. */

@@ -44,9 +44,20 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().ordinal()); output.writeBoolean(journey.blockReason().isPresent());
             if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().ordinal());
         }
+        FrontierWorldStateCodec.writeCount(output, population.provisions().size());
+        for (SettlementProvision provision : population.provisions().values().stream().sorted(Comparator.comparing(SettlementProvision::settlementId)).toList()) {
+            FrontierWorldStateCodec.writeString(output, provision.settlementId().value()); FrontierWorldStateCodec.writeCount(output, provision.cycleOrdinal());
+            output.writeLong(provision.startedAtTick()); FrontierWorldStateCodec.writeCount(output, provision.requiredRations());
+            FrontierWorldStateCodec.writeCount(output, provision.fulfilledRations()); FrontierWorldStateCodec.writeCount(output, provision.allocations().size());
+            for (SettlementRationAllocation allocation : provision.allocations()) {
+                FrontierWorldStateCodec.writeString(output, allocation.itemId().value()); FrontierWorldStateCodec.writeCount(output, allocation.count());
+            }
+            FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().ordinal()); output.writeBoolean(provision.activeIntentId().isPresent());
+            if (provision.activeIntentId().isPresent()) FrontierWorldStateCodec.writeString(output, provision.activeIntentId().orElseThrow().value());
+        }
     }
 
-    static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations) throws IOException {
+    static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions) throws IOException {
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -96,7 +107,23 @@ final class HumanPopulationStateCodec {
                     ResidentMigrationStatus.values()[status], reason);
             if (migrations.put(resident, journey) != null) throw new IllegalArgumentException("duplicate resident migration journey");
         }
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations);
+        if (!hasProvisions) return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations);
+        Map<SubjectId, SettlementProvision> provisions = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input)); int cycle = FrontierWorldStateCodec.readCount(input);
+            long startedAt = input.readLong(); int required = FrontierWorldStateCodec.readCount(input); int fulfilled = FrontierWorldStateCodec.readCount(input);
+            java.util.List<SettlementRationAllocation> allocations = new java.util.ArrayList<>();
+            for (int allocation = 0, allocationCount = FrontierWorldStateCodec.readCount(input); allocation < allocationCount; allocation++) {
+                allocations.add(new SettlementRationAllocation(new SubjectId(FrontierWorldStateCodec.readString(input)), FrontierWorldStateCodec.readCount(input)));
+            }
+            int next = FrontierWorldStateCodec.readCount(input); int status = input.readUnsignedByte(); boolean active = input.readBoolean();
+            if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision status");
+            java.util.Optional<PhysicalIntentId> intent = active ? java.util.Optional.of(new PhysicalIntentId(FrontierWorldStateCodec.readString(input))) : java.util.Optional.empty();
+            SettlementProvision provision = new SettlementProvision(settlement, cycle, startedAt, required, fulfilled, allocations, next,
+                    SettlementProvisionStatus.values()[status], intent);
+            if (provisions.put(settlement, provision) != null) throw new IllegalArgumentException("duplicate settlement provision");
+        }
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions);
     }
 
     private static ResidentMigrationBlockReason readBlockReason(DataInputStream input) throws IOException {

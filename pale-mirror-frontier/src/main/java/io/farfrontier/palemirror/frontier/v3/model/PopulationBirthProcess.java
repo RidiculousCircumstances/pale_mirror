@@ -130,7 +130,7 @@ final class PopulationBirthProcess {
     private static Optional<ExactItemStack> food(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind())
-                && item.count() == 64 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
+                && item.count() >= 1 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                 && state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE).findFirst();
     }
 

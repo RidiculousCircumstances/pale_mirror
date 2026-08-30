@@ -173,6 +173,11 @@ public final class FrontierV3ResourceSiteGameTests {
         site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
     private static void prepareGrayboxBaseline(ServerLevel level, ResourceSite site) {
+        // Keep the graybox COLD-projection fixture subject to the same exact-chunk
+        // setup as the ordinary baseline. An 8x8 field can cross the random
+        // 1x1 GameTest template boundary; this test-only admission load prevents
+        // an unavailable neighbouring cell from masquerading as player/world drift.
+        site.managedSlots().forEach(slot -> level.getChunkAt(minecraft(slot)));
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(position, Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), 3); });
         site.irrigationSlots().forEach(irrigation -> { BlockPos position = minecraft(irrigation); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);

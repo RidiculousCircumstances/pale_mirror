@@ -27,7 +27,7 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import java.util.Comparator;
 import java.util.Optional;
 
-/** Removes one whole identity-tagged canonical stack only after durable admission and loaded-world inspection. */
+/** Removes one exact identity-tagged count only after durable admission and loaded-world inspection. */
 final class FrontierV3ExactItemConsumptionExecutor {
     private FrontierV3ExactItemConsumptionExecutor() { }
 
@@ -54,11 +54,15 @@ final class FrontierV3ExactItemConsumptionExecutor {
     static boolean consume(ChestBlockEntity chest, Target target) {
         ItemStack stack = chest.getItem(target.slot());
         if (!FrontierV3CargoHandoffExecutor.exactMatch(stack, target.item())) return false;
-        chest.setItem(target.slot(), ItemStack.EMPTY); chest.setChanged(); return true;
+        stack.shrink(target.count()); chest.setItem(target.slot(), stack); chest.setChanged(); return true;
     }
 
-    /** Restart predicate: an empty exact slot is the only successful full-stack postcondition. */
-    static boolean consumed(ChestBlockEntity chest, Target target) { return chest.getItem(target.slot()).isEmpty(); }
+    /** Restart predicate: the same identity tag with exactly the expected remainder is the only success. */
+    static boolean consumed(ChestBlockEntity chest, Target target) {
+        ItemStack stack = chest.getItem(target.slot()); int remainder = target.item().count() - target.count();
+        return remainder == 0 ? stack.isEmpty() : FrontierV3CargoHandoffExecutor.exactMatch(stack, new ExactItemStack(
+                target.item().id(), target.item().economicOwnerId(), target.item().itemKind(), remainder, target.item().custody()));
+    }
 
     private static void inspectRunning(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target, ChestBlockEntity chest) {
         if (consumed(chest, target)) confirm(runtime, intent, target);
@@ -67,14 +71,14 @@ final class FrontierV3ExactItemConsumptionExecutor {
 
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         ExactItemConsumedObservation observation = new ExactItemConsumedObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
-                intent.id(), target.item().id(), target.item().count(), 0);
+                intent.id(), target.item().id(), target.item().count(), target.item().count() - target.count());
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) throw new IllegalStateException("exact consumption confirmation was rejected");
     }
 
     static Target target(FrontierWorldState state, PhysicalIntent intent) {
         try {
             ExactItemConsumptionStateSupport.Claim claim = ExactItemConsumptionStateSupport.claim(state, intent);
-            return new Target(claim.item(), claim.containerId(), claim.slot(), new BlockPos(claim.position().x(), claim.position().y(), claim.position().z()));
+            return new Target(claim.item(), claim.containerId(), claim.slot(), new BlockPos(claim.position().x(), claim.position().y(), claim.position().z()), claim.count());
         } catch (IllegalArgumentException conflict) {
             return null;
         }
@@ -91,5 +95,5 @@ final class FrontierV3ExactItemConsumptionExecutor {
         return result instanceof CommandResult.Accepted;
     }
 
-    record Target(ExactItemStack item, SubjectId containerId, int slot, BlockPos chestPosition) { }
+    record Target(ExactItemStack item, SubjectId containerId, int slot, BlockPos chestPosition, int count) { }
 }

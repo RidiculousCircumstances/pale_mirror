@@ -326,8 +326,7 @@ final class SupplyOperationProcess {
                 .orElseThrow(() -> new IllegalArgumentException("supply preparation has no matching delivery task"));
     }
     private static Optional<ExactItemStack> bread(FrontierWorldState state, Settlement settlement) {
-        SubjectId depot = FrontierWorldState.depotId(settlement.id()); return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
-                .filter(item -> item.itemKind().equals("minecraft:bread") && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)).findFirst();
+        return SettlementProvisionProcess.exportableBread(state, settlement.id());
     }
     private static boolean participantsAvailable(FrontierWorldState state, Settlement settlement) {
         return FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.HAULER).isPresent()

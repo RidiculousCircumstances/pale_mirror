@@ -133,10 +133,12 @@ never add an ad-hoc HUD toggle to a scenario.
 
 ## Frontier v3 daily and scale workflow
 
-- For a v3 materialization edit, run focused pure/Node tests and the
-  `runFrontierV3SceneGameTestServer` slice first; reserve the complete critical
-  gate for a commit or milestone. The fast slice is evidence for the changed
-  scene boundary, not permission to skip the final gate.
+- For a v3 materialization edit, run focused pure/Node tests and the smallest
+  matching named GameTest slice first (`runFrontierV3SceneGameTestServer` for
+  HOT/COLD scenes; `runFrontierV3EconomyGameTestServer` for exact items,
+  production transforms or owned boards); reserve the complete critical gate for a commit
+  or milestone. A fast slice is evidence only for its changed boundary, not
+  permission to skip the final gate.
 - Every HOT/COLD change needs both its ordinary path and a negative or recovery
   path. A test that merely observes `PREPARED` or `READY` is insufficient when a
   terminal domain result is available.
