@@ -36,6 +36,13 @@ test('native pilot may await a bounded fresh read-only diagnostic predicate', ()
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], timeoutMs: 300_001 }] }), /wait_until_diagnostic/);
 });
 
+test('native pilot recognizes the one read-only route-construction diagnostic view', () => {
+  const routeConstruction = { ...scenario, actions: [{ type: 'wait_until_diagnostic', view: 'route_construction', id: 'settlement:1',
+    expect: { status: 'ok', phase: 'BUILDING' }, timeoutMs: 30_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(routeConstruction));
+  assert.throws(() => validateScenario({ ...routeConstruction, actions: [{ ...routeConstruction.actions[0], id: '' }] }), /wait_until_diagnostic/);
+});
+
 test('native pilot has one domain wait for a confirmed exact harvest, not READY', () => {
   const harvest = { ...scenario, actions: [{ type: 'wait_until_harvest_result', siteId: 'site:1-wheat-field',
     intentId: 'intent:site-harvest-1-wheat-field-1', itemId: 'item:site-harvest-1-wheat-field-1-wheat', timeoutMs: 180_000 }], assertions: [], frames: [] };
@@ -71,6 +78,12 @@ test('chunk visits are ordinary-player travel and may be causal evidence actions
 
 test('native pilot permits the isolated HOT/COLD route-return fixture only by its named profile', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
+});
+
+test('isolated server view distance is bounded and explicit when a scenario needs a COLD chunk', () => {
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, viewDistance: 4 } }));
+  assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, viewDistance: 1 } }), /viewDistance/);
+  assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, viewDistance: 33 } }), /viewDistance/);
 });
 
 test('semantic visible checks are bounded evidence actions, not world mutations', () => {

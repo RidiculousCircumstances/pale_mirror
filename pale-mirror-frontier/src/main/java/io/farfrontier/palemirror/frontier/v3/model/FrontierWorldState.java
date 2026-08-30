@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set;
     public record FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
@@ -146,11 +146,17 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
                     && !expectedStructures.contains(intent.causeSubjectId()) && !productionJobs.containsKey(intent.causeSubjectId())
                     && !contracts.containsKey(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
-                    && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
+                    && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !routeConstructions.containsKey(intent.causeSubjectId())
+                    && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
             for (SubjectId subject : intent.subjectIds()) {
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
+                RouteConstruction routeConstruction = routeConstructions.get(intent.causeSubjectId());
+                boolean reservedRouteConstructionCargo = intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING
+                        && routeConstruction != null && routeConstruction.cargoId().isEmpty()
+                        && (subject.equals(RouteConstructionProcess.cargoId(routeConstruction))
+                        || subject.equals(RouteConstructionProcess.cargoItemId(routeConstruction)));
                 if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
@@ -159,7 +165,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
                         && !strategicPlans.routeEngagements().containsKey(subject)
                         && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))
-                        && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, subject)) {
+                        && !reservedRouteConstructionCargo && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, subject)) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }
             }
@@ -374,7 +380,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if ((current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION
                     || current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST)
                     && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return ResourceSitePhysicalIntentStateSupport.conflict(this, current, next);
-            if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
+            if ((current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
+                    || current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING)
                     && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteConstructionStateSupport.conflict(this, current, next);
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
@@ -402,6 +409,16 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION) {
             if (!(evidence instanceof RouteConstructionObservation construction)) throw new IllegalArgumentException("route construction requires construction observation evidence");
             return RouteConstructionStateSupport.complete(this, current, construction, next);
+        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) {
+            if (!(evidence instanceof RouteConstructionMaterialLoadObservation loading)) {
+                throw new IllegalArgumentException("route construction material loading requires exact pickup evidence");
+            }
+            RouteConstructionStateSupport.validateMaterialLoadingReceipt(this, current, loading);
+            next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(loading.id())));
+            Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(loading.id(), loading);
+            return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
+                    next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
             if (!(evidence instanceof SceneStrikeObservation strike)) throw new IllegalArgumentException("scene strike requires exact hit evidence");

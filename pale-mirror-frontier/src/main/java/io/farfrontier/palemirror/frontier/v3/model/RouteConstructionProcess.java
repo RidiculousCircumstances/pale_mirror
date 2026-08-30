@@ -22,6 +22,7 @@ import java.util.Optional;
 final class RouteConstructionProcess {
     private static final SubjectId SYSTEM = new SubjectId("system:route-construction");
     private static final int[] DETOUR_SPINES = {-300, -260, -220, -180, -80, -40, 40, 80, 180, 220, 260, 300};
+    private static final int[] DETOUR_LANE_OFFSETS = {60, -60, 80, -80, 36};
     private RouteConstructionProcess() { }
 
     static ScheduledAction scan(int ordinal, long dueAt) {
@@ -48,7 +49,8 @@ final class RouteConstructionProcess {
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value()) + 1;
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal, action.dueAt().ticks() + 100L)));
-        if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
+        if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
+                || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING)
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<RouteConstruction> ready = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.READY)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
@@ -59,17 +61,24 @@ final class RouteConstructionProcess {
         Optional<RouteConstruction> project = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.BUILDING)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
         if (project.isEmpty()) return List.of(next);
-        List<BlockPosition> cells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.orElseThrow().settlementId(), project.orElseThrow().waypoints());
-        BlockPosition position = cells.get(project.orElseThrow().confirmedCells());
-        Optional<ExactItemStack> material = state.inventory().items().values().stream()
-                .filter(item -> item.itemKind().equals(GrayboxMaterial.ROUTE.repairItemKind()))
-                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER)
-                        && state.inventory().surfaces().get(slot.containerId()).status() == ContainerSurfaceStatus.ACTIVE)
-                .sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
-        if (material.isEmpty()) return List.of(next);
-        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-build-" + project.orElseThrow().id().value().replace(':', '-') + "-" + project.orElseThrow().confirmedCells()),
+        RouteConstruction current = project.orElseThrow();
+        if (current.cargoId().isEmpty()) {
+            Optional<ExactItemStack> material = maintenanceMaterial(state);
+            ContainerSurface surface = state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER);
+            if (material.isEmpty() || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return List.of(next);
+            return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                    new PhysicalIntentPrepared(materialLoadingIntent(current, material.orElseThrow(), surface))), next);
+        }
+        SubjectId cargoId = current.cargoId().orElseThrow(); CargoBatch cargo = state.inventory().cargo().get(cargoId);
+        if (cargo == null || cargo.itemIds().size() != 1) return List.of(next);
+        ExactItemStack material = state.inventory().items().get(cargo.itemIds().getFirst());
+        if (material == null || !material.custody().equals(new InventoryCustody.Cargo(cargoId))
+                || !material.itemKind().equals(GrayboxMaterial.ROUTE.repairItemKind())) return List.of(next);
+        List<BlockPosition> cells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), current.settlementId(), current.waypoints());
+        BlockPosition position = cells.get(current.confirmedCells());
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-build-" + current.id().value().replace(':', '-') + "-" + current.confirmedCells()),
                 PhysicalIntentKind.ROUTE_CONSTRUCTION, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
-                List.of(FrontierRouteNetwork.OWNER, project.orElseThrow().id(), material.orElseThrow().id()),
+                List.of(FrontierRouteNetwork.OWNER, current.id(), cargoId, material.id()),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
                 PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED);
         return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new PhysicalIntentPrepared(intent)), next);
@@ -83,15 +92,42 @@ final class RouteConstructionProcess {
     private static Optional<RouteConstruction> candidate(FrontierWorldState state, Settlement settlement) {
         List<BlockPosition> current = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
         BlockPosition origin = current.getFirst(), destination = current.getLast();
-        BlockPosition detourEgress = origin.offset(-36, 0, 0), detourLane = detourEgress.offset(0, 0, 36);
-        for (int spineX : DETOUR_SPINES) {
-            List<BlockPosition> route = List.of(origin, detourEgress, detourLane, new BlockPosition(spineX, detourLane.y(), detourLane.z()),
-                    new BlockPosition(spineX, destination.y(), destination.z()), destination);
-            if (accepts(state, settlement.id(), route)) {
-                return Optional.of(new RouteConstruction(projectId(settlement.id(), state), settlement.id(), route, 0, RouteConstructionStatus.BUILDING));
+        BlockPosition detourEgress = origin.offset(-36, 0, 0);
+        for (int laneOffset : DETOUR_LANE_OFFSETS) {
+            BlockPosition detourLane = detourEgress.offset(0, 0, laneOffset);
+            for (int spineX : DETOUR_SPINES) {
+                List<BlockPosition> route = List.of(origin, detourEgress, detourLane, new BlockPosition(spineX, detourLane.y(), detourLane.z()),
+                        new BlockPosition(spineX, destination.y(), destination.z()), destination);
+                if (accepts(state, settlement.id(), route)) {
+                    return Optional.of(new RouteConstruction(projectId(settlement.id(), state), settlement.id(), route, 0, RouteConstructionStatus.BUILDING));
+                }
             }
         }
         return Optional.empty();
+    }
+
+    private static Optional<ExactItemStack> maintenanceMaterial(FrontierWorldState state) {
+        return state.inventory().items().values().stream().filter(item -> item.itemKind().equals(GrayboxMaterial.ROUTE.repairItemKind()))
+                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER))
+                .sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
+    }
+
+    private static PhysicalIntent materialLoadingIntent(RouteConstruction project, ExactItemStack material, ContainerSurface surface) {
+        SubjectId cargo = cargoId(project); BlockPosition position = surface.position();
+        // A project consumes a new exact unit for every cell.  Completed intents remain
+        // durable audit evidence, so the pickup identity must be scoped to that cell rather
+        // than reused when the next unit is requested after a restart.
+        return new PhysicalIntent(new PhysicalIntentId("intent:route-material-load-" + project.id().value().replace(':', '-') + "-" + project.confirmedCells()),
+                PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, project.id(),
+                List.of(FrontierRouteNetwork.OWNER, project.id(), cargo, cargoItemId(project), material.id()),
+                new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
+                PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED);
+    }
+    static SubjectId cargoId(RouteConstruction project) {
+        return new SubjectId("cargo:route-build-" + project.id().value().substring("construction:".length()) + "-" + project.confirmedCells());
+    }
+    static SubjectId cargoItemId(RouteConstruction project) {
+        return new SubjectId("item:route-build-" + project.id().value().substring("construction:".length()) + "-" + project.confirmedCells());
     }
 
     private static boolean accepts(FrontierWorldState state, SubjectId settlementId, List<BlockPosition> route) {
@@ -119,7 +155,7 @@ final class RouteConstructionProcess {
 
     static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         if (!subject.equals(FrontierRouteNetwork.OWNER) || intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION
-                || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER) || intent.subjectIds().size() != 3
+                || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER) || intent.subjectIds().size() != 4
                 || !intent.subjectIds().contains(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction intent has an invalid owner");
         if (state.physicalIntents().values().stream().anyMatch(existing -> existing.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
                 && (existing.status() == PhysicalIntentStatus.PREPARED || existing.status() == PhysicalIntentStatus.RUNNING))) throw new IllegalArgumentException("only one route construction cell may be active");
@@ -132,6 +168,21 @@ final class RouteConstructionProcess {
         StrategicTask task = constructionTask(state, project.settlementId(), StrategicTaskStatus.ACTIVE);
         ProposedEvent physical = new ProposedEvent(FrontierRouteNetwork.OWNER, transition);
         return transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART ? List.of(physical, transition(task, StrategicTaskStatus.BLOCKED)) : List.of(physical);
+    }
+    static List<ProposedEvent> planMaterialLoadingTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent);
+        RouteConstruction project = state.routeConstructions().get(intent.causeSubjectId());
+        if (project == null) throw new IllegalArgumentException("route construction material loading has no project");
+        StrategicTask task = constructionTask(state, project.settlementId(), StrategicTaskStatus.ACTIVE);
+        ProposedEvent physical = new ProposedEvent(FrontierRouteNetwork.OWNER, transition);
+        if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return List.of(physical, transition(task, StrategicTaskStatus.BLOCKED));
+        if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(physical);
+        if (!(transition.observation().orElseThrow() instanceof RouteConstructionMaterialLoadObservation observation)) {
+            throw new IllegalArgumentException("route construction material loading requires its exact observation");
+        }
+        RouteConstructionStateSupport.validateMaterialLoadingReceipt(state, intent, observation);
+        return List.of(physical, new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new RouteConstructionMaterialLoaded(project.id(), new CargoBatch(observation.cargoId(), FrontierRouteNetwork.OWNER, List.of(observation.cargoItemId())))));
     }
     static StrategicTask constructionTask(FrontierWorldState state, SubjectId settlementId, StrategicTaskStatus status) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId)

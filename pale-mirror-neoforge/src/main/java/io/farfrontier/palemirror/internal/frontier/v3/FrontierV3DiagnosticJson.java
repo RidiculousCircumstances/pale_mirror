@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
+import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 
 import java.util.Objects;
@@ -69,6 +70,7 @@ final class FrontierV3DiagnosticJson {
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state);
+            case "route_construction" -> routeConstruction(id, checkpoint, state);
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
             case "scene" -> scene(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness);
@@ -196,6 +198,21 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
                 + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]}";
+    }
+
+    /** One settlement's current replacement-route project; it never discovers or advances one. */
+    private static String routeConstruction(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId settlement = subject(id).orElse(null);
+        RouteConstruction project = settlement == null ? null : state.routeConstructions().values().stream()
+                .filter(value -> value.settlementId().equals(settlement)).sorted(java.util.Comparator.comparing(RouteConstruction::id))
+                .findFirst().orElse(null);
+        if (project == null) return unavailable("route_construction", id, checkpoint, "not_found");
+        java.util.List<BlockPosition> cells = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.routeConstructionCells(state, project);
+        String next = project.confirmedCells() == cells.size() ? "null" : position(cells.get(project.confirmedCells()));
+        return base("route_construction", id, checkpoint) + ",\"status\":\"ok\",\"project\":\"" + quote(project.id().value())
+                + "\",\"phase\":\"" + project.status() + "\",\"confirmedCells\":" + project.confirmedCells()
+                + ",\"requiredCells\":" + cells.size() + ",\"cargo\":\"" + quote(project.cargoId().map(SubjectId::value).orElse(""))
+                + "\",\"cargoPresent\":" + project.cargoId().isPresent() + ",\"nextCell\":" + next + "}";
     }
 
     /** One exact durable world-change fact, keyed by a canonical x,y,z cell rather than a player identity. */

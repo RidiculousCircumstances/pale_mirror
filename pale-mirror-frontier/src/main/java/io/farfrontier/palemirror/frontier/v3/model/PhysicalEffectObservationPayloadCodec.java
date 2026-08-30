@@ -42,6 +42,11 @@ final class PhysicalEffectObservationPayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(output, harvest.output().economicOwnerId()); FrontierWorldPayloadCodecs.writeString(output, harvest.output().itemKind());
             output.writeByte(harvest.output().count()); FrontierWorldStateCodec.writeCustody(output, harvest.output().custody()); output.writeByte(harvest.harvestedCropSlots());
         }
+        else if (observation instanceof RouteConstructionMaterialLoadObservation loading) {
+            output.writeByte(12); ids(output, loading); FrontierWorldPayloadCodecs.writeSubject(output, loading.projectId());
+            FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, loading.sourceItemId());
+            FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoItemId()); output.writeByte(loading.sourceRemainingCount());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -60,6 +65,10 @@ final class PhysicalEffectObservationPayloadCodec {
             case 9 -> new CargoLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
             case 10 -> harvest(input);
+            case 11 -> throw new IllegalArgumentException("legacy unsplit route-material receipt is not recoverable");
+            case 12 -> new RouteConstructionMaterialLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

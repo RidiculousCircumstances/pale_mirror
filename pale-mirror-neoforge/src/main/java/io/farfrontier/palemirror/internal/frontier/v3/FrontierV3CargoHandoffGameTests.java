@@ -175,25 +175,39 @@ public final class FrontierV3CargoHandoffGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-route-construction", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void inactiveRouteConstructionConsumesOneExactConcreteAndNeverAdoptsWorldGeometry(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0)); BlockPos chestPosition = target.east(2);
-        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
-        ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
-        ExactItemStack concrete = new ExactItemStack(new SubjectId("item:construction-game-test"), new SubjectId("route:frontier-network"), "minecraft:gray_concrete", 2,
-                new InventoryCustody.ContainerSlot(new SubjectId("container:construction-game-test"), 0));
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(concrete));
+    public static void inactiveRouteConstructionUsesPriorCargoAndNeverAdoptsWorldGeometry(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0));
         GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        helper.assertTrue(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete),
-                "one fresh inactive corridor cell consumes one exact supplied concrete item");
-        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && chest.getItem(0).getCount() == 1 && ledger.claim(target) != null,
-                "the exact live block, stack and newly claimed route provenance must converge together");
+        helper.assertTrue(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, target, cell),
+                "one fresh inactive corridor cell accepts the separately-confirmed COLD cargo work");
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && ledger.claim(target) != null,
+                "the exact live block and newly claimed route provenance must converge without a remote chest");
         BlockPos foreign = target.south(); level.setBlock(foreign, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, foreign, grayboxCell(foreign, "route:frontier-network",
-                GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE), chest, 0, concrete),
+                GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE)),
                 "construction must never adopt or overwrite a player/world block");
-        helper.assertTrue(level.getBlockState(foreign).is(Blocks.DIAMOND_BLOCK) && chest.getItem(0).getCount() == 1,
-                "a rejected foreign cell leaves both world geometry and exact maintenance stock untouched");
+        helper.assertTrue(level.getBlockState(foreign).is(Blocks.DIAMOND_BLOCK),
+                "a rejected foreign cell leaves player/world geometry untouched");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-route-construction", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void routeConstructionExtractsOneExactUnitAndLeavesThePhysicalRemainder(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos chestPosition = helper.absolutePos(new BlockPos(25, 8, 0));
+        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
+        ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
+        ExactItemStack source = new ExactItemStack(new SubjectId("item:construction-extract-test"), new SubjectId("route:frontier-network"),
+                "minecraft:gray_concrete", 2, new InventoryCustody.ContainerSlot(new SubjectId("container:construction-extract-test"), 0));
+        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(source));
+        helper.assertTrue(FrontierV3RouteConstructionExecutor.extractOne(chest, 0, source),
+                "one loaded physical maintenance unit must become the exact route-work extraction");
+        helper.assertTrue(chest.getItem(0).getCount() == 1
+                        && FrontierV3CargoHandoffExecutor.itemId(chest.getItem(0)).equals(java.util.Optional.of(source.id())),
+                "the remaining real stack keeps its original exact identity and no surplus is hidden in COLD cargo");
+        helper.assertFalse(FrontierV3RouteConstructionExecutor.extractOne(chest, 0, source),
+                "a stale pre-extraction count cannot consume the remainder a second time");
+        helper.assertValueEqual(chest.getItem(0).getCount(), 1, "a rejected stale extraction leaves the real remainder untouched");
         helper.succeed();
     }
 

@@ -61,6 +61,7 @@ def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername'
 def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
 def frontierV3PilotRunId = providers.gradleProperty('frontierV3PilotRunId').orElse('').get()
 def frontierV3PilotProfile = providers.gradleProperty('frontierV3PilotProfile').orElse('world').get()
+def frontierV3PilotViewDistance = providers.gradleProperty('frontierV3PilotViewDistance').orElse('10').get()
 def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
@@ -741,13 +742,14 @@ tasks.named('runFrontierV3PilotServer') {
         def port = frontierV3PilotPort
         def username = frontierV3PilotOperator
         if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)
+                || !(frontierV3PilotViewDistance ==~ /[2-9]|[12][0-9]|3[0-2]/)
                 || !(frontierV3PilotProfile in ['world', 'hot-scene-strike', 'hive-growth', 'scene-return'])
                 || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
-            throw new GradleException('Frontier v3 pilot world, username, port, profile or run id is invalid')
+            throw new GradleException('Frontier v3 pilot world, username, port, view distance, profile or run id is invalid')
         }
         directory.mkdirs()
         new File(directory, 'eula.txt').text = 'eula=true\n'
-        new File(directory, 'server.properties').text = "level-name=${world}\nlevel-seed=${seed}\nserver-ip=127.0.0.1\nserver-port=${port}\nonline-mode=false\nallow-flight=true\ngamemode=creative\ndifficulty=normal\nspawn-protection=0\nview-distance=10\nsimulation-distance=10\n"
+        new File(directory, 'server.properties').text = "level-name=${world}\nlevel-seed=${seed}\nserver-ip=127.0.0.1\nserver-port=${port}\nonline-mode=false\nallow-flight=true\ngamemode=creative\ndifficulty=normal\nspawn-protection=0\nview-distance=${frontierV3PilotViewDistance}\nsimulation-distance=${frontierV3PilotViewDistance}\n"
         def uuid = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(java.nio.charset.StandardCharsets.UTF_8))
         new File(directory, 'ops.json').text = '[\n  {"uuid":"' + uuid + '","name":"' + username + '","level":4,"bypassesPlayerLimit":false}\n]\n'
     }

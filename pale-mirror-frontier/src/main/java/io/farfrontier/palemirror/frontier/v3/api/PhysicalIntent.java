@@ -78,6 +78,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("cargo loading must bind contract, cargo and exact depot stack without an area radius");
                 }
             }
+            case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED || subjectIds.size() != 5) {
+                    throw new IllegalArgumentException("route construction material loading must bind route, project, cargo, cargo item and source stack without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");

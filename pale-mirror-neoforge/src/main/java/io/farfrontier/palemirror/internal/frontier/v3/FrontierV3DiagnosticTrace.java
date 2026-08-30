@@ -27,6 +27,12 @@ final class FrontierV3DiagnosticTrace {
         return "physical-delta:" + position.x() + "," + position.y() + "," + position.z();
     }
 
+    /** One work-order trace, shared by its observed pickup and later physical cell placement. */
+    static String routeConstructionCorrelation(SubjectId projectId) {
+        Objects.requireNonNull(projectId, "route construction project");
+        return "route-construction:" + projectId.value();
+    }
+
     static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(correlation, "correlation");
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(subject, "subject"); Objects.requireNonNull(result, "result");

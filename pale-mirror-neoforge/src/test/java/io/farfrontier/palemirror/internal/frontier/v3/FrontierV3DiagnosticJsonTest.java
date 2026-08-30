@@ -10,6 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
+import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
+import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -96,6 +98,12 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void derivesOneStableTraceCorrelationForTheCompleteRouteRepairWorkOrder() {
+        assertTrue(FrontierV3DiagnosticTrace.routeConstructionCorrelation(new SubjectId("construction:route-reroute-settlement-1--380-64--304"))
+                .equals("route-construction:construction:route-reroute-settlement-1--380-64--304"));
+    }
+
+    @Test
     void exposesOneExactPhysicalDeltaWithoutLeakingThePlayerIdentity(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-delta-test"), 95L),
@@ -146,5 +154,35 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(nonHarvest.contains("\"status\":\"not_found\""));
         assertFalse(nonHarvest.contains("physicalReadiness"));
+    }
+
+    @Test
+    void exposesOneSettlementRouteRepairWithoutCreatingOrChangingIt(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-route-construction-test"), 96L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState baseline = runtime.decodedState().orElseThrow();
+        SubjectId settlement = baseline.bootstrap().settlements().getFirst().id();
+        java.util.List<BlockPosition> waypoints = baseline.routeTopology().supplyWaypoints(baseline.bootstrap(), settlement);
+        RouteConstruction project = new RouteConstruction(new SubjectId("construction:diagnostic-route"), settlement,
+                java.util.List.of(waypoints.get(0), waypoints.get(1), waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
+                        waypoints.get(2), waypoints.get(3), waypoints.get(4), waypoints.get(5), waypoints.get(6)), 0, RouteConstructionStatus.BUILDING);
+        FrontierWorldState changed = withRouteConstruction(baseline, project);
+
+        String route = FrontierV3DiagnosticJson.render("route_construction", settlement.value(), checkpoint, changed, Optional.empty());
+        String missing = FrontierV3DiagnosticJson.render("route_construction", "settlement:missing", checkpoint, changed, Optional.empty());
+
+        assertTrue(route.contains("\"status\":\"ok\"") && route.contains("\"project\":\"construction:diagnostic-route\""));
+        assertTrue(route.contains("\"phase\":\"BUILDING\"") && route.contains("\"cargoPresent\":false") && route.contains("\"nextCell\":{"));
+        assertTrue(missing.contains("\"status\":\"not_found\""));
+        assertTrue(changed.routeConstructions().get(project.id()).equals(project), "read-only route diagnostics never advance a project");
+    }
+
+    private static FrontierWorldState withRouteConstruction(FrontierWorldState state, RouteConstruction project) {
+        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(),
+                state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
+                state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), java.util.Map.of(project.id(), project),
+                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
 }

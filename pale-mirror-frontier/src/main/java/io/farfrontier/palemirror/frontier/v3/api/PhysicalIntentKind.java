@@ -17,5 +17,7 @@ public enum PhysicalIntentKind {
     /** One exact owned input stack becomes one named exact output stack in its physical slot. */
     PRODUCTION_TRANSFORMATION,
     /** One exact active-depot stack leaves its physical slot before becoming a named cargo batch. */
-    CARGO_LOADING
+    CARGO_LOADING,
+    /** One exact maintenance stack leaves its owned chest before becoming a COLD route-work cargo. */
+    ROUTE_CONSTRUCTION_MATERIAL_LOADING
 }

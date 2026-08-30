@@ -30,8 +30,9 @@ class RouteConstructionTaskProcessTest {
                         "minecraft:gray_concrete", 1, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
         PhysicalIntentPrepared prepared = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        state = RouteConstructionProcess.reducePrepared(state, FrontierRouteNetwork.OWNER, prepared.intent());
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> unknown = RouteConstructionProcess.planTransition(state, prepared.intent(),
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, prepared.intent().kind());
+        state = state.preparePhysicalIntent(prepared.intent());
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> unknown = RouteConstructionProcess.planMaterialLoadingTransition(state, prepared.intent(),
                 new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
         assertTrue(unknown.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
                 && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.BLOCKED));

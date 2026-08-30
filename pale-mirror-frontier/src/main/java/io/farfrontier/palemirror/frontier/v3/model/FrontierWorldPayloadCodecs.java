@@ -19,7 +19,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
                 ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.conflictObserved(),
-                RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
+                RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
                 RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
                 StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }
     private static final class InfectionCodec implements PayloadCodec {

@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -54,11 +55,22 @@ public final class FrontierReadabilityPlan {
         boolean sceneConflict = state.sceneLeases().values().stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.CONFLICT);
         boolean caravan = state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE);
         FrontierObjectBoard.Tone tone = damaged || sceneConflict ? FrontierObjectBoard.Tone.WARNING : FrontierObjectBoard.Tone.SETTLEMENT;
-        String stateText = damaged ? "ROUTE DAMAGE · PATROL NEEDED" : sceneConflict ? "SCENE BLOCKED · KEEP CLEAR"
-                : caravan ? "CARAVAN EN ROUTE" : "ACTIVE · 12 SETTLEMENTS";
+        RouteConstruction construction = state.routeConstructions().values().stream()
+                .sorted(Comparator.comparing(RouteConstruction::id)).findFirst().orElse(null);
+        String stateText = construction == null
+                ? damaged ? "ROUTE DAMAGE · PATROL NEEDED" : sceneConflict ? "SCENE BLOCKED · KEEP CLEAR"
+                : caravan ? "CARAVAN EN ROUTE" : "ACTIVE · 12 SETTLEMENTS"
+                : routeConstructionText(state, construction);
         add(values, new FrontierObjectBoard(FrontierRouteNetwork.OWNER,
                 FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3), tone,
                 "FRONTIER ROUTES\nNETWORK\n" + stateText));
+    }
+
+    private static String routeConstructionText(FrontierWorldState state, RouteConstruction construction) {
+        int total = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), construction.settlementId(), construction.waypoints()).size();
+        if (construction.status() == RouteConstructionStatus.CONFLICT) return "REPAIR BLOCKED · INSPECT ROUTE";
+        if (construction.cargoId().isEmpty()) return "ROUTE REPAIR · MATERIALS NEEDED";
+        return "BYPASS BUILDING · " + construction.confirmedCells() + "/" + total;
     }
 
     private static BlockPosition structureBoardPosition(SettlementStructure structure, StructureCondition condition) {

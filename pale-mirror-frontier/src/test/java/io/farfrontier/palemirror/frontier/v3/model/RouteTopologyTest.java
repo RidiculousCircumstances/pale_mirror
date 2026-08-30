@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -89,19 +90,43 @@ class RouteTopologyTest {
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(materialId, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 2, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
         var events = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 900L));
-        PhysicalIntentPrepared prepared = events.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
+        PhysicalIntentPrepared loading = events.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        assertTrue(prepared.intent().subjectIds().contains(project.id()));
-        FrontierWorldState conflicted = RouteConstructionProcess.reducePrepared(state, FrontierRouteNetwork.OWNER, prepared.intent())
-                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        assertEquals(PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, loading.intent().kind());
+        assertTrue(loading.intent().subjectIds().contains(project.id()));
+        FrontierWorldState conflicted = state.preparePhysicalIntent(loading.intent())
+                .transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
         assertEquals(RouteConstructionStatus.CONFLICT, conflicted.routeConstructions().get(project.id()).status());
+        state = state.preparePhysicalIntent(loading.intent())
+                .transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        SubjectId cargoId = loading.intent().subjectIds().get(2), cargoItemId = loading.intent().subjectIds().get(3), sourceItemId = loading.intent().subjectIds().get(4);
+        state = state.transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(new RouteConstructionMaterialLoadObservation(
+                new PhysicalObservationId("observation:route-work-load"), loading.intent().id(), project.id(), cargoId, sourceItemId, cargoItemId, 1)));
+        state = RouteConstructionStateSupport.reduceMaterialLoaded(state, FrontierRouteNetwork.OWNER,
+                new RouteConstructionMaterialLoaded(project.id(), new CargoBatch(cargoId, FrontierRouteNetwork.OWNER, List.of(cargoItemId))));
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
+                "a restart must retain the project-to-COLD-cargo binding before a cell is built");
+        PhysicalIntentPrepared prepared = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 1_000L)).stream()
+                .map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        assertEquals(PhysicalIntentKind.ROUTE_CONSTRUCTION, prepared.intent().kind());
         state = RouteConstructionProcess.reducePrepared(state, FrontierRouteNetwork.OWNER, prepared.intent())
                 .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         BlockPosition position = FrontierGrayboxPlan.routeConstructionCells(state, project).getFirst();
         state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(new RouteConstructionObservation(
-                new PhysicalObservationId("observation:route-work"), prepared.intent().id(), project.id(), materialId, position)));
+                new PhysicalObservationId("observation:route-work"), prepared.intent().id(), project.id(), cargoItemId, position)));
         assertEquals(1, state.routeConstructions().get(project.id()).confirmedCells());
         assertEquals(1, state.inventory().items().get(materialId).count());
+        assertTrue(state.routeConstructions().get(project.id()).cargoId().isEmpty(),
+                "one completed cell must retire its single-unit cargo rather than strand a hidden remainder");
+        assertTrue(!state.inventory().cargo().containsKey(cargoId) && !state.inventory().items().containsKey(cargoItemId),
+                "the consumed cargo identity must not retain stock after its one physical block is placed");
+        PhysicalIntentPrepared nextLoading = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(3, 1_100L)).stream()
+                .map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        assertEquals(PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, nextLoading.intent().kind());
+        assertEquals(materialId, nextLoading.intent().subjectIds().get(4), "the remainder stays in the original maintenance stack");
+        assertTrue(!nextLoading.intent().subjectIds().get(2).equals(cargoId), "each extracted physical unit receives a fresh cargo identity");
+        assertTrue(!nextLoading.intent().id().equals(loading.intent().id()),
+                "a later material pickup must never reuse the completed intent identity");
         assertEquals(RouteTopology.initial(), state.routeTopology());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }

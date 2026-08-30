@@ -42,6 +42,10 @@ export function validateScenario(scenario) {
       || !Number.isInteger(scenario.isolation.seed) || scenario.isolation.seed < -2_147_483_648 || scenario.isolation.seed > 2_147_483_647)) {
     throw new Error('isolation must declare disposable_lite with a signed 32-bit seed');
   }
+  if (scenario.server?.viewDistance !== undefined && (!Number.isInteger(scenario.server.viewDistance)
+      || scenario.server.viewDistance < 2 || scenario.server.viewDistance > 32)) {
+    throw new Error('server.viewDistance must be an integer 2..32');
+  }
   if (scenario.restart !== undefined && (!scenario.restart || !Number.isInteger(scenario.restart.afterAction)
       || scenario.restart.afterAction < 1 || scenario.restart.afterAction >= (scenario.actions ?? []).length
       || !['graceful', 'abrupt'].includes(scenario.restart.mode)
@@ -132,7 +136,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'physical_delta', 'scene', 'intent', 'trace'].includes(assertion.view)
+        || !['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace'].includes(assertion.view)
         || typeof assertion.id !== 'string' || (assertion.view !== 'summary' && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
@@ -184,7 +188,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'physical_delta', 'scene', 'intent', 'trace'].includes(value.view)
+  return ['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace'].includes(value.view)
     && typeof value.id === 'string' && (value.view === 'summary' || Boolean(value.id));
 }
 

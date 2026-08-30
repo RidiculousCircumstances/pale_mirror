@@ -19,9 +19,10 @@ final class RouteConstructionStateCodec {
             FrontierWorldStateCodec.writeString(output, project.id().value()); FrontierWorldStateCodec.writeString(output, project.settlementId().value());
             output.writeByte(project.status().ordinal()); output.writeShort(project.confirmedCells()); output.writeByte(project.waypoints().size());
             for (BlockPosition waypoint : project.waypoints()) FrontierWorldStateCodec.writePosition(output, waypoint);
+            output.writeBoolean(project.cargoId().isPresent()); if (project.cargoId().isPresent()) FrontierWorldStateCodec.writeString(output, project.cargoId().orElseThrow().value());
         }
     }
-    static Map<SubjectId, RouteConstruction> read(DataInputStream input) throws IOException {
+    static Map<SubjectId, RouteConstruction> read(DataInputStream input, boolean includesCargo) throws IOException {
         int count = input.readUnsignedByte(); if (count > RouteConstructionStateSupport.MAX_CONSTRUCTIONS) throw new IllegalArgumentException("route construction count is out of bounds");
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
@@ -32,7 +33,8 @@ final class RouteConstructionStateCodec {
             }
             java.util.ArrayList<BlockPosition> waypoints = new java.util.ArrayList<>();
             for (int point = 0; point < waypointCount; point++) waypoints.add(FrontierWorldStateCodec.readPosition(input));
-            RouteConstruction project = new RouteConstruction(id, settlement, List.copyOf(waypoints), confirmed, RouteConstructionStatus.values()[status]);
+            java.util.Optional<SubjectId> cargo = includesCargo && input.readBoolean() ? java.util.Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))) : java.util.Optional.empty();
+            RouteConstruction project = new RouteConstruction(id, settlement, List.copyOf(waypoints), confirmed, RouteConstructionStatus.values()[status], cargo);
             if (projects.put(id, project) != null) throw new IllegalArgumentException("duplicate route construction id");
         }
         return Map.copyOf(projects);

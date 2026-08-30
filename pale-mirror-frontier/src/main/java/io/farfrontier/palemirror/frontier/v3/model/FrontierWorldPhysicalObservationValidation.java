@@ -39,6 +39,8 @@ final class FrontierWorldPhysicalObservationValidation {
                 ExactItemConsumptionStateSupport.validateReceipt(intent, consumed);
             } else if (observation instanceof RouteConstructionObservation construction) {
                 RouteConstructionStateSupport.validateReceipt(bootstrap, topology, constructions, intent, construction);
+            } else if (observation instanceof RouteConstructionMaterialLoadObservation loading) {
+                RouteConstructionStateSupport.validateMaterialLoadingReceiptForRecovery(inventory, constructions, intents, observations, intent, loading);
             } else if (observation instanceof ResourceSiteHarvestObservation harvest) {
                 ResourceSitePhysicalIntentStateSupport.validateHarvestReceipt(bootstrap, intent, harvest);
             } else if (observation instanceof ResourceSitePreparationObservation preparation) {

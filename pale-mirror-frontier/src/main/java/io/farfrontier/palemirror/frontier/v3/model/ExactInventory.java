@@ -157,6 +157,40 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces);
     }
 
+    /** Consumes one exact COLD cargo unit only through the owning work process. */
+    public ExactInventory consumeCargoUnit(SubjectId cargoId, SubjectId itemId) {
+        CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
+        ExactItemStack current = items.get(Objects.requireNonNull(itemId, "item id"));
+        if (batch == null || !batch.itemIds().equals(java.util.List.of(itemId)) || current == null
+                || !current.custody().equals(new InventoryCustody.Cargo(cargoId))) {
+            throw new IllegalArgumentException("construction material is not one exact work cargo");
+        }
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items); Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
+        if (current.count() == 1) { nextItems.remove(itemId); nextCargo.remove(cargoId); }
+        else nextItems.put(itemId, new ExactItemStack(current.id(), current.economicOwnerId(), current.itemKind(), current.count() - 1, current.custody()));
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces);
+    }
+
+    /** Splits one real owned-container unit into one new exact single-unit COLD cargo. */
+    public ExactInventory extractOneToCargo(SubjectId sourceItemId, CargoBatch batch, SubjectId cargoItemId) {
+        Objects.requireNonNull(batch, "cargo batch"); Objects.requireNonNull(cargoItemId, "cargo item id");
+        ExactItemStack source = items.get(Objects.requireNonNull(sourceItemId, "source item id"));
+        if (source == null || !(source.custody() instanceof InventoryCustody.ContainerSlot slot) || source.count() < 1
+                || !batch.itemIds().equals(java.util.List.of(cargoItemId)) || cargo.containsKey(batch.id()) || items.containsKey(cargoItemId)) {
+            throw new IllegalArgumentException("route construction extraction has invalid exact source or cargo identity");
+        }
+        ContainerRecord container = containers.get(slot.containerId());
+        if (container == null || !container.ownerId().equals(batch.ownerId()) || !source.economicOwnerId().equals(batch.ownerId())) {
+            throw new IllegalArgumentException("route construction extraction source is not owned by its cargo sender");
+        }
+        Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
+        if (source.count() == 1) nextItems.remove(sourceItemId);
+        else nextItems.put(sourceItemId, new ExactItemStack(source.id(), source.economicOwnerId(), source.itemKind(), source.count() - 1, source.custody()));
+        nextItems.put(cargoItemId, new ExactItemStack(cargoItemId, source.economicOwnerId(), source.itemKind(), 1, new InventoryCustody.Cargo(batch.id())));
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.put(batch.id(), batch);
+        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces);
+    }
+
     /** Stores a new exact stack only in an actual currently-free owned container slot. */
     public ExactInventory store(ExactItemStack item) {
         Objects.requireNonNull(item, "item");

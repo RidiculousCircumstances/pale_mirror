@@ -28,6 +28,7 @@ final class FrontierPhysicalIntentCommandProcess {
                 case STRUCTURAL_REPAIR -> new CommandPlan.Accepted(List.of(new ProposedEvent(
                         FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
                 case ROUTE_CONSTRUCTION -> new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition));
+                case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteConstructionProcess.planMaterialLoadingTransition(state, intent, transition));
                 case DECONTAMINATION -> new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition));
                 case RESOURCE_SITE_PREPARATION -> new CommandPlan.Accepted(
                         ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks()));
