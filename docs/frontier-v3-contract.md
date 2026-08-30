@@ -182,9 +182,12 @@ as an unowned global pool.
 Migration is an exact-person Transit journey, never a population-counter
 adjustment. A displaced resident retains their origin household and settlement
 during a bounded immutable corridor of adjacent positions, carries an exact
-cursor and owns one destination-bed reservation. COLD advances only a small
-bounded distance when no HOT or scene executor owns that body; a later HOT
-journey executor must continue the same cursor, resident identity and
+cursor and owns one destination-bed reservation. The compiler uses the visible
+route network but excludes semantic building/organ volume and every other
+living actor's canonical hand-off cell; a graybox route is a thin visible
+surface and Transit uses its adjacent clear lane. COLD advances only a small bounded distance when
+no HOT or scene executor owns that body; a later HOT journey executor must
+continue the same cursor, resident identity and
 reservation rather than create a second migration truth. Home changes only at
 the arrived cursor. Quarantine, loss of the reserved destination housing or a
 known route loss make that same journey visibly blocked; they never spawn a

@@ -17,7 +17,7 @@ import java.util.Set;
  * same axis-aligned segments into its visible route surface. There is no second hand-authored
  * route for materialization.</p>
  */
-final class FrontierRouteNetwork {
+public final class FrontierRouteNetwork {
     static final SubjectId OWNER = new SubjectId("route:frontier-network");
     static final SubjectId MAINTENANCE_CONTAINER = new SubjectId("container:frontier-route-maintenance");
 
@@ -88,6 +88,27 @@ final class FrontierRouteNetwork {
         return Set.copyOf(cells);
     }
 
+    /** True when a canonical floor cell is occupied by the one-block visible route surface. */
+    public static boolean isSurfaceCell(FrontierBootstrap bootstrap, RouteTopology topology, BlockPosition position) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(position, "route position");
+        List<Settlement> settlements = bootstrap.settlements();
+        for (int index = 0; index < settlements.size(); index++) {
+            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
+            int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
+            if (onSegment(position, new BlockPosition(anchor.x(), 64, laneZ), new BlockPosition(laneX, 64, laneZ))
+                    || onSegment(position, new BlockPosition(laneX, 64, anchor.z()), new BlockPosition(laneX, 64, laneZ))
+                    || index % 4 != 3 && onSegment(position, new BlockPosition(laneX, 64, laneZ),
+                    new BlockPosition(settlements.get(index + 1).anchor().x() + 36, 64, laneZ))
+                    || index < 8 && onSegment(position, new BlockPosition(laneX, 64, laneZ),
+                    new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36))) return true;
+        }
+        for (Settlement settlement : settlements) {
+            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
+            for (int index = 2; index < supply.size(); index++) if (onSegment(position, supply.get(index - 1), supply.get(index))) return true;
+        }
+        return false;
+    }
+
     /** Cells that a replacement must physically create before the topology may become active. */
     static List<BlockPosition> constructionCells(FrontierBootstrap bootstrap, RouteTopology active, SubjectId settlementId,
                                                  List<BlockPosition> replacement) {
@@ -143,6 +164,13 @@ final class FrontierRouteNetwork {
             cells.add(new BlockPosition(x, from.y(), z));
             if (x == to.x() && z == to.z()) return;
         }
+    }
+
+    private static boolean onSegment(BlockPosition position, BlockPosition from, BlockPosition to) {
+        if (position.y() != from.y() || from.y() != to.y()) return false;
+        if (from.x() == to.x()) return position.x() == from.x() && position.z() >= Math.min(from.z(), to.z()) && position.z() <= Math.max(from.z(), to.z());
+        if (from.z() == to.z()) return position.z() == from.z() && position.x() >= Math.min(from.x(), to.x()) && position.x() <= Math.max(from.x(), to.x());
+        throw new IllegalArgumentException("route segment must be axis aligned");
     }
     private static void addSegment(java.util.List<BlockPosition> cells, BlockPosition from, BlockPosition to) {
         if (from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) throw new IllegalArgumentException("route segment must be horizontal and axis aligned");

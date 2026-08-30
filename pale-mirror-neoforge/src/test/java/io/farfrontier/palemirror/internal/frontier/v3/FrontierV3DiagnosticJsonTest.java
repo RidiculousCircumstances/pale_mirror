@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStatus;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -73,12 +74,28 @@ class FrontierV3DiagnosticJsonTest {
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
         var evidence = new FrontierV3AmbientActorExecutor.AdmissionDiagnostic("BLOCKED", UUID.fromString("6e6a062d-a182-469c-9de8-2de3f3703ee1"), false,
-                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4, 65, 8));
+                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4, 65, 8), null);
 
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty(), Optional.of(evidence));
 
         assertTrue(actorJson.contains("\"physicalAdmission\":{\"status\":\"BLOCKED\""));
         assertTrue(actorJson.contains("\"placement\":{\"x\":4,\"y\":65,\"z\":8}"));
+    }
+
+    @Test
+    void exposesOneExactTransitCursorWithoutAdvancingTheJourney(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.developmentResidentTransitConfiguration(new WorldId("frontier:diagnostic-transit-test"), 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        ResidentMigrationJourney journey = state.humanPopulation().migrations().values().iterator().next();
+
+        String transit = FrontierV3DiagnosticJson.render("transit", journey.residentId().value(), checkpoint, state, Optional.empty());
+
+        assertTrue(transit.contains("\"status\":\"ok\"") && transit.contains("\"journeyStatus\":\"EN_ROUTE\""));
+        assertTrue(transit.contains("\"routeIndex\":0") && transit.contains("\"next\":{"));
+        assertTrue(runtime.decodedState().orElseThrow().equals(state), "read-only Transit diagnostics may not advance or materialize a resident");
     }
 
     @Test

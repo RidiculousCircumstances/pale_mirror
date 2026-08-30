@@ -29,6 +29,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -135,6 +136,28 @@ public final class FrontierV3AmbientActorGameTests {
                         .distanceToSqr(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 180L)) > 0.01D,
                 "a durable ambient work lease must produce a continuing cycle rather than one static target");
         farmerBody.discard(); scoutBody.discard(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-transit-motion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void controlledMotionUsesTheClearLaneBesideRouteSurfaceButNeverPassesThroughAFullWall(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, origin, 12);
+        for (int x = 1; x <= 6; x++) level.setBlock(origin.offset(x, 0, 0), Blocks.GRAY_CARPET.defaultBlockState(), 3);
+        Villager body = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create resident body");
+        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 1.5D); body.setPersistenceRequired(); body.setNoAi(true);
+        helper.assertTrue(level.addFreshEntity(body), "the controlled-motion fixture must enter the loaded world");
+        for (int tick = 0; tick < 120; tick++) FrontierV3ControlledMobMotion.moveToward(level, body,
+                new Vec3(origin.getX() + 6.5D, origin.getY(), origin.getZ() + 1.5D));
+        helper.assertTrue(body.getX() > origin.getX() + 4.0D,
+                "a resident must advance through the clear lane beside the materialized route surface");
+
+        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 1.5D);
+        for (int z = -5; z <= 5; z++) for (int y = 0; y <= 2; y++) level.setBlock(origin.offset(3, y, z), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
+        for (int tick = 0; tick < 100; tick++) FrontierV3ControlledMobMotion.moveToward(level, body,
+                new Vec3(origin.getX() + 7.5D, origin.getY(), origin.getZ() + 1.5D));
+        helper.assertTrue(body.getX() < origin.getX() + 3.0D,
+                "controlled motion may sidestep but must never cross a full materialized wall");
+        body.discard(); helper.succeed();
     }
 
     private static void prepareFloor(ServerLevel level, BlockPos position) {

@@ -18,6 +18,8 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PopulationMigrationProcessTest {
@@ -135,7 +137,70 @@ class PopulationMigrationProcessTest {
             ResidentMigrationStarted started = payload(PopulationMigrationProcess.planReview(displaced, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
             assertTrue(started.journey().route().size() <= ResidentMigrationJourney.MAX_WAYPOINTS);
             assertEquals(started.journey().route().getFirst(), displaced.actorLocations().get(started.journey().residentId()).position());
+            var graybox = FrontierGrayboxPlan.compile(displaced).cells();
+            assertTrue(started.journey().route().stream().anyMatch(position -> FrontierRouteNetwork.isSurfaceCell(displaced.bootstrap(), displaced.routeTopology(), position)),
+                    "the migration corridor must use the visible route network instead of a hidden direct line");
+            for (BlockPosition position : started.journey().route()) {
+                assertTrue(clearOfStructuralGeometry(graybox, position),
+                        () -> "migration corridor enters planned geometry at " + position);
+                assertTrue(displaced.actorLocations().entrySet().stream()
+                                .filter(entry -> !entry.getKey().equals(started.journey().residentId()))
+                                .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
+                                .noneMatch(entry -> entry.getValue().position().equals(position)),
+                        () -> "migration corridor enters another actor hand-off cell at " + position);
+            }
         }
+    }
+
+    @Test
+    void hotTransitAdvancesTheSameJourneyThenArrivesWithoutATeleportOrSecondLease() {
+        FrontierWorldState state = displaced();
+        ResidentMigrationStarted started = payload(PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
+        state = HumanPopulationStateSupport.startMigration(state, started.journey());
+        SubjectId resident = started.journey().residentId();
+        AmbientActorLease prepared = AmbientActorProcess.nextLease(state, resident, new SimInstant(101L));
+        assertEquals(AmbientGoalKind.TRANSIT, prepared.goal());
+        assertEquals(started.journey().nextColdPosition(), prepared.goalPosition());
+        state = AmbientLeaseStateProcess.prepare(state, prepared);
+        state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
+        FrontierWorldState hot = state;
+        assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigration(hot,
+                new ResidentMigrationAdvanced(resident, started.journey().nextRouteIndex())), "COLD may not race a HOT lease");
+
+        ResidentMigrationJourney before = state.humanPopulation().migration(resident);
+        ResidentTransitAdvanced first = new ResidentTransitAdvanced(resident, before.nextRouteIndex());
+        assertEquals(first, roundTrip(first));
+        state = PopulationMigrationProcess.reduceHotAdvance(state, first);
+        ResidentMigrationJourney after = state.humanPopulation().migration(resident);
+        assertEquals(before.nextRouteIndex(), after.routeIndex());
+        assertEquals(after.currentPosition(), state.actorLocations().get(resident).position());
+        assertEquals(AmbientLeaseStatus.HOT, state.ambientLeases().get(resident).status());
+        assertEquals(AmbientGoalKind.TRANSIT, state.ambientLeases().get(resident).goal());
+        assertEquals(after.nextColdPosition(), state.ambientLeases().get(resident).goalPosition());
+
+        while (state.humanPopulation().migration(resident) != null) {
+            ResidentMigrationJourney journey = state.humanPopulation().migration(resident);
+            state = PopulationMigrationProcess.reduceHotAdvance(state, new ResidentTransitAdvanced(resident, journey.nextRouteIndex()));
+        }
+        assertEquals(started.journey().destinationSettlementId(), state.humanPopulation().resident(resident).settlementId());
+        assertEquals(started.journey().route().getLast(), state.actorLocations().get(resident).position());
+        assertNotEquals(AmbientGoalKind.TRANSIT, state.ambientLeases().get(resident).goal());
+    }
+
+    @Test
+    void deathOfAHOTTransitResidentCancelsTheSameReservationInsteadOfLeavingAnOrphanedJourney() {
+        FrontierWorldState state = displaced();
+        ResidentMigrationStarted started = payload(PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
+        state = HumanPopulationStateSupport.startMigration(state, started.journey());
+        SubjectId resident = started.journey().residentId();
+        state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, resident, new SimInstant(101L)));
+        state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
+        state = AmbientLeaseStateProcess.recordDeath(state, new AmbientActorDied(resident, state.actorLocations().get(resident).position(), "test:transit-death"));
+
+        assertEquals(null, state.humanPopulation().migration(resident));
+        assertEquals(0L, state.humanPopulation().inboundHousingReservations(started.journey().destinationSettlementId()));
+        assertEquals(ActorLifeStatus.DEAD, state.actorLocations().get(resident).condition().status());
+        assertEquals(AmbientLeaseStatus.CLOSED, state.ambientLeases().get(resident).status());
     }
 
     private static FrontierWorldState displaced() {
@@ -165,5 +230,10 @@ class PopulationMigrationProcessTest {
     private static io.farfrontier.palemirror.frontier.v3.api.FrontierPayload roundTrip(io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         return codecs.decode(payload.type(), codecs.encode(payload));
+    }
+
+    private static boolean clearOfStructuralGeometry(java.util.Map<BlockPosition, GrayboxCell> cells, BlockPosition position) {
+        return java.util.stream.Stream.of(position, position.offset(0, 1, 0), position.offset(0, 2, 0))
+                .map(cells::get).filter(java.util.Objects::nonNull).noneMatch(cell -> cell.semanticPart() != GrayboxSemanticPart.ROUTE_SURFACE);
     }
 }

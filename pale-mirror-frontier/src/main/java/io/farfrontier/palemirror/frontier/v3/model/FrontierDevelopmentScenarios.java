@@ -112,6 +112,24 @@ final class FrontierDevelopmentScenarios {
         return new HealthQuarantineFixture(state, SimInstant.ZERO, List.of(StrategicObjectiveProcess.review(settlement.id(), 1, 1L)), settlement.id(), contact);
     }
 
+    /**
+     * Read-only starting condition for one real displaced resident.  The fixture creates the
+     * ordinary bounded route and its exact bed reservation, but deliberately owns no HOT body:
+     * a visiting player must cause the normal ambient executor to materialize and advance it.
+     */
+    static ResidentTransitFixture residentTransitFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        Settlement source = state.bootstrap().settlements().getFirst();
+        SubjectId housing = source.structures().stream().filter(value -> value.kind() == StructureKind.HOUSING).findFirst()
+                .orElseThrow(() -> new IllegalStateException("transit fixture needs source housing")).id();
+        state = state.withStructureCondition(housing, StructureCondition.DESTROYED);
+        ResidentMigrationStarted started = PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 1L)).stream()
+                .map(ProposedEvent::payload).filter(ResidentMigrationStarted.class::isInstance).map(ResidentMigrationStarted.class::cast)
+                .findFirst().orElseThrow(() -> new IllegalStateException("transit fixture needs one displaced resident"));
+        state = HumanPopulationStateSupport.startMigration(state, started.journey());
+        return new ResidentTransitFixture(state, SimInstant.ZERO, List.of(), started.journey());
+    }
+
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         HiveGrowthFixture {
             schedules = List.copyOf(schedules);
@@ -127,6 +145,13 @@ final class FrontierDevelopmentScenarios {
     record HealthQuarantineFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                    SubjectId settlementId, InfectionCell contact) {
         HealthQuarantineFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record ResidentTransitFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
+                                  ResidentMigrationJourney journey) {
+        ResidentTransitFixture {
             schedules = List.copyOf(schedules);
         }
     }

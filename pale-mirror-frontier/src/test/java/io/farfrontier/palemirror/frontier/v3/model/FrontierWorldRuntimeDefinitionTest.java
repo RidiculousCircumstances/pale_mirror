@@ -189,6 +189,22 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void developmentResidentTransitProfileRetainsOneRealColdJourneyWithoutAHiddenHotBody() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentResidentTransitConfiguration(
+                new WorldId("frontier:resident-transit-profile"), 91L));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+
+        assertEquals(1, state.humanPopulation().migrations().size());
+        ResidentMigrationJourney journey = state.humanPopulation().migrations().values().iterator().next();
+        assertEquals(ResidentMigrationStatus.EN_ROUTE, journey.status());
+        assertEquals(journey.currentPosition(), state.actorLocations().get(journey.residentId()).position());
+        assertEquals(1L, state.humanPopulation().inboundHousingReservations(journey.destinationSettlementId()));
+        assertEquals(null, state.ambientLeases().get(journey.residentId()),
+                "the fixture must not mint a HOT lease/body: only an ordinary loaded-world visit may do that");
+        assertTrue(engine.checkpoint().schedules().isEmpty(), "the fixture must not race the HOT evidence with a COLD timer");
+    }
+
+    @Test
     void durableObservedItemTransferMovesOnlyTheNamedCanonicalStack() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:item-custody"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

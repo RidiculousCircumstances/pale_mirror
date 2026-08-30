@@ -166,7 +166,10 @@ final class FrontierV3GrayboxExecutor {
             case HIVE_HEART -> Blocks.RED_CONCRETE.defaultBlockState();
             case HIVE_BROOD -> Blocks.PURPLE_CONCRETE.defaultBlockState();
             case HIVE_STORE -> Blocks.MAGENTA_CONCRETE.defaultBlockState();
-            case ROUTE -> Blocks.GRAY_CONCRETE.defaultBlockState();
+            // Routes are semantic paved corridors, not waist-high walls.  A thin gray surface
+            // stays plainly visible in graybox; exact Transit bodies use the compiler's adjacent
+            // clear lane, so forced HOT motion never treats the route block as pass-through air.
+            case ROUTE -> Blocks.GRAY_CARPET.defaultBlockState();
             case INFECTION -> throw new IllegalArgumentException("infection requires the dynamic overlay executor");
         };
     }

@@ -34,11 +34,18 @@ final class FrontierV3ControlledMobMotion {
         if (distance <= ARRIVAL_DISTANCE) return;
         double speed = actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED;
         Vec3 direct = new Vec3(delta.x / distance * speed, 0.0D, delta.z / distance * speed);
-        Vec3 step = List.of(direct, new Vec3(-direct.z, 0.0D, direct.x), new Vec3(direct.z, 0.0D, -direct.x)).stream()
-                .filter(candidate -> level.noCollision(actor, actor.getBoundingBox().move(candidate))).findFirst().orElse(null);
-        if (step == null) return;
-        actor.setYRot((float) Math.toDegrees(Math.atan2(-step.x, step.z)));
-        actor.yBodyRot = actor.getYRot();
-        actor.move(MoverType.SELF, step);
+        for (Vec3 step : List.of(direct, new Vec3(-direct.z, 0.0D, direct.x), new Vec3(direct.z, 0.0D, -direct.x))) {
+            Vec3 before = actor.position();
+            // Entity.move is Minecraft's collision authority.  A speculative noCollision check
+            // rejects legitimate low steps (carpets, snow layers, slabs) before that authority
+            // can apply normal step-up.  Accept only an actual horizontal displacement, so a
+            // wall still yields no path and never becomes a pass-through.
+            actor.move(MoverType.SELF, step);
+            Vec3 moved = actor.position().subtract(before);
+            if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) continue;
+            actor.setYRot((float) Math.toDegrees(Math.atan2(-moved.x, moved.z)));
+            actor.yBodyRot = actor.getYRot();
+            return;
+        }
     }
 }

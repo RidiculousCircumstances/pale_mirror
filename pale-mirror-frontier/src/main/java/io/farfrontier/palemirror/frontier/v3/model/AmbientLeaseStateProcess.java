@@ -42,6 +42,10 @@ final class AmbientLeaseStateProcess {
         ActorLocation actor = state.actorLocations().get(release.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("ambient release actor is not alive");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), release.position());
+        ResidentMigrationJourney journey = state.humanPopulation().migration(release.actorId());
+        if (journey != null && !release.position().equals(journey.currentPosition())) {
+            throw new IllegalArgumentException("HOT transit may return to COLD only at its exact canonical cursor");
+        }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(release.actorId(), new ActorLocation(release.position(), actor.condition().withHealth(release.health())));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
@@ -56,12 +60,24 @@ final class AmbientLeaseStateProcess {
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), death.position());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations()); actors.put(death.actorId(), actor.deadAt(death.position()));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(death.actorId(), lease.withStatus(AmbientLeaseStatus.CLOSED));
-        return copy(state, actors, leases);
+        return copy(state, actors, leases, state.humanPopulation().cancelMigration(death.actorId()));
+    }
+
+    static FrontierWorldState retarget(FrontierWorldState state, SubjectId actorId, AmbientGoalKind goal, BlockPosition goalPosition) {
+        AmbientActorLease current = state.ambientLeases().get(Objects.requireNonNull(actorId, "ambient actor id"));
+        if (current == null || current.status() != AmbientLeaseStatus.HOT) throw new IllegalArgumentException("only a HOT ambient lease may retarget");
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), goalPosition);
+        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(actorId, current.withGoal(goal, goalPosition));
+        return copy(state, state.actorLocations(), leases);
     }
 
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors, Map<SubjectId, AmbientActorLease> leases) {
+        return copy(state, actors, leases, state.humanPopulation());
+    }
+    private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors, Map<SubjectId, AmbientActorLease> leases,
+                                           HumanPopulation population) {
         return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), leases, state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.structureDamage(), state.physicalDeltas(), leases, state.routeConstructions(), state.routeTopology(), state.strategicPlans(), population, state.resourceSites());
     }
 }

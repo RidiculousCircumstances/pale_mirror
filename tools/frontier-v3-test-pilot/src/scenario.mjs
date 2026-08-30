@@ -32,8 +32,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'scene-return', 'health-quarantine'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, scene-return or health-quarantine');
+  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'scene-return', 'health-quarantine', 'resident-transit'].includes(scenario.server.profile)) {
+    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, scene-return, health-quarantine or resident-transit');
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
@@ -136,7 +136,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace'].includes(assertion.view)
+        || !['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace', 'transit'].includes(assertion.view)
         || typeof assertion.id !== 'string' || (assertion.view !== 'summary' && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
@@ -188,7 +188,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace'].includes(value.view)
+  return ['summary', 'site', 'settlement', 'hive', 'actor', 'item', 'container', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace', 'transit'].includes(value.view)
     && typeof value.id === 'string' && (value.view === 'summary' || Boolean(value.id));
 }
 

@@ -75,6 +75,7 @@ final class FrontierV3DiagnosticJson {
             case "scene" -> scene(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness);
             case "trace" -> trace(id, checkpoint, trace);
+            case "transit" -> transit(id, checkpoint, state);
             default -> unavailable(kind, id, checkpoint, "unknown_view");
         };
         if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {
@@ -162,11 +163,30 @@ final class FrontierV3DiagnosticJson {
                 + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
     }
 
+    /** One exact resident's durable movement corridor; diagnostics never choose, advance or unblock it. */
+    private static String transit(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        var journey = subject == null ? null : state.humanPopulation().migration(subject);
+        if (journey == null) return unavailable("transit", id, checkpoint, "not_found");
+        String next = journey.arriving() ? "null" : position(journey.nextColdPosition());
+        var lease = state.ambientLeases().get(subject);
+        String goal = lease == null ? "NONE" : lease.goal().name();
+        String goalPosition = lease == null ? "null" : position(lease.goalPosition());
+        return base("transit", id, checkpoint) + ",\"status\":\"ok\",\"journeyStatus\":\"" + journey.status()
+                + "\",\"origin\":\"" + quote(journey.originSettlementId().value()) + "\",\"destination\":\""
+                + quote(journey.destinationSettlementId().value()) + "\",\"routeIndex\":" + journey.routeIndex()
+                + ",\"routeLength\":" + journey.route().size() + ",\"current\":" + position(journey.currentPosition())
+                + ",\"next\":" + next + ",\"ambientLease\":\"" + quote(lease == null ? "NONE" : lease.status().name())
+                + "\",\"ambientGoal\":\"" + quote(goal) + "\",\"goalPosition\":" + goalPosition + "}";
+    }
+
     private static String admission(FrontierV3AmbientActorExecutor.AdmissionDiagnostic value) {
         String placement = value.placement() == null ? "null" : position(value.placement());
+        String observedPosition = value.observedPosition() == null ? "null" : position(value.observedPosition());
         String entityId = value.entityId() == null ? "" : value.entityId().toString();
         return ",\"physicalAdmission\":{\"status\":\"" + quote(value.status()) + "\",\"entityUuid\":\""
-                + quote(entityId) + "\",\"pending\":" + value.pending() + ",\"placement\":" + placement + "}";
+                + quote(entityId) + "\",\"pending\":" + value.pending() + ",\"placement\":" + placement
+                + ",\"observedPosition\":" + observedPosition + "}";
     }
 
     private static String item(String id, CheckpointImage checkpoint, FrontierWorldState state) {

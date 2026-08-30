@@ -74,14 +74,21 @@ final class PopulationMigrationProcess {
         if (!coldAvailable(state, journey.residentId())) {
             return List.of(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), STEP_INTERVAL))));
         }
-        if (journey.arriving()) {
-            Settlement destination = FrontierWorldStateSupport.settlement(state.bootstrap(), journey.destinationSettlementId());
-            int ordinal = SettlementFacilityCapability.livingResidents(state, destination.id());
-            BlockPosition handoff = FrontierSettlementActorSlots.slot(state.bootstrap().bounds(), destination, ordinal);
-            return List.of(new ProposedEvent(destination.id(), new ResidentMigrated(journey.residentId(), journey.destinationHouseholdId(), destination.id(), handoff)));
-        }
+        if (journey.arriving()) return List.of(new ProposedEvent(journey.destinationSettlementId(), new ResidentMigrated(journey.residentId(),
+                journey.destinationHouseholdId(), journey.destinationSettlementId(), journey.currentPosition())));
         return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationAdvanced(journey.residentId(), journey.nextRouteIndex())),
                 schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), STEP_INTERVAL))));
+    }
+
+    static FrontierWorldState reduceHotAdvance(FrontierWorldState state, ResidentTransitAdvanced advanced) {
+        FrontierWorldState advancedState = HumanPopulationStateSupport.advanceMigrationHot(state, advanced);
+        ResidentMigrationJourney journey = advancedState.humanPopulation().migration(advanced.residentId());
+        if (journey.arriving()) {
+            advancedState = advancedState.recordResidentMigration(new ResidentMigrated(journey.residentId(), journey.destinationHouseholdId(),
+                    journey.destinationSettlementId(), journey.currentPosition()));
+        }
+        AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(advancedState, advanced.residentId());
+        return AmbientLeaseStateProcess.retarget(advancedState, advanced.residentId(), goal.kind(), goal.position());
     }
 
     private static Optional<Candidate> candidate(FrontierWorldState state, Settlement source) {
@@ -100,33 +107,20 @@ final class PopulationMigrationProcess {
         Household household = state.humanPopulation().households().values().stream().filter(value -> value.settlementId().equals(target.id()))
                 .min(Comparator.comparingLong((Household value) -> state.humanPopulation().residents().values().stream().filter(personInHome -> personInHome.householdId().equals(value.id())).count())
                         .thenComparing(Household::id)).orElseThrow();
-        return Optional.of(new Candidate(source, journey(state, person, source, household, target)));
+        int arrivalOrdinal = Math.toIntExact(SettlementFacilityCapability.livingResidents(state, target.id())
+                + state.humanPopulation().inboundHousingReservations(target.id()));
+        BlockPosition arrival = FrontierSettlementActorSlots.slot(state.bootstrap().bounds(), target, arrivalOrdinal);
+        return Optional.of(new Candidate(source, journey(state, person, source, household, target, arrival)));
     }
 
-    private static ResidentMigrationJourney journey(FrontierWorldState state, ResidentProfile resident, Settlement source, Household household, Settlement destination) {
-        List<BlockPosition> route = new ArrayList<>(); route.add(state.actorLocations().get(resident.id()).position());
-        append(route, state.routeTopology().supplyWaypoints(state.bootstrap(), source.id()));
-        List<BlockPosition> reverseDestination = new ArrayList<>(state.routeTopology().supplyWaypoints(state.bootstrap(), destination.id()));
-        java.util.Collections.reverse(reverseDestination); append(route, reverseDestination);
+    private static ResidentMigrationJourney journey(FrontierWorldState state, ResidentProfile resident, Settlement source, Household household,
+                                                    Settlement destination, BlockPosition arrival) {
+        List<BlockPosition> route = FrontierMigrationCorridor.compile(state, resident.id(), state.actorLocations().get(resident.id()).position(), source, destination, arrival);
+        if (!FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas())) {
+            throw new IllegalArgumentException("migration corridor has a known physical obstruction");
+        }
         return new ResidentMigrationJourney(resident.id(), source.id(), household.id(), destination.id(), route, 0,
                 ResidentMigrationStatus.EN_ROUTE, Optional.empty());
-    }
-
-    private static void append(List<BlockPosition> route, List<BlockPosition> suffix) {
-        for (BlockPosition destination : suffix) appendSegment(route, destination);
-    }
-    private static void appendSegment(List<BlockPosition> route, BlockPosition destination) {
-        BlockPosition from = route.getLast();
-        if (from.y() != destination.y()) throw new IllegalArgumentException("migration route cannot change vertical datum");
-        if (from.x() != destination.x() && from.z() != destination.z()) appendAxis(route, new BlockPosition(destination.x(), from.y(), from.z()));
-        appendAxis(route, destination);
-    }
-    private static void appendAxis(List<BlockPosition> route, BlockPosition destination) {
-        BlockPosition from = route.getLast(); int stepX = Integer.compare(destination.x(), from.x()), stepZ = Integer.compare(destination.z(), from.z());
-        for (int x = from.x() + stepX, z = from.z() + stepZ; x != destination.x() + stepX || z != destination.z() + stepZ; x += stepX, z += stepZ) {
-            route.add(new BlockPosition(x, from.y(), z));
-            if (route.size() > ResidentMigrationJourney.MAX_WAYPOINTS) throw new IllegalArgumentException("migration route exceeds bounded frontier profile");
-        }
     }
 
     private static boolean displaced(FrontierWorldState state, Settlement settlement) { return overflow(state, settlement) > 0; }
@@ -140,7 +134,8 @@ final class PopulationMigrationProcess {
     private static boolean corridorPassable(FrontierWorldState state, Settlement source, Settlement destination) {
         List<BlockPosition> route = new ArrayList<>(state.routeTopology().supplyWaypoints(state.bootstrap(), source.id()));
         List<BlockPosition> reverse = new ArrayList<>(state.routeTopology().supplyWaypoints(state.bootstrap(), destination.id()));
-        java.util.Collections.reverse(reverse); append(route, reverse);
+        java.util.Collections.reverse(reverse);
+        route.addAll(reverse);
         return FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas());
     }
     private static boolean coldAvailable(FrontierWorldState state, SubjectId residentId) {

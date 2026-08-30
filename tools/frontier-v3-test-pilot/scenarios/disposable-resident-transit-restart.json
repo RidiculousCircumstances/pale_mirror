@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "disposable_resident_transit_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "resident-transit" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "routeIndex": 0, "current": { "x": -366, "y": 64, "z": -346 }, "next": { "x": -367, "y": 64, "z": -343 }, "ambientLease": "NONE" } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -366, "y": 65, "z": -346 }, "settleMs": 1000 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-1", "expect": { "status": "ok", "ambientLease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "wait", "ms": 3000 },
+    { "type": "inspect", "view": "actor", "id": "resident:1-1" },
+    { "type": "wait_until_diagnostic", "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "routeIndex": 4, "current": { "x": -367, "y": 64, "z": -343 }, "ambientLease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "actor", "id": "resident:1-1" },
+    { "type": "inspect", "view": "transit", "id": "resident:1-1" },
+    { "type": "wait_until_diagnostic", "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "routeIndex": 8, "current": { "x": -367, "y": 64, "z": -339 }, "ambientLease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "resident-transit:resident:1-1", "expect": { "status": "ok", "eventKind": "resident_transit_advanced", "subject": "resident:1-1" }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "transit", "id": "resident:1-1" },
+    { "type": "inspect", "view": "trace", "id": "resident-transit:resident:1-1" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 4,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -367, "y": 65, "z": -343 }, "settleMs": 1000 }
+    ]
+  },
+  "assertions": [
+    { "after": 4, "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "routeIndex": 4, "current": { "x": -367, "y": 64, "z": -343 }, "ambientLease": "HOT" } },
+    { "after": 10, "view": "transit", "id": "resident:1-1", "expect": { "status": "ok", "journeyStatus": "EN_ROUTE", "origin": "settlement:1", "destination": "settlement:11", "ambientLease": "HOT" } },
+    { "after": 10, "view": "trace", "id": "resident-transit:resident:1-1", "expect": { "status": "ok", "eventKind": "resident_transit_advanced", "subject": "resident:1-1" } }
+  ]
+}

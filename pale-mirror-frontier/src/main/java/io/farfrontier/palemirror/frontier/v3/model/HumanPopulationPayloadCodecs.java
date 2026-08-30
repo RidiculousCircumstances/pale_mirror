@@ -74,6 +74,18 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec transitAdvanced() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_transit_advanced"; }
+            @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                ResidentTransitAdvanced advanced = (ResidentTransitAdvanced) payload;
+                FrontierWorldPayloadCodecs.writeSubject(output, advanced.residentId()); FrontierWorldStateCodec.writeCount(output, advanced.nextRouteIndex());
+            }); }
+            @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
+                    input -> new ResidentTransitAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldStateCodec.readCount(input))); }
+        };
+    }
+
     static PayloadCodec migrationBlocked() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_migration_blocked"; }

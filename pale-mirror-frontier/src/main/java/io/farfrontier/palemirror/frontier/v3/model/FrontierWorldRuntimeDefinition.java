@@ -52,6 +52,12 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+    /** Development-only exact-person Transit fixture; it owns no materialized body or shortcut. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentResidentTransitConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.ResidentTransitFixture fixture = FrontierDevelopmentScenarios.residentTransitFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
                 RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
@@ -74,6 +80,12 @@ public final class FrontierWorldRuntimeDefinition {
         if (command.payload() instanceof ResidentMigrated migration) {
             try { state.recordResidentMigration(migration); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(migration.destinationSettlementId(), migration)));
+        }
+        if (command.payload() instanceof ResidentTransitAdvanced advanced) {
+            ResidentMigrationJourney journey = state.humanPopulation().migration(advanced.residentId());
+            if (journey == null) return rejected("HOT transit observation has no active migration journey");
+            try { PopulationMigrationProcess.reduceHotAdvance(state, advanced); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(journey.originSettlementId(), advanced)));
         }
         if (command.payload() instanceof PhysicalIntentTransition || command.payload() instanceof PhysicalIntentPrepared) {
             return FrontierPhysicalIntentCommandProcess.plan(state, command);
@@ -272,6 +284,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ResidentMigrated migration -> reduceResidentMigrated(state, event.subject(), migration);
             case ResidentMigrationStarted started -> reduceMigrationStarted(state, event.subject(), started);
             case ResidentMigrationAdvanced advanced -> reduceMigrationAdvanced(state, event.subject(), advanced);
+            case ResidentTransitAdvanced advanced -> reduceTransitAdvanced(state, event.subject(), advanced);
             case ResidentMigrationBlocked blocked -> reduceMigrationBlocked(state, event.subject(), blocked);
             case ResidentMigrationResumed resumed -> reduceMigrationResumed(state, event.subject(), resumed);
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
@@ -327,6 +340,11 @@ public final class FrontierWorldRuntimeDefinition {
         ResidentMigrationJourney journey = state.humanPopulation().migration(advanced.residentId());
         if (journey == null || !subject.equals(journey.originSettlementId())) throw new IllegalArgumentException("migration advance lacks its origin settlement owner");
         return HumanPopulationStateSupport.advanceMigration(state, advanced);
+    }
+    private static FrontierWorldState reduceTransitAdvanced(FrontierWorldState state, SubjectId subject, ResidentTransitAdvanced advanced) {
+        ResidentMigrationJourney journey = state.humanPopulation().migration(advanced.residentId());
+        if (journey == null || !subject.equals(journey.originSettlementId())) throw new IllegalArgumentException("HOT transit observation lacks its origin settlement owner");
+        return PopulationMigrationProcess.reduceHotAdvance(state, advanced);
     }
     private static FrontierWorldState reduceMigrationBlocked(FrontierWorldState state, SubjectId subject, ResidentMigrationBlocked blocked) {
         ResidentMigrationJourney journey = state.humanPopulation().migration(blocked.residentId());

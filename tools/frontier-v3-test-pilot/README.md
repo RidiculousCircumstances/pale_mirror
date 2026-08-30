@@ -15,7 +15,7 @@ world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare `"server": { "profile":
 "hot-scene-strike" }`, `"hive-growth" }`, `"scene-return" }` or
-`"health-quarantine" }`. These fail-closed development
+`"health-quarantine" }` or `"resident-transit" }`. These fail-closed development
 fixtures are available only to the named disposable pilot runner. The first
 selects a deterministic canonical HOT engagement; the second stops the real
 twelve-settlement schedule at a durable exact-biomass receipt, so an ordinary
@@ -23,7 +23,9 @@ visit to the owned chest must cause the named organ, bioform and infection
 advance. `scene-return` exposes one real COLD route continuation, while
 `health-quarantine` begins with a contaminated infirmary and requires the
 ordinary first strategic review to create the exact exposure and quarantine
-facts. The normal `world` profile remains the default. No profile gives the
+facts. `resident-transit` begins with one genuine displaced resident, a bounded
+reserved-bed corridor and no HOT body; an ordinary visit must materialize and
+advance that same journey. The normal `world` profile remains the default. No profile gives the
 pilot a canonical mutation API or force-loads chunks.
 
 Run the checked-in isolated terminal-harvest regression on the visible `:0`

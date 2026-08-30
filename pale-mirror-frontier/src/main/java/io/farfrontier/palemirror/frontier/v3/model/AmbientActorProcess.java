@@ -58,7 +58,7 @@ public final class AmbientActorProcess {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("ambient lease requires a living canonical actor");
         AmbientActorLease previous = state.ambientLeases().get(actorId);
         long revision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
-        AmbientGoal goal = goal(state, actorId);
+        AmbientGoal goal = goalFor(state, actorId);
         return new AmbientActorLease(actorId, actor.position(), instant, revision, AmbientLeaseStatus.PREPARED, goal.kind(), goal.position());
     }
 
@@ -132,7 +132,13 @@ public final class AmbientActorProcess {
         if (owner(state, actorId) == null) throw new IllegalArgumentException("ambient actor has no canonical owner");
     }
 
-    private static AmbientGoal goal(FrontierWorldState state, SubjectId actorId) {
+    static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId) {
+        ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
+        if (journey != null) {
+            BlockPosition target = journey.status() == ResidentMigrationStatus.EN_ROUTE && !journey.arriving()
+                    ? journey.nextColdPosition() : journey.currentPosition();
+            return new AmbientGoal(AmbientGoalKind.TRANSIT, target);
+        }
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) {
             Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
@@ -157,5 +163,5 @@ public final class AmbientActorProcess {
     private static SubjectId owner(FrontierWorldState state, SubjectId actorId) {
         return FrontierWorldStateSupport.actorOwner(state, actorId);
     }
-    private record AmbientGoal(AmbientGoalKind kind, BlockPosition position) { }
+    record AmbientGoal(AmbientGoalKind kind, BlockPosition position) { }
 }

@@ -43,9 +43,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             journey.route().forEach(position -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position));
             if (sceneLeases.values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
-                    && lease.members().stream().anyMatch(member -> member.actorId().equals(journey.residentId())))
-                    || ambientLeases.get(journey.residentId()) != null && ambientLeases.get(journey.residentId()).status() != AmbientLeaseStatus.CLOSED) {
-                throw new IllegalArgumentException("migration journey resident may not retain a competing physical executor");
+                    && lease.members().stream().anyMatch(member -> member.actorId().equals(journey.residentId())))) {
+                throw new IllegalArgumentException("migration journey resident may not retain a competing scene executor");
+            }
+            AmbientActorLease ambient = ambientLeases.get(journey.residentId());
+            if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED && ambient.goal() != AmbientGoalKind.TRANSIT) {
+                throw new IllegalArgumentException("migration journey resident may retain only its exact HOT transit executor");
             }
         }
         if (ambientLeases.size() > MAX_AMBIENT_LEASES) throw new IllegalArgumentException("ambient lease retention limit exceeded"); Set<SubjectId> activelyAmbientLeased = new HashSet<>();

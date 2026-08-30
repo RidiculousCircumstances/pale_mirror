@@ -26,4 +26,10 @@ public record AmbientActorLease(
     AmbientActorLease withStatus(AmbientLeaseStatus nextStatus) {
         return new AmbientActorLease(actorId, handoffPosition, handoffInstant, revision, nextStatus, goal, goalPosition);
     }
+
+    AmbientActorLease withGoal(AmbientGoalKind nextGoal, BlockPosition nextGoalPosition) {
+        if (status != AmbientLeaseStatus.HOT) throw new IllegalStateException("only a HOT ambient lease may change its goal");
+        return new AmbientActorLease(actorId, handoffPosition, handoffInstant, revision, status,
+                Objects.requireNonNull(nextGoal, "ambient goal"), Objects.requireNonNull(nextGoalPosition, "ambient goal position"));
+    }
 }

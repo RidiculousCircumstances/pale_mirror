@@ -21,7 +21,7 @@ final class HumanPopulationStateSupport {
         ResidentMigrationJourney journey = state.humanPopulation().migration(migration.residentId());
         if (journey == null || !journey.arriving() || !actor.position().equals(journey.currentPosition())
                 || !journey.destinationHouseholdId().equals(migration.destinationHouseholdId())
-                || !journey.destinationSettlementId().equals(migration.destinationSettlementId())) {
+                || !journey.destinationSettlementId().equals(migration.destinationSettlementId()) || !journey.currentPosition().equals(migration.destination())) {
             throw new IllegalArgumentException("resident migration must complete one exact arrived journey");
         }
         if (state.humanPopulation().quarantined(current.settlementId()) || state.humanPopulation().quarantined(migration.destinationSettlementId())) {
@@ -58,6 +58,19 @@ final class HumanPopulationStateSupport {
         }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(advanced.residentId(), actor.withPosition(journey.route().get(advanced.nextRouteIndex())));
+        return copy(state, actors, state.humanPopulation().advanceMigration(advanced.residentId(), advanced.nextRouteIndex()));
+    }
+
+    static FrontierWorldState advanceMigrationHot(FrontierWorldState state, ResidentTransitAdvanced advanced) {
+        ResidentMigrationJourney journey = requireJourney(state, advanced.residentId());
+        ActorLocation actor = state.actorLocations().get(advanced.residentId()); AmbientActorLease lease = state.ambientLeases().get(advanced.residentId());
+        if (journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() != journey.nextRouteIndex()
+                || actor == null || !actor.position().equals(journey.currentPosition()) || lease == null || lease.status() != AmbientLeaseStatus.HOT
+                || lease.goal() != AmbientGoalKind.TRANSIT || !lease.goalPosition().equals(journey.nextColdPosition())) {
+            throw new IllegalArgumentException("HOT transit observation lacks its exact leased segment");
+        }
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(advanced.residentId(), actor.withPosition(journey.nextColdPosition()));
         return copy(state, actors, state.humanPopulation().advanceMigration(advanced.residentId(), advanced.nextRouteIndex()));
     }
 
