@@ -1,6 +1,7 @@
 @echo off
 setlocal
-set "FF_SOURCE=http://192.168.0.100:8092"
+rem The artifact host is reachable through its stable mDNS name, not a DHCP IP.
+set "FF_SOURCE=http://rd-EliteMini-Series.local:8092"
 set "FF_TARGET=%~dp0"
 
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ^

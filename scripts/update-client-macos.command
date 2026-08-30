@@ -3,7 +3,9 @@
 # Keep this file in the root of the NeoForge instance it should update.
 set -euo pipefail
 
-readonly default_source_base='http://192.168.0.100:8092'
+# This is the mDNS name announced by the artifact host, not a DHCP address.
+# It keeps the Finder updater stable when the development host changes LAN IP.
+readonly default_source_base='http://rd-EliteMini-Series.local:8092'
 readonly source_base="${FAR_FRONTIER_SOURCE_URL:-$default_source_base}"
 readonly instance_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bootstrap_file=''

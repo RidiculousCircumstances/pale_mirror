@@ -112,7 +112,7 @@ The private host exposes a stable latest-installer endpoint. Download the tiny
 launcher **once into the root of the Minecraft instance**. On Linux:
 
 ```bash
-curl -fsSL http://192.168.0.100:8092/scripts/bootstrap-client.sh \
+curl -fsSL http://rd-EliteMini-Series.local:8092/scripts/bootstrap-client.sh \
   -o /path/to/NeoForge-instance/update-far-frontier.sh
 chmod +x /path/to/NeoForge-instance/update-far-frontier.sh
 ```
@@ -133,7 +133,7 @@ On Windows, download one `.cmd` file into the instance once:
 
 ```powershell
 Invoke-WebRequest `
-  "http://192.168.0.100:8092/scripts/update-client.cmd" `
+  "http://rd-EliteMini-Series.local:8092/scripts/update-client.cmd" `
   -OutFile "C:\path\to\NeoForge-instance\update-far-frontier.cmd"
 ```
 
@@ -144,7 +144,7 @@ installer automatically.
 On macOS, download one `.command` file into the root of the NeoForge instance:
 
 ```bash
-curl -fsSL http://192.168.0.100:8092/scripts/update-client-macos.command \
+curl -fsSL http://rd-EliteMini-Series.local:8092/scripts/update-client-macos.command \
   -o "/path/to/NeoForge-instance/update-far-frontier.command"
 chmod +x "/path/to/NeoForge-instance/update-far-frontier.command"
 ```
@@ -152,7 +152,10 @@ chmod +x "/path/to/NeoForge-instance/update-far-frontier.command"
 After that, double-click `update-far-frontier.command` in Finder for every update.
 It uses its own directory as the instance root, finds Java 21 from an installed JDK,
 `PATH`, or the official Minecraft Launcher's managed runtime, and downloads the
-current checksum-pinned installer automatically. For the official launcher the
+current checksum-pinned installer automatically. The default host uses the
+development machine's mDNS name, so a normal DHCP address change does not leave a
+client on an old Pale Mirror JAR; override it with `FAR_FRONTIER_SOURCE_URL` only
+when using another host. For the official launcher the
 usual instance root is `~/Library/Application Support/minecraft`. If macOS blocks a
 file downloaded through a browser, use Finder's **Open** context-menu once. A custom
 Java executable can be selected by setting `JAVA_BIN` before running the script.

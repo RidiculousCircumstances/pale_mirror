@@ -2,7 +2,10 @@
 # Fetch and execute the current checksum-pinned Far Frontier client installer.
 set -euo pipefail
 
-default_source_base='http://192.168.0.100:8092'
+# The artifact host is announced over mDNS by the development machine.  A
+# hostname, rather than the machine's DHCP address, lets the small updater keep
+# working after an ordinary LAN address change.
+default_source_base='http://rd-EliteMini-Series.local:8092'
 source_base=${FAR_FRONTIER_SOURCE_URL:-$default_source_base}
 forward=()
 verify_only=false

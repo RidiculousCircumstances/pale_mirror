@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "91679f80ab252645d6f83b4f70b9568f9baecc52229953b4cdf8d750cda40213"
+hash = "1db283c60e64518ce5f187f5bdb54bac28972d0da37af3b7d29b1d030c98c630"
 
 [[files]]
 file = "config/README.md"
@@ -714,11 +714,11 @@ hash = "a98bad792dc1b95a156c16f276e1313792bb526658f7c442e6f476f694178d73"
 
 [[files]]
 file = "scripts/bootstrap-client.sh"
-hash = "a3e1047307480f7543a0770c8a1b541e731cccb017c7695fa5f3a0b60230f863"
+hash = "e986175ab41833ef5c4aab7c77c5069e4574e31333ebbc46c9087ce5591b0da5"
 
 [[files]]
 file = "scripts/install-client.ps1"
-hash = "3e3d82578cc434d88cc52e2842b4f9c8a09162fa0672daf4ea3e0660894aadb2"
+hash = "85f896c733f16324f8b2f642581c150f5838c43e93da85e146499771773ed622"
 
 [[files]]
 file = "scripts/install-client.sh"
@@ -762,11 +762,11 @@ hash = "75939fe1d7abb7d487e03b16f3c9b7a29c3e6b1400fe4a7229a2d7826e7614ba"
 
 [[files]]
 file = "scripts/update-client-macos.command"
-hash = "01f34d04540360ff394c8e458572291e568f9d2442b4680b838023d61bb892dd"
+hash = "18db6d2e2f8eace4645a182d6b71cf6f82eb02898982e57d92f27b94d5b623d8"
 
 [[files]]
 file = "scripts/update-client.cmd"
-hash = "611104db71317f9672b8188f0f2fcdae7ff96ca309664c0ac918f51b952ee00c"
+hash = "13d67d3b05ac49f38f24161183e84477b2f25855daaf951a44e4d7d886ecdb3d"
 
 [[files]]
 file = "scripts/validate-structure-assets.py"

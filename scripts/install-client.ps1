@@ -294,7 +294,8 @@ function Get-HostedSha512 {
 
 
 if ([string]::IsNullOrWhiteSpace($SourceBaseUrl)) {
-    $SourceBaseUrl = "http://192.168.0.100:8092"
+    # Keep a launcher-installed client independent from the host's DHCP lease.
+    $SourceBaseUrl = "http://rd-EliteMini-Series.local:8092"
 }
 $SourceBaseUrl = $SourceBaseUrl.TrimEnd('/')
 
