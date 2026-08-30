@@ -99,6 +99,20 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
         return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId, members, positions,
                 ambientHandoffActorIds, recoveryEvidence);
     }
+    /**
+     * Advances a non-combat HOT logistics scene at the same durable grid checkpoint as its
+     * operation.  The lease keeps its identity and body UUIDs; only its current recovery anchor
+     * moves, so a return/restart never seeks the caravan at a stale segment origin.
+     */
+    public SceneLease rebaseHotOperationTravel(OperationTravel prior, OperationTravel next) {
+        Objects.requireNonNull(prior, "prior operation travel"); Objects.requireNonNull(next, "next operation travel");
+        if (status != SceneLeaseStatus.HOT || engagementId.isPresent() || !memberPositions.equals(prior.formation())
+                || !cargoPosition.equals(prior.cargoAnchor()) || !next.isExactHotAdvanceFrom(prior)) {
+            throw new IllegalArgumentException("HOT logistics scene does not match its current operation travel");
+        }
+        return new SceneLease(id, worldId, operationId, cargoId, next.currentPosition(), next.cargoAnchor(), handoffInstant, revision,
+                status, engagementId, members, next.formation(), ambientHandoffActorIds, recoveryEvidence);
+    }
     public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {
         return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId, members, memberPositions, ambientHandoffActorIds,
                 Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));

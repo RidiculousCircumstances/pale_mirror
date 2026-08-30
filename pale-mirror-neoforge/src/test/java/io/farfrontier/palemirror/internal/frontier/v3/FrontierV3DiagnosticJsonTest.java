@@ -83,6 +83,30 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesOneBoundedPhysicalAssemblyProbeWithoutChangingItsCursor(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(new WorldId("frontier:diagnostic-assembly-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        var operation = state.operations().values().iterator().next();
+        var entry = operation.activeAssembly().orElseThrow().members().entrySet().iterator().next();
+        var member = entry.getValue();
+        var readiness = new FrontierV3AmbientActorExecutor.AssemblyReadiness(java.util.List.of(
+                new FrontierV3AmbientActorExecutor.AssemblyMemberReadiness(entry.getKey(), member.currentPosition(),
+                        member.corridor().get(member.cursor() + 1), member.currentPosition(), new FrontierV3AmbientActorExecutor.ObservedPosition(4.5D, 64.0D, 8.5D), "OCCUPIED",
+                        "minecraft:gray_carpet", "minecraft:stone", "minecraft:air", "minecraft:air", java.util.List.of("minecraft:villager"))));
+
+        String operationJson = FrontierV3DiagnosticJson.render("operation", operation.id().value(), checkpoint, state, Optional.empty(),
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(readiness));
+
+        assertTrue(operationJson.contains("\"physicalAssembly\":[{\"actor\":\"" + entry.getKey().value() + "\""));
+        assertTrue(operationJson.contains("\"targetStatus\":\"OCCUPIED\"") && operationJson.contains("\"occupants\":[\"minecraft:villager\"]"));
+        assertTrue(operationJson.contains("\"observedExact\":{\"x\":4.5,\"y\":64.0,\"z\":8.5}") && operationJson.contains("\"supportBlock\":\"minecraft:stone\""));
+        assertTrue(runtime.decodedState().orElseThrow().equals(state), "a physical assembly probe may not advance or defer the operation");
+    }
+
+    @Test
     void exposesOneExactTransitCursorWithoutAdvancingTheJourney(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.developmentResidentTransitConfiguration(new WorldId("frontier:diagnostic-transit-test"), 91L),

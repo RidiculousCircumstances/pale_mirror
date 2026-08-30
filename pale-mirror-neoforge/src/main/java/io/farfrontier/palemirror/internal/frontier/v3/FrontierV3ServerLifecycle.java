@@ -125,8 +125,17 @@ public final class FrontierV3ServerLifecycle {
                 // The immutable canonical formatter remains the source of the not-found response.
             }
         }
+        java.util.Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness = java.util.Optional.empty();
+        if ("operation".equals(view)) {
+            try {
+                assemblyReadiness = FrontierV3AmbientActorExecutor.assemblyReadiness(FrontierV3PhysicalWorld.require(server), state,
+                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
+            } catch (IllegalArgumentException ignored) {
+                // The immutable canonical formatter remains the source of the not-found response.
+            }
+        }
         return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
-                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness);
+                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness, assemblyReadiness);
     }
 
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */

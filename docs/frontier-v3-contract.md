@@ -239,7 +239,10 @@ states.
   strategic route milestones remain planning facts, while its adjacent-cell
   corridor, cursor, formation positions and cargo anchor are the one movement
   truth. COLD may advance that cursor by a bounded distance; HOT accepts only
-  observed physical arrival at its next cursor. Leaving or restarting midway
+  observed physical arrival at its next cursor. A HOT acceptance atomically
+  replaces both that travel checkpoint and the lease's complete member/cargo
+  anchors with the same adjacent formation; a rejected observation changes
+  neither. Leaving or restarting midway
   retains that same cursor and formation, never teleports the convoy to a
   milestone or lets a second COLD route action run.
 - A logistics operation may begin that travel only after a durable assembly has

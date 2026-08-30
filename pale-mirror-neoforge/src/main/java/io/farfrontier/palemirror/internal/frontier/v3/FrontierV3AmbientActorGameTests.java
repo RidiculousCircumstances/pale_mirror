@@ -179,6 +179,28 @@ public final class FrontierV3AmbientActorGameTests {
         body.discard(); helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-transit-motion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void controlledMotionStepsOntoThinRouteSurfaceWithoutCrossingAFullWall(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, origin, 12);
+        for (int x = 1; x <= 6; x++) level.setBlock(origin.offset(x, 0, 0), Blocks.GRAY_CARPET.defaultBlockState(), 3);
+        Villager body = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create resident body");
+        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D); body.setPersistenceRequired(); body.setNoAi(true);
+        helper.assertTrue(level.addFreshEntity(body), "the controlled-motion fixture must enter the loaded world");
+        for (int tick = 0; tick < 160; tick++) FrontierV3ControlledMobMotion.moveToward(level, body,
+                new Vec3(origin.getX() + 6.5D, origin.getY(), origin.getZ() + 0.5D));
+        helper.assertTrue(body.getX() > origin.getX() + 4.0D,
+                "a resident must step onto the visible route surface instead of stalling before it");
+
+        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
+        for (int z = -1; z <= 1; z++) for (int y = 0; y <= 2; y++) level.setBlock(origin.offset(3, y, z), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
+        for (int tick = 0; tick < 120; tick++) FrontierV3ControlledMobMotion.moveToward(level, body,
+                new Vec3(origin.getX() + 7.5D, origin.getY(), origin.getZ() + 0.5D));
+        helper.assertTrue(body.getX() < origin.getX() + 3.0D,
+                "the low-step fallback must not climb or pass through a full graybox wall");
+        body.discard(); helper.succeed();
+    }
+
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);

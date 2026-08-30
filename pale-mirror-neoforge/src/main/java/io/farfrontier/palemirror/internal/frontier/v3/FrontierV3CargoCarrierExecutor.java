@@ -1,10 +1,10 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CargoBatch;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -12,7 +12,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MoverType;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -57,22 +56,27 @@ final class FrontierV3CargoCarrierExecutor {
         return level.addFreshEntity(cart) ? FrontierV3SceneExecutor.BodyMaterialization.COMPLETE : FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
     }
 
-    static boolean move(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+    static boolean move(ServerLevel level, FrontierWorldState state, SceneLease lease, BlockPosition destination) {
         CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
         if (cargo == null) return false;
         Entity entity = carrier(level, lease);
         if (!owned(entity, lease, items(state, cargo))) return false;
         MinecartChest cart = (MinecartChest) entity;
-        Mob hauler = lease.members().stream().filter(member -> residentHauler(state, member.actorId())).map(member -> level.getEntity(member.entityId()))
-                .filter(Mob.class::isInstance).map(Mob.class::cast).filter(Mob::isAlive).min(Comparator.comparing(Entity::getUUID)).orElse(null);
-        if (hauler == null) return false;
-        Vec3 target = hauler.position().subtract(hauler.getLookAngle().normalize().scale(1.25D));
+        Vec3 target = new Vec3(destination.x() + 0.5D, cart.getY(), destination.z() + 0.5D);
         Vec3 delta = target.subtract(cart.position()); double distance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (distance <= ARRIVAL_DISTANCE) return true;
         Vec3 step = new Vec3(delta.x / distance * SPEED, 0.0D, delta.z / distance * SPEED);
         if (!level.noCollision(cart, cart.getBoundingBox().move(step))) return true;
         cart.move(MoverType.SELF, step); cart.setDeltaMovement(Vec3.ZERO);
         return true;
+    }
+
+    static boolean atDestination(ServerLevel level, FrontierWorldState state, SceneLease lease, BlockPosition destination) {
+        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        Entity entity = carrier(level, lease);
+        if (cargo == null || !owned(entity, lease, items(state, cargo))) return false;
+        Vec3 delta = entity.position().subtract(destination.x() + 0.5D, entity.getY(), destination.z() + 0.5D);
+        return delta.x * delta.x + delta.z * delta.z <= ARRIVAL_DISTANCE * ARRIVAL_DISTANCE;
     }
 
     static boolean intact(ServerLevel level, FrontierWorldState state, SceneLease lease) {
@@ -156,8 +160,4 @@ final class FrontierV3CargoCarrierExecutor {
         return new BlockPos(lease.cargoPosition().x(), lease.cargoPosition().y(), lease.cargoPosition().z());
     }
 
-    private static boolean residentHauler(FrontierWorldState state, SubjectId actorId) {
-        return state.bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
-                .anyMatch(resident -> resident.id().equals(actorId) && resident.role() == ResidentRole.HAULER);
-    }
 }

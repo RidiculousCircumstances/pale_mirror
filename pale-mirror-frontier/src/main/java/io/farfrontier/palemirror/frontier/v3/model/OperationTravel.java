@@ -49,6 +49,17 @@ public record OperationTravel(List<BlockPosition> corridor, int cursor, Map<Subj
     public int nextHotCursor() { return Math.min(cursor + 1, corridor.size() - 1); }
     public int nextColdCursor() { return Math.min(cursor + MAX_COLD_ADVANCE, corridor.size() - 1); }
 
+    /** A loaded physical caravan may certify only its immediately adjacent cell. */
+    public boolean isExactHotAdvanceFrom(OperationTravel prior) {
+        Objects.requireNonNull(prior, "prior operation travel");
+        if (!corridor.equals(prior.corridor()) || cursor != prior.cursor() + 1 || !formation.keySet().equals(prior.formation.keySet())) return false;
+        BlockPosition from = prior.currentPosition(), to = currentPosition();
+        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z();
+        if (Math.abs(deltaX) + Math.abs(deltaY) + Math.abs(deltaZ) != 1) return false;
+        boolean formationTranslated = formation.entrySet().stream().allMatch(entry -> entry.getValue().equals(prior.formation.get(entry.getKey()).offset(deltaX, deltaY, deltaZ)));
+        return formationTranslated && cargoAnchor.equals(prior.cargoAnchor.offset(deltaX, deltaY, deltaZ));
+    }
+
     public OperationTravel advance(int nextCursor, Map<SubjectId, BlockPosition> nextFormation, BlockPosition nextCargoAnchor) {
         if (nextCursor <= cursor || nextCursor > nextColdCursor()) {
             throw new IllegalArgumentException("operation travel cursor must advance by one bounded COLD step");

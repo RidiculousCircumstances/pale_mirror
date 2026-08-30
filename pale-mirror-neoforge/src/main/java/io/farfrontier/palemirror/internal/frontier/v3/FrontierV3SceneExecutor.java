@@ -26,6 +26,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
+import io.farfrontier.palemirror.frontier.v3.model.OperationTravelAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
@@ -195,7 +196,8 @@ final class FrontierV3SceneExecutor {
                 // hand-off window is still running.
                 if (!demand) return;
                 executeLocalGoals(level, state, lease);
-                if (!FrontierV3CargoCarrierExecutor.move(level, state, lease)) { conflict(runtime, lease); return; }
+                if (!FrontierV3CargoCarrierExecutor.move(level, state, lease, cargoDestination(state, lease))) { conflict(runtime, lease); return; }
+                if (observeHotTravelAdvance(level, runtime, state, lease)) return;
                 if (combatEnabled(lease) && level.getGameTime() % 20L == 0L
                         && !executeExplosion(level, runtime, state, lease)) executeStrike(level, runtime, state, lease);
                 rememberObserved(level, runtime, state, lease);
@@ -347,6 +349,28 @@ final class FrontierV3SceneExecutor {
         for (Body actor : bodies) FrontierV3ControlledMobMotion.moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
     }
 
+    /** Commits one reached physical grid step with the operation and its current HOT lease together. */
+    private static boolean observeHotTravelAdvance(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                   FrontierWorldState state, SceneLease lease) {
+        if (lease.engagementId().isPresent()) return false;
+        RouteOperation operation = state.operations().get(lease.operationId());
+        if (operation == null || operation.activeTravel().isEmpty()) return false;
+        OperationTravel current = operation.activeTravel().orElseThrow();
+        if (current.arrived()) return false;
+        OperationTravel next = translateTravel(current, current.nextHotCursor());
+        for (SceneMember member : lease.members()) {
+            Entity entity = level.getEntity(member.entityId());
+            BlockPosition expected = next.formation().get(member.actorId());
+            if (!(entity instanceof Mob body) || !owned(entity, state, lease, member)
+                    || body.getBlockX() != expected.x() || body.getBlockZ() != expected.z()) return false;
+        }
+        if (!FrontierV3CargoCarrierExecutor.atDestination(level, state, lease, next.cargoAnchor())) return false;
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "scene-operation-travel", lease.id().value(),
+                new OperationTravelAdvanced(operation.id(), next));
+        FrontierV3DiagnosticTrace.record(level.getServer(), "operation-travel:" + operation.id().value(), "operation_travel_advanced", operation.id(), result);
+        return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+    }
+
     /** Executes one durable effect phase; HOT scheduling supplies the twenty-tick cadence. */
     static boolean executeExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                     FrontierWorldState state, SceneLease lease) {
@@ -422,6 +446,16 @@ final class FrontierV3SceneExecutor {
     }
 
     private static Vec3 localTarget(FrontierWorldState state, Body actor, List<Body> bodies, SceneLease lease) {
+        if (lease.engagementId().isEmpty()) {
+            RouteOperation operation = state.operations().get(lease.operationId());
+            if (operation != null && operation.activeTravel().isPresent()) {
+                OperationTravel travel = operation.activeTravel().orElseThrow();
+                if (!travel.arrived()) {
+                    BlockPosition target = translateTravel(travel, travel.nextHotCursor()).formation().get(actor.member().actorId());
+                    return new Vec3(target.x() + 0.5D, actor.entity().getY(), target.z() + 0.5D);
+                }
+            }
+        }
         Optional<Body> opponent = bodies.stream().filter(other -> other.bioform() != actor.bioform()).min(Comparator.comparingDouble(other -> actor.entity().distanceToSqr(other.entity())));
         if (opponent.isPresent()) {
             Vec3 delta = opponent.orElseThrow().entity().position().subtract(actor.entity().position());
@@ -436,6 +470,22 @@ final class FrontierV3SceneExecutor {
     private static long confirmedStrikeCount(FrontierWorldState state, SceneLease lease) {
         return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
                 && intent.causeSubjectId().equals(lease.operationId()) && intent.status() == PhysicalIntentStatus.CONFIRMED).count();
+    }
+
+    private static BlockPosition cargoDestination(FrontierWorldState state, SceneLease lease) {
+        RouteOperation operation = state.operations().get(lease.operationId());
+        if (lease.engagementId().isEmpty() && operation != null && operation.activeTravel().isPresent()) {
+            OperationTravel travel = operation.activeTravel().orElseThrow();
+            if (!travel.arrived()) return translateTravel(travel, travel.nextHotCursor()).cargoAnchor();
+        }
+        return lease.cargoPosition();
+    }
+
+    private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
+        BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
+        int deltaX = to.x() - from.x(), deltaZ = to.z() - from.z(); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
+        travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, 0, deltaZ)));
+        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, 0, deltaZ));
     }
 
     private static boolean residentGuard(FrontierWorldState state, SubjectId actorId) {
@@ -678,13 +728,18 @@ final class FrontierV3SceneExecutor {
                                            boolean missingCarrier) {
         submit(runtime, "scene-recovery-unresolved", lease.id().value(), new SceneLeaseRecoveryUnresolved(lease.id(), missingActors, missingCarrier));
     }
-    private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
+    private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
         CheckpointImage checkpoint = checkpoint(runtime);
-        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-'));
+        // A scene can perform a sequence of distinct durable transitions while retaining the
+        // same lease identity.  Bind the command identity to the expected canonical revision,
+        // as every other physical executor does, so a later grid checkpoint is not mistaken
+        // for a duplicate of the earlier checkpoint.
+        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("scene executor transition was rejected: " + result);
+        return result;
     }
     private static CheckpointImage checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));

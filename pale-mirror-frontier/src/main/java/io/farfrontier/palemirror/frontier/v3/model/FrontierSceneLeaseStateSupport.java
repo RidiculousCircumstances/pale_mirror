@@ -124,10 +124,18 @@ final class FrontierSceneLeaseStateSupport {
                 .collect(java.util.stream.Collectors.toSet());
         Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
         if (!expected.equals(observed) || observed.size() != positions.size()) throw new IllegalArgumentException("scene release must capture exactly its leased actors");
+        RouteOperation operation = state.operations().get(current.operationId());
+        boolean logisticsCheckpoint = current.engagementId().isEmpty() && operation != null && operation.stage() == OperationStage.EN_ROUTE
+                && operation.activeTravel().isPresent();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         for (SceneMemberPosition position : positions) {
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position.position());
-            ActorLocation currentActor = actors.get(position.actorId()); actors.put(position.actorId(), new ActorLocation(position.position(), currentActor.condition().withHealth(position.health())));
+            ActorLocation currentActor = actors.get(position.actorId());
+            // The operation cursor is the durable HOT/COLD hand-off.  A body may have been
+            // halfway through ordinary Minecraft movement when its chunk vanished, but that
+            // transient sub-cell location must not become a second strategic travel state.
+            BlockPosition canonical = logisticsCheckpoint ? operation.activeTravel().orElseThrow().formation().get(position.actorId()) : position.position();
+            actors.put(position.actorId(), new ActorLocation(canonical, currentActor.condition().withHealth(position.health())));
         }
         StrategicPlanState plans = current.engagementId().map(id -> {
             RouteEngagement engagement = state.strategicPlans().routeEngagements().get(id);

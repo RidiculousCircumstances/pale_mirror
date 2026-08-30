@@ -34,6 +34,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SettlementAccessPort;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementStructure;
 import io.farfrontier.palemirror.frontier.v3.model.StructureKind;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -46,8 +47,10 @@ import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.List;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -205,6 +208,47 @@ final class FrontierV3AmbientActorExecutor {
         BlockPos position = FrontierV3StandingPosition.aboveFloor(level, location.position());
         if (position == null) return AdmissionDiagnostic.blocked(expectedId, new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
         return AdmissionDiagnostic.ready(expectedId, new BlockPosition(position.getX(), position.getY(), position.getZ()));
+    }
+
+    /**
+     * Bounded read-only evidence for a stalled assembly cursor.  The immutable cursor remains
+     * authoritative; this only exposes the loaded physical cell that Minecraft is refusing to
+     * traverse and never probes an unloaded chunk.
+     */
+    static java.util.Optional<AssemblyReadiness> assemblyReadiness(ServerLevel level, FrontierWorldState state, SubjectId operationId) {
+        RouteOperation operation = state.operations().get(operationId);
+        if (operation == null || operation.activeAssembly().isEmpty()) return java.util.Optional.empty();
+        List<AssemblyMemberReadiness> members = operation.activeAssembly().orElseThrow().members().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).map(entry -> assemblyMemberReadiness(level, state, entry.getKey(), entry.getValue())).toList();
+        return java.util.Optional.of(new AssemblyReadiness(members));
+    }
+
+    private static AssemblyMemberReadiness assemblyMemberReadiness(ServerLevel level, FrontierWorldState state, SubjectId actorId,
+                                                                     OperationAssembly.Member member) {
+        BlockPosition next = member.arrived() ? null : member.corridor().get(member.cursor() + 1);
+        Entity body = level.getEntity(entityId(state, actorId));
+        BlockPosition observed = body == null ? null : new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+        ObservedPosition observedExact = body == null ? null : new ObservedPosition(body.getX(), body.getY(), body.getZ());
+        if (next == null) return new AssemblyMemberReadiness(actorId, member.currentPosition(), null, observed, observedExact, "ARRIVED", "", "", "", "", List.of());
+        BlockPos target = new BlockPos(next.x(), next.y(), next.z());
+        if (!level.hasChunkAt(target)) {
+            return new AssemblyMemberReadiness(actorId, member.currentPosition(), next, observed, observedExact, "UNLOADED", "", "", "", "", List.of());
+        }
+        List<String> occupants = level.getEntities((Entity) null, new AABB(target.getX(), target.getY(), target.getZ(),
+                        target.getX() + 1.0D, target.getY() + 3.0D, target.getZ() + 1.0D), entity -> entity != body).stream()
+                .sorted(java.util.Comparator.comparing(entity -> entity.getUUID().toString())).limit(4).map(FrontierV3AmbientActorExecutor::occupantKind).toList();
+        String status = !FrontierV3StandingPosition.hasExactHeadroom(level, next) ? "BLOCKED" : occupants.isEmpty() ? "CLEAR" : "OCCUPIED";
+        return new AssemblyMemberReadiness(actorId, member.currentPosition(), next, observed, observedExact, status,
+                blockKind(level, target), blockKind(level, target.below()), blockKind(level, target.above()), blockKind(level, target.above(2)), occupants);
+    }
+
+    private static String blockKind(ServerLevel level, BlockPos position) {
+        return BuiltInRegistries.BLOCK.getKey(level.getBlockState(position).getBlock()).toString();
+    }
+
+    private static String occupantKind(Entity entity) {
+        String actorId = entity.getPersistentData().getString(ACTOR_KEY);
+        return actorId.isBlank() ? BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString() : "frontier_actor";
     }
 
     /** Retains only an exact expected body during the short join-to-index hand-off. */
@@ -544,6 +588,14 @@ final class FrontierV3AmbientActorExecutor {
         private static AdmissionDiagnostic unloaded(UUID entityId) { return new AdmissionDiagnostic("UNLOADED", entityId, false, null, null); }
         private static AdmissionDiagnostic blocked(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("BLOCKED", entityId, false, placement, null); }
         private static AdmissionDiagnostic ready(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("READY", entityId, false, placement, null); }
+    }
+    record AssemblyReadiness(List<AssemblyMemberReadiness> members) {
+        AssemblyReadiness { members = List.copyOf(members); }
+    }
+    record ObservedPosition(double x, double y, double z) { }
+    record AssemblyMemberReadiness(SubjectId actorId, BlockPosition current, BlockPosition next, BlockPosition observed, ObservedPosition observedExact,
+                                   String targetStatus, String floorBlock, String supportBlock, String bodyBlock, String headBlock, List<String> occupants) {
+        AssemblyMemberReadiness { occupants = List.copyOf(occupants); }
     }
     enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT }
 }

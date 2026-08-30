@@ -20,6 +20,7 @@ final class FrontierV3ControlledMobMotion {
     private static final double RESIDENT_SPEED = 0.055D;
     private static final double BIOFORM_SPEED = 0.075D;
     private static final double ARRIVAL_DISTANCE = 0.35D;
+    private static final double THIN_SURFACE_STEP = 0.125D;
 
     private FrontierV3ControlledMobMotion() { }
 
@@ -42,7 +43,17 @@ final class FrontierV3ControlledMobMotion {
             // wall still yields no path and never becomes a pass-through.
             actor.move(MoverType.SELF, step);
             Vec3 moved = actor.position().subtract(before);
-            if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) continue;
+            if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) {
+                // A canonical grid column may have a thin physical surface (carpet, snow or
+                // an infection overlay) at the feet datum.  The first collision-authoritative
+                // horizontal move can legitimately reject it, even though a normal mob may
+                // step onto it.  Only after that exact move fails, try one bounded low-step
+                // candidate.  It neither changes the X/Z target nor bypasses full blocks.
+                Vec3 lifted = step.add(0.0D, THIN_SURFACE_STEP, 0.0D);
+                if (!level.noCollision(actor, actor.getBoundingBox().move(lifted))) continue;
+                before = actor.position(); actor.move(MoverType.SELF, lifted); moved = actor.position().subtract(before);
+                if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) continue;
+            }
             actor.setYRot((float) Math.toDegrees(Math.atan2(-moved.x, moved.z)));
             actor.yBodyRot = actor.getYRot();
             return;

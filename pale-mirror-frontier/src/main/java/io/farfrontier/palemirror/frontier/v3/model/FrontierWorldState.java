@@ -388,8 +388,18 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         RouteOperation advanced = operation.withTravel(travel); Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), advanced);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position)));
+        Map<SceneLeaseId, SceneLease> nextLeases = sceneLeases;
+        SceneLease activeScene = sceneLeases.values().stream().filter(lease -> lease.operationId().equals(operation.id()))
+                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).findFirst().orElse(null);
+        if (activeScene != null) {
+            if (!travel.isExactHotAdvanceFrom(current)) {
+                throw new IllegalArgumentException("HOT operation travel may advance only one exact cursor");
+            }
+            SceneLease rebased = activeScene.rebaseHotOperationTravel(current, travel);
+            nextLeases = new LinkedHashMap<>(sceneLeases); nextLeases.put(rebased.id(), rebased);
+        }
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+                physicalIntents, physicalObservations, nextLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState advanceOperationAssembly(SubjectId operationId, OperationAssembly assembly) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));

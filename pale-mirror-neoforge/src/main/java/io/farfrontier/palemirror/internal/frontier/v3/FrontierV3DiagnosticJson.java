@@ -54,6 +54,15 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness) {
+        return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, Optional.empty());
+    }
+
+    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+                         Optional<FrontierV3DiagnosticTrace.Entry> trace,
+                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
+                         Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
+                         Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness) {
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(id, "id");
         Objects.requireNonNull(checkpoint, "checkpoint");
         Objects.requireNonNull(state, "state");
@@ -61,6 +70,7 @@ final class FrontierV3DiagnosticJson {
         Objects.requireNonNull(admission, "admission");
         Objects.requireNonNull(harvestReadiness, "harvestReadiness");
         Objects.requireNonNull(sceneReadiness, "sceneReadiness");
+        Objects.requireNonNull(assemblyReadiness, "assemblyReadiness");
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
             case "site" -> site(id, checkpoint, state);
@@ -69,7 +79,7 @@ final class FrontierV3DiagnosticJson {
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state);
-            case "operation" -> operation(id, checkpoint, state);
+            case "operation" -> operation(id, checkpoint, state, assemblyReadiness);
             case "route_construction" -> routeConstruction(id, checkpoint, state);
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
             case "scene" -> scene(id, checkpoint, state, sceneReadiness);
@@ -212,21 +222,46 @@ final class FrontierV3DiagnosticJson {
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + "}";
     }
 
-    private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state,
+                                    Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> readiness) {
         SubjectId subject = subject(id).orElse(null); RouteOperation operation = subject == null ? null : state.operations().get(subject);
         if (operation == null) return unavailable("operation", id, checkpoint, "not_found");
         String members = operation.participantIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
         String assembly = operation.activeAssembly().map(value -> ",\"assemblyMembers\":" + value.members().size()
                 + ",\"assemblyCursorTotal\":" + value.members().values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.OperationAssembly.Member::cursor).sum()
                 + ",\"assemblyComplete\":" + value.complete() + ",\"cargoCarrier\":\"" + quote(value.cargoCarrierId().value()) + "\""
+                + ",\"assemblyProgress\":[" + value.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .map(entry -> assemblyProgress(entry.getKey(), entry.getValue())).reduce((left, right) -> left + "," + right).orElse("") + "]"
                 + value.deferral().map(deferral -> ",\"assemblyDeferred\":true,\"assemblyDeferredActor\":\"" + quote(deferral.actorId().value())
                         + "\",\"assemblyDeferredTarget\":" + position(deferral.target()) + ",\"assemblyObstructionFloor\":" + position(deferral.obstructionFloor())
                         + ",\"assemblyDeferredReason\":\"" + deferral.reason() + "\"")
                         .orElse(",\"assemblyDeferred\":false")).orElse("");
+        String travel = operation.activeTravel().map(value -> ",\"travelCursor\":" + value.cursor() + ",\"travelLength\":" + value.corridor().size()
+                + ",\"travelCurrent\":" + position(value.currentPosition()) + ",\"travelCargo\":" + position(value.cargoAnchor())
+                + ",\"travelArrived\":" + value.arrived()).orElse("");
         return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
-                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + "}";
+                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + travel
+                + readiness.map(FrontierV3DiagnosticJson::assemblyReadiness).orElse("") + "}";
+    }
+
+    /** Bounded exact cursors make a stalled ordinary HOT approach diagnosable without world mutation. */
+    private static String assemblyProgress(SubjectId actorId, io.farfrontier.palemirror.frontier.v3.model.OperationAssembly.Member member) {
+        String next = member.arrived() ? "null" : position(member.corridor().get(member.cursor() + 1));
+        return "{\"actor\":\"" + quote(actorId.value()) + "\",\"cursor\":" + member.cursor()
+                + ",\"length\":" + member.corridor().size() + ",\"current\":" + position(member.currentPosition()) + ",\"next\":" + next + "}";
+    }
+
+    private static String assemblyReadiness(FrontierV3AmbientActorExecutor.AssemblyReadiness value) {
+        String members = value.members().stream().map(member -> "{\"actor\":\"" + quote(member.actorId().value())
+                + "\",\"current\":" + position(member.current()) + ",\"next\":" + nullablePosition(member.next())
+                + ",\"observed\":" + nullablePosition(member.observed()) + ",\"observedExact\":" + nullablePosition(member.observedExact())
+                + ",\"targetStatus\":\"" + quote(member.targetStatus()) + "\",\"floorBlock\":\"" + quote(member.floorBlock())
+                + "\",\"supportBlock\":\"" + quote(member.supportBlock()) + "\",\"bodyBlock\":\"" + quote(member.bodyBlock())
+                + "\",\"headBlock\":\"" + quote(member.headBlock()) + "\",\"occupants\":" + strings(member.occupants()) + "}")
+                .reduce((left, right) -> left + "," + right).orElse("");
+        return ",\"physicalAssembly\":[" + members + "]";
     }
 
     /** One settlement's current replacement-route project; it never discovers or advances one. */
@@ -353,6 +388,10 @@ final class FrontierV3DiagnosticJson {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream()).filter(value -> value.id().equals(id)).findFirst();
     }
     private static String position(BlockPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
+    private static String nullablePosition(BlockPosition position) { return position == null ? "null" : position(position); }
+    private static String nullablePosition(FrontierV3AmbientActorExecutor.ObservedPosition position) {
+        return position == null ? "null" : "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}";
+    }
     private static String strings(java.util.List<String> values) { return values.stream().map(value -> "\"" + quote(value) + "\"").reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]"); }
     private static String custody(InventoryCustody custody) {
         return switch (custody) {
