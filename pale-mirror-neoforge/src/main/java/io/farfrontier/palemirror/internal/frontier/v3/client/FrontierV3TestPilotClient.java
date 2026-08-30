@@ -56,6 +56,9 @@ public final class FrontierV3TestPilotClient {
     private static boolean quickMoveAttempted;
     private static boolean boardInteractionAttempted;
     private static boolean entityInteractionAttempted;
+    private static int attackedEntityRuntimeId = -1;
+    private static int entityAttackAttempts;
+    private static long lastEntityAttackTick = Long.MIN_VALUE;
     private static Boolean originalHideGui;
     private static CaptureBarrier captureBarrier;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
@@ -74,6 +77,7 @@ public final class FrontierV3TestPilotClient {
             containerOpenAttempted = false; quickMoveAttempted = false;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
+            attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
             captureBarrier = null; diagnostics.clear();
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
         } catch (IOException | IllegalArgumentException failure) {
@@ -130,6 +134,7 @@ public final class FrontierV3TestPilotClient {
                 case "assert_visible_board" -> assertVisibleBoard(minecraft, action);
                 case "interact_board" -> interactBoard(minecraft, action);
                 case "interact_nearest_entity" -> interactNearestEntity(minecraft, action);
+                case "attack_nearest_entity" -> attackNearestEntity(minecraft, action);
                 case "fast_forward" -> { minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); advance(type); }
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + action.get("view").getAsString()
@@ -343,6 +348,50 @@ public final class FrontierV3TestPilotClient {
         timeout(minecraft, action, "timed out opening ordinary entity container " + expectedType);
     }
 
+    /**
+     * Repeats ordinary client attack packets against one initially nearest,
+     * locally rendered entity. The scenario never supplies an entity UUID or
+     * server-side target; after the first local choice, the client keeps that
+     * same body so a death cannot spill into a second nearby resident.
+     */
+    private static void attackNearestEntity(Minecraft minecraft, JsonObject action) {
+        ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
+        double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 8.0D;
+        int maximumAttempts = action.get("maxAttacks").getAsInt();
+        Entity target;
+        if (attackedEntityRuntimeId < 0) {
+            target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
+                            !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType))
+                    .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
+                            .thenComparing(Entity::getUUID)).findFirst().orElse(null);
+            if (target == null) { timeout(minecraft, action, "no nearby ordinary entity of type " + expectedType); return; }
+            attackedEntityRuntimeId = target.getId();
+        } else {
+            target = minecraft.level.getEntity(attackedEntityRuntimeId);
+            if (target == null || target.isRemoved()) { advance("attack_nearest_entity"); return; }
+            if (!BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).equals(expectedType)
+                    || target.distanceToSqr(minecraft.player) > maximum * maximum) {
+                throw new IllegalStateException("selected ordinary entity left the permitted attack range/type");
+            }
+        }
+        long tick = minecraft.level.getGameTime();
+        if (entityAttackAttempts < maximumAttempts && (lastEntityAttackTick == Long.MIN_VALUE || tick - lastEntityAttackTick >= 12L)) {
+            minecraft.gameMode.attack(minecraft.player, target);
+            entityAttackAttempts++;
+            lastEntityAttackTick = tick;
+        }
+        if (entityAttackAttempts >= maximumAttempts) {
+            // The final client packet can reach the server after this client tick. Give the
+            // normal entity-removal update a bounded confirmation window before reporting a
+            // failed ordinary attack rather than racing the network with a false negative.
+            if (tick - lastEntityAttackTick >= 40L) {
+                timeout(minecraft, action, "ordinary attacks did not remove the selected " + expectedType + " after " + maximumAttempts + " attempts");
+            }
+            return;
+        }
+        timeout(minecraft, action, "timed out attacking ordinary entity " + expectedType);
+    }
+
     /** Polls the existing read-only diagnostic command at most once per second until a fresh exact predicate arrives. */
     private static void waitUntilDiagnostic(Minecraft minecraft, JsonObject action) {
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString(); long tick = minecraft.level.getGameTime();
@@ -496,6 +545,7 @@ public final class FrontierV3TestPilotClient {
         index++; actionStartedTick = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
+        attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
         else if (reachedFrame != null) {
             JsonObject frame = reachedFrame;
@@ -561,6 +611,7 @@ public final class FrontierV3TestPilotClient {
         visitSent = false; visitChunkReadyTick = -1L;
         containerOpenAttempted = false; quickMoveAttempted = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
+        attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
         diagnostics.clear();
     }
     private record DiagnosticIdentity(String view, String id) { }
