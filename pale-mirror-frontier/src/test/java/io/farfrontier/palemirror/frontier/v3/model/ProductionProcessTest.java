@@ -109,6 +109,32 @@ class ProductionProcessTest {
         assertEquals(StrategicObjectiveStatus.BLOCKED, reduced.strategicPlans().objectives().get(task.objectiveId()).status());
     }
 
+    @Test
+    void productionRefusesToStartWhenEveryCrafterIsStarvingAndRecoversAfterOneExactRation() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:starving-crafter"), 91L));
+        Settlement settlement = initial.bootstrap().settlements().getFirst(); HumanPopulation population = initial.humanPopulation();
+        List<ResidentProfile> crafters = population.residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id())
+                && resident.role() == ResidentRole.CRAFTER).toList();
+        for (int cycle = 1; cycle <= ResidentNutrition.STARVING_AFTER_MISSED_CYCLES; cycle++) {
+            for (ResidentProfile crafter : crafters) population = population.resolveNutrition(crafter.id(), cycle, false);
+        }
+        FrontierWorldState starving = productionTask(initial.withHumanPopulation(population), StrategicTaskStatus.PENDING);
+        StrategicTask task = starving.strategicPlans().tasks().values().iterator().next();
+
+        List<ProposedEvent> planned = FrontierWorldRuntimeDefinition.planScheduled(starving, ProductionProcess.start(task, 200L));
+        ProductionBlocked block = planned.stream().map(ProposedEvent::payload).filter(ProductionBlocked.class::isInstance)
+                .map(ProductionBlocked.class::cast).findFirst().orElseThrow();
+        assertEquals(ProductionBlockReason.WORKER_UNAVAILABLE, block.reason());
+        assertEquals(block, FrontierWorldRuntimeDefinition.payloadCodecs().decode(block.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(block)));
+        FrontierWorldState reduced = ProductionProcess.reduceBlocked(starving, settlement.id(), block);
+        assertEquals(starving, reduced);
+
+        for (ResidentProfile crafter : crafters) population = population.resolveNutrition(crafter.id(), ResidentNutrition.STARVING_AFTER_MISSED_CYCLES + 1, true);
+        FrontierWorldState recovered = productionTask(initial.withHumanPopulation(population), StrategicTaskStatus.PENDING);
+        List<ProposedEvent> retried = FrontierWorldRuntimeDefinition.planScheduled(recovered, ProductionProcess.start(task, 300L));
+        assertTrue(retried.stream().map(ProposedEvent::payload).anyMatch(ProductionStarted.class::isInstance));
+    }
+
     private static FrontierWorldState productionTask(FrontierWorldState state, StrategicTaskStatus status) {
         SubjectId settlement = new SubjectId("settlement:1");
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:test-production"), settlement,

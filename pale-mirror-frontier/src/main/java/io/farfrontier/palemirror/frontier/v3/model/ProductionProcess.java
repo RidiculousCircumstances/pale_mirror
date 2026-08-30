@@ -35,6 +35,9 @@ final class ProductionProcess {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING); Settlement settlement = settlement(state, task.ownerId());
         SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.FACILITY_UNAVAILABLE);
+        if (FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isEmpty()) {
+            return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.WORKER_UNAVAILABLE);
+        }
         Optional<ExactItemStack> input = wheat(state, settlement);
         if (input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.INPUT_UNAVAILABLE);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
@@ -111,6 +114,12 @@ final class ProductionProcess {
             case FACILITY_UNAVAILABLE -> {
                 if (state.structureConditions().get(workshop.id()) == StructureCondition.INTACT) throw new IllegalArgumentException("production facility block precondition does not hold");
             }
+            case WORKER_UNAVAILABLE -> {
+                if (!blocked.workId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isPresent()) {
+                    throw new IllegalArgumentException("production worker block precondition does not hold");
+                }
+            }
         }
         return state;
     }
@@ -137,7 +146,7 @@ final class ProductionProcess {
     private static Settlement settlement(FrontierWorldState state, SubjectId id) { return FrontierWorldStateSupport.settlement(state.bootstrap(), id); }
     private static SettlementStructure workshop(Settlement settlement) { return settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst()
             .orElseThrow(() -> new IllegalStateException("settlement lacks workshop")); }
-    private static ResidentProfile crafter(FrontierWorldState state, Settlement settlement) { return FrontierWorldStateSupport.livingResident(state, settlement.id(), ResidentRole.CRAFTER)
+    private static ResidentProfile crafter(FrontierWorldState state, Settlement settlement) { return FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER)
             .orElseThrow(() -> new IllegalStateException("settlement lacks crafter")); }
     private static ProductionJob job(FrontierWorldState state, Settlement settlement, SettlementStructure workshop, ExactItemStack input, int ordinal) {
         ResidentProfile worker = crafter(state, settlement); String number = settlement.id().value().substring("settlement:".length());

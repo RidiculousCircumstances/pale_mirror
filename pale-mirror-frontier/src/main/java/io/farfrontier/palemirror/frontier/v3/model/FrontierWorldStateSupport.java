@@ -74,17 +74,17 @@ final class FrontierWorldStateSupport {
         return resident;
     }
 
-    static Optional<ResidentProfile> livingResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
+    static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(resident -> workCapable(state, resident))
                 .sorted(byRoleSkill(role)).findFirst();
     }
 
     static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(resident -> workCapable(state, resident))
                 .filter(resident -> !activeOperationClaim(state, resident.id()))
                 .filter(resident -> !activePatrolClaim(state, resident.id()))
                 .filter(resident -> !state.humanPopulation().migrations().containsKey(resident.id()))
@@ -94,12 +94,22 @@ final class FrontierWorldStateSupport {
     static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(resident -> workCapable(state, resident))
                 .filter(resident -> state.operations().values().stream().noneMatch(operation -> retainsParticipantClaim(state, operation)
                         && operation.participantIds().contains(resident.id())))
                 .filter(resident -> state.sceneLeases().values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                         && lease.members().stream().anyMatch(member -> member.actorId().equals(resident.id()))))
                 .sorted(byRoleSkill(role)).findFirst();
+    }
+
+    /**
+     * Nutrition governs admission to new work, while an already durable job retains its exact
+     * worker until that job resolves or reaches its own explicit failure boundary.  This avoids
+     * silently cancelling a physical effect halfway through its acknowledged lifecycle.
+     */
+    static boolean workCapable(FrontierWorldState state, ResidentProfile resident) {
+        return state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE
+                && state.humanPopulation().nutrition(resident.id()).status() != ResidentNutritionStatus.STARVING;
     }
 
     static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {

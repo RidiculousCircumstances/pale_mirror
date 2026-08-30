@@ -34,16 +34,31 @@ class HumanPopulationProcessTest {
     void starvationIsAnIndividualNutritionOutcomeWithoutChangingActorIdentityOrDiseaseState() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:nutrition-work"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst(); HumanPopulation population = state.humanPopulation();
-        var haulers = population.residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
-                .filter(resident -> resident.role() == ResidentRole.HAULER).toList();
+        var workers = population.residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> resident.role() == ResidentRole.HAULER || resident.role() == ResidentRole.GUARD
+                        || resident.role() == ResidentRole.FARMER || resident.role() == ResidentRole.CRAFTER).toList();
         for (int cycle = 1; cycle <= ResidentNutrition.STARVING_AFTER_MISSED_CYCLES; cycle++) {
-            for (ResidentProfile hauler : haulers) population = population.resolveNutrition(hauler.id(), cycle, false);
+            for (ResidentProfile worker : workers) population = population.resolveNutrition(worker.id(), cycle, false);
         }
         FrontierWorldState hungry = state.withHumanPopulation(population);
 
-        assertTrue(haulers.stream().allMatch(hauler -> hungry.humanPopulation().nutrition(hauler.id()).status() == ResidentNutritionStatus.STARVING));
-        assertTrue(haulers.stream().allMatch(hauler -> hungry.actorLocations().get(hauler.id()).condition().status() == ActorLifeStatus.ALIVE));
-        assertTrue(haulers.stream().allMatch(hauler -> hungry.humanPopulation().health(hauler.id()).status() == ResidentHealthStatus.HEALTHY));
+        assertTrue(workers.stream().allMatch(worker -> hungry.humanPopulation().nutrition(worker.id()).status() == ResidentNutritionStatus.STARVING));
+        assertTrue(workers.stream().allMatch(worker -> hungry.actorLocations().get(worker.id()).condition().status() == ActorLifeStatus.ALIVE));
+        assertTrue(workers.stream().allMatch(worker -> hungry.humanPopulation().health(worker.id()).status() == ResidentHealthStatus.HEALTHY));
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.HAULER).isEmpty());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.GUARD).isEmpty());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(hungry, settlement.id(), ResidentRole.FARMER).isEmpty());
+        assertTrue(FrontierWorldStateSupport.availableWorkResident(hungry, settlement.id(), ResidentRole.CRAFTER).isEmpty());
+        FrontierWorldState afterRecovery = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(hungry));
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(afterRecovery, settlement.id(), ResidentRole.HAULER).isEmpty());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(afterRecovery, settlement.id(), ResidentRole.FARMER).isEmpty());
+
+        for (ResidentProfile worker : workers) population = population.resolveNutrition(worker.id(), 4, true);
+        FrontierWorldState recovered = state.withHumanPopulation(population);
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(recovered, settlement.id(), ResidentRole.HAULER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(recovered, settlement.id(), ResidentRole.GUARD).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(recovered, settlement.id(), ResidentRole.FARMER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableWorkResident(recovered, settlement.id(), ResidentRole.CRAFTER).isPresent());
     }
 
     @Test

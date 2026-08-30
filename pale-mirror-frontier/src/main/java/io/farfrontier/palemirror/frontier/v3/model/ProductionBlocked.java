@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** A verified lack of input, usable output storage or facility capacity; it never creates stock. */
+/** A verified lack of input, work-capable resident, usable output storage or facility capacity; it never creates stock. */
 public record ProductionBlocked(
         SubjectId settlementId, SubjectId facilityId, SubjectId workId, ProductionBlockReason reason
 ) implements FrontierPayload {

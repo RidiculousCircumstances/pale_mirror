@@ -23,7 +23,7 @@ class RoutePatrolProcessTest {
     void activePatrolGuardCannotBeReassignedToAConcurrentSupplyOperation() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-claim"), 713L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        SubjectId guard = FrontierWorldStateSupport.livingResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
+        SubjectId guard = FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
         SubjectId objectiveId = new SubjectId("objective:patrol-claim"), taskId = new SubjectId("task:patrol-claim");
         StrategicObjective objective = new StrategicObjective(objectiveId, settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
