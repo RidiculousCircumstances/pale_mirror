@@ -47,6 +47,12 @@ final class ProductionProcess {
         }
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
         ProductionJob job = job(state, settlement, workshop, input.orElseThrow(), ordinal);
+        // Finance is a start precondition.  A blocked task must not leave a durable job
+        // occupying its workshop: otherwise a later objective review could create a
+        // second job for the same facility and quarantine the canonical engine.
+        if (!CompanyWorkPaymentProcess.canSettle(state, job)) {
+            return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.FINANCE_UNAVAILABLE);
+        }
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new ProductionStarted(job, input.orElseThrow().id())), schedule(complete(job, action.dueAt().ticks() + 100L)));
     }
 
@@ -125,8 +131,29 @@ final class ProductionProcess {
             }
             case FINANCE_UNAVAILABLE -> {
                 ProductionJob job = state.productionJobs().get(blocked.workId());
-                if (job == null || !job.settlementId().equals(settlement.id()) || CompanyWorkPaymentProcess.canSettle(state, job)) {
-                    throw new IllegalArgumentException("production finance block precondition does not hold");
+                if (job != null) {
+                    if (!job.settlementId().equals(settlement.id()) || CompanyWorkPaymentProcess.canSettle(state, job)) {
+                        throw new IllegalArgumentException("production finance block precondition does not hold");
+                    }
+                    break;
+                }
+                // A finance failure is normally admitted before ProductionStarted.  Bind a
+                // start-time block to the exact pending task and prospective job so a forged
+                // block cannot free a facility that actually has available funds.
+                StrategicTask pending = task(state, state.strategicPlans().tasks().values().stream()
+                        .filter(value -> value.ownerId().equals(settlement.id()) && value.kind() == StrategicTaskKind.PRODUCE_BREAD
+                                && value.status() == StrategicTaskStatus.PENDING)
+                        .map(StrategicTask::id).reduce((left, right) -> {
+                            throw new IllegalArgumentException("production finance block has ambiguous pending task");
+                        }).orElseThrow(() -> new IllegalArgumentException("production finance block has no pending task")), StrategicTaskStatus.PENDING);
+                Optional<ExactItemStack> prospectiveInput = wheat(state, settlement);
+                if (!blocked.workId().equals(workshop.id()) || prospectiveInput.isEmpty()
+                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isEmpty()) {
+                    throw new IllegalArgumentException("production finance start block precondition does not hold");
+                }
+                int ordinal = state.strategicPlans().objectives().get(pending.objectiveId()).decisionOrdinal();
+                if (CompanyWorkPaymentProcess.canSettle(state, job(state, settlement, workshop, prospectiveInput.orElseThrow(), ordinal))) {
+                    throw new IllegalArgumentException("production finance start block has available funds");
                 }
             }
         }

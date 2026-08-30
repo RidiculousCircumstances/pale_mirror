@@ -24,6 +24,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -135,6 +136,28 @@ class ProductionProcessTest {
         FrontierWorldState recovered = productionTask(initial.withHumanPopulation(population), StrategicTaskStatus.PENDING);
         List<ProposedEvent> retried = FrontierWorldRuntimeDefinition.planScheduled(recovered, ProductionProcess.start(task, 300L));
         assertTrue(retried.stream().map(ProposedEvent::payload).anyMatch(ProductionStarted.class::isInstance));
+    }
+
+    @Test
+    void unaffordableCompanyWorkBlocksBeforeItOccupiesTheWorkshop() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-finance"), 91L));
+        SubjectId settlementId = new SubjectId("settlement:1");
+        for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlementId, 1, 4_000L))) {
+            if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlementId, registered);
+            if (event.payload() instanceof EmploymentContractOpened opened) initial = CompanyFoundationProcess.reduceEmployment(initial, settlementId, opened);
+        }
+        EconomicAccount treasury = initial.inventory().economics().require(settlementId);
+        var accounts = new LinkedHashMap<>(initial.inventory().economics().accounts());
+        accounts.put(settlementId, new EconomicAccount(settlementId, treasury.ownerKind(), treasury.status(), FixedScalar.ZERO, treasury.creditLimit()));
+        FrontierWorldState state = productionTask(initial.withInventory(initial.inventory().withEconomics(new EconomicLedger(accounts))), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+
+        List<ProposedEvent> planned = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L));
+
+        ProductionBlocked block = assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload());
+        assertEquals(ProductionBlockReason.FINANCE_UNAVAILABLE, block.reason());
+        assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(ProductionStarted.class::isInstance));
+        assertEquals(state, ProductionProcess.reduceBlocked(state, settlementId, block));
     }
 
     private static FrontierWorldState productionTask(FrontierWorldState state, StrategicTaskStatus status) {
