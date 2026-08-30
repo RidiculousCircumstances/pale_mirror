@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const SCHEMA = 1;
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -32,8 +32,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'scene-return', 'health-quarantine', 'resident-transit'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, scene-return, health-quarantine or resident-transit');
+  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'scene-return', 'operation-assembly', 'health-quarantine', 'resident-transit'].includes(scenario.server.profile)) {
+    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, scene-return, operation-assembly, health-quarantine or resident-transit');
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
@@ -67,7 +67,10 @@ export function validateScenario(scenario) {
           || action.checks.some((check) => !validDiagnosticIdentity(check) || !check.expect || typeof check.expect !== 'object' || Array.isArray(check.expect)))) {
         throw new Error('assert_fixture needs 1..16 read-only diagnostic checks and timeoutMs 0..120000');
       }
-      if (['walk', 'look', 'break', 'open_container', 'wait_until_block'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (['walk', 'look', 'break', 'place', 'open_container', 'wait_until_block'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (action.type === 'place' && (!validItemKind(action.item) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
+        throw new Error('place needs a known item, block position and timeoutMs 0..120000');
+      }
       if (action.type === 'open_container' && (!Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('open_container needs timeoutMs 0..120000');
       }

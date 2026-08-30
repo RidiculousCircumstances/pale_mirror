@@ -216,10 +216,13 @@ final class FrontierV3DiagnosticJson {
         SubjectId subject = subject(id).orElse(null); RouteOperation operation = subject == null ? null : state.operations().get(subject);
         if (operation == null) return unavailable("operation", id, checkpoint, "not_found");
         String members = operation.participantIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
+        String assembly = operation.activeAssembly().map(value -> ",\"assemblyMembers\":" + value.members().size()
+                + ",\"assemblyCursorTotal\":" + value.members().values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.OperationAssembly.Member::cursor).sum()
+                + ",\"assemblyComplete\":" + value.complete() + ",\"cargoCarrier\":\"" + quote(value.cargoCarrierId().value()) + "\"").orElse("");
         return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
-                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]}";
+                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + "}";
     }
 
     /** One settlement's current replacement-route project; it never discovers or advances one. */

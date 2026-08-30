@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.EngineLimits;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import java.util.List;
@@ -43,6 +44,12 @@ public final class FrontierWorldRuntimeDefinition {
     /** Development-only HOT/COLD continuity fixture; production always begins at the normal world bootstrap. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentRouteSceneReturnConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+    /** Development-only exact HOT assembly fixture; the pilot supplies every movement observation. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentOperationAssemblyConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.OperationAssemblyFixture fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
@@ -90,8 +97,18 @@ public final class FrontierWorldRuntimeDefinition {
         if (command.payload() instanceof OperationAssemblyAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());
             if (operation == null) return rejected("operation assembly observation has no active operation");
-            try { state.advanceOperationAssembly(advanced.operationId(), advanced.assembly()); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), advanced)));
+            try {
+                validateHotAssemblyObservation(state, operation, advanced.assembly());
+                state.advanceOperationAssembly(advanced.operationId(), advanced.assembly());
+            } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            List<ProposedEvent> events = new java.util.ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), advanced)));
+            if (advanced.assembly().complete()) {
+                events.add(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(),
+                        SupplyOperationProcess.travelForCompletedAssembly(operation, advanced.assembly()))));
+                events.add(new ProposedEvent(operation.id(), new ScheduleEffect.Created(
+                        SupplyOperationProcess.operationProgress(operation, command.submittedAt().ticks() + 20L))));
+            }
+            return new CommandPlan.Accepted(List.copyOf(events));
         }
         if (command.payload() instanceof OperationTravelSegmentCompleted completed) {
             RouteOperation operation = state.operations().get(completed.operationId());
@@ -280,6 +297,30 @@ public final class FrontierWorldRuntimeDefinition {
         // invalidated its work. That no-op must still become a persisted schedule transition:
         // otherwise a later tick/restart would rediscover the same head and quarantine the world.
         return planned.isEmpty() ? List.of(new ProposedEvent(action.subject(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(action.id()))) : planned;
+    }
+
+    /** A HOT observer may acknowledge exactly one visible next-cursor arrival, never a COLD batch. */
+    private static void validateHotAssemblyObservation(FrontierWorldState state, RouteOperation operation, OperationAssembly next) {
+        OperationAssembly current = operation.activeAssembly().orElseThrow(() -> new IllegalArgumentException("operation has no active assembly"));
+        if (!current.members().keySet().equals(next.members().keySet())) throw new IllegalArgumentException("HOT assembly observation changes formation");
+        SubjectId observed = null;
+        for (SubjectId actor : current.members().keySet()) {
+            OperationAssembly.Member before = current.members().get(actor), after = next.members().get(actor);
+            if (!before.corridor().equals(after.corridor()) || after.cursor() < before.cursor() || after.cursor() > before.cursor() + 1) {
+                throw new IllegalArgumentException("HOT assembly observation may advance only one adjacent cursor");
+            }
+            if (after.cursor() > before.cursor()) {
+                if (observed != null) throw new IllegalArgumentException("HOT assembly observation may acknowledge only one actor");
+                observed = actor;
+            }
+        }
+        if (observed == null) throw new IllegalArgumentException("HOT assembly observation did not advance an actor");
+        AmbientActorLease lease = state.ambientLeases().get(observed);
+        OperationAssembly.Member arrived = next.members().get(observed);
+        if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
+                || !lease.goalPosition().equals(arrived.currentPosition())) {
+            throw new IllegalArgumentException("HOT assembly observation lacks its exact active actor lease");
+        }
     }
     private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         if (event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition || event.payload() instanceof AmbientLeaseReleased) {

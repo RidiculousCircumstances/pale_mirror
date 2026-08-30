@@ -49,6 +49,52 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void hotAssemblyRequiresExactLeasesThenAtomicallyStartsTheFirstTravelSegment() {
+        WorldId world = new WorldId("frontier:hot-assembly");
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
+                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(world, 91L));
+        FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
+        OperationAssembly assembly = operation.activeAssembly().orElseThrow();
+        SubjectId first = operation.participantIds().getFirst();
+        Map<SubjectId, OperationAssembly.Member> rejectedMembers = new LinkedHashMap<>(assembly.members());
+        OperationAssembly.Member firstMember = rejectedMembers.get(first);
+        rejectedMembers.put(first, new OperationAssembly.Member(firstMember.corridor(), firstMember.cursor() + 1));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class, submit(engine, world, "assembly-without-lease",
+                new OperationAssemblyAdvanced(operation.id(), new OperationAssembly(rejectedMembers, assembly.cargoCarrierId()))));
+
+        for (SubjectId participant : operation.participantIds()) {
+            FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            AmbientActorLease lease = AmbientActorProcess.nextLease(state, participant, engine.checkpoint().instant());
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, submit(engine, world, "assembly-prepare-" + participant.value(), new AmbientLeasePrepared(lease)));
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, submit(engine, world, "assembly-hot-" + participant.value(), new AmbientLeaseTransition(participant, AmbientLeaseStatus.HOT)));
+        }
+        int sequence = 0;
+        while (true) {
+            FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            RouteOperation current = state.operations().get(operation.id());
+            if (current.stage() == OperationStage.EN_ROUTE) break;
+            OperationAssembly active = current.activeAssembly().orElseThrow();
+            SubjectId actor = active.members().entrySet().stream().filter(entry -> !entry.getValue().arrived()).map(Map.Entry::getKey).findFirst().orElseThrow();
+            Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(active.members());
+            OperationAssembly.Member member = members.get(actor);
+            members.put(actor, new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, submit(engine, world,
+                    "assembly-arrival-" + sequence++, new OperationAssemblyAdvanced(operation.id(), new OperationAssembly(members, active.cargoCarrierId()))));
+        }
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation departed = after.operations().get(operation.id());
+        assertEquals(OperationStage.EN_ROUTE, departed.stage());
+        assertTrue(departed.activeTravel().isPresent());
+        assertEquals(departed.activeTravel().orElseThrow().formation(), after.actorLocations().entrySet().stream()
+                .filter(entry -> departed.participantIds().contains(entry.getKey())).collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,
+                        entry -> entry.getValue().position())));
+        assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.subject().equals(operation.id())
+                && action.kind().equals("frontier.operation.progress")));
+        assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+    }
+
+    @Test
     void exactStructuralDamageIsDurableAndDerivesItsConditionFromKnownCells() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:structure-damage"), 91L));
         SettlementStructure structure = state.bootstrap().settlements().getFirst().structures().getFirst();
@@ -600,7 +646,14 @@ class FrontierWorldRuntimeDefinitionTest {
         var checkpoint = engine.checkpoint(); var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId(command);
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
                 commandId, new WorldId(world), checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
-                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), new PhysicalIntentTransition(intentId, status, observation))));
+                        io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), new PhysicalIntentTransition(intentId, status, observation))));
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.api.CommandResult submit(FrontierEngine<FrontierWorldProjection> engine, WorldId world,
+                                                                                   String command, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
+        var checkpoint = engine.checkpoint(); var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:" + command.replace(':', '-'));
+        return engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), payload));
     }
 
     /** Mirrors the real server's one-tick cadence and waits for a durable domain result. */

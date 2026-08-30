@@ -204,6 +204,15 @@ final class SupplyOperationProcess {
         List<BlockPosition> corridor = adjacentSegment(operation.route().get(operation.routeIndex()), operation.route().get(operation.routeIndex() + 1));
         return new OperationTravel(corridor, 0, formation, formation.get(operation.cargoCarrierId()));
     }
+
+    /**
+     * The final HOT observed arrival is an authoritative assembly completion, so it starts the
+     * first segment in that same canonical transaction instead of waiting for a stale COLD poll.
+     */
+    static OperationTravel travelForCompletedAssembly(RouteOperation operation, OperationAssembly assembly) {
+        if (!assembly.complete()) throw new IllegalArgumentException("only a complete assembly may start operation travel");
+        return travelForNextSegment(operation, assembly.positions());
+    }
     private static java.util.Map<SubjectId, BlockPosition> participantPositions(FrontierWorldState state, RouteOperation operation) {
         java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
         operation.participantIds().forEach(actor -> formation.put(actor, state.actorLocations().get(actor).position()));

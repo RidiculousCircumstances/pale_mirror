@@ -77,10 +77,18 @@ test('chunk visits are ordinary-player travel and may be causal evidence actions
 });
 
 test('native pilot permits only named isolated development profiles', () => {
-  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
+    assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'operation-assembly' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'health-quarantine' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'resident-transit' } }));
   assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'arbitrary-fixture' } }), /profile/);
+});
+
+test('native pilot permits one ordinary bounded block placement as causal evidence', () => {
+  const placement = { ...scenario, actions: [{ type: 'place', item: 'minecraft:stone', position: { x: 1, y: 65, z: 2 }, timeoutMs: 10_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(placement));
+  assert.throws(() => validateScenario({ ...placement, actions: [{ ...placement.actions[0], item: 'stone' }] }), /place needs/);
+  assert.throws(() => validateScenario({ ...placement, actions: [{ ...placement.actions[0], timeoutMs: 120_001 }] }), /place needs/);
 });
 
 test('isolated server view distance is bounded and explicit when a scenario needs a COLD chunk', () => {

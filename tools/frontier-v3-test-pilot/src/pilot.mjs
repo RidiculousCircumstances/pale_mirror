@@ -1,5 +1,6 @@
 import mineflayer from 'mineflayer';
 import pathfinderModule from 'mineflayer-pathfinder';
+import { Vec3 } from 'vec3';
 
 const { pathfinder, Movements, goals } = pathfinderModule;
 const { GoalNear } = goals;
@@ -47,6 +48,19 @@ export async function perform(bot, action) {
       if (!block || block.name === 'air') throw new Error(`break target is missing at ${position.x},${position.y},${position.z}`);
       await withTimeout(bot.dig(block, true), action.timeoutMs ?? 15_000, 'break');
       return { type: action.type, position, block: block.name };
+    }
+    case 'place': {
+      const position = action.position;
+      const item = bot.registry.itemsByName[action.item];
+      if (!item) throw new Error(`place item is unknown: ${action.item}`);
+      const support = bot.blockAt(new Vec3(position.x, position.y - 1, position.z));
+      if (!support || support.name === 'air') throw new Error(`place support is missing below ${position.x},${position.y},${position.z}`);
+      await bot.equip(item.id, 'hand');
+      await bot.lookAt(center(position), true);
+      await withTimeout(bot.placeBlock(support, new Vec3(0, 1, 0)), action.timeoutMs ?? 15_000, 'place');
+      const placed = bot.blockAt(new Vec3(position.x, position.y, position.z));
+      if (!placed || placed.name !== action.item.replace('minecraft:', '')) throw new Error(`place did not produce ${action.item} at ${position.x},${position.y},${position.z}`);
+      return { type: action.type, position, item: action.item };
     }
     case 'open_container': {
       const position = action.position;

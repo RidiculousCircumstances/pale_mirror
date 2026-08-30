@@ -92,6 +92,27 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Stops at the ordinary cargo-loaded assembly boundary before its first COLD step.  The
+     * disposable native pilot must load the port and advance these exact people through normal
+     * HOT movement; it cannot use the fixture to start travel or move a resident.
+     */
+    static OperationAssemblyFixture operationAssemblyFixture(WorldId worldId, long seed) {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        for (long tick = 1L; tick <= 12_000L; tick++) {
+            engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            var checkpoint = engine.checkpoint();
+            FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+            if (operation == null || operation.stage() != OperationStage.ASSEMBLING || operation.activeAssembly().isEmpty()) continue;
+            var schedules = checkpoint.schedules().stream().filter(action -> !action.subject().equals(operation.id())
+                    || !action.kind().equals("frontier.operation.assembly")).toList();
+            if (schedules.size() == checkpoint.schedules().size()) throw new IllegalStateException("assembly fixture has no pending COLD assembly action");
+            return new OperationAssemblyFixture(state, checkpoint.instant(), schedules, operation.id());
+        }
+        throw new IllegalStateException("development assembly fixture did not reach its exact cargo-loaded boundary by 12000 ticks");
+    }
+
+    /**
      * Retains the real 12-settlement schedule through the first hive decision, stopping only
      * at the durable exact-biomass physical boundary.  The native pilot must still load the
      * east store and let its ordinary executor consume the real tagged stack.
@@ -156,6 +177,12 @@ final class FrontierDevelopmentScenarios {
 
     record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         RouteSceneReturnFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record OperationAssemblyFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId operationId) {
+        OperationAssemblyFixture {
             schedules = List.copyOf(schedules);
         }
     }
