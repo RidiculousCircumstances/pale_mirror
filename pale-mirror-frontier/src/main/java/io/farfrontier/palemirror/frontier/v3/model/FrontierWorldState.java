@@ -409,6 +409,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, nextAmbient);
     }
+    public FrontierWorldState deferOperationAssembly(SubjectId operationId, OperationAssemblyDeferral deferral) {
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));
+        if (operation == null || operation.activeAssembly().isEmpty()) throw new IllegalArgumentException("operation has no active assembly");
+        RouteOperation deferred = operation.withAssembly(operation.activeAssembly().orElseThrow().defer(Objects.requireNonNull(deferral, "assembly deferral")));
+        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), deferred);
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
     public FrontierWorldState completeOperationTravelSegment(SubjectId operationId) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
         if (operation == null) throw new IllegalArgumentException("unknown operation travel");

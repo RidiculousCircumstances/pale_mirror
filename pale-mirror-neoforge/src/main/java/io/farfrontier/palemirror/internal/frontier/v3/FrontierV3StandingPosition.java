@@ -35,4 +35,10 @@ final class FrontierV3StandingPosition {
         }
         return null;
     }
+
+    /** The exact canonical body column, without accepting a new floor on top of an obstruction. */
+    static boolean hasExactHeadroom(ServerLevel level, BlockPosition anchor) {
+        BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
+        return level.hasChunkAt(floor) && level.getBlockState(floor.above()).isAir() && level.getBlockState(floor.above(2)).isAir();
+    }
 }

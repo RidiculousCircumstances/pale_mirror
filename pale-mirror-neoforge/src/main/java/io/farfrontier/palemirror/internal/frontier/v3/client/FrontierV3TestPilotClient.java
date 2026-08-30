@@ -19,6 +19,7 @@ import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -50,6 +51,7 @@ public final class FrontierV3TestPilotClient {
     private static int index;
     private static long actionStartedTick = -1L;
     private static boolean breaking;
+    private static boolean placementAttempted;
     private static boolean visitSent;
     private static long visitChunkReadyTick = -1L;
     private static boolean containerOpenAttempted;
@@ -73,7 +75,7 @@ public final class FrontierV3TestPilotClient {
             FrontierV3TestPilotScenario.Parsed scenario = FrontierV3TestPilotScenario.parse(Files.readString(Path.of(configured)));
             setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
-            breaking = false; visitSent = false; visitChunkReadyTick = -1L;
+            breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L;
             containerOpenAttempted = false; quickMoveAttempted = false;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
@@ -157,6 +159,7 @@ public final class FrontierV3TestPilotClient {
                 }
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
+                case "place" -> placeBlock(minecraft, action);
                 case "open_container" -> openContainer(minecraft, position(action, "position"), action.get("timeoutMs").getAsLong());
                 case "quick_move_from_inventory" -> quickMoveFromInventory(minecraft, action);
                 case "quick_move_from_container" -> quickMoveFromContainer(minecraft, action);
@@ -180,6 +183,29 @@ public final class FrontierV3TestPilotClient {
         if (minecraft.level.getBlockState(target).isAir()) { breaking = false; advance("break"); return; }
         if (!breaking) { minecraft.gameMode.startDestroyBlock(target, Direction.UP); breaking = true; }
         else minecraft.gameMode.continueDestroyBlock(target, Direction.UP);
+    }
+
+    /** Places one declared ordinary block through the normal client use-item-on-block packet. */
+    private static void placeBlock(Minecraft minecraft, JsonObject action) {
+        BlockPos target = position(action, "position"); ResourceLocation itemId = ResourceLocation.parse(action.get("item").getAsString());
+        var item = BuiltInRegistries.ITEM.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("unknown placement item " + itemId));
+        var expected = BuiltInRegistries.BLOCK.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("placement item is not a block " + itemId));
+        if (minecraft.level.getBlockState(target).is(expected)) { advance("place"); return; }
+        BlockPos support = target.below();
+        if (minecraft.level.getBlockState(support).isAir()) throw new IllegalStateException("ordinary placement has no support at " + support);
+        if (!placementAttempted) {
+            int slot = -1;
+            for (int index = 0; index < minecraft.player.getInventory().items.size(); index++) {
+                ItemStack stack = minecraft.player.getInventory().items.get(index);
+                if (!stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).equals(itemId)) { slot = index; break; }
+            }
+            if (slot < 0 || slot >= 9) throw new IllegalStateException("ordinary player hotbar lacks placement item " + itemId);
+            minecraft.player.getInventory().selected = slot;
+            minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
+                    new BlockHitResult(Vec3.atCenterOf(support).add(0.0D, 0.5D, 0.0D), Direction.UP, support, false));
+            placementAttempted = true;
+        }
+        timeout(minecraft, action, "ordinary placement did not produce " + itemId + " at " + target);
     }
 
     /** Opens the real block menu through Minecraft's normal client interaction packet. */
@@ -559,7 +585,7 @@ public final class FrontierV3TestPilotClient {
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
         int completedAction = runningSetup ? 0 : index + 1;
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
-        index++; actionStartedTick = -1L; breaking = false;
+        index++; actionStartedTick = -1L; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;

@@ -111,6 +111,17 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsOneBoundedOrdinaryBlockPlacementWithoutWorldCommandAuthority() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"place","position":{"x":1,"y":65,"z":2},
+                "item":"minecraft:gray_concrete","timeoutMs":10000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"place","position":{"x":1,"y":65,"z":2},
+                "item":"gray_concrete","timeoutMs":10000}]}"""));
+    }
+
+    @Test
     void permitsOnlyBoundedOrdinaryV3BoardInteractionWithAVisibleCardReceipt() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"interact_board","text":"WHEAT FIELD","title":"Northwatch",

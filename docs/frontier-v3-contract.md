@@ -253,11 +253,16 @@ states.
   a formation teleport: every member has a distinct assigned port slot and
   adjacent-cell cursor, while the named carrier retains cargo provenance.
   Creation leaves all actor locations unchanged; only exact COLD/HOT cursor
-  transitions move them. Completion atomically starts the first
+  transitions move them. A loaded physical obstruction is one durable,
+  identity-specific fact: it records the participant's next cursor plus either
+  that assigned slot or the same compiled Hall-throat floor. It freezes the
+  shared assembly until the named actor reaches that unchanged cursor through
+  ordinary Minecraft movement after the same floor is clear; no timer, COLD
+  poll, alternate port or generic repair command may erase the fact. Completion atomically starts the first
   `OperationTravel`; an arrived travel atomically advances its strategic
   segment while retaining the formation/cargo positions. Assembly is not an
   attackable route operation, and a player/world obstruction of its compiled
-  throat or slot is a visible deferral or semantic damage observation, never
+  throat or slot is the visible durable deferral above or a semantic damage observation, never
   permission to choose a hidden alternative path. COLD actor records do not
   represent physical bodies and therefore do not obstruct pure corridor
   compilation; only a live HOT lease reserves its canonical floor cell, and

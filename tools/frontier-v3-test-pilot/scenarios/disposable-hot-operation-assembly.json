@@ -6,21 +6,41 @@
   "pilot": { "username": "PMTestPilot" },
   "setup": [
     { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:gray_concrete 1" },
     { "type": "command", "command": "/time set day" },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "ASSEMBLING", "assemblyMembers": 2, "assemblyCursorTotal": 0, "assemblyComplete": false, "cargoCarrier": "resident:1-30" } }
     ] },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1500 }
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -370, "y": 65, "z": -340 }, "settleMs": 1500 }
   ],
   "actions": [
-    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "ASSEMBLING", "assemblyMembers": 2 }, "timeoutMs": 30000 },
-    { "type": "wait", "ms": 10000 },
+    { "type": "walk", "position": { "x": -367, "y": 65, "z": -340 }, "radius": 1, "timeoutMs": 30000 },
+    { "type": "place", "position": { "x": -364, "y": 65, "z": -340 }, "item": "minecraft:gray_concrete", "timeoutMs": 15000 },
+    { "type": "assert_visible_block", "position": { "x": -364, "y": 65, "z": -340 }, "timeoutMs": 10000 },
+    { "type": "look", "at": { "x": -364, "y": 65, "z": -340 } },
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "ASSEMBLING", "assemblyMembers": 2, "assemblyCursorTotal": 0, "assemblyDeferred": true, "assemblyObstructionFloor": { "x": -364, "y": 64, "z": -340 }, "assemblyDeferredReason": "LOADED_WORLD_OBSTRUCTION" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "operation-assembly:operation:supply-1-2", "expect": { "status": "ok", "eventKind": "operation_assembly_deferred" }, "timeoutMs": 30000 },
+    { "type": "break", "position": { "x": -364, "y": 65, "z": -340 }, "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "operation-assembly:operation:supply-1-2", "expect": { "status": "ok", "eventKind": "operation_assembly_advanced" }, "timeoutMs": 60000 },
     { "type": "inspect", "view": "operation", "id": "operation:supply-1-2" }
   ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 6,
+    "resumeSetup": [
+      { "type": "command", "command": "/gamemode creative PMTestPilot" },
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -367, "y": 65, "z": -340 }, "settleMs": 1500 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "ASSEMBLING", "assemblyMembers": 2, "assemblyCursorTotal": 0, "assemblyDeferred": true, "assemblyObstructionFloor": { "x": -364, "y": 64, "z": -340 } } }
+      ] }
+    ]
+  },
   "assertions": [
-    { "after": 1, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "ASSEMBLING", "assemblyMembers": 2 } }
+    { "after": 6, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "ASSEMBLING", "assemblyMembers": 2, "assemblyCursorTotal": 0, "assemblyDeferred": true, "assemblyObstructionFloor": { "x": -364, "y": 64, "z": -340 } } },
+    { "after": 6, "view": "trace", "id": "operation-assembly:operation:supply-1-2", "expect": { "status": "ok", "eventKind": "operation_assembly_deferred" } },
+    { "after": 9, "view": "trace", "id": "operation-assembly:operation:supply-1-2", "expect": { "status": "ok", "eventKind": "operation_assembly_advanced" } }
   ],
   "frames": [
-    { "after": 2, "name": "assembly-approach" }
+    { "after": 4, "name": "assembly-throat-obstructed" }
   ]
 }

@@ -95,6 +95,46 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void hotAssemblyDeferralIsExactDurableAndPreventsColdFromSkippingTheLoadedObstacle() {
+        WorldId world = new WorldId("frontier:hot-assembly-deferral");
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
+                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(world, 91L));
+        FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
+        OperationAssembly assembly = operation.activeAssembly().orElseThrow();
+        SubjectId actor = operation.participantIds().getFirst();
+        Settlement settlement = initial.bootstrap().settlements().stream().filter(value -> value.id().equals(operation.settlementId())).findFirst().orElseThrow();
+        SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.HALL).findFirst().orElseThrow());
+        OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actor,
+                assembly.members().get(actor).corridor().get(1), access.throatFloor(),
+                OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
+
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
+                submit(engine, world, "assembly-deferral-without-hot-lease", new OperationAssemblyDeferred(operation.id(), deferral)));
+        AmbientActorLease lease = AmbientActorProcess.nextLease(initial, actor, engine.checkpoint().instant());
+        assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, lease.goal());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                submit(engine, world, "assembly-deferral-prepare", new AmbientLeasePrepared(lease)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                submit(engine, world, "assembly-deferral-hot", new AmbientLeaseTransition(actor, AmbientLeaseStatus.HOT)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                submit(engine, world, "assembly-deferral", new OperationAssemblyDeferred(operation.id(), deferral)));
+
+        FrontierWorldState deferred = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(deferral, deferred.operations().get(operation.id()).activeAssembly().orElseThrow().deferral().orElseThrow());
+        assertEquals(deferred, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(deferred)),
+                "the exact blocked actor and target survive a snapshot/recovery boundary");
+        assertEquals(new OperationAssemblyDeferred(operation.id(), deferral), FrontierWorldRuntimeDefinition.payloadCodecs().decode(
+                "frontier.operation_assembly_deferred", FrontierWorldRuntimeDefinition.payloadCodecs().encode(new OperationAssemblyDeferred(operation.id(), deferral))));
+        List<ProposedEvent> cold = SupplyOperationProcess.planAssembly(deferred,
+                SupplyOperationProcess.operationAssembly(operation, engine.checkpoint().instant().ticks()));
+        assertEquals(1, cold.size());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class, cold.getFirst().payload(),
+                "COLD retains a bounded recovery check but cannot advance a loaded-world block on its own");
+    }
+
+    @Test
     void exactStructuralDamageIsDurableAndDerivesItsConditionFromKnownCells() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:structure-damage"), 91L));
         SettlementStructure structure = state.bootstrap().settlements().getFirst().structures().getFirst();

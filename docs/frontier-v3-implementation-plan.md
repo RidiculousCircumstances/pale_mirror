@@ -236,8 +236,11 @@ Creation must retain each actor's current canonical position. Assembly COLD
 movement uses the same pure clear-lane planner as Transit; HOT assembly uses
 an actor lease with a distinct `OPERATION_ASSEMBLY` goal and accepts only the
 next observed cursor. A naturally loaded obstruction at the throat or assigned
-slot defers visibly; it neither selects a hidden alternate slot nor changes the
-world. An interrupted/failed assembly releases only its own participant and
+slot becomes a durable identity-specific deferral containing the member's next
+cursor and the exact blocked compiled floor; it freezes the shared operation
+until that same actor normally reaches that same cursor after ordinary passage
+is restored. It neither selects a hidden alternate slot nor changes the world.
+An interrupted/failed assembly releases only its own participant and
 cargo claims after the corresponding durable reason.
 
 `OperationTravel` is never cleared by a non-atomic `OperationAdvanced`.

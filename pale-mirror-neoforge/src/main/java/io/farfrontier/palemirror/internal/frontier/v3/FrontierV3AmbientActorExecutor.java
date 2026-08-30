@@ -24,9 +24,15 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferred;
 import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+import io.farfrontier.palemirror.frontier.v3.model.Settlement;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAccessPort;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementStructure;
+import io.farfrontier.palemirror.frontier.v3.model.StructureKind;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -80,55 +86,61 @@ final class FrontierV3AmbientActorExecutor {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         int admitted = 0;
-        for (var entry : state.actorLocations().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
+        // Commands submitted below synchronously install a new immutable checkpoint.  Preserve
+        // the deterministic actor order, but never let a later actor make another physical
+        // decision from the predecessor's stale snapshot.
+        for (SubjectId actorId : state.actorLocations().keySet().stream().sorted().toList()) {
             if (admitted >= MAX_ACTORS_PER_TICK) return;
-            if (entry.getValue().condition().status() != ActorLifeStatus.ALIVE
-                    || FrontierSceneAdmission.reserved(state, entry.getKey())) {
-                forgetColdDemand(runtime, entry.getKey());
+            state = runtime.decodedState().orElse(null);
+            if (state == null) return;
+            var location = state.actorLocations().get(actorId);
+            if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
+                    || FrontierSceneAdmission.reserved(state, actorId)) {
+                forgetColdDemand(runtime, actorId);
                 continue;
             }
-            var lease = state.ambientLeases().get(entry.getKey());
-            boolean demanded = demand(level, entry.getValue().position());
+            var lease = state.ambientLeases().get(actorId);
+            boolean demanded = demand(level, location.position());
             if (!demanded) {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
-                    Entity body = level.getEntity(entityId(state, entry.getKey()));
-                    if (body instanceof Mob mob && owned(mob, entry.getKey(), bioform(state, entry.getKey()))) {
+                    Entity body = level.getEntity(entityId(state, actorId));
+                    if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
                         if (directedGoal(lease)) {
-                            pursueLocalGoal(level, state, entry.getKey(), mob, lease);
-                            if (observeDirectedArrival(level, runtime, state, entry.getKey(), mob, lease)) admitted++;
+                            if (pursueLocalGoal(level, runtime, state, actorId, mob, lease)) return;
+                            if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
                         }
-                        if (drainAfterDemandHysteresis(level, runtime, entry.getKey(), mob)) admitted++;
+                        if (drainAfterDemandHysteresis(level, runtime, actorId, mob)) admitted++;
                     }
                 } else {
-                    forgetColdDemand(runtime, entry.getKey());
+                    forgetColdDemand(runtime, actorId);
                 }
                 continue;
             }
-            forgetColdDemand(runtime, entry.getKey());
+            forgetColdDemand(runtime, actorId);
             if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
-                submit(runtime, "ambient-prepare", entry.getKey().value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, entry.getKey(), runtime.checkpointImage().orElseThrow().instant())));
+                submit(runtime, "ambient-prepare", actorId.value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId, runtime.checkpointImage().orElseThrow().instant())));
                 admitted++;
                 continue;
             }
             if (lease.status() == AmbientLeaseStatus.PREPARED) {
-                Result result = materialize(level, runtime, state, entry.getKey(), lease.handoffPosition());
+                Result result = materialize(level, runtime, state, actorId, lease.handoffPosition());
                 if (result == Result.APPLIED || result == Result.CURRENT || result == Result.PENDING) {
-                    if (result != Result.PENDING) submit(runtime, "ambient-hot", entry.getKey().value(), new AmbientLeaseTransition(entry.getKey(), AmbientLeaseStatus.HOT));
+                    if (result != Result.PENDING) submit(runtime, "ambient-hot", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
                     admitted++;
                 }
                 continue;
             }
-            Entity body = level.getEntity(entityId(state, entry.getKey()));
+            Entity body = level.getEntity(entityId(state, actorId));
             if (lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
-                if (body != null && owned(body, entry.getKey(), bioform(state, entry.getKey()))) {
-                    submit(runtime, "ambient-recovered", entry.getKey().value(), new AmbientLeaseTransition(entry.getKey(), AmbientLeaseStatus.HOT));
+                if (body != null && owned(body, actorId, bioform(state, actorId))) {
+                    submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
                     admitted++;
                 }
                 continue;
             }
-            if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, entry.getKey(), bioform(state, entry.getKey()))) {
-                pursueLocalGoal(level, state, entry.getKey(), mob, lease);
-                if (observeDirectedArrival(level, runtime, state, entry.getKey(), mob, lease)) admitted++;
+            if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
+                if (pursueLocalGoal(level, runtime, state, actorId, mob, lease)) return;
+                if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
             }
         }
     }
@@ -321,20 +333,49 @@ final class FrontierV3AmbientActorExecutor {
      * remains disabled because ambient combat, target acquisition and inventory use would evade
      * the v3 physical-intent ledger.
      */
-    static void pursueLocalGoal(ServerLevel level, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+    /** @return true when a canonical command was accepted and this tick must not use its old snapshot again. */
+    static boolean pursueLocalGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
         if (lease.goal() == AmbientGoalKind.TRANSIT) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
             if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
                     || !lease.goalPosition().equals(journey.nextColdPosition())) {
                 body.getNavigation().stop();
-                return;
+                return false;
             }
         }
-        if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY && assemblyMember(state, actorId, lease) == null) {
-            body.getNavigation().stop();
-            return;
+        if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
+            OperationAssembly.Member member = assemblyMember(state, actorId, lease);
+            if (member == null) {
+                body.getNavigation().stop();
+                return false;
+            }
+            RouteOperation operation = assemblingOperation(state, actorId);
+            OperationAssembly assembly = operation.activeAssembly().orElseThrow();
+            // Assembly is one public operation, not two independent pedestrians.  A recorded
+            // block therefore holds every other member at its current exact cursor.  Only the
+            // named blocked actor may inspect the restored same target and clear the fact by a
+            // normal observed arrival; no command clears it speculatively.
+            if (assembly.deferral().isPresent() && !assembly.deferral().orElseThrow().actorId().equals(actorId)) {
+                body.getNavigation().stop();
+                return false;
+            }
+            BlockPosition obstruction = assemblyObstruction(level, state, operation, lease.goalPosition());
+            if (obstruction != null) {
+                OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actorId, lease.goalPosition(), obstruction,
+                        OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
+                if (!assembly.deferral().filter(deferral::equals).isPresent()) {
+                    io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly-deferred", actorId.value(),
+                            new OperationAssemblyDeferred(operation.id(), deferral));
+                    FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_deferred", actorId, result);
+                    body.getNavigation().stop();
+                    return true;
+                }
+                body.getNavigation().stop();
+                return false;
+            }
         }
         FrontierV3ControlledMobMotion.moveToward(level, body, localTarget(state, actorId, lease, level.getGameTime()));
+        return false;
     }
 
     static Vec3 localTarget(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease, long gameTime) {
@@ -461,6 +502,14 @@ final class FrontierV3AmbientActorExecutor {
         return state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
                 .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
                 .findFirst().orElse(null);
+    }
+    /** Returns only one authored port floor that is presently unsafe, never an inferred nearby route. */
+    private static BlockPosition assemblyObstruction(ServerLevel level, FrontierWorldState state, RouteOperation operation, BlockPosition target) {
+        if (!FrontierV3StandingPosition.hasExactHeadroom(level, target)) return target;
+        Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(operation.settlementId())).findFirst().orElse(null);
+        SettlementStructure hall = settlement == null ? null : settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst().orElse(null);
+        BlockPosition throat = hall == null ? null : SettlementAccessPort.forHall(hall).throatFloor();
+        return throat != null && !FrontierV3StandingPosition.hasExactHeadroom(level, throat) ? throat : null;
     }
     private static OperationAssembly.Member assemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         RouteOperation operation = assemblingOperation(state, actorId);

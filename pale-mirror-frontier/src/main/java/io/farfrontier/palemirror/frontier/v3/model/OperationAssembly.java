@@ -5,18 +5,26 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Exact durable approaches of a named convoy before it may start route travel. */
-public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoCarrierId) {
+public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoCarrierId, Optional<OperationAssemblyDeferral> deferral) {
     public static final int MAX_COLD_ADVANCE = 32;
+    public OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoCarrierId) { this(members, cargoCarrierId, Optional.empty()); }
     public OperationAssembly {
-        Objects.requireNonNull(members, "assembly members"); cargoCarrierId = Objects.requireNonNull(cargoCarrierId, "assembly cargo carrier");
+        Objects.requireNonNull(members, "assembly members"); cargoCarrierId = Objects.requireNonNull(cargoCarrierId, "assembly cargo carrier"); deferral = Objects.requireNonNull(deferral, "assembly deferral");
         Map<SubjectId, Member> copy = new LinkedHashMap<>();
         members.forEach((actor, member) -> {
             if (copy.put(Objects.requireNonNull(actor, "assembly actor"), Objects.requireNonNull(member, "assembly member")) != null) throw new IllegalArgumentException("duplicate assembly actor");
         });
         if (copy.isEmpty() || copy.size() > 8 || !copy.containsKey(cargoCarrierId)) throw new IllegalArgumentException("assembly requires its cargo carrier and 1..8 members");
         if (copy.values().stream().map(Member::destination).distinct().count() != copy.size()) throw new IllegalArgumentException("assembly destinations must be distinct");
+        if (deferral.isPresent()) {
+            OperationAssemblyDeferral blocked = deferral.orElseThrow(); Member member = copy.get(blocked.actorId());
+            if (member == null || member.arrived() || !member.corridor().get(member.cursor() + 1).equals(blocked.target())) {
+                throw new IllegalArgumentException("assembly deferral must name one exact next member cursor");
+            }
+        }
         members = Map.copyOf(copy);
     }
     public boolean complete() { return members.values().stream().allMatch(Member::arrived); }
@@ -27,18 +35,39 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
         Objects.requireNonNull(nextMembers, "next assembly members");
         if (!members.keySet().equals(nextMembers.keySet())) throw new IllegalArgumentException("assembly advance changes formation");
         Map<SubjectId, Member> next = new LinkedHashMap<>();
-        boolean moved = false;
+        SubjectId advancedActor = null;
         for (Map.Entry<SubjectId, Member> entry : members.entrySet()) {
             Member current = entry.getValue(); Member candidate = Objects.requireNonNull(nextMembers.get(entry.getKey()), "next assembly member");
             if (!current.corridor().equals(candidate.corridor()) || candidate.cursor() < current.cursor()
                     || candidate.cursor() > current.nextColdCursor()) {
                 throw new IllegalArgumentException("assembly member must advance its existing bounded corridor");
             }
-            moved |= candidate.cursor() > current.cursor();
+            if (candidate.cursor() > current.cursor()) {
+                if (advancedActor != null && deferral.isPresent()) {
+                    throw new IllegalArgumentException("loaded-world assembly deferral permits only its blocked member to advance");
+                }
+                advancedActor = entry.getKey();
+            }
             next.put(entry.getKey(), candidate);
         }
-        if (!moved) throw new IllegalArgumentException("assembly advance must move at least one member");
+        if (advancedActor == null) throw new IllegalArgumentException("assembly advance must move at least one member");
+        if (deferral.isPresent()) {
+            OperationAssemblyDeferral blocked = deferral.orElseThrow();
+            Member prior = members.get(blocked.actorId()), advanced = next.get(blocked.actorId());
+            if (!blocked.actorId().equals(advancedActor) || advanced.cursor() != prior.cursor() + 1
+                    || !advanced.currentPosition().equals(blocked.target())) {
+                throw new IllegalArgumentException("loaded-world assembly deferral may clear only through its blocked exact next cursor");
+            }
+        }
         return new OperationAssembly(next, cargoCarrierId);
+    }
+
+    public OperationAssembly defer(OperationAssemblyDeferral nextDeferral) {
+        nextDeferral = Objects.requireNonNull(nextDeferral, "assembly deferral");
+        if (deferral.isPresent() && !deferral.orElseThrow().equals(nextDeferral)) {
+            throw new IllegalArgumentException("assembly already has a different loaded-world deferral");
+        }
+        return new OperationAssembly(members, cargoCarrierId, Optional.of(nextDeferral));
     }
 
     public record Member(List<BlockPosition> corridor, int cursor) {

@@ -110,6 +110,15 @@ public final class FrontierWorldRuntimeDefinition {
             }
             return new CommandPlan.Accepted(List.copyOf(events));
         }
+        if (command.payload() instanceof OperationAssemblyDeferred deferred) {
+            RouteOperation operation = state.operations().get(deferred.operationId());
+            if (operation == null) return rejected("operation assembly deferral has no active operation");
+            try {
+                validateHotAssemblyDeferral(state, operation, deferred.deferral());
+                state.deferOperationAssembly(deferred.operationId(), deferred.deferral());
+            } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), deferred)));
+        }
         if (command.payload() instanceof OperationTravelSegmentCompleted completed) {
             RouteOperation operation = state.operations().get(completed.operationId());
             if (operation == null) return rejected("operation travel completion has no active operation");
@@ -315,11 +324,32 @@ public final class FrontierWorldRuntimeDefinition {
             }
         }
         if (observed == null) throw new IllegalArgumentException("HOT assembly observation did not advance an actor");
+        if (current.deferral().isPresent()) {
+            OperationAssemblyDeferral blocked = current.deferral().orElseThrow();
+            if (!blocked.actorId().equals(observed) || !next.members().get(observed).currentPosition().equals(blocked.target())) {
+                throw new IllegalArgumentException("HOT assembly observation may not bypass a loaded-world assembly deferral");
+            }
+        }
         AmbientActorLease lease = state.ambientLeases().get(observed);
         OperationAssembly.Member arrived = next.members().get(observed);
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
                 || !lease.goalPosition().equals(arrived.currentPosition())) {
             throw new IllegalArgumentException("HOT assembly observation lacks its exact active actor lease");
+        }
+    }
+    private static void validateHotAssemblyDeferral(FrontierWorldState state, RouteOperation operation, OperationAssemblyDeferral deferral) {
+        OperationAssembly assembly = operation.activeAssembly().orElseThrow(() -> new IllegalArgumentException("operation has no active assembly"));
+        OperationAssembly.Member member = assembly.members().get(deferral.actorId());
+        AmbientActorLease lease = state.ambientLeases().get(deferral.actorId());
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), operation.settlementId());
+        SettlementStructure hall = settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("assembly settlement has no Hall access port"));
+        SettlementAccessPort access = SettlementAccessPort.forHall(hall);
+        if (member == null || member.arrived() || !member.corridor().get(member.cursor() + 1).equals(deferral.target())
+                || lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
+                || !lease.goalPosition().equals(deferral.target())
+                || (!deferral.obstructionFloor().equals(deferral.target()) && !deferral.obstructionFloor().equals(access.throatFloor()))) {
+            throw new IllegalArgumentException("HOT assembly deferral lacks its exact active actor lease");
         }
     }
     private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
@@ -336,6 +366,7 @@ public final class FrontierWorldRuntimeDefinition {
             case OperationCreated created -> reduceOperationCreated(state, event.subject(), created);
             case OperationAdvanced advanced -> reduceOperationAdvanced(state, event.subject(), advanced);
             case OperationAssemblyAdvanced advanced -> reduceOperationAssemblyAdvanced(state, event.subject(), advanced);
+            case OperationAssemblyDeferred deferred -> reduceOperationAssemblyDeferred(state, event.subject(), deferred);
             case OperationTravelStarted started -> reduceOperationTravelStarted(state, event.subject(), started);
             case OperationTravelAdvanced advanced -> reduceOperationTravelAdvanced(state, event.subject(), advanced);
             case OperationTravelSegmentCompleted completed -> reduceOperationTravelSegmentCompleted(state, event.subject(), completed);
@@ -467,6 +498,11 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = state.operations().get(advanced.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation assembly subject does not own operation");
         return state.advanceOperationAssembly(advanced.operationId(), advanced.assembly());
+    }
+    private static FrontierWorldState reduceOperationAssemblyDeferred(FrontierWorldState state, SubjectId subject, OperationAssemblyDeferred deferred) {
+        RouteOperation operation = state.operations().get(deferred.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation assembly deferral subject does not own operation");
+        return state.deferOperationAssembly(deferred.operationId(), deferred.deferral());
     }
     private static FrontierWorldState reduceOperationTravelStarted(FrontierWorldState state, SubjectId subject, OperationTravelStarted started) {
         RouteOperation operation = state.operations().get(started.operationId());

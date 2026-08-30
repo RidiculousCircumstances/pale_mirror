@@ -36,6 +36,27 @@ class OperationAssemblyTest {
     }
 
     @Test
+    void durableExactDeferralPinsOnlyTheNextUnarrivedCursorAndClearsOnRealAdvance() {
+        OperationAssembly initial = new OperationAssembly(Map.of(HAULER, member(0, 0), GUARD, member(0, 1)), HAULER);
+        OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(HAULER, new BlockPosition(1, 64, 0),
+                new BlockPosition(1, 64, 0), OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
+
+        OperationAssembly deferred = initial.defer(deferral);
+        assertEquals(deferral, deferred.deferral().orElseThrow());
+        assertEquals(java.util.Optional.empty(), deferred.advance(Map.of(HAULER, member(1, 0), GUARD, member(0, 1))).deferral(),
+                "one accepted cursor observation is the only recovery path and clears the stale loaded-world observation");
+        assertThrows(IllegalArgumentException.class, () -> deferred.advance(Map.of(HAULER, member(0, 0), GUARD, member(1, 1))),
+                "a different member cannot clear the shared loaded-world deferral");
+        assertThrows(IllegalArgumentException.class, () -> initial.defer(new OperationAssemblyDeferral(HAULER, new BlockPosition(9, 64, 0),
+                new BlockPosition(9, 64, 0), OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION)));
+        assertThrows(IllegalArgumentException.class, () -> deferred.defer(new OperationAssemblyDeferral(GUARD, new BlockPosition(1, 64, 1),
+                new BlockPosition(1, 64, 1), OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION)),
+                "a second actor cannot overwrite the physical fact that currently holds the shared operation");
+        assertThrows(IllegalArgumentException.class, () -> new OperationAssembly(Map.of(HAULER, member(1, 0), GUARD, member(0, 1)), HAULER,
+                java.util.Optional.of(deferral)));
+    }
+
+    @Test
     void compiledApproachTreatsSemanticHallFloorAsSupportButKeepsTheBodyClearance() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assembly-floor"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
@@ -47,6 +68,19 @@ class OperationAssemblyTest {
 
         assertEquals(state.actorLocations().get(hauler).position(), corridor.getFirst());
         assertEquals(access.assemblyFloor(), corridor.getLast());
+    }
+
+    @Test
+    void everyCompiledOperationApproachCellRetainsTwoClearSemanticBodyCells() {
+        FrontierWorldState state = FrontierDevelopmentScenarios.operationAssemblyFixture(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assembly-clearance"), 91L).state();
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        java.util.Set<BlockPosition> geometry = FrontierGrayboxPlan.compile(state).cells().keySet();
+
+        operation.activeAssembly().orElseThrow().members().forEach((actor, member) -> member.corridor().forEach(floor -> {
+            org.junit.jupiter.api.Assertions.assertFalse(geometry.contains(floor.offset(0, 1, 0)) || geometry.contains(floor.offset(0, 2, 0)),
+                    () -> "assembly corridor must not enter authored geometry: actor=" + actor + " floor=" + floor);
+        }));
     }
 
     private static OperationAssembly.Member member(int cursor, int z) {

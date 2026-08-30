@@ -11,7 +11,7 @@ import java.util.Set;
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
-            "walk", "break", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
+            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "hive", "actor", "item", "container", "operation", "route_construction", "physical_delta", "scene", "intent", "trace", "transit");
 
@@ -70,6 +70,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
                     (type.equals("open_container") && (!position(action) || !timeout(action, 120_000L))) ||
+                    (type.equals("place") && (!position(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
                     ((type.equals("look") || type.equals("walk") || type.equals("break") || type.equals("wait_until_block")) && !action.has("position") && !action.has("at"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");

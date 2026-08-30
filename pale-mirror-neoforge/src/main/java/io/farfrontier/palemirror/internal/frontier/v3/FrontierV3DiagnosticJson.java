@@ -218,7 +218,11 @@ final class FrontierV3DiagnosticJson {
         String members = operation.participantIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
         String assembly = operation.activeAssembly().map(value -> ",\"assemblyMembers\":" + value.members().size()
                 + ",\"assemblyCursorTotal\":" + value.members().values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.OperationAssembly.Member::cursor).sum()
-                + ",\"assemblyComplete\":" + value.complete() + ",\"cargoCarrier\":\"" + quote(value.cargoCarrierId().value()) + "\"").orElse("");
+                + ",\"assemblyComplete\":" + value.complete() + ",\"cargoCarrier\":\"" + quote(value.cargoCarrierId().value()) + "\""
+                + value.deferral().map(deferral -> ",\"assemblyDeferred\":true,\"assemblyDeferredActor\":\"" + quote(deferral.actorId().value())
+                        + "\",\"assemblyDeferredTarget\":" + position(deferral.target()) + ",\"assemblyObstructionFloor\":" + position(deferral.obstructionFloor())
+                        + ",\"assemblyDeferredReason\":\"" + deferral.reason() + "\"")
+                        .orElse(",\"assemblyDeferred\":false")).orElse("");
         return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()

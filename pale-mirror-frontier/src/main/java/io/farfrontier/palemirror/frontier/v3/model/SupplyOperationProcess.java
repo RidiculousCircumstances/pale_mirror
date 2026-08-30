@@ -108,6 +108,9 @@ final class SupplyOperationProcess {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
         OperationAssembly assembly = operation.activeAssembly().orElseThrow();
+        // The durable HOT observation owns recovery.  COLD retains only a sparse, bounded
+        // recheck so an unloaded world never becomes a busy poll or silently skips the block.
+        if (assembly.deferral().isPresent()) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 100L)));
         if (assembly.complete()) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));

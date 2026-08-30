@@ -101,7 +101,9 @@ public final class FrontierV3AmbientActorGameTests {
     @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void hotAmbientBodiesUseRoleAwareControlledMotionWithoutVanillaAi(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, origin, 16);
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ambient-local-brain"), 91L));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-local-brain"), 91L), new EphemeralStore(), 10_000);
+        FrontierWorldState state = state(runtime);
         SubjectId farmer = new SubjectId("resident:1-1"), scout = new SubjectId("bioform:west-1");
         BlockPosition anchor = new BlockPosition(origin.getX(), origin.getY(), origin.getZ());
         AmbientActorLease farmerLease = new AmbientActorLease(farmer, anchor, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
@@ -117,8 +119,8 @@ public final class FrontierV3AmbientActorGameTests {
         Zombie scoutBody = (Zombie) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, scout));
         double farmerBefore = farmerBody.distanceToSqr(origin.getX() + 0.5D, farmerBody.getY(), origin.getZ() + 0.5D);
         for (int tick = 0; tick < 80; tick++) {
-            FrontierV3AmbientActorExecutor.pursueLocalGoal(level, state, farmer, farmerBody, farmerLease);
-            FrontierV3AmbientActorExecutor.pursueLocalGoal(level, state, scout, scoutBody, scoutLease);
+            FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, state, farmer, farmerBody, farmerLease);
+            FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, state, scout, scoutBody, scoutLease);
         }
         helper.assertTrue(farmerBody.isNoAi() && scoutBody.isNoAi(),
                 "HOT ambient bodies must stay outside uncontrolled vanilla target/combat AI");
@@ -135,7 +137,24 @@ public final class FrontierV3AmbientActorGameTests {
         helper.assertTrue(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 0L)
                         .distanceToSqr(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 180L)) > 0.01D,
                 "a durable ambient work lease must produce a continuing cycle rather than one static target");
-        farmerBody.discard(); scoutBody.discard(); helper.succeed();
+        farmerBody.discard(); scoutBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-assembly-headroom", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void exactAssemblyTargetRejectsLoadedObstructionWithoutClimbingToAnotherFloor(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos floor = helper.absolutePos(new BlockPos(4, 8, 0));
+        level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+        BlockPosition anchor = new BlockPosition(floor.getX(), floor.getY(), floor.getZ());
+        helper.assertTrue(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
+                "a canonical floor with two clear body cells admits its exact assembly cursor");
+        level.setBlock(floor.above(), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
+        helper.assertFalse(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
+                "a player block at the exact feet cell is a loaded-world deferral, not an invitation to climb it");
+        level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(floor, Blocks.AIR.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
+                "headroom checks only the exact canonical body cells; ordinary Minecraft collision remains the support authority");
+        helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-transit-motion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
