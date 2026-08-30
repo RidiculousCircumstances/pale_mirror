@@ -9,6 +9,9 @@ import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -30,6 +33,24 @@ public final class FrontierV3GrayboxCursorGameTests {
                 "one player-loaded east chunk is not delayed behind a remote west chunk");
         helper.assertValueEqual(cursor.nextNaturallyLoaded(cell -> cell.position().x() >= 0).orElseThrow().ownerId().value(), "organ:east-b",
                 "the local loaded chunk keeps bounded in-chunk progress");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void publicAccessSurfaceRequiresSupportAndRetainsHallProvenance(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(16, 8, 0));
+        GrayboxCell surface = new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
+                new SubjectId("structure:access-hall"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, surface), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
+                "an unsupported public access sill must defer rather than float or adopt terrain");
+        level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, surface), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "a supported public access sill must materialize through ordinary owned projection");
+        helper.assertTrue(level.getBlockState(position).is(Blocks.GRAY_CARPET) && ledger.claim(position) != null
+                        && ledger.claim(position).owner().equals("structure:access-hall")
+                        && ledger.claim(position).semanticPart().equals(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE.name()),
+                "public access must retain exact Hall provenance rather than become anonymous route decoration");
         helper.succeed();
     }
 

@@ -44,6 +44,23 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
+    void everyHallCompilesOneAuditablePublicAccessPortWithARealTwoBodyThroat() {
+        FrontierWorldState state = initial(); FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        state.bootstrap().settlements().forEach(settlement -> {
+            SettlementStructure hall = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow();
+            SettlementAccessPort port = SettlementAccessPort.forHall(hall);
+            assertEquals(new GrayboxCell(port.assemblyFloor(), hall.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
+                    plan.cells().get(port.assemblyFloor()), "public assembly sill must retain exact Hall provenance");
+            assertEquals(new GrayboxCell(port.routeFloor(), FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE),
+                    plan.cells().get(port.routeFloor()), "public assembly sill must join the route graph at its exact route cell");
+            port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
+                    "Hall throat must retain two body-clear cells: " + hall.id()));
+            assertEquals(FrontierGrayboxPlan.intactStructureCell(hall, port.assemblyFloor()), plan.cells().get(port.assemblyFloor()));
+        });
+    }
+
+    @Test
     void everyBootstrapContainerHasOnePlannedProvenanceSupportSocket() {
         FrontierWorldState state = initial();
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);

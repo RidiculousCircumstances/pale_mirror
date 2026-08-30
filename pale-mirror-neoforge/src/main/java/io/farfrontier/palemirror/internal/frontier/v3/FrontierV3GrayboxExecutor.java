@@ -175,7 +175,8 @@ final class FrontierV3GrayboxExecutor {
     }
 
     private static boolean requiresSupport(GrayboxSemanticPart part) {
-        return part == GrayboxSemanticPart.FOUNDATION || part == GrayboxSemanticPart.ROUTE_SURFACE;
+        return part == GrayboxSemanticPart.FOUNDATION || part == GrayboxSemanticPart.ROUTE_SURFACE
+                || part == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE;
     }
     private static boolean matches(FrontierV3GrayboxLedger.Claim claim, GrayboxCell cell) {
         return claim.owner().equals(cell.ownerId().value()) && claim.material().equals(cell.material().name())

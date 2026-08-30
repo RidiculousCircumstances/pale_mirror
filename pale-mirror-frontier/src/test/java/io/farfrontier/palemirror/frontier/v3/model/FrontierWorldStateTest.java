@@ -161,6 +161,22 @@ class FrontierWorldStateTest {
     }
 
     @Test
+    void destroyedPublicAccessSillBecomesExactHallDamageRatherThanAnUnownedPathHole() {
+        FrontierWorldState baseline = initial(); Settlement settlement = baseline.bootstrap().settlements().getFirst();
+        SettlementStructure hall = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow();
+        SettlementAccessPort port = SettlementAccessPort.forHall(hall);
+        PhysicalDelta loss = new PhysicalDelta(port.assemblyFloor(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(hall.id()), java.util.Optional.of(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), "player:test");
+
+        FrontierWorldState changed = baseline.recordPhysicalDelta(loss);
+
+        assertEquals(StructureCondition.DAMAGED, changed.structureConditions().get(hall.id()));
+        assertEquals(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE, changed.structureDamage().get(hall.id()).cells().get(port.assemblyFloor()).semanticPart());
+        assertEquals(null, FrontierGrayboxPlan.compile(changed).cells().get(port.assemblyFloor()));
+        assertEquals(loss, changed.physicalDeltas().get(port.assemblyFloor()));
+    }
+
+    @Test
     void infectionOverlayPlanKeepsOneCompleteBoundedSurfacePatchPerSparseSourceCell() {
         FrontierWorldState baseline = initial();
         InfectionCell trace = new InfectionCell(-100, 100);

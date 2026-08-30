@@ -140,12 +140,17 @@ public final class FrontierGrayboxPlan {
             case HALL -> GrayboxMaterial.HALL; case HOUSING -> GrayboxMaterial.HOUSING; case FARM -> GrayboxMaterial.FARM;
             case WORKSHOP -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
         };
+        SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
             add(cells, structure.anchor().offset(x, 0, z), structure.id(), material, GrayboxSemanticPart.FOUNDATION);
             for (int y = 1; y < height; y++) if (x == -width / 2 || x == (width - 1) / 2 || z == -depth / 2 || z == (depth - 1) / 2) {
-                add(cells, structure.anchor().offset(x, y, z), structure.id(), material, GrayboxSemanticPart.WALL);
+                BlockPosition wall = structure.anchor().offset(x, y, z);
+                if (access == null || !access.throatAirCells().contains(wall)) add(cells, wall, structure.id(), material, GrayboxSemanticPart.WALL);
             }
             add(cells, structure.anchor().offset(x, height, z), structure.id(), material, GrayboxSemanticPart.ROOF);
+        }
+        if (access != null) for (BlockPosition surface : access.ownedSurfaceCells()) {
+            add(cells, surface, structure.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
         }
     }
 

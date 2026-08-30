@@ -7,5 +7,6 @@ public enum GrayboxSemanticPart {
     ROOF,
     HIVE_TISSUE,
     ROUTE_SURFACE,
+    PUBLIC_ACCESS_SURFACE,
     INFECTION_SURFACE
 }
