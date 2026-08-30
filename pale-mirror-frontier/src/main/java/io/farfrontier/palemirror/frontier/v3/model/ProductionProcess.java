@@ -50,7 +50,7 @@ final class ProductionProcess {
         // Finance is a start precondition.  A blocked task must not leave a durable job
         // occupying its workshop: otherwise a later objective review could create a
         // second job for the same facility and quarantine the canonical engine.
-        if (!CompanyWorkPaymentProcess.canSettle(state, job)) {
+        if (!CompanyWorkPaymentProcess.canReserve(state, job)) {
             return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.FINANCE_UNAVAILABLE);
         }
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new ProductionStarted(job, input.orElseThrow().id())), schedule(complete(job, action.dueAt().ticks() + 100L)));
@@ -61,7 +61,6 @@ final class ProductionProcess {
         if (job == null) throw new IllegalStateException("production completion has no active job: " + action.subject().value());
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id()); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.FACILITY_UNAVAILABLE);
-        if (!CompanyWorkPaymentProcess.canSettle(state, job)) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.FINANCE_UNAVAILABLE);
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null) {
             SubjectId depot = FrontierWorldState.depotId(settlement.id()); OptionalInt slot = state.inventory().firstFreeSlot(depot);
@@ -88,7 +87,9 @@ final class ProductionProcess {
                 || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) throw new IllegalArgumentException("production start input is unavailable or not in its depot");
         if (input.count() != job.outputCount() || !BREAD.equals(job.outputItemKind())) throw new IllegalArgumentException("production output is not a verified wheat conversion");
         boolean physicallyActive = state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).status() == ContainerSurfaceStatus.ACTIVE;
-        activeTask(state, settlement.id()); return physicallyActive ? state.withProductionJob(job) : state.startProductionJob(job, started.inputItemId());
+        activeTask(state, settlement.id());
+        FrontierWorldState startedState = physicallyActive ? state.withProductionJob(job) : state.startProductionJob(job, started.inputItemId());
+        return CompanyWorkPaymentProcess.reserve(startedState, job);
     }
 
     static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, ProductionCompleted completed) {
@@ -104,7 +105,6 @@ final class ProductionProcess {
             throw new IllegalArgumentException("materialized production output requires a physical transformation receipt");
         }
         activeTask(state, settlement.id());
-        if (!CompanyWorkPaymentProcess.canSettle(state, job)) throw new IllegalArgumentException("production completion has unavailable company finance");
         return CompanyWorkPaymentProcess.settle(state, job).completeProductionJob(completed.jobId(), completed.output());
     }
 
@@ -132,7 +132,7 @@ final class ProductionProcess {
             case FINANCE_UNAVAILABLE -> {
                 ProductionJob job = state.productionJobs().get(blocked.workId());
                 if (job != null) {
-                    if (!job.settlementId().equals(settlement.id()) || CompanyWorkPaymentProcess.canSettle(state, job)) {
+                    if (!job.settlementId().equals(settlement.id()) || CompanyWorkPaymentProcess.canReserve(state, job)) {
                         throw new IllegalArgumentException("production finance block precondition does not hold");
                     }
                     break;
@@ -152,7 +152,7 @@ final class ProductionProcess {
                     throw new IllegalArgumentException("production finance start block precondition does not hold");
                 }
                 int ordinal = state.strategicPlans().objectives().get(pending.objectiveId()).decisionOrdinal();
-                if (CompanyWorkPaymentProcess.canSettle(state, job(state, settlement, workshop, prospectiveInput.orElseThrow(), ordinal))) {
+                if (CompanyWorkPaymentProcess.canReserve(state, job(state, settlement, workshop, prospectiveInput.orElseThrow(), ordinal))) {
                     throw new IllegalArgumentException("production finance start block has available funds");
                 }
             }

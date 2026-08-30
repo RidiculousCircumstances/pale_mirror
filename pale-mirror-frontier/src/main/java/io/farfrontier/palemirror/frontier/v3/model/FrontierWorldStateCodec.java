@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 62, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 63, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -71,7 +71,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
                     && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
-                    && version != 58 && version != 59 && version != 60 && version != 61 && version != VERSION) {
+                    && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -79,7 +79,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
-            EconomicLedger economics = version >= 60 ? readEconomicLedger(input) : EconomicLedger.bootstrap(bootstrap);
+            EconomicLedger economics = version >= 60 ? readEconomicLedger(input, version >= 63) : EconomicLedger.bootstrap(bootstrap);
             CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62) : CompanyRegistry.empty();
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
@@ -269,8 +269,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, account.ownerId().value()); output.writeByte(account.ownerKind().ordinal()); output.writeByte(account.status().ordinal());
             output.writeLong(account.balance().raw()); output.writeLong(account.creditLimit().raw());
         }
+        writeCount(output, ledger.reservations().size());
+        for (FinancialReservation reservation : ledger.reservations().values().stream().sorted(Comparator.comparing(FinancialReservation::id)).toList()) {
+            writeString(output, reservation.id().value()); writeString(output, reservation.payerId().value()); writeString(output, reservation.payeeId().value());
+            writeString(output, reservation.reasonId().value()); output.writeLong(reservation.amount().raw());
+        }
     }
-    private static EconomicLedger readEconomicLedger(DataInputStream input) throws IOException {
+    private static EconomicLedger readEconomicLedger(DataInputStream input, boolean reservationsPresent) throws IOException {
         Map<SubjectId, EconomicAccount> accounts = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId owner = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
@@ -280,7 +285,15 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate economic account");
             }
         }
-        return new EconomicLedger(accounts);
+        Map<SubjectId, FinancialReservation> reservations = new LinkedHashMap<>();
+        if (reservationsPresent) {
+            for (int index = 0, count = readCount(input); index < count; index++) {
+                SubjectId id = new SubjectId(readString(input)); FinancialReservation reservation = new FinancialReservation(id,
+                        new SubjectId(readString(input)), new SubjectId(readString(input)), new SubjectId(readString(input)), new FixedScalar(input.readLong()));
+                if (reservations.put(id, reservation) != null) throw new IllegalArgumentException("duplicate financial reservation");
+            }
+        }
+        return new EconomicLedger(accounts, reservations);
     }
     private static void writeCompanyRegistry(DataOutputStream output, CompanyRegistry registry) throws IOException {
         writeCount(output, registry.companies().size());
@@ -568,7 +581,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             java.util.Set<SubjectId> handoffActors = new java.util.LinkedHashSet<>();
             for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) handoffActors.add(new SubjectId(readString(input)));
             java.util.Optional<SceneRecoveryEvidence> recovery = java.util.Optional.empty();
-            if (version >= VERSION && input.readBoolean()) {
+            if (version >= 62 && input.readBoolean()) {
                 java.util.Set<SubjectId> missing = new java.util.LinkedHashSet<>();
                 for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) missing.add(new SubjectId(readString(input)));
                 recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));

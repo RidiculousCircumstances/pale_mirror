@@ -28,7 +28,12 @@ public final class ProductionTransformationStateSupport {
         }
         StrategicTask task = activeTask(state, job);
         if (task.status() != StrategicTaskStatus.ACTIVE) throw new IllegalArgumentException("production transformation task is not active");
-        if (!CompanyWorkPaymentProcess.canSettle(state, job)) throw new IllegalArgumentException("production transformation has unavailable company finance");
+        CompanyWorkPaymentProcess.contractFor(state, job).ifPresent(contract -> {
+            FinancialReservation expected = CompanyWorkPaymentProcess.reservation(job, contract);
+            if (!state.inventory().economics().reservations().containsKey(expected.id())) {
+                throw new IllegalArgumentException("production transformation has no held company finance");
+            }
+        });
     }
 
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ProductionTransformationObservation observation,

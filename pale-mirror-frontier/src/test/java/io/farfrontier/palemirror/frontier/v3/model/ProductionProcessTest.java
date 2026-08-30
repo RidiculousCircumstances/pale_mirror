@@ -182,7 +182,7 @@ class ProductionProcessTest {
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)), StrategicTaskStatus.ACTIVE);
         ProductionJob job = new ProductionJob(new SubjectId("job:production-1-physical"), settlement, new SubjectId("structure:1-workshop"),
                 worker, new SubjectId("item:bootstrap-1-wheat"), new SubjectId("item:production-1-physical-bread"), "minecraft:bread", 64);
-        state = state.withProductionJob(job);
+        state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-1-physical"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
                 PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId(), job.outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);

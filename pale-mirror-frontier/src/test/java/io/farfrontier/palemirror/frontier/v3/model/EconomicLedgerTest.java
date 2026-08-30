@@ -46,4 +46,28 @@ class EconomicLedgerTest {
         assertEquals(issued, after.accounts().values().stream().map(EconomicAccount::balance).reduce(FixedScalar.ZERO, FixedScalar::plus));
         assertThrows(IllegalArgumentException.class, () -> after.transfer(payer, payee, EconomicLedger.INITIAL_SETTLEMENT_TREASURY));
     }
+
+    @Test
+    void namedReservationPreventsDoubleCommitmentThenSettlesWithoutMinting() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:economy-reservation"), 91L));
+        SubjectId payer = new SubjectId("settlement:1"), payee = state.bootstrap().hive().id();
+        FinancialReservation hold = new FinancialReservation(new SubjectId("reservation:test-payment"), payer, payee,
+                new SubjectId("job:test-payment"), FixedScalar.whole(60));
+        EconomicLedger reserved = state.inventory().economics().reserve(hold);
+        FrontierWorldState reservedState = state.withInventory(state.inventory().withEconomics(reserved));
+
+        assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY, reserved.require(payer).balance());
+        assertEquals(FixedScalar.whole(40), reserved.availableToReserve(payer));
+        assertEquals(reservedState, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(reservedState)));
+        assertThrows(IllegalArgumentException.class, () -> reserved.reserve(new FinancialReservation(new SubjectId("reservation:overcommit"), payer, payee,
+                new SubjectId("job:overcommit"), FixedScalar.whole(41))));
+        EconomicLedger released = reserved.release(hold.id());
+        assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY, released.require(payer).balance());
+        assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY, released.availableToReserve(payer));
+        assertThrows(IllegalArgumentException.class, () -> released.settle(hold.id()));
+        EconomicLedger settled = reserved.settle(hold.id());
+        assertTrue(settled.reservations().isEmpty());
+        assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY.minus(hold.amount()), settled.require(payer).balance());
+        assertEquals(hold.amount(), settled.require(payee).balance());
+    }
 }
