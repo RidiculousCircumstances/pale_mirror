@@ -18,6 +18,7 @@ class FrontierReadabilityPlanTest {
         FrontierObjectBoard workshop = plan.boards().get(state.bootstrap().settlements().getFirst().structures().stream()
                 .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id());
         assertEquals(FrontierObjectBoard.Tone.SETTLEMENT, workshop.tone());
+        assertEquals(FrontierObjectBoard.Scope.LOCAL, workshop.scope());
         assertTrue(workshop.text().contains("WORKSHOP"));
         assertTrue(workshop.text().endsWith("OPERATIONAL"));
         ResourceSite field = FrontierResourceSitePlan.compile(state.bootstrap()).values().iterator().next();
@@ -29,6 +30,7 @@ class FrontierReadabilityPlanTest {
         FrontierObjectBoard routeBoard = plan.boards().get(FrontierRouteNetwork.OWNER);
         assertEquals(FrontierObjectBoard.Tone.SETTLEMENT, routeBoard.tone());
         assertTrue(routeBoard.text().contains("FRONTIER ROUTES"));
+        assertEquals(FrontierObjectBoard.Scope.LANDMARK, routeBoard.scope());
         assertTrue(routeBoard.text().endsWith("ACTIVE · 12 SETTLEMENTS"));
         assertEquals(FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3), routeBoard.position());
         assertEquals(plan.boards(), FrontierReadabilityPlan.compile(state).boards());
@@ -43,6 +45,7 @@ class FrontierReadabilityPlanTest {
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));
         assertTrue(!board.text().contains(structure.id().value()));
+        assertEquals(FrontierObjectBoard.Scope.LANDMARK, board.scope());
     }
 
     @Test
@@ -53,6 +56,7 @@ class FrontierReadabilityPlanTest {
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("INFECTED\nSATURATED"));
         assertTrue(!board.text().contains(heart.id().value()));
+        assertEquals(FrontierObjectBoard.Scope.LANDMARK, board.scope());
     }
 
     @Test

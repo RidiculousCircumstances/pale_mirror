@@ -25,7 +25,7 @@ public final class FrontierReadabilityPlan {
             StructureCondition condition = state.structureConditions().get(structure.id());
             InfectionOverlayStage stage = contamination.get(structure.id());
             boolean quarantine = structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id());
-            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition, stage, quarantine),
+            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition, stage, quarantine), scope(structure.kind()),
                     settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition), stage)));
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
@@ -40,13 +40,14 @@ public final class FrontierReadabilityPlan {
     private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage) {
         boolean operational = state.isHiveOrganOperational(organ.id());
         add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), stage == null && operational ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING,
+                organ.kind() == HiveOrganKind.HEART ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL,
                 "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? "ACTIVE" : "DISABLED · REPAIR NEEDED", stage)));
     }
 
     private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(site), fieldTone(lifecycle.phase()),
+        add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(site), fieldTone(lifecycle.phase()), FrontierObjectBoard.Scope.LOCAL,
                 settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(lifecycle)));
     }
 
@@ -63,7 +64,7 @@ public final class FrontierReadabilityPlan {
                 : caravan ? "CARAVAN EN ROUTE" : "ACTIVE · 12 SETTLEMENTS"
                 : routeConstructionText(state, construction);
         add(values, new FrontierObjectBoard(FrontierRouteNetwork.OWNER,
-                FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3), tone,
+                FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3), tone, FrontierObjectBoard.Scope.LANDMARK,
                 "FRONTIER ROUTES\nNETWORK\n" + stateText));
     }
 
@@ -94,6 +95,10 @@ public final class FrontierReadabilityPlan {
 
     private static FrontierObjectBoard.Tone tone(StructureCondition condition, InfectionOverlayStage stage, boolean quarantine) {
         return condition == StructureCondition.INTACT && stage == null && !quarantine ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
+    }
+
+    private static FrontierObjectBoard.Scope scope(StructureKind kind) {
+        return kind == StructureKind.HALL ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL;
     }
 
     private static FrontierObjectBoard.Tone fieldTone(ResourceSitePhase phase) {

@@ -97,10 +97,13 @@ final class FrontierV3ObjectBoardExecutor {
         CompoundTag data = display.saveWithoutId(new CompoundTag());
         Component text = Component.literal(board.text()).withStyle(colour(board.tone()), ChatFormatting.BOLD);
         data.putString(Display.TextDisplay.TAG_TEXT, Component.Serializer.toJson(text, display.registryAccess()));
-        data.putInt("line_width", 320); data.putByte("text_opacity", (byte) 0xFF); data.putInt("background", 0xE0000000);
-        data.putBoolean("shadow", true); data.putBoolean("see_through", true); data.putString("alignment", "center"); data.putFloat("view_range", 3.0F);
-        data.putFloat("width", 20.0F); data.putFloat("height", 5.0F); data.putInt("glow_color_override", glow(board.tone())); data.putBoolean("Glowing", true);
-        Transformation.EXTENDED_CODEC.encodeStart(NbtOps.INSTANCE, new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(1.75F), new Quaternionf()))
+        BoardRenderProfile profile = BoardRenderProfile.forScope(board.scope());
+        data.putInt("line_width", profile.lineWidth()); data.putByte("text_opacity", (byte) 0xFF); data.putInt("background", 0xB0000000);
+        // Object boards belong to an object in physical space. Rendering through its building
+        // makes remote local facts overlap and falsely look like a global HUD.
+        data.putBoolean("shadow", true); data.putBoolean("see_through", false); data.putString("alignment", "center"); data.putFloat("view_range", profile.viewRange());
+        data.putFloat("width", profile.width()); data.putFloat("height", profile.height()); data.putInt("glow_color_override", glow(board.tone())); data.putBoolean("Glowing", true);
+        Transformation.EXTENDED_CODEC.encodeStart(NbtOps.INSTANCE, new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(profile.scale()), new Quaternionf()))
                 .ifSuccess(value -> data.put("transformation", value));
         Display.BillboardConstraints.CODEC.encodeStart(NbtOps.INSTANCE, Display.BillboardConstraints.CENTER).ifSuccess(value -> data.put("billboard", value));
         Brightness.CODEC.encodeStart(NbtOps.INSTANCE, Brightness.FULL_BRIGHT).ifSuccess(value -> data.put("brightness", value));
@@ -112,6 +115,15 @@ final class FrontierV3ObjectBoardExecutor {
     }
     private static int glow(FrontierObjectBoard.Tone tone) {
         return switch (tone) { case SETTLEMENT -> 0xFFAA00; case HIVE -> 0xD77CFF; case WARNING -> 0xFF5555; };
+    }
+    /** Compact physical board grammar.  Display view range is expressed in 64-block units. */
+    private record BoardRenderProfile(int lineWidth, float viewRange, float width, float height, float scale) {
+        static BoardRenderProfile forScope(FrontierObjectBoard.Scope scope) {
+            return switch (scope) {
+                case LANDMARK -> new BoardRenderProfile(176, 1.50F, 8.0F, 3.0F, 0.95F);
+                case LOCAL -> new BoardRenderProfile(144, 0.70F, 6.0F, 2.5F, 0.70F);
+            };
+        }
     }
     /**
      * A canonical revision is not a materialization epoch.  The simulation can advance its

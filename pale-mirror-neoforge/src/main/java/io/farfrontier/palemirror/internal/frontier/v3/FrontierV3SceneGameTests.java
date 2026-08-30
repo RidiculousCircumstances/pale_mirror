@@ -154,24 +154,32 @@ public final class FrontierV3SceneGameTests {
             level.getChunkAt(position); prepareFloor(level, position);
             addOwnedBody(helper, level, lease, lease.members().get(index), position);
         }
-        for (SceneMember member : lease.members()) {
-            Entity body = level.getEntity(member.entityId());
-            helper.assertTrue(body != null && FrontierV3SceneExecutor.recognizes(runtime, body),
-                    "only a body whose UUID, kind, actor, lease and revision match an active canonical scene may pass Graybox admission: "
-                            + admissionDetail(runtime, member, body));
-        }
-        Zombie foreign = EntityType.ZOMBIE.create(level);
-        helper.assertTrue(foreign != null && !FrontierV3SceneExecutor.recognizes(runtime, foreign),
-                "an untagged native mob must not acquire a scene admission proof");
-        FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-drain", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING));
-        FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-close", leaseId.value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased(leaseId,
-                lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), candidate.handoffPosition())).toList()));
-        Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
-        helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
-                "a stale body from a closed scene must be denied rather than retained as a permanent exception");
-        lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
-        runtime.shutdown(); helper.succeed();
+        // addFreshEntity is accepted on this server tick but the UUID index becomes observable
+        // on the next tick.  The proof is about strict admission, not an incidental indexing race.
+        helper.runAfterDelay(1L, () -> {
+            try {
+                for (SceneMember member : lease.members()) {
+                    Entity body = level.getEntity(member.entityId());
+                    helper.assertTrue(body != null && FrontierV3SceneExecutor.recognizes(runtime, body),
+                            "only a body whose UUID, kind, actor, lease and revision match an active canonical scene may pass Graybox admission: "
+                                    + admissionDetail(runtime, member, body));
+                }
+                Zombie foreign = EntityType.ZOMBIE.create(level);
+                helper.assertTrue(foreign != null && !FrontierV3SceneExecutor.recognizes(runtime, foreign),
+                        "an untagged native mob must not acquire a scene admission proof");
+                FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+                FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-drain", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING));
+                FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-close", leaseId.value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased(leaseId,
+                        lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), candidate.handoffPosition())).toList()));
+                Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
+                helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
+                        "a stale body from a closed scene must be denied rather than retained as a permanent exception");
+                helper.succeed();
+            } finally {
+                lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+                runtime.shutdown();
+            }
+        });
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-conflict", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

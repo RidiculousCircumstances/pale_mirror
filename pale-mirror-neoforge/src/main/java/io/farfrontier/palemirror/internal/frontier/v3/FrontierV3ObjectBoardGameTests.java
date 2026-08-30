@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.EntityType;
@@ -71,6 +72,21 @@ public final class FrontierV3ObjectBoardGameTests {
         helper.assertValueEqual(display(level, position).getCustomName().getString(), current.text(), "the display exposes only current canonical text");
         helper.assertValueEqual(level.getEntitiesOfClass(Display.TextDisplay.class, new AABB(position).inflate(1.0D)).size(), 1,
                 "an explanation update never duplicates a player-facing board");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void localBoardUsesCompactOccludedPhysicalPresentation(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(27, 8, 0));
+        FrontierObjectBoard board = board(position, "site:board-local-field", FrontierObjectBoard.Tone.SETTLEMENT,
+                "Northwatch\nWHEAT FIELD\nGROWING · STAGE 0/7");
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, FrontierV3ObjectBoardLedger.get(level), board), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
+                "a local object board is materialized once");
+        CompoundTag data = display(level, position).saveWithoutId(new CompoundTag());
+        helper.assertFalse(data.getBoolean("see_through"), "a local board may not render through its own or a neighbouring structure");
+        helper.assertTrue(data.getFloat("view_range") <= 0.70F, "local state remains local instead of becoming horizon-wide HUD text");
+        helper.assertTrue(data.getInt("line_width") <= 144, "local text has a compact readable line width");
+        helper.assertTrue(data.contains("transformation", Tag.TAG_COMPOUND), "the compact scale is persisted with the owned display");
         helper.succeed();
     }
 

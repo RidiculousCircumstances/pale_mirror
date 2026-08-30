@@ -367,10 +367,13 @@ communicate function before text; labels explain state, cause, risk and possible
 action without exposing opaque IDs to ordinary players.
 
 Boards are a pure projection, not a second state store: their deterministic
-identity, position and content come from the current canonical object. The
-loaded-chunk executor owns a bounded provenance record. A moved, replaced or
-missing claimed board is a visible presentation conflict; it is never silently
-recreated over an unknown world entity.
+identity, position, scope and content come from the current canonical object.
+Landmarks orient an approach; object-local facts are compact, use a local view
+range and are occluded by physical geometry, so a settlement does not become a
+wall of text or a remote HUD. The loaded-chunk executor owns a bounded
+provenance record. A moved, replaced or missing claimed board is a visible
+presentation conflict; it is never silently recreated over an unknown world
+entity.
 
 Evidence is graded separately:
 
