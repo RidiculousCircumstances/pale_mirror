@@ -18,13 +18,20 @@ final class FrontierDevelopmentScenarios {
     private FrontierDevelopmentScenarios() { }
 
     static FrontierWorldState hotSceneStrikeState(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, seed));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        FrontierWorldState state = null; RouteOperation operation = null;
+        for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            if (tick % 20L != 0L) continue;
+            state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            RouteOperation candidate = state.operations().get(new SubjectId("operation:supply-1-2"));
+            if (candidate != null && candidate.stage() == OperationStage.EN_ROUTE && candidate.activeTravel().isPresent()
+                    && candidate.activeTravel().orElseThrow().cursor() == 0) {
+                operation = candidate;
+                break;
+            }
         }
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst()
-                .orElseThrow(() -> new IllegalStateException("development scene needs one en-route operation"));
+        if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
         BlockPosition intercept = operation.currentPosition();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
             if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorLocation(bioform.id(), intercept);
@@ -56,21 +63,29 @@ final class FrontierDevelopmentScenarios {
      */
     static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
-        var checkpoint = engine.checkpoint();
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
-        BlockPosition start = new BlockPosition(-360, 64, -340);
-        BlockPosition next = new BlockPosition(-366, 64, -340);
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || operation.routeIndex() != 0
-                || !operation.route().getFirst().equals(start) || !operation.route().get(1).equals(next)
-                || !operation.participantIds().equals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16")))) {
-            throw new IllegalStateException("development route-return fixture did not retain its exact Northwatch shipment");
+        io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = null;
+        FrontierWorldState state = null; RouteOperation operation = null;
+        for (long tick = 1L; tick <= 12_000L; tick++) {
+            engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            if (tick % 20L != 0L) continue;
+            checkpoint = engine.checkpoint(); state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            RouteOperation candidate = state.operations().get(new SubjectId("operation:supply-1-2"));
+            if (candidate != null && candidate.stage() == OperationStage.EN_ROUTE && candidate.routeIndex() == 0
+                    && candidate.activeTravel().isPresent() && candidate.activeTravel().orElseThrow().cursor() == 0) {
+                operation = candidate; break;
+            }
         }
+        BlockPosition start = new BlockPosition(-366, 64, -340);
+        BlockPosition next = new BlockPosition(-366, 64, -304);
+        if (checkpoint == null || state == null || operation == null || !operation.route().getFirst().equals(start) || !operation.route().get(1).equals(next)
+                || !operation.participantIds().equals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16")))) {
+            throw new IllegalStateException("development route-return fixture did not retain its exact assembled Northwatch shipment");
+        }
+        RouteOperation activeOperation = operation;
         var schedules = checkpoint.schedules().stream()
-                .filter(action -> !action.subject().equals(operation.id()) || !action.kind().equals("frontier.operation.progress"))
+                .filter(action -> !action.subject().equals(activeOperation.id()) || !action.kind().equals("frontier.operation.progress"))
                 .toList();
-        if (schedules.stream().anyMatch(action -> action.subject().equals(operation.id()) && action.kind().equals("frontier.operation.progress"))) {
+        if (schedules.stream().anyMatch(action -> action.subject().equals(activeOperation.id()) && action.kind().equals("frontier.operation.progress"))) {
             throw new IllegalStateException("development route-return fixture retained a pre-HOT route progression");
         }
         return new RouteSceneReturnFixture(state, checkpoint.instant(), schedules);
@@ -83,14 +98,17 @@ final class FrontierDevelopmentScenarios {
      */
     static HiveGrowthFixture hiveGrowthFixture(WorldId worldId, long seed) {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
-        for (long tick = 100L; tick <= 3_600L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
-        var checkpoint = engine.checkpoint();
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
-        HiveGrowthJob job = state.hiveColony().growthJobs().get(new SubjectId("job:hive-growth-1"));
-        if (job == null || state.physicalIntents().get(job.consumptionIntentId()) == null) {
-            throw new IllegalStateException("development hive-growth fixture did not reach its exact biomass boundary");
+        for (long tick = 1L; tick <= 12_000L; tick++) {
+            engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
+            if (tick % 20L != 0L) continue;
+            var checkpoint = engine.checkpoint();
+            FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            HiveGrowthJob job = state.hiveColony().growthJobs().get(new SubjectId("job:hive-growth-1"));
+            if (job != null && state.physicalIntents().get(job.consumptionIntentId()) != null) {
+                return new HiveGrowthFixture(state, checkpoint.instant(), checkpoint.schedules());
+            }
         }
-        return new HiveGrowthFixture(state, checkpoint.instant(), checkpoint.schedules());
+        throw new IllegalStateException("development hive-growth fixture did not reach its exact biomass boundary by 12000 ticks");
     }
 
     /**

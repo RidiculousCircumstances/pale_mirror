@@ -186,7 +186,7 @@ class FrontierV3DiagnosticJsonTest {
         java.util.List<BlockPosition> waypoints = baseline.routeTopology().supplyWaypoints(baseline.bootstrap(), settlement);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:diagnostic-route"), settlement,
                 java.util.List.of(waypoints.get(0), waypoints.get(1), waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
-                        waypoints.get(2), waypoints.get(3), waypoints.get(4), waypoints.get(5), waypoints.get(6)), 0, RouteConstructionStatus.BUILDING);
+                        waypoints.get(2), waypoints.get(3), waypoints.get(4), waypoints.get(5)), 0, RouteConstructionStatus.BUILDING);
         FrontierWorldState changed = withRouteConstruction(baseline, project);
 
         String route = FrontierV3DiagnosticJson.render("route_construction", settlement.value(), checkpoint, changed, Optional.empty());

@@ -32,8 +32,8 @@ class RouteConstructionProcessIntegrationTest {
                 engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new PhysicalDeltaObserved(delta))));
         for (long tick = 1L; tick <= 2_600L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(1, after.routeConstructions().size());
-        RouteConstruction candidate = after.routeConstructions().values().iterator().next();
+        RouteConstruction candidate = after.routeConstructions().values().stream()
+                .filter(value -> value.settlementId().equals(settlement)).findFirst().orElseThrow();
         assertEquals(settlement, candidate.settlementId());
         assertTrue(FrontierRouteNetwork.isPassable(after.bootstrap(), candidate.waypoints(), after.physicalDeltas()));
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement)

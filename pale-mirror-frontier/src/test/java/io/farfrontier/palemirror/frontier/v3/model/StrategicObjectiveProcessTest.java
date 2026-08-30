@@ -160,8 +160,8 @@ class StrategicObjectiveProcessTest {
 
     @Test
     void operationInterruptPreemptsHiveWorkWithoutForkingItsPeriodicReviewCadence() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:strategic-interrupt"), 408L));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick), new WorkBudget(64, 512));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+                new WorldId("frontier:strategic-interrupt"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
         InfectionCell infection = InfectionCell.at(state.bootstrap().hive().seedNests().getFirst().anchor());
         StrategicObjective active = new StrategicObjective(new SubjectId("objective:hive-active-infection"), hive,

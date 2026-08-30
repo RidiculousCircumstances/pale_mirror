@@ -46,6 +46,11 @@ final class AmbientLeaseStateProcess {
         if (journey != null && !release.position().equals(journey.currentPosition())) {
             throw new IllegalArgumentException("HOT transit may return to COLD only at its exact canonical cursor");
         }
+        RouteOperation assembling = state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
+                .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false)).findFirst().orElse(null);
+        if (assembling != null && !release.position().equals(assembling.activeAssembly().orElseThrow().members().get(release.actorId()).currentPosition())) {
+            throw new IllegalArgumentException("HOT operation assembly may return to COLD only at its exact cursor");
+        }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(release.actorId(), new ActorLocation(release.position(), actor.condition().withHealth(release.health())));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));

@@ -27,10 +27,12 @@ public final class FrontierRouteNetwork {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
-        BlockPosition origin = settlement.anchor();
+        SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("settlement lacks its Hall access port")));
+        BlockPosition origin = access.routeFloor();
         BlockPosition destination = supplyNest(bootstrap).anchor().offset(4, 0, -4);
-        BlockPosition egress = origin.offset(-6, 0, 0), lane = egress.offset(0, 0, 36);
-        return List.of(origin, egress, lane, new BlockPosition(-405, origin.y(), lane.z()), new BlockPosition(-405, origin.y(), 250),
+        BlockPosition lane = origin.offset(0, 0, 36);
+        return List.of(origin, lane, new BlockPosition(-405, origin.y(), lane.z()), new BlockPosition(-405, origin.y(), 250),
                 new BlockPosition(-405, destination.y(), destination.z()), destination);
     }
 
@@ -38,7 +40,9 @@ public final class FrontierRouteNetwork {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id"); Objects.requireNonNull(route, "route");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
-        if (route.size() < RouteTopology.MIN_WAYPOINTS || route.size() > RouteTopology.MAX_WAYPOINTS || !route.getFirst().equals(settlement.anchor())
+        SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("settlement lacks its Hall access port")));
+        if (route.size() < RouteTopology.MIN_WAYPOINTS || route.size() > RouteTopology.MAX_WAYPOINTS || !route.getFirst().equals(access.routeFloor())
                 || !route.getLast().equals(supplyNest(bootstrap).anchor().offset(4, 0, -4))) throw new IllegalArgumentException("replacement route has invalid endpoints or size");
         for (int index = 1; index < route.size(); index++) {
             BlockPosition from = route.get(index - 1), to = route.get(index);
@@ -83,7 +87,7 @@ public final class FrontierRouteNetwork {
         }
         for (Settlement settlement : settlements) {
             List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
-            for (int index = 2; index < supply.size(); index++) addSegment(cells, supply.get(index - 1), supply.get(index));
+            for (int index = 1; index < supply.size(); index++) addSegment(cells, supply.get(index - 1), supply.get(index));
         }
         return Set.copyOf(cells);
     }
@@ -104,7 +108,7 @@ public final class FrontierRouteNetwork {
         }
         for (Settlement settlement : settlements) {
             List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
-            for (int index = 2; index < supply.size(); index++) if (onSegment(position, supply.get(index - 1), supply.get(index))) return true;
+            for (int index = 1; index < supply.size(); index++) if (onSegment(position, supply.get(index - 1), supply.get(index))) return true;
         }
         return false;
     }
@@ -149,9 +153,7 @@ public final class FrontierRouteNetwork {
 
     private static Set<BlockPosition> operationSurfaceCells(List<BlockPosition> waypoints) {
         Set<BlockPosition> cells = new LinkedHashSet<>();
-        // The origin-to-egress segment stays inside the settlement silhouette and is intentionally
-        // not a route surface. All later segments are the materialized corridor.
-        for (int index = 2; index < waypoints.size(); index++) addSegment(cells, waypoints.get(index - 1), waypoints.get(index));
+        for (int index = 1; index < waypoints.size(); index++) addSegment(cells, waypoints.get(index - 1), waypoints.get(index));
         return cells;
     }
 

@@ -152,7 +152,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && sceneLeases.values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.operationId().equals(operation.id())
                         && lease.members().stream().anyMatch(member -> member.actorId().equals(participant)))
                         && !actorLocations.get(participant).position().equals(operation.activeTravel().map(travel -> travel.formation().get(participant))
-                        .orElseGet(operation::currentPosition))) {
+                        .orElseGet(() -> operation.activeAssembly().map(assembly -> assembly.positions().get(participant)).orElseGet(operation::currentPosition)))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical travel position");
                 }
             }
@@ -357,38 +357,21 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(operation, "route operation");
         if (operations.containsKey(operation.id())) throw new IllegalArgumentException("route operation identity already exists: " + operation.id().value());
         Map<SubjectId, RouteOperation> next = new LinkedHashMap<>(operations); next.put(operation.id(), operation);
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        if (operation.activeTravel().isPresent()) operation.activeTravel().orElseThrow().formation()
-                .forEach((participant, position) -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
-        else {
-            BlockPosition position = operation.currentPosition();
-            operation.participantIds().forEach(participant -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
-        }
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, next,
+        // Creation is a claim, never a movement.  Each assembly/travel cursor owns later positions.
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, next,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState advanceOperation(SubjectId operationId, int nextRouteIndex, OperationStage nextStage) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "route operation id"));
         if (operation == null) throw new IllegalArgumentException("unknown route operation: " + operationId.value());
-        if (operation.stage() != OperationStage.EN_ROUTE || nextRouteIndex != operation.routeIndex() + 1) throw new IllegalArgumentException("route operation advancement is not sequential");
-        if (operation.activeTravel().isPresent()) {
-            throw new IllegalArgumentException("route operation must cross an exact travel boundary through its atomic segment hand-off");
-        }
-        OperationStage expectedStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
-        if (nextStage != expectedStage) throw new IllegalArgumentException("route operation stage does not match route cursor");
-        RouteOperation advanced = new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
-                operation.participantIds(), operation.route(), nextRouteIndex, nextStage);
-        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), advanced);
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        BlockPosition position = advanced.route().get(nextRouteIndex);
-        advanced.participantIds().forEach(participant -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        throw new IllegalArgumentException("route operation advancement must use one exact operation travel segment");
     }
     public FrontierWorldState startOperationTravel(SubjectId operationId, OperationTravel travel) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
-        if (operation == null || operation.activeTravel().isPresent()) throw new IllegalArgumentException("operation already owns exact travel or does not exist");
-        RouteOperation started = operation.withTravel(Objects.requireNonNull(travel, "operation travel"));
+        if (operation == null || (operation.activeTravel().isPresent() && !operation.activeTravel().orElseThrow().arrived())) {
+            throw new IllegalArgumentException("operation already owns an in-progress exact travel or does not exist");
+        }
+        RouteOperation started = operation.startTravel(Objects.requireNonNull(travel, "operation travel"));
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), started);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position)));
@@ -406,6 +389,32 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position)));
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    public FrontierWorldState advanceOperationAssembly(SubjectId operationId, OperationAssembly assembly) {
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));
+        if (operation == null || operation.activeAssembly().isEmpty()) throw new IllegalArgumentException("operation has no active assembly");
+        OperationAssembly advanced = operation.activeAssembly().orElseThrow().advance(Objects.requireNonNull(assembly, "operation assembly").members());
+        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), operation.withAssembly(advanced));
+        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
+        advanced.positions().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position)));
+        Map<SubjectId, AmbientActorLease> nextAmbient = new LinkedHashMap<>(ambientLeases);
+        advanced.members().forEach((actor, member) -> {
+            AmbientActorLease lease = nextAmbient.get(actor);
+            if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
+                BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
+                nextAmbient.put(actor, lease.withGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target));
+            }
+        });
+        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, nextAmbient);
+    }
+    public FrontierWorldState completeOperationTravelSegment(SubjectId operationId) {
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
+        if (operation == null) throw new IllegalArgumentException("unknown operation travel");
+        RouteOperation completed = operation.completeTravelSegment();
+        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), completed);
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState preparePhysicalIntent(PhysicalIntent intent) {

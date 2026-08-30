@@ -9,7 +9,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
+                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
+                new OperationAssemblyAdvancedCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
+                new OperationTravelSegmentCompletedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
                 new SceneRecoveryPayloadCodec(),
@@ -135,6 +137,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             return new OperationAdvanced(id.value(), routeIndex, OperationStage.values()[stage]);
         }); }
     }
+    private static final class OperationAssemblyAdvancedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.operation_assembly_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationAssemblyAdvanced advanced = (OperationAssemblyAdvanced) payload;
+            writeSubject(output, advanced.operationId()); writeOperationAssembly(output, advanced.assembly()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes,
+                input -> new OperationAssemblyAdvanced(readSubject(input).value(), readOperationAssembly(input))); }
+    }
     private static final class OperationTravelStartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_travel_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelStarted started = (OperationTravelStarted) payload;
@@ -148,6 +157,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             writeSubject(output, advanced.operationId()); writeOperationTravel(output, advanced.travel()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
                 new OperationTravelAdvanced(readSubject(input).value(), readOperationTravel(input))); }
+    }
+    private static final class OperationTravelSegmentCompletedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.operation_travel_segment_completed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((OperationTravelSegmentCompleted) payload).operationId())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationTravelSegmentCompleted(readSubject(input).value())); }
     }
     private static final class OperationColdSuspendedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_cold_suspended"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationColdSuspended suspended = (OperationColdSuspended) payload;
@@ -422,6 +436,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         output.writeByte(operation.route().size());
         for (BlockPosition point : operation.route()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
         output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+        // 0xA5 separates the v3 assembly-aware envelope from the legacy one-byte travel flag.
+        output.writeByte(0xA5); output.writeBoolean(operation.activeAssembly().isPresent());
+        if (operation.activeAssembly().isPresent()) writeOperationAssembly(output, operation.activeAssembly().orElseThrow());
         output.writeBoolean(operation.activeTravel().isPresent());
         if (operation.activeTravel().isPresent()) writeOperationTravel(output, operation.activeTravel().orElseThrow());
     }
@@ -433,8 +450,16 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
         if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
-        java.util.Optional<OperationTravel> travel = input.available() > 0 && input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
-        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.values()[stage], travel);
+        int marker = input.available() > 0 ? input.readUnsignedByte() : 0;
+        java.util.Optional<OperationAssembly> assembly = java.util.Optional.empty();
+        java.util.Optional<OperationTravel> travel;
+        if (marker == 0xA5) {
+            assembly = input.readBoolean() ? java.util.Optional.of(readOperationAssembly(input)) : java.util.Optional.empty();
+            travel = input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
+        } else if (marker == 0 || marker == 1) {
+            travel = marker == 1 ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
+        } else throw new IllegalArgumentException("unknown route operation payload envelope");
+        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.values()[stage], assembly, travel);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
         output.writeShort(travel.corridor().size()); for (BlockPosition point : travel.corridor()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
@@ -450,6 +475,24 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) formation.put(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         return new OperationTravel(corridor, cursor, formation, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+    }
+    private static void writeOperationAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
+        writeSubject(output, assembly.cargoCarrierId()); output.writeByte(assembly.members().size());
+        for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
+            writeSubject(output, entry.getKey()); output.writeShort(entry.getValue().corridor().size());
+            for (BlockPosition point : entry.getValue().corridor()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
+            output.writeShort(entry.getValue().cursor());
+        }
+    }
+    private static OperationAssembly readOperationAssembly(DataInputStream input) throws IOException {
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId carrier = readSubject(input).value();
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value(); java.util.List<BlockPosition> corridor = new java.util.ArrayList<>();
+            for (int cell = 0, cellCount = input.readUnsignedShort(); cell < cellCount; cell++) corridor.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+            if (members.put(actor, new OperationAssembly.Member(corridor, input.readUnsignedShort())) != null) throw new IllegalArgumentException("duplicate operation assembly member");
+        }
+        return new OperationAssembly(members, carrier);
     }
     private static void writePhysicalIntent(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) throws IOException {
         writeString(output, intent.id().value()); output.writeByte(intent.kind().ordinal()); output.writeByte(intent.status().ordinal());
@@ -499,20 +542,38 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, lease.operationId()); writeSubject(output, lease.cargoId());
         output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeSubject(output, lease.engagementId().orElseThrow());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
+        output.writeInt(lease.cargoPosition().x()); output.writeInt(lease.cargoPosition().y()); output.writeInt(lease.cargoPosition().z());
         output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal()); output.writeByte(lease.members().size());
-        for (SceneMember member : lease.members()) { writeSubject(output, member.actorId()); writeString(output, member.entityId().toString()); }
+        for (SceneMember member : lease.members()) {
+            writeSubject(output, member.actorId());
+            writeString(output, member.entityId().toString());
+            BlockPosition position = lease.memberPosition(member.actorId());
+            output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
+        }
         output.writeByte(lease.ambientHandoffActorIds().size()); for (io.farfrontier.palemirror.frontier.v3.api.SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeSubject(output, actor);
     }
     private static SceneLease readSceneLease(DataInputStream input) throws IOException {
         var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input));
         var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId(readString(input)); SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input);
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(readSubject(input).value()) : java.util.Optional.empty();
-        BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); long handoff = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
-        if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status"); java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) members.add(new SceneMember(readSubject(input).value(), java.util.UUID.fromString(readString(input))));
+        BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+        BlockPosition cargoPosition = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+        long handoff = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
+        if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
+        java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> memberPositions = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
+            members.add(new SceneMember(actor, java.util.UUID.fromString(readString(input))));
+            memberPositions.put(actor, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        }
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> handoffActors = new java.util.LinkedHashSet<>();
         for (int actor = 0, actorCount = input.readUnsignedByte(); actor < actorCount; actor++) handoffActors.add(readSubject(input).value());
-        return new SceneLease(id, world, operation.value(), cargo.value(), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision, SceneLeaseStatus.values()[status], engagement, members, handoffActors); }
+        return new SceneLease(id, world, operation.value(), cargo.value(), position, cargoPosition,
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
+                SceneLeaseStatus.values()[status], engagement, members, memberPositions, handoffActors,
+                java.util.Optional.empty());
+    }
     static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(1); writeString(output, player.playerId().toString()); }

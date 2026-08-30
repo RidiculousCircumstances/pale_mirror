@@ -87,6 +87,18 @@ public final class FrontierWorldRuntimeDefinition {
             try { PopulationMigrationProcess.reduceHotAdvance(state, advanced); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(journey.originSettlementId(), advanced)));
         }
+        if (command.payload() instanceof OperationAssemblyAdvanced advanced) {
+            RouteOperation operation = state.operations().get(advanced.operationId());
+            if (operation == null) return rejected("operation assembly observation has no active operation");
+            try { state.advanceOperationAssembly(advanced.operationId(), advanced.assembly()); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), advanced)));
+        }
+        if (command.payload() instanceof OperationTravelSegmentCompleted completed) {
+            RouteOperation operation = state.operations().get(completed.operationId());
+            if (operation == null) return rejected("operation travel completion has no active operation");
+            try { state.completeOperationTravelSegment(completed.operationId()); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), completed)));
+        }
         if (command.payload() instanceof OperationTravelAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());
             if (operation == null) return rejected("operation travel observation has no active operation");
@@ -238,6 +250,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.settlement.production.task.complete" -> ProductionProcess.planCompletion(state, action);
             case "frontier.supply.task.start" -> SupplyOperationProcess.planStart(state, action);
             case "frontier.supply.cargo.load" -> SupplyOperationProcess.planCargoLoad(state, action, autonomousInterception);
+            case "frontier.operation.assembly" -> SupplyOperationProcess.planAssembly(state, action);
             case "frontier.operation.progress" -> SupplyOperationProcess.planProgress(state, action);
             case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
@@ -259,7 +272,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive_route_engagement.readiness" -> HiveRouteEngagementProcess.planReadiness(state, action);
             case "frontier.hive_route_engagement.combat" -> HiveRouteEngagementProcess.planCombat(state, action);
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
-            case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action);
+            case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action, autonomousInterception);
             case "frontier.objective.interrupt" -> StrategicObjectiveProcess.planOpportunity(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
@@ -281,8 +294,10 @@ public final class FrontierWorldRuntimeDefinition {
             case CargoLoaded loaded -> reduceCargoLoaded(state, event.subject(), loaded);
             case OperationCreated created -> reduceOperationCreated(state, event.subject(), created);
             case OperationAdvanced advanced -> reduceOperationAdvanced(state, event.subject(), advanced);
+            case OperationAssemblyAdvanced advanced -> reduceOperationAssemblyAdvanced(state, event.subject(), advanced);
             case OperationTravelStarted started -> reduceOperationTravelStarted(state, event.subject(), started);
             case OperationTravelAdvanced advanced -> reduceOperationTravelAdvanced(state, event.subject(), advanced);
+            case OperationTravelSegmentCompleted completed -> reduceOperationTravelSegmentCompleted(state, event.subject(), completed);
             case OperationColdSuspended suspended -> reduceOperationColdSuspended(state, event.subject(), suspended);
             case PhysicalIntentPrepared prepared -> reducePhysicalIntentPrepared(state, event.subject(), prepared);
             case PhysicalIntentTransition transition -> reducePhysicalIntentTransition(state, event.subject(), transition);
@@ -388,8 +403,8 @@ public final class FrontierWorldRuntimeDefinition {
     }
     private static FrontierWorldState reduceOperationCreated(FrontierWorldState state, SubjectId subject, OperationCreated created) {
         RouteOperation operation = created.operation();
-        if (!subject.equals(operation.settlementId()) || operation.stage() != OperationStage.EN_ROUTE || operation.routeIndex() != 0) {
-            throw new IllegalArgumentException("route operation must begin en-route at its owning settlement");
+        if (!subject.equals(operation.settlementId()) || operation.stage() != OperationStage.ASSEMBLING || operation.routeIndex() != 0) {
+            throw new IllegalArgumentException("route operation must begin assembling at its owning settlement");
         }
         SupplyContract contract = state.contracts().values().stream().filter(value -> value.cargoId().equals(operation.cargoId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("route operation cargo has no supply contract"));
@@ -407,6 +422,11 @@ public final class FrontierWorldRuntimeDefinition {
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("route advancement subject does not own operation");
         return state.advanceOperation(advanced.operationId(), advanced.routeIndex(), advanced.stage());
     }
+    private static FrontierWorldState reduceOperationAssemblyAdvanced(FrontierWorldState state, SubjectId subject, OperationAssemblyAdvanced advanced) {
+        RouteOperation operation = state.operations().get(advanced.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation assembly subject does not own operation");
+        return state.advanceOperationAssembly(advanced.operationId(), advanced.assembly());
+    }
     private static FrontierWorldState reduceOperationTravelStarted(FrontierWorldState state, SubjectId subject, OperationTravelStarted started) {
         RouteOperation operation = state.operations().get(started.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation travel subject does not own operation");
@@ -416,6 +436,11 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = state.operations().get(advanced.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation travel subject does not own operation");
         return state.advanceOperationTravel(advanced.operationId(), advanced.travel());
+    }
+    private static FrontierWorldState reduceOperationTravelSegmentCompleted(FrontierWorldState state, SubjectId subject, OperationTravelSegmentCompleted completed) {
+        RouteOperation operation = state.operations().get(completed.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation travel completion subject does not own operation");
+        return state.completeOperationTravelSegment(completed.operationId());
     }
     private static FrontierWorldState reduceOperationColdSuspended(FrontierWorldState state, SubjectId subject, OperationColdSuspended suspended) {
         RouteOperation operation = state.operations().get(suspended.operationId());

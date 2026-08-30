@@ -24,7 +24,7 @@ final class StrategicObjectiveProcess {
     }
 
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
-        return plan(state, action, true);
+        return plan(state, action, true, true);
     }
 
     static ScheduledAction interceptOpportunity(SubjectId hive, RouteOperation operation, long dueAt) {
@@ -33,7 +33,12 @@ final class StrategicObjectiveProcess {
     }
 
     static List<ProposedEvent> planOpportunity(FrontierWorldState state, ScheduledAction action) {
-        return plan(state, action, false);
+        return plan(state, action, false, true);
+    }
+
+    /** Development profiles may retain the same economy without admitting a competing hive strike. */
+    static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean allowHiveInterception) {
+        return plan(state, action, true, allowHiveInterception);
     }
 
     /** A ready exact field asks its settlement planner for work without bypassing durable task ownership. */
@@ -61,14 +66,15 @@ final class StrategicObjectiveProcess {
                 new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(action.dueAt().ticks(), 100L)))));
     }
 
-    private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring) {
+    private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
+                                            boolean allowHiveInterception) {
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
         List<ProposedEvent> next = recurring ? List.of(new ProposedEvent(owner,
                 new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks() + REVIEW_INTERVAL)))) : List.of();
         List<ProposedEvent> health = state.bootstrap().hive().id().equals(owner) ? List.of()
                 : HumanHealthProcess.assess(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
-        Optional<Candidate> candidate = candidate(state, owner);
+        Optional<Candidate> candidate = candidate(state, owner, allowHiveInterception);
         List<ProposedEvent> preempted = preemptForInterception(state, owner, candidate);
         if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC) && preempted.isEmpty()) return concatenate(health, next);
         if (candidate.isEmpty()) return concatenate(health, next);
@@ -126,8 +132,9 @@ final class StrategicObjectiveProcess {
         return state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), transition.status()));
     }
 
-    private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId owner) {
-        return state.bootstrap().hive().id().equals(owner) ? hiveCandidate(state) : settlementCandidate(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner));
+    private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId owner, boolean allowHiveInterception) {
+        return state.bootstrap().hive().id().equals(owner) ? hiveCandidate(state, allowHiveInterception)
+                : settlementCandidate(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner));
     }
     private static List<ProposedEvent> preemptForInterception(FrontierWorldState state, SubjectId owner, Optional<Candidate> candidate) {
         if (!state.bootstrap().hive().id().equals(owner) || candidate.map(Candidate::kind).orElse(null) != StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION) return List.of();
@@ -174,8 +181,8 @@ final class StrategicObjectiveProcess {
         return bread && !state.humanPopulation().quarantined(settlement.id())
                 ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
-    private static Optional<Candidate> hiveCandidate(FrontierWorldState state) {
-        Optional<SubjectId> intercept = HiveRouteEngagementProcess.targetOperation(state);
+    private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception) {
+        Optional<SubjectId> intercept = allowInterception ? HiveRouteEngagementProcess.targetOperation(state) : Optional.empty();
         if (intercept.isPresent()) return Optional.of(new Candidate(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), Long.MAX_VALUE));
         Optional<Candidate> growth = hiveGrowthCandidate(state); if (growth.isPresent()) return growth;
         return HiveInfectionProcess.expansionTarget(state).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),

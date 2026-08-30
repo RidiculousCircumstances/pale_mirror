@@ -11,7 +11,6 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
-import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -26,14 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CargoCarrierReleaseStateTest {
     @Test
     void releaseAtomicallyInterruptsRouteAndKeepsExactStacksPhysical() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:cargo-release"), 91L));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+                new WorldId("frontier:cargo-release"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:cargo-release");
-        SceneLease lease = new SceneLease(leaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(2_550L),
-                engine.checkpoint().revision().value(), SceneLeaseStatus.PREPARED,
-                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
+        SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, operation.id(), operation.cargoId(),
+                operation.currentPosition(), new SimInstant(2_550L), engine.checkpoint().revision().value(),
+                Optional.empty(), operation.participantIds());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         UUID carrier = CargoCarrierIdentity.id(lease);
         CargoCarrierReleased release = new CargoCarrierReleased(leaseId, operation.cargoId(), carrier, Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000051")));
@@ -74,8 +73,9 @@ class CargoCarrierReleaseStateTest {
         FrontierWorldState before = FrontierDevelopmentScenarios.hotSceneStrikeState(new WorldId("frontier:cargo-release-recovery"), 91L);
         SceneEngagementCandidate candidate = before.coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:cargo-release-recovery");
-        SceneLease lease = new SceneLease(leaseId, before.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(2_600L), 1L,
-                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList());
+        SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, candidate.operationId(), candidate.cargoId(),
+                candidate.handoffPosition(), new SimInstant(2_600L), 1L, Optional.of(candidate.engagementId()),
+                candidate.actorIds());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         FrontierWorldState interrupted = hot.releaseCargoCarrier(new CargoCarrierReleased(leaseId, lease.cargoId(), CargoCarrierIdentity.id(lease), Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000052"))));
 
@@ -99,10 +99,9 @@ class CargoCarrierReleaseStateTest {
         FrontierWorldState before = state(engine);
         SceneEngagementCandidate candidate = before.coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:cargo-release-live-path");
-        SceneLease lease = new SceneLease(leaseId, world, candidate.operationId(), candidate.cargoId(),
+        SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, candidate.operationId(), candidate.cargoId(),
                 candidate.handoffPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
-                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), candidate.actorIds().stream()
-                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList());
+                Optional.of(candidate.engagementId()), candidate.actorIds());
 
         submit(engine, world, "prepare", new SceneLeasePrepared(lease));
         submit(engine, world, "hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));

@@ -77,16 +77,16 @@ public final class FrontierV3CargoCarrierGameTests {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-deck-test");
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-deck-test");
-        BlockPos deck = cargoPosition(origin, lease); prepareFloor(level, deck); level.setBlock(deck, Blocks.STONE.defaultBlockState(), 3);
+        BlockPos deck = cargoPosition(origin, lease); prepareFloor(level, deck); level.setBlock(deck, Blocks.GRAY_CARPET.defaultBlockState(), 3);
 
         helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
-                "a loaded route deck may occupy strategic hand-off height without blocking the exact cargo carrier");
+                "a loaded thin route surface may occupy strategic hand-off height without blocking the exact cargo carrier");
         helper.runAfterDelay(1L, () -> {
             try {
                 Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
                 helper.assertTrue(carrier != null && carrier.blockPosition().getY() > deck.getY(),
                         "the carrier must stand on the existing route deck rather than inside or replacing it");
-                helper.assertValueEqual(level.getBlockState(deck), Blocks.STONE.defaultBlockState(),
+                helper.assertValueEqual(level.getBlockState(deck), Blocks.GRAY_CARPET.defaultBlockState(),
                         "carrier placement must preserve the loaded route deck exactly");
                 carrier.discard(); runtime.shutdown(); helper.succeed();
             } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
@@ -119,9 +119,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-recovery-test");
         FrontierWorldState state = state(runtime); SceneEngagementCandidate candidate = state.coldEngagementSceneCandidates().getFirst();
         var checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = new SceneLease(new SceneLeaseId("lease:frontier-v3-cargo-recovery-test"), state.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(),
-                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()),
-                candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList());
+        SceneLease lease = FrontierV3GameTestSceneLeases.exact(state, checkpoint, candidate, new SceneLeaseId("lease:frontier-v3-cargo-recovery-test"));
         BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z());
         level.getChunkAt(handoff);
         for (int index = 0; index < lease.members().size(); index++) {
@@ -160,9 +158,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
         BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z()); level.getChunkAt(handoff);
         var checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = new SceneLease(new SceneLeaseId("lease:frontier-v3-cargo-player-release"), initial.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(),
-                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()),
-                candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(initial.bootstrap().worldId(), actor))).toList());
+        SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, checkpoint, candidate, new SceneLeaseId("lease:frontier-v3-cargo-player-release"));
         prepareFloor(level, cargoPosition(handoff, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state(runtime), lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
@@ -205,9 +201,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-external-impact");
         FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
         var checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = new SceneLease(new SceneLeaseId("lease:frontier-v3-cargo-external-impact"), initial.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(),
-                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()),
-                candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(initial.bootstrap().worldId(), actor))).toList());
+        SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, checkpoint, candidate, new SceneLeaseId("lease:frontier-v3-cargo-external-impact"));
         prepareFloor(level, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-impact-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-impact-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
@@ -276,9 +270,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-terminal-damage");
         FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
         var checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = new SceneLease(new SceneLeaseId("lease:frontier-v3-cargo-terminal-damage"), initial.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(),
-                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()),
-                candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(initial.bootstrap().worldId(), actor))).toList());
+        SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, checkpoint, candidate, new SceneLeaseId("lease:frontier-v3-cargo-terminal-damage"));
         prepareFloor(level, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-terminal-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-terminal-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));

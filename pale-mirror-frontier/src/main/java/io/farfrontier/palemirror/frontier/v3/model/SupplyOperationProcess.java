@@ -98,8 +98,35 @@ final class SupplyOperationProcess {
                 transition(preparation, StrategicTaskStatus.COMPLETED), transition(delivery, StrategicTaskStatus.ACTIVE),
                 new ProposedEvent(contract.settlementId(), new OperationCreated(operation))));
         if (autonomousInterception) events.add(schedule(StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), operation, now + 20L)));
-        events.add(schedule(operationProgress(operation, now + 100L)));
+        events.add(schedule(operationAssembly(operation, now + 20L)));
         return List.copyOf(events);
+    }
+
+    static List<ProposedEvent> planAssembly(FrontierWorldState state, ScheduledAction action) {
+        RouteOperation operation = state.operations().get(action.subject());
+        if (operation == null || operation.stage() != OperationStage.ASSEMBLING || operation.activeAssembly().isEmpty()) {
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
+        }
+        OperationAssembly assembly = operation.activeAssembly().orElseThrow();
+        if (assembly.complete()) {
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
+                    schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+        }
+        java.util.Map<SubjectId, OperationAssembly.Member> advanced = new java.util.LinkedHashMap<>();
+        assembly.members().forEach((actor, member) -> {
+            AmbientActorLease lease = state.ambientLeases().get(actor);
+            int cursor = lease == null || lease.status() == AmbientLeaseStatus.CLOSED ? member.nextColdCursor() : member.cursor();
+            advanced.put(actor, new OperationAssembly.Member(member.corridor(), cursor));
+        });
+        OperationAssembly next = new OperationAssembly(advanced, assembly.cargoCarrierId());
+        if (next.equals(assembly)) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
+        if (next.complete()) {
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
+                    new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(operation, next.positions()))),
+                    schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+        }
+        return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
+                schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
     }
 
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
@@ -125,10 +152,21 @@ final class SupplyOperationProcess {
                 && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) return failed(state, operation, "route-obstructed");
-        int index = operation.routeIndex() + 1; OperationStage stage = index == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
-        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), new OperationAdvanced(operation.id(), index, stage))));
-        if (stage == OperationStage.ARRIVED) events.add(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
-        if (stage == OperationStage.EN_ROUTE) events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+        if (operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()
+                && operation.activeTravel().orElseThrow().corridor().getLast().equals(operation.route().get(operation.routeIndex()))) {
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(operation, participantPositions(state, operation)))),
+                    schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+        }
+        OperationTravel travel = operation.activeTravel().orElseThrow();
+        if (!travel.arrived()) {
+            OperationTravel advanced = translateTravel(travel, travel.nextColdCursor());
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced)),
+                    schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+        }
+        int completedIndex = operation.routeIndex() + 1;
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), new OperationTravelSegmentCompleted(operation.id()))));
+        if (completedIndex == operation.route().size() - 1) events.add(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
+        else events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         return List.copyOf(events);
     }
 
@@ -152,9 +190,36 @@ final class SupplyOperationProcess {
 
     static ScheduledAction operationProgress(RouteOperation operation, long due) { return new ScheduledAction(new ScheduleId("schedule:operation-progress-" + operation.id().value().substring("operation:".length())),
             new SimInstant(due), 0, operation.id(), "frontier.operation.progress", 1); }
+    static ScheduledAction operationAssembly(RouteOperation operation, long due) { return new ScheduledAction(new ScheduleId("schedule:operation-assembly-" + operation.id().value().substring("operation:".length())),
+            new SimInstant(due), 0, operation.id(), "frontier.operation.assembly", 1); }
     private static ScheduledAction cargoLoad(SupplyContract contract, long due) { return new ScheduledAction(new ScheduleId("schedule:cargo-load-" + contract.id().value().substring("contract:".length())),
             new SimInstant(due), 0, contract.id(), "frontier.supply.cargo.load", 1); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+
+    private static OperationTravel travelForNextSegment(FrontierWorldState state, RouteOperation operation) {
+        return travelForNextSegment(operation, participantPositions(state, operation));
+    }
+    private static OperationTravel travelForNextSegment(RouteOperation operation, java.util.Map<SubjectId, BlockPosition> formation) {
+        if (operation.routeIndex() >= operation.route().size() - 1) throw new IllegalArgumentException("arrived operation has no next travel segment");
+        List<BlockPosition> corridor = adjacentSegment(operation.route().get(operation.routeIndex()), operation.route().get(operation.routeIndex() + 1));
+        return new OperationTravel(corridor, 0, formation, formation.get(operation.cargoCarrierId()));
+    }
+    private static java.util.Map<SubjectId, BlockPosition> participantPositions(FrontierWorldState state, RouteOperation operation) {
+        java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
+        operation.participantIds().forEach(actor -> formation.put(actor, state.actorLocations().get(actor).position()));
+        return java.util.Map.copyOf(formation);
+    }
+    private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
+        BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
+        int deltaX = to.x() - from.x(), deltaZ = to.z() - from.z(); java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
+        travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, 0, deltaZ)));
+        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, 0, deltaZ));
+    }
+    private static List<BlockPosition> adjacentSegment(BlockPosition from, BlockPosition to) {
+        if (from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) throw new IllegalArgumentException("operation route segment must be horizontal and axis aligned");
+        List<BlockPosition> corridor = new ArrayList<>(); int deltaX = Integer.compare(to.x(), from.x()), deltaZ = Integer.compare(to.z(), from.z());
+        for (BlockPosition cursor = from;; cursor = cursor.offset(deltaX, 0, deltaZ)) { corridor.add(cursor); if (cursor.equals(to)) return List.copyOf(corridor); }
+    }
 
     private static PhysicalIntent cargoLoadingIntent(SupplyContract contract, ExactItemStack item, ContainerSurface surface) {
         BlockPosition position = surface.position();
@@ -210,8 +275,13 @@ final class SupplyOperationProcess {
         SubjectId hauler = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.HAULER).orElseThrow().id();
         SubjectId guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
         int ordinal = FrontierWorldScheduleSupport.ordinal(contract.id().value());
+        SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("supply settlement lacks a Hall")));
+        OperationAssembly assembly = new OperationAssembly(java.util.Map.of(
+                hauler, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, hauler, access.assemblyFloor()), 0),
+                guard, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, guard, access.routeFloor()), 0)), hauler);
         return new RouteOperation(new SubjectId("operation:supply-" + settlement.id().value().substring("settlement:".length()) + "-" + ordinal), settlement.id(), contract.cargoId(), contract.recipientId(),
-                List.of(hauler, guard), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.EN_ROUTE);
+                List.of(hauler, guard), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty());
     }
     private static SupplyContract contract(FrontierWorldState state, StrategicTask task, Settlement settlement, ExactItemStack bread) {
         SupplyContract contract = contract(state, task);

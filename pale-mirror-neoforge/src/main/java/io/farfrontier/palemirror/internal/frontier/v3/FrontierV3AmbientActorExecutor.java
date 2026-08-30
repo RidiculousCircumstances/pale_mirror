@@ -23,6 +23,10 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
+import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -36,7 +40,6 @@ import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.IdentityHashMap;
@@ -60,7 +63,6 @@ final class FrontierV3AmbientActorExecutor {
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int MAX_PENDING_ADMISSIONS = 4_096;
-    private static final int MAX_VERTICAL_PLACEMENT_SEARCH = 4;
     private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
     private static final long PENDING_ADMISSION_TICKS = 20L;
     /** Noncanonical, short-lived bridge across EntityJoinLevelEvent and the UUID index. */
@@ -91,9 +93,9 @@ final class FrontierV3AmbientActorExecutor {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, entry.getKey()));
                     if (body instanceof Mob mob && owned(mob, entry.getKey(), bioform(state, entry.getKey()))) {
-                        if (lease.goal() == AmbientGoalKind.TRANSIT) {
+                        if (directedGoal(lease)) {
                             pursueLocalGoal(level, state, entry.getKey(), mob, lease);
-                            if (observeTransitArrival(level, runtime, state, entry.getKey(), mob, lease)) admitted++;
+                            if (observeDirectedArrival(level, runtime, state, entry.getKey(), mob, lease)) admitted++;
                         }
                         if (drainAfterDemandHysteresis(level, runtime, entry.getKey(), mob)) admitted++;
                     }
@@ -126,7 +128,7 @@ final class FrontierV3AmbientActorExecutor {
             }
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, entry.getKey(), bioform(state, entry.getKey()))) {
                 pursueLocalGoal(level, state, entry.getKey(), mob, lease);
-                if (observeTransitArrival(level, runtime, state, entry.getKey(), mob, lease)) admitted++;
+                if (observeDirectedArrival(level, runtime, state, entry.getKey(), mob, lease)) admitted++;
             }
         }
     }
@@ -145,7 +147,7 @@ final class FrontierV3AmbientActorExecutor {
             }
             return Result.CURRENT;
         }
-        BlockPos position = standingPosition(level, canonicalPosition);
+        BlockPos position = FrontierV3StandingPosition.aboveFloor(level, canonicalPosition);
         if (position == null) return Result.DEFERRED;
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
@@ -188,24 +190,9 @@ final class FrontierV3AmbientActorExecutor {
         }
         BlockPos anchor = new BlockPos(location.position().x(), location.position().y(), location.position().z());
         if (!level.hasChunkAt(anchor)) return AdmissionDiagnostic.unloaded(expectedId);
-        BlockPos position = standingPosition(level, location.position());
+        BlockPos position = FrontierV3StandingPosition.aboveFloor(level, location.position());
         if (position == null) return AdmissionDiagnostic.blocked(expectedId, new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
         return AdmissionDiagnostic.ready(expectedId, new BlockPosition(position.getX(), position.getY(), position.getZ()));
-    }
-
-    /** Finds the first two-block-clear standing space directly above the naturally loaded surface. */
-    private static BlockPos standingPosition(ServerLevel level, BlockPosition canonicalPosition) {
-        BlockPos anchor = new BlockPos(canonicalPosition.x(), canonicalPosition.y(), canonicalPosition.z());
-        if (!level.hasChunkAt(anchor)) return null;
-        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ());
-        for (int y = surface; y <= surface + MAX_VERTICAL_PLACEMENT_SEARCH; y++) {
-            BlockPos candidate = new BlockPos(anchor.getX(), y, anchor.getZ());
-            if (!level.hasChunkAt(candidate)) return null;
-            if (!level.getBlockState(candidate).isAir() || !level.getBlockState(candidate.above()).isAir()
-                    || level.getBlockState(candidate.below()).isAir()) continue;
-            return candidate;
-        }
-        return null;
     }
 
     /** Retains only an exact expected body during the short join-to-index hand-off. */
@@ -343,11 +330,15 @@ final class FrontierV3AmbientActorExecutor {
                 return;
             }
         }
+        if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY && assemblyMember(state, actorId, lease) == null) {
+            body.getNavigation().stop();
+            return;
+        }
         FrontierV3ControlledMobMotion.moveToward(level, body, localTarget(state, actorId, lease, level.getGameTime()));
     }
 
     static Vec3 localTarget(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease, long gameTime) {
-        if (lease.goal() == AmbientGoalKind.TRANSIT) {
+        if (directedGoal(lease)) {
             BlockPosition target = lease.goalPosition();
             return new Vec3(target.x() + 0.5D, target.y(), target.z() + 0.5D);
         }
@@ -400,6 +391,11 @@ final class FrontierV3AmbientActorExecutor {
             // durable cursor authoritative rather than deriving a new vertical datum on drain.
             position = journey.currentPosition();
         }
+        if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
+            OperationAssembly.Member member = assemblyMember(state, actorId, state.ambientLeases().get(actorId));
+            if (member == null || !sameColumn(position, member.currentPosition())) return false;
+            position = member.currentPosition();
+        }
         FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
         submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
         submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health));
@@ -432,8 +428,9 @@ final class FrontierV3AmbientActorExecutor {
         if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
         return drained;
     }
-    private static boolean observeTransitArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
-                                                  SubjectId actorId, Mob body, AmbientActorLease lease) {
+    private static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                                   SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() != AmbientGoalKind.TRANSIT) return false;
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
@@ -444,6 +441,33 @@ final class FrontierV3AmbientActorExecutor {
                 new ResidentTransitAdvanced(actorId, journey.nextRouteIndex()));
         FrontierV3DiagnosticTrace.record(level.getServer(), "resident-transit:" + actorId.value(), "resident_transit_advanced", actorId, result);
         return true;
+    }
+    private static boolean observeAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                                   SubjectId actorId, Mob body, AmbientActorLease lease) {
+        OperationAssembly.Member member = assemblyMember(state, actorId, lease);
+        if (member == null || member.arrived() || !sameColumn(new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+        RouteOperation operation = assemblingOperation(state, actorId); OperationAssembly assembly = operation.activeAssembly().orElseThrow();
+        Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(assembly.members());
+        members.put(actorId, new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly", actorId.value(),
+                new OperationAssemblyAdvanced(operation.id(), new OperationAssembly(members, assembly.cargoCarrierId())));
+        FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_advanced", actorId, result);
+        return true;
+    }
+    private static boolean directedGoal(AmbientActorLease lease) {
+        return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY;
+    }
+    private static RouteOperation assemblingOperation(FrontierWorldState state, SubjectId actorId) {
+        return state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
+                .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
+                .findFirst().orElse(null);
+    }
+    private static OperationAssembly.Member assemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
+        RouteOperation operation = assemblingOperation(state, actorId);
+        if (operation == null || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY) return null;
+        OperationAssembly.Member member = operation.activeAssembly().orElseThrow().members().get(actorId);
+        BlockPosition expected = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
+        return lease.goalPosition().equals(expected) ? member : null;
     }
     private static boolean sameColumn(BlockPosition physicalBodyCell, BlockPosition canonicalFloorCell) {
         return physicalBodyCell.x() == canonicalFloorCell.x() && physicalBodyCell.y() == canonicalFloorCell.y()

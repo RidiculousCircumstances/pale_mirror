@@ -127,10 +127,8 @@ class HiveRouteEngagementProcessTest {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().values().stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:hot-scene-conflict");
         List<SubjectId> actorIds = java.util.stream.Stream.concat(operation.participantIds().stream(), engagement.attackerIds().stream()).sorted().toList();
-        WorldId worldId = state.bootstrap().worldId();
-        SceneLease lease = new SceneLease(leaseId, worldId, operation.id(), operation.cargoId(), intercept,
-                new SimInstant(3_000L), 0L, SceneLeaseStatus.PREPARED, Optional.of(engagement.id()),
-                actorIds.stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(worldId, actor))).toList());
+        SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, operation.id(), operation.cargoId(), intercept,
+                new SimInstant(3_000L), 0L, Optional.of(engagement.id()), actorIds);
 
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
@@ -189,8 +187,8 @@ class HiveRouteEngagementProcessTest {
         assertEquals(operation.id(), candidate.operationId());
         assertEquals(intercept, candidate.handoffPosition());
         assertEquals(5, candidate.actorIds().size());
-        var world = state.bootstrap().worldId();
         SceneLeaseId leaseId = new SceneLeaseId("lease:hive-cold-combat-r1");
+        var world = state.bootstrap().worldId();
         List<SceneMember> sceneMembers = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
         SceneLeaseId incompleteLeaseId = new SceneLeaseId("lease:hive-cold-combat-incomplete");
         List<SceneMember> incompleteMembers = candidate.actorIds().stream().limit(2).map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
@@ -198,8 +196,8 @@ class HiveRouteEngagementProcessTest {
                 new SimInstant(3_001L), 1L, SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), incompleteMembers);
         FrontierWorldState coldBeforeLease = state;
         assertThrows(IllegalArgumentException.class, () -> coldBeforeLease.prepareSceneLease(incomplete));
-        SceneLease lease = new SceneLease(leaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(3_001L), 1L,
-                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), sceneMembers);
+        SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, candidate.operationId(), candidate.cargoId(),
+                candidate.handoffPosition(), new SimInstant(3_001L), 1L, Optional.of(candidate.engagementId()), candidate.actorIds());
         FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(RouteEngagementStatus.HOT, hot.strategicPlans().routeEngagements().get(engagementId).status());
         SubjectId attacker = hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst();
@@ -356,7 +354,7 @@ class HiveRouteEngagementProcessTest {
         boolean reachedColdCombat = false;
         FrontierWorldState latest = null;
 
-        for (long tick = 20L; tick <= 10_000L; tick += 20L) {
+        for (long tick = 20L; tick <= 10_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             latest = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
             for (RouteEngagement engagement : latest.strategicPlans().routeEngagements().values()) {
@@ -374,16 +372,15 @@ class HiveRouteEngagementProcessTest {
     }
 
     private static FrontierWorldState enRouteState() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:intercept"), 91L));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+                new WorldId("frontier:intercept"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE));
         return state;
     }
 
     private static SceneLease routeLease(FrontierWorldState state, RouteOperation operation, String id, SceneLeaseStatus status) {
-        return new SceneLease(new SceneLeaseId(id), state.bootstrap().worldId(), operation.id(), operation.cargoId(),
-                operation.route().get(operation.routeIndex()), SimInstant.ZERO, 0L, status,
-                operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))).toList());
+        return FrontierTestSceneLeases.exact(state, new SceneLeaseId(id), operation.id(), operation.cargoId(),
+                operation.currentPosition(), SimInstant.ZERO, 0L, Optional.empty(), operation.participantIds()).withStatus(status);
     }
 }

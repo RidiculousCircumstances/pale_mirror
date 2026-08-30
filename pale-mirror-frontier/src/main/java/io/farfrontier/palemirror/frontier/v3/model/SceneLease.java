@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -14,8 +16,9 @@ import java.util.UUID;
 
 /** Immutable durable claim preventing concurrent COLD and HOT execution of one route scene. */
 public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
+                         BlockPosition cargoPosition,
                          SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId,
-                         List<SceneMember> members, Set<SubjectId> ambientHandoffActorIds,
+                         List<SceneMember> members, Map<SubjectId, BlockPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
                          Optional<SceneRecoveryEvidence> recoveryEvidence) {
     public SceneLease {
         Objects.requireNonNull(id, "scene lease id");
@@ -23,15 +26,21 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
         Objects.requireNonNull(operationId, "scene lease operation");
         Objects.requireNonNull(cargoId, "scene lease cargo");
         Objects.requireNonNull(handoffPosition, "scene lease handoff position");
+        Objects.requireNonNull(cargoPosition, "scene lease cargo position");
         Objects.requireNonNull(handoffInstant, "scene lease handoff instant");
         if (revision < 0) throw new IllegalArgumentException("scene lease revision must be non-negative");
         Objects.requireNonNull(status, "scene lease status"); engagementId = Objects.requireNonNull(engagementId, "scene lease engagement");
         members = List.copyOf(members);
+        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
+        memberPositions.forEach((actor, position) -> positions.put(Objects.requireNonNull(actor, "scene member position actor"),
+                Objects.requireNonNull(position, "scene member position")));
+        memberPositions = Map.copyOf(positions);
         ambientHandoffActorIds = Set.copyOf(ambientHandoffActorIds);
         recoveryEvidence = Objects.requireNonNull(recoveryEvidence, "scene lease recovery evidence");
         if (members.isEmpty() || members.size() > 32 || members.stream().map(SceneMember::actorId).distinct().count() != members.size()
                 || members.stream().map(SceneMember::entityId).distinct().count() != members.size()
-                || !members.stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(ambientHandoffActorIds)) {
+                || !members.stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(ambientHandoffActorIds)
+                || !memberPositions.keySet().equals(members.stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()))) {
             throw new IllegalArgumentException("scene lease must have one to thirty-two distinct members and bodies");
         }
         for (SceneMember member : members) {
@@ -46,17 +55,25 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
 
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, Optional.empty(), members, Set.of(), Optional.empty());
+        this(id, worldId, operationId, cargoId, handoffPosition, handoffPosition, handoffInstant, revision, status, Optional.empty(), members, positions(members, handoffPosition), Set.of(), Optional.empty());
     }
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, Set.of(), Optional.empty());
+        this(id, worldId, operationId, cargoId, handoffPosition, handoffPosition, handoffInstant, revision, status, engagementId, members, positions(members, handoffPosition), Set.of(), Optional.empty());
     }
 
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
                       Set<SubjectId> ambientHandoffActorIds) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, ambientHandoffActorIds, Optional.empty());
+        this(id, worldId, operationId, cargoId, handoffPosition, handoffPosition, handoffInstant, revision, status, engagementId, members, positions(members, handoffPosition), ambientHandoffActorIds, Optional.empty());
+    }
+
+    public static SceneLease atExactPositions(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId,
+                                              BlockPosition handoffPosition, BlockPosition cargoPosition, SimInstant handoffInstant, long revision,
+                                              SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
+                                              Map<SubjectId, BlockPosition> memberPositions) {
+        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId,
+                members, memberPositions, Set.of(), Optional.empty());
     }
 
     /** One canonical actor retains the same physical identity across ambient and scene leases. */
@@ -71,12 +88,25 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
     }
 
     public SceneLease withStatus(SceneLeaseStatus nextStatus) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, nextStatus, engagementId, members, ambientHandoffActorIds,
+        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, nextStatus, engagementId, members, memberPositions, ambientHandoffActorIds,
                 nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART ? recoveryEvidence : Optional.empty());
     }
-    public SceneLease withAmbientHandoff(Set<SubjectId> actorIds) { return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, actorIds, recoveryEvidence); }
+    public SceneLease withAmbientHandoff(Set<SubjectId> actorIds) {
+        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant,
+                revision, status, engagementId, members, memberPositions, actorIds, recoveryEvidence);
+    }
+    public SceneLease withMemberPositions(Map<SubjectId, BlockPosition> positions) {
+        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId, members, positions,
+                ambientHandoffActorIds, recoveryEvidence);
+    }
     public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, handoffInstant, revision, status, engagementId, members, ambientHandoffActorIds,
+        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId, members, memberPositions, ambientHandoffActorIds,
                 Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));
+    }
+    public BlockPosition memberPosition(SubjectId actorId) { return memberPositions.get(Objects.requireNonNull(actorId, "scene actor")); }
+    private static Map<SubjectId, BlockPosition> positions(List<SceneMember> members, BlockPosition handoffPosition) {
+        Map<SubjectId, BlockPosition> result = new LinkedHashMap<>();
+        members.forEach(member -> result.put(member.actorId(), handoffPosition));
+        return Map.copyOf(result);
     }
 }

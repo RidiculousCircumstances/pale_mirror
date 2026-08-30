@@ -224,7 +224,14 @@ states.
   without Minecraft entities or force-loaded chunks.
 - A scene becomes HOT only from naturally loaded non-spectator player demand.
   One persisted scene lease names its revision, members, custody and hand-off
-  instant before any body or container appears.
+  instant before any body or container appears. The broad hand-off point is
+  demand/readability metadata only: the lease separately snapshots one exact
+  canonical floor-anchor position for every member and one exact cargo floor
+  anchor. A floor anchor is the semantic support-cell column, not a mob's
+  feet-air cell: materialization may place feet only in the first two-cell-clear
+  space directly above that same loaded column.
+  Materialization may not arrange a formation around that broad point or offset
+  a carrier for convenience.
 - While HOT, the domain chooses intent and constraints; Minecraft movement,
   collision, combat, inventory and explosion results supply the physical facts.
   COLD rules do not execute the same action concurrently.
@@ -251,7 +258,10 @@ states.
   segment while retaining the formation/cargo positions. Assembly is not an
   attackable route operation, and a player/world obstruction of its compiled
   throat or slot is a visible deferral or semantic damage observation, never
-  permission to choose a hidden alternative path.
+  permission to choose a hidden alternative path. COLD actor records do not
+  represent physical bodies and therefore do not obstruct pure corridor
+  compilation; only a live HOT lease reserves its canonical floor cell, and
+  the naturally loaded Minecraft world remains the final admission authority.
 - HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished
   intents. If its hand-off surface remains naturally loaded, it durably closes

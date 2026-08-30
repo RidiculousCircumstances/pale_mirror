@@ -133,6 +133,13 @@ public final class AmbientActorProcess {
     }
 
     static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId) {
+        RouteOperation assembling = state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
+                .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false)).findFirst().orElse(null);
+        if (assembling != null) {
+            OperationAssembly.Member member = assembling.activeAssembly().orElseThrow().members().get(actorId);
+            BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
+            return new AmbientGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target);
+        }
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey != null) {
             BlockPosition target = journey.status() == ResidentMigrationStatus.EN_ROUTE && !journey.arriving()

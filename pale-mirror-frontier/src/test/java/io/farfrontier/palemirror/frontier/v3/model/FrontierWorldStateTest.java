@@ -102,26 +102,42 @@ class FrontierWorldStateTest {
     }
 
     @Test
-    void exactOperationTravelMovesOnlyItsNamedFormationAndSurvivesSnapshotRecovery() {
+    void durableAssemblyPreservesExactPeopleWithoutCreationTeleportAndSurvivesSnapshotRecovery() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:operation-travel"), 91L));
         for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
-        List<BlockPosition> corridor = adjacentSegment(operation.route().getFirst(), operation.route().get(1));
-        OperationTravel started = new OperationTravel(corridor, 0,
-                Map.of(operation.participantIds().getFirst(), operation.route().getFirst().offset(0, 0, 1),
-                        operation.participantIds().get(1), operation.route().getFirst().offset(0, 0, -1)), operation.route().getFirst());
+        OperationAssembly assembly = operation.activeAssembly().orElseThrow();
 
-        FrontierWorldState active = before.startOperationTravel(operation.id(), started);
-        OperationTravel advanced = started.advance(corridor.size() - 1, Map.of(operation.participantIds().getFirst(), operation.route().get(1).offset(0, 0, 1),
-                operation.participantIds().get(1), operation.route().get(1).offset(0, 0, -1)), operation.route().get(1));
-        FrontierWorldState moved = active.advanceOperationTravel(operation.id(), advanced);
+        assertEquals(OperationStage.ASSEMBLING, operation.stage());
+        assertTrue(operation.participantIds().stream().allMatch(actor -> before.actorLocations().get(actor).position()
+                .equals(assembly.positions().get(actor))), "creation and recovery retain each actual person, not a route-anchor teleport");
+        assertEquals(before, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(before)));
+        assertThrows(IllegalArgumentException.class, () -> before.startOperationTravel(operation.id(), new OperationTravel(
+                adjacentSegment(operation.route().getFirst(), operation.route().get(1)), 0, assembly.positions(), assembly.positions().get(assembly.cargoCarrierId()))));
+        assertThrows(IllegalArgumentException.class, () -> before.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
+    }
 
-        assertEquals(advanced, moved.operations().get(operation.id()).activeTravel().orElseThrow());
-        assertEquals(advanced.formation().get(operation.participantIds().getFirst()), moved.actorLocations().get(operation.participantIds().getFirst()).position());
-        assertEquals(moved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved)));
-        assertThrows(IllegalArgumentException.class, () -> active.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
-        assertThrows(IllegalArgumentException.class, () -> moved.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
+    @Test
+    void hotAssemblyMovesOnlyTheObservedMemberAndRetargetsItsSameLease() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:operation-assembly-hot"), 91L));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        SubjectId hauler = operation.participantIds().getFirst(); OperationAssembly initial = operation.activeAssembly().orElseThrow();
+        AmbientActorLease prepared = AmbientActorProcess.nextLease(state, hauler, new SimInstant(2_550L));
+        assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, prepared.goal());
+        state = AmbientLeaseStateProcess.prepare(state, prepared);
+        state = AmbientLeaseStateProcess.transition(state, hauler, AmbientLeaseStatus.HOT);
+        Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(initial.members());
+        OperationAssembly.Member current = members.get(hauler); members.put(hauler, new OperationAssembly.Member(current.corridor(), current.cursor() + 1));
+
+        FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()));
+
+        assertEquals(current.corridor().get(current.cursor() + 1), advanced.actorLocations().get(hauler).position());
+        assertEquals(initial.members().get(operation.participantIds().get(1)).currentPosition(), advanced.actorLocations().get(operation.participantIds().get(1)).position());
+        assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, advanced.ambientLeases().get(hauler).goal());
+        assertEquals(advanced, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced)));
     }
 
     @Test

@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 50, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 53, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -66,7 +66,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
-                    && version != 46 && version != 47 && version != 48 && version != 49 && version != VERSION) {
+                    && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51 && version != 52 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -75,7 +75,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
-                    readContracts(input), readOperations(input, version >= 50), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
+                    readContracts(input), readOperations(input, version >= 50, version >= 51), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
                     StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input, version >= 47, version >= 48),
                     ResourceSiteStateCodec.read(input));
@@ -376,11 +376,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeCount(output, operation.route().size());
             for (BlockPosition point : operation.route()) writePosition(output, point);
             output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+            output.writeBoolean(operation.activeAssembly().isPresent());
+            if (operation.activeAssembly().isPresent()) writeAssembly(output, operation.activeAssembly().orElseThrow());
             output.writeBoolean(operation.activeTravel().isPresent());
             if (operation.activeTravel().isPresent()) writeTravel(output, operation.activeTravel().orElseThrow());
         }
     }
-    private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input, boolean hasTravel) throws IOException {
+    private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input, boolean hasTravel, boolean hasAssembly) throws IOException {
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
@@ -389,8 +391,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
             for (int point = 0, pointCount = readCount(input); point < pointCount; point++) route.add(readPosition(input));
             int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
+            java.util.Optional<OperationAssembly> assembly = hasAssembly && input.readBoolean() ? java.util.Optional.of(readAssembly(input)) : java.util.Optional.empty();
             java.util.Optional<OperationTravel> travel = hasTravel && input.readBoolean() ? java.util.Optional.of(readTravel(input)) : java.util.Optional.empty();
-            if (stage >= OperationStage.values().length || operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.values()[stage], travel)) != null) {
+            if (stage >= OperationStage.values().length || operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.values()[stage], assembly, travel)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
             }
         }
@@ -408,14 +411,31 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0, count = readCount(input); index < count; index++) formation.put(new SubjectId(readString(input)), readPosition(input));
         return new OperationTravel(corridor, cursor, formation, readPosition(input));
     }
+    private static void writeAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
+        writeString(output, assembly.cargoCarrierId().value()); writeCount(output, assembly.members().size());
+        for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeString(output, entry.getKey().value()); writeCount(output, entry.getValue().corridor().size());
+            for (BlockPosition point : entry.getValue().corridor()) writePosition(output, point);
+            writeCount(output, entry.getValue().cursor());
+        }
+    }
+    private static OperationAssembly readAssembly(DataInputStream input) throws IOException {
+        SubjectId carrier = new SubjectId(readString(input)); Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId actor = new SubjectId(readString(input)); List<BlockPosition> corridor = new java.util.ArrayList<>();
+            for (int cell = 0, cellCount = readCount(input); cell < cellCount; cell++) corridor.add(readPosition(input));
+            if (members.put(actor, new OperationAssembly.Member(corridor, readCount(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
+        }
+        return new OperationAssembly(members, carrier);
+    }
     private static void writeSceneLeases(DataOutputStream output, Map<SceneLeaseId, SceneLease> leases) throws IOException {
         writeCount(output, leases.size());
         for (SceneLease lease : leases.values().stream().sorted(Comparator.comparing(SceneLease::id)).toList()) {
             writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeString(output, lease.operationId().value()); writeString(output, lease.cargoId().value());
             output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeString(output, lease.engagementId().orElseThrow().value());
-            writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
+            writePosition(output, lease.handoffPosition()); writePosition(output, lease.cargoPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
             writeCount(output, lease.members().size());
-            for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); }
+            for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); writePosition(output, lease.memberPosition(member.actorId())); }
             writeCount(output, lease.ambientHandoffActorIds().size());
             for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeString(output, actor.value());
             output.writeBoolean(lease.recoveryEvidence().isPresent());
@@ -429,14 +449,17 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     }
     private static Map<SceneLeaseId, SceneLease> readSceneLeases(DataInputStream input, int version) throws IOException {
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
+        int count = readCount(input);
+        if (version < 53 && count > 0) throw new IllegalArgumentException("legacy scene lease lacks exact member or cargo positions");
+        for (int index = 0; index < count; index++) {
             SceneLeaseId id = new SceneLeaseId(readString(input)); WorldId world = new WorldId(readString(input)); SubjectId operation = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
             java.util.Optional<SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
-            BlockPosition handoff = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
+            BlockPosition handoff = readPosition(input); BlockPosition cargoPosition = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-            java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
+            java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); Map<SubjectId, BlockPosition> memberPositions = new LinkedHashMap<>();
             for (int member = 0, memberCount = readCount(input); member < memberCount; member++) {
-                members.add(new SceneMember(new SubjectId(readString(input)), UUID.fromString(readString(input))));
+                SubjectId actor = new SubjectId(readString(input)); members.add(new SceneMember(actor, UUID.fromString(readString(input))));
+                memberPositions.put(actor, readPosition(input));
             }
             java.util.Set<SubjectId> handoffActors = new java.util.LinkedHashSet<>();
             for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) handoffActors.add(new SubjectId(readString(input)));
@@ -446,8 +469,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) missing.add(new SubjectId(readString(input)));
                 recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));
             }
-            SceneLease lease = new SceneLease(id, world, operation, cargo, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
-                    SceneLeaseStatus.values()[status], engagement, members, handoffActors, recovery);
+            SceneLease lease = new SceneLease(id, world, operation, cargo, handoff, cargoPosition, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
+                    SceneLeaseStatus.values()[status], engagement, members, memberPositions, handoffActors, recovery);
             if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
         }
         return leases;

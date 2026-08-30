@@ -248,6 +248,12 @@ death, cargo-loss, recovery and readability consult that same current
 position; they cannot assume a route milestone or treat `ASSEMBLING` as an
 attackable caravan.
 
+A scene lease preserves that truth at the HOT boundary: its demand point is not
+a spawn coordinate. It persists the exact position of every leased actor and
+the exact cargo anchor, validates them against the canonical operation before
+preparation, and uses those positions when bodies/carriers appear. A legacy
+uniform lease or carrier offset is rejected rather than quietly moving a convoy.
+
 Required evidence is a pure lifecycle/recovery test plus a causal pilot:
 ordinary player reaches a naturally loaded port, sees the two named villagers
 approach and depart, obstructs the owned public sill or throat, observes the

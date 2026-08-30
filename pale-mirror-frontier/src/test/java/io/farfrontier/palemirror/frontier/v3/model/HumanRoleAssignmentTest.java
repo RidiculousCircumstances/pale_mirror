@@ -56,9 +56,11 @@ class HumanRoleAssignmentTest {
         state = killRole(state, ResidentRole.GUARD);
         state = killRole(state, ResidentRole.HAULER);
         ResidentProfile guard = born(state, "resident:1-guard-born", ResidentRole.GUARD);
-        state = HumanPopulationTestFixtures.withResident(state, guard, settlement.anchor());
+        SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow());
+        state = HumanPopulationTestFixtures.withResident(state, guard, access.routeFloor());
         ResidentProfile hauler = born(state, "resident:1-hauler-born", ResidentRole.HAULER);
-        state = HumanPopulationTestFixtures.withResident(state, hauler, settlement.anchor());
+        state = HumanPopulationTestFixtures.withResident(state, hauler, access.interiorFloor());
         assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, guard.id()));
         state = state.withInventory(withBread(state.inventory(), settlement.id()));
 

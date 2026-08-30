@@ -14,7 +14,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.vehicle.MinecartChest;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -28,7 +27,6 @@ final class FrontierV3CargoCarrierExecutor {
     static final String LEASE_KEY = "pale_mirror_frontier_v3_cargo_carrier_lease";
     static final String CARGO_KEY = "pale_mirror_frontier_v3_cargo_carrier";
     private static final double SPEED = 0.055D, ARRIVAL_DISTANCE = 0.35D;
-    private static final int MAX_VERTICAL_PLACEMENT_SEARCH = 8;
 
     /** Bounded read-only physical admission result for one exact HOT cargo carrier. */
     enum Readiness { CURRENT, READY, UNLOADED, BLOCKED, CONFLICT }
@@ -43,9 +41,9 @@ final class FrontierV3CargoCarrierExecutor {
         Entity existing = carrier(level, lease);
         if (existing != null) return owned(existing, lease, items) ? FrontierV3SceneExecutor.BodyMaterialization.COMPLETE
                 : FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
-        BlockPos candidate = spawnCandidate(lease).east();
+        BlockPos candidate = spawnCandidate(lease);
         if (!level.hasChunkAt(candidate)) return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
-        BlockPos position = supportedPosition(level, candidate);
+        BlockPos position = FrontierV3StandingPosition.aboveFloor(level, candidate);
         if (position == null) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         MinecartChest cart = EntityType.CHEST_MINECART.create(level);
         if (cart == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 cargo carrier");
@@ -89,9 +87,9 @@ final class FrontierV3CargoCarrierExecutor {
         if (items.size() != cargo.itemIds().size()) return Readiness.CONFLICT;
         Entity existing = carrier(level, lease);
         if (existing != null) return owned(existing, lease, items) ? Readiness.CURRENT : Readiness.CONFLICT;
-        BlockPos candidate = spawnCandidate(lease).east();
+        BlockPos candidate = spawnCandidate(lease);
         if (!level.hasChunkAt(candidate)) return Readiness.UNLOADED;
-        return supportedPosition(level, candidate) == null ? Readiness.BLOCKED : Readiness.READY;
+        return FrontierV3StandingPosition.aboveFloor(level, candidate) == null ? Readiness.BLOCKED : Readiness.READY;
     }
 
     static void discardClosed(ServerLevel level, FrontierWorldState state, SceneLease lease) {
@@ -150,26 +148,12 @@ final class FrontierV3CargoCarrierExecutor {
     private static Entity carrier(ServerLevel level, SceneLease lease) {
         Entity direct = level.getEntity(id(lease));
         if (direct != null) return direct;
-        return level.getEntitiesOfClass(MinecartChest.class, new AABB(spawnCandidate(lease).east()).inflate(32.0D), entity -> id(lease).equals(entity.getUUID()))
+        return level.getEntitiesOfClass(MinecartChest.class, new AABB(spawnCandidate(lease)).inflate(32.0D), entity -> id(lease).equals(entity.getUUID()))
                 .stream().min(Comparator.comparing(Entity::getUUID)).orElse(null);
     }
 
     private static BlockPos spawnCandidate(SceneLease lease) {
-        int ordinal = lease.members().size();
-        return new BlockPos(lease.handoffPosition().x() + (ordinal % 2) * 2, lease.handoffPosition().y(), lease.handoffPosition().z() + (ordinal / 2) * 2);
-    }
-
-    /** Finds an existing loaded support column; carrier materialization never clears a route deck or player block. */
-    private static BlockPos supportedPosition(ServerLevel level, BlockPos position) {
-        if (!level.hasChunkAt(position)) return null;
-        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, position.getX(), position.getZ());
-        for (int y = surface; y <= surface + MAX_VERTICAL_PLACEMENT_SEARCH; y++) {
-            BlockPos candidate = new BlockPos(position.getX(), y, position.getZ());
-            if (!level.hasChunkAt(candidate)) return null;
-            if (level.getBlockState(candidate).isAir() && level.getBlockState(candidate.above()).isAir()
-                    && level.getBlockState(candidate.below()).isFaceSturdy(level, candidate.below(), net.minecraft.core.Direction.UP)) return candidate;
-        }
-        return null;
+        return new BlockPos(lease.cargoPosition().x(), lease.cargoPosition().y(), lease.cargoPosition().z());
     }
 
     private static boolean residentHauler(FrontierWorldState state, SubjectId actorId) {

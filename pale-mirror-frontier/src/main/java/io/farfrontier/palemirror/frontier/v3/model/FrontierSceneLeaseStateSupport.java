@@ -26,6 +26,14 @@ final class FrontierSceneLeaseStateSupport {
         if (lease.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
         }
+        if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).position().equals(lease.memberPosition(member.actorId())))) {
+            throw new IllegalArgumentException("scene lease must retain every exact canonical member position");
+        }
+        RouteOperation operation = state.operations().get(lease.operationId());
+        if (operation != null && operation.activeTravel().isPresent()
+                && !operation.activeTravel().orElseThrow().cargoAnchor().equals(lease.cargoPosition())) {
+            throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");
+        }
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         int requiredCompaction = leases.size() - MAX_SCENE_LEASES + 1;
         if (requiredCompaction > 0) {

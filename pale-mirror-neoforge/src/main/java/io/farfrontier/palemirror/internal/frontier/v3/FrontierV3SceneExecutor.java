@@ -25,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinitio
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
@@ -41,10 +42,8 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -76,7 +75,6 @@ final class FrontierV3SceneExecutor {
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int MAX_PENDING_DRAINS = 4_096;
-    private static final int MAX_VERTICAL_PLACEMENT_SEARCH = 8;
 
     /**
      * Short-lived loaded-world observation.  The durable scene lease remains the only canonical
@@ -113,7 +111,7 @@ final class FrontierV3SceneExecutor {
                 .filter(candidate -> demandExists(level, candidate.handoffPosition())).findFirst();
         if (engagement.isPresent()) {
             SceneEngagementCandidate candidate = engagement.orElseThrow();
-            SceneLease lease = lease(runtime, candidate);
+            SceneLease lease = lease(runtime, state, candidate);
             if (FrontierSceneAdmission.available(state, candidate.actorIds())) prepare(runtime, lease);
             else handoff(level, runtime, state, lease);
             return;
@@ -126,7 +124,7 @@ final class FrontierV3SceneExecutor {
                 .filter(operation -> demandExists(level, operation.currentPosition())).findFirst();
         if (demand.isPresent()) {
             RouteOperation operation = demand.orElseThrow();
-            SceneLease lease = lease(runtime, operation);
+            SceneLease lease = lease(runtime, state, operation);
             if (FrontierSceneAdmission.available(state, operation.participantIds())) prepare(runtime, lease);
             else handoff(level, runtime, state, lease);
             return;
@@ -135,20 +133,29 @@ final class FrontierV3SceneExecutor {
                 .findFirst().ifPresent(lease -> execute(level, runtime, state, lease));
     }
 
-    private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, RouteOperation operation) {
+    private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, RouteOperation operation) {
         CheckpointImage checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + operation.id().value().substring("operation:".length()) + "-r" + checkpoint.revision().value());
         List<SceneMember> members = operation.participantIds().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
-        return new SceneLease(id, checkpoint.worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, members);
+        BlockPosition cargoPosition = operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(operation.currentPosition());
+        return SceneLease.atExactPositions(id, checkpoint.worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.empty(), members, positions(state, members));
     }
 
-    private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneEngagementCandidate candidate) {
+    private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneEngagementCandidate candidate) {
         CheckpointImage checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + candidate.engagementId().value().substring("engagement:".length()) + "-r" + checkpoint.revision().value());
         List<SceneMember> members = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
-        return new SceneLease(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members);
+        RouteOperation operation = state.operations().get(candidate.operationId());
+        BlockPosition cargoPosition = operation != null ? operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(candidate.handoffPosition()) : candidate.handoffPosition();
+        return SceneLease.atExactPositions(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), cargoPosition, checkpoint.instant(), checkpoint.revision().value(),
+                SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members, positions(state, members));
+    }
+
+    private static Map<SubjectId, BlockPosition> positions(FrontierWorldState state, List<SceneMember> members) {
+        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
+        for (SceneMember member : members) positions.put(member.actorId(), state.actorLocations().get(member.actorId()).position());
+        return Map.copyOf(positions);
     }
 
     private static void prepare(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
@@ -166,8 +173,12 @@ final class FrontierV3SceneExecutor {
             if (!(body instanceof Mob mob) || !mob.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), bioform(state, member.actorId()))) return;
             captures.add(new SceneMemberPosition(member.actorId(), new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), fixed(mob.getHealth())));
         }
-        if (!captures.isEmpty()) submit(runtime, "scene-handoff", lease.id().value(), new SceneLeaseHandoff(lease.withAmbientHandoff(
-                captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures));
+        if (!captures.isEmpty()) {
+            Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>(lease.memberPositions());
+            captures.forEach(capture -> positions.put(capture.actorId(), capture.position()));
+            submit(runtime, "scene-handoff", lease.id().value(), new SceneLeaseHandoff(lease.withMemberPositions(positions).withAmbientHandoff(
+                    captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures));
+        }
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
@@ -264,9 +275,10 @@ final class FrontierV3SceneExecutor {
                 continue;
             }
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return BodyMaterialization.DEFERRED;
-            BlockPos candidate = spawnCandidate(lease.handoffPosition(), index);
+            BlockPosition canonical = lease.memberPosition(member.actorId());
+            BlockPos candidate = new BlockPos(canonical.x(), canonical.y(), canonical.z());
             if (!level.hasChunkAt(candidate)) return BodyMaterialization.DEFERRED;
-            BlockPos position = spawnPosition(level, candidate);
+            BlockPos position = FrontierV3StandingPosition.aboveFloor(level, candidate);
             if (position == null) return BodyMaterialization.CONFLICT;
             boolean bioform = bioform(state, member.actorId());
             Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
@@ -315,9 +327,10 @@ final class FrontierV3SceneExecutor {
             }
             allCurrent = false;
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return "AWAITING_AMBIENT_HANDOFF";
-            BlockPos candidate = spawnCandidate(lease.handoffPosition(), index);
+            BlockPosition canonical = lease.memberPosition(member.actorId());
+            BlockPos candidate = new BlockPos(canonical.x(), canonical.y(), canonical.z());
             if (!level.hasChunkAt(candidate)) return "UNLOADED";
-            if (spawnPosition(level, candidate) == null) return "BLOCKED";
+            if (FrontierV3StandingPosition.aboveFloor(level, candidate) == null) return "BLOCKED";
         }
         return allCurrent ? "CURRENT" : "READY";
     }
@@ -613,21 +626,6 @@ final class FrontierV3SceneExecutor {
     private static BlockPos spawnCandidate(BlockPosition anchor, int ordinal) {
         return new BlockPos(anchor.x() + (ordinal % 2) * 2, anchor.y(), anchor.z() + (ordinal / 2) * 2);
     }
-    private static BlockPos spawnPosition(ServerLevel level, BlockPos position) {
-        if (!level.hasChunkAt(position)) return null;
-        // A canonical hand-off is horizontal.  It can land on a route, field edge or player-built
-        // slope whose exact top surface differs from its strategic Y.  Search only the naturally
-        // loaded column, exactly as ambient admission does; never overwrite or clear an obstacle.
-        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, position.getX(), position.getZ());
-        for (int y = surface; y <= surface + MAX_VERTICAL_PLACEMENT_SEARCH; y++) {
-            BlockPos candidate = new BlockPos(position.getX(), y, position.getZ());
-            if (!level.hasChunkAt(candidate)) return null;
-            if (level.getBlockState(candidate).isAir() && level.getBlockState(candidate.above()).isAir()
-                    && level.getBlockState(candidate.below()).isFaceSturdy(level, candidate.below(), Direction.UP)) return candidate;
-        }
-        return null;
-    }
-
     static Optional<Entity> explosionCause(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.EXPLOSION || intent.subjectIds().size() != 2 || !bomber(state, intent.causeSubjectId())) return Optional.empty();
         return state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.HOT)

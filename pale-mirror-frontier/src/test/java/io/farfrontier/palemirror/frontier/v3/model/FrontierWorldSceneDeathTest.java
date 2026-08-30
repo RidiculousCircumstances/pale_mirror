@@ -11,7 +11,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
-import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,13 +23,14 @@ class FrontierWorldSceneDeathTest {
     @Test
     void laterExactDeathsRemainDurableWhileTheSameSceneIsDraining() {
         WorldId world = new WorldId("frontier:scene-multiple-deaths");
-        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
+                FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L));
         FrontierWorldState initial = state(engine);
         RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:multiple-deaths");
-        SceneLease lease = new SceneLease(leaseId, world, operation.id(), operation.cargoId(), operation.route().getFirst(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
-                SceneLeaseStatus.PREPARED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList());
+        SceneLease lease = FrontierTestSceneLeases.exact(initial, leaseId, operation.id(), operation.cargoId(),
+                operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
+                java.util.Optional.empty(), operation.participantIds());
         submit(engine, world, "prepare", new SceneLeasePrepared(lease));
         submit(engine, world, "hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
 
