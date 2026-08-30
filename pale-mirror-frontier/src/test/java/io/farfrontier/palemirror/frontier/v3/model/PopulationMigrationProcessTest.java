@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
@@ -126,6 +127,24 @@ class PopulationMigrationProcessTest {
                 assertEquals(1, Math.abs(previous.x() - current.x()) + Math.abs(previous.z() - current.z()));
             }
         }
+    }
+
+    @Test
+    void activeEmploymentReservesTheExactResidentFromMigrationUntilItsOwnLifecycleEnds() {
+        FrontierWorldState state = displaced(); Settlement source = state.bootstrap().settlements().getFirst();
+        ResidentProfile founder = state.humanPopulation().residents().values().stream().filter(person -> person.settlementId().equals(source.id())
+                && person.role() == ResidentRole.CRAFTER).sorted(java.util.Comparator.comparing(ResidentProfile::id)).findFirst().orElseThrow();
+        Company company = new Company(CompanyFoundationProcess.companyId(source.id()), source.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, 1L);
+        state = state.registerCompany(company);
+        SubjectId reserved = state.humanPopulation().residents().values().stream().filter(person -> person.settlementId().equals(source.id()))
+                .sorted(java.util.Comparator.comparing(ResidentProfile::id)).findFirst().orElseThrow().id();
+        state = state.openEmployment(new EmploymentContract(new SubjectId("contract:employment-migration-reservation"), company.id(), reserved,
+                FixedScalar.whole(2L), FixedScalar.ONE, EmploymentContractStatus.ACTIVE, 1L, 0L, FixedScalar.ZERO));
+
+        List<ResidentMigrationStarted> starts = PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 100L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(ResidentMigrationStarted.class::isInstance)
+                .map(ResidentMigrationStarted.class::cast).toList();
+        assertTrue(starts.stream().noneMatch(start -> start.journey().residentId().equals(reserved)));
     }
 
     @Test

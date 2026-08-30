@@ -28,6 +28,7 @@ public final class ProductionTransformationStateSupport {
         }
         StrategicTask task = activeTask(state, job);
         if (task.status() != StrategicTaskStatus.ACTIVE) throw new IllegalArgumentException("production transformation task is not active");
+        if (!CompanyWorkPaymentProcess.canSettle(state, job)) throw new IllegalArgumentException("production transformation has unavailable company finance");
     }
 
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ProductionTransformationObservation observation,
@@ -40,6 +41,7 @@ public final class ProductionTransformationStateSupport {
                 || job.outputCount() != observation.outputCount()) {
             throw new IllegalArgumentException("production transformation receipt does not match its durable job");
         }
+        FrontierWorldState paidState = CompanyWorkPaymentProcess.settle(state, job);
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) input.custody();
         ExactItemStack output = new ExactItemStack(job.outputItemId(), job.settlementId(), job.outputItemKind(), job.outputCount(), source);
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs()); jobs.remove(job.id());
@@ -47,10 +49,10 @@ public final class ProductionTransformationStateSupport {
         nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
         StrategicPlanState plans = state.strategicPlans().transitionTask(activeTask(state, job).id(), StrategicTaskStatus.COMPLETED);
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(),
-                state.inventory().withoutItem(input.id()).store(output), jobs, state.contracts(), state.operations(), state.logisticsHistory(), nextIntents, observations,
-                state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
-                state.routeTopology(), plans, state.humanPopulation(), state.companies(), state.resourceSites());
+        return new FrontierWorldState(paidState.bootstrap(), paidState.actorLocations(), paidState.structureConditions(), paidState.infection(),
+                paidState.inventory().withoutItem(input.id()).store(output), jobs, paidState.contracts(), paidState.operations(), paidState.logisticsHistory(), nextIntents, observations,
+                paidState.sceneLeases(), paidState.hiveColony(), paidState.structureDamage(), paidState.physicalDeltas(), paidState.ambientLeases(), paidState.routeConstructions(),
+                paidState.routeTopology(), plans, paidState.humanPopulation(), paidState.companies(), paidState.resourceSites());
     }
 
     static void validateReceipt(PhysicalIntent intent, ProductionTransformationObservation observation) {

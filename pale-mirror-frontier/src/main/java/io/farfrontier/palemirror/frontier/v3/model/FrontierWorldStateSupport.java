@@ -131,6 +131,11 @@ final class FrontierWorldStateSupport {
                 && operation.participantIds().contains(residentId));
     }
 
+    static boolean activeEmploymentClaim(FrontierWorldState state, SubjectId residentId) {
+        return state.companies().employmentContracts().values().stream().anyMatch(contract -> contract.residentId().equals(residentId)
+                && contract.status() == EmploymentContractStatus.ACTIVE);
+    }
+
     static boolean activePatrolClaim(FrontierWorldState state, SubjectId residentId) {
         return state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
                 && patrol.guardId().equals(residentId));

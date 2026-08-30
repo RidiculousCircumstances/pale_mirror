@@ -55,6 +55,7 @@ final class ProductionProcess {
         if (job == null) throw new IllegalStateException("production completion has no active job: " + action.subject().value());
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id()); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.FACILITY_UNAVAILABLE);
+        if (!CompanyWorkPaymentProcess.canSettle(state, job)) return blocked(task, settlement, workshop, job.id(), ProductionBlockReason.FINANCE_UNAVAILABLE);
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null) {
             SubjectId depot = FrontierWorldState.depotId(settlement.id()); OptionalInt slot = state.inventory().firstFreeSlot(depot);
@@ -96,7 +97,9 @@ final class ProductionProcess {
         if (state.inventory().items().containsKey(job.consumedItemId())) {
             throw new IllegalArgumentException("materialized production output requires a physical transformation receipt");
         }
-        activeTask(state, settlement.id()); return state.completeProductionJob(completed.jobId(), completed.output());
+        activeTask(state, settlement.id());
+        if (!CompanyWorkPaymentProcess.canSettle(state, job)) throw new IllegalArgumentException("production completion has unavailable company finance");
+        return CompanyWorkPaymentProcess.settle(state, job).completeProductionJob(completed.jobId(), completed.output());
     }
 
     static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, ProductionBlocked blocked) {
@@ -118,6 +121,12 @@ final class ProductionProcess {
                 if (!blocked.workId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                         || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isPresent()) {
                     throw new IllegalArgumentException("production worker block precondition does not hold");
+                }
+            }
+            case FINANCE_UNAVAILABLE -> {
+                ProductionJob job = state.productionJobs().get(blocked.workId());
+                if (job == null || !job.settlementId().equals(settlement.id()) || CompanyWorkPaymentProcess.canSettle(state, job)) {
+                    throw new IllegalArgumentException("production finance block precondition does not hold");
                 }
             }
         }

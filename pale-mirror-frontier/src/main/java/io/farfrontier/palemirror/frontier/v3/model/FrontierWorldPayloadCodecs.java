@@ -10,7 +10,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new EconomicTransferCodec(), new CompanyRegisteredCodec(),
+                new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(),
                 new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
                 new OperationTravelSegmentCompletedCodec(),
@@ -43,15 +43,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             return new InfectionChanged(new InfectionCell(input.getInt(), input.getInt()), new FixedRatio(new FixedScalar(input.getLong())));
         }
     }
-    private static final class EconomicTransferCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.economic_transfer"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            EconomicTransfer transfer = (EconomicTransfer) payload; writeSubject(output, transfer.payerId()); writeSubject(output, transfer.payeeId());
-            output.writeLong(transfer.amount().raw()); writeString(output, transfer.reason());
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new EconomicTransfer(
-                readSubject(input).value(), readSubject(input).value(), new FixedScalar(input.readLong()), readString(input))); }
-    }
     private static final class CompanyRegisteredCodec implements PayloadCodec {
         @Override public String type() { return "frontier.company_registered"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
@@ -63,6 +54,22 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             int purpose = input.readUnsignedByte(); int status = input.readUnsignedByte(); long registeredAt = input.readLong();
             if (purpose >= CompanyPurpose.values().length || status >= CompanyStatus.values().length) throw new IllegalArgumentException("invalid company registration payload");
             return new CompanyRegistered(new Company(id, settlement, founder, CompanyPurpose.values()[purpose], CompanyStatus.values()[status], registeredAt));
+        }); }
+    }
+    private static final class EmploymentContractOpenedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.employment_contract_opened"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            EmploymentContract contract = ((EmploymentContractOpened) payload).contract(); writeSubject(output, contract.id()); writeSubject(output, contract.companyId());
+            writeSubject(output, contract.residentId()); output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw());
+            output.writeByte(contract.status().ordinal()); output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectId id = readSubject(input).value(); SubjectId company = readSubject(input).value(); SubjectId resident = readSubject(input).value();
+            long invoice = input.readLong(); long wage = input.readLong(); int status = input.readUnsignedByte(); long openedAt = input.readLong();
+            long completed = input.readLong(); long totalWages = input.readLong();
+            if (status >= EmploymentContractStatus.values().length) throw new IllegalArgumentException("invalid employment contract status");
+            return new EmploymentContractOpened(new EmploymentContract(id, company, resident, new FixedScalar(invoice), new FixedScalar(wage),
+                    EmploymentContractStatus.values()[status], openedAt, completed, new FixedScalar(totalWages)));
         }); }
     }
     private static final class ResourceDepositedCodec implements PayloadCodec {

@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 61, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 62, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -71,7 +71,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
                     && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
-                    && version != 58 && version != 59 && version != 60 && version != VERSION) {
+                    && version != 58 && version != 59 && version != 60 && version != 61 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -80,7 +80,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             EconomicLedger economics = version >= 60 ? readEconomicLedger(input) : EconomicLedger.bootstrap(bootstrap);
-            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input) : CompanyRegistry.empty();
+            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62) : CompanyRegistry.empty();
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
@@ -288,8 +288,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, company.id().value()); writeString(output, company.settlementId().value()); writeString(output, company.founderId().value());
             output.writeByte(company.purpose().ordinal()); output.writeByte(company.status().ordinal()); output.writeLong(company.registeredAtTick());
         }
+        writeCount(output, registry.employmentContracts().size());
+        for (EmploymentContract contract : registry.employmentContracts().values().stream().sorted(Comparator.comparing(EmploymentContract::id)).toList()) {
+            writeString(output, contract.id().value()); writeString(output, contract.companyId().value()); writeString(output, contract.residentId().value());
+            output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw()); output.writeByte(contract.status().ordinal());
+            output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
+        }
     }
-    private static CompanyRegistry readCompanyRegistry(DataInputStream input) throws IOException {
+    private static CompanyRegistry readCompanyRegistry(DataInputStream input, boolean hasEmployment) throws IOException {
         Map<SubjectId, Company> companies = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId founder = new SubjectId(readString(input));
@@ -299,7 +305,17 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate company registry entry");
             }
         }
-        return new CompanyRegistry(companies);
+        Map<SubjectId, EmploymentContract> contracts = new LinkedHashMap<>();
+        if (hasEmployment) for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId company = new SubjectId(readString(input)); SubjectId resident = new SubjectId(readString(input));
+            long invoice = input.readLong(); long wage = input.readLong(); int status = input.readUnsignedByte(); long openedAt = input.readLong();
+            long completed = input.readLong(); long totalWages = input.readLong();
+            if (status >= EmploymentContractStatus.values().length || contracts.put(id, new EmploymentContract(id, company, resident,
+                    new FixedScalar(invoice), new FixedScalar(wage), EmploymentContractStatus.values()[status], openedAt, completed, new FixedScalar(totalWages))) != null) {
+                throw new IllegalArgumentException("invalid or duplicate employment contract registry entry");
+            }
+        }
+        return new CompanyRegistry(companies, contracts);
     }
     private static void writeInventory(DataOutputStream output, ExactInventory inventory) throws IOException {
         writeCount(output, inventory.containers().size());

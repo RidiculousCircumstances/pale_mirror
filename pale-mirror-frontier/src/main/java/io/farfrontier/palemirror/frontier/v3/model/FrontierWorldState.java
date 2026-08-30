@@ -55,17 +55,37 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         for (Company company : companies.companies().values()) {
             FrontierWorldStateSupport.settlement(bootstrap, company.settlementId());
             ResidentProfile founder = humanPopulation.resident(company.founderId());
-            if (founder == null || !founder.settlementId().equals(company.settlementId()) || founder.role() != ResidentRole.CRAFTER) {
-                throw new IllegalArgumentException("company founder must remain a settlement crafter");
+            if (founder == null) {
+                throw new IllegalArgumentException("company founder must remain a canonical resident");
             }
             EconomicAccount account = inventory.economics().require(company.id());
             if (account.ownerKind() != EconomicOwnerKind.COMPANY || account.status() != EconomicAccountStatus.ACTIVE && company.status() == CompanyStatus.ACTIVE) {
                 throw new IllegalArgumentException("company legal state and account must agree");
             }
         }
+        for (EmploymentContract contract : companies.employmentContracts().values()) {
+            Company company = companies.companies().get(contract.companyId());
+            ResidentProfile resident = humanPopulation.resident(contract.residentId());
+            if (company == null || resident == null) {
+                throw new IllegalArgumentException("employment must bind known legal identities");
+            }
+            EconomicAccount account = inventory.economics().require(contract.residentId());
+            if (account.ownerKind() != EconomicOwnerKind.RESIDENT) {
+                throw new IllegalArgumentException("employment resident must retain a resident account");
+            }
+            if (contract.status() == EmploymentContractStatus.ACTIVE
+                    && (company.status() != CompanyStatus.ACTIVE || !resident.settlementId().equals(company.settlementId())
+                    || humanPopulation.migrations().containsKey(resident.id()))) {
+                throw new IllegalArgumentException("active employment requires a settled resident in an active local company");
+            }
+        }
         for (EconomicAccount account : inventory.economics().accounts().values()) {
             if (account.ownerKind() == EconomicOwnerKind.COMPANY && !companies.companies().containsKey(account.ownerId())) {
                 throw new IllegalArgumentException("company account must have one registered legal company");
+            }
+            if (account.ownerKind() == EconomicOwnerKind.RESIDENT && companies.employmentContracts().values().stream()
+                    .noneMatch(contract -> contract.residentId().equals(account.ownerId()))) {
+                throw new IllegalArgumentException("resident account must have one employment contract");
             }
         }
         for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.position());
@@ -476,6 +496,21 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withEconomics(economics), productionJobs, contracts, operations,
                 logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases,
                 routeConstructions, routeTopology, strategicPlans, humanPopulation, companies.register(company), resourceSites);
+    }
+    FrontierWorldState openEmployment(EmploymentContract contract) {
+        Objects.requireNonNull(contract, "employment contract");
+        Company company = companies.companies().get(contract.companyId());
+        ResidentProfile resident = humanPopulation.resident(contract.residentId());
+        if (company == null || resident == null || !resident.settlementId().equals(company.settlementId())
+                || humanPopulation.migrations().containsKey(resident.id())) {
+            throw new IllegalArgumentException("employment must bind a resident in its company's settlement");
+        }
+        EconomicLedger economics = inventory.economics().register(new EconomicAccount(contract.residentId(), EconomicOwnerKind.RESIDENT,
+                EconomicAccountStatus.ACTIVE, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO));
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withEconomics(economics), productionJobs, contracts, operations,
+                logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases,
+                routeConstructions, routeTopology, strategicPlans, humanPopulation, companies.openEmployment(contract), resourceSites);
     }
     public FrontierWorldState recordResidentMigration(ResidentMigrated migration) { return HumanPopulationStateSupport.recordMigration(this, migration); }
     public FrontierWorldState startResidentBirth(ResidentBirthJob job) { return HumanPopulationStateSupport.startBirth(this, job); }
