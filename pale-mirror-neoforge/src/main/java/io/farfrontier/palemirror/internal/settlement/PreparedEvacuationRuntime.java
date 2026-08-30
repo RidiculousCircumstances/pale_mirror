@@ -156,8 +156,7 @@ public final class PreparedEvacuationRuntime {
     }
 
     private static boolean rejected(ServerPlayer player, String message) {
-        PaleMirrorPlayerPresentation.actionRejected(player, "pale-mirror:refugee-anchor-rejected",
-                Component.literal(message));
+        PaleMirrorPlayerPresentation.actionRejected(player, "pale-mirror:refugee-anchor-rejected");
         return false;
     }
 }

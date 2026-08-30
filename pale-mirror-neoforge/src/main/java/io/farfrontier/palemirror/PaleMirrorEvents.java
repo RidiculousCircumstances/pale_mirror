@@ -317,7 +317,7 @@ public final class PaleMirrorEvents {
             var transfer = runtime.interactWithSupplyDepot(player, event.getPos());
             if (transfer.handled()) {
                 if (!transfer.success()) PaleMirrorPlayerPresentation.actionRejected(player,
-                        "pale-mirror:depot-transfer-rejected", Component.literal(transfer.message()));
+                        "pale-mirror:depot-transfer-rejected");
                 event.setCanceled(true);
                 event.setCancellationResult(transfer.success() ? InteractionResult.SUCCESS : InteractionResult.FAIL);
             } else if (runtime.presentSettlementJournal(player, event.getPos())) {
@@ -337,8 +337,7 @@ public final class PaleMirrorEvents {
             }
             var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected",
-                        Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
+                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected");
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
             }
         }
@@ -372,8 +371,7 @@ public final class PaleMirrorEvents {
             }
             var cargo = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.releaseCargoCarrier(level, player, event.getTarget());
             if (cargo == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.CargoCarrierInteraction.REJECTED) {
-                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected",
-                        Component.literal("Frontier cargo could not be reconciled; the carrier remains closed."));
+                PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:cargo-carrier-rejected");
                 event.setCanceled(true); event.setCancellationResult(InteractionResult.FAIL); return;
             }
         }
@@ -456,8 +454,7 @@ public final class PaleMirrorEvents {
             if (event.getPlayer() instanceof ServerPlayer player) {
                 if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.rejectBlockBreak(level, event.getPos(), player)) {
                     event.setCanceled(true);
-                    PaleMirrorPlayerPresentation.critical(player, "frontier-v3:unrecorded-physical-change",
-                            Component.literal("Pale Mirror: physical change was not durably recorded."));
+                    PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:unrecorded-physical-change");
                     return;
                 }
             }
@@ -498,8 +495,7 @@ public final class PaleMirrorEvents {
     private static boolean denyReservedTransfer(Player player, ItemStack stack) {
         if (!(player instanceof ServerPlayer serverPlayer) || stack.isEmpty()
                 || !PaleMirrorRuntime.forServer(serverPlayer.getServer()).isReservedTransferItem(stack)) return false;
-        PaleMirrorPlayerPresentation.actionRejected(serverPlayer, "pale-mirror:reserved-resource-transfer",
-                Component.literal("This item is reserved by a Pale Mirror resource transfer."));
+        PaleMirrorPlayerPresentation.actionRejected(serverPlayer, "pale-mirror:reserved-resource-transfer");
         return true;
     }
 
