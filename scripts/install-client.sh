@@ -119,4 +119,25 @@ install_hosted_railway_untold \
   "$target" "$railway_untold_url" "$railway_untold_sha512" \
   "$target/.far-frontier-installer-cache"
 
+# These were independent client conveniences, not Pale Mirror or renderer
+# dependencies. Packwiz preserves no-longer-managed files, so retire them
+# explicitly and recoverably when updating an existing instance.
+obsolete_client_mods=(
+  'journeymap-neoforge-1.21.1-6.0.4.jar'
+  'ezactions-neoforge-1.21.1-2.0.3.5.jar'
+  'SimplyTooltips-neoforge-0.1.3.jar'
+  'entity_model_features-3.2.4-1.21-neoforge.jar'
+  'entity_texture_features_1.21-neoforge-7.1.jar'
+  'polytone-1.21-3.11.1-neoforge.jar'
+)
+retired_client_mods="$target/.far-frontier-retired-client-mods"
+for filename in "${obsolete_client_mods[@]}"; do
+  source="$target/mods/$filename"
+  [[ -f "$source" ]] || continue
+  mkdir -p "$retired_client_mods"
+  destination="$retired_client_mods/$filename.$(date -u +%Y%m%dT%H%M%SZ)"
+  mv -- "$source" "$destination"
+  echo "Retired nonessential client mod: $destination"
+done
+
 echo "Client pack synchronised in: $target"

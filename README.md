@@ -188,16 +188,17 @@ not downloaded by the default profile. Allow TCP `25565` for Minecraft and TCP
 `8091` only while clients need pack updates. Re-run the client installer after each
 pack update; stop `packwiz serve` when distribution is no longer needed.
 
-Pale Mirror is a private, separately built artifact. Its URL and SHA-512 are
-optional installer inputs (or `PALE_MIRROR_URL` / `PALE_MIRROR_SHA512` environment
-variables), but they must always be supplied together. The installer downloads it
-after Packwiz synchronisation, verifies the checksum before replacing its own
-`pale_mirror-hosted.jar`, and refuses to overwrite an independently managed Pale
-Mirror JAR. The private Railway Untold fork is installed by the analogous
-`RAILWAY_UNTOLD_URL` / `RAILWAY_UNTOLD_SHA512` pair. It must be the exact
-`1.2.1-pm.1` artifact and the pack enables its PM managed mode; the installer
-refuses to replace another unmanaged Railway Untold JAR. Give both artifact
-pairs to the dedicated-server installer:
+Pale Mirror is a private, separately built artifact. The bootstrap client updater
+and the server installer resolve Pale Mirror, Pale Mirror Visuals and Railway
+Untold from the same hosted pack source, then verify each SHA-512 before activating
+it. Explicit URL/SHA-512 pairs (or the corresponding environment variables) remain
+available for an alternative trusted artifact source and must always be supplied
+together. Old Pale Mirror JARs are retired under the installer cache during an
+update, so an obsolete network channel cannot remain active beside the pinned JAR.
+The graybox client profile no longer installs JourneyMap, EZ Actions, Simply
+Tooltips, EMF/ETF or Polytone; existing copies are moved to a recoverable local
+archive. To use an explicit artifact source, give the pairs to the dedicated-server
+installer:
 
 ```bash
 scripts/install-server.sh \

@@ -38,14 +38,15 @@ packwiz materialises the server. For LAN clients, publish this checkout separate
 scripts/install-client.sh or scripts/install-client.ps1.
 
 The script never deletes an existing server/world. --accept-eula is required only
-to write eula=true; read Mojang's EULA before using it. Pale Mirror URL and SHA-512
-must be supplied together; PALE_MIRROR_URL and PALE_MIRROR_SHA512 are also accepted.
-The Railway Untold pair is likewise accepted through RAILWAY_UNTOLD_URL and
-RAILWAY_UNTOLD_SHA512. The dedicated server runtime must be Java 22; Pale Mirror
-and all client artifacts remain compiled for Java 21. C2ME is downloaded but kept
-disabled unless --enable-c2me is supplied. Distant Horizons remains client-side by
-default; --enable-server-dh-cache enables its measured-cost cache/synchronisation
-service without enabling unknown-world generation.
+to write eula=true; read Mojang's EULA before using it. When the pack URL ends in
+`/pack.toml`, Pale Mirror, Pale Mirror Visuals and Railway Untold are resolved from
+the same hosted source and SHA-512-pinned automatically. Explicit URL/SHA-512 pairs
+still override that default and must be supplied together. The dedicated server
+runtime must be Java 22; Pale Mirror and all client artifacts remain compiled for
+Java 21. C2ME is downloaded but kept disabled unless --enable-c2me is supplied.
+Distant Horizons remains client-side by default; --enable-server-dh-cache enables
+its measured-cost cache/synchronisation service without enabling unknown-world
+generation.
 EOF
 }
 
@@ -152,6 +153,38 @@ if [[ -z "$pack_url" ]]; then
     echo "Temporary local pack server did not start" >&2; exit 1;
   }
 fi
+
+hosted_base=${pack_url%/pack.toml}
+if [[ "$hosted_base" == "$pack_url" ]]; then
+  echo "--pack-url must end in /pack.toml to resolve hosted Pale Mirror dependencies automatically" >&2
+  exit 2
+fi
+hosted_sha512() {
+  local artifact=$1 value
+  value=$(curl --fail --silent --show-error --location --retry 3 "$hosted_base/hosted/$artifact.sha512")
+  value=${value%%[[:space:]]*}
+  value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+  [[ "$value" =~ ^[[:xdigit:]]{128}$ ]] || {
+    echo "Invalid hosted SHA-512 for $artifact" >&2
+    return 1
+  }
+  printf '%s' "$value"
+}
+resolve_hosted_dependency() {
+  local name=$1 url_variable=$2 sha_variable=$3 url sha
+  url=${!url_variable}
+  sha=${!sha_variable}
+  [[ -n "$url" || -n "$sha" ]] && return 0
+  printf -v "$url_variable" '%s/hosted/%s' "$hosted_base" "$name"
+  printf -v "$sha_variable" '%s' "$(hosted_sha512 "$name")"
+  echo "Resolved checksum-pinned hosted dependency: $name"
+}
+resolve_hosted_dependency pale_mirror-current.jar pale_mirror_url pale_mirror_sha512
+resolve_hosted_dependency pale_mirror_visuals-current.jar pale_mirror_visuals_url pale_mirror_visuals_sha512
+resolve_hosted_dependency railwaysuntold-pm-current.jar railway_untold_url railway_untold_sha512
+validate_hosted_pale_mirror_args "$pale_mirror_url" "$pale_mirror_sha512"
+validate_hosted_pale_mirror_visuals_args "$pale_mirror_visuals_url" "$pale_mirror_visuals_sha512"
+validate_hosted_railway_args "$railway_untold_url" "$railway_untold_sha512"
 
 (
   cd "$target"

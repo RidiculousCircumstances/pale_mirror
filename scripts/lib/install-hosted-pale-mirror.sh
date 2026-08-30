@@ -61,6 +61,16 @@ pale_mirror_sha512_matches() {
   [[ "$actual" == "$expected" ]]
 }
 
+archive_retired_pale_mirror() {
+  local path=$1 cache_dir=$2 retired_dir timestamp destination
+  retired_dir="$cache_dir/retired-pale-mirror"
+  timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+  mkdir -p "$retired_dir"
+  destination="$retired_dir/${path##*/}.$timestamp"
+  mv -- "$path" "$destination"
+  echo "Archived stale Pale Mirror JAR: $destination"
+}
+
 install_hosted_pale_mirror() {
   local target=$1 url=${2:-} expected=${3:-} cache_dir=$4
   [[ -n "$url" ]] || return 0
@@ -80,24 +90,31 @@ install_hosted_pale_mirror() {
     [[ "${candidate##*/}" == pale_mirror_visuals* ]] || candidates+=("$candidate")
   done
 
-  if ((${#candidates[@]} > 1)); then
-    echo "Multiple Pale Mirror JARs are present; refusing to choose between them:" >&2
-    printf '  %s\n' "${candidates[@]}" >&2
-    return 1
-  fi
-  if ((${#candidates[@]} == 1)); then
-    local existing=${candidates[0]}
-    if pale_mirror_sha512_matches "$expected" "$existing"; then
-      echo "Pale Mirror already installed and SHA-512 verified: $existing"
-      return 0
+  # A previous updater used build-versioned names and would refuse to replace
+  # them. That leaves an old client speaking obsolete channels such as
+  # `pale_mirror:atlas` after the server has moved on. Keep every obsolete JAR
+  # recoverably under the installer cache, then make the checksum-pinned JAR
+  # the sole active Pale Mirror artifact.
+  local verified_existing=""
+  for candidate in "${candidates[@]}"; do
+    if pale_mirror_sha512_matches "$expected" "$candidate"; then
+      if [[ "$candidate" == "$managed_jar" ]]; then
+        verified_existing="$candidate"
+        break
+      fi
+      [[ -n "$verified_existing" ]] || verified_existing="$candidate"
     fi
-    if [[ "$existing" != "$managed_jar" ]]; then
-      echo "An unmanaged Pale Mirror JAR conflicts with the requested hosted artifact:" >&2
-      echo "  $existing" >&2
-      echo "Remove it explicitly or use its SHA-512; it will not be overwritten automatically." >&2
-      return 1
-    fi
+  done
+  if [[ -n "$verified_existing" ]]; then
+    for candidate in "${candidates[@]}"; do
+      [[ "$candidate" == "$verified_existing" ]] || archive_retired_pale_mirror "$candidate" "$cache_dir"
+    done
+    echo "Pale Mirror already installed and SHA-512 verified: $verified_existing"
+    return 0
   fi
+  for candidate in "${candidates[@]}"; do
+    archive_retired_pale_mirror "$candidate" "$cache_dir"
+  done
 
   local cache_jar="$cache_dir/pale-mirror-${expected:0:16}.jar"
   if ! pale_mirror_sha512_matches "$expected" "$cache_jar"; then

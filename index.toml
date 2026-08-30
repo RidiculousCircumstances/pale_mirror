@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "17e6e4d782bb9130e6e4266e16740a568a49b8001566cdf090848f5cb3a12e4c"
+hash = "91679f80ab252645d6f83b4f70b9568f9baecc52229953b4cdf8d750cda40213"
 
 [[files]]
 file = "config/README.md"
@@ -506,21 +506,6 @@ hash = "d5b9c23df79ef871a70032567db2512904251347bdf13da80fbb8b00a846a79a"
 metafile = true
 
 [[files]]
-file = "mods/entity-model-features.pw.toml"
-hash = "4fa25309ea7f4f7770ce6588f39711e891d39f70ae0906b842647273a9ce0448"
-metafile = true
-
-[[files]]
-file = "mods/entitytexturefeatures.pw.toml"
-hash = "cf7390cf06a861f7661222773371b429fce4fdd359240ca3c0eff20835471c0c"
-metafile = true
-
-[[files]]
-file = "mods/ez-actions.pw.toml"
-hash = "0d02b8be119245b5a1fb0647e77af0b45c5d234666f7f15650302ee4ed2c4c28"
-metafile = true
-
-[[files]]
 file = "mods/ez-emerald-pouch.pw.toml"
 hash = "5b19d3885559f11994595a573920a89075e7b62a2f3d7b253d11d33fa35ddc9e"
 metafile = true
@@ -586,11 +571,6 @@ hash = "db1c1e6382878b78e994dba1b9026935f8d1c5ca685c89d2437858e0a0dcab58"
 metafile = true
 
 [[files]]
-file = "mods/journeymap.pw.toml"
-hash = "36da1d948489d7ac11923e55b12ea092f05483c1dbd2a4b15cacfc4b3a975901"
-metafile = true
-
-[[files]]
 file = "mods/kotlin-for-forge.pw.toml"
 hash = "712a69b3569a8055979de6eea262068535fe182dffb3833e53e5833e9cbf9766"
 metafile = true
@@ -641,11 +621,6 @@ hash = "93284ca7f2f23f0bb76d42b797cabf2aea1914ee9825bec82bf6ffe4c60dda0d"
 metafile = true
 
 [[files]]
-file = "mods/polytone.pw.toml"
-hash = "70aeba11f46b3e2928d1b70cee6bbb8586f64b0c11feb798ea88a5dad3ac36dd"
-metafile = true
-
-[[files]]
 file = "mods/quark.pw.toml"
 hash = "726970c838cd6d724366956c2469b5a36dbe574abbd087317513359dfd1dd89e"
 metafile = true
@@ -668,11 +643,6 @@ metafile = true
 [[files]]
 file = "mods/simply-swords.pw.toml"
 hash = "1d37ac39109aa15d03a3a7ddf6402d63f72277acafca53f61830046acfe6edb0"
-metafile = true
-
-[[files]]
-file = "mods/simply-tooltips.pw.toml"
-hash = "320d755339086e8fb35709328ad7b094ecbf7c500d61c08c535ec7d277fe1053"
 metafile = true
 
 [[files]]
@@ -752,7 +722,7 @@ hash = "3e3d82578cc434d88cc52e2842b4f9c8a09162fa0672daf4ea3e0660894aadb2"
 
 [[files]]
 file = "scripts/install-client.sh"
-hash = "5d048fd974c03d0d0a89c38234666d516b542d22724f447a639886fe565d7444"
+hash = "29567f42a80179485e22f7beaa2479c0932107578239c2dac51fe1f658b600a4"
 
 [[files]]
 file = "scripts/install-server-java22.sh"
@@ -760,11 +730,11 @@ hash = "ba731c2600b07e23bc22ecf4d54350f4f4ce407add4a0cef94209a7573b29f8c"
 
 [[files]]
 file = "scripts/install-server.sh"
-hash = "4e0208d66ffbac0a40564e65aeee665407893136ffea27e8aed8a3993c39daa6"
+hash = "429e97d5cbccbea9a2f92c7b359e7204622226eda7b7a4e2b6cd73d9532e48b0"
 
 [[files]]
 file = "scripts/lib/install-hosted-pale-mirror.sh"
-hash = "7d3b24cd2986f6eaa539a2b411bdf9162623d4d744e12e119208365d2955b83a"
+hash = "af67126ec987f30a894d695de30bf73e268d5b3e1fbcf3e66e9ae5a4d34a14de"
 
 [[files]]
 file = "scripts/lib/install-hosted-railway-untold.sh"
