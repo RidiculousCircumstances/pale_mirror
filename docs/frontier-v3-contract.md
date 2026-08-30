@@ -228,6 +228,13 @@ states.
 - While HOT, the domain chooses intent and constraints; Minecraft movement,
   collision, combat, inventory and explosion results supply the physical facts.
   COLD rules do not execute the same action concurrently.
+- Every spatial logistics operation owns an immutable bounded `OperationTravel`:
+  strategic route milestones remain planning facts, while its adjacent-cell
+  corridor, cursor, formation positions and cargo anchor are the one movement
+  truth. COLD may advance that cursor by a bounded distance; HOT accepts only
+  observed physical arrival at its next cursor. Leaving or restarting midway
+  retains that same cursor and formation, never teleports the convoy to a
+  milestone or lets a second COLD route action run.
 - HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished
   intents. If its hand-off surface remains naturally loaded, it durably closes
