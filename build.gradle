@@ -64,6 +64,11 @@ def domainJavaSources = fileTree('pale-mirror-domain/src/main/java') { include '
 def frontierV3JavaSources = fileTree('pale-mirror-frontier/src/main/java') { include '**/*.java' }
 def apiJavaSources = fileTree('pale-mirror-api/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
 def playerNetworkSource = layout.projectDirectory.file('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/network/PaleMirrorNetwork.java').asFile
+def directPlayerUiAllowlist = [
+        '/internal/presentation/PaleMirrorPlayerPresentation.java',
+        '/internal/presentation/RegionalJournal.java',
+        '/internal/debug/RuntimeDebugNavigator.java'
+] as Set
 def visualJavaSources = fileTree('pale-mirror-visuals/src/main/java') { include '**/*.java' }
 def genericNeoForgeJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror') {
     include '**/*.java'
@@ -144,6 +149,7 @@ def requiredArchitectureStatements = [
         ,'HOT and COLD are exact execution locations for the same canonical actors, cargo and scenes; one persisted execution lease (scene-level for coupled operations, actor-level for ambient bodies) prevents double execution, captures complete hand-off state and reconstructs current continuation without force-loading, duplication, frozen entities or replayed history.'
         ,'A persisted v3 physical intent may affect every physically reachable Minecraft block, entity or player-owned structure without a protected-zone filter; actual results are immutable typed evidence, known subjects receive semantic consequences and unknown results enter the bounded physical-delta index instead of being erased by desired-state materialization.'
         ,'Frontier v3 persists versioned checksummed snapshots plus an ordered write-ahead log; player custody, physical leases and non-replayable effects are durable before acknowledgement or invocation, recovery never blindly replays a running effect, and compaction keeps events, schedules, receipts and physical deltas bounded.'
+        ,'Ordinary gameplay code has no direct Minecraft HUD/chat delivery: only the bounded PlayerPresentation boundary may emit player notices; RegionalJournal is an explicit player-requested transcript and RuntimeDebugNavigator is an opt-in operator transcript. Successful gameplay changes are acknowledged by their physical result, item lore, owned boards or Atlas, while direct HUD remains limited to a rejected player action.'
         ,'Automodel is an offline research boundary: source-pinned references and traces decide likeness, all model output remains provenance-pinned noncanonical evidence under ignored build artifacts, and no Automodel operation may write canonical Blender sources, PMMesh exports, runtime resources, server state or world state. External still staging remains MODEL_DERIVED; only an explicit complete-ring human receipt may promote secondary volume aids, while qualified DA3/VGGT disagreement is inspection-only and never mesh fusion.'
 ]
 
@@ -217,6 +223,14 @@ tasks.register('verifyArchitecture') {
 
         genericNeoForgeJavaSources.files.each { source ->
             String text = source.getText('UTF-8')
+            boolean directPlayerUi = text.contains('sendSystemMessage(') || text.contains('displayClientMessage(')
+            boolean permittedPlayerUi = directPlayerUiAllowlist.any { source.path.endsWith(it) }
+            if (directPlayerUi && !permittedPlayerUi) {
+                throw new GradleException("Player presentation boundary violation: ${source} writes directly to HUD/chat")
+            }
+            if (source.path.endsWith('/internal/debug/RuntimeDebugNavigator.java') && text.contains('displayClientMessage(')) {
+                throw new GradleException("Operator presentation boundary violation: RuntimeDebugNavigator must not emit periodic HUD text")
+            }
             if (text.contains('WorldStateHydration')
                     && !source.path.endsWith('/internal/world/PaleMirrorSavedData.java')
                     && !source.path.endsWith('/internal/world/RegionalStateCodec.java')

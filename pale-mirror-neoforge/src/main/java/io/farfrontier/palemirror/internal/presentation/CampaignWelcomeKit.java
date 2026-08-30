@@ -28,7 +28,7 @@ public final class CampaignWelcomeKit {
         letter.set(DataComponents.CUSTOM_NAME, Component.literal("Letter from Ironhill"));
         letter.set(DataComponents.LORE, new ItemLore(List.of(
                 Component.literal("Our mine train is the town's iron lifeline."),
-                Component.literal("Visit the bell or consult the Regional Ledger."))));
+                Component.literal("Visit the bell or open the Regional Ledger (P)."))));
         ItemStack map = MapItem.create(player.serverLevel(), settlement.anchor().getX(), settlement.anchor().getZ(),
                 (byte) 2, true, true);
         map.set(DataComponents.CUSTOM_NAME, Component.literal("Ironhill Survey Map"));
@@ -37,7 +37,6 @@ public final class CampaignWelcomeKit {
         player.getInventory().placeItemBackInInventory(map);
         player.getInventory().placeItemBackInInventory(ledger);
         player.getPersistentData().putBoolean(GRANTED_KEY, true);
-        player.sendSystemMessage(Component.literal("A survey map, Ironhill letter and Pale Mirror Regional Ledger were added to your inventory. Press P to open the Atlas."));
         return true;
     }
 }

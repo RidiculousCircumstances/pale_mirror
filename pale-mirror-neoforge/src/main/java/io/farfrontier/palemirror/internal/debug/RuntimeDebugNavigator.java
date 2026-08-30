@@ -47,7 +47,6 @@ public final class RuntimeDebugNavigator {
             "pale_mirror_debug_teleport", Comparator.comparing(UUID::toString));
     private static final int DEBUG_TELEPORT_TICKET_DISTANCE = 0;
     private static final long PREPARATION_TIMEOUT_TICKS = 6_000L;
-    private static final long PROGRESS_INTERVAL_TICKS = 100L;
     private static final int MAX_CONCURRENT_PREPARATIONS = 1;
 
     private final MinecraftServer server;
@@ -329,10 +328,6 @@ public final class RuntimeDebugNavigator {
                 continue;
             }
             if (level.getChunkSource().getChunkNow(pending.chunk().x, pending.chunk().z) == null) {
-                if (elapsed > 0L && elapsed % PROGRESS_INTERVAL_TICKS == 0L) {
-                    player.displayClientMessage(Component.literal("PM is preparing " + pending.objectId().value()
-                            + "… " + elapsed / 20L + "s"), true);
-                }
                 continue;
             }
             try {

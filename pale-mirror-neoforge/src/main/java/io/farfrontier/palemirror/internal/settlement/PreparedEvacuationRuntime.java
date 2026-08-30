@@ -21,6 +21,7 @@ import io.farfrontier.palemirror.domain.WorldSiteType;
 import io.farfrontier.palemirror.domain.WorldPath;
 import io.farfrontier.palemirror.domain.WorldPathNode;
 import io.farfrontier.palemirror.domain.KnownRegionalFeature;
+import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
 import io.farfrontier.palemirror.internal.presentation.RefugeeAnchorItem;
 import io.farfrontier.palemirror.internal.world.PaleMirrorSavedData;
 import io.farfrontier.palemirror.internal.world.RegionBindings;
@@ -89,7 +90,6 @@ public final class PreparedEvacuationRuntime {
             RefugeeAnchorItem.bind(stack, permit.id());
             stack.set(DataComponents.CUSTOM_NAME, Component.literal("Refugee Anchor — " + regionName(region.id())));
             player.getInventory().placeItemBackInInventory(stack);
-            player.sendSystemMessage(Component.literal("Place the Refugee Anchor on a clear site 96–160 blocks from the settlement."));
             data.setDirty();
             return true;
         } catch (IllegalArgumentException ignored) {
@@ -147,7 +147,6 @@ public final class PreparedEvacuationRuntime {
         stack.shrink(1);
         data.setDirty();
         eventHandler.accept(events);
-        player.sendSystemMessage(Component.literal("Refugee site prepared. Return to the Regional Ledger to begin evacuation."));
         return true;
     }
 
@@ -157,7 +156,8 @@ public final class PreparedEvacuationRuntime {
     }
 
     private static boolean rejected(ServerPlayer player, String message) {
-        player.sendSystemMessage(Component.literal(message));
+        PaleMirrorPlayerPresentation.actionRejected(player, "pale-mirror:refugee-anchor-rejected",
+                Component.literal(message));
         return false;
     }
 }
