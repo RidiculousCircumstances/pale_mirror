@@ -270,7 +270,7 @@ final class FrontierV3SceneExecutor {
                     continue;
                 }
                 if (!FrontierV3AmbientActorExecutor.owned(existing, member.actorId(), bioform(state, member.actorId()))) return BodyMaterialization.CONFLICT;
-                body.getNavigation().stop(); body.setNoAi(true); body.setCustomNameVisible(true);
+                body.getNavigation().stop(); body.setNoAi(true); body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform(state, member.actorId()))); body.setCustomNameVisible(true);
                 if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                         FrontierV3AmbientActorExecutor.bioformRole(state, member.actorId()));
                 mark(body, lease, member);
@@ -291,7 +291,7 @@ final class FrontierV3SceneExecutor {
             body.setNoAi(true);
             if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                     FrontierV3AmbientActorExecutor.bioformRole(state, member.actorId()));
-            body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + member.actorId().value()));
+            body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform));
             body.setCustomNameVisible(true);
             mark(body, lease, member);
             if (!level.addFreshEntity(body)) return BodyMaterialization.CONFLICT;

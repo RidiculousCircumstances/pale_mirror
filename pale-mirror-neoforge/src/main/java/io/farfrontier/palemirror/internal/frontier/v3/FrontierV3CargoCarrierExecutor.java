@@ -48,7 +48,7 @@ final class FrontierV3CargoCarrierExecutor {
         if (cart == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 cargo carrier");
         cart.setUUID(id(lease));
         cart.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
-        cart.setCustomName(Component.literal("Frontier cargo " + lease.cargoId().value()));
+        cart.setCustomName(FrontierV3ScenePresentation.cargoName(state, cargo));
         cart.setCustomNameVisible(true); cart.setNoGravity(true);
         for (int index = 0; index < items.size(); index++) cart.setItem(index, FrontierV3CargoHandoffExecutor.materializedStack(items.get(index)));
         cart.getPersistentData().putString(LEASE_KEY, lease.id().value());

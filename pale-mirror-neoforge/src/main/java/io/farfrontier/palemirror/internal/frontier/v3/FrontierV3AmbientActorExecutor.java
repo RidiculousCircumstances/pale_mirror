@@ -171,7 +171,7 @@ final class FrontierV3AmbientActorExecutor {
         // vanilla AI move it across that crash window.
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
-        body.setCustomName(Component.literal((bioform ? "Hive " : "Frontier ") + actorId.value())); body.setCustomNameVisible(false);
+        body.setCustomName(FrontierV3ScenePresentation.actorName(state, actorId, bioform)); body.setCustomNameVisible(false);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
     }
