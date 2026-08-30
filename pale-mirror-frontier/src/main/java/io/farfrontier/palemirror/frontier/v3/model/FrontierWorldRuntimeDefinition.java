@@ -29,6 +29,14 @@ public final class FrontierWorldRuntimeDefinition {
                 base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator());
     }
 
+    /** Fixture-only autonomous interception profile with the same exact food reserve as supply tests. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentAutonomousSupplyInterceptionConfiguration(WorldId worldId, long seed) {
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = configuration(worldId, seed, true);
+        FrontierWorldState initial = developmentSupplyReserve(base.initialState());
+        return new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator());
+    }
+
     /** Fixture-only exact reserve keeps logistics tests independent from the human food reserve policy. */
     private static FrontierWorldState developmentSupplyReserve(FrontierWorldState state) {
         Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
@@ -66,12 +74,16 @@ public final class FrontierWorldRuntimeDefinition {
         FrontierWorldState state = base.initialState(); Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId bread = new SubjectId("item:provision-fixture-bread"); int rations = settlement.residents().size();
         ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1));
-        SettlementProvision provision = SettlementProvision.started(settlement.id(), 1, 0L, rations,
-                List.of(new SettlementRationAllocation(bread, rations)));
-        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:settlement-provision-1-1-0"), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
+        List<SubjectId> recipients = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .map(ResidentProfile::id).sorted().toList();
+        HumanPopulation population = state.humanPopulation();
+        for (SubjectId recipient : recipients) population = population.resolveNutrition(recipient, 1, false);
+        SettlementProvision provision = SettlementProvision.started(settlement.id(), 2, 0L, rations, recipients,
+                List.of(new SettlementRationAllocation(bread, recipients)));
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:settlement-provision-1-2-0"), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, settlement.id(), List.of(settlement.id(), bread), new FixedPosition(FixedScalar.whole(settlement.anchor().x()),
                 FixedScalar.whole(settlement.anchor().y()), FixedScalar.whole(settlement.anchor().z())), 0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
-        state = state.withInventory(state.inventory().store(stack)).withHumanPopulation(state.humanPopulation().withProvision(provision.beginPhysical(intent.id())))
+        state = state.withInventory(state.inventory().store(stack)).withHumanPopulation(population.withProvision(provision.beginPhysical(intent.id())))
                 .preparePhysicalIntent(intent);
         return new FrontierEngineConfiguration<>(base.worldId(), state, SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
                 new FrontierWorldStateCodec(state.bootstrap()), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator());
@@ -434,6 +446,7 @@ public final class FrontierWorldRuntimeDefinition {
             case ResidentMigrationResumed resumed -> reduceMigrationResumed(state, event.subject(), resumed);
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
             case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
+            case LegacySettlementProvisionStarted started -> SettlementProvisionProcess.reduceLegacyStarted(state, event.subject(), started);
             case SettlementProvisionStarted started -> SettlementProvisionProcess.reduceStarted(state, event.subject(), started);
             case SettlementProvisionConsumed consumed -> SettlementProvisionProcess.reduceConsumed(state, event.subject(), consumed);
             case SettlementProvisionResolved resolved -> SettlementProvisionProcess.reduceResolved(state, event.subject(), resolved);

@@ -20,7 +20,6 @@ import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,12 +30,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettlementProvisionProcessTest {
     @Test
-    void provisionRejectsAnUnboundedAllocationLedger() {
+    void provisionRejectsAnUnboundedExactRecipientLedger() {
         SubjectId settlement = new SubjectId("settlement:bounded-provision");
-        SettlementRationAllocation allocation = new SettlementRationAllocation(new SubjectId("item:bounded-provision"), 1);
+        List<SubjectId> recipients = java.util.stream.IntStream.rangeClosed(1, HumanPopulation.MAX_RESIDENTS + 1)
+                .mapToObj(index -> new SubjectId("resident:bounded-" + index)).toList();
 
         assertThrows(IllegalArgumentException.class, () -> new SettlementProvision(settlement, 1, 0L,
-                HumanPopulation.MAX_RESIDENTS + 1, 0, Collections.nCopies(HumanPopulation.MAX_RESIDENTS + 1, allocation), 0,
+                HumanPopulation.MAX_RESIDENTS + 1, 0, recipients, List.of(), 0,
                 SettlementProvisionStatus.IN_PROGRESS, Optional.empty()));
     }
 
@@ -50,6 +50,8 @@ class SettlementProvisionProcessTest {
         assertEquals(SettlementProvisionStatus.SECURE, provision.status()); assertEquals(settlement.residents().size(), provision.requiredRations());
         assertEquals(settlement.residents().size(), provision.fulfilledRations());
         assertEquals(64 - settlement.residents().size(), settled.inventory().items().get(new SubjectId("item:provision-bread")).count());
+        assertTrue(settled.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .allMatch(resident -> settled.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.NOURISHED));
         assertEquals(provision, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(settled)).humanPopulation().provision(settlement.id()));
     }
 
@@ -61,6 +63,22 @@ class SettlementProvisionProcessTest {
         Settlement settlement = state(engine).bootstrap().settlements().getFirst(); SettlementProvision provision = state(engine).humanPopulation().provision(settlement.id());
         assertEquals(SettlementProvisionStatus.SHORTAGE, provision.status()); assertEquals(0, provision.fulfilledRations());
         assertTrue(state(engine).inventory().items().values().stream().noneMatch(item -> SettlementProvisionProcess.BREAD.equals(item.itemKind())));
+        assertTrue(state(engine).humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .allMatch(resident -> state(engine).humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.HUNGRY));
+    }
+
+    @Test
+    void partialExactStackFeedsNamedResidentsAndMarksEveryOtherRecipientHungry() {
+        WorldId world = new WorldId("frontier:provision-individual-rations"); FrontierWorldState initial = withBreadCount(base(world).initialState(), false, 3);
+        var engine = FrontierEngines.create(configuration(world, initial)); advance(engine, 102L);
+
+        FrontierWorldState settled = state(engine); Settlement settlement = settled.bootstrap().settlements().getFirst();
+        assertEquals(SettlementProvisionStatus.RATIONED, settled.humanPopulation().provision(settlement.id()).status());
+        long fed = settled.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> settled.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.NOURISHED).count();
+        long hungry = settled.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> settled.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.HUNGRY).count();
+        assertEquals(3, fed); assertEquals(settlement.residents().size() - 3L, hungry);
     }
 
     @Test
@@ -100,6 +118,38 @@ class SettlementProvisionProcessTest {
     }
 
     @Test
+    void activeDepotCreditsOnlyPhysicallyConfirmedRationRecipientsWhenALaterAllocationFails() {
+        WorldId world = new WorldId("frontier:provision-active-partial");
+        FrontierWorldState initial = hungryAtCycleOne(withBreadParts(base(world).initialState(), true, 20, 17));
+        var engine = FrontierEngines.create(configuration(world, initial, 2)); advance(engine, 101L);
+        Settlement settlement = state(engine).bootstrap().settlements().getFirst();
+        PhysicalIntent first = state(engine).physicalIntents().get(state(engine).humanPopulation().provision(settlement.id()).activeIntentId().orElseThrow());
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "partial-running-1",
+                new PhysicalIntentTransition(first.id(), PhysicalIntentStatus.RUNNING, Optional.empty())));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "partial-confirmed-1", new PhysicalIntentTransition(first.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new ExactItemConsumedObservation(new PhysicalObservationId("observation:provision-partial-1"), first.id(),
+                        new SubjectId("item:provision-bread-0"), 20, 0)))));
+        var nextTick = engine.advanceTo(new SimInstant(102L), new WorkBudget(32, 128));
+        assertEquals(EngineStatus.Kind.ACTIVE, nextTick.status().kind(), nextTick.status().failureDetail().orElse("frontier provision engine quarantined"));
+
+        PhysicalIntent second = state(engine).physicalIntents().get(state(engine).humanPopulation().provision(settlement.id()).activeIntentId().orElseThrow());
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "partial-running-2",
+                new PhysicalIntentTransition(second.id(), PhysicalIntentStatus.RUNNING, Optional.empty())));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "partial-unknown-2",
+                new PhysicalIntentTransition(second.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty())));
+
+        FrontierWorldState resolved = state(engine);
+        long nourished = resolved.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> resolved.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.NOURISHED).count();
+        long hungry = resolved.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> resolved.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.HUNGRY).count();
+        assertEquals(SettlementProvisionStatus.CONFLICT, resolved.humanPopulation().provision(settlement.id()).status());
+        assertEquals(20, nourished, "only the first exact physical receipt may feed its named residents");
+        assertEquals(settlement.residents().size() - 20L, hungry,
+                "an unresolved later physical effect preserves its residents' prior hunger instead of inventing food");
+    }
+
+    @Test
     void restartRetainsOnePreparedRationIntentAndConfirmsOnlyItsExactPhysicalRemainder() {
         WorldId world = new WorldId("frontier:provision-restart"); FrontierWorldState initial = withBread(base(world).initialState(), true);
         var uninterrupted = FrontierEngines.create(configuration(world, initial)); advance(uninterrupted, 101L);
@@ -130,10 +180,26 @@ class SettlementProvisionProcessTest {
         SettlementProvision provision = state.humanPopulation().provision(settlement.id());
         PhysicalIntent intent = state.physicalIntents().get(provision.activeIntentId().orElseThrow());
 
-        assertEquals(37, settlement.residents().size()); assertEquals(SettlementProvisionStatus.IN_PROGRESS, provision.status());
+        assertEquals(37, settlement.residents().size()); assertEquals(2, provision.cycleOrdinal()); assertEquals(SettlementProvisionStatus.IN_PROGRESS, provision.status());
         assertEquals(64, state.inventory().items().get(new SubjectId("item:provision-fixture-bread")).count());
         assertEquals(PhysicalIntentStatus.PREPARED, intent.status()); assertEquals(PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, intent.kind());
+        assertTrue(state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .allMatch(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.HUNGRY));
         assertEquals(ContainerSurfaceStatus.UNMATERIALIZED, state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).status());
+    }
+
+    @Test
+    void retainedCountOnlyProvisionStartUpgradesToExactCurrentRecipientIdsBeforeReduction() {
+        FrontierWorldState state = base(new WorldId("frontier:legacy-provision")).initialState(); Settlement settlement = state.bootstrap().settlements().getFirst();
+        int required = settlement.residents().size(); LegacySettlementProvisionStarted legacy = new LegacySettlementProvisionStarted(settlement.id(), 2, 100L, required, 0,
+                List.of(new LegacySettlementProvisionStarted.LegacyAllocation(new SubjectId("item:legacy-provision-bread"), required)), 0,
+                SettlementProvisionStatus.IN_PROGRESS);
+
+        assertEquals(legacy, FrontierWorldRuntimeDefinition.payloadCodecs().decode(legacy.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(legacy)));
+        FrontierWorldState upgraded = SettlementProvisionProcess.reduceLegacyStarted(state, settlement.id(), legacy);
+        SettlementProvision provision = upgraded.humanPopulation().provision(settlement.id());
+        assertEquals(required, provision.recipientIds().size()); assertEquals(required, provision.currentAllocation().recipientIds().size());
+        assertTrue(provision.recipientIds().stream().allMatch(id -> upgraded.humanPopulation().resident(id).settlementId().equals(settlement.id())));
     }
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base(WorldId world) {
@@ -141,17 +207,39 @@ class SettlementProvisionProcessTest {
     }
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId world, FrontierWorldState initial) {
+        return configuration(world, initial, 1);
+    }
+
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId world, FrontierWorldState initial, int cycle) {
         var base = base(world); SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         return new FrontierEngineConfiguration<>(world, initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
-                base.stateCodec(), base.projectionMapper(), base.limits(), List.of(SettlementProvisionProcess.review(settlement, 1, 100L)), base.transactionCommitter());
+                base.stateCodec(), base.projectionMapper(), base.limits(), List.of(SettlementProvisionProcess.review(settlement, cycle, 100L)), base.transactionCommitter());
     }
 
     private static FrontierWorldState withBread(FrontierWorldState state, boolean active) {
+        return withBreadCount(state, active, 64);
+    }
+
+    private static FrontierWorldState withBreadCount(FrontierWorldState state, boolean active, int count) {
+        return withBreadParts(state, active, count);
+    }
+
+    private static FrontierWorldState withBreadParts(FrontierWorldState state, boolean active, int... counts) {
         SubjectId settlement = state.bootstrap().settlements().getFirst().id(); SubjectId depot = FrontierWorldState.depotId(settlement);
         ExactInventory inventory = state.inventory();
         if (active) inventory = inventory.withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE);
-        return state.withInventory(inventory.store(new ExactItemStack(new SubjectId("item:provision-bread"), settlement, SettlementProvisionProcess.BREAD, 64,
-                new InventoryCustody.ContainerSlot(depot, 1))));
+        for (int index = 0; index < counts.length; index++) {
+            String suffix = counts.length == 1 ? "" : "-" + index;
+            inventory = inventory.store(new ExactItemStack(new SubjectId("item:provision-bread" + suffix), settlement, SettlementProvisionProcess.BREAD, counts[index],
+                    new InventoryCustody.ContainerSlot(depot, index + 1)));
+        }
+        return state.withInventory(inventory);
+    }
+
+    private static FrontierWorldState hungryAtCycleOne(FrontierWorldState state) {
+        HumanPopulation population = state.humanPopulation();
+        for (SubjectId residentId : population.residents().keySet()) population = population.resolveNutrition(residentId, 1, false);
+        return state.withHumanPopulation(population);
     }
 
     private static CommandResult submit(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,

@@ -40,11 +40,9 @@ final class SettlementProvisionProcess {
         List<ProposedEvent> events = new ArrayList<>();
         events.add(schedule(review(settlement.id(), nextOrdinal, Math.addExact(action.dueAt().ticks(), REVIEW_INTERVAL))));
         if (current.status() == SettlementProvisionStatus.IN_PROGRESS) return List.copyOf(events);
-        int required = Math.toIntExact(state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlement.id()))
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count());
-        SettlementProvision provision = SettlementProvision.started(settlement.id(), nextOrdinal, action.dueAt().ticks(), required,
-                allocations(state, settlement.id(), required));
+        List<SubjectId> recipients = recipients(state, settlement.id(), nextOrdinal);
+        SettlementProvision provision = SettlementProvision.started(settlement.id(), nextOrdinal, action.dueAt().ticks(), recipients.size(), recipients,
+                allocations(state, settlement.id(), recipients));
         events.add(new ProposedEvent(settlement.id(), new SettlementProvisionStarted(provision)));
         if (provision.status() == SettlementProvisionStatus.IN_PROGRESS) events.add(schedule(progress(provision, action.dueAt().ticks() + 1L)));
         return List.copyOf(events);
@@ -117,7 +115,28 @@ final class SettlementProvisionProcess {
         if (!subject.equals(provision.settlementId()) || state.humanPopulation().provision(subject).status() == SettlementProvisionStatus.IN_PROGRESS) {
             throw new IllegalArgumentException("settlement provision start lacks an idle owner");
         }
-        return state.withHumanPopulation(state.humanPopulation().withProvision(provision));
+        HumanPopulation population = state.humanPopulation().withProvision(provision);
+        if (provision.status() == SettlementProvisionStatus.SHORTAGE) population = resolveUnserved(population, provision, 0);
+        return state.withHumanPopulation(population);
+    }
+
+    /** Upgrades the retained count-only v57 start event before it reaches the current recipient-aware owner. */
+    static FrontierWorldState reduceLegacyStarted(FrontierWorldState state, SubjectId subject, LegacySettlementProvisionStarted legacy) {
+        List<SubjectId> recipients = recipients(state, legacy.settlementId(), legacy.cycleOrdinal());
+        if (!subject.equals(legacy.settlementId()) || legacy.requiredRations() != recipients.size() || legacy.fulfilledRations() != 0
+                || legacy.nextAllocation() != 0 || legacy.status() == SettlementProvisionStatus.CONFLICT) {
+            throw new IllegalArgumentException("legacy provision event cannot be losslessly upgraded");
+        }
+        List<SettlementRationAllocation> allocations = new ArrayList<>(); int nextRecipient = 0;
+        for (LegacySettlementProvisionStarted.LegacyAllocation allocation : legacy.allocations()) {
+            int end = Math.addExact(nextRecipient, allocation.count());
+            if (end > recipients.size()) throw new IllegalArgumentException("legacy provision allocation exceeds current recipients");
+            allocations.add(new SettlementRationAllocation(allocation.itemId(), recipients.subList(nextRecipient, end))); nextRecipient = end;
+        }
+        SettlementProvision upgraded = SettlementProvision.started(legacy.settlementId(), legacy.cycleOrdinal(), legacy.startedAtTick(), legacy.requiredRations(),
+                recipients, allocations);
+        if (upgraded.status() != legacy.status()) throw new IllegalArgumentException("legacy provision terminal status cannot be losslessly upgraded");
+        return reduceStarted(state, subject, new SettlementProvisionStarted(upgraded));
     }
 
     static FrontierWorldState reduceConsumed(FrontierWorldState state, SubjectId subject, SettlementProvisionConsumed consumed) {
@@ -138,7 +157,11 @@ final class SettlementProvisionProcess {
         if (!allocation.itemId().equals(consumed.itemId()) || allocation.count() != consumed.consumedCount()) {
             throw new IllegalArgumentException("physical settlement provision receipt does not match its allocation");
         }
-        return state.withHumanPopulation(state.humanPopulation().withProvision(provision.consumeCurrent(consumed.itemId(), consumed.consumedCount())));
+        HumanPopulation population = feedCurrentAllocation(state.humanPopulation(), provision);
+        if (provision.nextAllocation() + 1 == provision.allocations().size()) {
+            population = resolveUnserved(population, provision, provision.nextAllocation() + 1);
+        }
+        return state.withHumanPopulation(population.withProvision(provision.consumeCurrent(consumed.itemId(), consumed.consumedCount())));
     }
 
     static FrontierWorldState reduceResolved(FrontierWorldState state, SubjectId subject, SettlementProvisionResolved resolved) {
@@ -147,7 +170,9 @@ final class SettlementProvisionProcess {
             throw new IllegalArgumentException("settlement provision resolution lacks an active owner");
         }
         SettlementProvision next = resolved.status() == SettlementProvisionStatus.CONFLICT ? provision.conflict() : provision.shortage();
-        return state.withHumanPopulation(state.humanPopulation().withProvision(next));
+        HumanPopulation population = state.humanPopulation().withProvision(next);
+        return state.withHumanPopulation(resolved.status() == SettlementProvisionStatus.CONFLICT ? population
+                : resolveUnserved(population, provision, provision.nextAllocation()));
     }
 
     private static FrontierWorldState consume(FrontierWorldState state, SettlementProvision provision, SubjectId itemId, int count, boolean physical) {
@@ -159,8 +184,10 @@ final class SettlementProvisionProcess {
         }
         ContainerSurfaceStatus surface = state.inventory().surfaces().get(depot).status();
         if (physical != (surface == ContainerSurfaceStatus.ACTIVE)) throw new IllegalArgumentException("settlement provision crossed the wrong physical custody boundary");
+        HumanPopulation population = feedCurrentAllocation(state.humanPopulation(), provision);
+        if (provision.nextAllocation() + 1 == provision.allocations().size()) population = resolveUnserved(population, provision, provision.nextAllocation() + 1);
         return state.withInventory(state.inventory().consume(itemId, count))
-                .withHumanPopulation(state.humanPopulation().withProvision(provision.consumeCurrent(itemId, count)));
+                .withHumanPopulation(population.withProvision(provision.consumeCurrent(itemId, count)));
     }
 
     private static SettlementProvision provisionForIntent(FrontierWorldState state, PhysicalIntent intent) {
@@ -195,14 +222,44 @@ final class SettlementProvisionProcess {
                 0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
     }
 
-    private static List<SettlementRationAllocation> allocations(FrontierWorldState state, SubjectId settlementId, int required) {
-        int remaining = required; List<SettlementRationAllocation> allocations = new ArrayList<>(); SubjectId depot = FrontierWorldState.depotId(settlementId);
+    private static List<SettlementRationAllocation> allocations(FrontierWorldState state, SubjectId settlementId, List<SubjectId> recipients) {
+        int nextRecipient = 0; List<SettlementRationAllocation> allocations = new ArrayList<>(); SubjectId depot = FrontierWorldState.depotId(settlementId);
         for (ExactItemStack item : state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).toList()) {
-            if (remaining == 0) break;
+            if (nextRecipient == recipients.size()) break;
             if (!BREAD.equals(item.itemKind()) || !(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(depot)) continue;
-            int count = Math.min(remaining, item.count()); allocations.add(new SettlementRationAllocation(item.id(), count)); remaining -= count;
+            int count = Math.min(recipients.size() - nextRecipient, item.count());
+            allocations.add(new SettlementRationAllocation(item.id(), recipients.subList(nextRecipient, nextRecipient + count))); nextRecipient += count;
         }
         return List.copyOf(allocations);
+    }
+
+    /** Rotating exact order keeps a persistent shortage from always selecting lexicographically first residents. */
+    private static List<SubjectId> recipients(FrontierWorldState state, SubjectId settlementId, int cycleOrdinal) {
+        List<SubjectId> values = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlementId))
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .map(ResidentProfile::id).sorted().collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        if (values.isEmpty()) return List.of();
+        java.util.Collections.rotate(values, -Math.floorMod(cycleOrdinal - 1, values.size()));
+        return List.copyOf(values);
+    }
+
+    private static HumanPopulation feedCurrentAllocation(HumanPopulation population, SettlementProvision provision) {
+        for (SubjectId residentId : provision.currentOrActiveAllocation().recipientIds()) {
+            population = population.resolveNutrition(residentId, provision.cycleOrdinal(), true);
+        }
+        return population;
+    }
+
+    /** Only allocations already confirmed by this cycle count as food actually eaten. */
+    private static HumanPopulation resolveUnserved(HumanPopulation population, SettlementProvision provision, int confirmedAllocationCount) {
+        if (confirmedAllocationCount < 0 || confirmedAllocationCount > provision.allocations().size()) {
+            throw new IllegalArgumentException("invalid confirmed provision allocation count");
+        }
+        java.util.Set<SubjectId> served = provision.allocations().subList(0, confirmedAllocationCount).stream()
+                .flatMap(allocation -> allocation.recipientIds().stream())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        for (SubjectId residentId : provision.recipientIds()) if (!served.contains(residentId)) population = population.resolveNutrition(residentId, provision.cycleOrdinal(), false);
+        return population;
     }
 
     private static ScheduledAction progress(SettlementProvision provision, long dueAt) {
@@ -212,7 +269,8 @@ final class SettlementProvisionProcess {
 
     private static ScheduledAction progressAfter(SettlementProvision provision, long dueAt) {
         SettlementProvision next = new SettlementProvision(provision.settlementId(), provision.cycleOrdinal(), provision.startedAtTick(), provision.requiredRations(),
-                provision.fulfilledRations(), provision.allocations(), provision.nextAllocation() + 1, SettlementProvisionStatus.IN_PROGRESS, java.util.Optional.empty());
+                provision.fulfilledRations(), provision.recipientIds(), provision.allocations(), provision.nextAllocation() + 1, SettlementProvisionStatus.IN_PROGRESS,
+                java.util.Optional.empty());
         return progress(next, dueAt);
     }
 

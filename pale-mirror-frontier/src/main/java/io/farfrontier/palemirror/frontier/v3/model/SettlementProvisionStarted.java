@@ -6,5 +6,5 @@ import java.util.Objects;
 
 record SettlementProvisionStarted(SettlementProvision provision) implements FrontierPayload {
     SettlementProvisionStarted { Objects.requireNonNull(provision, "settlement provision"); }
-    @Override public String type() { return "frontier.settlement_provision_started"; }
+    @Override public String type() { return "frontier.settlement_provision_started_v2"; }
 }

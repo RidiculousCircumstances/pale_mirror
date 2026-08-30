@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentNutritionStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
@@ -139,6 +140,12 @@ final class FrontierV3DiagnosticJson {
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE).count();
         int reserve = Math.addExact(Math.multiplyExact(living, 2), provision.status().name().equals("IN_PROGRESS")
                 ? provision.requiredRations() - provision.fulfilledRations() : 0);
+        int nourished = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
+                .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.NOURISHED).count();
+        int hungry = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
+                .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.HUNGRY).count();
+        int starving = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
+                .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.STARVING).count();
         return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"strategic\":" + lane(value.strategic())
                 + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())
@@ -148,7 +155,8 @@ final class FrontierV3DiagnosticJson {
                 + ",\"quarantine\":\"" + (state.humanPopulation().quarantined(subject) ? "QUARANTINED" : "NORMAL") + "\",\"activeCases\":"
                 + state.humanPopulation().activeCases(subject) + ",\"food\":{\"status\":\"" + provision.status()
                 + "\",\"available\":" + availableFood + ",\"reserve\":" + reserve + ",\"required\":" + provision.requiredRations()
-                + ",\"fulfilled\":" + provision.fulfilledRations() + ",\"intent\":\""
+                + ",\"fulfilled\":" + provision.fulfilledRations() + ",\"nourished\":" + nourished + ",\"hungry\":" + hungry
+                + ",\"starving\":" + starving + ",\"intent\":\""
                 + quote(provision.activeIntentId().map(PhysicalIntentId::value).orElse("")) + "\"}}";
     }
 
@@ -178,10 +186,12 @@ final class FrontierV3DiagnosticJson {
         Bioform bioform = bioform(state, subject).orElse(null);
         String role = resident != null ? resident.role().name() : bioform != null ? bioform.role().name() : "UNKNOWN";
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
+        String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
         return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + (resident != null ? "RESIDENT" : "BIOFORM")
                 + "\",\"owner\":\"" + quote(owner) + "\",\"role\":\"" + role + "\",\"life\":\"" + location.condition().status()
                 + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(location.position())
-                + ",\"ambientLease\":\"" + quote(state.ambientLeases().containsKey(subject) ? state.ambientLeases().get(subject).status().name() : "NONE") + "\""
+                + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
+                + quote(state.ambientLeases().containsKey(subject) ? state.ambientLeases().get(subject).status().name() : "NONE") + "\""
                 + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
     }
 

@@ -348,8 +348,8 @@ class HiveRouteEngagementProcessTest {
         assertEquals(3_060L, ((ScheduleEffect.Created) hotDeferred.getFirst().payload()).action().dueAt().ticks());
     }
 
-    @Test void productionProfileAutonomouslyHoldsARealCaravanUntilHiveGuardsReachItsCurrentPosition() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-intercept"), 91L));
+    @Test void autonomousSupplyProfileHoldsARealCaravanUntilHiveGuardsReachItsCurrentPosition() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentAutonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
         boolean heldAtCurrentIntercept = false;
         boolean reachedColdCombat = false;
         FrontierWorldState latest = null;
@@ -367,8 +367,8 @@ class HiveRouteEngagementProcessTest {
 
         FrontierWorldState finalState = latest;
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
-        assertTrue(heldAtCurrentIntercept, () -> "normal profile never held an EN_ROUTE caravan at its intercept: " + finalState.strategicPlans().routeEngagements());
-        assertTrue(reachedColdCombat, () -> "normal profile never reached COLD combat: " + finalState.strategicPlans().routeEngagements());
+        assertTrue(heldAtCurrentIntercept, () -> "autonomous supply profile never held an EN_ROUTE caravan at its intercept: " + finalState.strategicPlans().routeEngagements());
+        assertTrue(reachedColdCombat, () -> "autonomous supply profile never reached COLD combat: " + finalState.strategicPlans().routeEngagements());
     }
 
     private static FrontierWorldState enRouteState() {

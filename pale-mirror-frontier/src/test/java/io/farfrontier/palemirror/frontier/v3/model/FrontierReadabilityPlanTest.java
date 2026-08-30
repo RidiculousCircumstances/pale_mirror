@@ -88,7 +88,9 @@ class FrontierReadabilityPlanTest {
     void makesExactSettlementFoodShortageReadableAtTheOwnedDepot() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-food-shortage"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, settlement.residents().size(), java.util.List.of());
+        java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
+        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, settlement.residents().size(), recipients, java.util.List.of());
         FrontierWorldState hungry = state.withHumanPopulation(state.humanPopulation().withProvision(shortage));
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry).boards().get(depot.id());

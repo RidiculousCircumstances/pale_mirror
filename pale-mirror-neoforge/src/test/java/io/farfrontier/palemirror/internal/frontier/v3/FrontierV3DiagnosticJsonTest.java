@@ -32,7 +32,7 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId site = state.resourceSites().sites().keySet().stream().sorted().findFirst().orElseThrow();
-        SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
+        SubjectId actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId item = state.inventory().items().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
         SubjectId hive = state.bootstrap().hive().id();
@@ -52,6 +52,7 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(siteJson.contains("\"id\":\"" + site.value() + "\""));
         assertTrue(siteJson.contains("\"firstCrop\":{"));
         assertTrue(actorJson.contains("\"position\":{"));
+        assertTrue(actorJson.contains("\"nutrition\":\"NOURISHED\""));
         assertTrue(itemJson.contains("\"custody\":{"));
         assertTrue(settlementJson.contains("\"harvestAdmission\":\"NO_READY_SITE\""));
         assertTrue(settlementJson.contains("\"strategic\":{"));
@@ -59,6 +60,9 @@ class FrontierV3DiagnosticJsonTest {
                 "one named settlement view exposes bounded health policy facts without resident histories");
         assertTrue(settlementJson.contains("\"food\":{\"status\":\"IDLE\",\"available\":0,\"reserve\":"),
                 "one named settlement view exposes exact available food and its derived reserve without creating a second ledger");
+        assertTrue(settlementJson.contains("\"nourished\":" + state.bootstrap().settlements().getFirst().residents().size()
+                        + ",\"hungry\":0,\"starving\":0"),
+                "one named settlement view exposes bounded individual nutrition totals without a separate aggregate owner");
         assertTrue(hiveJson.contains("\"infectionCells\":18") && hiveJson.contains("\"addedOrgans\":0"),
                 "one named hive diagnostic exposes bounded canonical expansion state without materializing it");
         assertTrue(containerJson.contains("\"surface\":") && containerJson.contains("\"occupiedCount\":") && containerJson.contains("\"occupied\":["),

@@ -31,6 +31,11 @@ final class HumanPopulationStateCodec {
         for (Map.Entry<SubjectId, ResidentHealth> entry : population.health().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal()); output.writeLong(entry.getValue().sinceTick());
         }
+        FrontierWorldStateCodec.writeCount(output, population.nutrition().size());
+        for (Map.Entry<SubjectId, ResidentNutrition> entry : population.nutrition().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal());
+            FrontierWorldStateCodec.writeCount(output, entry.getValue().consecutiveMissedCycles()); FrontierWorldStateCodec.writeCount(output, entry.getValue().resolvedCycle());
+        }
         FrontierWorldStateCodec.writeCount(output, population.quarantines().size());
         for (Map.Entry<SubjectId, SettlementQuarantine> entry : population.quarantines().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal()); output.writeLong(entry.getValue().sinceTick());
@@ -48,16 +53,19 @@ final class HumanPopulationStateCodec {
         for (SettlementProvision provision : population.provisions().values().stream().sorted(Comparator.comparing(SettlementProvision::settlementId)).toList()) {
             FrontierWorldStateCodec.writeString(output, provision.settlementId().value()); FrontierWorldStateCodec.writeCount(output, provision.cycleOrdinal());
             output.writeLong(provision.startedAtTick()); FrontierWorldStateCodec.writeCount(output, provision.requiredRations());
-            FrontierWorldStateCodec.writeCount(output, provision.fulfilledRations()); FrontierWorldStateCodec.writeCount(output, provision.allocations().size());
+            FrontierWorldStateCodec.writeCount(output, provision.fulfilledRations()); FrontierWorldStateCodec.writeCount(output, provision.recipientIds().size());
+            for (SubjectId recipient : provision.recipientIds()) FrontierWorldStateCodec.writeString(output, recipient.value());
+            FrontierWorldStateCodec.writeCount(output, provision.allocations().size());
             for (SettlementRationAllocation allocation : provision.allocations()) {
-                FrontierWorldStateCodec.writeString(output, allocation.itemId().value()); FrontierWorldStateCodec.writeCount(output, allocation.count());
+                FrontierWorldStateCodec.writeString(output, allocation.itemId().value()); FrontierWorldStateCodec.writeCount(output, allocation.recipientIds().size());
+                for (SubjectId recipient : allocation.recipientIds()) FrontierWorldStateCodec.writeString(output, recipient.value());
             }
             FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().ordinal()); output.writeBoolean(provision.activeIntentId().isPresent());
             if (provision.activeIntentId().isPresent()) FrontierWorldStateCodec.writeString(output, provision.activeIntentId().orElseThrow().value());
         }
     }
 
-    static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions) throws IOException {
+    static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions, boolean hasNutrition) throws IOException {
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -82,6 +90,16 @@ final class HumanPopulationStateCodec {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
             if (status >= ResidentHealthStatus.values().length || health.put(id, new ResidentHealth(ResidentHealthStatus.values()[status], input.readLong())) != null) {
                 throw new IllegalArgumentException("invalid or duplicate resident health");
+            }
+        }
+        Map<SubjectId, ResidentNutrition> nutrition = new LinkedHashMap<>();
+        if (hasNutrition) {
+            for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+                SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
+                if (status >= ResidentNutritionStatus.values().length || nutrition.put(id, new ResidentNutrition(ResidentNutritionStatus.values()[status],
+                        FrontierWorldStateCodec.readCount(input), FrontierWorldStateCodec.readCount(input))) != null) {
+                    throw new IllegalArgumentException("invalid or duplicate resident nutrition");
+                }
             }
         }
         Map<SubjectId, SettlementQuarantine> quarantines = new LinkedHashMap<>();
@@ -112,18 +130,45 @@ final class HumanPopulationStateCodec {
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input)); int cycle = FrontierWorldStateCodec.readCount(input);
             long startedAt = input.readLong(); int required = FrontierWorldStateCodec.readCount(input); int fulfilled = FrontierWorldStateCodec.readCount(input);
+            java.util.List<SubjectId> recipients = new java.util.ArrayList<>();
+            if (hasNutrition) {
+                for (int recipient = 0, recipientCount = FrontierWorldStateCodec.readCount(input); recipient < recipientCount; recipient++) {
+                    recipients.add(new SubjectId(FrontierWorldStateCodec.readString(input)));
+                }
+            } else recipients.addAll(legacyRecipients(residents, settlement, required));
             java.util.List<SettlementRationAllocation> allocations = new java.util.ArrayList<>();
             for (int allocation = 0, allocationCount = FrontierWorldStateCodec.readCount(input); allocation < allocationCount; allocation++) {
-                allocations.add(new SettlementRationAllocation(new SubjectId(FrontierWorldStateCodec.readString(input)), FrontierWorldStateCodec.readCount(input)));
+                SubjectId item = new SubjectId(FrontierWorldStateCodec.readString(input)); java.util.List<SubjectId> allocationRecipients = new java.util.ArrayList<>();
+                if (hasNutrition) {
+                    for (int recipient = 0, recipientCount = FrontierWorldStateCodec.readCount(input); recipient < recipientCount; recipient++) {
+                        allocationRecipients.add(new SubjectId(FrontierWorldStateCodec.readString(input)));
+                    }
+                } else {
+                    int legacyCount = FrontierWorldStateCodec.readCount(input); int start = allocations.stream().mapToInt(SettlementRationAllocation::count).sum();
+                    allocationRecipients.addAll(recipients.subList(start, Math.min(Math.addExact(start, legacyCount), recipients.size())));
+                }
+                allocations.add(new SettlementRationAllocation(item, allocationRecipients));
             }
             int next = FrontierWorldStateCodec.readCount(input); int status = input.readUnsignedByte(); boolean active = input.readBoolean();
             if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision status");
             java.util.Optional<PhysicalIntentId> intent = active ? java.util.Optional.of(new PhysicalIntentId(FrontierWorldStateCodec.readString(input))) : java.util.Optional.empty();
-            SettlementProvision provision = new SettlementProvision(settlement, cycle, startedAt, required, fulfilled, allocations, next,
+            SettlementProvision provision = new SettlementProvision(settlement, cycle, startedAt, required, fulfilled, recipients, allocations, next,
                     SettlementProvisionStatus.values()[status], intent);
             if (provisions.put(settlement, provision) != null) throw new IllegalArgumentException("duplicate settlement provision");
         }
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions);
+        if (!hasNutrition) nutrition = legacyNutrition(residents, provisions);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, nutrition);
+    }
+
+    private static java.util.List<SubjectId> legacyRecipients(Map<SubjectId, ResidentProfile> residents, SubjectId settlement, int required) {
+        return residents.values().stream().filter(resident -> resident.settlementId().equals(settlement)).map(ResidentProfile::id).sorted().limit(required).toList();
+    }
+
+    private static Map<SubjectId, ResidentNutrition> legacyNutrition(Map<SubjectId, ResidentProfile> residents, Map<SubjectId, SettlementProvision> provisions) {
+        Map<SubjectId, ResidentNutrition> values = new LinkedHashMap<>();
+        residents.values().forEach(resident -> values.put(resident.id(), ResidentNutrition.nourishedAt(
+                provisions.get(resident.settlementId()).cycleOrdinal())));
+        return values;
     }
 
     private static ResidentMigrationBlockReason readBlockReason(DataInputStream input) throws IOException {

@@ -31,6 +31,22 @@ class HumanPopulationProcessTest {
     }
 
     @Test
+    void starvationIsAnIndividualNutritionOutcomeWithoutChangingActorIdentityOrDiseaseState() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:nutrition-work"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst(); HumanPopulation population = state.humanPopulation();
+        var haulers = population.residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> resident.role() == ResidentRole.HAULER).toList();
+        for (int cycle = 1; cycle <= ResidentNutrition.STARVING_AFTER_MISSED_CYCLES; cycle++) {
+            for (ResidentProfile hauler : haulers) population = population.resolveNutrition(hauler.id(), cycle, false);
+        }
+        FrontierWorldState hungry = state.withHumanPopulation(population);
+
+        assertTrue(haulers.stream().allMatch(hauler -> hungry.humanPopulation().nutrition(hauler.id()).status() == ResidentNutritionStatus.STARVING));
+        assertTrue(haulers.stream().allMatch(hauler -> hungry.actorLocations().get(hauler.id()).condition().status() == ActorLifeStatus.ALIVE));
+        assertTrue(haulers.stream().allMatch(hauler -> hungry.humanPopulation().health(hauler.id()).status() == ResidentHealthStatus.HEALTHY));
+    }
+
+    @Test
     void exactBirthNeedsAConfirmedOwnedFoodReceiptAndCannotBeSubmittedDirectly() {
         WorldId world = new WorldId("frontier:human-events");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));
