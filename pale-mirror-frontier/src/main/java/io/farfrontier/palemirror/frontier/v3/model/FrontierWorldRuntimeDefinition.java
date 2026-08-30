@@ -131,6 +131,10 @@ public final class FrontierWorldRuntimeDefinition {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
         }
+        if (command.payload() instanceof EconomicTransfer transfer) {
+            try { return new CommandPlan.Accepted(EconomicTransferProcess.plan(state, transfer)); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ResidentBorn birth) {
             return rejected("resident birth is emitted only by a confirmed population permit");
         }
@@ -416,6 +420,7 @@ public final class FrontierWorldRuntimeDefinition {
         }
         return switch (event.payload()) {
             case InfectionChanged changed -> state.withInfection(changed.cell(), changed.intensity());
+            case EconomicTransfer transfer -> EconomicTransferProcess.reduce(state, event.subject(), transfer);
             case ProductionStarted started -> ProductionProcess.reduceStarted(state, event.subject(), started);
             case ProductionCompleted completed -> ProductionProcess.reduceCompleted(state, event.subject(), completed);
             case ProductionBlocked blocked -> ProductionProcess.reduceBlocked(state, event.subject(), blocked);

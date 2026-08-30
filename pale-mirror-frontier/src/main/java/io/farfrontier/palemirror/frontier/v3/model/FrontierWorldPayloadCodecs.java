@@ -9,6 +9,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
+                new EconomicTransferCodec(),
                 new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
                 new OperationTravelSegmentCompletedCodec(),
@@ -40,6 +41,15 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             ByteBuffer input = ByteBuffer.wrap(bytes);
             return new InfectionChanged(new InfectionCell(input.getInt(), input.getInt()), new FixedRatio(new FixedScalar(input.getLong())));
         }
+    }
+    private static final class EconomicTransferCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.economic_transfer"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            EconomicTransfer transfer = (EconomicTransfer) payload; writeSubject(output, transfer.payerId()); writeSubject(output, transfer.payeeId());
+            output.writeLong(transfer.amount().raw()); writeString(output, transfer.reason());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new EconomicTransfer(
+                readSubject(input).value(), readSubject(input).value(), new FixedScalar(input.readLong()), readString(input))); }
     }
     private static final class ResourceDepositedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.resource_deposited"; } @Override public byte[] encode(FrontierPayload payload) {

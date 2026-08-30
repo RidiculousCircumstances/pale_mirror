@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 59, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 60, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -43,6 +43,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writePhysicalDeltas(output, state.physicalDeltas());
                 writeInfection(output, state.infection());
                 writeHiveColony(output, state.hiveColony());
+                writeEconomicLedger(output, state.inventory().economics());
                 writeInventory(output, state.inventory());
                 writeProductionJobs(output, state.productionJobs());
                 writeContracts(output, state.contracts());
@@ -69,7 +70,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
                     && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
-                    && version != 58 && version != VERSION) {
+                    && version != 58 && version != 59 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -77,7 +78,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
-            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
+            EconomicLedger economics = version >= 60 ? readEconomicLedger(input) : EconomicLedger.bootstrap(bootstrap);
+            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
                     readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
@@ -258,6 +260,25 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         return new HiveColony(organs, bioforms, jobs);
     }
+    private static void writeEconomicLedger(DataOutputStream output, EconomicLedger ledger) throws IOException {
+        writeCount(output, ledger.accounts().size());
+        for (EconomicAccount account : ledger.accounts().values().stream().sorted(Comparator.comparing(EconomicAccount::ownerId)).toList()) {
+            writeString(output, account.ownerId().value()); output.writeByte(account.ownerKind().ordinal()); output.writeByte(account.status().ordinal());
+            output.writeLong(account.balance().raw()); output.writeLong(account.creditLimit().raw());
+        }
+    }
+    private static EconomicLedger readEconomicLedger(DataInputStream input) throws IOException {
+        Map<SubjectId, EconomicAccount> accounts = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId owner = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
+            if (kind >= EconomicOwnerKind.values().length || status >= EconomicAccountStatus.values().length
+                    || accounts.put(owner, new EconomicAccount(owner, EconomicOwnerKind.values()[kind], EconomicAccountStatus.values()[status],
+                    new FixedScalar(input.readLong()), new FixedScalar(input.readLong()))) != null) {
+                throw new IllegalArgumentException("invalid or duplicate economic account");
+            }
+        }
+        return new EconomicLedger(accounts);
+    }
     private static void writeInventory(DataOutputStream output, ExactInventory inventory) throws IOException {
         writeCount(output, inventory.containers().size());
         for (ContainerRecord value : inventory.containers().values().stream().sorted(java.util.Comparator.comparing(ContainerRecord::id)).toList()) {
@@ -292,7 +313,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             output.writeByte(conflict.slot()); output.writeByte(conflict.kind().ordinal());
         }
     }
-    private static ExactInventory readInventory(DataInputStream input) throws IOException {
+    private static ExactInventory readInventory(DataInputStream input, EconomicLedger economics) throws IOException {
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
@@ -336,7 +357,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate inventory conflict");
             }
         }
-        return new ExactInventory(containers, items, cargo, players, carriers, conflicts, surfaces);
+        return new ExactInventory(containers, items, cargo, players, carriers, conflicts, surfaces, economics);
     }
     private static void writeProductionJobs(DataOutputStream output, Map<SubjectId, ProductionJob> jobs) throws IOException {
         writeCount(output, jobs.size());
