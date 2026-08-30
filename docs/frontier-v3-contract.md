@@ -348,6 +348,27 @@ Canonical storage is exact slot-level inventory, even while COLD. Every stored
 resource has a named owner, container/cargo ID, item kind, count and slot or
 custody position.
 
+An economic need is not permission to fabricate work or money. The bounded
+market aggregate retains one exact buyer demand (resource kind, exact count,
+maximum total price, durable reason and expiry), zero or more deterministic
+seller quotes, and at most one accepted work order. A quote names its active
+legal company, its exact offer and expiry; a work order binds the winning quote
+to the producing task and immutable accepted total. Every visible workshop job
+is therefore explainable as a buyer need, a seller offer and a particular
+price, rather than a planner-only instruction.
+
+Accepting a work order creates one named financial reservation before any
+physical or COLD transformation begins. Confirmation consumes exact input,
+delivers exact output to the named buyer and settles that reservation; failure
+before irreversible work explicitly releases it. An effect that may already
+have happened stays inspectable and unresolved until its physical postcondition
+is known; it is never silently cancelled just to free funds. Market clearing is
+a bounded deterministic due action ordered by demand urgency, expiry and stable
+ID. It may leave a demand unfilled, expire stale quotes or reject an
+unaffordable offer, but may not mint credit, choose an unknown seller, overwrite
+player custody or create a second order for the same demand. Terminal records
+compact only after no job, reservation, cargo or physical intent refers to them.
+
 - One iron ingot is one canonical iron ingot; one stack is sixty-four units.
 - HOT warehouses and depots use ordinary Minecraft containers representing
   those exact slots. They are displays and interaction surfaces for the same

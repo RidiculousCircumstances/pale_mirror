@@ -9,14 +9,16 @@ import java.util.Optional;
 import java.util.HashSet;
 import java.util.Set;
 
-/** Bounded legal register. It deliberately holds neither money nor physical item custody. */
-public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, EmploymentContract> employmentContracts) {
+/** Bounded legal/institution register. It deliberately holds neither money nor physical item custody. */
+public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, EmploymentContract> employmentContracts,
+                              MarketOrderBook market) {
     public static final int MAX_COMPANIES = 1_024;
     public static final int MAX_EMPLOYMENT_CONTRACTS = 4_096;
 
     public CompanyRegistry {
         companies = Map.copyOf(companies);
         employmentContracts = Map.copyOf(employmentContracts);
+        Objects.requireNonNull(market, "market order book");
         if (companies.size() > MAX_COMPANIES) throw new IllegalArgumentException("company registry retention limit exceeded");
         if (employmentContracts.size() > MAX_EMPLOYMENT_CONTRACTS) throw new IllegalArgumentException("employment contract retention limit exceeded");
         for (Map.Entry<SubjectId, Company> entry : companies.entrySet()) {
@@ -32,8 +34,11 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
         }
     }
 
-    public CompanyRegistry(Map<SubjectId, Company> companies) { this(companies, Map.of()); }
-    static CompanyRegistry empty() { return new CompanyRegistry(Map.of(), Map.of()); }
+    public CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, EmploymentContract> employmentContracts) {
+        this(companies, employmentContracts, MarketOrderBook.empty());
+    }
+    public CompanyRegistry(Map<SubjectId, Company> companies) { this(companies, Map.of(), MarketOrderBook.empty()); }
+    static CompanyRegistry empty() { return new CompanyRegistry(Map.of(), Map.of(), MarketOrderBook.empty()); }
 
     CompanyRegistry register(Company company) {
         Objects.requireNonNull(company, "company");
@@ -43,7 +48,7 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
             throw new IllegalArgumentException("settlement already has an active company for purpose: " + company.purpose());
         }
         Map<SubjectId, Company> next = new LinkedHashMap<>(companies); next.put(company.id(), company);
-        return new CompanyRegistry(next, employmentContracts);
+        return new CompanyRegistry(next, employmentContracts, market);
     }
 
     CompanyRegistry openEmployment(EmploymentContract contract) {
@@ -57,14 +62,18 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
             throw new IllegalArgumentException("resident already has a current employment contract");
         }
         Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contract.id(), contract);
-        return new CompanyRegistry(companies, next);
+        return new CompanyRegistry(companies, next, market);
     }
 
     CompanyRegistry settle(SubjectId contractId) {
         EmploymentContract contract = employmentContracts.get(Objects.requireNonNull(contractId, "employment contract id"));
         if (contract == null) throw new IllegalArgumentException("unknown employment contract");
         Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contractId, contract.settleOneCompletedJob());
-        return new CompanyRegistry(companies, next);
+        return new CompanyRegistry(companies, next, market);
+    }
+
+    CompanyRegistry withMarket(MarketOrderBook nextMarket) {
+        return new CompanyRegistry(companies, employmentContracts, nextMarket);
     }
 
     Optional<Company> activeWorksCompany(SubjectId settlementId) {

@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 63, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 64, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -71,7 +71,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
                     && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
-                    && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != VERSION) {
+                    && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -80,7 +80,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             EconomicLedger economics = version >= 60 ? readEconomicLedger(input, version >= 63) : EconomicLedger.bootstrap(bootstrap);
-            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62) : CompanyRegistry.empty();
+            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62, version >= 64) : CompanyRegistry.empty();
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
@@ -307,8 +307,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw()); output.writeByte(contract.status().ordinal());
             output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
         }
+        writeMarketOrderBook(output, registry.market());
     }
-    private static CompanyRegistry readCompanyRegistry(DataInputStream input, boolean hasEmployment) throws IOException {
+    private static CompanyRegistry readCompanyRegistry(DataInputStream input, boolean hasEmployment, boolean hasMarket) throws IOException {
         Map<SubjectId, Company> companies = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId founder = new SubjectId(readString(input));
@@ -328,7 +329,51 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate employment contract registry entry");
             }
         }
-        return new CompanyRegistry(companies, contracts);
+        return new CompanyRegistry(companies, contracts, hasMarket ? readMarketOrderBook(input) : MarketOrderBook.empty());
+    }
+    private static void writeMarketOrderBook(DataOutputStream output, MarketOrderBook market) throws IOException {
+        writeCount(output, market.demands().size());
+        for (MarketDemand demand : market.demands().values().stream().sorted(Comparator.comparing(MarketDemand::id)).toList()) {
+            writeString(output, demand.id().value()); writeString(output, demand.buyerId().value()); writeString(output, demand.reasonId().value());
+            writeString(output, demand.itemKind()); output.writeInt(demand.itemCount()); output.writeLong(demand.maximumTotalPrice().raw());
+            output.writeLong(demand.openedAtTick()); output.writeLong(demand.expiresAtTick()); output.writeByte(demand.status().ordinal());
+        }
+        writeCount(output, market.quotes().size());
+        for (CompanyQuote quote : market.quotes().values().stream().sorted(Comparator.comparing(CompanyQuote::id)).toList()) {
+            writeString(output, quote.id().value()); writeString(output, quote.demandId().value()); writeString(output, quote.sellerId().value());
+            output.writeInt(quote.itemCount()); output.writeLong(quote.totalPrice().raw()); output.writeLong(quote.quotedAtTick()); output.writeLong(quote.expiresAtTick());
+        }
+        writeCount(output, market.workOrders().size());
+        for (MarketWorkOrder order : market.workOrders().values().stream().sorted(Comparator.comparing(MarketWorkOrder::id)).toList()) {
+            writeString(output, order.id().value()); writeString(output, order.demandId().value()); writeString(output, order.quoteId().value());
+            writeString(output, order.sellerId().value()); writeString(output, order.taskId().value()); writeString(output, order.reservationId().value());
+            output.writeLong(order.acceptedTotalPrice().raw()); output.writeByte(order.status().ordinal());
+        }
+    }
+    private static MarketOrderBook readMarketOrderBook(DataInputStream input) throws IOException {
+        Map<SubjectId, MarketDemand> demands = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId buyer = new SubjectId(readString(input)); SubjectId reason = new SubjectId(readString(input));
+            String itemKind = readString(input); int itemCount = input.readInt(); FixedScalar maximum = new FixedScalar(input.readLong());
+            long openedAt = input.readLong(), expiresAt = input.readLong(); int status = input.readUnsignedByte();
+            if (status >= MarketDemandStatus.values().length || demands.put(id, new MarketDemand(id, buyer, reason, itemKind, itemCount, maximum,
+                    openedAt, expiresAt, MarketDemandStatus.values()[status])) != null) throw new IllegalArgumentException("invalid or duplicate market demand");
+        }
+        Map<SubjectId, CompanyQuote> quotes = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId demand = new SubjectId(readString(input)); SubjectId seller = new SubjectId(readString(input));
+            int itemCount = input.readInt(); FixedScalar total = new FixedScalar(input.readLong()); long quotedAt = input.readLong(), expiresAt = input.readLong();
+            if (quotes.put(id, new CompanyQuote(id, demand, seller, itemCount, total, quotedAt, expiresAt)) != null) throw new IllegalArgumentException("duplicate market quote");
+        }
+        Map<SubjectId, MarketWorkOrder> orders = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId demand = new SubjectId(readString(input)); SubjectId quote = new SubjectId(readString(input));
+            SubjectId seller = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId reservation = new SubjectId(readString(input));
+            FixedScalar total = new FixedScalar(input.readLong()); int status = input.readUnsignedByte();
+            if (status >= MarketWorkOrderStatus.values().length || orders.put(id, new MarketWorkOrder(id, demand, quote, seller, task, reservation,
+                    total, MarketWorkOrderStatus.values()[status])) != null) throw new IllegalArgumentException("invalid or duplicate market work order");
+        }
+        return new MarketOrderBook(demands, quotes, orders);
     }
     private static void writeInventory(DataOutputStream output, ExactInventory inventory) throws IOException {
         writeCount(output, inventory.containers().size());
