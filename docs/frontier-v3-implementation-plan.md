@@ -91,7 +91,7 @@ no such worker is introduced until profiling proves it necessary.
   `architecture.yml` while accurately retaining v2 as frozen-active.
 - Extend Gradle guardrails so future v3 Java sources are scanned for forbidden
   Minecraft, NeoForge, legacy-domain, wall-clock and random references and for
-  the existing 500-line source limit.
+  the existing 1000-line source limit.
 - Mark `frontier-ai-contract.md` and source-reference documents as v2 historical
   contracts, not v3 requirements.
 - Archive the pre-v3 continuity ledger and replace it with the current wave,

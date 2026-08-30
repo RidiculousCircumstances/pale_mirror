@@ -9,7 +9,7 @@ messages unless their durable facts are reflected there.
 At the start of every assistant turn, read `CONTINUITY.md` before acting. Update
 it only when goals, constraints/assumptions, key decisions, progress state,
 important verification evidence, open questions or the active working set
-change. Keep it factual and at most 240 lines; never store dialogue summaries,
+change. Keep it factual and at most 400 lines; never store dialogue summaries,
 long changelogs, raw test logs or stale file inventories in the active ledger.
 
 If history must be retained, archive the previous ledger under `docs/archive/`

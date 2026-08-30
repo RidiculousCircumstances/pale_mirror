@@ -29,6 +29,7 @@
 - Evidence levels remain separate: architecture, automated correctness, real-world continuity and unbriefed player comprehension.
 - Frontier v3 causal changes use the smallest relevant checked-in pilot scenario: read-only fixture, ordinary player action, terminal domain assertion and PMV3 trace; visible claims add a semantic camera/frame check, while durable/recovery changes add a declared restart split.
 - A pilot visual frame is a local test-only barrier, not a player action: `clean` is the default and closes incidental screens, hides generic UI/chat, settles rendering and waits for exact capture acknowledgement before the next action. `player` is explicit for UI evidence; ordinary HUD toggles are prohibited.
+- The active continuity ledger is capped at 400 lines; Java sources are capped at 1000 lines by the Gradle guardrail. Both limits are ratchets, not permission for mixed-responsibility coordinators.
 ## State
 
 ### Done

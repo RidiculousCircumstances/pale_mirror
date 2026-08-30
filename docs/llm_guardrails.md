@@ -42,7 +42,7 @@ report the limitation and preserve the corresponding harness work as open.
   wall-clock time, or ambient randomness;
 - the experimental API does not import internal implementation types;
 - generated/local workspace paths and real environment files are not tracked;
-- Java files remain below the 500-line default size cap.
+- Java files remain below the 1000-line default size cap.
 
 `check` depends on the same guardrails. The limit is a ratchet, not proof that
 a class is cohesive: split by responsibility before it becomes a coordinator
