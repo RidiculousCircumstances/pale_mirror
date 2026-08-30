@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 60, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 61, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -44,6 +44,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeInfection(output, state.infection());
                 writeHiveColony(output, state.hiveColony());
                 writeEconomicLedger(output, state.inventory().economics());
+                writeCompanyRegistry(output, state.companies());
                 writeInventory(output, state.inventory());
                 writeProductionJobs(output, state.productionJobs());
                 writeContracts(output, state.contracts());
@@ -70,7 +71,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
                     && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
-                    && version != 58 && version != 59 && version != VERSION) {
+                    && version != 58 && version != 59 && version != 60 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -79,12 +80,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             EconomicLedger economics = version >= 60 ? readEconomicLedger(input) : EconomicLedger.bootstrap(bootstrap);
+            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input) : CompanyRegistry.empty();
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
                     readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
                     StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58),
+                    companies,
                     ResourceSiteStateCodec.read(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
@@ -278,6 +281,25 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         return new EconomicLedger(accounts);
+    }
+    private static void writeCompanyRegistry(DataOutputStream output, CompanyRegistry registry) throws IOException {
+        writeCount(output, registry.companies().size());
+        for (Company company : registry.companies().values().stream().sorted(Comparator.comparing(Company::id)).toList()) {
+            writeString(output, company.id().value()); writeString(output, company.settlementId().value()); writeString(output, company.founderId().value());
+            output.writeByte(company.purpose().ordinal()); output.writeByte(company.status().ordinal()); output.writeLong(company.registeredAtTick());
+        }
+    }
+    private static CompanyRegistry readCompanyRegistry(DataInputStream input) throws IOException {
+        Map<SubjectId, Company> companies = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId founder = new SubjectId(readString(input));
+            int purpose = input.readUnsignedByte(); int status = input.readUnsignedByte(); long registeredAt = input.readLong();
+            if (purpose >= CompanyPurpose.values().length || status >= CompanyStatus.values().length
+                    || companies.put(id, new Company(id, settlement, founder, CompanyPurpose.values()[purpose], CompanyStatus.values()[status], registeredAt)) != null) {
+                throw new IllegalArgumentException("invalid or duplicate company registry entry");
+            }
+        }
+        return new CompanyRegistry(companies);
     }
     private static void writeInventory(DataOutputStream output, ExactInventory inventory) throws IOException {
         writeCount(output, inventory.containers().size());

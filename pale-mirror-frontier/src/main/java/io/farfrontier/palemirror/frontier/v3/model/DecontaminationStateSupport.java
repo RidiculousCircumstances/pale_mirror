@@ -44,7 +44,7 @@ final class DecontaminationStateSupport {
         if (remaining == 0L) infection.remove(cell); else infection.put(cell, new FixedRatio(new FixedScalar(remaining)));
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), infection, state.inventory().consumeOne(observation.itemId()),
                 state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), intents, observations, state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static void validateReceipt(FrontierBootstrap bootstrap, Map<InfectionCell, FixedRatio> infection, PhysicalIntent intent,

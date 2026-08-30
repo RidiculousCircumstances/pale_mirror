@@ -40,7 +40,7 @@ final class RouteConstructionStateSupport {
         Map<SubjectId, RouteConstruction> next = new LinkedHashMap<>(state.routeConstructions()); next.put(project.id(), project);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), next, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), next, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
@@ -163,7 +163,7 @@ final class RouteConstructionStateSupport {
         observations.put(observation.id(), observation);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeCargoUnit(project.cargoId().orElseThrow(), observation.itemId()),
                 state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), intents, observations, state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,
@@ -175,7 +175,7 @@ final class RouteConstructionStateSupport {
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.logisticsHistory(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(),
-                state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static FrontierWorldState cutover(FrontierWorldState state, SubjectId projectId) {
@@ -193,7 +193,7 @@ final class RouteConstructionStateSupport {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.logisticsHistory(), intents, observations, state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects,
-                state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints()), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints()), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteConstructionStarted started) {
@@ -219,7 +219,7 @@ final class RouteConstructionStateSupport {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory()
                 .extractOneToCargo(observation.sourceItemId(), loaded.cargo(), observation.cargoItemId()),
                 state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {

@@ -9,10 +9,23 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
         Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony, Map<SubjectId, StructureDamage> structureDamage, Map<BlockPosition, PhysicalDelta> physicalDeltas,
         Map<SubjectId, AmbientActorLease> ambientLeases, Map<SubjectId, RouteConstruction> routeConstructions, RouteTopology routeTopology, StrategicPlanState strategicPlans,
-        HumanPopulation humanPopulation, ResourceSiteState resourceSites) {
+        HumanPopulation humanPopulation, CompanyRegistry companies, ResourceSiteState resourceSites) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     private static final ThreadLocal<Integer> DEFERRED_FULL_VALIDATION_DEPTH = ThreadLocal.withInitial(() -> 0);
+    /** Compatibility constructor for pre-company pure fixtures; production transitions always carry the registry explicitly. */
+    public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations, Map<SubjectId, StructureCondition> structureConditions,
+                       Map<InfectionCell, FixedRatio> infection, ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
+                       Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations, LogisticsHistory logisticsHistory,
+                       Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
+                       Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony, Map<SubjectId, StructureDamage> structureDamage,
+                       Map<BlockPosition, PhysicalDelta> physicalDeltas, Map<SubjectId, AmbientActorLease> ambientLeases,
+                       Map<SubjectId, RouteConstruction> routeConstructions, RouteTopology routeTopology, StrategicPlanState strategicPlans,
+                       HumanPopulation humanPopulation, ResourceSiteState resourceSites) {
+        this(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, logisticsHistory,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions,
+                routeTopology, strategicPlans, humanPopulation, CompanyRegistry.empty(), resourceSites);
+    }
     public FrontierWorldState { Objects.requireNonNull(bootstrap, "bootstrap");
         actorLocations = FrontierWorldStateSupport.immutableMap(actorLocations, "actor locations"); structureConditions = FrontierWorldStateSupport.immutableMap(structureConditions, "structure conditions");
         infection = FrontierWorldStateSupport.immutableMap(infection, "infection"); Objects.requireNonNull(inventory, "inventory");
@@ -22,7 +35,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         structureDamage = FrontierWorldStateSupport.immutableMap(structureDamage, "structure damage"); physicalDeltas = FrontierWorldStateSupport.immutableMap(physicalDeltas, "physical deltas");
         ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases"); routeConstructions = FrontierWorldStateSupport.immutableMap(routeConstructions, "route constructions");
         Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(strategicPlans, "strategic plans"); Objects.requireNonNull(humanPopulation, "human population");
-        Objects.requireNonNull(resourceSites, "resource sites");
+        Objects.requireNonNull(companies, "company registry"); Objects.requireNonNull(resourceSites, "resource sites");
         if (!fullValidationDeferred()) {
             resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, humanPopulation);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
@@ -39,6 +52,22 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             // Bootstrap defines an exact person's immutable identity, not their permanent home.
             // A completed v3 migration deliberately changes the profile's household/settlement.
             if (profile == null) throw new IllegalArgumentException("bootstrap resident must remain in the canonical population register"); }
+        for (Company company : companies.companies().values()) {
+            FrontierWorldStateSupport.settlement(bootstrap, company.settlementId());
+            ResidentProfile founder = humanPopulation.resident(company.founderId());
+            if (founder == null || !founder.settlementId().equals(company.settlementId()) || founder.role() != ResidentRole.CRAFTER) {
+                throw new IllegalArgumentException("company founder must remain a settlement crafter");
+            }
+            EconomicAccount account = inventory.economics().require(company.id());
+            if (account.ownerKind() != EconomicOwnerKind.COMPANY || account.status() != EconomicAccountStatus.ACTIVE && company.status() == CompanyStatus.ACTIVE) {
+                throw new IllegalArgumentException("company legal state and account must agree");
+            }
+        }
+        for (EconomicAccount account : inventory.economics().accounts().values()) {
+            if (account.ownerKind() == EconomicOwnerKind.COMPANY && !companies.companies().containsKey(account.ownerId())) {
+                throw new IllegalArgumentException("company account must have one registered legal company");
+            }
+        }
         for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.position());
         Map<SubjectId, SupplyContract> validatedContracts = contracts;
         StrategicPlanState validatedPlans = strategicPlans;
@@ -306,7 +335,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         try {
             new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts,
                     operations, logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas,
-                    ambientLeases, routeConstructions, routeTopology, strategicPlans, humanPopulation, resourceSites);
+                    ambientLeases, routeConstructions, routeTopology, strategicPlans, humanPopulation, companies, resourceSites);
         } finally {
             if (depth != 0) DEFERRED_FULL_VALIDATION_DEPTH.set(depth);
         }
@@ -352,7 +381,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 || contracts != previous.contracts || operations != previous.operations || logisticsHistory != previous.logisticsHistory || physicalIntents != previous.physicalIntents
                 || physicalObservations != previous.physicalObservations || sceneLeases != previous.sceneLeases || hiveColony != previous.hiveColony
                 || structureDamage != previous.structureDamage || physicalDeltas != previous.physicalDeltas || ambientLeases != previous.ambientLeases
-                || routeConstructions != previous.routeConstructions || routeTopology != previous.routeTopology || resourceSites != previous.resourceSites
+                || routeConstructions != previous.routeConstructions || routeTopology != previous.routeTopology || companies != previous.companies || resourceSites != previous.resourceSites
                 || (strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation)) return false;
         if (!sceneLeases.isEmpty() || !physicalIntents.isEmpty() || !physicalObservations.isEmpty()) return false;
         return humanPopulation.households() == previous.humanPopulation.households()
@@ -383,7 +412,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 && operations == previous.operations && logisticsHistory == previous.logisticsHistory && physicalIntents == previous.physicalIntents && physicalObservations == previous.physicalObservations
                 && sceneLeases == previous.sceneLeases && hiveColony == previous.hiveColony && structureDamage == previous.structureDamage
                 && physicalDeltas == previous.physicalDeltas && ambientLeases == previous.ambientLeases && routeConstructions == previous.routeConstructions
-                && routeTopology == previous.routeTopology && strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation
+                && routeTopology == previous.routeTopology && strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation && companies == previous.companies
                 && resourceSites == previous.resourceSites && infection != previous.infection;
     }
 
@@ -428,15 +457,26 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                                     Map<SubjectId, SupplyContract> nextContracts, Map<SubjectId, RouteOperation> nextOperations, Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
                                     Map<SceneLeaseId, SceneLease> leases, HiveColony colony, Map<SubjectId, StructureDamage> damage, Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
         return new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, nextContracts, nextOperations,
-                logisticsHistory, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeTopology, strategicPlans, humanPopulation, resourceSites);
+                logisticsHistory, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeTopology, strategicPlans, humanPopulation, companies, resourceSites);
     } public FrontierWorldState withRouteTopology(RouteTopology nextTopology) { return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, nextTopology, strategicPlans, humanPopulation, resourceSites); }
+            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, nextTopology, strategicPlans, humanPopulation, companies, resourceSites); }
     public FrontierWorldState withStrategicPlans(StrategicPlanState nextPlans) { return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans, humanPopulation, resourceSites); }
+            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans, humanPopulation, companies, resourceSites); }
     public FrontierWorldState withResourceSites(ResourceSiteState nextSites) { return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, strategicPlans, humanPopulation, nextSites); }
+            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, strategicPlans, humanPopulation, companies, nextSites); }
     public FrontierWorldState withHumanPopulation(HumanPopulation nextPopulation) { return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, strategicPlans, nextPopulation, resourceSites); }
+            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, strategicPlans, nextPopulation, companies, resourceSites); }
+    public FrontierWorldState withCompanies(CompanyRegistry nextCompanies) { return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
+            logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, strategicPlans, humanPopulation, nextCompanies, resourceSites); }
+    FrontierWorldState registerCompany(Company company) {
+        Objects.requireNonNull(company, "company");
+        EconomicLedger economics = inventory.economics().register(new EconomicAccount(company.id(), EconomicOwnerKind.COMPANY,
+                EconomicAccountStatus.ACTIVE, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO));
+        return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory.withEconomics(economics), productionJobs, contracts, operations,
+                logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases,
+                routeConstructions, routeTopology, strategicPlans, humanPopulation, companies.register(company), resourceSites);
+    }
     public FrontierWorldState recordResidentMigration(ResidentMigrated migration) { return HumanPopulationStateSupport.recordMigration(this, migration); }
     public FrontierWorldState startResidentBirth(ResidentBirthJob job) { return HumanPopulationStateSupport.startBirth(this, job); }
     public FrontierWorldState completeResidentBirth(ResidentBirthJob job) { return HumanPopulationStateSupport.completeBirth(this, job); }
@@ -448,7 +488,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations); next.put(actor, actorLocations.get(actor).withPosition(position));
         return new FrontierWorldState(bootstrap, next, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans, humanPopulation, resourceSites);
+                logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology, nextPlans, humanPopulation, companies, resourceSites);
     }
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {
         Objects.requireNonNull(structure, "structure"); Objects.requireNonNull(condition, "structure condition");
@@ -456,7 +496,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, StructureCondition> next = new LinkedHashMap<>(structureConditions); next.put(structure, condition);
         return new FrontierWorldState(bootstrap, actorLocations, next, infection, inventory, productionJobs, contracts, operations,
                 logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeTopology,
-                strategicPlans, humanPopulation, resourceSitesForCondition(structure, condition));
+                strategicPlans, humanPopulation, companies, resourceSitesForCondition(structure, condition));
     }
     ResourceSiteState resourceSitesForCondition(SubjectId facilityId, StructureCondition condition) {
         if (condition != StructureCondition.DESTROYED) return resourceSites;
@@ -792,7 +832,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         LogisticsHistory nextHistory = logisticsHistory.record(receipt);
         return new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, nextContracts, nextOperations,
                 nextHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases,
-                routeConstructions, routeTopology, strategicPlans, humanPopulation, resourceSites);
+                routeConstructions, routeTopology, strategicPlans, humanPopulation, companies, resourceSites);
     }
     boolean canCompactTerminalLogistics(SubjectId operationId) {
         try { terminalLogisticsReceipt(operationId, 0L); return true; }

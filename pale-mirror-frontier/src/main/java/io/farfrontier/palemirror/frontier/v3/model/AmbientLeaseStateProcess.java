@@ -83,6 +83,6 @@ final class AmbientLeaseStateProcess {
                                            HumanPopulation population) {
         return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), leases, state.routeConstructions(), state.routeTopology(), state.strategicPlans(), population, state.resourceSites());
+                state.structureDamage(), state.physicalDeltas(), leases, state.routeConstructions(), state.routeTopology(), state.strategicPlans(), population, state.companies(), state.resourceSites());
     }
 }

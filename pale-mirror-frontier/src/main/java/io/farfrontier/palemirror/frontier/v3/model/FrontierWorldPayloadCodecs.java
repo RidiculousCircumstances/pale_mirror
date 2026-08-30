@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload; import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream;
 import java.io.DataOutputStream; import java.io.IOException; import java.util.List;
@@ -9,7 +10,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new EconomicTransferCodec(),
+                new EconomicTransferCodec(), new CompanyRegisteredCodec(),
                 new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
                 new OperationTravelSegmentCompletedCodec(),
@@ -50,6 +51,19 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new EconomicTransfer(
                 readSubject(input).value(), readSubject(input).value(), new FixedScalar(input.readLong()), readString(input))); }
+    }
+    private static final class CompanyRegisteredCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.company_registered"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            Company company = ((CompanyRegistered) payload).company(); writeSubject(output, company.id()); writeSubject(output, company.settlementId());
+            writeSubject(output, company.founderId()); output.writeByte(company.purpose().ordinal()); output.writeByte(company.status().ordinal()); output.writeLong(company.registeredAtTick());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectId id = readSubject(input).value(); SubjectId settlement = readSubject(input).value(); SubjectId founder = readSubject(input).value();
+            int purpose = input.readUnsignedByte(); int status = input.readUnsignedByte(); long registeredAt = input.readLong();
+            if (purpose >= CompanyPurpose.values().length || status >= CompanyStatus.values().length) throw new IllegalArgumentException("invalid company registration payload");
+            return new CompanyRegistered(new Company(id, settlement, founder, CompanyPurpose.values()[purpose], CompanyStatus.values()[status], registeredAt));
+        }); }
     }
     private static final class ResourceDepositedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.resource_deposited"; } @Override public byte[] encode(FrontierPayload payload) {

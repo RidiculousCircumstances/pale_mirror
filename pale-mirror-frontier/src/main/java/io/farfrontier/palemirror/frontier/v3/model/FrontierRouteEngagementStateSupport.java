@@ -77,6 +77,6 @@ final class FrontierRouteEngagementStateSupport {
         return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(),
                 state.productionJobs(), state.contracts(), operations, state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
                 state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
-                state.routeTopology(), plans, state.humanPopulation(), state.resourceSites());
+                state.routeTopology(), plans, state.humanPopulation(), state.companies(), state.resourceSites());
     }
 }

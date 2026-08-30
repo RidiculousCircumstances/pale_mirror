@@ -51,6 +51,16 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts) {
         return account;
     }
 
+    /** Opens one explicitly authorized account; no money or resource claim is created by registration. */
+    EconomicLedger register(EconomicAccount account) {
+        Objects.requireNonNull(account, "economic account");
+        if (accounts.containsKey(account.ownerId())) {
+            throw new IllegalArgumentException("economic account identity already exists: " + account.ownerId().value());
+        }
+        Map<SubjectId, EconomicAccount> next = new LinkedHashMap<>(accounts); next.put(account.ownerId(), account);
+        return new EconomicLedger(next);
+    }
+
     /** Atomically transfers a positive amount without minting money or bypassing either account. */
     public EconomicLedger transfer(SubjectId payerId, SubjectId payeeId, FixedScalar amount) {
         Objects.requireNonNull(amount, "transfer amount");

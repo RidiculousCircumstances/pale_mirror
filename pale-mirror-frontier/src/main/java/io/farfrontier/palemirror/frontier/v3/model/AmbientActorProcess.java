@@ -72,7 +72,7 @@ public final class AmbientActorProcess {
         return new FrontierWorldState(state.bootstrap(), nextActors, state.structureConditions(), state.infection(), state.inventory(),
                 state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(),
                 state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
-                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorObserved observation) {
@@ -84,7 +84,7 @@ public final class AmbientActorProcess {
         return new FrontierWorldState(state.bootstrap(), nextActors, state.structureConditions(), state.infection(), state.inventory(),
                 state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(),
                 state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
-                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
     static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, SimInstant instant, AmbientLeasePrepared prepared) {
         if (!subject.equals(owner(state, prepared.lease().actorId())) || !prepared.lease().handoffInstant().equals(instant)) {

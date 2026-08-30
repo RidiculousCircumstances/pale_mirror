@@ -58,7 +58,7 @@ public final class CargoLoadingStateSupport {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(),
                 state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(),
-                state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static void validateReceipt(PhysicalIntent intent, CargoLoadObservation receipt) {

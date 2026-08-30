@@ -120,6 +120,7 @@ public final class FrontierWorldRuntimeDefinition {
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
             actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1,
                     SettlementProvisionProcess.INITIAL_REVIEW_TICK + index * 100L));
+            actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1, 4_000L + index * 100L));
         }
         actions.add(PopulationMigrationProcess.review(1, 8_000L));
         actions.add(TerminalLogisticsProcess.review(1, 8_100L));
@@ -341,6 +342,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.population.migration.progress" -> PopulationMigrationProcess.planProgress(state, action);
             case "frontier.settlement.provision.review" -> SettlementProvisionProcess.planReview(state, action);
             case "frontier.settlement.provision.progress" -> SettlementProvisionProcess.planProgress(state, action);
+            case "frontier.company.foundation.review" -> CompanyFoundationProcess.plan(state, action);
             case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
             case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
             case "frontier.resource_site.harvest" -> ResourceSiteHarvestProcess.plan(state, action);
@@ -421,6 +423,7 @@ public final class FrontierWorldRuntimeDefinition {
         return switch (event.payload()) {
             case InfectionChanged changed -> state.withInfection(changed.cell(), changed.intensity());
             case EconomicTransfer transfer -> EconomicTransferProcess.reduce(state, event.subject(), transfer);
+            case CompanyRegistered registered -> CompanyFoundationProcess.reduce(state, event.subject(), registered);
             case ProductionStarted started -> ProductionProcess.reduceStarted(state, event.subject(), started);
             case ProductionCompleted completed -> ProductionProcess.reduceCompleted(state, event.subject(), completed);
             case ProductionBlocked blocked -> ProductionProcess.reduceBlocked(state, event.subject(), blocked);

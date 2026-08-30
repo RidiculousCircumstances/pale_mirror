@@ -35,6 +35,6 @@ final class CargoCarrierReleaseStateSupport {
         StrategicPlanState plans = state.strategicPlans().interruptRouteOperation(operation.id(), operation.settlementId());
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), contracts, operations,
                 state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), leases, state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(),
-                state.routeConstructions(), state.routeTopology(), plans, state.humanPopulation(), state.resourceSites());
+                state.routeConstructions(), state.routeTopology(), plans, state.humanPopulation(), state.companies(), state.resourceSites());
     }
 }

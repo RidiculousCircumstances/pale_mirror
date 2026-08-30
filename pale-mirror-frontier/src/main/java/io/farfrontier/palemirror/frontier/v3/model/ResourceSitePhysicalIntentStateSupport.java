@@ -164,6 +164,6 @@ final class ResourceSitePhysicalIntentStateSupport {
                                               Map<PhysicalObservationId, PhysicalEffectObservation> observations) {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(),
                 state.contracts(), state.operations(), state.logisticsHistory(), intents, observations, state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(),
-                state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), sites);
+                state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), sites);
     }
 }

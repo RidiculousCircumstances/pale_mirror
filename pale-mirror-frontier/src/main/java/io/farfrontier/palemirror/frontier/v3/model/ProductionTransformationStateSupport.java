@@ -50,7 +50,7 @@ public final class ProductionTransformationStateSupport {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(),
                 state.inventory().withoutItem(input.id()).store(output), jobs, state.contracts(), state.operations(), state.logisticsHistory(), nextIntents, observations,
                 state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
-                state.routeTopology(), plans, state.humanPopulation(), state.resourceSites());
+                state.routeTopology(), plans, state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     static void validateReceipt(PhysicalIntent intent, ProductionTransformationObservation observation) {
@@ -69,7 +69,7 @@ public final class ProductionTransformationStateSupport {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(),
                 state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), plans,
-                state.humanPopulation(), state.resourceSites());
+                state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     public static Target target(FrontierWorldState state, PhysicalIntent intent) {
